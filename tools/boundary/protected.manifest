@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-04T17:16:08Z
-# Commit: f1b5d4aee19697b8007ec886d954eded9e26e23a
+# Generated: 2026-07-04T17:54:59Z
+# Commit: 5195bdbb08ddd4bcecd9fbd021e4d347fe75a5e9
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -584,7 +584,7 @@ d7ad656ec37a80da9538c9435229f2e06214ccdde857fdf81e86dbb18d4ad7d7  core/pkg/guard
 604a3143cb413e5f65278430f7f40c0c98c3eb123b7180d01c05e7b19906f678  core/pkg/guardian/guardian_stress_coverage_test.go
 ca72cfc8728b95865c08db1cd5a538ca0a2b498527fa9e11bdfb9ae780da8e1a  core/pkg/guardian/guardian_test.go
 b8a92ba80717a401aed15e89883c609ca40e7281b74b2b781fd9b327e9360a9c  core/pkg/guardian/integration_test.go
-64fa35f9a02e40124acda38363456ae6a0c38192cdd6ecbd28fd49a5ccd5c0c6  core/pkg/guardian/interceptor.go
+10c17dfabce3658162750f7b6cd56967a75debe6a9c689b05393f6ab7759bdfd  core/pkg/guardian/interceptor.go
 1852294e35d190075c1561ee6f1e3f35356eec27cfca159c5df512eff441b1f9  core/pkg/guardian/interceptor_test.go
 c0118e244adcba44a228c918ffb6c2fddc5be3273b7383914fb81e5f933bdb54  core/pkg/guardian/intervention_test.go
 fa50013f154fd1a1ebe1dcc1448b22f0ef3650990cefef4e7693aed227130b52  core/pkg/guardian/otel.go
@@ -592,7 +592,7 @@ fa50013f154fd1a1ebe1dcc1448b22f0ef3650990cefef4e7693aed227130b52  core/pkg/guard
 fa1a85d544d0ad5594acfc7845e11c9787382f79325354d6e4e43a708577e926  core/pkg/guardian/policy_snapshot_test.go
 ed69d20637a1737e28994d74fcbd2195dbf2ac6972b053143c5839e89015400a  core/pkg/guardian/privilege.go
 1d2c50051328c3c101f74bcbc28527dd0c29dc6606322328e81755c33d49ed4e  core/pkg/guardian/privilege_test.go
-54ac38f31e1a60fd9338ac0a2071a6871f85cbb449a7585d23c364af23adec27  core/pkg/guardian/prompt_armor_test.go
+371af3c1394a1c1375eeca544cb7caebbf77a5ec532dbff7a08b7d58b0c2b092  core/pkg/guardian/prompt_armor_test.go
 4314e6563be45a6956d8cdde64f57506b39710738028bd837c4c5621049510e8  core/pkg/guardian/race_disabled_test.go
 d803b35371310f212cad09ba7158ca644cd8955c56b902921a02f3e552f0aedb  core/pkg/guardian/race_enabled_test.go
 bb0e9beaa7e84800122d2eed895f957f505a53f4bfa2be39cd3701fd8a9f1100  core/pkg/guardian/session_history_test.go

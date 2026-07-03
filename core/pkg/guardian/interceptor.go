@@ -275,18 +275,17 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 	if p.g.threatScanner != nil {
 		channel, trustLevel := trustedInputProvenance(evalCtx.Request.Context)
 
-		var textToScan string
-		if input, ok := evalCtx.Request.Context["user_input"].(string); ok {
-			textToScan = input
-		} else if input, ok := evalCtx.Request.Context["text"].(string); ok {
-			textToScan = input
-		} else if input, ok := evalCtx.Request.Context["content"].(string); ok {
-			textToScan = input
-		}
-
-		if textToScan != "" {
+		// Every scannable text field must be inspected: first-match-only
+		// scanning lets a payload in a secondary field bypass the gate.
+		for _, key := range []string{"user_input", "text", "content"} {
+			textToScan, ok := evalCtx.Request.Context[key].(string)
+			if !ok || textToScan == "" {
+				continue
+			}
 			scanResult := p.g.threatScanner.ScanInput(textToScan, channel, trustLevel)
-			evalCtx.ThreatScanResult = scanResult
+			if evalCtx.ThreatScanResult == nil || scanResult.FindingCount > 0 {
+				evalCtx.ThreatScanResult = scanResult
+			}
 
 			if scanResult.FindingCount > 0 && trustLevel.IsTainted() && threatscan.ContainsHighRiskFindings(scanResult) {
 				now := p.g.clock.Now()

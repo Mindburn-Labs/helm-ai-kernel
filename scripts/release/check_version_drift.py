@@ -23,6 +23,14 @@ REQUEST_TIMEOUT_SECONDS = 30.0
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 SEMVER_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 REJECT_TOKEN_SUFFIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.+-"
+GHCR_MANIFEST_ACCEPT = ", ".join(
+    [
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    ]
+)
 
 
 @dataclass
@@ -266,11 +274,30 @@ def ghcr_tags(repository: str) -> list[str]:
     return payload.get("tags") or []
 
 
+def ghcr_manifest_status(repository: str, tag: str) -> int:
+    token_url = f"https://ghcr.io/token?scope=repository:{repository}:pull&service=ghcr.io"
+    token = request_json(token_url)["token"]
+    req = urllib.request.Request(
+        f"https://ghcr.io/v2/{repository}/manifests/{tag}",
+        method="HEAD",
+        headers=http_headers({"Authorization": f"Bearer {token}", "Accept": GHCR_MANIFEST_ACCEPT}),
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return response.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
+
+
 def check_ghcr_tags(surface: dict[str, Any], version: str) -> SurfaceResult:
     expected = [fmt(tag, version) for tag in surface["required_tags"]]
-    tags = ghcr_tags(surface["repository"])
-    missing = sorted(set(expected) - set(tags))
-    return SurfaceResult(surface["id"], "pass" if not missing else "fail", expected, sorted(tag for tag in tags if tag in expected), url=surface["human_url"], detail=f"missing tags: {', '.join(missing)}" if missing else None)
+    statuses = {tag: ghcr_manifest_status(surface["repository"], tag) for tag in expected}
+    found = sorted(tag for tag, status in statuses.items() if 200 <= status < 300)
+    missing = sorted(tag for tag, status in statuses.items() if not (200 <= status < 300))
+    detail = None
+    if missing:
+        detail = "missing manifests: " + ", ".join(f"{tag} ({statuses[tag]})" for tag in missing)
+    return SurfaceResult(surface["id"], "pass" if not missing else "fail", expected, found, url=surface["human_url"], detail=detail)
 
 
 def check_http_exists(surface: dict[str, Any], version: str) -> SurfaceResult:

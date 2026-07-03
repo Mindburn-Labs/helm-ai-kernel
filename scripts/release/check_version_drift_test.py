@@ -101,6 +101,62 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertEqual(selection.actual, ["typo"])
         self.assertIn("unknown --only", selection.detail or "")
 
+    def test_ghcr_tags_check_verifies_required_manifests(self) -> None:
+        calls = []
+        original = drift.ghcr_manifest_status
+
+        def fake_manifest_status(repository: str, tag: str) -> int:
+            calls.append((repository, tag))
+            return 200
+
+        drift.ghcr_manifest_status = fake_manifest_status
+        try:
+            result = drift.check_ghcr_tags(
+                {
+                    "id": "ghcr-image",
+                    "repository": "mindburn-labs/helm-ai-kernel",
+                    "required_tags": ["v{version}", "v{version}-slim"],
+                    "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/helm-ai-kernel",
+                },
+                "0.6.0",
+            )
+        finally:
+            drift.ghcr_manifest_status = original
+
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(result.actual, ["v0.6.0", "v0.6.0-slim"])
+        self.assertEqual(
+            calls,
+            [
+                ("mindburn-labs/helm-ai-kernel", "v0.6.0"),
+                ("mindburn-labs/helm-ai-kernel", "v0.6.0-slim"),
+            ],
+        )
+
+    def test_ghcr_tags_check_reports_missing_manifest_status(self) -> None:
+        original = drift.ghcr_manifest_status
+
+        def fake_manifest_status(_repository: str, tag: str) -> int:
+            return 404 if tag.endswith("-slim") else 200
+
+        drift.ghcr_manifest_status = fake_manifest_status
+        try:
+            result = drift.check_ghcr_tags(
+                {
+                    "id": "ghcr-image",
+                    "repository": "mindburn-labs/helm-ai-kernel",
+                    "required_tags": ["v{version}", "v{version}-slim"],
+                    "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/pkgs/container/helm-ai-kernel",
+                },
+                "0.6.0",
+            )
+        finally:
+            drift.ghcr_manifest_status = original
+
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.actual, ["v0.6.0"])
+        self.assertIn("v0.6.0-slim (404)", result.detail or "")
+
     def test_published_error_preserves_advisory_status(self) -> None:
         surface = {
             "id": "optional-docs-cache",

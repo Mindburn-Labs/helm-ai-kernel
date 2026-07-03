@@ -1,18 +1,18 @@
-* @Mindburn-Labs/helm-core
+* @Mindburn-Labs/admins
 
-/core/ @Mindburn-Labs/helm-core
-/protocols/ @Mindburn-Labs/helm-core
-/schemas/ @Mindburn-Labs/helm-core
-/api/openapi/ @Mindburn-Labs/helm-core
-/.github/ @Mindburn-Labs/helm-core
-/scripts/ @Mindburn-Labs/helm-core
+/core/ @Mindburn-Labs/admins
+/protocols/ @Mindburn-Labs/admins
+/schemas/ @Mindburn-Labs/admins
+/api/openapi/ @Mindburn-Labs/admins
+/.github/ @Mindburn-Labs/admins
+/scripts/ @Mindburn-Labs/admins
 
-/sdk/ @Mindburn-Labs/helm-core
-/deploy/helm-chart/ @Mindburn-Labs/helm-core
+/sdk/ @Mindburn-Labs/admins
+/deploy/helm-chart/ @Mindburn-Labs/admins
 
-# Release lockstep surfaces require release-owner review through helm-core.
-/VERSION @Mindburn-Labs/helm-core
-/release/version-surfaces.yaml @Mindburn-Labs/helm-core
-/docs/PUBLISHING.md @Mindburn-Labs/helm-core
-/docs/VERIFICATION.md @Mindburn-Labs/helm-core
-/docs/RELEASE_SECURITY.md @Mindburn-Labs/helm-core
+# Release lockstep surfaces require release-owner review through admins.
+/VERSION @Mindburn-Labs/admins
+/release/version-surfaces.yaml @Mindburn-Labs/admins
+/docs/PUBLISHING.md @Mindburn-Labs/admins
+/docs/VERIFICATION.md @Mindburn-Labs/admins
+/docs/RELEASE_SECURITY.md @Mindburn-Labs/admins

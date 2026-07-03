@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-02T21:09:45Z
-# Commit: a0d1bacdee9aef96787fd7014158528e349afc1a
+# Generated: 2026-07-03T15:35:01Z
+# Commit: c9db4a8b56f46675cc90f5d79d355e04be26b8e7
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -918,7 +918,7 @@ de0c086ae6fc3f8eaadeabc5cbea9bd3574ed06299e31c191ac149f23e2a97b8  protocols/spec
 131014dcb8960299ae69210a86799d1f2dbae6e6d2000ed708d71699a6120aec  protocols/specs/receipts/HELM_RECEIPT_SPEC_v1.0.md
 8f012b8b85b82c7533561abb94160108587648859ceecffa802f3df86f249b77  protocols/specs/rfc/artifact-versioning-v1.md
 41e41ae7387cbfeff899b7569d4b3cb3859ce2049e0cacc80c8c521500cb02d3  protocols/specs/rfc/identifier-urn-v1.md
-0e3a1fb9e542ac8ff5d41e45134f1d29af0126745089d386d1386e247fc64e72  protocols/specs/rfc/policy-bundle-v1.md
+95a8f72b3c80023d3fa9966333e06dab8b0e1c7c7e78b198a76c6f69bfd76557  protocols/specs/rfc/policy-bundle-v1.md
 2a18e0c35cba8d7d0536a36ab502e4cf667f0de1a7dafc07343cb0b1c3dc3214  protocols/specs/rfc/reason-codes-v1.md
 f465ad9d07639d7c5ee584156857fa947eade9d2ee584e04aa46398e9456c14e  protocols/specs/rfc/receipt-format-v1.md
 e98a649ea99d4f4dfac7989f326447ac49c42840f54237f20b621687a20d06e7  protocols/specs/rfc/receipt-pq-hybrid-profile-v1.md

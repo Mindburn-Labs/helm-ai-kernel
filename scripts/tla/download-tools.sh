@@ -4,7 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CACHE_DIR="${ROOT_DIR}/.cache/tlc"
 DEFAULT_TLA_TOOLS_VERSION="v1.8.0"
-DEFAULT_TLA_TOOLS_SHA256="237332bdcc79a35c7d26efa7b82c77c85c2744591c5598673a8a45085ff2a4fb"
+# tlaplus v1.8.0 is a rolling pre-release: upstream periodically rebuilds
+# tla2tools.jar under the same tag. On SHA-256 mismatch, re-verify the asset
+# against the official release and update this digest and the one in
+# .github/workflows/tla.yml together.
+DEFAULT_TLA_TOOLS_SHA256="d144885f107ead1d1e56bcfc946df4b27b61588014b8d6525471c744aa743d18"
 VERSION="${TLA_TOOLS_VERSION:-$DEFAULT_TLA_TOOLS_VERSION}"
 EXPECTED_SHA256="${TLA_TOOLS_SHA256:-}"
 JAR_URL="${TLA_TOOLS_JAR_URL:-}"

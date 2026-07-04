@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -111,6 +112,7 @@ type PDPEvaluator interface {
 
 // InMemoryEffectBoundary is a reference implementation.
 type InMemoryEffectBoundary struct {
+	mu             sync.Mutex
 	effects        map[string]*EffectRequest
 	lifecycles     map[string]*EffectLifecycle
 	idempotencyLog map[string]string // key -> effectID
@@ -140,6 +142,12 @@ func (b *InMemoryEffectBoundary) Submit(ctx context.Context, req *EffectRequest)
 	if req.Subject.SubjectID == "" {
 		return nil, fmt.Errorf("subject.subject_id is required")
 	}
+
+	// Hold the lock across the idempotency check-and-reserve and all map
+	// mutations so concurrent submissions of the same key cannot both pass
+	// the existence check and double-execute.
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	// Generate effect ID if not provided
 	if req.EffectID == "" {
@@ -219,6 +227,8 @@ func (b *InMemoryEffectBoundary) Submit(ctx context.Context, req *EffectRequest)
 
 // Approve marks an effect as approved.
 func (b *InMemoryEffectBoundary) Approve(ctx context.Context, effectID, decisionID string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	lifecycle, exists := b.lifecycles[effectID]
 	if !exists {
 		return fmt.Errorf("effect not found: %s", effectID)
@@ -230,6 +240,8 @@ func (b *InMemoryEffectBoundary) Approve(ctx context.Context, effectID, decision
 
 // Deny marks an effect as denied.
 func (b *InMemoryEffectBoundary) Deny(ctx context.Context, effectID, decisionID, reason string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	lifecycle, exists := b.lifecycles[effectID]
 	if !exists {
 		return fmt.Errorf("effect not found: %s", effectID)
@@ -241,6 +253,8 @@ func (b *InMemoryEffectBoundary) Deny(ctx context.Context, effectID, decisionID,
 
 // Execute marks an effect as executing.
 func (b *InMemoryEffectBoundary) Execute(ctx context.Context, effectID string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	lifecycle, exists := b.lifecycles[effectID]
 	if !exists {
 		return fmt.Errorf("effect not found: %s", effectID)
@@ -255,6 +269,8 @@ func (b *InMemoryEffectBoundary) Execute(ctx context.Context, effectID string) e
 
 // Complete marks an effect as completed.
 func (b *InMemoryEffectBoundary) Complete(ctx context.Context, effectID, evidencePackID string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	lifecycle, exists := b.lifecycles[effectID]
 	if !exists {
 		return fmt.Errorf("effect not found: %s", effectID)
@@ -267,6 +283,8 @@ func (b *InMemoryEffectBoundary) Complete(ctx context.Context, effectID, evidenc
 
 // GetLifecycle returns the current lifecycle state.
 func (b *InMemoryEffectBoundary) GetLifecycle(ctx context.Context, effectID string) (*EffectLifecycle, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	lifecycle, exists := b.lifecycles[effectID]
 	if !exists {
 		return nil, fmt.Errorf("effect not found: %s", effectID)
@@ -276,6 +294,8 @@ func (b *InMemoryEffectBoundary) GetLifecycle(ctx context.Context, effectID stri
 
 // CheckIdempotency checks if an effect with this key was already processed.
 func (b *InMemoryEffectBoundary) CheckIdempotency(ctx context.Context, key string) (bool, string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	effectID, exists := b.idempotencyLog[key]
 	return exists, effectID, nil
 }

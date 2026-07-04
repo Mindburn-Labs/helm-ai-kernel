@@ -2,9 +2,54 @@ package kernel
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
+
+// TestInMemoryEffectBoundaryConcurrentSameKey exercises the idempotency
+// check-and-reserve under concurrent submissions of the same key. Run with
+// -race: an unsynchronized boundary either data-races on the maps or admits
+// more than one effect for the shared key.
+func TestInMemoryEffectBoundaryConcurrentSameKey(t *testing.T) {
+	boundary := NewInMemoryEffectBoundary(nil, nil)
+
+	const goroutines = 32
+	var wg sync.WaitGroup
+	ids := make([]string, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			req := &EffectRequest{
+				EffectType: EffectTypeDataWrite,
+				Subject:    EffectSubject{SubjectID: "user-1", SubjectType: "human"},
+				Payload:    EffectPayload{Data: map[string]interface{}{"n": idx}},
+				Idempotency: &IdempotencyConfig{
+					Key:           "shared-key",
+					KeyDerivation: "client_provided",
+				},
+			}
+			if _, err := boundary.Submit(context.Background(), req); err != nil {
+				t.Errorf("Submit failed: %v", err)
+				return
+			}
+			ids[idx] = req.EffectID
+		}(i)
+	}
+	wg.Wait()
+
+	// Exactly one effect may be reserved for the shared idempotency key.
+	boundary.mu.Lock()
+	defer boundary.mu.Unlock()
+	if got := len(boundary.effects); got != 1 {
+		t.Fatalf("idempotency admitted %d effects for one key, want 1", got)
+	}
+	if got := len(boundary.idempotencyLog); got != 1 {
+		t.Fatalf("idempotencyLog has %d entries, want 1", got)
+	}
+}
 
 // mockPDPEvaluator for testing
 type mockPDPEvaluator struct {

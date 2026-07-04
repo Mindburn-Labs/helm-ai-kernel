@@ -22,9 +22,20 @@ jobs:
       - name: Download TLC
         id: tlc
         env:
+          # NOTE: tlaplus v1.8.0 is a rolling pre-release; its tla2tools.jar is
+          # periodically rebuilt upstream, which changes this digest. When the
+          # job fails with a SHA-256 mismatch, re-verify the asset against the
+          # official tlaplus release and update the digest here and in
+          # scripts/tla/download-tools.sh together.
           TLA_TOOLS_VERSION: v1.8.0
-          TLA_TOOLS_SHA256: 237332bdcc79a35c7d26efa7b82c77c85c2744591c5598673a8a45085ff2a4fb
-        run: echo "jar=$(bash scripts/tla/download-tools.sh)" >> "$GITHUB_OUTPUT"
+          TLA_TOOLS_SHA256: 9e27b5e19a69ae1f56aabf8403a6ed5598dbfa6e638908e5278ac39736c1543d
+        # Run the script and capture output separately: `echo "jar=$(...)"`
+        # swallows the script's exit code, letting later steps run with an
+        # empty classpath when the download or digest check fails.
+        run: |
+          jar="$(bash scripts/tla/download-tools.sh)"
+          test -s "$jar"
+          echo "jar=$jar" >> "$GITHUB_OUTPUT"
       - name: Guardian pipeline spec
         run: java -cp "${{ steps.tlc.outputs.jar }}" tlc2.TLC -deadlock -config proofs/guardian.cfg proofs/GuardianPipeline.tla
       - name: Safe Deprecation Mode spec

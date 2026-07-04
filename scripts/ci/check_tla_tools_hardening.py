@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PINNED_VERSION = "v1.8.0"
-PINNED_SHA256 = "237332bdcc79a35c7d26efa7b82c77c85c2744591c5598673a8a45085ff2a4fb"
+PINNED_SHA256 = "9e27b5e19a69ae1f56aabf8403a6ed5598dbfa6e638908e5278ac39736c1543d"
 SHA256_RE = re.compile(r"\b[0-9a-f]{64}\b")
 
 

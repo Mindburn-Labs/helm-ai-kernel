@@ -137,6 +137,13 @@ func (g *Graph) Validate(actionID string, artifacts []*pkg_artifact.ArtifactEnve
 	return false, "", fmt.Errorf("missing requirement")
 }
 
+// check is the legacy artifact-presence validator used by Graph.Validate.
+// It evaluates only ArtifactType requirements; CEL Expression requirements are
+// treated as satisfied here. The canonical evaluator that honours CEL is
+// PolicyEngine.EvaluateRequirementSet — prefer it for policy decisions. This
+// function is retained for the artifact-only Graph.Validate API and kept in
+// operator-semantics sync with that path.
+//
 //nolint:gocognit // recursive requirement checking is inherently complex
 func check(rs RequirementSet, artifacts []*pkg_artifact.ArtifactEnvelope) bool {
 	// Recursive check
@@ -173,8 +180,11 @@ func check(rs RequirementSet, artifacts []*pkg_artifact.ArtifactEnvelope) bool {
 		return true
 	}
 
+	// Combine using the same operator semantics as the canonical CEL path
+	// (PolicyEngine.combineResults): empty logic defaults to AND and NOT is
+	// supported. Kept in sync so the two evaluators do not diverge.
 	switch rs.Logic {
-	case AND:
+	case AND, "":
 		for _, r := range leafResults {
 			if !r {
 				return false
@@ -188,8 +198,16 @@ func check(rs RequirementSet, artifacts []*pkg_artifact.ArtifactEnvelope) bool {
 			}
 		}
 		return false
+	case NOT:
+		// NOT is satisfied unless every child/leaf is satisfied.
+		for _, r := range leafResults {
+			if !r {
+				return true
+			}
+		}
+		return false
 	default:
-		// Unknown logic, fail safe
+		// Unknown logic, fail safe.
 		return false
 	}
 }

@@ -149,6 +149,51 @@ func TestGuardian_Delegation_ToolScopeViolation_Deny(t *testing.T) {
 	assert.Contains(t, decision.Reason, "forbidden_tool")
 }
 
+func TestGuardian_Delegation_ScopeDeniedDoesNotBurnNonce(t *testing.T) {
+	g, store := setupGuardianWithDelegation(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	session := identity.NewDelegationSession(
+		"sess-retry", "user-alice", "agent-bot1",
+		"nonce-retry", "sha256:policy1", "trust-root-1",
+		100, now.Add(1*time.Hour), true, nil,
+	)
+	session.AddAllowedTool("allowed_tool")
+	_ = session.AddCapability(identity.CapabilityGrant{
+		Resource: "allowed_tool",
+		Actions:  []string{"EXECUTE_TOOL"},
+	})
+	_ = store.Store(session)
+
+	// First attempt hits the wrong tool: scope violation. This must NOT
+	// consume the single-use session nonce.
+	bad := DecisionRequest{
+		Principal: "agent-bot1",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "forbidden_tool",
+		Context:   map[string]interface{}{"delegation_session_id": "sess-retry"},
+	}
+	decision, err := g.EvaluateDecision(ctx, bad)
+	require.NoError(t, err)
+	assert.Equal(t, "DENY", decision.Verdict)
+	assert.Equal(t, string(contracts.ReasonDelegationScopeViolation), decision.ReasonCode)
+
+	assert.False(t, store.IsNonceUsed("nonce-retry"),
+		"scope-denied attempt must not burn the session nonce")
+
+	// Corrected retry with the in-scope tool must still be allowed.
+	good := DecisionRequest{
+		Principal: "agent-bot1",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "allowed_tool",
+		Context:   map[string]interface{}{"delegation_session_id": "sess-retry"},
+	}
+	decision, err = g.EvaluateDecision(ctx, good)
+	require.NoError(t, err)
+	assert.Equal(t, "ALLOW", decision.Verdict, "corrected retry should succeed; reason=%s", decision.ReasonCode)
+}
+
 func TestGuardian_Delegation_RevokedSession_Deny(t *testing.T) {
 	g, store := setupGuardianWithDelegation(t)
 	ctx := context.Background()

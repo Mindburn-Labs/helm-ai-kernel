@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-04T18:10:57Z
-# Commit: 0101fdaba2e735ab556fae1dc599821188aed1f9
+# Generated: 2026-07-04T18:40:33Z
+# Commit: d616e8a711ef19a25f570b064f044e9258550c7c
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -575,7 +575,7 @@ aa4ea979d3f36460d50808f0ccee6bd48eb97cbc3c888d53b2971701b704e462  core/pkg/guard
 2a5ca32bc0c383992332eea7cd839575ee7dd4b6266c2ed64c7bd8a2bfec044f  core/pkg/guardian/guardian_bench_test.go
 85459f0cd76631d94c0ea0e886eb90237c1b29ae7512b542ed4cd4995101f532  core/pkg/guardian/guardian_contracts_test.go
 6855d4df5ba134cb673af5dc89ac9197bacfd51fa17bec87e67ea4ba3fb66c39  core/pkg/guardian/guardian_core_coverage_test.go
-a7e35f40e542f1d03d0d4b2f8aa3f514dbebd301754a74f5c2090ac2489bb80e  core/pkg/guardian/guardian_delegation_test.go
+7c16929281b29d9b1256c185e6b98997470b44e6135a3f6bb1e5e5abeb187ef8  core/pkg/guardian/guardian_delegation_test.go
 1c6069fc10f370e11aefe4cab278c3994d29a72fe616aad5420aa6876bb05bde  core/pkg/guardian/guardian_edge_cases_test.go
 f4bb89f2028879a0a9f2ca0206d98908937a7602083565dba2a94f59139aa7c3  core/pkg/guardian/guardian.go
 d7ad656ec37a80da9538c9435229f2e06214ccdde857fdf81e86dbb18d4ad7d7  core/pkg/guardian/guardian_intervention_test.go
@@ -584,7 +584,7 @@ d7ad656ec37a80da9538c9435229f2e06214ccdde857fdf81e86dbb18d4ad7d7  core/pkg/guard
 604a3143cb413e5f65278430f7f40c0c98c3eb123b7180d01c05e7b19906f678  core/pkg/guardian/guardian_stress_coverage_test.go
 ca72cfc8728b95865c08db1cd5a538ca0a2b498527fa9e11bdfb9ae780da8e1a  core/pkg/guardian/guardian_test.go
 b8a92ba80717a401aed15e89883c609ca40e7281b74b2b781fd9b327e9360a9c  core/pkg/guardian/integration_test.go
-10c17dfabce3658162750f7b6cd56967a75debe6a9c689b05393f6ab7759bdfd  core/pkg/guardian/interceptor.go
+d0c6c074a9a73202be5c054bd2a45db92df4c39bc2546e91fed80945320ad311  core/pkg/guardian/interceptor.go
 ff78b833c6f03eecbf994ddf44b2e41cc65346c3cd8bca55d0c1ed2bbfc4fe7d  core/pkg/guardian/interceptor_test.go
 c0118e244adcba44a228c918ffb6c2fddc5be3273b7383914fb81e5f933bdb54  core/pkg/guardian/intervention_test.go
 fa50013f154fd1a1ebe1dcc1448b22f0ef3650990cefef4e7693aed227130b52  core/pkg/guardian/otel.go

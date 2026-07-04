@@ -237,6 +237,11 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 	}
 
 	if g.clock == nil {
+		// Per KERNEL_TCB §3 the kernel must derive time from an injected
+		// authority clock, not the wall clock. Fall back to wallClock for
+		// backward compatibility, but surface it so the invariant violation
+		// is observable rather than silent.
+		slog.Warn("[guardian] no authority clock injected; falling back to wall clock (KERNEL_TCB §3) — inject WithClock in production")
 		g.clock = wallClock{}
 	}
 	g.boundaryChain = []BoundaryInterceptor{

@@ -28,7 +28,7 @@ jobs:
           # official tlaplus release and update the digest here and in
           # scripts/tla/download-tools.sh together.
           TLA_TOOLS_VERSION: v1.8.0
-          TLA_TOOLS_SHA256: d144885f107ead1d1e56bcfc946df4b27b61588014b8d6525471c744aa743d18
+          TLA_TOOLS_SHA256: 9e27b5e19a69ae1f56aabf8403a6ed5598dbfa6e638908e5278ac39736c1543d
         # Run the script and capture output separately: `echo "jar=$(...)"`
         # swallows the script's exit code, letting later steps run with an
         # empty classpath when the download or digest check fails.

@@ -8,7 +8,7 @@ DEFAULT_TLA_TOOLS_VERSION="v1.8.0"
 # tla2tools.jar under the same tag. On SHA-256 mismatch, re-verify the asset
 # against the official release and update this digest and the one in
 # .github/workflows/tla.yml together.
-DEFAULT_TLA_TOOLS_SHA256="d144885f107ead1d1e56bcfc946df4b27b61588014b8d6525471c744aa743d18"
+DEFAULT_TLA_TOOLS_SHA256="9e27b5e19a69ae1f56aabf8403a6ed5598dbfa6e638908e5278ac39736c1543d"
 VERSION="${TLA_TOOLS_VERSION:-$DEFAULT_TLA_TOOLS_VERSION}"
 EXPECTED_SHA256="${TLA_TOOLS_SHA256:-}"
 JAR_URL="${TLA_TOOLS_JAR_URL:-}"

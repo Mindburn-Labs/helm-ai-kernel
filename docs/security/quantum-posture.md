@@ -82,9 +82,13 @@ control-plane emits a `receipt` product event for finalized GeneratedSpec
 boundary runs, and Console receipt activity can display that hybrid-required
 posture from the event payload.
 
-That is live control-plane event compatibility, not a claim that a deployed
-authenticated workspace flow has been smoked end to end. Treat authenticated
-deployed console receipt smoke as a separate remaining gate.
+That is live control-plane event compatibility plus source-owned Console smoke
+coverage: `app-helm-console` PR #18 verifies an authenticated BFF
+`/api/v1/signing-key` hybrid-required posture and renders a hybrid-required
+receipt product event from the SSE stream against the local contract harness.
+That is not a claim that a deployed authenticated production workspace flow has
+been smoked end to end. Treat deployed console receipt smoke as a separate
+remaining gate.
 
 ## Public Web Boundary
 

@@ -101,8 +101,8 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
 - Routed docs truth through the public org reusable workflow and pinned that
   reusable workflow's docs-truth runner checkout so `MINDBURN_ORG_READ_TOKEN`
   is not paired with floating runner code.
-- Clarified public-web post-quantum wording so release documentation does not
-  imply an added post-quantum cryptographic control.
+- Clarified HELM Kernel and HELM Enterprise quantum-security wording so public
+  release material does not imply an added post-quantum cryptographic control.
 
 ## [0.5.20] - 2026-07-01
 

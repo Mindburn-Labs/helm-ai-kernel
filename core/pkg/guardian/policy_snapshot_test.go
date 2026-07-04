@@ -125,6 +125,52 @@ func TestGuardianEarlyDenyBindsActivePolicySnapshot(t *testing.T) {
 	}
 }
 
+func TestGuardianSnapshotWithEmbeddedPDPBindsPolicyHashAndIssuesIntent(t *testing.T) {
+	scope := policyreconcile.DefaultScope
+	store := policyreconcile.NewAtomicSnapshotStore()
+	hash := "sha256:snapshot-pdp"
+	if err := store.Swap(scope, &policyreconcile.EffectivePolicySnapshot{
+		TenantID:    scope.TenantID,
+		WorkspaceID: scope.WorkspaceID,
+		PolicyEpoch: 9,
+		PolicyHash:  hash,
+		Validation:  policyreconcile.ValidationStatus{Status: policyreconcile.StatusActive},
+		Graph:       allowGraphFor("deploy"),
+		PDP:         guardianCoveragePDP{},
+	}); err != nil {
+		t.Fatalf("swap snapshot: %v", err)
+	}
+
+	g := NewGuardian(
+		&MockSigner{},
+		prg.NewGraph(),
+		pkg_artifact.NewRegistry(NewMockStore(), nil),
+		WithPolicySnapshots(store, scope),
+	)
+	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
+		Principal: "agent-1",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "deploy",
+	})
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if decision.Verdict != string(contracts.VerdictAllow) {
+		t.Fatalf("expected allow, got %+v", decision)
+	}
+	if decision.PolicyContentHash != hash || decision.PolicyEpoch != "9" {
+		t.Fatalf("snapshot+PDP decision lost policy binding: hash=%q epoch=%q", decision.PolicyContentHash, decision.PolicyEpoch)
+	}
+
+	if _, err := g.IssueExecutionIntent(context.Background(), decision, &contracts.Effect{
+		EffectID:   "effect-1",
+		EffectType: "EXECUTE_TOOL",
+		Params:     map[string]any{"tool_name": "deploy"},
+	}); err != nil {
+		t.Fatalf("issue intent under snapshot+PDP config: %v", err)
+	}
+}
+
 func TestGuardianPolicyEpochChangeBeforeIntentDenies(t *testing.T) {
 	scope := policyreconcile.DefaultScope
 	store := policyreconcile.NewAtomicSnapshotStore()

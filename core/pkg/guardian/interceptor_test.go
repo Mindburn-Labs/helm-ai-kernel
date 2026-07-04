@@ -96,6 +96,47 @@ func TestInterceptorChain_ExecutionFlowAndShortCircuit(t *testing.T) {
 	})
 }
 
+func TestTaintEgressOverrideRequiresTrustedContext(t *testing.T) {
+	t.Run("caller-set override without trusted context is ignored", func(t *testing.T) {
+		t.Setenv("HELM_TAINT_TRACKING", "1")
+		g := newMinimalGuardian()
+
+		dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{
+			Principal: "untrusted-agent",
+			Action:    "EXECUTE_TOOL",
+			Resource:  "http.post",
+			Context: map[string]interface{}{
+				"destination":          "https://external.egress.com/upload",
+				"taint":                []string{contracts.TaintCredential},
+				"allow_tainted_egress": true, // attacker-controlled: must not bypass
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, string(contracts.VerdictDeny), dec.Verdict)
+		assert.Equal(t, string(contracts.ReasonTaintedEgressDeny), dec.ReasonCode)
+	})
+
+	t.Run("override honored only from trusted security context", func(t *testing.T) {
+		t.Setenv("HELM_TAINT_TRACKING", "1")
+		g := newMinimalGuardian()
+
+		dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{
+			Principal: "trusted-adapter",
+			Action:    "EXECUTE_TOOL",
+			Resource:  "http.post",
+			Context: map[string]interface{}{
+				ContextSecurityTrusted: true, // bound by trusted transport boundary
+				"destination":          "https://external.egress.com/upload",
+				"taint":                []string{contracts.TaintCredential},
+				"allow_tainted_egress": true,
+			},
+		})
+		assert.NoError(t, err)
+		// Gate bypassed: evaluation proceeds to PRG, which has no rule.
+		assert.Equal(t, string(contracts.ReasonNoPolicy), dec.ReasonCode)
+	})
+}
+
 func TestTaintInterceptorEgressBlock(t *testing.T) {
 	t.Run("Tainted flow egress block", func(t *testing.T) {
 		t.Setenv("HELM_TAINT_TRACKING", "1")

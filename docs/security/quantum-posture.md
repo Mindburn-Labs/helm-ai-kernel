@@ -78,12 +78,13 @@ projection is a separate display contract: GeneratedSpec and approval-derived
 receipt metadata can carry `signature_profile=hybrid`, normalized
 `signature_algorithm=hybrid-ed25519-mldsa65-sha256`,
 `verification_policy=hybrid-required`, and `downgrade_rejected=true`. The
-Console has fixture-backed contract coverage for that projected receipt shape
-and displays the hybrid-required posture in receipt activity.
+control-plane emits a `receipt` product event for finalized GeneratedSpec
+boundary runs, and Console receipt activity can display that hybrid-required
+posture from the event payload.
 
-That is display compatibility, not a claim that an authenticated live workspace
-flow has shown a production receipt end to end. Treat authenticated production
-console receipt smoke as a separate remaining gate.
+That is live control-plane event compatibility, not a claim that a deployed
+authenticated workspace flow has been smoked end to end. Treat authenticated
+deployed console receipt smoke as a separate remaining gate.
 
 ## Public Web Boundary
 

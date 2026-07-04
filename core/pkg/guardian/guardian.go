@@ -251,15 +251,21 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 	return g
 }
 
-// newDecisionID generates a cryptographically random decision ID.
-// Uses crypto/rand to prevent ID collisions under concurrent load
-// (replaces the previous time.UnixNano() approach).
-func newDecisionID() string {
+// randomID generates a cryptographically random identifier with the given
+// prefix (e.g. "dec-", "eff-"). Using crypto/rand instead of a wall-clock
+// counter prevents ID collisions under concurrent load and same-nanosecond
+// generation, and keeps IDs from leaking timing information.
+func randomID(prefix string) string {
 	var b [16]byte
 	if _, err := crand.Read(b[:]); err != nil {
 		panic(fmt.Sprintf("guardian: crypto/rand failure: %v", err))
 	}
-	return "dec-" + hex.EncodeToString(b[:])
+	return prefix + hex.EncodeToString(b[:])
+}
+
+// newDecisionID generates a cryptographically random decision ID.
+func newDecisionID() string {
+	return randomID("dec-")
 }
 
 // SetBudgetTracker configures the budget enforcement gate.
@@ -921,7 +927,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 
 		// 1. Construct Effect from Request
 		effect := &contracts.Effect{
-			EffectID:   fmt.Sprintf("eff-%d", g.clock.Now().UnixNano()),
+			EffectID:   randomID("eff-"),
 			EffectType: req.Action,
 			Params:     req.Context,
 			Taint:      contracts.TaintLabelsFromContext(req.Context),

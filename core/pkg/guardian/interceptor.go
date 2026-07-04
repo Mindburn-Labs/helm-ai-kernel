@@ -123,7 +123,7 @@ func (t *TemporalInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationC
 
 			// Build effect and its digest
 			effect := &contracts.Effect{
-				EffectID:   fmt.Sprintf("eff-%d", t.g.clock.Now().UnixNano()),
+				EffectID:   randomID("eff-"),
 				EffectType: evalCtx.Request.Action,
 				Params:     evalCtx.Request.Context,
 				Taint:      contracts.TaintLabelsFromContext(evalCtx.Request.Context),
@@ -676,7 +676,7 @@ func (s *SandboxAllocationInterceptor) Evaluate(ctx context.Context, evalCtx *Ev
 		if evalCtx.Request.Context == nil {
 			evalCtx.Request.Context = make(map[string]interface{})
 		}
-		leaseID := fmt.Sprintf("lease-%d", s.g.clock.Now().UnixNano())
+		leaseID := randomID("lease-")
 		evalCtx.Request.Context["sandbox_lease_id"] = leaseID
 
 		// Release the warm sandbox back to pool

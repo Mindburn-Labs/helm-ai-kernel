@@ -274,6 +274,25 @@ func TestExt_DecisionIDsUnique(t *testing.T) {
 	}
 }
 
+// ─── 17b: randomID is collision-free even in a tight loop ─────
+// A wall-clock (UnixNano) generator collides when many IDs are minted
+// within the same nanosecond tick; crypto/rand does not.
+
+func TestExt_RandomIDNoCollisionInTightLoop(t *testing.T) {
+	const n = 100_000
+	seen := make(map[string]struct{}, n)
+	for i := 0; i < n; i++ {
+		id := randomID("eff-")
+		if !strings.HasPrefix(id, "eff-") {
+			t.Fatalf("expected eff- prefix, got %s", id)
+		}
+		if _, dup := seen[id]; dup {
+			t.Fatalf("collision after %d iterations: %s", i, id)
+		}
+		seen[id] = struct{}{}
+	}
+}
+
 // ─── 18: WithDelegationStore injects store ────────────────────
 
 func TestExt_WithDelegationStore(t *testing.T) {

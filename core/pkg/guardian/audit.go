@@ -55,6 +55,10 @@ func (l *AuditLog) Append(actor, action, target, details string) (*AuditEntry, e
 
 	now := l.clock.Now()
 	entry := AuditEntry{
+		// Clock-derived (not random): the audit entry ID is part of the
+		// hashed content, and the hash chain must be deterministic and
+		// replayable for the same inputs and clock. See
+		// TestDeepAuditLogHashDeterminism.
 		ID:           fmt.Sprintf("evt_%d", now.UnixNano()),
 		Timestamp:    now.UTC(),
 		Actor:        actor,

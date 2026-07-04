@@ -794,6 +794,49 @@ func TestGraph_Validate_ArtifactMissing(t *testing.T) {
 	}
 }
 
+func TestGraph_Validate_EmptyLogicDefaultsToAND(t *testing.T) {
+	g := NewGraph()
+	// Logic unset ("") must behave as AND, matching the canonical CEL path,
+	// not fall through to the fail-safe deny.
+	_ = g.AddRule("act-1", RequirementSet{
+		ID:           "rs-1",
+		Requirements: []Requirement{{ID: "r1", ArtifactType: "evidence/alert"}},
+	})
+	arts := []*pkg_artifact.ArtifactEnvelope{{Type: "evidence/alert"}}
+	ok, _, err := g.Validate("act-1", arts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("empty logic with satisfied requirement should pass (AND semantics)")
+	}
+}
+
+func TestGraph_Validate_NOTLogic(t *testing.T) {
+	g := NewGraph()
+	// NOT is satisfied unless every child/leaf is satisfied.
+	_ = g.AddRule("act-not", RequirementSet{
+		ID:           "rs-not",
+		Logic:        NOT,
+		Requirements: []Requirement{{ID: "r1", ArtifactType: "evidence/forbidden"}},
+	})
+
+	// Artifact absent → leaf false → NOT true → pass.
+	ok, _, err := g.Validate("act-not", []*pkg_artifact.ArtifactEnvelope{{Type: "evidence/other"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("NOT with unsatisfied leaf should pass")
+	}
+
+	// Artifact present → leaf true → NOT false → deny.
+	ok, _, err = g.Validate("act-not", []*pkg_artifact.ArtifactEnvelope{{Type: "evidence/forbidden"}})
+	if err == nil && ok {
+		t.Fatal("NOT with satisfied leaf should deny")
+	}
+}
+
 // --- RequirementSet.Hash ---
 
 func TestRequirementSet_Hash_NotEmpty(t *testing.T) {

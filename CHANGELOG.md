@@ -39,7 +39,8 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
-        A1["[0.6.0] - 2026-07-02"]
+        A1["[0.7.0] - 2026-07-05"]
+        A2["[0.6.0] - 2026-07-02"]
         B["[0.5.20] - 2026-07-01"]
         B0["[0.5.19] - 2026-07-01"]
         B1["[0.5.16] - 2026-06-18"]
@@ -57,7 +58,8 @@ flowchart TD
     %% Operational Flow Edges
     Page --> A
     A --> A1
-    A1 --> B
+    A1 --> A2
+    A2 --> B
     B --> B0
     B0 --> B1
     B1 --> B2
@@ -82,6 +84,26 @@ No public feature claim is active in this section. Keep research scaffolds and
 hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
+
+## [0.7.0] - 2026-07-05
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.0>.
+
+<!-- quantum_posture: v0.7.0 release notes mention existing cosign release verification only; this release adds no post-quantum cryptographic control. -->
+
+- Cut the EvidencePack and ProofGraph beta release without adding product,
+  cloud, GA, connector certification, or checkout scope.
+- Made native EvidencePack verification fail closed when any regular pack file
+  is not listed in `00_INDEX.json`, with only `00_INDEX.json` and
+  `07_ATTESTATIONS/evidence_pack.sig` treated as unindexed control files.
+- Bound declared `99_EXT/` extension files to pack verification so formal-proof
+  and future extension material must be indexed before a seal verifies.
+- Froze ProofGraph hash-reference validation for `node_hash` and `parents[]`
+  as 64-character lowercase SHA-256 hex refs.
+- Hardened the legacy tar EvidencePack verifier against duplicate,
+  unsupported, or unmanifested archive entries.
+- Added a release-asset gate that verifies the staged `evidence-pack.tar` and
+  then proves an appended tampered copy is rejected by the same offline verifier.
 
 ## [0.6.0] - 2026-07-02
 

@@ -153,6 +153,7 @@ func VerifyPack(packPath string) (*ExportManifest, error) {
 
 	var manifest *ExportManifest
 	fileHashes := make(map[string]string)
+	seenEntries := make(map[string]struct{})
 
 	for {
 		hdr, err := tr.Next()
@@ -161,6 +162,16 @@ func VerifyPack(packPath string) (*ExportManifest, error) {
 		}
 		if err != nil {
 			return nil, fmt.Errorf("tar read: %w", err)
+		}
+		if hdr.Name == "" {
+			return nil, fmt.Errorf("empty tar entry name")
+		}
+		if _, ok := seenEntries[hdr.Name]; ok {
+			return nil, fmt.Errorf("duplicate tar entry %s", hdr.Name)
+		}
+		seenEntries[hdr.Name] = struct{}{}
+		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA {
+			return nil, fmt.Errorf("unsupported tar entry %s type %d", hdr.Name, hdr.Typeflag)
 		}
 
 		data, err := io.ReadAll(tr)
@@ -195,6 +206,11 @@ func VerifyPack(packPath string) (*ExportManifest, error) {
 		}
 		if actualHash != expectedHash {
 			return nil, fmt.Errorf("hash mismatch for %s: expected %s, got %s", name, expectedHash, actualHash)
+		}
+	}
+	for name := range fileHashes {
+		if _, ok := manifest.FileHashes[name]; !ok {
+			return nil, fmt.Errorf("file %s present in pack but missing from manifest", name)
 		}
 	}
 

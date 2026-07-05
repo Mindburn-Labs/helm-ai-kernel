@@ -368,8 +368,30 @@ func TestVerifyEvidencePackSealRejectsUnindexedExtensionFile(t *testing.T) {
 	if result.State == "valid" {
 		t.Fatalf("unindexed extension file accepted: %+v", result)
 	}
-	if !strings.Contains(strings.Join(result.Errors, "; "), "unindexed extension file: 99_EXT/helm-formal-proof/proof.json") {
+	if !strings.Contains(strings.Join(result.Errors, "; "), "unindexed evidence pack file: 99_EXT/helm-formal-proof/proof.json") {
 		t.Fatalf("expected unindexed extension failure, got %+v", result.Errors)
+	}
+}
+
+func TestVerifyEvidencePackSealRejectsUnindexedEvidenceFile(t *testing.T) {
+	packDir := writeSealTestPack(t, map[string][]byte{
+		"01_SCORE.json": []byte(`{"pass":true}`),
+	})
+	if _, err := SealEvidencePack(context.Background(), packDir, SealEvidencePackOptions{DataDir: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(packDir, "06_PROOFGRAPH"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packDir, "06_PROOFGRAPH", "unindexed.json"), []byte(`{"extra":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := VerifyEvidencePackSeal(packDir, VerifyEvidencePackSealOptions{Profile: EvidenceTrustProfileDevLocal})
+	if result.State == "valid" {
+		t.Fatalf("unindexed evidence file accepted: %+v", result)
+	}
+	if !strings.Contains(strings.Join(result.Errors, "; "), "unindexed evidence pack file: 06_PROOFGRAPH/unindexed.json") {
+		t.Fatalf("expected unindexed evidence file failure, got %+v", result.Errors)
 	}
 }
 

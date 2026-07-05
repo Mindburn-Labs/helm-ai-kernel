@@ -15,7 +15,7 @@ published drift evidence for that exact version.
 | Surface | Current state | Evidence | Plan impact |
 | --- | --- | --- | --- |
 | Release baseline | `v0.6.0` is the latest public GitHub release; `main` has moved past the tag. | `gh release list`, `git log v0.6.0..origin/main` | Start the next release from current `origin/main`, not from the tag. |
-| Open PR dependencies | No open kernel PRs. | `gh pr list --state open` returned `[]`. | No prerequisite merge queue exists today. |
+| Open PR dependencies | Open kernel PRs are this internal docs plan and the quantum inventory CI guard. No release-theme code prerequisite is open. | `gh pr list --state open` returned #509 and #510 on 2026-07-05. | Merge this docs plan before rebasing the CI guard; keep release-theme work out of both PRs. |
 | Unreleased main delta | Post-`v0.6.0` commits are guardian/kernel/PRG/TLA/release-doc hardening, not a feature train. | `git diff --stat v0.6.0..origin/main` | Fold into `v0.7.0` unless a security patch release is cut first. |
 | EvidencePack structure | Mandatory pack structure, optional host evidence, and declared `99_EXT/` extensions exist. | `core/pkg/conform/evidencepack.go:13` | `v0.7.0` should freeze authority and compatibility, not invent a pack layout. |
 | EvidencePack seal and verifier | Native seal and verification paths exist. | `core/pkg/evidence/seal.go:191`, `core/pkg/evidence/seal.go:349` | `v0.7.0` must define exact verifier success and tamper-failure requirements. |

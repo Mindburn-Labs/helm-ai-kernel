@@ -423,11 +423,7 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "  📦 %d receipts → %s/\n", len(receipts), outDir)
 	fmt.Fprintf(stdout, "  🔏 Sealed (dev-local) → %s/%s\n", outDir, evidencepkg.EvidencePackSealPath)
-	if err := generateProofReportJSON(receipts, outDir, template, provider); err != nil {
-		fmt.Fprintf(stderr, "Warning: could not generate JSON report: %v\n", err)
-	} else {
-		fmt.Fprintf(stdout, "  📊 Run Report → %s/%s\n", outDir, demoRunReportRelPath)
-	}
+	fmt.Fprintf(stdout, "  📊 Run Report → %s/%s\n", outDir, demoRunReportRelPath)
 
 	fmt.Fprintf(stdout, "\n%sVerifying EvidencePack...%s\n", ColorBold, ColorReset)
 	verifyPrev := ""
@@ -574,6 +570,10 @@ func writeVerifiableEvidencePack(outDir string, cfg demoScenarioConfig, receipts
 	scoreSum := sha256.Sum256(scoreJSON)
 	if err := os.WriteFile(filepath.Join(outDir, "01_SCORE.json.sha256"), []byte(hex.EncodeToString(scoreSum[:])+"\n"), 0o600); err != nil {
 		return err
+	}
+
+	if err := generateProofReportJSON(receipts, outDir, template, provider); err != nil {
+		return fmt.Errorf("generate run report: %w", err)
 	}
 
 	// 00_INDEX.json over every pack file (excluding the index itself and the

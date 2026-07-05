@@ -94,8 +94,9 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
 - Cut the EvidencePack and ProofGraph beta release without adding product,
   cloud, GA, connector certification, or checkout scope.
 - Made native EvidencePack verification fail closed when any regular pack file
-  is not listed in `00_INDEX.json`, with only `00_INDEX.json` and
-  `07_ATTESTATIONS/evidence_pack.sig` treated as unindexed control files.
+  is neither listed in `00_INDEX.json` nor a separately verified control file
+  such as `00_INDEX.json`, `07_ATTESTATIONS/evidence_pack.sig`, or
+  `07_ATTESTATIONS/conformance_report.sig`.
 - Bound declared `99_EXT/` extension files to pack verification so formal-proof
   and future extension material must be indexed before a seal verifies.
 - Froze ProofGraph hash-reference validation for `node_hash` and `parents[]`

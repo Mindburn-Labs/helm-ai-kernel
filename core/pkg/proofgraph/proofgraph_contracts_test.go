@@ -2,6 +2,7 @@ package proofgraph
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -58,6 +59,25 @@ func TestFinal_NodeValidateFailure(t *testing.T) {
 	n.NodeHash = "tampered"
 	if err := n.Validate(); err == nil {
 		t.Fatal("tampered node should fail validation")
+	}
+}
+
+func TestFinal_NodeValidateRejectsMalformedNodeHashRef(t *testing.T) {
+	n := NewNode(NodeTypeAttestation, nil, []byte(`{}`), 1, "p1", 0)
+	n.NodeHash = strings.ToUpper(n.NodeHash)
+	err := n.Validate()
+	if err == nil || !strings.Contains(err.Error(), "invalid node_hash ref") {
+		t.Fatalf("expected invalid node_hash ref, got %v", err)
+	}
+}
+
+func TestFinal_NodeValidateRejectsMalformedParentRef(t *testing.T) {
+	n := NewNode(NodeTypeAttestation, nil, []byte(`{}`), 1, "p1", 0)
+	n.Parents = []string{"parent1"}
+	n.NodeHash = n.ComputeNodeHash()
+	err := n.Validate()
+	if err == nil || !strings.Contains(err.Error(), "invalid parents ref") {
+		t.Fatalf("expected invalid parents ref, got %v", err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package conform
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,6 +62,9 @@ func CreateEvidencePackDirs(root string) error {
 // Supports declared extensions under 99_EXT/ if listed in declaredExtensions.
 func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []string {
 	var issues []string
+	if len(declaredExtensions) == 0 {
+		declaredExtensions = declaredEvidencePackExtensions(root)
+	}
 
 	// Check 00_INDEX.json exists
 	if _, err := os.Stat(filepath.Join(root, "00_INDEX.json")); err != nil {
@@ -129,4 +133,18 @@ func ValidateEvidencePackStructure(root string, declaredExtensions ...string) []
 	}
 
 	return issues
+}
+
+func declaredEvidencePackExtensions(root string) []string {
+	data, err := os.ReadFile(filepath.Join(root, "00_INDEX.json"))
+	if err != nil {
+		return nil
+	}
+	var index struct {
+		Extensions []string `json:"extensions"`
+	}
+	if err := json.Unmarshal(data, &index); err != nil {
+		return nil
+	}
+	return index.Extensions
 }

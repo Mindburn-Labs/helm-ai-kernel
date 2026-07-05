@@ -51,6 +51,21 @@ func TestVerifyProfileDevLocalPassesSealedPack(t *testing.T) {
 	}
 }
 
+func TestVerifyProfileDevLocalPassesDeclaredIndexedExtension(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("HELM_DATA_DIR", dataDir)
+	packDir := writeCLISealedPack(t, dataDir, "helm-formal-proof")
+
+	var stdout, stderr bytes.Buffer
+	code := runVerifyCmd([]string{"--profile", "dev-local", packDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("verify exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "VERIFIED") {
+		t.Fatalf("compact output missing verification state: %s", stdout.String())
+	}
+}
+
 func TestVerifyProfileCustomerFailsWithoutExternalTrust(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("HELM_DATA_DIR", dataDir)
@@ -192,7 +207,7 @@ func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
 	}
 }
 
-func writeCLISealedPack(t *testing.T, dataDir string) string {
+func writeCLISealedPack(t *testing.T, dataDir string, extensions ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	score := []byte(`{"pass":true}`)
@@ -214,12 +229,28 @@ func writeCLISealedPack(t *testing.T, dataDir string) string {
 	}
 	scoreHash := sha256.Sum256(score)
 	receiptHash := sha256.Sum256(receipt)
+	entries := []map[string]string{
+		{"path": "01_SCORE.json", "sha256": hex.EncodeToString(scoreHash[:])},
+		{"path": "02_PROOFGRAPH/receipts/receipt-1.json", "sha256": hex.EncodeToString(receiptHash[:])},
+	}
+	for _, ext := range extensions {
+		rel := "99_EXT/" + ext + "/proof.json"
+		data := []byte(`{"ok":true}`)
+		if err := os.MkdirAll(filepath.Join(dir, "99_EXT", ext), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, rel), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		entries = append(entries, map[string]string{"path": rel, "sha256": hex.EncodeToString(sum[:])})
+	}
 	index := map[string]any{
 		"version": "1.0.0",
-		"entries": []map[string]string{
-			{"path": "01_SCORE.json", "sha256": hex.EncodeToString(scoreHash[:])},
-			{"path": "02_PROOFGRAPH/receipts/receipt-1.json", "sha256": hex.EncodeToString(receiptHash[:])},
-		},
+		"entries": entries,
+	}
+	if len(extensions) > 0 {
+		index["extensions"] = extensions
 	}
 	indexData, err := json.MarshalIndent(index, "", "  ")
 	if err != nil {

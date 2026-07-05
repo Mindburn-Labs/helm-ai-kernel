@@ -530,9 +530,12 @@ func verifyNoUnindexedEvidencePackFiles(packDir string, entries []indexRootEntry
 	for _, entry := range entries {
 		indexed[filepath.ToSlash(filepath.Clean(entry.Path))] = true
 	}
+	// conformance_report.sig signs 00_INDEX.json and 01_SCORE.json, so it is
+	// verified as a control signature outside the index it signs.
 	allowedUnindexed := map[string]bool{
-		"00_INDEX.json":      true,
-		EvidencePackSealPath: true,
+		"00_INDEX.json":                          true,
+		EvidencePackSealPath:                     true,
+		"07_ATTESTATIONS/conformance_report.sig": true,
 	}
 	return filepath.WalkDir(packDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {

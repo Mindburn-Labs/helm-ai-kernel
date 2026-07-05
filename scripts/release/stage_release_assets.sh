@@ -145,6 +145,44 @@ if [ -z "$pack_root" ]; then
 fi
 "$ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar"
 "$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar"
+tampered_pack="$TMP_DIR/evidence-pack-tampered.tar"
+python3 - "$ASSETS_DIR/evidence-pack.tar" "$tampered_pack" <<'PY'
+import copy
+import io
+import pathlib
+import sys
+import tarfile
+
+src = pathlib.Path(sys.argv[1])
+dst = pathlib.Path(sys.argv[2])
+
+with tarfile.open(src, "r:*") as inp, tarfile.open(dst, "w") as out:
+    for member in inp.getmembers():
+        cloned = copy.copy(member)
+        if member.isfile():
+            fileobj = inp.extractfile(member)
+            if fileobj is None:
+                raise SystemExit(f"missing file object for {member.name}")
+            with fileobj:
+                out.addfile(cloned, fileobj)
+        else:
+            out.addfile(cloned)
+
+    payload = b'{"tampered":true}\n'
+    info = tarfile.TarInfo("06_PROOFGRAPH/unindexed-release-tamper.json")
+    info.size = len(payload)
+    info.uid = info.gid = 0
+    info.uname = info.gname = "root"
+    info.mode = 0o644
+    info.mtime = 0
+    out.addfile(info, io.BytesIO(payload))
+PY
+if "$ROOT/bin/helm-ai-kernel" verify "$tampered_pack" > "$TMP_DIR/tampered-verify.log" 2>&1; then
+    echo "::error file=scripts/release/stage_release_assets.sh::tampered release EvidencePack unexpectedly verified" >&2
+    cat "$TMP_DIR/tampered-verify.log" >&2
+    exit 1
+fi
+log_step "tampered release EvidencePack rejected"
 
 (
     cd "$ASSETS_DIR"

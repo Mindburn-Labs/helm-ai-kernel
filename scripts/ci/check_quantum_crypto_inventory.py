@@ -57,7 +57,27 @@ def git_changed_files(args: list[str]) -> list[pathlib.Path] | None:
     return [pathlib.Path(line) for line in proc.stdout.splitlines() if line.strip()]
 
 
+def fetch_github_base_ref() -> None:
+    base = os.environ.get("GITHUB_BASE_REF", "").strip()
+    if not base:
+        return
+    subprocess.run(
+        [
+            "git",
+            "fetch",
+            "--no-tags",
+            "--depth=100",
+            "origin",
+            f"+refs/heads/{base}:refs/remotes/origin/{base}",
+        ],
+        stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+    )
+
+
 def changed_files(base: str) -> list[pathlib.Path]:
+    fetch_github_base_ref()
+
     refspecs: list[str] = []
     if base:
         refspecs.append(f"{base}...HEAD")

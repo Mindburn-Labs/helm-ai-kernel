@@ -93,7 +93,8 @@ func TestNodeHash_Intent(t *testing.T) {
 }
 
 func TestNodeHash_Attestation(t *testing.T) {
-	n := NewNode(NodeTypeAttestation, []string{"parent"}, []byte(`{"ok":true}`), 2, "p", 1)
+	parent := NewNode(NodeTypeIntent, nil, []byte(`{"intent":true}`), 1, "p", 0)
+	n := NewNode(NodeTypeAttestation, []string{parent.NodeHash}, []byte(`{"ok":true}`), 2, "p", 1)
 	if err := n.Validate(); err != nil {
 		t.Fatalf("attestation node validation failed: %v", err)
 	}
@@ -121,7 +122,9 @@ func TestNodeHash_Checkpoint(t *testing.T) {
 }
 
 func TestNodeHash_MergeDecision(t *testing.T) {
-	n := NewNode(NodeTypeMergeDecision, []string{"a", "b"}, []byte(`{"merged":true}`), 5, "p", 3)
+	a := NewNode(NodeTypeIntent, nil, []byte(`{"branch":"a"}`), 1, "p", 0)
+	b := NewNode(NodeTypeIntent, nil, []byte(`{"branch":"b"}`), 1, "p", 1)
+	n := NewNode(NodeTypeMergeDecision, []string{a.NodeHash, b.NodeHash}, []byte(`{"merged":true}`), 5, "p", 3)
 	if err := n.Validate(); err != nil {
 		t.Fatalf("merge decision node validation failed: %v", err)
 	}

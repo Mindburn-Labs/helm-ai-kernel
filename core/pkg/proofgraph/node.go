@@ -120,14 +120,35 @@ func (n *Node) ComputeNodeHash() string {
 	return hash
 }
 
-// Validate checks the node hash integrity.
+// Validate checks the node hash integrity and reference grammar.
 func (n *Node) Validate() error {
 	if err := n.validateSignaturePurpose(); err != nil {
 		return err
 	}
+	if err := validateNodeHashRef("node_hash", n.NodeHash); err != nil {
+		return err
+	}
+	for _, parent := range n.Parents {
+		if err := validateNodeHashRef("parents", parent); err != nil {
+			return err
+		}
+	}
 	expected := n.ComputeNodeHash()
 	if n.NodeHash != expected {
 		return fmt.Errorf("node hash mismatch: got %s, want %s", n.NodeHash, expected)
+	}
+	return nil
+}
+
+func validateNodeHashRef(field string, ref string) error {
+	if len(ref) != sha256.Size*2 {
+		return fmt.Errorf("proofgraph: invalid %s ref %q: expected 64 lowercase hex characters", field, ref)
+	}
+	for _, c := range ref {
+		if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') {
+			continue
+		}
+		return fmt.Errorf("proofgraph: invalid %s ref %q: expected 64 lowercase hex characters", field, ref)
 	}
 	return nil
 }

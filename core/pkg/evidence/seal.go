@@ -514,12 +514,46 @@ func computeEvidencePackInventory(packDir string, verifyFiles bool) (evidencePac
 		if err := verifyEvidencePackIndexedFiles(packDir, index.Entries); err != nil {
 			return evidencePackInventory{}, err
 		}
+		if err := verifyNoUnindexedExtensionFiles(packDir, index.Entries); err != nil {
+			return evidencePackInventory{}, err
+		}
 	}
 	return evidencePackInventory{Roots: EvidencePackIndexRoots{
 		IndexHash:  sha256HexEvidence(indexData),
 		MerkleRoot: merkleRootHexEvidence(leaves),
 		EntryCount: len(index.Entries),
 	}, Entries: index.Entries}, nil
+}
+
+func verifyNoUnindexedExtensionFiles(packDir string, entries []indexRootEntry) error {
+	extDir := filepath.Join(packDir, "99_EXT")
+	if _, err := os.Stat(extDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read 99_EXT: %w", err)
+	}
+	indexed := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		indexed[filepath.ToSlash(filepath.Clean(entry.Path))] = true
+	}
+	return filepath.WalkDir(extDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(packDir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if !indexed[rel] {
+			return fmt.Errorf("unindexed extension file: %s", rel)
+		}
+		return nil
+	})
 }
 
 func verifyEvidencePackIndexedFiles(packDir string, entries []indexRootEntry) error {

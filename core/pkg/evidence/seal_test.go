@@ -355,6 +355,24 @@ func TestVerifyEvidencePackSealRejectsIndexedFileTamper(t *testing.T) {
 	}
 }
 
+func TestVerifyEvidencePackSealRejectsUnindexedExtensionFile(t *testing.T) {
+	packDir := writeSealTestPack(t, map[string][]byte{
+		"01_SCORE.json":                       []byte(`{"pass":true}`),
+		"99_EXT/helm-formal-proof/proof.json": []byte(`{"ok":true}`),
+	})
+	writeSealTestIndexWithExtensions(t, packDir, []string{"01_SCORE.json"}, []string{"helm-formal-proof"})
+	if _, err := SealEvidencePack(context.Background(), packDir, SealEvidencePackOptions{DataDir: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	result := VerifyEvidencePackSeal(packDir, VerifyEvidencePackSealOptions{Profile: EvidenceTrustProfileDevLocal})
+	if result.State == "valid" {
+		t.Fatalf("unindexed extension file accepted: %+v", result)
+	}
+	if !strings.Contains(strings.Join(result.Errors, "; "), "unindexed extension file: 99_EXT/helm-formal-proof/proof.json") {
+		t.Fatalf("expected unindexed extension failure, got %+v", result.Errors)
+	}
+}
+
 func TestVerifyStorageReceiptForSealRequiresCustomerGradeS3(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "pack.tar")
 	if err := os.WriteFile(archivePath, []byte("sealed archive"), 0o600); err != nil {
@@ -575,6 +593,10 @@ func writeSealTestPack(t testing.TB, files map[string][]byte) string {
 }
 
 func writeSealTestIndex(t testing.TB, dir string, paths []string) {
+	writeSealTestIndexWithExtensions(t, dir, paths, nil)
+}
+
+func writeSealTestIndexWithExtensions(t testing.TB, dir string, paths []string, extensions []string) {
 	t.Helper()
 	entries := make([]map[string]string, 0, len(paths))
 	for _, rel := range paths {
@@ -586,6 +608,9 @@ func writeSealTestIndex(t testing.TB, dir string, paths []string) {
 		entries = append(entries, map[string]string{"path": rel, "sha256": hex.EncodeToString(sum[:])})
 	}
 	index := map[string]any{"version": "1.0.0", "entries": entries}
+	if len(extensions) > 0 {
+		index["extensions"] = extensions
+	}
 	data, err := json.MarshalIndent(index, "", "  ")
 	if err != nil {
 		t.Fatal(err)

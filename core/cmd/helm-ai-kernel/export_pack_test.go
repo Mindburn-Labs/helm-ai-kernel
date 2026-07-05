@@ -109,6 +109,27 @@ func TestVerifyPack_TamperedFile(t *testing.T) {
 	}
 }
 
+func TestVerifyPackRejectsUnmanifestedFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pack.tar")
+	tamperedPath := filepath.Join(dir, "tampered.tar")
+
+	files := map[string][]byte{
+		"data.json": []byte(`{"key":"value"}`),
+	}
+	if err := ExportPack("sess", files, path); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyPackWithExtraEntry(path, tamperedPath, "proofgraph/unmanifested.json", []byte(`{"extra":true}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := VerifyPack(tamperedPath)
+	if err == nil || !strings.Contains(err.Error(), "missing from manifest") {
+		t.Fatalf("expected unmanifested file rejection, got %v", err)
+	}
+}
+
 func TestExportPackWithOptions_EUAIActProfile(t *testing.T) {
 	path := t.TempDir() + "/ai-act.tar"
 	profile := completeExportEUAIActProfile()
@@ -372,4 +393,56 @@ func completeExportEUAIActProfile() *contracts.EUAIActEvidenceProfile {
 		TimelineStatus:                      "FINAL",
 		RedactionMetadata:                   map[string]string{"profile": "employment_minimized"},
 	}
+}
+
+func copyPackWithExtraEntry(srcPath, dstPath, extraName string, extraData []byte) error {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	gr, err := gzip.NewReader(src)
+	if err != nil {
+		return err
+	}
+	defer gr.Close()
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	gw := gzip.NewWriter(dst)
+	tw := tar.NewWriter(gw)
+
+	tr := tar.NewReader(gr)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return err
+		}
+		copied := *hdr
+		if err := tw.WriteHeader(&copied); err != nil {
+			return err
+		}
+		if _, err := tw.Write(data); err != nil {
+			return err
+		}
+	}
+	if err := writeEntry(tw, extraName, extraData); err != nil {
+		return err
+	}
+	if err := tw.Close(); err != nil {
+		return err
+	}
+	return gw.Close()
 }

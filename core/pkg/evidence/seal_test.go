@@ -397,6 +397,29 @@ func TestVerifyEvidencePackSealRejectsUnindexedEvidenceFile(t *testing.T) {
 	}
 }
 
+func TestVerifyEvidencePackSealRejectsUnindexedConformanceSignature(t *testing.T) {
+	packDir := writeSealTestPack(t, map[string][]byte{
+		"01_SCORE.json": []byte(`{"pass":true}`),
+	})
+	if _, err := SealEvidencePack(context.Background(), packDir, SealEvidencePackOptions{DataDir: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	attestDir := filepath.Join(packDir, "07_ATTESTATIONS")
+	if err := os.MkdirAll(attestDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attestDir, "conformance_report.sig"), []byte("unsigned-test-fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := VerifyEvidencePackSeal(packDir, VerifyEvidencePackSealOptions{Profile: EvidenceTrustProfileDevLocal})
+	if result.State == "valid" {
+		t.Fatalf("unindexed conformance signature accepted: %+v", result)
+	}
+	if !strings.Contains(strings.Join(result.Errors, "; "), "unindexed evidence pack file: 07_ATTESTATIONS/conformance_report.sig") {
+		t.Fatalf("expected unindexed conformance signature failure, got %+v", result.Errors)
+	}
+}
+
 func TestVerifyStorageReceiptForSealRequiresCustomerGradeS3(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "pack.tar")
 	if err := os.WriteFile(archivePath, []byte("sealed archive"), 0o600); err != nil {

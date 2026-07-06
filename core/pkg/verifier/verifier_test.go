@@ -136,7 +136,7 @@ func writeSealFixtureIndex(t *testing.T, dir string) {
 		}
 		rel = filepath.ToSlash(rel)
 		switch rel {
-		case "00_INDEX.json", evidencepkg.EvidencePackSealPath, "07_ATTESTATIONS/conformance_report.sig":
+		case "00_INDEX.json", evidencepkg.EvidencePackSealPath:
 			return nil
 		}
 		data, err := os.ReadFile(path)

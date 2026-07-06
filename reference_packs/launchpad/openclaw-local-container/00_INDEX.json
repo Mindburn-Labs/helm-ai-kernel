@@ -1,14 +1,52 @@
 {
   "version": "1.0.0",
-  "gates": ["launchpad"],
+  "gates": [
+    "launchpad"
+  ],
   "entries": [
     {
       "path": "01_SCORE.json",
       "sha256": "d7a08290de6a0e7c66cdb65a9843d96b0477cd5b56632ff7aa80281444d73430"
     },
     {
+      "path": "02_PROOFGRAPH/proofgraph.json",
+      "sha256": "5525d9919b71755203cfe3d05795f2a95c87118dee92c3ffd845a0a49847a21d"
+    },
+    {
       "path": "02_PROOFGRAPH/receipts/001_kernel_verdict.json",
       "sha256": "8a32382824d257abf374363832221b147ddb520bfacb43834bd3af7f54c0a5e0"
+    },
+    {
+      "path": "03_TELEMETRY/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "04_EXPORTS/launch_plan.json",
+      "sha256": "40b7f9851357984464f061dfb0d78232254442e6e0fd3e1b3823712e0461e778"
+    },
+    {
+      "path": "05_DIFFS/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "06_LOGS/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "07_ATTESTATIONS/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "08_TAPES/tape_manifest.json",
+      "sha256": "4415013240c99b9ee7afb6a77b87c4d03925efa94872bb070dadf775b31edf29"
+    },
+    {
+      "path": "09_SCHEMAS/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "12_REPORTS/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
     }
   ]
 }

@@ -1,27 +1,28 @@
 {
   "version": "evidence-pack-seal/v1",
   "pack_id": "openclaw-local-container",
-  "index_hash": "df5f87e53a5c391cc90337dd71f3e183b06f854c44bf96ec678edd785e05dee2",
-  "merkle_root": "67fafe9a2ab0ad4839d6f837cf3aa0842665ea08eea8495524e5c11840a4190c",
-  "entry_count": 2,
+  "index_hash": "c0d206cdeea84439887fded75ed4b62a88ba6ed8d7e44226206163cccfcd20ee",
+  "merkle_root": "7f8b66d8923169bbfa3e05cfc05ffee71a7f3c08f81b06864eef9f9216d7b93e",
+  "entry_count": 11,
   "profile": "dev-local",
   "signer": {
     "type": "file-dev",
-    "key_id": "file-dev:a4c0a69527e6e648",
+    "key_id": "file-dev:launchpad-reference-v1",
     "algorithm": "ed25519",
-    "public_key": "66e91804584e47287a5e84ec459ab7e63541905b1248889e22b6c6c113b86370"
+    "public_key": "00bda3ad078388b0929f3e1bca293271c28fedd6fd9a57819867301cd4177df2"
   },
   "anchor": {
     "type": "local-dev",
     "uri": "local-dev://evidence-pack",
     "status": "development-only",
-    "time": "2026-06-04T14:21:25.338221Z"
+    "time": "2026-07-06T06:42:06Z"
   },
   "storage": {
     "type": "local-dev",
     "uri": "local-dev://evidence-pack",
-    "status": "development-only"
+    "status": "development-only",
+    "retain_until": "0001-01-01T00:00:00Z"
   },
-  "signed_at": "2026-06-04T14:21:25.338221Z",
-  "signature": "eec821ff9bed55ecc52379ba80f4167990828f2b3bfa68c5274cb88bea2a4c814fb5696f9e630f9225e037e6c45e090db98d12c5da2aa865e58ef41281ec7e03"
+  "signed_at": "2026-07-06T06:42:06Z",
+  "signature": "b21f8fdbb3436c5406f2519bbc025091ac933d8787f8eb4cf94482e4e16e62588824e4f5ef986901676a7e89f660bb4f1a9288d37860baf66126829fff63400c"
 }

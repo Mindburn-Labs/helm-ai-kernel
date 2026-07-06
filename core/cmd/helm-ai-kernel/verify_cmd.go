@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: verify command trust checks use classical Ed25519
+// conformance/report signatures in this release; no post-quantum assurance is
+// claimed for this CLI verification path.
+
 import (
 	"archive/tar"
 	"bytes"
@@ -131,13 +135,21 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	if strings.TrimSpace(profile) != "" {
 		profileOpt = normalizeEvidenceTrustProfile(profile)
 	}
+	conformanceSigPresent := hasConformanceSignature(verifyTarget)
+	var conformanceSigErr error
+	allowVerifiedConformanceSignature := false
+	if conformanceSigPresent {
+		conformanceSigErr = verifyConformanceReportSignature(verifyTarget, trustedPublicKey)
+		allowVerifiedConformanceSignature = conformanceSigErr == nil
+	}
 	report, err := verifier.VerifyBundleWithOptions(verifyTarget, verifier.VerifyOptions{
-		Profile:                         profileOpt,
-		ConfigPath:                      configPath,
-		StorageReceiptPath:              storageReceipt,
-		StorageObjectPath:               storageObjectPath,
-		ExternalHostKeyHex:              externalHostKey,
-		ManagedAgentReceiptPublicKeyHex: managedAgentKey,
+		Profile:                           profileOpt,
+		ConfigPath:                        configPath,
+		StorageReceiptPath:                storageReceipt,
+		StorageObjectPath:                 storageObjectPath,
+		ExternalHostKeyHex:                externalHostKey,
+		ManagedAgentReceiptPublicKeyHex:   managedAgentKey,
+		AllowVerifiedConformanceSignature: allowVerifiedConformanceSignature,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)
@@ -160,34 +172,12 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Verify report signature when a conformance report signature is present.
-	if hasConformanceSignature(verifyTarget) {
-		sigErr := conform.VerifyReport(verifyTarget, func(data []byte, sig string) error {
-			pubKeyHex := strings.TrimSpace(trustedPublicKey)
-			if pubKeyHex == "" {
-				return fmt.Errorf("signature present but no trusted verification key available (set --trusted-public-key or HELM_VERIFY_PUBLIC_KEY_HEX)")
-			}
-
-			pubKeyBytes, err := hex.DecodeString(pubKeyHex)
-			if err != nil || len(pubKeyBytes) != 32 {
-				return fmt.Errorf("invalid HELM_VERIFY_PUBLIC_KEY_HEX: must be 64 hex chars (32 bytes)")
-			}
-
-			sigBytes, err := hex.DecodeString(sig)
-			if err != nil {
-				return fmt.Errorf("invalid signature encoding: %w", err)
-			}
-
-			pubKey := ed25519.PublicKey(pubKeyBytes)
-			if !ed25519.Verify(pubKey, data, sigBytes) {
-				return fmt.Errorf("Ed25519 signature verification failed: signature does not match data")
-			}
-			return nil
-		})
-		if sigErr != nil {
+	if conformanceSigPresent {
+		if conformanceSigErr != nil {
 			report.Checks = append(report.Checks, verifier.CheckResult{
 				Name:   "signature_verification",
 				Pass:   false,
-				Reason: fmt.Sprintf("signature: %v", sigErr),
+				Reason: fmt.Sprintf("signature: %v", conformanceSigErr),
 			})
 			report.Verified = false
 		}
@@ -373,6 +363,31 @@ func hasCanonicalEvidenceLayout(root string) bool {
 func hasConformanceSignature(root string) bool {
 	_, err := os.Stat(filepath.Join(root, "07_ATTESTATIONS", "conformance_report.sig"))
 	return err == nil
+}
+
+func verifyConformanceReportSignature(root string, trustedPublicKey string) error {
+	return conform.VerifyReport(root, func(data []byte, sig string) error {
+		pubKeyHex := strings.TrimSpace(trustedPublicKey)
+		if pubKeyHex == "" {
+			return fmt.Errorf("signature present but no trusted verification key available (set --trusted-public-key or HELM_VERIFY_PUBLIC_KEY_HEX)")
+		}
+
+		pubKeyBytes, err := hex.DecodeString(pubKeyHex)
+		if err != nil || len(pubKeyBytes) != 32 {
+			return fmt.Errorf("invalid HELM_VERIFY_PUBLIC_KEY_HEX: must be 64 hex chars (32 bytes)")
+		}
+
+		sigBytes, err := hex.DecodeString(sig)
+		if err != nil {
+			return fmt.Errorf("invalid signature encoding: %w", err)
+		}
+
+		pubKey := ed25519.PublicKey(pubKeyBytes)
+		if !ed25519.Verify(pubKey, data, sigBytes) {
+			return fmt.Errorf("Ed25519 signature verification failed: signature does not match data")
+		}
+		return nil
+	})
 }
 
 func normalizeVerifyArgs(args []string) ([]string, error) {

@@ -141,6 +141,10 @@ type VerifyEvidencePackSealOptions struct {
 	StorageReceiptPath string
 	StorageObjectPath  string
 	Now                time.Time
+	// AllowVerifiedConformanceSignature permits the legacy control signature
+	// file outside 00_INDEX.json only after the caller has verified it against
+	// an external trusted key. Library callers should leave this false.
+	AllowVerifiedConformanceSignature bool
 }
 
 // EvidencePackSealVerification is the verifier-facing seal status.
@@ -406,7 +410,7 @@ func VerifyEvidencePackSeal(packDir string, opts VerifyEvidencePackSealOptions) 
 	if seal.Version != EvidencePackSealVersion {
 		result.Errors = append(result.Errors, fmt.Sprintf("unsupported seal version %q", seal.Version))
 	}
-	inventory, err := computeEvidencePackInventory(packDir, true)
+	inventory, err := computeEvidencePackInventory(packDir, true, opts.AllowVerifiedConformanceSignature)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
 	} else {
@@ -481,7 +485,7 @@ func ComputeEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, erro
 	return inventory.Roots, err
 }
 
-func computeEvidencePackInventory(packDir string, verifyFiles bool) (evidencePackInventory, error) {
+func computeEvidencePackInventory(packDir string, verifyFiles bool, allowVerifiedConformanceSignature ...bool) (evidencePackInventory, error) {
 	indexPath := filepath.Join(packDir, "00_INDEX.json")
 	indexData, err := os.ReadFile(indexPath)
 	if err != nil {
@@ -516,7 +520,8 @@ func computeEvidencePackInventory(packDir string, verifyFiles bool) (evidencePac
 		if err := verifyEvidencePackIndexedFiles(packDir, index.Entries); err != nil {
 			return evidencePackInventory{}, err
 		}
-		if err := verifyNoUnindexedEvidencePackFiles(packDir, index.Entries); err != nil {
+		allowConformanceSignature := len(allowVerifiedConformanceSignature) > 0 && allowVerifiedConformanceSignature[0]
+		if err := verifyNoUnindexedEvidencePackFiles(packDir, index.Entries, allowConformanceSignature); err != nil {
 			return evidencePackInventory{}, err
 		}
 	}
@@ -527,17 +532,17 @@ func computeEvidencePackInventory(packDir string, verifyFiles bool) (evidencePac
 	}, Entries: index.Entries}, nil
 }
 
-func verifyNoUnindexedEvidencePackFiles(packDir string, entries []indexRootEntry) error {
+func verifyNoUnindexedEvidencePackFiles(packDir string, entries []indexRootEntry, allowVerifiedConformanceSignature bool) error {
 	indexed := make(map[string]bool, len(entries))
 	for _, entry := range entries {
 		indexed[filepath.ToSlash(filepath.Clean(entry.Path))] = true
 	}
-	// conformance_report.sig signs 00_INDEX.json and 01_SCORE.json, so it is
-	// verified as a control signature outside the index it signs.
 	allowedUnindexed := map[string]bool{
-		"00_INDEX.json":                          true,
-		EvidencePackSealPath:                     true,
-		"07_ATTESTATIONS/conformance_report.sig": true,
+		"00_INDEX.json":      true,
+		EvidencePackSealPath: true,
+	}
+	if allowVerifiedConformanceSignature {
+		allowedUnindexed["07_ATTESTATIONS/conformance_report.sig"] = true
 	}
 	return filepath.WalkDir(packDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {

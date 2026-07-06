@@ -9,6 +9,10 @@
 // It does NOT trust the HELM server, proxy, or any network service.
 package verifier
 
+// quantum_posture: standalone verifier trust roots use classical Ed25519
+// signatures for EvidencePack and embedded receipt checks in this release; no
+// post-quantum assurance is claimed by this verifier path.
+
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -89,6 +93,11 @@ type VerifyOptions struct {
 	// demands a valid signature over the receipt hash (fail-closed).
 	WitnessPublicKeysHex map[string]string
 	Now                  time.Time
+	// AllowVerifiedConformanceSignature permits 07_ATTESTATIONS/conformance_report.sig
+	// to remain outside 00_INDEX.json only for callers that have already
+	// verified it against an external trusted key. Standalone library callers
+	// should leave this false so the seal verifier remains fail-closed.
+	AllowVerifiedConformanceSignature bool
 }
 
 // VerifyBundle performs offline verification of an EvidencePack directory.
@@ -187,13 +196,14 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 
 func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyOptions) CheckResult {
 	seal := evidencepkg.VerifyEvidencePackSeal(bundlePath, evidencepkg.VerifyEvidencePackSealOptions{
-		Profile:            opts.Profile,
-		TrustConfig:        opts.TrustConfig,
-		DataDir:            opts.DataDir,
-		ConfigPath:         opts.ConfigPath,
-		StorageReceiptPath: opts.StorageReceiptPath,
-		StorageObjectPath:  opts.StorageObjectPath,
-		Now:                opts.Now,
+		Profile:                           opts.Profile,
+		TrustConfig:                       opts.TrustConfig,
+		DataDir:                           opts.DataDir,
+		ConfigPath:                        opts.ConfigPath,
+		StorageReceiptPath:                opts.StorageReceiptPath,
+		StorageObjectPath:                 opts.StorageObjectPath,
+		Now:                               opts.Now,
+		AllowVerifiedConformanceSignature: opts.AllowVerifiedConformanceSignature,
 	})
 	report.Seal = &seal
 	report.SealState = seal.State

@@ -10,6 +10,7 @@ import sys
 
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 RELEASE_TAG_RE = re.compile(r"^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+NPM_DIST_TAG_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,63}$")
 RUN_ID_RE = re.compile(r"^[1-9]\d{5,19}$")
 
 
@@ -49,6 +50,15 @@ def validate_optional_publish_tag(value: str | None, *, version: str) -> str | N
     return tag
 
 
+def validate_npm_dist_tag(value: str | None) -> str:
+    value = (value or "latest").strip()
+    if not NPM_DIST_TAG_RE.fullmatch(value):
+        raise ValueError("dist_tag must start with a letter and contain only letters, numbers, dot, underscore, or dash")
+    if SEMVER_RE.fullmatch(value) or RELEASE_TAG_RE.fullmatch(value):
+        raise ValueError("dist_tag must not be parseable as SemVer")
+    return value
+
+
 def validate_artifact_run_id(value: str) -> str:
     value = (value or "").strip()
     if not RUN_ID_RE.fullmatch(value):
@@ -64,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--version", required=True)
     publish.add_argument("--dry-run", default=None)
     publish.add_argument("--release-tag", default=None)
+    publish.add_argument("--dist-tag", default=None)
 
     clean_install = sub.add_parser("clean-install")
     clean_install.add_argument("--release-tag", required=True)
@@ -79,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
             version = validate_version(args.version)
             validate_bool(args.dry_run, field="dry_run")
             validate_optional_publish_tag(args.release_tag, version=version)
+            validate_npm_dist_tag(args.dist_tag)
         elif args.command == "clean-install":
             validate_release_tag(args.release_tag)
             validate_artifact_run_id(args.artifact_run_id)

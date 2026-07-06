@@ -7,6 +7,11 @@ on:
         description: Version to publish. Must match VERSION.
         required: true
         type: string
+      release_tag:
+        description: Optional release tag to publish from. Must match v<version>.
+        required: false
+        default: ""
+        type: string
       dry_run:
         description: Build and pack without publishing.
         required: false
@@ -37,16 +42,22 @@ jobs:
             test_command: "npm test -- --run"
             smoke_command: ""
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: "22"
-          registry-url: https://registry.npmjs.org
+      - name: Check out workflow validation ref
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Validate dispatch inputs
         run: |
           python3 scripts/ci/validate_workflow_dispatch_inputs.py publish \
             --version "${{ inputs.version }}" \
-            --dry-run "${{ inputs.dry_run }}"
+            --dry-run "${{ inputs.dry_run }}" \
+            --release-tag "${{ inputs.release_tag }}"
+      - name: Check out package ref
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ inputs.release_tag != '' && inputs.release_tag || github.ref }}
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
       - name: Version checks
         working-directory: ${{ matrix.package.path }}
         run: |

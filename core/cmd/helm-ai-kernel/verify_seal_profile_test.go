@@ -20,6 +20,8 @@ import (
 	proofanchor "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph/anchor"
 )
 
+// quantum_posture: these CLI tests validate classical Ed25519-backed
+// EvidencePack trust profiles and do not cover post-quantum verification.
 type cliFakeEvidenceSigner struct {
 	keyID      string
 	privateKey ed25519.PrivateKey

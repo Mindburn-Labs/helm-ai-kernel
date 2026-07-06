@@ -26,6 +26,14 @@ class WorkflowDispatchInputValidationTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validator.validate_optional_publish_tag(tag, version="1.2.3")
 
+    def test_npm_dist_tag_is_channel_not_version(self) -> None:
+        self.assertEqual(validator.validate_npm_dist_tag(None), "latest")
+        self.assertEqual(validator.validate_npm_dist_tag("v0_7_backfill"), "v0_7_backfill")
+        for tag in ["1.2.3", "v1.2.3", "bad tag", "next;echo pwned", "-latest"]:
+            with self.subTest(tag=tag):
+                with self.assertRaises(ValueError):
+                    validator.validate_npm_dist_tag(tag)
+
     def test_bool_is_strict(self) -> None:
         self.assertTrue(validator.validate_bool("true", field="dry_run"))
         self.assertFalse(validator.validate_bool("false", field="dry_run"))

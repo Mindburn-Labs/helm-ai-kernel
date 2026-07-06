@@ -569,6 +569,21 @@
       "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v{version}"
     },
     {
+      "id": "github-release-notes",
+      "kind": "github_release_notes",
+      "url": "https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel/releases/tags/v{version}",
+      "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v{version}"
+    },
+    {
+      "id": "github-release-slsa-provenance",
+      "kind": "github_release_assets",
+      "url": "https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel/releases/tags/v{version}",
+      "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v{version}",
+      "required_assets": [
+        "multiple.intoto.jsonl"
+      ]
+    },
+    {
       "id": "ghcr-image",
       "kind": "ghcr_tags",
       "repository": "mindburn-labs/helm-ai-kernel",

@@ -223,6 +223,29 @@ def check_github_release(surface: dict[str, Any], version: str) -> SurfaceResult
     return SurfaceResult(surface["id"], "pass" if actual == expected else "fail", expected, actual, url=fmt(surface["human_url"], version))
 
 
+def check_github_release_notes(surface: dict[str, Any], version: str) -> SurfaceResult:
+    url = fmt(surface["url"], version)
+    payload = request_json(url)
+    body = str(payload.get("body") or "").strip()
+    return SurfaceResult(surface["id"], "pass" if body else "fail", "non-empty release notes", bool(body), url=fmt(surface["human_url"], version))
+
+
+def check_github_release_assets(surface: dict[str, Any], version: str) -> SurfaceResult:
+    url = fmt(surface["url"], version)
+    payload = request_json(url)
+    actual = sorted(asset.get("name") for asset in payload.get("assets", []) if asset.get("name"))
+    expected = sorted(fmt(asset, version) for asset in surface["required_assets"])
+    missing = sorted(asset for asset in expected if asset not in actual)
+    return SurfaceResult(
+        surface["id"],
+        "pass" if not missing else "fail",
+        expected,
+        {"found": sorted(asset for asset in expected if asset in actual), "missing": missing},
+        url=fmt(surface["human_url"], version),
+        detail="missing assets: " + ", ".join(missing) if missing else None,
+    )
+
+
 def check_npm(surface: dict[str, Any], version: str) -> SurfaceResult:
     payload = request_json(surface["url"])
     actual = payload.get("dist-tags", {}).get("latest")
@@ -366,6 +389,8 @@ def check_pkg_go_dev(surface: dict[str, Any], version: str) -> SurfaceResult:
 
 PUBLISHED_CHECKS = {
     "github_release": check_github_release,
+    "github_release_notes": check_github_release_notes,
+    "github_release_assets": check_github_release_assets,
     "npm": check_npm,
     "pypi": check_pypi,
     "crates": check_crates,

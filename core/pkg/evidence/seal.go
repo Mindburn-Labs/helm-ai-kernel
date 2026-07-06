@@ -23,6 +23,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// quantum_posture: EvidencePack seals use classical Ed25519 signatures for
+// offline integrity checks in this release; no post-quantum assurance is claimed.
 const (
 	EvidencePackSealPath    = "07_ATTESTATIONS/evidence_pack.sig"
 	EvidencePackSealVersion = "evidence-pack-seal/v1"

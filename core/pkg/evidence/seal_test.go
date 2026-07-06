@@ -22,6 +22,8 @@ import (
 	proofanchor "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph/anchor"
 )
 
+// quantum_posture: tests exercise classical Ed25519 seal and receipt paths only;
+// they do not assert post-quantum signature resistance.
 func TestExternalSignerHelper(t *testing.T) {
 	if os.Getenv("HELM_TEST_EXTERNAL_SIGNER") != "1" {
 		return

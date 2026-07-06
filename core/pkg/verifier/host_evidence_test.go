@@ -14,6 +14,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence/externalhost"
 )
 
+// quantum_posture: host-evidence verifier tests cover classical Ed25519
+// receipt signatures only; post-quantum host attestation is out of scope here.
 func TestVerifyBundle_VerifiesHostEvidenceWhenPresent(t *testing.T) {
 	dir := createValidCanonicalBundleFixture(t)
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -32,6 +34,7 @@ func TestVerifyBundle_VerifiesHostEvidenceWhenPresent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(hostDir, "chain.json"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	sealVerifierFixture(t, dir, "canonical-test")
 
 	report, err := VerifyBundleWithOptions(dir, VerifyOptions{ExternalHostKeyHex: hex.EncodeToString(pub)})
 	if err != nil {
@@ -69,6 +72,7 @@ func TestVerifyBundle_RejectsSelfSuppliedHostEvidenceKey(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(hostDir, "chain.json"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	sealVerifierFixture(t, dir, "canonical-test")
 
 	report, err := VerifyBundle(dir)
 	if err != nil {

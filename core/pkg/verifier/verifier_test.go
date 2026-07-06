@@ -8,12 +8,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
+// quantum_posture: verifier fixtures use classical Ed25519 signatures to
+// exercise trust wiring; these tests do not claim post-quantum resistance.
 // createValidBundleFixture creates a minimal valid evidence bundle directory
 // with all required structural elements for the hardened verifier:
 // manifest.json, 00_INDEX.json, proofgraph.json, receipts/ with a receipt.
@@ -104,12 +107,53 @@ func createValidCanonicalBundleFixture(t *testing.T) string {
 
 func sealVerifierFixture(t *testing.T, dir, packID string) {
 	t.Helper()
+	writeSealFixtureIndex(t, dir)
 	if _, err := evidencepkg.SealEvidencePack(context.Background(), dir, evidencepkg.SealEvidencePackOptions{
 		PackID:  packID,
 		DataDir: t.TempDir(),
 	}); err != nil {
 		t.Fatalf("seal fixture: %v", err)
 	}
+}
+
+func writeSealFixtureIndex(t *testing.T, dir string) {
+	t.Helper()
+	type entry struct {
+		Path   string `json:"path"`
+		SHA256 string `json:"sha256"`
+	}
+	entries := []entry{}
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		switch rel {
+		case "00_INDEX.json", evidencepkg.EvidencePackSealPath, "07_ATTESTATIONS/conformance_report.sig":
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, entry{Path: rel, SHA256: sha256Hex(data)})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
+	writeJSON(t, filepath.Join(dir, "00_INDEX.json"), map[string]any{
+		"version": "1.0.0",
+		"entries": entries,
+	})
 }
 
 func TestVerifyBundle_Valid(t *testing.T) {
@@ -199,6 +243,7 @@ func TestVerifyBundleRejectsUntrustedEmbeddedSignatures(t *testing.T) {
 		"lamport_clock": 1,
 		"signature":     "attacker-controlled",
 	})
+	sealVerifierFixture(t, dir, "test-session-001")
 
 	report, err := VerifyBundle(dir)
 	if err != nil {
@@ -242,6 +287,7 @@ func TestVerifyBundleAcceptsTrustedManagedAgentReceiptSignature(t *testing.T) {
 		"signing_public_key_hex": hex.EncodeToString(pub),
 		"signature":              hex.EncodeToString(ed25519.Sign(priv, []byte(decisionHash))),
 	})
+	sealVerifierFixture(t, dir, "test-session-001")
 
 	report, err := VerifyBundleWithOptions(dir, VerifyOptions{ManagedAgentReceiptPublicKeyHex: hex.EncodeToString(pub)})
 	if err != nil {
@@ -296,6 +342,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 	t.Run("dev-local trusts seal-anchored key disclosure", func(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
 		report, err := VerifyBundle(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -311,6 +358,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		forged := hex.EncodeToString(ed25519.Sign(priv, []byte(payload+"-tampered")))
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(forged, keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
 		report, err := VerifyBundle(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -321,6 +369,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 	t.Run("missing key disclosure fails closed", func(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, ""))
+		sealVerifierFixture(t, dir, "test-session-001")
 		report, err := VerifyBundle(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -331,6 +380,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 	t.Run("non-dev-local profile refuses disclosure trust", func(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
 		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam})
 		if err != nil {
 			t.Fatal(err)
@@ -364,6 +414,7 @@ func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
 	t.Run("unconfigured witness keys are skipped, never auto-failed", func(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(witnessSig))
+		sealVerifierFixture(t, dir, "test-session-001")
 		report, err := VerifyBundle(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -378,6 +429,7 @@ func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
 	t.Run("configured witness key verifies valid signature", func(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(witnessSig))
+		sealVerifierFixture(t, dir, "test-session-001")
 		report, err := VerifyBundleWithOptions(dir, VerifyOptions{
 			WitnessPublicKeysHex: map[string]string{"w1": hex.EncodeToString(pub)},
 		})
@@ -395,6 +447,7 @@ func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		forged := hex.EncodeToString(ed25519.Sign(priv, []byte("tampered")))
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(forged))
+		sealVerifierFixture(t, dir, "test-session-001")
 		report, err := VerifyBundleWithOptions(dir, VerifyOptions{
 			WitnessPublicKeysHex: map[string]string{"w1": hex.EncodeToString(pub)},
 		})
@@ -531,6 +584,7 @@ func TestVerifyBundle_EUAIActProfileValidatesWhenPresent(t *testing.T) {
 			"redaction_metadata":                     map[string]string{"profile": "employment_minimized"},
 		},
 	})
+	sealVerifierFixture(t, dir, "canonical-test")
 
 	report, err := VerifyBundle(dir)
 	if err != nil {
@@ -555,6 +609,7 @@ func TestVerifyBundle_EUAIActProfileRejectsMissingRequiredRefs(t *testing.T) {
 			"timeline_status":           "FINAL",
 		},
 	})
+	sealVerifierFixture(t, dir, "canonical-test")
 
 	report, err := VerifyBundle(dir)
 	if err != nil {
@@ -584,6 +639,7 @@ func TestVerifyBundle_ValidWithHashes(t *testing.T) {
 		},
 	}
 	writeJSON(t, filepath.Join(dir, "manifest.json"), manifest)
+	sealVerifierFixture(t, dir, "test-session-001")
 
 	report, err := VerifyBundle(dir)
 	if err != nil {

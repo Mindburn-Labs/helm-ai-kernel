@@ -19,6 +19,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
 )
 
+// quantum_posture: demo EvidencePacks are sealed with the kernel's classical
+// EvidencePack controls; the demo command makes no post-quantum claim.
 // runDemoCmd implements `helm-ai-kernel demo` — run governed demonstrations.
 //
 // Exit codes:

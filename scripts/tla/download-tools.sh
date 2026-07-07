@@ -33,7 +33,11 @@ if [[ -z "${VERSION}" || "${VERSION}" == "latest" ]]; then
 fi
 
 if [[ -z "${JAR_URL}" ]]; then
-  JAR_URL="${DEFAULT_TLA_TOOLS_JAR_URL}"
+  if [[ "${VERSION}" == "${DEFAULT_TLA_TOOLS_VERSION}" ]]; then
+    JAR_URL="${DEFAULT_TLA_TOOLS_JAR_URL}"
+  else
+    JAR_URL="https://github.com/tlaplus/tlaplus/releases/download/${VERSION}/tla2tools.jar"
+  fi
 fi
 
 if [[ "${JAR_URL}" != https://* ]]; then

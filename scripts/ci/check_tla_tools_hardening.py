@@ -38,6 +38,7 @@ def check_downloader(path: Path) -> None:
     require(text, f'DEFAULT_TLA_TOOLS_VERSION="{PINNED_VERSION}"', path)
     require(text, f'DEFAULT_TLA_TOOLS_JAR_URL="{PINNED_URL}"', path)
     require(text, f'DEFAULT_TLA_TOOLS_SHA256="{PINNED_SHA256}"', path)
+    require(text, 'releases/download/${VERSION}/tla2tools.jar', path)
     require(text, "TLA_TOOLS_VERSION must be an immutable release tag", path)
     require(text, "TLA_TOOLS_JAR_URL must use HTTPS", path)
     require(text, "TLA_TOOLS_SHA256 must be a 64-character SHA-256 digest", path)

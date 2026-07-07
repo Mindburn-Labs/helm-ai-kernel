@@ -87,8 +87,8 @@ bin/helm-ai-kernel setup claude-code --yes
 
 | Release target | SDK pointers after publication |
 | --- | --- |
-| `v0.7.0` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.0` |
-| `v0.7.0` | `io.github.mindburnlabs:helm-sdk:0.7.0` |
+| `v0.7.1` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.1` |
+| `v0.7.1` | `io.github.mindburnlabs:helm-sdk:0.7.1` |
 
 Apache-2.0. See [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), and
 [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -39,6 +39,7 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
+        A0["[0.7.1] - 2026-07-07"]
         A1["[0.7.0] - 2026-07-05"]
         A2["[0.6.0] - 2026-07-02"]
         B["[0.5.20] - 2026-07-01"]
@@ -57,7 +58,8 @@ flowchart TD
 
     %% Operational Flow Edges
     Page --> A
-    A --> A1
+    A --> A0
+    A0 --> A1
     A1 --> A2
     A2 --> B
     B --> B0
@@ -85,12 +87,23 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+## [0.7.1] - 2026-07-07
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.1>.
+
+<!-- quantum_posture: v0.7.1 release notes mention existing SLSA and cosign release verification only; this release adds no post-quantum cryptographic control. -->
+
 - Added a published-release SLSA subject integrity gate that compares
   `multiple.intoto.jsonl` subjects against the published `SHA256SUMS.txt`
   manifest.
 - Converted the standalone SLSA provenance workflow into a manual repair path
   for already-published release assets so normal tag releases use the lockstep
   `release.yml` provenance job.
+- Repaired the `v0.7.0` provenance asset so its SLSA subjects match the
+  published checksum manifest before starting `v0.8.0` RiskEnvelope work.
+
+No RiskEnvelope, scan, upload, cloud, checkout, website, connector
+certification, or Company AI OS GA scope is included.
 
 ## [0.7.0] - 2026-07-05
 

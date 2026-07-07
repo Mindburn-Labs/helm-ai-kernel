@@ -43,8 +43,9 @@ surface for the `helm-ai-kernel` project.
 - `scorecard.yml` uploads OpenSSF Scorecard SARIF for `main` and pull requests;
   PR SARIF is normalized so GitHub code scanning sees the same branch-protection
   category that exists on `main`.
-- `slsa-provenance.yml` builds reproducible release binaries before generating
-  provenance subjects.
+- `slsa-provenance.yml` is a manual repair workflow that re-attests the
+  checksum-covered assets already attached to a published release. Normal tag
+  releases generate SLSA provenance from `release.yml`.
 - `version-drift.yml` runs the published registry drift check daily and opens or
   updates one issue when any public channel falls behind `VERSION`.
 

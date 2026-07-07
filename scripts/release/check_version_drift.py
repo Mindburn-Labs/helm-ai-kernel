@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import hashlib
 import json
 import os
 import re
@@ -204,6 +207,12 @@ def request_json(url: str) -> Any:
         return json.loads(response.read().decode("utf-8"))
 
 
+def request_bytes(url: str) -> bytes:
+    req = urllib.request.Request(url, headers=http_headers({"Accept": "application/octet-stream, */*"}))
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        return response.read()
+
+
 def request_text(url: str) -> str:
     req = urllib.request.Request(url, headers=http_headers({"Accept": "text/plain, text/html, application/xml, */*"}))
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
@@ -244,6 +253,112 @@ def check_github_release_assets(surface: dict[str, Any], version: str) -> Surfac
         url=fmt(surface["human_url"], version),
         detail="missing assets: " + ", ".join(missing) if missing else None,
     )
+
+
+def parse_sha256sums(data: bytes) -> dict[str, str]:
+    checksums: dict[str, str] = {}
+    for line in data.decode("utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        match = re.match(r"^([0-9a-fA-F]{64}) [ *](.+)$", line)
+        if match is None:
+            raise ValueError(f"invalid SHA256SUMS line: {line!r}")
+        digest, name = match.groups()
+        checksums[name] = digest.lower()
+    if not checksums:
+        raise ValueError("SHA256SUMS has no entries")
+    return checksums
+
+
+def decode_dsse_payload(payload: str) -> dict[str, Any]:
+    padded = payload + ("=" * (-len(payload) % 4))
+    return json.loads(base64.b64decode(padded).decode("utf-8"))
+
+
+def slsa_statements_from_bundle(data: bytes) -> list[dict[str, Any]]:
+    statements: list[dict[str, Any]] = []
+    for line in data.decode("utf-8").splitlines() or [data.decode("utf-8")]:
+        if not line.strip():
+            continue
+        doc = json.loads(line)
+        if "subject" in doc:
+            statements.append(doc)
+            continue
+        envelope = doc.get("dsseEnvelope") or doc.get("envelope") or {}
+        payload = envelope.get("payload")
+        if payload:
+            statements.append(decode_dsse_payload(payload))
+    if not statements:
+        raise ValueError("SLSA bundle has no in-toto statements")
+    return statements
+
+
+def slsa_subject_digests(data: bytes) -> dict[str, str]:
+    subjects: dict[str, str] = {}
+    for statement in slsa_statements_from_bundle(data):
+        for subject in statement.get("subject", []):
+            name = Path(str(subject.get("name", ""))).name
+            digest = subject.get("digest", {}).get("sha256")
+            if not name or not digest:
+                continue
+            digest = str(digest).lower()
+            if name in subjects and subjects[name] != digest:
+                raise ValueError(f"conflicting SLSA subject digest for {name}")
+            subjects[name] = digest
+    if not subjects:
+        raise ValueError("SLSA bundle has no sha256 subjects")
+    return subjects
+
+
+def release_asset_by_name(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {asset["name"]: asset for asset in payload.get("assets", []) if asset.get("name")}
+
+
+def check_github_release_slsa_subjects(surface: dict[str, Any], version: str) -> SurfaceResult:
+    url = fmt(surface["url"], version)
+    payload = request_json(url)
+    assets = release_asset_by_name(payload)
+    checksum_asset = surface.get("checksum_asset", "SHA256SUMS.txt")
+    slsa_asset = surface.get("slsa_asset", "multiple.intoto.jsonl")
+    missing_assets = [name for name in [checksum_asset, slsa_asset] if name not in assets]
+    if missing_assets:
+        return SurfaceResult(
+            surface["id"],
+            "fail",
+            [checksum_asset, slsa_asset],
+            {"missing_assets": missing_assets},
+            url=fmt(surface["human_url"], version),
+            detail="missing assets: " + ", ".join(missing_assets),
+        )
+
+    try:
+        checksum_bytes = request_bytes(assets[checksum_asset]["browser_download_url"])
+        slsa_bytes = request_bytes(assets[slsa_asset]["browser_download_url"])
+        expected = parse_sha256sums(checksum_bytes)
+        expected[checksum_asset] = hashlib.sha256(checksum_bytes).hexdigest()
+        subjects = slsa_subject_digests(slsa_bytes)
+    except (KeyError, ValueError, UnicodeDecodeError, binascii.Error) as exc:
+        return SurfaceResult(surface["id"], "fail", "SLSA subjects match SHA256SUMS", None, url=fmt(surface["human_url"], version), detail=str(exc))
+
+    missing = sorted(name for name in expected if name not in subjects)
+    mismatched = [
+        {"name": name, "checksum": expected[name], "slsa": subjects.get(name)}
+        for name in sorted(expected)
+        if name in subjects and subjects[name] != expected[name]
+    ]
+    extra = sorted(name for name in subjects if name not in expected)
+    actual = {
+        "matched": sorted(name for name in expected if subjects.get(name) == expected[name]),
+        "missing": missing,
+        "mismatched": mismatched,
+        "extra": extra,
+    }
+    ok = not missing and not mismatched and not extra
+    detail = None
+    if not ok:
+        detail = f"missing={len(missing)} mismatched={len(mismatched)} extra={len(extra)}"
+    return SurfaceResult(surface["id"], "pass" if ok else "fail", sorted(expected), actual, url=fmt(surface["human_url"], version), detail=detail)
 
 
 def check_npm(surface: dict[str, Any], version: str) -> SurfaceResult:
@@ -391,6 +506,7 @@ PUBLISHED_CHECKS = {
     "github_release": check_github_release,
     "github_release_notes": check_github_release_notes,
     "github_release_assets": check_github_release_assets,
+    "github_release_slsa_subjects": check_github_release_slsa_subjects,
     "npm": check_npm,
     "pypi": check_pypi,
     "crates": check_crates,

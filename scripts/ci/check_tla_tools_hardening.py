@@ -11,6 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PINNED_VERSION = "v1.8.0"
 PINNED_SHA256 = "9e27b5e19a69ae1f56aabf8403a6ed5598dbfa6e638908e5278ac39736c1543d"
+PINNED_URL = (
+    "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/download/"
+    "deps-tla2tools-v1.8.0/tla2tools-v1.8.0.jar"
+)
 SHA256_RE = re.compile(r"\b[0-9a-f]{64}\b")
 
 
@@ -32,7 +36,9 @@ def forbid(text: str, token: str, path: Path) -> None:
 def check_downloader(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     require(text, f'DEFAULT_TLA_TOOLS_VERSION="{PINNED_VERSION}"', path)
+    require(text, f'DEFAULT_TLA_TOOLS_JAR_URL="{PINNED_URL}"', path)
     require(text, f'DEFAULT_TLA_TOOLS_SHA256="{PINNED_SHA256}"', path)
+    require(text, 'releases/download/${VERSION}/tla2tools.jar', path)
     require(text, "TLA_TOOLS_VERSION must be an immutable release tag", path)
     require(text, "TLA_TOOLS_JAR_URL must use HTTPS", path)
     require(text, "TLA_TOOLS_SHA256 must be a 64-character SHA-256 digest", path)
@@ -48,6 +54,7 @@ def check_workflow(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     require(text, "bash scripts/tla/download-tools.sh", path)
     require(text, f"TLA_TOOLS_VERSION: {PINNED_VERSION}", path)
+    require(text, f"TLA_TOOLS_JAR_URL: {PINNED_URL}", path)
     require(text, f"TLA_TOOLS_SHA256: {PINNED_SHA256}", path)
     if not SHA256_RE.search(text):
         fail(f"{path}: missing pinned TLA tools SHA-256")

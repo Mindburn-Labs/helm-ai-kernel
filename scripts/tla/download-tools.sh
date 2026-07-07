@@ -4,10 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CACHE_DIR="${ROOT_DIR}/.cache/tlc"
 DEFAULT_TLA_TOOLS_VERSION="v1.8.0"
-# tlaplus v1.8.0 is a rolling pre-release: upstream periodically rebuilds
-# tla2tools.jar under the same tag. On SHA-256 mismatch, re-verify the asset
-# against the official release and update this digest and the one in
-# .github/workflows/tla.yml together.
+DEFAULT_TLA_TOOLS_JAR_URL="https://github.com/Mindburn-Labs/helm-ai-kernel/releases/download/deps-tla2tools-v1.8.0/tla2tools-v1.8.0.jar"
+# tlaplus v1.8.0 is a rolling pre-release upstream, so CI defaults to the
+# org-controlled mirror above and keeps the digest check as the immutable gate.
 DEFAULT_TLA_TOOLS_SHA256="9e27b5e19a69ae1f56aabf8403a6ed5598dbfa6e638908e5278ac39736c1543d"
 VERSION="${TLA_TOOLS_VERSION:-$DEFAULT_TLA_TOOLS_VERSION}"
 EXPECTED_SHA256="${TLA_TOOLS_SHA256:-}"
@@ -34,7 +33,11 @@ if [[ -z "${VERSION}" || "${VERSION}" == "latest" ]]; then
 fi
 
 if [[ -z "${JAR_URL}" ]]; then
-  JAR_URL="https://github.com/tlaplus/tlaplus/releases/download/${VERSION}/tla2tools.jar"
+  if [[ "${VERSION}" == "${DEFAULT_TLA_TOOLS_VERSION}" ]]; then
+    JAR_URL="${DEFAULT_TLA_TOOLS_JAR_URL}"
+  else
+    JAR_URL="https://github.com/tlaplus/tlaplus/releases/download/${VERSION}/tla2tools.jar"
+  fi
 fi
 
 if [[ "${JAR_URL}" != https://* ]]; then
@@ -42,7 +45,7 @@ if [[ "${JAR_URL}" != https://* ]]; then
   exit 1
 fi
 
-if [[ -z "${EXPECTED_SHA256}" && "${VERSION}" == "${DEFAULT_TLA_TOOLS_VERSION}" && "${JAR_URL}" == "https://github.com/tlaplus/tlaplus/releases/download/${DEFAULT_TLA_TOOLS_VERSION}/tla2tools.jar" ]]; then
+if [[ -z "${EXPECTED_SHA256}" && "${VERSION}" == "${DEFAULT_TLA_TOOLS_VERSION}" && "${JAR_URL}" == "${DEFAULT_TLA_TOOLS_JAR_URL}" ]]; then
   EXPECTED_SHA256="${DEFAULT_TLA_TOOLS_SHA256}"
 fi
 

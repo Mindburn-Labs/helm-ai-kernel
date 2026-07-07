@@ -22,12 +22,10 @@ jobs:
       - name: Download TLC
         id: tlc
         env:
-          # NOTE: tlaplus v1.8.0 is a rolling pre-release; its tla2tools.jar is
-          # periodically rebuilt upstream, which changes this digest. When the
-          # job fails with a SHA-256 mismatch, re-verify the asset against the
-          # official tlaplus release and update the digest here and in
-          # scripts/tla/download-tools.sh together.
+          # NOTE: tlaplus v1.8.0 is a rolling pre-release upstream. CI uses the
+          # org-controlled mirror release and still verifies the SHA-256 digest.
           TLA_TOOLS_VERSION: v1.8.0
+          TLA_TOOLS_JAR_URL: https://github.com/Mindburn-Labs/helm-ai-kernel/releases/download/deps-tla2tools-v1.8.0/tla2tools-v1.8.0.jar
           TLA_TOOLS_SHA256: 9e27b5e19a69ae1f56aabf8403a6ed5598dbfa6e638908e5278ac39736c1543d
         # Run the script and capture output separately: `echo "jar=$(...)"`
         # swallows the script's exit code, letting later steps run with an

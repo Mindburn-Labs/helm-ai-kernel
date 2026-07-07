@@ -85,6 +85,13 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+- Added a published-release SLSA subject integrity gate that compares
+  `multiple.intoto.jsonl` subjects against the published `SHA256SUMS.txt`
+  manifest.
+- Converted the standalone SLSA provenance workflow into a manual repair path
+  for already-published release assets so normal tag releases use the lockstep
+  `release.yml` provenance job.
+
 ## [0.7.0] - 2026-07-05
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.0>.

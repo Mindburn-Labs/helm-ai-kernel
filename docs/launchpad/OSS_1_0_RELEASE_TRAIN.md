@@ -1,10 +1,12 @@
 # HELM AI Kernel OSS 1.0 Release Train
 
+<!-- quantum_posture: this planning doc mentions release signature and provenance assets but does not implement cryptographic controls. -->
+
 Status: internal release planning source, not release notes.
-Current audit date: 2026-07-05.
-Current source base: `origin/main@e5bc9b3d`.
-Current source version: `VERSION=0.6.0`.
-Current public release: `v0.6.0`.
+Current audit date: 2026-07-07.
+Current source base: `origin/main@eed014fa`.
+Current source version: `VERSION=0.7.0`.
+Current public release: `v0.7.0`.
 
 Do not add this file to the public docs manifest. Future release scope becomes
 public only through tagged release notes, changelog entries, release assets, and
@@ -14,9 +16,9 @@ published drift evidence for that exact version.
 
 | Surface | Current state | Evidence | Plan impact |
 | --- | --- | --- | --- |
-| Release baseline | `v0.6.0` is the latest public GitHub release; `main` has moved past the tag. | `gh release list`, `git log v0.6.0..origin/main` | Start the next release from current `origin/main`, not from the tag. |
-| Open PR dependencies | Open kernel PRs are this internal docs plan and the quantum inventory CI guard. No release-theme code prerequisite is open. | `gh pr list --state open` returned #509 and #510 on 2026-07-05. | Merge this docs plan before rebasing the CI guard; keep release-theme work out of both PRs. |
-| Unreleased main delta | Post-`v0.6.0` commits are guardian/kernel/PRG/TLA/release-doc hardening, not a feature train. | `git diff --stat v0.6.0..origin/main` | Fold into `v0.7.0` unless a security patch release is cut first. |
+| Release baseline | `v0.7.0` is the latest public GitHub release; `main` has moved past the tag for release-provenance guard work. | `gh release list`, `git log v0.7.0..origin/main` | Cut `v0.7.1` only for evidence/release hardening needed before `v0.8.0`. |
+| Open PR dependencies | No open kernel PR dependency is required for the next patch. | `gh pr list --state open` returned no open PRs on 2026-07-07. | Keep `v0.7.1` independent unless a release repair PR becomes necessary. |
+| Unreleased main delta | Post-`v0.7.0` commits harden npm publication and release provenance checks, not a feature train. | `git diff --stat v0.7.0..origin/main` | Fold into `v0.7.1`; do not mix in RiskEnvelope feature work. |
 | EvidencePack structure | Mandatory pack structure, optional host evidence, and declared `99_EXT/` extensions exist. | `core/pkg/conform/evidencepack.go:13` | `v0.7.0` should freeze authority and compatibility, not invent a pack layout. |
 | EvidencePack seal and verifier | Native seal and verification paths exist. | `core/pkg/evidence/seal.go:191`, `core/pkg/evidence/seal.go:349` | `v0.7.0` must define exact verifier success and tamper-failure requirements. |
 | ProofGraph | ProofGraph refs are used by runtime adapters, exports, and evidence packs. | `core/pkg/evidence/arc/pack_builder.go:39`, `core/pkg/workstation/evidence.go:63` | `v0.7.0` must freeze ref grammar, pack placement, and replay semantics. |
@@ -151,6 +153,8 @@ Allowed changes:
 
 - clearer verifier error output;
 - compatibility fixes for packs produced by retained `v0.7.0` writers;
+- published-release SLSA subject integrity checks and repair-only provenance
+  workflow fixes;
 - documentation examples that mirror tested commands;
 - conformance regression fixtures.
 

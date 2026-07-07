@@ -2,6 +2,9 @@
 """Self-tests for release version drift monitoring."""
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import unittest
 
 import check_version_drift as drift
@@ -24,6 +27,7 @@ class VersionDriftMonitorTests(unittest.TestCase):
             "maven-sdk",
             "go-proxy-sdk",
             "pkg-go-dev-sdk",
+            "github-release-slsa-subjects",
             "docs-site-developer-journey",
             "docs-site-sdk-index",
             "docs-site-examples",
@@ -37,6 +41,8 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertEqual(kinds["docs-site-sdk-index"], "http_contains")
         self.assertTrue(blocking["go-proxy-sdk"])
         self.assertTrue(blocking["pkg-go-dev-sdk"])
+        self.assertEqual(kinds["github-release-slsa-subjects"], "github_release_slsa_subjects")
+        self.assertTrue(blocking["github-release-slsa-subjects"])
 
     def test_all_published_surface_kinds_are_supported(self) -> None:
         contract = drift.load_contract(drift.DEFAULT_CONTRACT)
@@ -156,6 +162,57 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertEqual(result.status, "fail")
         self.assertEqual(result.actual, ["v0.6.0"])
         self.assertIn("v0.6.0-slim (404)", result.detail or "")
+
+    def test_github_release_slsa_subjects_match_checksum_manifest(self) -> None:
+        asset_digest = "a" * 64
+        checksum_bytes = f"{asset_digest}  artifact.tar\n".encode()
+        checksum_digest = hashlib.sha256(checksum_bytes).hexdigest()
+        bundle = slsa_bundle(
+            {
+                "dist/release-assets/SHA256SUMS.txt": checksum_digest,
+                "dist/release-assets/artifact.tar": asset_digest,
+            }
+        )
+        original_json = drift.request_json
+        original_bytes = drift.request_bytes
+        drift.request_json = lambda _url: release_payload()
+        drift.request_bytes = lambda url: (
+            checksum_bytes if url == "https://example.test/SHA256SUMS.txt" else bundle
+        )
+        try:
+            result = drift.check_github_release_slsa_subjects(release_surface(), "0.7.1")
+        finally:
+            drift.request_json = original_json
+            drift.request_bytes = original_bytes
+
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(result.actual["missing"], [])
+        self.assertEqual(result.actual["mismatched"], [])
+        self.assertEqual(result.actual["extra"], [])
+
+    def test_github_release_slsa_subjects_report_digest_mismatch(self) -> None:
+        checksum_bytes = f"{'a' * 64}  artifact.tar\n".encode()
+        bundle = slsa_bundle(
+            {
+                "dist/release-assets/SHA256SUMS.txt": hashlib.sha256(checksum_bytes).hexdigest(),
+                "dist/release-assets/artifact.tar": "b" * 64,
+            }
+        )
+        original_json = drift.request_json
+        original_bytes = drift.request_bytes
+        drift.request_json = lambda _url: release_payload()
+        drift.request_bytes = lambda url: (
+            checksum_bytes if url == "https://example.test/SHA256SUMS.txt" else bundle
+        )
+        try:
+            result = drift.check_github_release_slsa_subjects(release_surface(), "0.7.1")
+        finally:
+            drift.request_json = original_json
+            drift.request_bytes = original_bytes
+
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.actual["mismatched"][0]["name"], "artifact.tar")
+        self.assertIn("mismatched=1", result.detail or "")
 
     def test_published_error_preserves_advisory_status(self) -> None:
         surface = {
@@ -283,6 +340,34 @@ class VersionDriftMonitorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "pass")
         self.assertEqual(result.actual["rejected_found"], [])
+
+
+def release_surface() -> dict[str, str]:
+    return {
+        "id": "github-release-slsa-subjects",
+        "kind": "github_release_slsa_subjects",
+        "url": "https://api.example.test/releases/tags/v{version}",
+        "human_url": "https://example.test/releases/tag/v{version}",
+    }
+
+
+def release_payload() -> dict[str, list[dict[str, str]]]:
+    return {
+        "assets": [
+            {"name": "SHA256SUMS.txt", "browser_download_url": "https://example.test/SHA256SUMS.txt"},
+            {"name": "multiple.intoto.jsonl", "browser_download_url": "https://example.test/multiple.intoto.jsonl"},
+        ]
+    }
+
+
+def slsa_bundle(subjects: dict[str, str]) -> bytes:
+    statement = {
+        "_type": "https://in-toto.io/Statement/v0.1",
+        "predicateType": "https://slsa.dev/provenance/v0.2",
+        "subject": [{"name": name, "digest": {"sha256": digest}} for name, digest in sorted(subjects.items())],
+    }
+    payload = base64.b64encode(json.dumps(statement).encode()).decode().rstrip("=")
+    return json.dumps({"dsseEnvelope": {"payload": payload}}).encode()
 
 
 if __name__ == "__main__":

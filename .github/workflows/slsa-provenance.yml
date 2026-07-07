@@ -1,46 +1,79 @@
-name: SLSA L3 Provenance
+name: SLSA L3 Provenance Repair
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to build and upload provenance for, for example v0.5.12.
+        description: Release tag whose published assets should be re-attested, for example v0.7.0.
         required: true
         type: string
 
 permissions: read-all
 
 jobs:
-  build:
+  subjects:
     outputs:
       hashes: ${{ steps.hash.outputs.hashes }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version: "1.25.10"
-          cache-dependency-path: "**/go.sum"
-      - name: Build artifacts
-        run: make release-assets
+      - name: Download published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir -p dist/release-assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist/release-assets
+      - name: Keep checksum-covered primary assets
+        run: |
+          cd dist/release-assets
+          shasum -a 256 -c SHA256SUMS.txt
+          python3 - <<'PY'
+          import pathlib
+
+          root = pathlib.Path(".")
+          keep = {"SHA256SUMS.txt"}
+          for line in root.joinpath("SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():
+              if not line.strip():
+                  continue
+              _digest, name = line.split(maxsplit=1)
+              keep.add(name.lstrip("*"))
+          for path in root.iterdir():
+              if path.is_file() and path.name not in keep:
+                  path.unlink()
+          PY
       - name: Generate hashes
         id: hash
         run: |
           echo "hashes=$(find dist/release-assets -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum | base64 -w0)" >> "$GITHUB_OUTPUT"
 
+  replace-existing:
+    needs: [subjects]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete existing provenance asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          api_url="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[] | select(.name == "multiple.intoto.jsonl") | .apiUrl' || true)"
+          if [ -n "$api_url" ]; then
+            gh api --method DELETE "${api_url#https://api.github.com/}"
+          fi
+
   provenance:
-    needs: [build]
+    needs: [subjects, replace-existing]
     permissions:
       actions: read
       id-token: write
       contents: write
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
-      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      base64-subjects: "${{ needs.subjects.outputs.hashes }}"
       upload-assets: true
-      upload-tag-name: ${{ github.event.release.tag_name || inputs.tag || '' }}
+      upload-tag-name: ${{ inputs.tag }}
       compile-generator: true

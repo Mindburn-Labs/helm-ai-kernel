@@ -69,6 +69,7 @@ func createValidCanonicalBundleFixture(t *testing.T) string {
 	writeJSON(t, filepath.Join(dir, "00_INDEX.json"), map[string]any{
 		"version": "1.0.0",
 		"entries": []any{},
+		"gates":   []string{"G0", "G1"},
 	})
 	writeJSON(t, filepath.Join(dir, "01_SCORE.json"), map[string]any{
 		"pass": true,
@@ -150,10 +151,38 @@ func writeSealFixtureIndex(t *testing.T, dir string) {
 		t.Fatal(err)
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
-	writeJSON(t, filepath.Join(dir, "00_INDEX.json"), map[string]any{
+	index := map[string]any{
 		"version": "1.0.0",
 		"entries": entries,
-	})
+	}
+	indexPath := filepath.Join(dir, "00_INDEX.json")
+	if data, err := os.ReadFile(indexPath); err == nil {
+		var existing map[string]any
+		if json.Unmarshal(data, &existing) == nil {
+			for key, value := range existing {
+				if key == "entries" {
+					continue
+				}
+				index[key] = value
+			}
+		}
+	}
+	writeJSON(t, indexPath, index)
+}
+
+func setBundleGates(t *testing.T, dir string, gates ...string) {
+	t.Helper()
+	indexPath := filepath.Join(dir, "00_INDEX.json")
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var index map[string]any
+	if err := json.Unmarshal(data, &index); err != nil {
+		t.Fatal(err)
+	}
+	index["gates"] = gates
+	writeJSON(t, indexPath, index)
 }
 
 func TestVerifyBundle_Valid(t *testing.T) {

@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connector"
@@ -28,7 +31,19 @@ type Connector struct {
 	gate        *connector.ZeroTrustGate
 	graph       *proofgraph.Graph
 	connectorID string
+	nonceMu     sync.Mutex
+	usedNonces  map[string]struct{}
 	seq         atomic.Uint64
+}
+
+const linearPermitMaxTTL = time.Hour
+
+var toolEffectTypeMap = map[string]effects.EffectType{
+	"linear.create_issue": effects.EffectTypeWrite,
+	"linear.update_issue": effects.EffectTypeWrite,
+	"linear.get_issue":    effects.EffectTypeRead,
+	"linear.list_issues":  effects.EffectTypeRead,
+	"linear.add_comment":  effects.EffectTypeWrite,
 }
 
 // Config configures a new Linear connector.
@@ -75,6 +90,7 @@ func NewConnector(cfg Config) *Connector {
 		gate:        gate,
 		graph:       proofgraph.NewGraph(),
 		connectorID: cfg.ConnectorID,
+		usedNonces:  make(map[string]struct{}),
 	}
 }
 
@@ -86,18 +102,27 @@ func (c *Connector) ID() string {
 // Execute dispatches a tool call through the zero-trust gate and records it in
 // the ProofGraph. Implements effects.Connector.
 func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, toolName string, params map[string]any) (any, error) {
-	// 1. Validate permit.ConnectorID matches
-	if permit.ConnectorID != c.connectorID {
-		return nil, fmt.Errorf("linear: permit connector_id %q does not match %q", permit.ConnectorID, c.connectorID)
+	if params == nil {
+		params = map[string]any{}
 	}
 
-	// 2. Resolve data class for this tool
+	// 1. Resolve governed classifications before any side effect.
 	dataClass, ok := toolDataClassMap[toolName]
 	if !ok {
 		return nil, fmt.Errorf("linear: unknown tool %q", toolName)
 	}
+	effectType, ok := toolEffectTypeMap[toolName]
+	if !ok {
+		return nil, fmt.Errorf("linear: missing effect classification for tool %q", toolName)
+	}
 
-	// 3. Gate check
+	// 2. Validate the EffectPermit scope. Connectors are the last guard before
+	// Linear GraphQL sinks, so they must not rely only on the gateway.
+	if err := c.validatePermit(permit, toolName, effectType, params); err != nil {
+		return nil, err
+	}
+
+	// 3. Gate check.
 	decision := c.gate.CheckCall(ctx, c.connectorID, dataClass)
 	if !decision.Allowed {
 		return nil, fmt.Errorf("linear: gate denied: %s (%s)", decision.Reason, decision.Violation)
@@ -109,7 +134,13 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return nil, fmt.Errorf("linear: canonical hash of params: %w", err)
 	}
 
-	// 5. Append INTENT node to ProofGraph
+	// 5. Consume the single-use permit only after all pre-execution validation
+	// succeeds, but before any ProofGraph intent or Linear GraphQL call is made.
+	if err := c.consumePermitNonce(permit.Nonce); err != nil {
+		return nil, err
+	}
+
+	// 6. Append INTENT node to ProofGraph
 	intentPayload, err := json.Marshal(map[string]any{
 		"type":       "linear.intent",
 		"tool":       toolName,
@@ -124,10 +155,10 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return nil, fmt.Errorf("linear: append intent: %w", err)
 	}
 
-	// 6. Dispatch to appropriate client method
+	// 7. Dispatch to appropriate client method
 	result, execErr := c.dispatch(ctx, toolName, params)
 
-	// 7. Append EFFECT node to ProofGraph
+	// 8. Append EFFECT node to ProofGraph
 	effectEntry := map[string]any{
 		"type":       "linear.effect",
 		"tool":       toolName,
@@ -153,6 +184,152 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return nil, execErr
 	}
 	return result, nil
+}
+
+func (c *Connector) validatePermit(permit *effects.EffectPermit, toolName string, effectType effects.EffectType, params map[string]any) error {
+	if permit == nil {
+		return fmt.Errorf("linear: missing effect permit")
+	}
+	if permit.ConnectorID != c.connectorID {
+		return fmt.Errorf("linear: permit connector_id %q does not match %q", permit.ConnectorID, c.connectorID)
+	}
+	if permit.Scope.AllowedAction == "" {
+		return fmt.Errorf("linear: permit missing allowed_action")
+	}
+	if permit.Scope.AllowedAction != toolName {
+		return fmt.Errorf("linear: permit action %q does not authorize %q", permit.Scope.AllowedAction, toolName)
+	}
+	if permit.EffectType != effectType {
+		return fmt.Errorf("linear: permit effect_type %q does not authorize %q", permit.EffectType, toolName)
+	}
+	now := time.Now().UTC()
+	if permit.IssuedAt.IsZero() {
+		return fmt.Errorf("linear: permit missing issued_at")
+	}
+	if permit.IssuedAt.UTC().After(now.Add(time.Minute)) {
+		return fmt.Errorf("linear: permit issued_at is in the future")
+	}
+	if permit.ExpiresAt.IsZero() {
+		return fmt.Errorf("linear: permit missing expires_at")
+	}
+	if !now.Before(permit.ExpiresAt.UTC()) {
+		return fmt.Errorf("linear: permit expired at %s", permit.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+	if permit.ExpiresAt.UTC().Sub(permit.IssuedAt.UTC()) > linearPermitMaxTTL {
+		return fmt.Errorf("linear: permit ttl exceeds %s", linearPermitMaxTTL)
+	}
+	if !permit.SingleUse {
+		return fmt.Errorf("linear: permit must be single-use")
+	}
+	if strings.TrimSpace(permit.Nonce) == "" {
+		return fmt.Errorf("linear: permit missing nonce")
+	}
+	if err := validateParamScope(permit, toolName, effectType, params); err != nil {
+		return err
+	}
+	return validateResourceScope(permit, effectType, params)
+}
+
+func validateParamScope(permit *effects.EffectPermit, toolName string, effectType effects.EffectType, params map[string]any) error {
+	allowedKeys := make(map[string]struct{}, len(permit.Scope.AllowedParams))
+	exactValues := map[string]string{}
+	for _, raw := range permit.Scope.AllowedParams {
+		entry := strings.TrimSpace(raw)
+		if entry == "" {
+			return fmt.Errorf("linear: permit contains blank allowed_param")
+		}
+		key, value, hasValue := strings.Cut(entry, "=")
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return fmt.Errorf("linear: permit contains blank allowed_param key")
+		}
+		allowedKeys[key] = struct{}{}
+		if hasValue {
+			exactValues[key] = value
+		}
+	}
+	if effectType == effects.EffectTypeWrite && len(allowedKeys) == 0 {
+		return fmt.Errorf("linear: write action %q requires allowed_params scope", toolName)
+	}
+	if len(allowedKeys) > 0 {
+		for key := range params {
+			if _, ok := allowedKeys[key]; !ok {
+				return fmt.Errorf("linear: param %q not authorized by permit scope", key)
+			}
+		}
+	}
+	for key, expected := range exactValues {
+		actual, ok := params[key]
+		if !ok {
+			return fmt.Errorf("linear: permit scope requires param %q", key)
+		}
+		if got := scopeParamValue(actual); got != expected {
+			return fmt.Errorf("linear: param %q value %q does not match permit scope", key, got)
+		}
+	}
+	return nil
+}
+
+func validateResourceScope(permit *effects.EffectPermit, effectType effects.EffectType, params map[string]any) error {
+	teamID := strings.TrimSpace(stringParam(params, "team_id"))
+	issueID := strings.TrimSpace(stringParam(params, "issue_id"))
+	if teamID == "" && issueID == "" {
+		return nil
+	}
+	resourceRef := strings.TrimSpace(permit.ResourceRef)
+	if resourceRef == "" {
+		if effectType == effects.EffectTypeWrite {
+			return fmt.Errorf("linear: write action requires permit resource_ref")
+		}
+		return nil
+	}
+	if resourceRefMatchesLinear(resourceRef, teamID, issueID) {
+		return nil
+	}
+	return fmt.Errorf("linear: permit resource_ref %q does not authorize team_id %q or issue_id %q", resourceRef, teamID, issueID)
+}
+
+func resourceRefMatchesLinear(resourceRef, teamID, issueID string) bool {
+	if teamID != "" {
+		for _, candidate := range []string{teamID, "team:" + teamID, "linear:" + teamID, "linear:team:" + teamID} {
+			if resourceRef == candidate {
+				return true
+			}
+		}
+	}
+	if issueID != "" {
+		for _, candidate := range []string{issueID, "issue:" + issueID, "linear:" + issueID, "linear:issue:" + issueID} {
+			if resourceRef == candidate {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func scopeParamValue(v any) string {
+	switch typed := v.(type) {
+	case string:
+		return typed
+	case bool:
+		return fmt.Sprint(typed)
+	default:
+		b, err := json.Marshal(typed)
+		if err != nil {
+			return fmt.Sprint(typed)
+		}
+		return string(b)
+	}
+}
+
+func (c *Connector) consumePermitNonce(nonce string) error {
+	c.nonceMu.Lock()
+	defer c.nonceMu.Unlock()
+	if _, ok := c.usedNonces[nonce]; ok {
+		return fmt.Errorf("linear: permit nonce %q already used", nonce)
+	}
+	c.usedNonces[nonce] = struct{}{}
+	return nil
 }
 
 // dispatch routes to the appropriate client method based on toolName.

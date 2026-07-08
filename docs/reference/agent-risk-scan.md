@@ -7,7 +7,7 @@ last_reviewed: 2026-06-30
 
 `helm-ai-kernel scan` is the local-first AI agent risk audit command. It reads
 local Claude, Codex, MCP, source, and optional workstation receipt evidence,
-then emits an anonymized `RiskEnvelope` plus local preview and evidence-pack
+then emits an anonymized `RiskEnvelope` plus local preview and `EvidencePack`
 artifacts.
 
 ## Audience
@@ -25,7 +25,7 @@ After running `scan`, you can show:
 - how many MCP servers and config files were observed;
 - a content hash for the exported envelope;
 - a local preview generated only from the envelope;
-- an evidence pack containing only anonymized scan artifacts.
+- an `EvidencePack` containing only anonymized scan artifacts.
 
 ## Capability Matrix
 
@@ -35,7 +35,7 @@ After running `scan`, you can show:
 | RiskEnvelope JSON | `--risk-envelope out.json` |
 | Markdown preview | `--preview out.md` |
 | HTML preview | `--preview out.html` |
-| Evidence pack tar | `--evidence-pack pack.tar` |
+| EvidencePack tar | `--evidence-pack pack.tar` |
 | Explicit upload | `--upload --upload-url <url> --yes` |
 | Receipt projection | `--from-receipts <dir>` |
 | Local salt | `--salt-file <path>` |

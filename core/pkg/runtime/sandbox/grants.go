@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -16,6 +17,11 @@ const (
 	BackendGVisor      BackendKind = "native-gvisor"
 	BackendFirecracker BackendKind = "native-firecracker"
 	BackendHosted      BackendKind = "hosted-adapter"
+
+	networkPostureDenyAll   = "deny-all"
+	networkPostureAllowlist = "allowlist"
+	networkPostureUnknown   = "unknown"
+	networkPostureUncertain = "uncertain"
 )
 
 type BackendProfile struct {
@@ -67,10 +73,9 @@ func GrantFromPolicy(policy *SandboxPolicy, runtimeName, profileName, imageDiges
 		preopens = append(preopens, contracts.FilesystemPreopen{Path: path, Mode: mode})
 	}
 
-	network := contracts.NetworkGrant{Mode: "deny-all"}
-	if !policy.NetworkDenyAll {
-		network.Mode = "allowlist"
-		network.Destinations = append([]string(nil), policy.NetworkAllowlist...)
+	network, err := resolveNetworkGrant(policy)
+	if err != nil {
+		return contracts.SandboxGrant{}, err
 	}
 
 	grant := contracts.SandboxGrant{
@@ -90,4 +95,27 @@ func GrantFromPolicy(policy *SandboxPolicy, runtimeName, profileName, imageDiges
 		PolicyEpoch: policyEpoch,
 	}
 	return grant.Seal()
+}
+
+func resolveNetworkGrant(policy *SandboxPolicy) (contracts.NetworkGrant, error) {
+	posture := strings.ToLower(strings.TrimSpace(policy.NetworkPosture))
+	switch posture {
+	case "":
+		if policy.NetworkDenyAll {
+			posture = networkPostureDenyAll
+		} else {
+			posture = networkPostureAllowlist
+		}
+	case networkPostureUnknown, networkPostureUncertain:
+		posture = networkPostureDenyAll
+	case networkPostureDenyAll, networkPostureAllowlist:
+	default:
+		return contracts.NetworkGrant{}, fmt.Errorf("invalid network posture %q", policy.NetworkPosture)
+	}
+
+	network := contracts.NetworkGrant{Mode: posture}
+	if posture == networkPostureAllowlist {
+		network.Destinations = append([]string(nil), policy.NetworkAllowlist...)
+	}
+	return network, nil
 }

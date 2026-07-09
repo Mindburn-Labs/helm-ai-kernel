@@ -12,6 +12,8 @@ import (
 	"log/slog"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
 )
@@ -19,12 +21,17 @@ import (
 // MCPAdapter intercepts MCP tool calls and routes them through HELM governance.
 type MCPAdapter struct {
 	graph  *proofgraph.Graph
+	bridge *GovernedBridge
 	logger *slog.Logger
 }
 
 // Config configures the MCPAdapter.
 type Config struct {
-	Graph  *proofgraph.Graph
+	Graph *proofgraph.Graph
+	// Bridge, when set, evaluates each tool call through the governed execution
+	// bridge (ALLOW/DENY/ESCALATE, permit, receipt, optional dispatch). When nil
+	// the adapter stays deny-only and fail-closed (BRIDGE_NOT_CONFIGURED).
+	Bridge *GovernedBridge
 	Logger *slog.Logger
 }
 
@@ -39,6 +46,7 @@ func NewMCPAdapter(cfg Config) (*MCPAdapter, error) {
 	}
 	return &MCPAdapter{
 		graph:  cfg.Graph,
+		bridge: cfg.Bridge,
 		logger: logger,
 	}, nil
 }
@@ -83,15 +91,90 @@ func (a *MCPAdapter) Intercept(ctx context.Context, req *runtimeadapters.Adapted
 		"proof_node", node.NodeHash,
 	)
 
-	// The OSS adapter records the intercepted call and denies execution until a
-	// deployment supplies a governed MCP execution bridge.
-	return &runtimeadapters.AdaptedResponse{
-		Allowed:        false,
-		DenyReason:     &runtimeadapters.DenyReason{Code: "BRIDGE_NOT_CONFIGURED", Message: "MCP adapter execution bridge is not configured", Actionable: "contact_admin"},
-		ReceiptID:      node.NodeHash,
-		DecisionID:     node.NodeHash,
-		ProofGraphNode: node.NodeHash,
-	}, nil
+	// Without a governed bridge the adapter stays fail-closed: it records the
+	// intercepted call and denies execution.
+	if a.bridge == nil {
+		return &runtimeadapters.AdaptedResponse{
+			Allowed:        false,
+			DenyReason:     &runtimeadapters.DenyReason{Code: "BRIDGE_NOT_CONFIGURED", Message: "MCP adapter execution bridge is not configured", Actionable: "contact_admin"},
+			ReceiptID:      node.NodeHash,
+			DecisionID:     node.NodeHash,
+			ProofGraphNode: node.NodeHash,
+		}, nil
+	}
+
+	return a.governed(ctx, req, inputHash, node.NodeHash)
+}
+
+// governed routes an intercepted call through the execution bridge, records an
+// EFFECT node linked to the INTENT, and maps the verdict to an AdaptedResponse.
+func (a *MCPAdapter) governed(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash, intentNode string) (*runtimeadapters.AdaptedResponse, error) {
+	outcome := a.bridge.Govern(ctx, req, inputHash)
+
+	effectPayload, err := json.Marshal(mcpEffectPayload{
+		AdapterID:     a.ID(),
+		ToolName:      req.ToolName,
+		IntentNode:    intentNode,
+		Verdict:       string(outcome.Verdict),
+		ReasonCode:    outcome.ReasonCode,
+		DecisionID:    outcome.DecisionID,
+		ReceiptHash:   outcome.ReceiptHash,
+		DispatchState: outcome.DispatchState,
+		OutputHash:    outcome.OutputHash,
+		PermitID:      permitID(outcome.Permit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("runtimeadapters/mcp: effect payload marshal failed: %w", err)
+	}
+	effectNode, err := a.graph.Append(proofgraph.NodeTypeEffect, effectPayload, req.PrincipalID, 0)
+	if err != nil {
+		return nil, fmt.Errorf("runtimeadapters/mcp: proofgraph effect append failed: %w", err)
+	}
+
+	receiptID := outcome.ReceiptHash
+	if receiptID == "" {
+		receiptID = effectNode.NodeHash
+	}
+	decisionID := outcome.DecisionID
+	if decisionID == "" {
+		decisionID = intentNode
+	}
+
+	resp := &runtimeadapters.AdaptedResponse{
+		Allowed:        outcome.Verdict == contracts.VerdictAllow,
+		Result:         outcome.Output,
+		ReceiptID:      receiptID,
+		DecisionID:     decisionID,
+		ProofGraphNode: effectNode.NodeHash,
+	}
+	if resp.Allowed {
+		a.logger.InfoContext(ctx, "mcp tool call allowed",
+			"tool", req.ToolName, "dispatch", outcome.DispatchState, "permit", permitID(outcome.Permit))
+		return resp, nil
+	}
+
+	resp.DenyReason = &runtimeadapters.DenyReason{
+		Code:       outcome.ReasonCode,
+		Message:    outcome.Reason,
+		Actionable: actionableFor(outcome.Verdict),
+	}
+	a.logger.InfoContext(ctx, "mcp tool call not allowed",
+		"tool", req.ToolName, "verdict", outcome.Verdict, "reason", outcome.ReasonCode)
+	return resp, nil
+}
+
+func actionableFor(v contracts.Verdict) string {
+	if v == contracts.VerdictEscalate {
+		return "request_approval"
+	}
+	return "modify_scope"
+}
+
+func permitID(p *effects.EffectPermit) string {
+	if p == nil {
+		return ""
+	}
+	return p.PermitID
 }
 
 type mcpProofPayload struct {
@@ -100,4 +183,17 @@ type mcpProofPayload struct {
 	ToolName    string `json:"tool_name"`
 	PrincipalID string `json:"principal_id"`
 	InputHash   string `json:"input_hash"`
+}
+
+type mcpEffectPayload struct {
+	AdapterID     string `json:"adapter_id"`
+	ToolName      string `json:"tool_name"`
+	IntentNode    string `json:"intent_node"`
+	Verdict       string `json:"verdict"`
+	ReasonCode    string `json:"reason_code,omitempty"`
+	DecisionID    string `json:"decision_id,omitempty"`
+	ReceiptHash   string `json:"receipt_hash,omitempty"`
+	DispatchState string `json:"dispatch_state"`
+	OutputHash    string `json:"output_hash,omitempty"`
+	PermitID      string `json:"permit_id,omitempty"`
 }

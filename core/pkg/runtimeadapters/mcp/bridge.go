@@ -1,3 +1,7 @@
+// quantum_posture: SHA-256 for JCS content hashing and deterministic permit
+// nonce derivation only; no signatures here (receipt signing is Ed25519 in the
+// workstation engine). Classical hash, PQ posture inherited from the signer.
+
 package mcp
 
 import (

@@ -87,6 +87,25 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+## [0.7.2] - 2026-07-10
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2>.
+
+<!-- quantum_posture: v0.7.2 release notes cover a Go standard-library toolchain rebuild only; this release adds no post-quantum cryptographic control. -->
+
+- Rebuilt both container images on Go 1.25.12 (up from 1.25.10) to clear five
+  Go standard-library CVEs baked into the binary at compile time —
+  `CVE-2026-27145` (`crypto/x509`), `CVE-2026-42504` (`mime`),
+  `CVE-2026-42507` (`net/textproto`), `CVE-2026-39822` (`os.Root`), and
+  `CVE-2026-42505` (Encrypted Client Hello). This is a rebuild, not a code
+  change; no public interface, SDK, or behavior is affected.
+- Moved the toolchain pin in lockstep across `go.work`, `mise.toml`, every
+  module `go` directive, the builder base image in all Dockerfiles, and the
+  CI `go-version` pins so dev, CI, SBOM, and SLSA provenance stay coherent.
+
+No RiskEnvelope, scan, upload, cloud, checkout, website, connector
+certification, or Company AI OS GA scope is included.
+
 ## [0.7.1] - 2026-07-07
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.1>.

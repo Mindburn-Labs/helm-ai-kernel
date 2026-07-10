@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "presentation hygiene check requires ripgrep (rg) on PATH" >&2
+  exit 127
+fi
+
 PATTERN='PLACEHOLDER|PlaceholderKey|ErrNotImplemented|simulated output|sha256-pending|viral adoption wedge|Verifiable AI Governance|Models propose|TODO|FIXME|WIP|coming soon|scaffold-only|placeholder public key'
 
 rg -n --hidden -S "$PATTERN" \

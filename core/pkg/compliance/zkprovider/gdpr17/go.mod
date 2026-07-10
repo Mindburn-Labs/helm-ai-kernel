@@ -1,6 +1,6 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/zkprovider/gdpr17
 
-go 1.25.10
+go 1.25.12
 
 require (
 	github.com/consensys/gnark v0.14.0

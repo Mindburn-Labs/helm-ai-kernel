@@ -26,6 +26,12 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
+      - name: Install presentation hygiene dependency
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ripgrep
+          rg --version
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25.10"
@@ -67,7 +73,8 @@ jobs:
           MARKER_C='WI''P'
           MARKER_D='coming ''soon'
           PATTERN="${MARKER_A}|${MARKER_B}|${MARKER_C}|${MARKER_D}"
-          ! rg -n --hidden -S "$PATTERN" \
+          set +e
+          rg -n --hidden -S "$PATTERN" \
             README.md docs .github core sdk deploy tests scripts \
             --glob '!**/node_modules/**' \
             --glob '!**/dist/**' \
@@ -79,10 +86,20 @@ jobs:
             --glob '!scripts/sdk/gen.sh' \
             --glob '!core/pkg/buildguard/verify.go' \
             --glob '!core/pkg/crypto/canonical_hardening_test.go'
-      - name: Check tracked file hygiene
-        run: |
-          set -euo pipefail
-          ! git ls-files | rg '\.(db|sqlite|log|tar|tar\.gz|zip|exe|dll|so|dylib)$' | rg -v '^reference_packs/proof_replays/[^/]+/evidencepack\.tar$'
+          marker_status=$?
+          set -e
+          case "$marker_status" in
+            0)
+              echo "unfinished marker check failed" >&2
+              exit 1
+              ;;
+            1)
+              ;;
+            *)
+              echo "unfinished marker search failed (rg exited $marker_status)" >&2
+              exit "$marker_status"
+              ;;
+          esac
 
   kernel:
     runs-on: ubuntu-latest

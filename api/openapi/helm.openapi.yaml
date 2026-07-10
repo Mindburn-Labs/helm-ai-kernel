@@ -5848,15 +5848,73 @@ components:
 
     BoundaryStatus:
       type: object
+      description: >-
+        Runtime health summary for the OSS-local execution boundary. A ready
+        status means both receipt storage and receipt signing are available;
+        otherwise status is degraded and the unavailable mechanism is named by
+        receipt_store or receipt_signer.
+      required:
+        - status
+        - mode
+        - receipt_signer
+        - receipt_store
+        - pdp
+        - mcp_firewall
+        - sandbox
+        - authz
+        - evidence_verifier
+        - checkpoint_log
+        - open_approval_count
+        - quarantined_mcp_count
+        - updated_at
       properties:
-        version: { type: string }
-        status: { type: string }
-        receipt_store_ready: { type: boolean }
-        signer_ready: { type: boolean }
-        open_approvals: { type: integer }
-        quarantined_mcp_servers: { type: integer }
-        last_checkpoint_id: { type: string }
-        checked_at: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [ready, degraded]
+        mode:
+          type: string
+          enum: [oss-local]
+        version:
+          type: string
+        receipt_signer:
+          type: string
+          enum: [ready, unavailable]
+        receipt_store:
+          type: string
+          enum: [ready, unavailable]
+        pdp:
+          type: string
+          enum: [fail-closed]
+        mcp_firewall:
+          type: string
+          enum: [enabled]
+        sandbox:
+          type: string
+          enum: [deny-default]
+        authz:
+          type: string
+          enum: [rebac-snapshot]
+        evidence_verifier:
+          type: string
+          enum: [offline]
+        checkpoint_log:
+          type: string
+          enum: [tamper-evident]
+        last_checkpoint_hash:
+          type: string
+        open_approval_count:
+          type: integer
+          minimum: 0
+        quarantined_mcp_count:
+          type: integer
+          minimum: 0
+        updated_at:
+          type: string
+          format: date-time
+        components:
+          type: object
+          additionalProperties:
+            type: string
 
     BoundaryCapabilitySummary:
       type: object

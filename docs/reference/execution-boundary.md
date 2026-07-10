@@ -1,6 +1,6 @@
 ---
 title: Execution Boundary Reference
-last_reviewed: 2026-05-21
+last_reviewed: 2026-07-10
 ---
 
 # Execution Boundary Reference
@@ -86,6 +86,29 @@ flowchart TD
 | Evidence envelopes | `helm-ai-kernel evidence export --envelope`, `helm-ai-kernel evidence envelope *` | `/api/v1/evidence/envelopes`, `/api/v1/evidence/export`, `/api/v1/evidence/verify`, `/api/v1/replay/verify` | Native EvidencePack roots; external envelopes are wrappers. |
 | External host evidence | `helm-ai-kernel verify external-receipt --chain <path> --public-key <hex|file>`, `helm-ai-kernel evidence attach-host-chain --bundle <bundle> --chain <path> --out <bundle> --source <name>`, `helm-ai-kernel evidence correlate-host --bundle <bundle>` | none | Vendor-neutral host/network evidence import, offline verification, and Boundary Drift correlation. |
 | Telemetry and coexistence | `helm-ai-kernel telemetry otel-config`, `helm-ai-kernel coexistence manifest`, `helm-ai-kernel integrate scaffold` | `/api/v1/telemetry/otel/config`, `/api/v1/telemetry/export`, `/api/v1/coexistence/capabilities` | Non-authoritative export and integration metadata. |
+
+## Boundary Status Compatibility
+
+`GET /api/v1/boundary/status` returns the JSON shape owned by
+`contracts.BoundaryStatus`. The `status` field is `ready` only when both
+`receipt_store` and `receipt_signer` are `ready`; otherwise it is `degraded`
+and the unavailable mechanism is reported explicitly.
+
+OpenAPI-generated models that predate the HELM-145 contract correction exposed
+legacy property names that the runtime did not emit. Consumers of those models
+must regenerate from the canonical OpenAPI and migrate as follows:
+
+| Legacy generated property | Runtime property |
+| --- | --- |
+| `receipt_store_ready` | `receipt_store` (`ready` or `unavailable`) |
+| `signer_ready` | `receipt_signer` (`ready` or `unavailable`) |
+| `open_approvals` | `open_approval_count` |
+| `quarantined_mcp_servers` | `quarantined_mcp_count` |
+| `last_checkpoint_id` | `last_checkpoint_hash` |
+| `checked_at` | `updated_at` |
+
+This is a schema and generated-client correction to the existing runtime wire
+response; it does not change the endpoint payload emitted by the Kernel.
 
 ## Durable State
 

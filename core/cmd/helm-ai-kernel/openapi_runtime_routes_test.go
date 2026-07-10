@@ -4,11 +4,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,6 +69,179 @@ func TestRuntimeRouteRegistryMatchesOpenAPI(t *testing.T) {
 			t.Fatalf("operationId drift for %s: registry=%s openapi=%s", key, registered.OperationID, operationID)
 		}
 	}
+}
+
+func TestBoundaryStatusOpenAPIMatchesRuntimeContract(t *testing.T) {
+	schema := readOpenAPIBoundaryStatusSchema(t)
+	properties, required := boundaryStatusJSONContract(t)
+
+	actualProperties := make([]string, 0, len(schema.Properties))
+	for name := range schema.Properties {
+		actualProperties = append(actualProperties, name)
+	}
+	sort.Strings(actualProperties)
+	if !reflect.DeepEqual(actualProperties, properties) {
+		t.Fatalf("BoundaryStatus OpenAPI properties drifted from Go JSON contract:\nopenapi=%v\ngo=%v", actualProperties, properties)
+	}
+	sort.Strings(schema.Required)
+	if !reflect.DeepEqual(schema.Required, required) {
+		t.Fatalf("BoundaryStatus OpenAPI required fields drifted from Go JSON contract:\nopenapi=%v\ngo=%v", schema.Required, required)
+	}
+
+	for name, property := range schema.Properties {
+		wantType := boundaryStatusOpenAPIType(t, name)
+		if property.Type != wantType {
+			t.Errorf("BoundaryStatus.%s type=%q, want %q", name, property.Type, wantType)
+		}
+	}
+	if got := schema.Properties["updated_at"].Format; got != "date-time" {
+		t.Errorf("BoundaryStatus.updated_at format=%q, want date-time", got)
+	}
+	for _, name := range []string{"open_approval_count", "quarantined_mcp_count"} {
+		minimum := schema.Properties[name].Minimum
+		if minimum == nil || *minimum != 0 {
+			t.Errorf("BoundaryStatus.%s minimum=%v, want 0", name, minimum)
+		}
+	}
+	if additional := schema.Properties["components"].AdditionalProperties; additional == nil || additional.Type != "string" {
+		t.Errorf("BoundaryStatus.components additionalProperties=%+v, want string values", additional)
+	}
+
+	registry := boundarypkg.NewSurfaceRegistry(func() time.Time {
+		return time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	})
+	ready := registry.Status("v-test", true, true, 0)
+	degraded := registry.Status("v-test", false, false, 0)
+	expectedEnums := map[string][]string{
+		"status":            {ready.Status, degraded.Status},
+		"mode":              {ready.Mode},
+		"receipt_signer":    {ready.ReceiptSigner, degraded.ReceiptSigner},
+		"receipt_store":     {ready.ReceiptStore, degraded.ReceiptStore},
+		"pdp":               {ready.PDP},
+		"mcp_firewall":      {ready.MCPFirewall},
+		"sandbox":           {ready.Sandbox},
+		"authz":             {ready.Authz},
+		"evidence_verifier": {ready.EvidenceVerifier},
+		"checkpoint_log":    {ready.CheckpointLog},
+	}
+	for name, want := range expectedEnums {
+		got := append([]string(nil), schema.Properties[name].Enum...)
+		got = uniqueSorted(got)
+		want = uniqueSorted(want)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("BoundaryStatus.%s enum=%v, want runtime values %v", name, got, want)
+		}
+	}
+}
+
+type openAPISchemaProperty struct {
+	Type                 string                 `yaml:"type"`
+	Format               string                 `yaml:"format"`
+	Enum                 []string               `yaml:"enum"`
+	Minimum              *int                   `yaml:"minimum"`
+	AdditionalProperties *openAPISchemaProperty `yaml:"additionalProperties"`
+}
+
+type openAPIObjectSchema struct {
+	Type       string                           `yaml:"type"`
+	Required   []string                         `yaml:"required"`
+	Properties map[string]openAPISchemaProperty `yaml:"properties"`
+}
+
+func readOpenAPIBoundaryStatusSchema(t *testing.T) openAPIObjectSchema {
+	t.Helper()
+	data, err := readOpenAPIFromRepository()
+	if err != nil {
+		t.Fatalf("read OpenAPI: %v", err)
+	}
+	var spec struct {
+		Components struct {
+			Schemas map[string]yaml.Node `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		t.Fatalf("parse OpenAPI: %v", err)
+	}
+	node, ok := spec.Components.Schemas["BoundaryStatus"]
+	if !ok {
+		t.Fatal("OpenAPI is missing components.schemas.BoundaryStatus")
+	}
+	var schema openAPIObjectSchema
+	if err := node.Decode(&schema); err != nil {
+		t.Fatalf("decode OpenAPI BoundaryStatus schema: %v", err)
+	}
+	if schema.Type != "object" {
+		t.Fatalf("BoundaryStatus type=%q, want object", schema.Type)
+	}
+	return schema
+}
+
+func boundaryStatusJSONContract(t *testing.T) ([]string, []string) {
+	t.Helper()
+	typeOfStatus := reflect.TypeOf(contracts.BoundaryStatus{})
+	properties := make([]string, 0, typeOfStatus.NumField())
+	required := make([]string, 0, typeOfStatus.NumField())
+	for i := 0; i < typeOfStatus.NumField(); i++ {
+		field := typeOfStatus.Field(i)
+		parts := strings.Split(field.Tag.Get("json"), ",")
+		if len(parts) == 0 || parts[0] == "" || parts[0] == "-" {
+			t.Fatalf("BoundaryStatus.%s has no public JSON property", field.Name)
+		}
+		properties = append(properties, parts[0])
+		optional := false
+		for _, option := range parts[1:] {
+			if option == "omitempty" {
+				optional = true
+				break
+			}
+		}
+		if !optional {
+			required = append(required, parts[0])
+		}
+	}
+	sort.Strings(properties)
+	sort.Strings(required)
+	return properties, required
+}
+
+func boundaryStatusOpenAPIType(t *testing.T, propertyName string) string {
+	t.Helper()
+	typeOfStatus := reflect.TypeOf(contracts.BoundaryStatus{})
+	for i := 0; i < typeOfStatus.NumField(); i++ {
+		field := typeOfStatus.Field(i)
+		if strings.Split(field.Tag.Get("json"), ",")[0] != propertyName {
+			continue
+		}
+		if field.Type == reflect.TypeOf(time.Time{}) {
+			return "string"
+		}
+		switch field.Type.Kind() {
+		case reflect.String:
+			return "string"
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return "integer"
+		case reflect.Map:
+			return "object"
+		default:
+			t.Fatalf("BoundaryStatus.%s has unsupported Go type %s", field.Name, field.Type)
+		}
+	}
+	t.Fatalf("BoundaryStatus has no JSON property %q", propertyName)
+	return ""
+}
+
+func uniqueSorted(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	unique := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		unique = append(unique, value)
+	}
+	sort.Strings(unique)
+	return unique
 }
 
 func TestRuntimeRouteRegistryHasExplicitSecurityMetadata(t *testing.T) {

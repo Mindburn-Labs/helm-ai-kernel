@@ -4,9 +4,11 @@ Typed Java client for the retained HELM kernel API.
 
 ## Package Status
 
-The Java SDK is published on Maven Central as
-`io.github.mindburnlabs:helm-sdk:0.7.2`. Remote Maven resolution and repo1
-artifacts were verified for this coordinate.
+Package metadata in this source tree targets the future Maven Central
+coordinate `io.github.mindburnlabs:helm-sdk:0.7.2`. This source target does not
+claim that remote artifacts have been published; verify Maven Central or the
+published version-status evidence before using the coordinate. After the
+tag-driven release completes, the dependency declaration is:
 
 ```xml
 <dependency>

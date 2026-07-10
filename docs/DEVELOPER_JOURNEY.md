@@ -49,8 +49,9 @@ docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 docker compose up -d
 ```
 
-Java SDK consumers can use the current Maven coordinate:
-`io.github.mindburnlabs:helm-sdk:0.7.2`.
+After the tag-driven release and published registry verification complete,
+Java SDK consumers can use the source-target Maven coordinate
+`io.github.mindburnlabs:helm-sdk:0.7.2`:
 
 ```xml
 <dependency>
@@ -61,13 +62,14 @@ Java SDK consumers can use the current Maven coordinate:
 ```
 
 Current source release target: `v0.7.2`.
-Release assets are attached at
-`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2`,
-including `v0.7.2.openvex.json` and `v0.7.2.json`.
+The expected release URL is
+`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2`. Do not
+treat its assets as present until the normal release workflow attaches and
+verifies them, including `v0.7.2.openvex.json` and `v0.7.2.json`.
 
-Go SDK consumers can pin
-`github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.2`; the source subdir tag
-is `sdk/go/v0.7.2`.
+After the source subdirectory tag is published and verified, Go SDK consumers
+can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.2`; the expected
+tag is `sdk/go/v0.7.2`.
 
 ## Local Boundary
 

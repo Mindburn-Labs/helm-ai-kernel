@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import pprint
 from datetime import datetime
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Set, Union
+from typing import Annotated, Any, ClassVar, Dict, List, Literal, Optional, Set, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr, ValidationError, field_validator
 
@@ -1900,17 +1900,95 @@ class BoundaryRecordVerification(BaseModel):
 
 class BoundaryStatus(BaseModel):
     """
-    BoundaryStatus
+    Runtime health summary for the OSS-local execution boundary. A ready status means both receipt storage and receipt signing are available; otherwise status is degraded and the unavailable mechanism is named by receipt_store or receipt_signer.
     """ # noqa: E501
+    status: StrictStr
+    mode: StrictStr
     version: Optional[StrictStr] = None
-    status: Optional[StrictStr] = None
-    receipt_store_ready: Optional[StrictBool] = None
-    signer_ready: Optional[StrictBool] = None
-    open_approvals: Optional[StrictInt] = None
-    quarantined_mcp_servers: Optional[StrictInt] = None
-    last_checkpoint_id: Optional[StrictStr] = None
-    checked_at: Optional[datetime] = None
-    __properties: ClassVar[List[str]] = ["version", "status", "receipt_store_ready", "signer_ready", "open_approvals", "quarantined_mcp_servers", "last_checkpoint_id", "checked_at"]
+    receipt_signer: StrictStr
+    receipt_store: StrictStr
+    pdp: StrictStr
+    mcp_firewall: StrictStr
+    sandbox: StrictStr
+    authz: StrictStr
+    evidence_verifier: StrictStr
+    checkpoint_log: StrictStr
+    last_checkpoint_hash: Optional[StrictStr] = None
+    open_approval_count: Annotated[int, Field(strict=True, ge=0)]
+    quarantined_mcp_count: Annotated[int, Field(strict=True, ge=0)]
+    updated_at: datetime
+    components: Optional[Dict[str, StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["status", "mode", "version", "receipt_signer", "receipt_store", "pdp", "mcp_firewall", "sandbox", "authz", "evidence_verifier", "checkpoint_log", "last_checkpoint_hash", "open_approval_count", "quarantined_mcp_count", "updated_at", "components"]
+
+    @field_validator('status')
+    def status_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['ready', 'degraded']):
+            raise ValueError("must be one of enum values ('ready', 'degraded')")
+        return value
+
+    @field_validator('mode')
+    def mode_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['oss-local']):
+            raise ValueError("must be one of enum values ('oss-local')")
+        return value
+
+    @field_validator('receipt_signer')
+    def receipt_signer_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['ready', 'unavailable']):
+            raise ValueError("must be one of enum values ('ready', 'unavailable')")
+        return value
+
+    @field_validator('receipt_store')
+    def receipt_store_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['ready', 'unavailable']):
+            raise ValueError("must be one of enum values ('ready', 'unavailable')")
+        return value
+
+    @field_validator('pdp')
+    def pdp_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['fail-closed']):
+            raise ValueError("must be one of enum values ('fail-closed')")
+        return value
+
+    @field_validator('mcp_firewall')
+    def mcp_firewall_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['enabled']):
+            raise ValueError("must be one of enum values ('enabled')")
+        return value
+
+    @field_validator('sandbox')
+    def sandbox_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['deny-default']):
+            raise ValueError("must be one of enum values ('deny-default')")
+        return value
+
+    @field_validator('authz')
+    def authz_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['rebac-snapshot']):
+            raise ValueError("must be one of enum values ('rebac-snapshot')")
+        return value
+
+    @field_validator('evidence_verifier')
+    def evidence_verifier_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['offline']):
+            raise ValueError("must be one of enum values ('offline')")
+        return value
+
+    @field_validator('checkpoint_log')
+    def checkpoint_log_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['tamper-evident']):
+            raise ValueError("must be one of enum values ('tamper-evident')")
+        return value
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -1963,14 +2041,21 @@ class BoundaryStatus(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "version": obj.get("version"),
             "status": obj.get("status"),
-            "receipt_store_ready": obj.get("receipt_store_ready"),
-            "signer_ready": obj.get("signer_ready"),
-            "open_approvals": obj.get("open_approvals"),
-            "quarantined_mcp_servers": obj.get("quarantined_mcp_servers"),
-            "last_checkpoint_id": obj.get("last_checkpoint_id"),
-            "checked_at": obj.get("checked_at")
+            "mode": obj.get("mode"),
+            "version": obj.get("version"),
+            "receipt_signer": obj.get("receipt_signer"),
+            "receipt_store": obj.get("receipt_store"),
+            "pdp": obj.get("pdp"),
+            "mcp_firewall": obj.get("mcp_firewall"),
+            "sandbox": obj.get("sandbox"),
+            "authz": obj.get("authz"),
+            "evidence_verifier": obj.get("evidence_verifier"),
+            "checkpoint_log": obj.get("checkpoint_log"),
+            "last_checkpoint_hash": obj.get("last_checkpoint_hash"),
+            "open_approval_count": obj.get("open_approval_count"),
+            "quarantined_mcp_count": obj.get("quarantined_mcp_count"),
+            "updated_at": obj.get("updated_at"),
         })
         return _obj
 

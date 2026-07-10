@@ -169,7 +169,7 @@ from __future__ import annotations
 import json
 import pprint
 from datetime import datetime
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Set, Union
+from typing import Annotated, Any, ClassVar, Dict, List, Literal, Optional, Set, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr, ValidationError, field_validator
 HEADER

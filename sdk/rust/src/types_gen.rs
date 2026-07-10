@@ -920,38 +920,190 @@ impl BoundaryRecordVerification {
  */
 
 
+/// BoundaryStatus : Runtime health summary for the OSS-local execution boundary. A ready status means both receipt storage and receipt signing are available; otherwise status is degraded and the unavailable mechanism is named by receipt_store or receipt_signer.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BoundaryStatus {
+    #[serde(rename = "status")]
+    pub status: BoundaryStatusStatus,
+    #[serde(rename = "mode")]
+    pub mode: BoundaryStatusMode,
     #[serde(rename = "version", skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
-    #[serde(rename = "status", skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(rename = "receipt_store_ready", skip_serializing_if = "Option::is_none")]
-    pub receipt_store_ready: Option<bool>,
-    #[serde(rename = "signer_ready", skip_serializing_if = "Option::is_none")]
-    pub signer_ready: Option<bool>,
-    #[serde(rename = "open_approvals", skip_serializing_if = "Option::is_none")]
-    pub open_approvals: Option<i32>,
-    #[serde(rename = "quarantined_mcp_servers", skip_serializing_if = "Option::is_none")]
-    pub quarantined_mcp_servers: Option<i32>,
-    #[serde(rename = "last_checkpoint_id", skip_serializing_if = "Option::is_none")]
-    pub last_checkpoint_id: Option<String>,
-    #[serde(rename = "checked_at", skip_serializing_if = "Option::is_none")]
-    pub checked_at: Option<String>,
+    #[serde(rename = "receipt_signer")]
+    pub receipt_signer: BoundaryStatusReceiptSigner,
+    #[serde(rename = "receipt_store")]
+    pub receipt_store: BoundaryStatusReceiptStore,
+    #[serde(rename = "pdp")]
+    pub pdp: BoundaryStatusPdp,
+    #[serde(rename = "mcp_firewall")]
+    pub mcp_firewall: BoundaryStatusMcpFirewall,
+    #[serde(rename = "sandbox")]
+    pub sandbox: BoundaryStatusSandbox,
+    #[serde(rename = "authz")]
+    pub authz: BoundaryStatusAuthz,
+    #[serde(rename = "evidence_verifier")]
+    pub evidence_verifier: BoundaryStatusEvidenceVerifier,
+    #[serde(rename = "checkpoint_log")]
+    pub checkpoint_log: BoundaryStatusCheckpointLog,
+    #[serde(rename = "last_checkpoint_hash", skip_serializing_if = "Option::is_none")]
+    pub last_checkpoint_hash: Option<String>,
+    #[serde(rename = "open_approval_count")]
+    pub open_approval_count: i32,
+    #[serde(rename = "quarantined_mcp_count")]
+    pub quarantined_mcp_count: i32,
+    #[serde(rename = "updated_at")]
+    pub updated_at: String,
+    #[serde(rename = "components", skip_serializing_if = "Option::is_none")]
+    pub components: Option<std::collections::HashMap<String, String>>,
 }
 
 impl BoundaryStatus {
-    pub fn new() -> BoundaryStatus {
+    /// Runtime health summary for the OSS-local execution boundary. A ready status means both receipt storage and receipt signing are available; otherwise status is degraded and the unavailable mechanism is named by receipt_store or receipt_signer.
+    pub fn new(status: BoundaryStatusStatus, mode: BoundaryStatusMode, receipt_signer: BoundaryStatusReceiptSigner, receipt_store: BoundaryStatusReceiptStore, pdp: BoundaryStatusPdp, mcp_firewall: BoundaryStatusMcpFirewall, sandbox: BoundaryStatusSandbox, authz: BoundaryStatusAuthz, evidence_verifier: BoundaryStatusEvidenceVerifier, checkpoint_log: BoundaryStatusCheckpointLog, open_approval_count: i32, quarantined_mcp_count: i32, updated_at: String) -> BoundaryStatus {
         BoundaryStatus {
+            status,
+            mode,
             version: None,
-            status: None,
-            receipt_store_ready: None,
-            signer_ready: None,
-            open_approvals: None,
-            quarantined_mcp_servers: None,
-            last_checkpoint_id: None,
-            checked_at: None,
+            receipt_signer,
+            receipt_store,
+            pdp,
+            mcp_firewall,
+            sandbox,
+            authz,
+            evidence_verifier,
+            checkpoint_log,
+            last_checkpoint_hash: None,
+            open_approval_count,
+            quarantined_mcp_count,
+            updated_at,
+            components: None,
         }
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusStatus {
+    #[serde(rename = "ready")]
+    Ready,
+    #[serde(rename = "degraded")]
+    Degraded,
+}
+
+impl Default for BoundaryStatusStatus {
+    fn default() -> BoundaryStatusStatus {
+        Self::Ready
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusMode {
+    #[serde(rename = "oss-local")]
+    OssLocal,
+}
+
+impl Default for BoundaryStatusMode {
+    fn default() -> BoundaryStatusMode {
+        Self::OssLocal
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusReceiptSigner {
+    #[serde(rename = "ready")]
+    Ready,
+    #[serde(rename = "unavailable")]
+    Unavailable,
+}
+
+impl Default for BoundaryStatusReceiptSigner {
+    fn default() -> BoundaryStatusReceiptSigner {
+        Self::Ready
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusReceiptStore {
+    #[serde(rename = "ready")]
+    Ready,
+    #[serde(rename = "unavailable")]
+    Unavailable,
+}
+
+impl Default for BoundaryStatusReceiptStore {
+    fn default() -> BoundaryStatusReceiptStore {
+        Self::Ready
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusPdp {
+    #[serde(rename = "fail-closed")]
+    FailClosed,
+}
+
+impl Default for BoundaryStatusPdp {
+    fn default() -> BoundaryStatusPdp {
+        Self::FailClosed
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusMcpFirewall {
+    #[serde(rename = "enabled")]
+    Enabled,
+}
+
+impl Default for BoundaryStatusMcpFirewall {
+    fn default() -> BoundaryStatusMcpFirewall {
+        Self::Enabled
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusSandbox {
+    #[serde(rename = "deny-default")]
+    DenyDefault,
+}
+
+impl Default for BoundaryStatusSandbox {
+    fn default() -> BoundaryStatusSandbox {
+        Self::DenyDefault
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusAuthz {
+    #[serde(rename = "rebac-snapshot")]
+    RebacSnapshot,
+}
+
+impl Default for BoundaryStatusAuthz {
+    fn default() -> BoundaryStatusAuthz {
+        Self::RebacSnapshot
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusEvidenceVerifier {
+    #[serde(rename = "offline")]
+    Offline,
+}
+
+impl Default for BoundaryStatusEvidenceVerifier {
+    fn default() -> BoundaryStatusEvidenceVerifier {
+        Self::Offline
+    }
+}
+///
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum BoundaryStatusCheckpointLog {
+    #[serde(rename = "tamper-evident")]
+    TamperEvident,
+}
+
+impl Default for BoundaryStatusCheckpointLog {
+    fn default() -> BoundaryStatusCheckpointLog {
+        Self::TamperEvident
     }
 }
 

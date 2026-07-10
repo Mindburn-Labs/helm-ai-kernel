@@ -2186,11 +2186,23 @@ export function BoundaryRecordVerificationToJSON(value?: BoundaryRecordVerificat
  */
 
 /**
- *
+ * Runtime health summary for the OSS-local execution boundary. A ready status means both receipt storage and receipt signing are available; otherwise status is degraded and the unavailable mechanism is named by receipt_store or receipt_signer.
  * @export
  * @interface BoundaryStatus
  */
 export interface BoundaryStatus {
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    status: BoundaryStatusStatusEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    mode: BoundaryStatusModeEnum;
     /**
      *
      * @type {string}
@@ -2202,49 +2214,183 @@ export interface BoundaryStatus {
      * @type {string}
      * @memberof BoundaryStatus
      */
-    status?: string;
-    /**
-     *
-     * @type {boolean}
-     * @memberof BoundaryStatus
-     */
-    receipt_store_ready?: boolean;
-    /**
-     *
-     * @type {boolean}
-     * @memberof BoundaryStatus
-     */
-    signer_ready?: boolean;
-    /**
-     *
-     * @type {number}
-     * @memberof BoundaryStatus
-     */
-    open_approvals?: number;
-    /**
-     *
-     * @type {number}
-     * @memberof BoundaryStatus
-     */
-    quarantined_mcp_servers?: number;
+    receipt_signer: BoundaryStatusReceiptSignerEnum;
     /**
      *
      * @type {string}
      * @memberof BoundaryStatus
      */
-    last_checkpoint_id?: string;
+    receipt_store: BoundaryStatusReceiptStoreEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    pdp: BoundaryStatusPdpEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    mcp_firewall: BoundaryStatusMcpFirewallEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    sandbox: BoundaryStatusSandboxEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    authz: BoundaryStatusAuthzEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    evidence_verifier: BoundaryStatusEvidenceVerifierEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    checkpoint_log: BoundaryStatusCheckpointLogEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof BoundaryStatus
+     */
+    last_checkpoint_hash?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof BoundaryStatus
+     */
+    open_approval_count: number;
+    /**
+     *
+     * @type {number}
+     * @memberof BoundaryStatus
+     */
+    quarantined_mcp_count: number;
     /**
      *
      * @type {Date}
      * @memberof BoundaryStatus
      */
-    checked_at?: Date;
+    updated_at: Date;
+    /**
+     *
+     * @type {{ [key: string]: string; }}
+     * @memberof BoundaryStatus
+     */
+    components?: { [key: string]: string; };
 }
+
+
+/**
+ * @export
+ */
+export const BoundaryStatusStatusEnum = {
+    Ready: 'ready',
+    Degraded: 'degraded'
+} as const;
+export type BoundaryStatusStatusEnum = typeof BoundaryStatusStatusEnum[keyof typeof BoundaryStatusStatusEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusModeEnum = {
+    OssLocal: 'oss-local'
+} as const;
+export type BoundaryStatusModeEnum = typeof BoundaryStatusModeEnum[keyof typeof BoundaryStatusModeEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusReceiptSignerEnum = {
+    Ready: 'ready',
+    Unavailable: 'unavailable'
+} as const;
+export type BoundaryStatusReceiptSignerEnum = typeof BoundaryStatusReceiptSignerEnum[keyof typeof BoundaryStatusReceiptSignerEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusReceiptStoreEnum = {
+    Ready: 'ready',
+    Unavailable: 'unavailable'
+} as const;
+export type BoundaryStatusReceiptStoreEnum = typeof BoundaryStatusReceiptStoreEnum[keyof typeof BoundaryStatusReceiptStoreEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusPdpEnum = {
+    FailClosed: 'fail-closed'
+} as const;
+export type BoundaryStatusPdpEnum = typeof BoundaryStatusPdpEnum[keyof typeof BoundaryStatusPdpEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusMcpFirewallEnum = {
+    Enabled: 'enabled'
+} as const;
+export type BoundaryStatusMcpFirewallEnum = typeof BoundaryStatusMcpFirewallEnum[keyof typeof BoundaryStatusMcpFirewallEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusSandboxEnum = {
+    DenyDefault: 'deny-default'
+} as const;
+export type BoundaryStatusSandboxEnum = typeof BoundaryStatusSandboxEnum[keyof typeof BoundaryStatusSandboxEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusAuthzEnum = {
+    RebacSnapshot: 'rebac-snapshot'
+} as const;
+export type BoundaryStatusAuthzEnum = typeof BoundaryStatusAuthzEnum[keyof typeof BoundaryStatusAuthzEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusEvidenceVerifierEnum = {
+    Offline: 'offline'
+} as const;
+export type BoundaryStatusEvidenceVerifierEnum = typeof BoundaryStatusEvidenceVerifierEnum[keyof typeof BoundaryStatusEvidenceVerifierEnum];
+
+/**
+ * @export
+ */
+export const BoundaryStatusCheckpointLogEnum = {
+    TamperEvident: 'tamper-evident'
+} as const;
+export type BoundaryStatusCheckpointLogEnum = typeof BoundaryStatusCheckpointLogEnum[keyof typeof BoundaryStatusCheckpointLogEnum];
+
 
 /**
  * Check if a given object implements the BoundaryStatus interface.
  */
 export function instanceOfBoundaryStatus(value: object): boolean {
+    if (!('status' in value)) return false;
+    if (!('mode' in value)) return false;
+    if (!('receipt_signer' in value)) return false;
+    if (!('receipt_store' in value)) return false;
+    if (!('pdp' in value)) return false;
+    if (!('mcp_firewall' in value)) return false;
+    if (!('sandbox' in value)) return false;
+    if (!('authz' in value)) return false;
+    if (!('evidence_verifier' in value)) return false;
+    if (!('checkpoint_log' in value)) return false;
+    if (!('open_approval_count' in value)) return false;
+    if (!('quarantined_mcp_count' in value)) return false;
+    if (!('updated_at' in value)) return false;
     return true;
 }
 
@@ -2258,14 +2404,22 @@ export function BoundaryStatusFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
 
+        'status': json['status'],
+        'mode': json['mode'],
         'version': json['version'] == null ? undefined : json['version'],
-        'status': json['status'] == null ? undefined : json['status'],
-        'receipt_store_ready': json['receipt_store_ready'] == null ? undefined : json['receipt_store_ready'],
-        'signer_ready': json['signer_ready'] == null ? undefined : json['signer_ready'],
-        'open_approvals': json['open_approvals'] == null ? undefined : json['open_approvals'],
-        'quarantined_mcp_servers': json['quarantined_mcp_servers'] == null ? undefined : json['quarantined_mcp_servers'],
-        'last_checkpoint_id': json['last_checkpoint_id'] == null ? undefined : json['last_checkpoint_id'],
-        'checked_at': json['checked_at'] == null ? undefined : (new Date(json['checked_at'])),
+        'receipt_signer': json['receipt_signer'],
+        'receipt_store': json['receipt_store'],
+        'pdp': json['pdp'],
+        'mcp_firewall': json['mcp_firewall'],
+        'sandbox': json['sandbox'],
+        'authz': json['authz'],
+        'evidence_verifier': json['evidence_verifier'],
+        'checkpoint_log': json['checkpoint_log'],
+        'last_checkpoint_hash': json['last_checkpoint_hash'] == null ? undefined : json['last_checkpoint_hash'],
+        'open_approval_count': json['open_approval_count'],
+        'quarantined_mcp_count': json['quarantined_mcp_count'],
+        'updated_at': (new Date(json['updated_at'])),
+        'components': json['components'] == null ? undefined : json['components'],
     };
 }
 
@@ -2275,14 +2429,22 @@ export function BoundaryStatusToJSON(value?: BoundaryStatus | null): any {
     }
     return {
 
-        'version': value['version'],
         'status': value['status'],
-        'receipt_store_ready': value['receipt_store_ready'],
-        'signer_ready': value['signer_ready'],
-        'open_approvals': value['open_approvals'],
-        'quarantined_mcp_servers': value['quarantined_mcp_servers'],
-        'last_checkpoint_id': value['last_checkpoint_id'],
-        'checked_at': value['checked_at'] == null ? undefined : ((value['checked_at']).toISOString()),
+        'mode': value['mode'],
+        'version': value['version'],
+        'receipt_signer': value['receipt_signer'],
+        'receipt_store': value['receipt_store'],
+        'pdp': value['pdp'],
+        'mcp_firewall': value['mcp_firewall'],
+        'sandbox': value['sandbox'],
+        'authz': value['authz'],
+        'evidence_verifier': value['evidence_verifier'],
+        'checkpoint_log': value['checkpoint_log'],
+        'last_checkpoint_hash': value['last_checkpoint_hash'],
+        'open_approval_count': value['open_approval_count'],
+        'quarantined_mcp_count': value['quarantined_mcp_count'],
+        'updated_at': ((value['updated_at']).toISOString()),
+        'components': value['components'],
     };
 }
 

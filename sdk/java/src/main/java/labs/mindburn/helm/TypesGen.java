@@ -7265,46 +7265,464 @@ public static class BoundaryRecordVerification {
 
 
 /**
- * BoundaryStatus
+ * Runtime health summary for the OSS-local execution boundary. A ready status means both receipt storage and receipt signing are available; otherwise status is degraded and the unavailable mechanism is named by receipt_store or receipt_signer.
  */
 @JsonPropertyOrder({
-  BoundaryStatus.JSON_PROPERTY_VERSION,
   BoundaryStatus.JSON_PROPERTY_STATUS,
-  BoundaryStatus.JSON_PROPERTY_RECEIPT_STORE_READY,
-  BoundaryStatus.JSON_PROPERTY_SIGNER_READY,
-  BoundaryStatus.JSON_PROPERTY_OPEN_APPROVALS,
-  BoundaryStatus.JSON_PROPERTY_QUARANTINED_MCP_SERVERS,
-  BoundaryStatus.JSON_PROPERTY_LAST_CHECKPOINT_ID,
-  BoundaryStatus.JSON_PROPERTY_CHECKED_AT
+  BoundaryStatus.JSON_PROPERTY_MODE,
+  BoundaryStatus.JSON_PROPERTY_VERSION,
+  BoundaryStatus.JSON_PROPERTY_RECEIPT_SIGNER,
+  BoundaryStatus.JSON_PROPERTY_RECEIPT_STORE,
+  BoundaryStatus.JSON_PROPERTY_PDP,
+  BoundaryStatus.JSON_PROPERTY_MCP_FIREWALL,
+  BoundaryStatus.JSON_PROPERTY_SANDBOX,
+  BoundaryStatus.JSON_PROPERTY_AUTHZ,
+  BoundaryStatus.JSON_PROPERTY_EVIDENCE_VERIFIER,
+  BoundaryStatus.JSON_PROPERTY_CHECKPOINT_LOG,
+  BoundaryStatus.JSON_PROPERTY_LAST_CHECKPOINT_HASH,
+  BoundaryStatus.JSON_PROPERTY_OPEN_APPROVAL_COUNT,
+  BoundaryStatus.JSON_PROPERTY_QUARANTINED_MCP_COUNT,
+  BoundaryStatus.JSON_PROPERTY_UPDATED_AT,
+  BoundaryStatus.JSON_PROPERTY_COMPONENTS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class BoundaryStatus {
+  /**
+   * Gets or Sets status
+   */
+  public enum StatusEnum {
+    READY("ready"),
+
+    DEGRADED("degraded");
+
+    private String value;
+
+    StatusEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static StatusEnum fromValue(String value) {
+      for (StatusEnum b : StatusEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private StatusEnum status;
+
+  /**
+   * Gets or Sets mode
+   */
+  public enum ModeEnum {
+    OSS_LOCAL("oss-local");
+
+    private String value;
+
+    ModeEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static ModeEnum fromValue(String value) {
+      for (ModeEnum b : ModeEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_MODE = "mode";
+  private ModeEnum mode;
+
   public static final String JSON_PROPERTY_VERSION = "version";
   private String version;
 
-  public static final String JSON_PROPERTY_STATUS = "status";
-  private String status;
+  /**
+   * Gets or Sets receiptSigner
+   */
+  public enum ReceiptSignerEnum {
+    READY("ready"),
 
-  public static final String JSON_PROPERTY_RECEIPT_STORE_READY = "receipt_store_ready";
-  private Boolean receiptStoreReady;
+    UNAVAILABLE("unavailable");
 
-  public static final String JSON_PROPERTY_SIGNER_READY = "signer_ready";
-  private Boolean signerReady;
+    private String value;
 
-  public static final String JSON_PROPERTY_OPEN_APPROVALS = "open_approvals";
-  private Integer openApprovals;
+    ReceiptSignerEnum(String value) {
+      this.value = value;
+    }
 
-  public static final String JSON_PROPERTY_QUARANTINED_MCP_SERVERS = "quarantined_mcp_servers";
-  private Integer quarantinedMcpServers;
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
 
-  public static final String JSON_PROPERTY_LAST_CHECKPOINT_ID = "last_checkpoint_id";
-  private String lastCheckpointId;
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
 
-  public static final String JSON_PROPERTY_CHECKED_AT = "checked_at";
-  private OffsetDateTime checkedAt;
+    @JsonCreator
+    public static ReceiptSignerEnum fromValue(String value) {
+      for (ReceiptSignerEnum b : ReceiptSignerEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_RECEIPT_SIGNER = "receipt_signer";
+  private ReceiptSignerEnum receiptSigner;
+
+  /**
+   * Gets or Sets receiptStore
+   */
+  public enum ReceiptStoreEnum {
+    READY("ready"),
+
+    UNAVAILABLE("unavailable");
+
+    private String value;
+
+    ReceiptStoreEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static ReceiptStoreEnum fromValue(String value) {
+      for (ReceiptStoreEnum b : ReceiptStoreEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_RECEIPT_STORE = "receipt_store";
+  private ReceiptStoreEnum receiptStore;
+
+  /**
+   * Gets or Sets pdp
+   */
+  public enum PdpEnum {
+    FAIL_CLOSED("fail-closed");
+
+    private String value;
+
+    PdpEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static PdpEnum fromValue(String value) {
+      for (PdpEnum b : PdpEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_PDP = "pdp";
+  private PdpEnum pdp;
+
+  /**
+   * Gets or Sets mcpFirewall
+   */
+  public enum McpFirewallEnum {
+    ENABLED("enabled");
+
+    private String value;
+
+    McpFirewallEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static McpFirewallEnum fromValue(String value) {
+      for (McpFirewallEnum b : McpFirewallEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_MCP_FIREWALL = "mcp_firewall";
+  private McpFirewallEnum mcpFirewall;
+
+  /**
+   * Gets or Sets sandbox
+   */
+  public enum SandboxEnum {
+    DENY_DEFAULT("deny-default");
+
+    private String value;
+
+    SandboxEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static SandboxEnum fromValue(String value) {
+      for (SandboxEnum b : SandboxEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_SANDBOX = "sandbox";
+  private SandboxEnum sandbox;
+
+  /**
+   * Gets or Sets authz
+   */
+  public enum AuthzEnum {
+    REBAC_SNAPSHOT("rebac-snapshot");
+
+    private String value;
+
+    AuthzEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static AuthzEnum fromValue(String value) {
+      for (AuthzEnum b : AuthzEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_AUTHZ = "authz";
+  private AuthzEnum authz;
+
+  /**
+   * Gets or Sets evidenceVerifier
+   */
+  public enum EvidenceVerifierEnum {
+    OFFLINE("offline");
+
+    private String value;
+
+    EvidenceVerifierEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static EvidenceVerifierEnum fromValue(String value) {
+      for (EvidenceVerifierEnum b : EvidenceVerifierEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_EVIDENCE_VERIFIER = "evidence_verifier";
+  private EvidenceVerifierEnum evidenceVerifier;
+
+  /**
+   * Gets or Sets checkpointLog
+   */
+  public enum CheckpointLogEnum {
+    TAMPER_EVIDENT("tamper-evident");
+
+    private String value;
+
+    CheckpointLogEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static CheckpointLogEnum fromValue(String value) {
+      for (CheckpointLogEnum b : CheckpointLogEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_CHECKPOINT_LOG = "checkpoint_log";
+  private CheckpointLogEnum checkpointLog;
+
+  public static final String JSON_PROPERTY_LAST_CHECKPOINT_HASH = "last_checkpoint_hash";
+  private String lastCheckpointHash;
+
+  public static final String JSON_PROPERTY_OPEN_APPROVAL_COUNT = "open_approval_count";
+  private Integer openApprovalCount;
+
+  public static final String JSON_PROPERTY_QUARANTINED_MCP_COUNT = "quarantined_mcp_count";
+  private Integer quarantinedMcpCount;
+
+  public static final String JSON_PROPERTY_UPDATED_AT = "updated_at";
+  private OffsetDateTime updatedAt;
+
+  public static final String JSON_PROPERTY_COMPONENTS = "components";
+  private Map<String, String> components = new HashMap<>();
 
   public BoundaryStatus() {
   }
+
+  public BoundaryStatus status(StatusEnum status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * Get status
+   * @return status
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public StatusEnum getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStatus(StatusEnum status) {
+    this.status = status;
+  }
+
+
+  public BoundaryStatus mode(ModeEnum mode) {
+    this.mode = mode;
+    return this;
+  }
+
+   /**
+   * Get mode
+   * @return mode
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_MODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public ModeEnum getMode() {
+    return mode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setMode(ModeEnum mode) {
+    this.mode = mode;
+  }
+
 
   public BoundaryStatus version(String version) {
     this.version = version;
@@ -7331,178 +7749,330 @@ public static class BoundaryStatus {
   }
 
 
-  public BoundaryStatus status(String status) {
-    this.status = status;
+  public BoundaryStatus receiptSigner(ReceiptSignerEnum receiptSigner) {
+    this.receiptSigner = receiptSigner;
     return this;
   }
 
    /**
-   * Get status
-   * @return status
+   * Get receiptSigner
+   * @return receiptSigner
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_STATUS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_RECEIPT_SIGNER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public String getStatus() {
-    return status;
+  public ReceiptSignerEnum getReceiptSigner() {
+    return receiptSigner;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_STATUS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setStatus(String status) {
-    this.status = status;
+  @JsonProperty(JSON_PROPERTY_RECEIPT_SIGNER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReceiptSigner(ReceiptSignerEnum receiptSigner) {
+    this.receiptSigner = receiptSigner;
   }
 
 
-  public BoundaryStatus receiptStoreReady(Boolean receiptStoreReady) {
-    this.receiptStoreReady = receiptStoreReady;
+  public BoundaryStatus receiptStore(ReceiptStoreEnum receiptStore) {
+    this.receiptStore = receiptStore;
     return this;
   }
 
    /**
-   * Get receiptStoreReady
-   * @return receiptStoreReady
+   * Get receiptStore
+   * @return receiptStore
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_RECEIPT_STORE_READY)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_RECEIPT_STORE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public Boolean getReceiptStoreReady() {
-    return receiptStoreReady;
+  public ReceiptStoreEnum getReceiptStore() {
+    return receiptStore;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_RECEIPT_STORE_READY)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setReceiptStoreReady(Boolean receiptStoreReady) {
-    this.receiptStoreReady = receiptStoreReady;
+  @JsonProperty(JSON_PROPERTY_RECEIPT_STORE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReceiptStore(ReceiptStoreEnum receiptStore) {
+    this.receiptStore = receiptStore;
   }
 
 
-  public BoundaryStatus signerReady(Boolean signerReady) {
-    this.signerReady = signerReady;
+  public BoundaryStatus pdp(PdpEnum pdp) {
+    this.pdp = pdp;
     return this;
   }
 
    /**
-   * Get signerReady
-   * @return signerReady
+   * Get pdp
+   * @return pdp
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_SIGNER_READY)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PDP)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public Boolean getSignerReady() {
-    return signerReady;
+  public PdpEnum getPdp() {
+    return pdp;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_SIGNER_READY)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setSignerReady(Boolean signerReady) {
-    this.signerReady = signerReady;
+  @JsonProperty(JSON_PROPERTY_PDP)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPdp(PdpEnum pdp) {
+    this.pdp = pdp;
   }
 
 
-  public BoundaryStatus openApprovals(Integer openApprovals) {
-    this.openApprovals = openApprovals;
+  public BoundaryStatus mcpFirewall(McpFirewallEnum mcpFirewall) {
+    this.mcpFirewall = mcpFirewall;
     return this;
   }
 
    /**
-   * Get openApprovals
-   * @return openApprovals
+   * Get mcpFirewall
+   * @return mcpFirewall
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_OPEN_APPROVALS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_MCP_FIREWALL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public Integer getOpenApprovals() {
-    return openApprovals;
+  public McpFirewallEnum getMcpFirewall() {
+    return mcpFirewall;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_OPEN_APPROVALS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setOpenApprovals(Integer openApprovals) {
-    this.openApprovals = openApprovals;
+  @JsonProperty(JSON_PROPERTY_MCP_FIREWALL)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setMcpFirewall(McpFirewallEnum mcpFirewall) {
+    this.mcpFirewall = mcpFirewall;
   }
 
 
-  public BoundaryStatus quarantinedMcpServers(Integer quarantinedMcpServers) {
-    this.quarantinedMcpServers = quarantinedMcpServers;
+  public BoundaryStatus sandbox(SandboxEnum sandbox) {
+    this.sandbox = sandbox;
     return this;
   }
 
    /**
-   * Get quarantinedMcpServers
-   * @return quarantinedMcpServers
+   * Get sandbox
+   * @return sandbox
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_QUARANTINED_MCP_SERVERS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_SANDBOX)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public Integer getQuarantinedMcpServers() {
-    return quarantinedMcpServers;
+  public SandboxEnum getSandbox() {
+    return sandbox;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_QUARANTINED_MCP_SERVERS)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setQuarantinedMcpServers(Integer quarantinedMcpServers) {
-    this.quarantinedMcpServers = quarantinedMcpServers;
+  @JsonProperty(JSON_PROPERTY_SANDBOX)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSandbox(SandboxEnum sandbox) {
+    this.sandbox = sandbox;
   }
 
 
-  public BoundaryStatus lastCheckpointId(String lastCheckpointId) {
-    this.lastCheckpointId = lastCheckpointId;
+  public BoundaryStatus authz(AuthzEnum authz) {
+    this.authz = authz;
     return this;
   }
 
    /**
-   * Get lastCheckpointId
-   * @return lastCheckpointId
+   * Get authz
+   * @return authz
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_LAST_CHECKPOINT_ID)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_AUTHZ)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public String getLastCheckpointId() {
-    return lastCheckpointId;
+  public AuthzEnum getAuthz() {
+    return authz;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_LAST_CHECKPOINT_ID)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setLastCheckpointId(String lastCheckpointId) {
-    this.lastCheckpointId = lastCheckpointId;
+  @JsonProperty(JSON_PROPERTY_AUTHZ)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setAuthz(AuthzEnum authz) {
+    this.authz = authz;
   }
 
 
-  public BoundaryStatus checkedAt(OffsetDateTime checkedAt) {
-    this.checkedAt = checkedAt;
+  public BoundaryStatus evidenceVerifier(EvidenceVerifierEnum evidenceVerifier) {
+    this.evidenceVerifier = evidenceVerifier;
     return this;
   }
 
    /**
-   * Get checkedAt
-   * @return checkedAt
+   * Get evidenceVerifier
+   * @return evidenceVerifier
   **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_CHECKED_AT)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_VERIFIER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public OffsetDateTime getCheckedAt() {
-    return checkedAt;
+  public EvidenceVerifierEnum getEvidenceVerifier() {
+    return evidenceVerifier;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_CHECKED_AT)
+  @JsonProperty(JSON_PROPERTY_EVIDENCE_VERIFIER)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEvidenceVerifier(EvidenceVerifierEnum evidenceVerifier) {
+    this.evidenceVerifier = evidenceVerifier;
+  }
+
+
+  public BoundaryStatus checkpointLog(CheckpointLogEnum checkpointLog) {
+    this.checkpointLog = checkpointLog;
+    return this;
+  }
+
+   /**
+   * Get checkpointLog
+   * @return checkpointLog
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_CHECKPOINT_LOG)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public CheckpointLogEnum getCheckpointLog() {
+    return checkpointLog;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CHECKPOINT_LOG)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setCheckpointLog(CheckpointLogEnum checkpointLog) {
+    this.checkpointLog = checkpointLog;
+  }
+
+
+  public BoundaryStatus lastCheckpointHash(String lastCheckpointHash) {
+    this.lastCheckpointHash = lastCheckpointHash;
+    return this;
+  }
+
+   /**
+   * Get lastCheckpointHash
+   * @return lastCheckpointHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LAST_CHECKPOINT_HASH)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setCheckedAt(OffsetDateTime checkedAt) {
-    this.checkedAt = checkedAt;
+
+  public String getLastCheckpointHash() {
+    return lastCheckpointHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LAST_CHECKPOINT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLastCheckpointHash(String lastCheckpointHash) {
+    this.lastCheckpointHash = lastCheckpointHash;
+  }
+
+
+  public BoundaryStatus openApprovalCount(Integer openApprovalCount) {
+    this.openApprovalCount = openApprovalCount;
+    return this;
+  }
+
+   /**
+   * Get openApprovalCount
+   * minimum: 0
+   * @return openApprovalCount
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_OPEN_APPROVAL_COUNT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Integer getOpenApprovalCount() {
+    return openApprovalCount;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_OPEN_APPROVAL_COUNT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setOpenApprovalCount(Integer openApprovalCount) {
+    this.openApprovalCount = openApprovalCount;
+  }
+
+
+  public BoundaryStatus quarantinedMcpCount(Integer quarantinedMcpCount) {
+    this.quarantinedMcpCount = quarantinedMcpCount;
+    return this;
+  }
+
+   /**
+   * Get quarantinedMcpCount
+   * minimum: 0
+   * @return quarantinedMcpCount
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_QUARANTINED_MCP_COUNT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Integer getQuarantinedMcpCount() {
+    return quarantinedMcpCount;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_QUARANTINED_MCP_COUNT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setQuarantinedMcpCount(Integer quarantinedMcpCount) {
+    this.quarantinedMcpCount = quarantinedMcpCount;
+  }
+
+
+  public BoundaryStatus updatedAt(OffsetDateTime updatedAt) {
+    this.updatedAt = updatedAt;
+    return this;
+  }
+
+   /**
+   * Get updatedAt
+   * @return updatedAt
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_UPDATED_AT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public OffsetDateTime getUpdatedAt() {
+    return updatedAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_UPDATED_AT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setUpdatedAt(OffsetDateTime updatedAt) {
+    this.updatedAt = updatedAt;
+  }
+
+
+  public BoundaryStatus components(Map<String, String> components) {
+    this.components = components;
+    return this;
+  }
+
+   /**
+   * Get components
+   * @return components
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_COMPONENTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, String> getComponents() {
+    return components;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_COMPONENTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setComponents(Map<String, String> components) {
+    this.components = components;
   }
 
 
@@ -7518,33 +8088,49 @@ public static class BoundaryStatus {
       return false;
     }
     BoundaryStatus boundaryStatus = (BoundaryStatus) o;
-    return Objects.equals(this.version, boundaryStatus.version) &&
-        Objects.equals(this.status, boundaryStatus.status) &&
-        Objects.equals(this.receiptStoreReady, boundaryStatus.receiptStoreReady) &&
-        Objects.equals(this.signerReady, boundaryStatus.signerReady) &&
-        Objects.equals(this.openApprovals, boundaryStatus.openApprovals) &&
-        Objects.equals(this.quarantinedMcpServers, boundaryStatus.quarantinedMcpServers) &&
-        Objects.equals(this.lastCheckpointId, boundaryStatus.lastCheckpointId) &&
-        Objects.equals(this.checkedAt, boundaryStatus.checkedAt);
+    return Objects.equals(this.status, boundaryStatus.status) &&
+        Objects.equals(this.mode, boundaryStatus.mode) &&
+        Objects.equals(this.version, boundaryStatus.version) &&
+        Objects.equals(this.receiptSigner, boundaryStatus.receiptSigner) &&
+        Objects.equals(this.receiptStore, boundaryStatus.receiptStore) &&
+        Objects.equals(this.pdp, boundaryStatus.pdp) &&
+        Objects.equals(this.mcpFirewall, boundaryStatus.mcpFirewall) &&
+        Objects.equals(this.sandbox, boundaryStatus.sandbox) &&
+        Objects.equals(this.authz, boundaryStatus.authz) &&
+        Objects.equals(this.evidenceVerifier, boundaryStatus.evidenceVerifier) &&
+        Objects.equals(this.checkpointLog, boundaryStatus.checkpointLog) &&
+        Objects.equals(this.lastCheckpointHash, boundaryStatus.lastCheckpointHash) &&
+        Objects.equals(this.openApprovalCount, boundaryStatus.openApprovalCount) &&
+        Objects.equals(this.quarantinedMcpCount, boundaryStatus.quarantinedMcpCount) &&
+        Objects.equals(this.updatedAt, boundaryStatus.updatedAt) &&
+        Objects.equals(this.components, boundaryStatus.components);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(version, status, receiptStoreReady, signerReady, openApprovals, quarantinedMcpServers, lastCheckpointId, checkedAt);
+    return Objects.hash(status, mode, version, receiptSigner, receiptStore, pdp, mcpFirewall, sandbox, authz, evidenceVerifier, checkpointLog, lastCheckpointHash, openApprovalCount, quarantinedMcpCount, updatedAt, components);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class BoundaryStatus {\n");
-    sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
-    sb.append("    receiptStoreReady: ").append(toIndentedString(receiptStoreReady)).append("\n");
-    sb.append("    signerReady: ").append(toIndentedString(signerReady)).append("\n");
-    sb.append("    openApprovals: ").append(toIndentedString(openApprovals)).append("\n");
-    sb.append("    quarantinedMcpServers: ").append(toIndentedString(quarantinedMcpServers)).append("\n");
-    sb.append("    lastCheckpointId: ").append(toIndentedString(lastCheckpointId)).append("\n");
-    sb.append("    checkedAt: ").append(toIndentedString(checkedAt)).append("\n");
+    sb.append("    mode: ").append(toIndentedString(mode)).append("\n");
+    sb.append("    version: ").append(toIndentedString(version)).append("\n");
+    sb.append("    receiptSigner: ").append(toIndentedString(receiptSigner)).append("\n");
+    sb.append("    receiptStore: ").append(toIndentedString(receiptStore)).append("\n");
+    sb.append("    pdp: ").append(toIndentedString(pdp)).append("\n");
+    sb.append("    mcpFirewall: ").append(toIndentedString(mcpFirewall)).append("\n");
+    sb.append("    sandbox: ").append(toIndentedString(sandbox)).append("\n");
+    sb.append("    authz: ").append(toIndentedString(authz)).append("\n");
+    sb.append("    evidenceVerifier: ").append(toIndentedString(evidenceVerifier)).append("\n");
+    sb.append("    checkpointLog: ").append(toIndentedString(checkpointLog)).append("\n");
+    sb.append("    lastCheckpointHash: ").append(toIndentedString(lastCheckpointHash)).append("\n");
+    sb.append("    openApprovalCount: ").append(toIndentedString(openApprovalCount)).append("\n");
+    sb.append("    quarantinedMcpCount: ").append(toIndentedString(quarantinedMcpCount)).append("\n");
+    sb.append("    updatedAt: ").append(toIndentedString(updatedAt)).append("\n");
+    sb.append("    components: ").append(toIndentedString(components)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -7592,44 +8178,84 @@ public static class BoundaryStatus {
 
     StringJoiner joiner = new StringJoiner("&");
 
-    // add `version` to the URL query string
-    if (getVersion() != null) {
-      joiner.add(String.format("%sversion%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
     // add `status` to the URL query string
     if (getStatus() != null) {
       joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `receipt_store_ready` to the URL query string
-    if (getReceiptStoreReady() != null) {
-      joiner.add(String.format("%sreceipt_store_ready%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReceiptStoreReady()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `mode` to the URL query string
+    if (getMode() != null) {
+      joiner.add(String.format("%smode%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `signer_ready` to the URL query string
-    if (getSignerReady() != null) {
-      joiner.add(String.format("%ssigner_ready%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignerReady()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `version` to the URL query string
+    if (getVersion() != null) {
+      joiner.add(String.format("%sversion%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `open_approvals` to the URL query string
-    if (getOpenApprovals() != null) {
-      joiner.add(String.format("%sopen_approvals%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getOpenApprovals()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `receipt_signer` to the URL query string
+    if (getReceiptSigner() != null) {
+      joiner.add(String.format("%sreceipt_signer%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReceiptSigner()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `quarantined_mcp_servers` to the URL query string
-    if (getQuarantinedMcpServers() != null) {
-      joiner.add(String.format("%squarantined_mcp_servers%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getQuarantinedMcpServers()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `receipt_store` to the URL query string
+    if (getReceiptStore() != null) {
+      joiner.add(String.format("%sreceipt_store%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReceiptStore()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `last_checkpoint_id` to the URL query string
-    if (getLastCheckpointId() != null) {
-      joiner.add(String.format("%slast_checkpoint_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLastCheckpointId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `pdp` to the URL query string
+    if (getPdp() != null) {
+      joiner.add(String.format("%spdp%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPdp()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `checked_at` to the URL query string
-    if (getCheckedAt() != null) {
-      joiner.add(String.format("%schecked_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCheckedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `mcp_firewall` to the URL query string
+    if (getMcpFirewall() != null) {
+      joiner.add(String.format("%smcp_firewall%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMcpFirewall()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `sandbox` to the URL query string
+    if (getSandbox() != null) {
+      joiner.add(String.format("%ssandbox%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSandbox()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `authz` to the URL query string
+    if (getAuthz() != null) {
+      joiner.add(String.format("%sauthz%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAuthz()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `evidence_verifier` to the URL query string
+    if (getEvidenceVerifier() != null) {
+      joiner.add(String.format("%sevidence_verifier%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEvidenceVerifier()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `checkpoint_log` to the URL query string
+    if (getCheckpointLog() != null) {
+      joiner.add(String.format("%scheckpoint_log%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCheckpointLog()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `last_checkpoint_hash` to the URL query string
+    if (getLastCheckpointHash() != null) {
+      joiner.add(String.format("%slast_checkpoint_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLastCheckpointHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `open_approval_count` to the URL query string
+    if (getOpenApprovalCount() != null) {
+      joiner.add(String.format("%sopen_approval_count%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getOpenApprovalCount()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `quarantined_mcp_count` to the URL query string
+    if (getQuarantinedMcpCount() != null) {
+      joiner.add(String.format("%squarantined_mcp_count%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getQuarantinedMcpCount()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `updated_at` to the URL query string
+    if (getUpdatedAt() != null) {
+      joiner.add(String.format("%supdated_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUpdatedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `components` to the URL query string
+    if (getComponents() != null) {
+      joiner.add(String.format("%scomponents%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getComponents()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

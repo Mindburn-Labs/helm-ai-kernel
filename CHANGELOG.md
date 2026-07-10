@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-05-19
+last_reviewed: 2026-07-10
 ---
 
 # Changelog
@@ -86,6 +86,17 @@ No public feature claim is active in this section. Keep research scaffolds and
 hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
+
+- Prepared the corrective `v0.7.2` source target to align the canonical
+  `BoundaryStatus` OpenAPI schema and generated Java, Python, Rust, and
+  TypeScript models with the JSON already emitted by
+  `GET /api/v1/boundary/status`.
+- Replaced legacy generated properties such as `receipt_store_ready`,
+  `signer_ready`, `last_checkpoint_id`, and `checked_at` with the existing
+  runtime properties, and documented the consumer migration mapping.
+- This correction does not change Kernel runtime JSON behavior and is not a
+  released version until the normal tag-driven release train and published
+  artifact verification complete.
 
 ## [0.7.1] - 2026-07-07
 

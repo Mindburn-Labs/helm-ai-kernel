@@ -1,5 +1,8 @@
 name: Launchpad Artifacts
 
+# quantum_posture: launchpad artifacts workflow orchestrates existing cosign
+# signing and image digest pinning; it does not implement cryptographic controls.
+
 on:
   workflow_dispatch:
     inputs:

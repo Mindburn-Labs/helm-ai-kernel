@@ -224,6 +224,20 @@ if '"public_key_set": obj.get("public_key_set")' not in s:
         '            "timestamp": obj.get("timestamp"),'
     )
 
+boundary_status_components = (
+    '            "quarantined_mcp_count": obj.get("quarantined_mcp_count"),\n'
+    '            "updated_at": obj.get("updated_at"),'
+)
+if s.count(boundary_status_components) != 1:
+    raise SystemExit("expected exactly one BoundaryStatus from_dict tail")
+s = s.replace(
+    boundary_status_components,
+    '            "quarantined_mcp_count": obj.get("quarantined_mcp_count"),\n'
+    '            "updated_at": obj.get("updated_at"),\n'
+    '            "components": obj.get("components"),',
+    1,
+)
+
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
 fi

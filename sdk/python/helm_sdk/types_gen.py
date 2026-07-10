@@ -1923,8 +1923,8 @@ class BoundaryStatus(BaseModel):
     @field_validator('status')
     def status_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['ready', 'degraded']):
-            raise ValueError("must be one of enum values ('ready', 'degraded')")
+        if value not in set(['degraded', 'ready']):
+            raise ValueError("must be one of enum values ('degraded', 'ready')")
         return value
 
     @field_validator('mode')
@@ -1937,15 +1937,15 @@ class BoundaryStatus(BaseModel):
     @field_validator('receipt_signer')
     def receipt_signer_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['ready', 'unavailable']):
-            raise ValueError("must be one of enum values ('ready', 'unavailable')")
+        if value not in set(['unavailable', 'ready']):
+            raise ValueError("must be one of enum values ('unavailable', 'ready')")
         return value
 
     @field_validator('receipt_store')
     def receipt_store_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['ready', 'unavailable']):
-            raise ValueError("must be one of enum values ('ready', 'unavailable')")
+        if value not in set(['unavailable', 'ready']):
+            raise ValueError("must be one of enum values ('unavailable', 'ready')")
         return value
 
     @field_validator('pdp')
@@ -2056,6 +2056,7 @@ class BoundaryStatus(BaseModel):
             "open_approval_count": obj.get("open_approval_count"),
             "quarantined_mcp_count": obj.get("quarantined_mcp_count"),
             "updated_at": obj.get("updated_at"),
+            "components": obj.get("components"),
         })
         return _obj
 

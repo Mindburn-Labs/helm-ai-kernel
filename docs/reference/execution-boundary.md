@@ -107,6 +107,19 @@ must regenerate from the canonical OpenAPI and migrate as follows:
 | `last_checkpoint_id` | `last_checkpoint_hash` |
 | `checked_at` | `updated_at` |
 
+The corrected typed models also require the runtime-owned mechanism fields
+`mode`, `pdp`, `mcp_firewall`, `sandbox`, `authz`, `evidence_verifier`, and
+`checkpoint_log`, together with `open_approval_count`,
+`quarantined_mcp_count`, and `updated_at`. Code that constructs generated
+TypeScript, Python, Rust, or Java models must supply those required fields and
+use the declared enum values. `version`, `last_checkpoint_hash`, and
+`components` remain optional.
+
+The hand-maintained Go SDK keeps `BoundaryStatus` as `map[string]any`, so this
+correction does not create a Go source-level constructor or type break. Go
+consumers should still migrate reads to the canonical runtime property names
+above.
+
 This is a schema and generated-client correction to the existing runtime wire
 response; it does not change the endpoint payload emitted by the Kernel.
 

@@ -5870,7 +5870,7 @@ components:
       properties:
         status:
           type: string
-          enum: [ready, degraded]
+          enum: [degraded, ready]
         mode:
           type: string
           enum: [oss-local]
@@ -5878,10 +5878,10 @@ components:
           type: string
         receipt_signer:
           type: string
-          enum: [ready, unavailable]
+          enum: [unavailable, ready]
         receipt_store:
           type: string
-          enum: [ready, unavailable]
+          enum: [unavailable, ready]
         pdp:
           type: string
           enum: [fail-closed]

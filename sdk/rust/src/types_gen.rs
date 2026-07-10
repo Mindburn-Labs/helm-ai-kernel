@@ -983,15 +983,15 @@ impl BoundaryStatus {
 ///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum BoundaryStatusStatus {
-    #[serde(rename = "ready")]
-    Ready,
     #[serde(rename = "degraded")]
     Degraded,
+    #[serde(rename = "ready")]
+    Ready,
 }
 
 impl Default for BoundaryStatusStatus {
     fn default() -> BoundaryStatusStatus {
-        Self::Ready
+        Self::Degraded
     }
 }
 ///
@@ -1009,29 +1009,29 @@ impl Default for BoundaryStatusMode {
 ///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum BoundaryStatusReceiptSigner {
-    #[serde(rename = "ready")]
-    Ready,
     #[serde(rename = "unavailable")]
     Unavailable,
+    #[serde(rename = "ready")]
+    Ready,
 }
 
 impl Default for BoundaryStatusReceiptSigner {
     fn default() -> BoundaryStatusReceiptSigner {
-        Self::Ready
+        Self::Unavailable
     }
 }
 ///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum BoundaryStatusReceiptStore {
-    #[serde(rename = "ready")]
-    Ready,
     #[serde(rename = "unavailable")]
     Unavailable,
+    #[serde(rename = "ready")]
+    Ready,
 }
 
 impl Default for BoundaryStatusReceiptStore {
     fn default() -> BoundaryStatusReceiptStore {
-        Self::Ready
+        Self::Unavailable
     }
 }
 ///

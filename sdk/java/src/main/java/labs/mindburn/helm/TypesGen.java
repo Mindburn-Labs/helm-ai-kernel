@@ -7291,9 +7291,9 @@ public static class BoundaryStatus {
    * Gets or Sets status
    */
   public enum StatusEnum {
-    READY("ready"),
+    DEGRADED("degraded"),
 
-    DEGRADED("degraded");
+    READY("ready");
 
     private String value;
 
@@ -7368,9 +7368,9 @@ public static class BoundaryStatus {
    * Gets or Sets receiptSigner
    */
   public enum ReceiptSignerEnum {
-    READY("ready"),
+    UNAVAILABLE("unavailable"),
 
-    UNAVAILABLE("unavailable");
+    READY("ready");
 
     private String value;
 
@@ -7406,9 +7406,9 @@ public static class BoundaryStatus {
    * Gets or Sets receiptStore
    */
   public enum ReceiptStoreEnum {
-    READY("ready"),
+    UNAVAILABLE("unavailable"),
 
-    UNAVAILABLE("unavailable");
+    READY("ready");
 
     private String value;
 

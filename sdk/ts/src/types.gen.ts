@@ -2294,8 +2294,8 @@ export interface BoundaryStatus {
  * @export
  */
 export const BoundaryStatusStatusEnum = {
-    Ready: 'ready',
-    Degraded: 'degraded'
+    Degraded: 'degraded',
+    Ready: 'ready'
 } as const;
 export type BoundaryStatusStatusEnum = typeof BoundaryStatusStatusEnum[keyof typeof BoundaryStatusStatusEnum];
 
@@ -2311,8 +2311,8 @@ export type BoundaryStatusModeEnum = typeof BoundaryStatusModeEnum[keyof typeof 
  * @export
  */
 export const BoundaryStatusReceiptSignerEnum = {
-    Ready: 'ready',
-    Unavailable: 'unavailable'
+    Unavailable: 'unavailable',
+    Ready: 'ready'
 } as const;
 export type BoundaryStatusReceiptSignerEnum = typeof BoundaryStatusReceiptSignerEnum[keyof typeof BoundaryStatusReceiptSignerEnum];
 
@@ -2320,8 +2320,8 @@ export type BoundaryStatusReceiptSignerEnum = typeof BoundaryStatusReceiptSigner
  * @export
  */
 export const BoundaryStatusReceiptStoreEnum = {
-    Ready: 'ready',
-    Unavailable: 'unavailable'
+    Unavailable: 'unavailable',
+    Ready: 'ready'
 } as const;
 export type BoundaryStatusReceiptStoreEnum = typeof BoundaryStatusReceiptStoreEnum[keyof typeof BoundaryStatusReceiptStoreEnum];
 

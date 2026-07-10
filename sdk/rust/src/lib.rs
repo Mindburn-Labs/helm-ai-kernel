@@ -1133,4 +1133,23 @@ mod tests {
         .unwrap();
         assert_eq!(grant.grant_id, "grant1");
     }
+
+    #[test]
+    fn test_boundary_status_default_is_fail_closed() {
+        let status = BoundaryStatus::default();
+        assert_eq!(status.status, BoundaryStatusStatus::Degraded);
+        assert_eq!(
+            status.receipt_signer,
+            BoundaryStatusReceiptSigner::Unavailable
+        );
+        assert_eq!(
+            status.receipt_store,
+            BoundaryStatusReceiptStore::Unavailable
+        );
+
+        let json = serde_json::to_value(status).unwrap();
+        assert_eq!(json["status"], "degraded");
+        assert_eq!(json["receipt_signer"], "unavailable");
+        assert_eq!(json["receipt_store"], "unavailable");
+    }
 }

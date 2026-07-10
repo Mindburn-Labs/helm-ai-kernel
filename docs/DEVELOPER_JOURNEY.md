@@ -1,6 +1,6 @@
 ---
 title: Developer Journey
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-10
 ---
 
 # Developer Journey

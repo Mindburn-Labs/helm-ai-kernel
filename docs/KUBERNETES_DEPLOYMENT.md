@@ -1,6 +1,6 @@
 ---
 title: Kubernetes Deployment
-last_reviewed: 2026-06-29
+last_reviewed: 2026-07-10
 ---
 
 # Kubernetes Deployment
@@ -68,7 +68,7 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
 | Value | Default | Source-backed behavior |
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image used by the Deployment. |
-| `image.tag` | chart `appVersion` | Defaults to `v0.7.2` from `Chart.yaml`; override only with a source-owned image tag you can verify. |
+| `image.tag` | chart `appVersion` | The source target is `v0.7.2` from `Chart.yaml`. It is not a published image until the tag-driven release workflow publishes and verifies it; use only a source-owned image tag (or local override) you can verify. |
 | `helm.bindAddr` | `0.0.0.0` | Required because the pod must bind beyond loopback. |
 | `service.port` | `8080` | Runtime HTTP port passed to `helm-ai-kernel serve --port`. |
 | `service.healthPort` | `8081` | Health probe port via `HELM_HEALTH_PORT`. |

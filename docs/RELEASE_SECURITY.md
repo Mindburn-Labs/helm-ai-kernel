@@ -1,6 +1,6 @@
 ---
 title: Release and Security Evidence
-last_reviewed: 2026-05-20
+last_reviewed: 2026-07-10
 ---
 
 # HELM AI Kernel Release and Security Evidence

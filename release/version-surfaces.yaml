@@ -98,8 +98,8 @@
       "id": "go-sdk-readme-version-truth",
       "path": "sdk/go/README.md",
       "kind": "regex",
-      "pattern": "VERSION` file \\(`(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` for this release\\)",
-      "replacement": "VERSION` file (`{version}` for this release)"
+      "pattern": "VERSION` file \\(`(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` for this source target\\)",
+      "replacement": "VERSION` file (`{version}` for this source target)"
     },
     {
       "id": "sdk-readme-package-versions",

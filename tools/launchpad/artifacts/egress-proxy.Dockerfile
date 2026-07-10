@@ -1,4 +1,4 @@
-FROM golang:1.25.10-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45 AS build
+FROM golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 AS build
 WORKDIR /src
 # Copy the whole package (main.go + build-tagged origdst_{linux,other}.go + go.mod)
 # and build in package mode so the linux SO_ORIGINAL_DST file is selected.

@@ -186,6 +186,12 @@ s = path.read_text()
 classmethod_validators = {
     "AccountEntitlements": {"plan_validate_enum"},
     "AccountSession": {"plan_validate_enum"},
+    "BoundaryStatus": {
+        "status_validate_enum", "mode_validate_enum", "receipt_signer_validate_enum",
+        "receipt_store_validate_enum", "pdp_validate_enum", "mcp_firewall_validate_enum",
+        "sandbox_validate_enum", "authz_validate_enum", "evidence_verifier_validate_enum",
+        "checkpoint_log_validate_enum",
+    },
     "EntitlementDecision": {"user_state_validate_enum"},
     "EnvExposurePolicy": {"mode_validate_enum"},
     "EvidenceEnvelopeExportRequest": {"envelope_validate_enum"},

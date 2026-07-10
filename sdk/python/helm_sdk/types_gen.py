@@ -1921,6 +1921,7 @@ class BoundaryStatus(BaseModel):
     __properties: ClassVar[List[str]] = ["status", "mode", "version", "receipt_signer", "receipt_store", "pdp", "mcp_firewall", "sandbox", "authz", "evidence_verifier", "checkpoint_log", "last_checkpoint_hash", "open_approval_count", "quarantined_mcp_count", "updated_at", "components"]
 
     @field_validator('status')
+    @classmethod
     def status_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['degraded', 'ready']):
@@ -1928,6 +1929,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('mode')
+    @classmethod
     def mode_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['oss-local']):
@@ -1935,6 +1937,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('receipt_signer')
+    @classmethod
     def receipt_signer_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['unavailable', 'ready']):
@@ -1942,6 +1945,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('receipt_store')
+    @classmethod
     def receipt_store_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['unavailable', 'ready']):
@@ -1949,6 +1953,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('pdp')
+    @classmethod
     def pdp_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['fail-closed']):
@@ -1956,6 +1961,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('mcp_firewall')
+    @classmethod
     def mcp_firewall_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['enabled']):
@@ -1963,6 +1969,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('sandbox')
+    @classmethod
     def sandbox_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['deny-default']):
@@ -1970,6 +1977,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('authz')
+    @classmethod
     def authz_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['rebac-snapshot']):
@@ -1977,6 +1985,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('evidence_verifier')
+    @classmethod
     def evidence_verifier_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['offline']):
@@ -1984,6 +1993,7 @@ class BoundaryStatus(BaseModel):
         return value
 
     @field_validator('checkpoint_log')
+    @classmethod
     def checkpoint_log_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['tamper-evident']):

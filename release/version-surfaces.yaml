@@ -386,8 +386,8 @@
       "id": "kubernetes-deployment-chart-default",
       "path": "docs/KUBERNETES_DEPLOYMENT.md",
       "kind": "regex",
-      "pattern": "Defaults to `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` from `Chart.yaml`",
-      "replacement": "Defaults to `v{version}` from `Chart.yaml`"
+      "pattern": "The source target is `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` from `Chart.yaml`",
+      "replacement": "The source target is `v{version}` from `Chart.yaml`"
     },
     {
       "id": "quickstart-release-evidence-pack",

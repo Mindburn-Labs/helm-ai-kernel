@@ -52,19 +52,77 @@ func TestVerifyBundle_NoDecisionHash(t *testing.T) {
 
 func TestVerifyBundle_WithTapesDirectory(t *testing.T) {
 	dir := createValidBundleFixture(t)
+	setBundleGates(t, dir, "G0", "G1", "G2")
 	tapesDir := filepath.Join(dir, "08_TAPES")
 	os.MkdirAll(tapesDir, 0o755)
-	os.WriteFile(filepath.Join(tapesDir, "tape1.json"), []byte(`{}`), 0o644)
+	sealVerifierFixture(t, dir, "test-session-001")
 	r, _ := VerifyBundle(dir)
 	found := false
 	for _, c := range r.Checks {
-		if c.Name == "replay_determinism" && c.Pass {
+		if c.Name == "replay_determinism" && !c.Pass {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("replay_determinism check should pass with tapes dir")
+		t.Fatal("replay_determinism check should fail when G2 is declared but replay evidence is incomplete")
 	}
+	if r.Verified {
+		t.Fatal("bundle should fail when G2 replay evidence is incomplete")
+	}
+}
+
+func TestVerifyBundle_ReplayDeterminismNAWhenG2OutOfScope(t *testing.T) {
+	dir := createValidBundleFixture(t)
+	r, _ := VerifyBundle(dir)
+	for _, c := range r.Checks {
+		if c.Name != "replay_determinism" {
+			continue
+		}
+		if !c.Pass {
+			t.Fatalf("replay_determinism should be N/A when G2 is omitted: %+v", c)
+		}
+		if c.Detail != "n/a: 00_INDEX.json gates omit G2 replay determinism" {
+			t.Fatalf("unexpected replay_determinism detail: %q", c.Detail)
+		}
+		return
+	}
+	t.Fatal("missing replay_determinism check")
+}
+
+func TestVerifyBundle_ReplayDeterminismPassesWithRequiredEvidence(t *testing.T) {
+	dir := createValidBundleFixture(t)
+	setBundleGates(t, dir, "G0", "G1", "G2")
+	tapesDir := filepath.Join(dir, "08_TAPES")
+	if err := os.MkdirAll(tapesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(tapesDir, "tape_manifest.json"), map[string]any{
+		"schema_version": "helm.tape_manifest.v1",
+		"run_id":         "test-session-001",
+		"entries":        []any{},
+	})
+	if err := os.MkdirAll(filepath.Join(dir, "02_PROOFGRAPH"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(dir, "02_PROOFGRAPH", "determinism_manifest.json"), map[string]any{
+		"schema_version": "helm.determinism.v1",
+		"live_hash":      "sha256:same",
+		"replay_hash":    "sha256:same",
+	})
+	sealVerifierFixture(t, dir, "test-session-001")
+	r, _ := VerifyBundle(dir)
+	if !r.Verified {
+		t.Fatalf("bundle should verify with required replay evidence: %+v", r.Checks)
+	}
+	for _, c := range r.Checks {
+		if c.Name == "replay_determinism" {
+			if !c.Pass {
+				t.Fatalf("replay_determinism should pass with required evidence: %+v", c)
+			}
+			return
+		}
+	}
+	t.Fatal("missing replay_determinism check")
 }
 
 func TestVerifyBundle_ReportIssueCount(t *testing.T) {

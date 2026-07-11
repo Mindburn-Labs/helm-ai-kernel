@@ -80,7 +80,7 @@ func noDispatchEvaluation(resp AuthorizationResponse) Evaluation {
 }
 
 func VerifyResponse(req AuthorizationRequest, resp AuthorizationResponse, store TrustStore, opts VerifyOptions, now time.Time) error {
-	if err := verifyRequestShape(req); err != nil {
+	if err := ValidateRequest(req); err != nil {
 		return err
 	}
 	if err := verifyResponseShape(resp); err != nil {
@@ -105,6 +105,12 @@ func VerifyResponse(req AuthorizationRequest, resp AuthorizationResponse, store 
 		return err
 	}
 	return nil
+}
+
+// ValidateRequest checks the source-owned v1 request shape before a producer
+// evaluates it. Consumers also call it as part of response verification.
+func ValidateRequest(req AuthorizationRequest) error {
+	return verifyRequestShape(req)
 }
 
 func verifyRequestShape(req AuthorizationRequest) error {

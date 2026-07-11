@@ -1,6 +1,6 @@
 ---
 title: HTTP API
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-11
 ---
 
 # HTTP API
@@ -45,6 +45,16 @@ public docs surface.
 | `tenant_scoped` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` and matching tenant/principal context |
 | `admin` / `authenticated` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` |
 | `service_internal` | Requires `Authorization: Bearer $HELM_SERVICE_API_KEY` |
+
+When `HELM_EMERGENCY_STOP_FENCE_ENABLED=1`, `POST /api/v1/evaluate`
+additionally requires `X-Helm-Workspace-ID`, which must match the
+server-owned `HELM_RUNTIME_WORKSPACE_ID`. A request body cannot choose its
+workspace binding. This is a dispatch fence only; it does not cancel already
+running work.
+
+The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
+unavailable while this fence is enabled because request JSON is not an
+authoritative tenant/workspace binding.
 
 ## Receipt Headers
 

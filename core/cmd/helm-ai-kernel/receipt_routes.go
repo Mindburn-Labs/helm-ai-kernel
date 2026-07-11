@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -43,12 +44,31 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteForbidden(w, "Evaluate route requires authenticated tenant and principal identifiers")
 			return
 		}
+		workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
+		if svc.EmergencyStops != nil {
+			configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
+			if configuredTenantID == "" || tenantID != configuredTenantID {
+				api.WriteForbidden(w, "Evaluate route tenant binding could not be verified")
+				return
+			}
+			if workspaceID == "" {
+				api.WriteForbidden(w, "Evaluate route requires an explicit authenticated workspace binding")
+				return
+			}
+			if configuredWorkspaceID := configuredRuntimeWorkspaceID(); configuredWorkspaceID == "" || workspaceID != configuredWorkspaceID {
+				api.WriteForbidden(w, "Evaluate route workspace binding could not be verified")
+				return
+			}
+		}
 		req.Principal = principalID
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
 		req.Context["principal_id"] = principalID
 		req.Context["tenant_id"] = tenantID
+		if workspaceID != "" {
+			req.Context["workspace_id"] = workspaceID
+		}
 		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
 		if err != nil {
 			api.WriteInternal(w, err)
@@ -255,6 +275,7 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 			OutputHash:   decision.PolicyDecisionHash,
 			Timestamp:    timestamp,
 			ExecutorID:   agentID,
+			ReasonCode:   decision.ReasonCode,
 			Metadata:     metadata,
 			PrevHash:     prevHash,
 			LamportClock: lamport,

@@ -95,7 +95,19 @@ representation is the `ReasonCode` enum in `protocols/proto/helm/kernel/v1/helm.
 | ------------------------ | ---------- | ----------------------------------------- |
 | `JURISDICTION_VIOLATION` | DENY       | Effect violates jurisdictional constraint |
 
-### 4.9 Safe Deprecation Codes
+### 4.9 Emergency-Stop Operations Codes
+
+| Code                            | Applies To | Description                                                                    |
+| ------------------------------- | ---------- | ------------------------------------------------------------------------------ |
+| `EMERGENCY_STOP_SCOPE_REQUIRED` | DENY       | Governed dispatch omitted required tenant/workspace scope while fencing is on  |
+| `EMERGENCY_STOP_UNVERIFIED`     | DENY       | Fence status could not be verified; dispatch was denied fail-closed            |
+| `EMERGENCY_STOP_FENCED`         | DENY       | Durable tenant/workspace fence is active for newly governed dispatches         |
+
+`EMERGENCY_STOP_FENCED` does not assert cancellation of already in-flight work.
+The acknowledgement and cancellation/reconciliation protocols are separate
+contracts and MUST NOT be inferred from this reason code.
+
+### 4.10 Safe Deprecation Codes
 
 | Code                              | Applies To | Description                                                       |
 | --------------------------------- | ---------- | ----------------------------------------------------------------- |

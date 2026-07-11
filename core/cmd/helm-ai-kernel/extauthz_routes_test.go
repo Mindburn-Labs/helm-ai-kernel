@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/extauthz"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
@@ -218,6 +220,63 @@ func TestExtAuthzAuthorizeRouteRequiresServiceAuth(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+}
+
+func TestExtAuthzAuthorizeRouteBindsScopeAndEnforcesFence(t *testing.T) {
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
+
+	_, stopStore, _ := newEmergencyStopFenceRouteForTest(t)
+	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	command := newEmergencyStopFenceCommand(time.Now().UTC())
+	command.CommandID = "stop-command-extauthz-route"
+	if _, _, err := stopStore.Fence(context.Background(), command, emergencyStopAcknowledgementIdentityForTest()); err != nil {
+		t.Fatal(err)
+	}
+	signer, err := helmcrypto.NewEd25519Signer("extauthz-stop-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &Services{
+		Guardian:       guardian.NewGuardian(signer, allowGraphForExtAuthzTest("local.echo"), artifacts.NewRegistry(nil, nil), guardian.WithScopedStopReader(stopStore)),
+		ReceiptSigner:  signer,
+		EmergencyStops: stopStore,
+	}
+	mux := http.NewServeMux()
+	registerExtAuthzRoutes(mux, svc)
+
+	t.Run("caller cannot select a different scope", func(t *testing.T) {
+		spoofed := extAuthzRouteFixture("req-scope-spoof", "tenant-a", "epoch-1")
+		spoofed.WorkspaceID = "workspace-unfenced"
+		req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, bytes.NewReader(mustJSONExtAuthzRoute(t, spoofed)))
+		req.Header.Set("Authorization", "Bearer route-secret")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("trusted configured scope is denied while fenced", func(t *testing.T) {
+		bound := extAuthzRouteFixture("req-fenced", "tenant-a", "epoch-1")
+		req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, bytes.NewReader(mustJSONExtAuthzRoute(t, bound)))
+		req.Header.Set("Authorization", "Bearer route-secret")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var response extauthz.AuthorizationResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.Verdict != extauthz.VerdictDeny || response.ReasonCode != string(contracts.ReasonEmergencyStopFenced) {
+			t.Fatalf("fenced response=%+v", response)
+		}
+		if response.EffectPermitRef != "" || response.PermitNonce != "" {
+			t.Fatalf("fenced denial carried permit material: %+v", response)
+		}
+	})
 }
 
 func TestExtAuthzAuthorizeRouteExtractsTraceparent(t *testing.T) {

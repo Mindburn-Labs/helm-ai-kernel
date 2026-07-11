@@ -330,6 +330,41 @@
               "minLength": 1,
               "default": "system-admin",
               "description": "Server-bound principal ID for tenant-scoped runtime routes. X-Helm-Principal-ID may be supplied only when it matches this configured principal."
+            },
+            "workspaceID": {
+              "type": "string",
+              "minLength": 1,
+              "default": "default",
+              "description": "Server-bound workspace ID used by governed evaluation when the scoped emergency-stop fence is enabled. The request body never selects this value."
+            }
+          }
+        },
+        "emergencyStop": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Opt-in internal scoped dispatch fence. It is not an in-flight cancellation or complete operator Emergency Stop.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable signed internal FENCE commands and fail-closed scoped Guardian evaluation."
+            },
+            "audience": {
+              "type": "string",
+              "description": "Deployment-specific signed command audience. Required when enabled."
+            },
+            "commandPublicKeys": {
+              "type": "string",
+              "description": "Comma-separated key_id=hex-ed25519-public-key command verification keyring. Required when enabled unless existingSecret is supplied."
+            },
+            "existingSecret": {
+              "type": "string",
+              "description": "Existing Secret containing the command verification keyring."
+            },
+            "commandPublicKeysSecretKey": {
+              "type": "string",
+              "default": "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS",
+              "description": "Key inside existingSecret that contains the command verification keyring."
             }
           }
         },

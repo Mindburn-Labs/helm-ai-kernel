@@ -23,6 +23,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/governance"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernelruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kms"
 	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
@@ -64,6 +65,7 @@ type Services struct {
 	MerkleTree       *merkle.MerkleTree
 	Sandbox          sandbox.Sandbox
 	Obligation       *obligation.ObligationEngine
+	EmergencyStops   *kernel.ScopedStopStore
 
 	// --- Evidence ---
 	Evidence      *evidence.DefaultExporter
@@ -141,6 +143,24 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	// --- 3. Authorization ---
 	s.Authz = authz.NewEngine()
 	logger.Info("subsystem ready", "component", " ReBAC Authorization Engine initialized")
+
+	// --- 3.5 Scoped emergency-stop fences ---
+	if !emergencyStopFenceEnabled() {
+		logger.Info("Scoped emergency-stop fences disabled")
+	} else {
+		if _, err := configuredEmergencyStopCommandVerifier(); err != nil {
+			return nil, fmt.Errorf("scoped emergency-stop fence command authority: %w", err)
+		}
+		if db == nil {
+			return nil, fmt.Errorf("scoped emergency-stop fence requires a durable database")
+		}
+		emergencyStops := kernel.NewScopedStopStore(db, time.Now)
+		if err := emergencyStops.Init(ctx); err != nil {
+			return nil, fmt.Errorf("init scoped emergency-stop store: %w", err)
+		}
+		s.EmergencyStops = emergencyStops
+		logger.Info("subsystem ready", "component", " Scoped emergency-stop fence store initialized")
+	}
 
 	// --- 4. Credentials (CRED-001: KMS-backed key management) ---
 	keystorePath := kmsKeystorePath(dataDir)

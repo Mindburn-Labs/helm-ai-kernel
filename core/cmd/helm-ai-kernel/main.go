@@ -240,9 +240,12 @@ func runServerWithOptions(opts serverOptions) {
 		// In production we refuse to start in a degraded state. Subsystems are
 		// allowed to fail in dev (e.g. observability without an OTLP endpoint),
 		// but the boundary enforcer and other safety-critical components must
-		// be present whenever HELM_PRODUCTION=1.
-		if envBool("HELM_PRODUCTION") {
-			log.Fatalf("Services init failed in production mode: %v", svcErr)
+		// be present whenever HELM_PRODUCTION=1. A configured emergency-stop
+		// fence is also safety-critical in every mode: continuing with an empty
+		// service graph would make readiness ambiguous and hide a bad authority
+		// or durable-store configuration.
+		if servicesInitFailureIsFatal() {
+			log.Fatalf("Services init failed while a fail-closed runtime boundary is enabled: %v", svcErr)
 		}
 		log.Printf("Services init (non-fatal, degraded mode): %v", svcErr)
 	}
@@ -310,6 +313,9 @@ func runServerWithOptions(opts serverOptions) {
 	guardianOpts := []guardian.GuardianOption{}
 	if policyStore != nil {
 		guardianOpts = append(guardianOpts, guardian.WithPolicySnapshots(policyStore, policyScope))
+	}
+	if services != nil && services.EmergencyStops != nil {
+		guardianOpts = append(guardianOpts, guardian.WithScopedStopReader(services.EmergencyStops))
 	}
 
 	if envBool("HELM_ENABLE_WARM_POOL") {
@@ -518,6 +524,10 @@ func runServerWithOptions(opts serverOptions) {
 		}
 	}
 	log.Println("[helm] shutdown complete")
+}
+
+func servicesInitFailureIsFatal() bool {
+	return envBool("HELM_PRODUCTION") || emergencyStopFenceEnabled()
 }
 
 func envBool(key string) bool {

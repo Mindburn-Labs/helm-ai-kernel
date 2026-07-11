@@ -1,0 +1,7 @@
+{
+  "source_repository": "Mindburn-Labs/contracts-catalog",
+  "source_commit": "a140cf32c9f245dc6ff2f1f97bbf64d1d2d82af0",
+  "source_path": "schema/test-vectors/emergency_stop_fence.v1.json",
+  "sha256": "7f3ae78141173e3a19d2bf952a1fc237181bec49c8cd29d5e28ff97b39834266",
+  "purpose": "Pinned consumer conformance input for the opt-in Kernel FENCE foundation. The contracts catalog remains the source authority."
+}

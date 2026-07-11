@@ -281,6 +281,7 @@ func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 		"launchpad_routes.go",
 		"contract_routes.go",
 		"policy_reconcile_routes.go",
+		"emergency_stop_routes.go",
 	}
 	protectedRoute := regexp.MustCompile(`mux\.HandleFunc\("([^"]+)",\s*protectRuntimeHandler`)
 	for _, routeFile := range routeFiles {
@@ -321,6 +322,9 @@ func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {
 			}
 			assertOpenAPIRequiredHeader(t, key, operation, "X-Helm-Tenant-ID", "#/components/parameters/HelmTenantIDHeader")
 			assertOpenAPIRequiredHeader(t, key, operation, "X-Helm-Principal-ID", "#/components/parameters/HelmPrincipalIDHeader")
+			if spec.Path == "/api/v1/evaluate" {
+				assertOpenAPIHeader(t, key, operation, "X-Helm-Workspace-ID", "#/components/parameters/HelmWorkspaceIDHeader")
+			}
 		}
 	}
 }
@@ -366,6 +370,19 @@ func assertOpenAPIRequiredHeader(t *testing.T, route string, operation openAPIOp
 		}
 	}
 	t.Fatalf("tenant-scoped public route %s is missing required OpenAPI header %s", route, headerName)
+}
+
+func assertOpenAPIHeader(t *testing.T, route string, operation openAPIOperationSecurity, headerName string, ref string) {
+	t.Helper()
+	for _, parameter := range operation.Parameters {
+		if parameter.Ref == ref {
+			return
+		}
+		if strings.EqualFold(parameter.Name, headerName) && parameter.In == "header" {
+			return
+		}
+	}
+	t.Fatalf("public route %s is missing OpenAPI header %s", route, headerName)
 }
 
 func readOpenAPIOperationSecurity(t *testing.T) map[string]openAPIOperationSecurity {

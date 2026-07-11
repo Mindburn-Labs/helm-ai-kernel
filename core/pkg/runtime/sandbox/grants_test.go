@@ -48,3 +48,34 @@ func TestGrantFromPolicyRequiresNetworkAllowlist(t *testing.T) {
 		t.Fatal("expected allowlist network policy without destinations to fail")
 	}
 }
+
+func TestGrantFromPolicyAmbiguousNetworkPostureFailsClosed(t *testing.T) {
+	for _, posture := range []string{"unknown", "uncertain"} {
+		t.Run(posture, func(t *testing.T) {
+			policy := &SandboxPolicy{
+				PolicyID:       posture + "-net",
+				FSAllowlist:    []string{"/workspace"},
+				NetworkPosture: posture,
+				NetworkDenyAll: false,
+			}
+			grant, err := GrantFromPolicy(policy, "wazero", posture+"-net", "", "epoch-42", time.Now().UTC())
+			if err != nil {
+				t.Fatalf("grant from policy: %v", err)
+			}
+			if grant.Network.Mode != "deny-all" {
+				t.Fatalf("network mode = %s, want deny-all", grant.Network.Mode)
+			}
+		})
+	}
+}
+
+func TestGrantFromPolicyRejectsInvalidNetworkPosture(t *testing.T) {
+	policy := &SandboxPolicy{
+		PolicyID:       "bad-posture",
+		FSAllowlist:    []string{"/workspace"},
+		NetworkPosture: "wide-open",
+	}
+	if _, err := GrantFromPolicy(policy, "wazero", "bad-posture", "", "epoch-42", time.Now().UTC()); err == nil {
+		t.Fatal("expected invalid network posture to fail")
+	}
+}

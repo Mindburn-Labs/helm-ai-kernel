@@ -256,6 +256,9 @@ paths:
         Drop-in replacement for OpenAI /v1/chat/completions.
         Tool calls are intercepted, schema-validated, and receipted.
         Response includes X-Helm-Receipt-ID, X-Helm-Output-Hash, X-Helm-Lamport-Clock headers.
+        When the opt-in scoped emergency-stop fence is enabled, this
+        unauthenticated route returns 503 until an authenticated adapter can
+        bind tenant and workspace scope.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyHeader'
       requestBody:
@@ -364,6 +367,7 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKeyHeader'
         - $ref: '#/components/parameters/HelmTenantIDHeader'
         - $ref: '#/components/parameters/HelmPrincipalIDHeader'
+        - $ref: '#/components/parameters/HelmWorkspaceIDHeader'
       requestBody:
         required: true
         content:
@@ -3959,6 +3963,17 @@ components:
         Principal binding required by tenant-scoped runtime routes. The value must
         match HELM_RUNTIME_PRINCIPAL_ID, or the authenticated admin principal when
         HELM_RUNTIME_PRINCIPAL_ID is unset.
+    HelmWorkspaceIDHeader:
+      name: X-Helm-Workspace-ID
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 1
+      description: |
+        Workspace binding required to evaluate a governed intent only while
+        scoped emergency-stop fencing is enabled. The value must match
+        HELM_RUNTIME_WORKSPACE_ID, or the route fails closed with 403.
     IdempotencyKeyHeader:
       name: Idempotency-Key
       in: header

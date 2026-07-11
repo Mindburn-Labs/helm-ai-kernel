@@ -42,6 +42,18 @@ func registerExtAuthzRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid JSON body")
 			return
 		}
+		if err := extauthz.ValidateRequest(req); err != nil {
+			api.WriteBadRequest(w, "Invalid ext-authz authorization request")
+			return
+		}
+		if svc.EmergencyStops != nil {
+			configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
+			configuredWorkspaceID := configuredRuntimeWorkspaceID()
+			if configuredTenantID == "" || configuredWorkspaceID == "" || req.TenantID != configuredTenantID || req.WorkspaceID != configuredWorkspaceID {
+				api.WriteForbidden(w, "Ext-authz route tenant/workspace binding could not be verified")
+				return
+			}
+		}
 
 		ctx := kernelotel.ExtractTraceparent(r.Context(), r.Header)
 		resp, err := authorizeExtAuthzRequest(ctx, svc, req, time.Now().UTC())

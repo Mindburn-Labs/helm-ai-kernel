@@ -163,6 +163,27 @@
       "since": "1.1.0"
     },
     {
+      "code": "EMERGENCY_STOP_SCOPE_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "A governed dispatch omitted the authoritative tenant/workspace scope required while emergency-stop fencing is enabled",
+      "since": "1.7.0"
+    },
+    {
+      "code": "EMERGENCY_STOP_UNVERIFIED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "Emergency-stop fence status could not be verified, so the governed dispatch was denied fail-closed",
+      "since": "1.7.0"
+    },
+    {
+      "code": "EMERGENCY_STOP_FENCED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "A durable tenant/workspace emergency-stop fence is active for newly governed dispatches",
+      "since": "1.7.0"
+    },
+    {
       "code": "CONTEXT_MISMATCH",
       "applies_to": ["DENY"],
       "domain": "environment",

@@ -71,6 +71,9 @@ const (
 
 	// ── Operations / Environment / Approval Reasons ────────
 	ReasonSystemFrozen               ReasonCode = "SYSTEM_FROZEN"
+	ReasonEmergencyStopFenced        ReasonCode = "EMERGENCY_STOP_FENCED"
+	ReasonEmergencyStopUnverified    ReasonCode = "EMERGENCY_STOP_UNVERIFIED"
+	ReasonEmergencyStopScopeRequired ReasonCode = "EMERGENCY_STOP_SCOPE_REQUIRED"
 	ReasonContextMismatch            ReasonCode = "CONTEXT_MISMATCH"
 	ReasonDataEgressBlocked          ReasonCode = "DATA_EGRESS_BLOCKED"
 	ReasonIdentityIsolationViolation ReasonCode = "IDENTITY_ISOLATION_VIOLATION"
@@ -194,6 +197,9 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonTenantIsolation,
 		ReasonJurisdiction,
 		ReasonSystemFrozen,
+		ReasonEmergencyStopFenced,
+		ReasonEmergencyStopUnverified,
+		ReasonEmergencyStopScopeRequired,
 		ReasonContextMismatch,
 		ReasonDataEgressBlocked,
 		ReasonIdentityIsolationViolation,

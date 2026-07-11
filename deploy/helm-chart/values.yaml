@@ -1,4 +1,6 @@
 # Default values for helm-ai-kernel
+# quantum_posture: default FENCE command-key configuration is raw Ed25519;
+# hybrid/PQ posture is not enabled by this values file.
 
 replicaCount: 1
 
@@ -105,6 +107,22 @@ helm:
     # another tenant or principal.
     tenantID: "default"
     principalID: "system-admin"
+    # Server-owned workspace binding used by governed evaluation when the
+    # scoped emergency-stop fence is enabled.
+    workspaceID: "default"
+
+  # Internal Kernel fence only. This remains disabled until the Control Plane
+  # has the shared command/ack contract plus its own durable command ledger
+  # and reconciliation worker. It fences newly governed dispatches and does
+  # not cancel work already in flight.
+  emergencyStop:
+    enabled: false
+    audience: ""
+    # Comma-separated key_id=hex-ed25519-public-key values. Multiple keys are
+    # allowed only for an explicit signing-key rotation overlap.
+    commandPublicKeys: ""
+    existingSecret: ""
+    commandPublicKeysSecretKey: "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS"
 
   # Signing key configuration
   signing:

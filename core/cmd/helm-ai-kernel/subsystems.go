@@ -43,6 +43,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 
 	registerPolicyReconcileRoutes(mux, svc)
 	registerExtAuthzRoutes(mux, svc)
+	registerEmergencyStopFenceRoutes(mux, svc)
 
 	// --- OpenAI-Compatible Proxy (governed inference) ---
 	// Wraps api.HandleOpenAIProxy with Guardian governance enforcement and receipt headers.
@@ -338,6 +339,14 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Services) {
 	if r.Method != http.MethodPost {
 		api.WriteMethodNotAllowed(w)
+		return
+	}
+	// The public proxy has no authenticated tenant/workspace authority. Leaving
+	// it open while a scoped fence is active would let caller JSON select an
+	// unfenced scope, so it is unavailable until an authenticated adapter
+	// contract is installed.
+	if svc != nil && svc.EmergencyStops != nil {
+		api.WriteError(w, http.StatusServiceUnavailable, "Governed proxy unavailable", "scoped emergency-stop fencing requires an authenticated tenant/workspace boundary")
 		return
 	}
 

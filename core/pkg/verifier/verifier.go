@@ -836,19 +836,97 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 }
 
 func checkReplayDeterminism(bundlePath string) CheckResult {
-	// Replay tapes are optional but recommended for L2+ conformance.
-	// Their absence is not a failure, but we note it explicitly.
+	required, detail := replayDeterminismRequired(bundlePath)
+	if !required {
+		return CheckResult{Name: "replay_determinism", Pass: true, Detail: detail}
+	}
+
 	tapesDir := filepath.Join(bundlePath, "08_TAPES")
 	if !dirExists(tapesDir) {
-		return CheckResult{Name: "replay_determinism", Pass: true, Detail: "warn: no tapes directory — replay verification skipped (optional for L1)"}
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "missing 08_TAPES directory — replay evidence required"}
 	}
 
-	entries, err := os.ReadDir(tapesDir)
-	if err != nil || len(entries) == 0 {
-		return CheckResult{Name: "replay_determinism", Pass: true, Detail: "warn: no tape files — replay verification skipped (optional for L1)"}
+	manifestPath := filepath.Join(tapesDir, "tape_manifest.json")
+	if !fileExists(manifestPath) {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "missing 08_TAPES/tape_manifest.json — replay evidence required"}
 	}
 
-	return CheckResult{Name: "replay_determinism", Pass: true, Detail: fmt.Sprintf("%d tape files available for replay", len(entries))}
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("cannot read tape manifest: %v", err)}
+	}
+	var tapeManifest map[string]any
+	if err := json.Unmarshal(manifestData, &tapeManifest); err != nil {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("invalid tape manifest JSON: %v", err)}
+	}
+
+	detManifestPath := filepath.Join(bundlePath, "02_PROOFGRAPH", "determinism_manifest.json")
+	if !fileExists(detManifestPath) {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "missing 02_PROOFGRAPH/determinism_manifest.json — replay hash proof required"}
+	}
+	detManifestData, err := os.ReadFile(detManifestPath)
+	if err != nil {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("cannot read determinism manifest: %v", err)}
+	}
+	var detManifest map[string]any
+	if err := json.Unmarshal(detManifestData, &detManifest); err != nil {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("invalid determinism manifest JSON: %v", err)}
+	}
+
+	liveHash, liveOK := detManifest["live_hash"].(string)
+	replayHash, replayOK := detManifest["replay_hash"].(string)
+	if !liveOK || liveHash == "" || !replayOK || replayHash == "" {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "determinism manifest must declare live_hash and replay_hash"}
+	}
+	if liveHash != replayHash {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: fmt.Sprintf("replay hash divergence: live=%s replay=%s", liveHash, replayHash)}
+	}
+
+	diffsDir := filepath.Join(bundlePath, "05_DIFFS")
+	if entries, err := os.ReadDir(diffsDir); err == nil && len(entries) > 0 {
+		return CheckResult{Name: "replay_determinism", Pass: false, Reason: "05_DIFFS contains replay differences"}
+	}
+
+	entryCount := 0
+	if entries, ok := tapeManifest["entries"].([]any); ok {
+		entryCount = len(entries)
+	}
+
+	return CheckResult{
+		Name:   "replay_determinism",
+		Pass:   true,
+		Detail: fmt.Sprintf("replay evidence verified: tape_manifest.json present, determinism hashes match, tape entries=%d", entryCount),
+	}
+}
+
+func replayDeterminismRequired(bundlePath string) (bool, string) {
+	indexPath := filepath.Join(bundlePath, "00_INDEX.json")
+	if !fileExists(indexPath) {
+		return false, "n/a: 00_INDEX.json missing; index integrity handles bundle validity"
+	}
+
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return false, "n/a: cannot read 00_INDEX.json gate scope"
+	}
+
+	var document map[string]any
+	if err := json.Unmarshal(data, &document); err != nil {
+		return false, "n/a: invalid 00_INDEX.json gate scope"
+	}
+
+	gates, ok := document["gates"].([]any)
+	if !ok {
+		return false, "n/a: 00_INDEX.json has no gates declaration"
+	}
+
+	for _, gate := range gates {
+		if value, ok := gate.(string); ok && value == "G2" {
+			return true, "replay evidence required by 00_INDEX.json gates"
+		}
+	}
+
+	return false, "n/a: 00_INDEX.json gates omit G2 replay determinism"
 }
 
 // --- Helpers ---

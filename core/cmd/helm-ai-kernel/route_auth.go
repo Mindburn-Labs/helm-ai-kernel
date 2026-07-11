@@ -14,8 +14,10 @@ import (
 const (
 	tenantHeader           = "X-Helm-Tenant-ID"
 	principalHeader        = "X-Helm-Principal-ID"
+	workspaceHeader        = "X-Helm-Workspace-ID"
 	runtimeTenantIDEnv     = "HELM_RUNTIME_TENANT_ID"
 	runtimePrincipalIDEnv  = "HELM_RUNTIME_PRINCIPAL_ID"
+	runtimeWorkspaceIDEnv  = "HELM_RUNTIME_WORKSPACE_ID"
 	quickstartExpiresAtEnv = "HELM_QUICKSTART_SESSION_EXPIRES_AT"
 	defaultRuntimeTenantID = "default"
 	serviceAPIKeyEnv       = "HELM_SERVICE_API_KEY"
@@ -112,6 +114,10 @@ func configuredRuntimePrincipalID(adminPrincipal helmauth.Principal) string {
 		return principalID
 	}
 	return strings.TrimSpace(adminPrincipal.GetID())
+}
+
+func configuredRuntimeWorkspaceID() string {
+	return strings.TrimSpace(os.Getenv(runtimeWorkspaceIDEnv))
 }
 
 func quickstartSessionExpired(now time.Time) (bool, bool) {

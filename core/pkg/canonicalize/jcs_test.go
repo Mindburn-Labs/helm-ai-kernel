@@ -1,6 +1,7 @@
 package canonicalize
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 )
@@ -66,6 +67,37 @@ func TestJCS_NoHTMLEscaping(t *testing.T) {
 
 	if string(b) != expected {
 		t.Errorf("Expected %s, got %s", expected, string(b))
+	}
+}
+
+func TestJCS_RFC8785LeavesLineAndParagraphSeparatorsAsUTF8(t *testing.T) {
+	input := map[string]string{
+		"\u2028key": "before\u2028line\u2029paragraph",
+	}
+	expected := "{\"\u2028key\":\"before\u2028line\u2029paragraph\"}"
+
+	canonical, err := JCS(input)
+	if err != nil {
+		t.Fatalf("JCS failed: %v", err)
+	}
+	if string(canonical) != expected {
+		t.Fatalf("RFC 8785 Unicode canonicalization mismatch: got %q want %q", canonical, expected)
+	}
+	if bytes.Contains(canonical, []byte(`\u2028`)) || bytes.Contains(canonical, []byte(`\u2029`)) {
+		t.Fatalf("RFC 8785 output must retain U+2028/U+2029 as UTF-8 literals: %q", canonical)
+	}
+}
+
+func TestJCS_RFC8785DoesNotRewriteLiteralBackslashUnicodeEscapes(t *testing.T) {
+	input := map[string]string{"literal": `\u2028\u2029`}
+	expected := `{"literal":"\\u2028\\u2029"}`
+
+	canonical, err := JCS(input)
+	if err != nil {
+		t.Fatalf("JCS failed: %v", err)
+	}
+	if string(canonical) != expected {
+		t.Fatalf("literal escape canonicalization mismatch: got %q want %q", canonical, expected)
 	}
 }
 

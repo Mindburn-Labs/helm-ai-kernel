@@ -1,3 +1,5 @@
+{{/* quantum_posture: chart wiring supplies a raw Ed25519 command-key keyring;
+      it does not claim hybrid or post-quantum command signing. */}}
 {{- if not (or (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.kind "crd") (eq .Values.helm.policy.source.kind "mountedFile")) -}}
 {{- fail "helm.policy.source.kind must be one of controlplane, crd, mountedFile" -}}
 {{- end -}}
@@ -36,6 +38,15 @@
 {{- end -}}
 {{- if and .Values.helm.production (not .Values.helm.auth.principalID) -}}
 {{- fail "helm.production=true requires helm.auth.principalID so tenant-scoped runtime routes are server-bound" -}}
+{{- end -}}
+{{- if and .Values.helm.emergencyStop.enabled (not .Values.helm.auth.workspaceID) -}}
+{{- fail "helm.emergencyStop.enabled=true requires helm.auth.workspaceID so scoped dispatches are server-bound" -}}
+{{- end -}}
+{{- if and .Values.helm.emergencyStop.enabled (not .Values.helm.emergencyStop.audience) -}}
+{{- fail "helm.emergencyStop.enabled=true requires helm.emergencyStop.audience" -}}
+{{- end -}}
+{{- if and .Values.helm.emergencyStop.enabled (not (or .Values.helm.emergencyStop.commandPublicKeys .Values.helm.emergencyStop.existingSecret)) -}}
+{{- fail "helm.emergencyStop.enabled=true requires helm.emergencyStop.commandPublicKeys or helm.emergencyStop.existingSecret" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -225,6 +236,23 @@ spec:
               value: {{ .Values.helm.auth.tenantID | quote }}
             - name: HELM_RUNTIME_PRINCIPAL_ID
               value: {{ .Values.helm.auth.principalID | quote }}
+            - name: HELM_RUNTIME_WORKSPACE_ID
+              value: {{ .Values.helm.auth.workspaceID | quote }}
+            - name: HELM_EMERGENCY_STOP_FENCE_ENABLED
+              value: {{ ternary "1" "0" .Values.helm.emergencyStop.enabled | quote }}
+            {{- if .Values.helm.emergencyStop.enabled }}
+            - name: HELM_EMERGENCY_STOP_COMMAND_AUDIENCE
+              value: {{ required "helm.emergencyStop.audience is required when the scoped emergency-stop fence is enabled" .Values.helm.emergencyStop.audience | quote }}
+            - name: HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS
+              {{- if .Values.helm.emergencyStop.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.helm.emergencyStop.existingSecret }}
+                  key: {{ .Values.helm.emergencyStop.commandPublicKeysSecretKey }}
+              {{- else }}
+              value: {{ required "helm.emergencyStop.commandPublicKeys or helm.emergencyStop.existingSecret is required when the scoped emergency-stop fence is enabled" .Values.helm.emergencyStop.commandPublicKeys | quote }}
+              {{- end }}
+            {{- end }}
             {{- if eq .Values.helm.storage.type "postgres" }}
             - name: HELM_DB_MAX_OPEN_CONNS
               value: {{ .Values.helm.storage.postgres.maxOpenConns | quote }}

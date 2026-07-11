@@ -14,8 +14,8 @@ import (
 	"testing"
 )
 
-const emergencyStopCatalogVectorSHA256 = "7f3ae78141173e3a19d2bf952a1fc237181bec49c8cd29d5e28ff97b39834266"
-const emergencyStopCatalogSourceCommit = "a140cf32c9f245dc6ff2f1f97bbf64d1d2d82af0"
+const emergencyStopCatalogVectorSHA256 = "78be0742665e8ec38b73c449f96d00ade9e2b86a52c8cdd4684703ba6912b51c"
+const emergencyStopCatalogSourceCommit = "41fe649f336fe62067ad72663acef885762d5f7c"
 
 type emergencyStopCatalogReferencePack struct {
 	SchemaVersion    string `json:"schema_version"`
@@ -79,8 +79,8 @@ func TestScopedStopCatalogReferencePack(t *testing.T) {
 	if pack.SchemaVersion != "emergency-stop-fence.v1.test-vectors.v2" || pack.Canonicalization.SafeIntegerMax != EmergencyStopMaxEpoch {
 		t.Fatalf("unexpected reference vector contract metadata: schema=%q safe_integer_max=%d", pack.SchemaVersion, pack.Canonicalization.SafeIntegerMax)
 	}
-	if len(pack.Vectors) < 2 {
-		t.Fatalf("reference pack has %d positive vectors, want at least two", len(pack.Vectors))
+	if len(pack.Vectors) < 3 {
+		t.Fatalf("reference pack has %d positive vectors, want at least three", len(pack.Vectors))
 	}
 
 	for _, vector := range pack.Vectors {

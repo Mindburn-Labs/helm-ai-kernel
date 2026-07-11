@@ -1,4 +1,6 @@
 # Default values for helm-ai-kernel
+# quantum_posture: default FENCE command-key configuration is raw Ed25519;
+# hybrid/PQ posture is not enabled by this values file.
 
 replicaCount: 1
 

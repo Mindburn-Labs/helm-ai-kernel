@@ -1,3 +1,5 @@
+// quantum_posture: FENCE commands use raw classical Ed25519 verification;
+// acknowledgement profiles are identity-bound and hybrid verification fails closed.
 package main
 
 import (

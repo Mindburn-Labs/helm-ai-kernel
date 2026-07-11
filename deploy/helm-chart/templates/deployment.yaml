@@ -1,3 +1,5 @@
+{{/* quantum_posture: chart wiring supplies a raw Ed25519 command-key keyring;
+      it does not claim hybrid or post-quantum command signing. */}}
 {{- if not (or (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.kind "crd") (eq .Values.helm.policy.source.kind "mountedFile")) -}}
 {{- fail "helm.policy.source.kind must be one of controlplane, crd, mountedFile" -}}
 {{- end -}}

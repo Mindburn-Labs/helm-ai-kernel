@@ -1,3 +1,5 @@
+// quantum_posture: catalog vectors cover raw Ed25519 FENCE commands and
+// profile-bound acknowledgement identities; hybrid claims fail closed.
 package kernel
 
 import (

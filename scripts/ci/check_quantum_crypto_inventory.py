@@ -127,7 +127,21 @@ def needs_annotation(path: pathlib.Path) -> bool:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return False
-    return bool(CRYPTO_RE.search(text)) and "quantum_posture:" not in text
+    if not CRYPTO_RE.search(text):
+        return False
+    if "quantum_posture:" in text:
+        return False
+    # Reference-pack vectors are copied byte-for-byte from an external source
+    # authority and are hash-pinned by their consumer.  Keep that payload
+    # immutable; require its local SOURCE-MANIFEST to carry the posture note.
+    if path.name == "vectors.json":
+        manifest = path.with_name("SOURCE-MANIFEST.json")
+        if manifest.is_file():
+            try:
+                return "quantum_posture" not in manifest.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                return True
+    return True
 
 
 def main() -> int:

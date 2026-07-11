@@ -1,3 +1,5 @@
+// quantum_posture: tests cover raw Ed25519 command verification and
+// fail-closed acknowledgement profile binding; they make no PQ guarantee.
 package main
 
 import (

@@ -1,4 +1,5 @@
 {
+  "$comment": "quantum_posture: chart schema documents raw Ed25519 command-key configuration; it is not a hybrid or PQ signing claim.",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://artifacthub.io/packages/helm/mindburn-labs/helm-ai-kernel/values.schema.json",
   "title": "helm-ai-kernel chart values",

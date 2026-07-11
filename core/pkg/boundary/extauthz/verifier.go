@@ -1,3 +1,5 @@
+// quantum_posture: ext-authz verifies classical Ed25519 receipt material;
+// scoped-stop enforcement changes authorization, not cryptographic posture.
 package extauthz
 
 import (

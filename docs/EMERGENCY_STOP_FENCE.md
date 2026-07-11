@@ -4,6 +4,9 @@ status: internal-foundation
 last_reviewed: 2026-07-11
 ---
 
+<!-- quantum_posture: FENCE command verification is raw classical Ed25519;
+acknowledgement profile binding fails closed and this foundation makes no PQ guarantee. -->
+
 # Scoped Emergency-Stop Fence
 
 The Kernel has an internal, opt-in fence for a specific tenant/workspace. When
@@ -21,6 +24,8 @@ present:
 - `HELM_EMERGENCY_STOP_COMMAND_AUDIENCE`, unique to this Kernel deployment;
 - `HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS`, a comma-separated
   `key_id=hex-ed25519-public-key` keyring; and
+- `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_WORKSPACE_ID`, each pinned to
+  the deployed scope; and
 - a service credential for the fixed internal Kernel route.
 
 Multiple keyring entries are permitted only for an intentional signing-key
@@ -49,7 +54,9 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
 ## Scope and coverage
 
 - A configured fence requires an authoritative tenant/workspace binding for
-  governed evaluation. Missing or unverified scope denies fail-closed.
+  governed evaluation. `HELM_RUNTIME_TENANT_ID` must match the authenticated
+  tenant and `HELM_RUNTIME_WORKSPACE_ID` must match the trusted workspace
+  header or ext-authz request. Missing or unverified scope denies fail-closed.
 - `POST /api/v1/evaluate` uses `X-Helm-Workspace-ID` matched against
   `HELM_RUNTIME_WORKSPACE_ID`; it never trusts a workspace supplied in JSON.
 - The unauthenticated OpenAI-compatible proxy is unavailable while the fence

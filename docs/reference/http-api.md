@@ -47,10 +47,11 @@ public docs surface.
 | `service_internal` | Requires `Authorization: Bearer $HELM_SERVICE_API_KEY` |
 
 When `HELM_EMERGENCY_STOP_FENCE_ENABLED=1`, `POST /api/v1/evaluate`
-additionally requires `X-Helm-Workspace-ID`, which must match the
-server-owned `HELM_RUNTIME_WORKSPACE_ID`. A request body cannot choose its
-workspace binding. This is a dispatch fence only; it does not cancel already
-running work.
+additionally requires an authenticated tenant matching the server-owned
+`HELM_RUNTIME_TENANT_ID` and `X-Helm-Workspace-ID` matching the server-owned
+`HELM_RUNTIME_WORKSPACE_ID`. A request body cannot choose either scope
+binding. This is a dispatch fence only; it does not cancel already running
+work.
 
 The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
 unavailable while this fence is enabled because request JSON is not an

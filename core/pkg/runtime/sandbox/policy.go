@@ -21,6 +21,7 @@ type SandboxPolicy struct {
 	FSDenylist       []string `json:"fs_denylist"`       // Denied paths (checked first)
 	NetworkAllowlist []string `json:"network_allowlist"` // Allowed hosts/CIDRs
 	NetworkDenyAll   bool     `json:"network_deny_all"`  // If true, block all network
+	NetworkPosture   string   `json:"network_posture,omitempty"`
 	MaxMemoryBytes   int64    `json:"max_memory_bytes"`
 	MaxCPUSeconds    int64    `json:"max_cpu_seconds"`
 	Capabilities     []string `json:"capabilities"` // Allowed capabilities
@@ -156,7 +157,19 @@ func (e *PolicyEnforcer) CheckNetwork(host string) CheckResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.policy.NetworkDenyAll {
+	network, err := resolveNetworkGrant(e.policy)
+	if err != nil {
+		v := PolicyViolation{
+			ViolationType: "NETWORK_INVALID_POLICY",
+			Detail:        err.Error(),
+			Timestamp:     e.clock(),
+			Blocked:       true,
+		}
+		e.violations = append(e.violations, v)
+		return CheckResult{Allowed: false, Reason: v.Detail}
+	}
+
+	if network.Mode == "deny-all" {
 		v := PolicyViolation{
 			ViolationType: "NETWORK_DENY_ALL",
 			Detail:        fmt.Sprintf("all network access denied, attempted: %s", host),
@@ -168,7 +181,7 @@ func (e *PolicyEnforcer) CheckNetwork(host string) CheckResult {
 	}
 
 	allowed := false
-	for _, allow := range e.policy.NetworkAllowlist {
+	for _, allow := range network.Destinations {
 		if allow == host || strings.HasSuffix(host, "."+allow) {
 			allowed = true
 			break

@@ -81,6 +81,19 @@ func TestNetworkAllowlist(t *testing.T) {
 	}
 }
 
+func TestNetworkUnknownPostureFailsClosed(t *testing.T) {
+	p := DefaultPolicy()
+	p.NetworkDenyAll = false
+	p.NetworkAllowlist = []string{"api.example.com"}
+	p.NetworkPosture = "unknown"
+	e := NewPolicyEnforcer(p)
+
+	r := e.CheckNetwork("api.example.com")
+	if r.Allowed {
+		t.Fatal("expected unknown posture to deny network access")
+	}
+}
+
 func TestCapabilityAllowed(t *testing.T) {
 	e := NewPolicyEnforcer(DefaultPolicy())
 	r := e.CheckCapability("read")

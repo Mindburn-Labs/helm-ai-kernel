@@ -1,0 +1,8 @@
+{
+  "source_repository": "Mindburn-Labs/contracts-catalog",
+  "source_commit": "41fe649f336fe62067ad72663acef885762d5f7c",
+  "source_path": "schema/test-vectors/emergency_stop_fence.v1.json",
+  "sha256": "78be0742665e8ec38b73c449f96d00ade9e2b86a52c8cdd4684703ba6912b51c",
+  "$comment": "quantum_posture: pinned vectors are exact catalog input for raw Ed25519 FENCE and profile-bound ACK checks; this manifest does not alter source bytes or claim post-quantum command signing.",
+  "purpose": "Pinned consumer conformance input for the opt-in Kernel FENCE foundation. The contracts catalog remains the source authority."
+}

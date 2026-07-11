@@ -8,6 +8,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
@@ -203,6 +204,33 @@ func (f *FreezeInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationCon
 		return decision, nil
 	}
 
+	// Gate 0.25: tenant/workspace emergency-stop fence. This is intentionally
+	// scoped and durable, unlike the global process freeze. Once configured,
+	// scope is mandatory: allowing an unscoped dispatch would create a direct
+	// bypass around an active workspace fence.
+	if f.g.scopedStopReader != nil {
+		tenantID, hasTenantID := stringContextValue(evalCtx.Request.Context, "tenant_id", "tenantId", "tenant")
+		workspaceID, hasWorkspaceID := stringContextValue(evalCtx.Request.Context, "workspace_id", "workspaceId", "workspace")
+		if !hasTenantID || !hasWorkspaceID {
+			return f.scopedStopDeny(evalCtx, contracts.ReasonEmergencyStopScopeRequired, "Tenant and workspace scope are required while emergency-stop fencing is enabled.", nil)
+		}
+		state, fenced, err := f.g.scopedStopReader.IsFenced(ctx, kernel.StopScope{
+			TenantID:    tenantID,
+			WorkspaceID: workspaceID,
+		})
+		if err != nil {
+			return f.scopedStopDeny(evalCtx, contracts.ReasonEmergencyStopUnverified, "Scoped emergency-stop status is unavailable; denying dispatch.", nil)
+		}
+		if fenced {
+			return f.scopedStopDeny(
+				evalCtx,
+				contracts.ReasonEmergencyStopFenced,
+				fmt.Sprintf("Scoped emergency-stop fence is active at epoch %d.", state.Epoch),
+				&state,
+			)
+		}
+	}
+
 	// Gate 0.5: Per-agent kill switch — if agent is killed, deny immediately
 	if f.g.agentKillSwitch != nil && f.g.agentKillSwitch.IsKilled(evalCtx.Request.Principal) {
 		now := f.g.clock.Now()
@@ -238,6 +266,74 @@ func (f *FreezeInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationCon
 	}
 
 	return next(ctx, evalCtx)
+}
+
+func (f *FreezeInterceptor) scopedStopDeny(evalCtx *EvaluationContext, code contracts.ReasonCode, reason string, state *kernel.FenceState) (*contracts.DecisionRecord, error) {
+	inputContext, effectDigest, err := scopedStopDecisionBinding(evalCtx.Request.Context, code, state)
+	if err != nil {
+		return nil, fmt.Errorf("bind scoped emergency-stop deny decision: %w", err)
+	}
+	decision := &contracts.DecisionRecord{
+		ID:           newDecisionID(),
+		Timestamp:    f.g.clock.Now(),
+		Verdict:      string(contracts.VerdictDeny),
+		Reason:       reason,
+		ReasonCode:   string(code),
+		EffectDigest: effectDigest,
+		InputContext: inputContext,
+	}
+	if err := f.g.signDecisionWithContext(decision, evalCtx); err != nil {
+		return nil, fmt.Errorf("failed to sign scoped emergency-stop deny decision: %w", err)
+	}
+	return decision, nil
+}
+
+// scopedStopDecisionBinding leaves raw scope identifiers out of the decision
+// projection while binding their JCS hash, command identity, epoch, and
+// acknowledgement hash into EffectDigest. EffectDigest is covered by the
+// legacy DecisionRecord signing payload, so these denial references cannot be
+// modified after signing without invalidating the decision.
+func scopedStopDecisionBinding(requestContext map[string]any, code contracts.ReasonCode, state *kernel.FenceState) (map[string]any, string, error) {
+	tenantID, _ := stringContextValue(requestContext, "tenant_id", "tenantId", "tenant")
+	workspaceID, _ := stringContextValue(requestContext, "workspace_id", "workspaceId", "workspace")
+	scopePayload, err := canonicalize.JCS(struct {
+		TenantID    string `json:"tenant_id"`
+		WorkspaceID string `json:"workspace_id"`
+	}{TenantID: tenantID, WorkspaceID: workspaceID})
+	if err != nil {
+		return nil, "", err
+	}
+	scopeHash := canonicalize.HashBytes(scopePayload)
+
+	binding := struct {
+		Purpose     string `json:"purpose"`
+		ReasonCode  string `json:"reason_code"`
+		ScopeHash   string `json:"scope_hash"`
+		CommandID   string `json:"command_id,omitempty"`
+		Epoch       uint64 `json:"epoch,omitempty"`
+		ReceiptHash string `json:"receipt_hash,omitempty"`
+	}{
+		Purpose:    "emergency-stop-denial.v1",
+		ReasonCode: string(code),
+		ScopeHash:  scopeHash,
+	}
+	inputContext := map[string]any{
+		"emergency_stop_scope_hash":  scopeHash,
+		"emergency_stop_reason_code": string(code),
+	}
+	if state != nil {
+		binding.CommandID = state.CommandID
+		binding.Epoch = state.Epoch
+		binding.ReceiptHash = state.ReceiptHash
+		inputContext["emergency_stop_command_id"] = state.CommandID
+		inputContext["emergency_stop_epoch"] = state.Epoch
+		inputContext["emergency_stop_receipt_hash"] = state.ReceiptHash
+	}
+	payload, err := canonicalize.JCS(binding)
+	if err != nil {
+		return nil, "", err
+	}
+	return inputContext, canonicalize.HashBytes(payload), nil
 }
 
 // ── PDPInterceptor ──

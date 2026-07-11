@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 )
 
 func TestReadGovernedOpenAIRequestResetsBody(t *testing.T) {
@@ -41,5 +43,19 @@ func TestReadGovernedOpenAIRequestRejectsOversize(t *testing.T) {
 	}
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
+func TestGovernedOpenAIProxyUnavailableWhenScopedFenceEnabled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-test","messages":[]}`))
+	rec := httptest.NewRecorder()
+
+	// This route has no authenticated tenant/workspace binding. It must stay
+	// unavailable rather than accepting a caller-selected scope in JSON while
+	// the scoped fence is active.
+	handleGovernedOpenAIProxy(rec, req, &Services{EmergencyStops: &kernel.ScopedStopStore{}})
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 	}
 }

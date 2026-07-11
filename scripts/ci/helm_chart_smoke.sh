@@ -85,8 +85,13 @@ assert_contains "$default_rendered" "HELM_POLICY_SIGNATURE_REQUIRED"
 assert_contains "$default_rendered" "/etc/helm-ai-kernel/policy/serve-policy.toml"
 assert_contains "$default_rendered" "HELM_RUNTIME_TENANT_ID"
 assert_contains "$default_rendered" "HELM_RUNTIME_PRINCIPAL_ID"
+assert_contains "$default_rendered" "HELM_RUNTIME_WORKSPACE_ID"
+assert_contains "$default_rendered" "HELM_EMERGENCY_STOP_FENCE_ENABLED"
 assert_contains "$default_rendered" "value: \"default\""
 assert_contains "$default_rendered" "value: \"system-admin\""
+assert_contains "$default_rendered" "value: \"0\""
+assert_not_contains "$default_rendered" "HELM_EMERGENCY_STOP_COMMAND_AUDIENCE"
+assert_not_contains "$default_rendered" "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS"
 assert_contains "$default_rendered" "automountServiceAccountToken: false"
 assert_not_contains "$default_rendered" "HELM_POLICY_TRUST_PUBLIC_KEY"
 assert_not_contains "$default_rendered" "checksum/config"
@@ -94,6 +99,28 @@ assert_not_contains "$default_rendered" "configmap-reload"
 assert_not_contains "$default_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
+
+emergency_stop_rendered="$RENDER_DIR/rendered-emergency-stop.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.emergencyStop.enabled=true \
+    --set helm.emergencyStop.audience=kernel-qa \
+    --set helm.emergencyStop.commandPublicKeys=cp-stop-qa=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >"$emergency_stop_rendered"
+assert_contains "$emergency_stop_rendered" "HELM_EMERGENCY_STOP_FENCE_ENABLED"
+assert_contains "$emergency_stop_rendered" "value: \"1\""
+assert_contains "$emergency_stop_rendered" "HELM_EMERGENCY_STOP_COMMAND_AUDIENCE"
+assert_contains "$emergency_stop_rendered" "kernel-qa"
+assert_contains "$emergency_stop_rendered" "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS"
+
+emergency_stop_missing_authority_log="$RENDER_DIR/emergency-stop-missing-authority.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.emergencyStop.enabled=true \
+    --set helm.emergencyStop.audience=kernel-qa >"$RENDER_DIR/emergency-stop-missing-authority.yaml" 2>"$emergency_stop_missing_authority_log"; then
+    echo "::error::emergency-stop render without command authority unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$emergency_stop_missing_authority_log" "helm.emergencyStop.commandPublicKeys"
 
 hermes_job_rendered="$RENDER_DIR/rendered-hermes-job.yaml"
 helm_runner template "$RELEASE" "$CHART" \

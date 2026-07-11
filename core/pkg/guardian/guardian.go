@@ -103,6 +103,13 @@ func WithFreezeController(fc *kernel.FreezeController) GuardianOption {
 	return func(g *Guardian) { g.freezeCtrl = fc }
 }
 
+// WithScopedStopReader injects a tenant/workspace emergency-stop fence. Once
+// configured, every governed decision must carry an explicit scope; an
+// unscoped request is denied rather than allowed to bypass a scoped fence.
+func WithScopedStopReader(reader kernel.ScopedStopReader) GuardianOption {
+	return func(g *Guardian) { g.scopedStopReader = reader }
+}
+
 // WithAgentKillSwitch injects the per-agent kill switch.
 func WithAgentKillSwitch(ks *kernel.AgentKillSwitch) GuardianOption {
 	return func(g *Guardian) { g.agentKillSwitch = ks }
@@ -184,6 +191,7 @@ type Guardian struct {
 	snapshotScope     policyreconcile.PolicyScope
 	complianceChecker ComplianceChecker            // Optional compliance pre-check
 	freezeCtrl        *kernel.FreezeController     // Global kill-switch
+	scopedStopReader  kernel.ScopedStopReader      // Tenant/workspace dispatch fence
 	agentKillSwitch   *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
 	contextGuard      *kernel.ContextGuard         // Environment mismatch detection
 	isolationChecker  *identity.IsolationChecker   // Agent credential reuse detection

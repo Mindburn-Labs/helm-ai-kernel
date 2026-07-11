@@ -1,0 +1,339 @@
+{
+  "schema_version": "emergency-stop-fence.v1.test-vectors.v2",
+  "canonicalization": {
+    "algorithm": "RFC 8785 JCS",
+    "encoding": "UTF-8",
+    "unicode_normalization": "none; JCS signs the exact Unicode scalar sequence supplied by the producer",
+    "timestamp_format": "UTC RFC3339Nano lexical form",
+    "command_action": "FENCE",
+    "acknowledgement_action": "FENCE_ACK",
+    "safe_integer_max": 9007199254740991
+  },
+  "deployment_pinned_kernel_keyring": {
+    "keyring_version": "emergency-stop-fence-kernel-ack-keyring.v1",
+    "keys": {
+      "kernel-stop-vector-1": {
+        "kernel_signer_profile": "classical",
+        "kernel_public_key": "c96c85cd1899663b60883b965596e13473416759f065da115400532518045873"
+      },
+      "kernel-stop-vector-2": {
+        "kernel_signer_profile": "classical",
+        "kernel_public_key": "0c2572cede2dc7a1cbb8da5a0ae4766b0a86f93da6002469f8d7d2c183cbc6e9"
+      },
+      "kernel-stop-vector-3": {
+        "kernel_signer_profile": "classical",
+        "kernel_public_key": "f385aac3fca4ba6722fdbd4b24afe0c0269bb86ea86e5eed38ed9bfebdd1f5a6"
+      }
+    }
+  },
+  "vectors": [
+    {
+      "id": "ed25519-raw-hex-fence-and-ack",
+      "command": {
+        "contract_version": "emergency-stop-fence.v1",
+        "audience": "kernel-test",
+        "key_id": "cp-stop-test",
+        "command_id": "stop-command-vector-1",
+        "tenant_id": "tenant-a",
+        "workspace_id": "workspace-a",
+        "epoch": 7,
+        "actor_id": "operator-a",
+        "reason": "containment",
+        "issued_at": "2026-07-11T20:00:00Z",
+        "expires_at": "2026-07-11T20:05:00Z"
+      },
+      "command_envelope": {
+        "command": {
+          "contract_version": "emergency-stop-fence.v1",
+          "audience": "kernel-test",
+          "key_id": "cp-stop-test",
+          "command_id": "stop-command-vector-1",
+          "tenant_id": "tenant-a",
+          "workspace_id": "workspace-a",
+          "epoch": 7,
+          "actor_id": "operator-a",
+          "reason": "containment",
+          "issued_at": "2026-07-11T20:00:00Z",
+          "expires_at": "2026-07-11T20:05:00Z"
+        },
+        "signature": "6e3686cc4b01b22e4e1a602abe7bf02a2a7e7ffa8a2435188903a2922a4fe761d4922b2408ad1a90a7a5f0784a8f783680b73cbd2d5480bbfc59a67b812cfc0e"
+      },
+      "command_canonical_payload": "{\"action\":\"FENCE\",\"actor_id\":\"operator-a\",\"audience\":\"kernel-test\",\"command_id\":\"stop-command-vector-1\",\"contract_version\":\"emergency-stop-fence.v1\",\"epoch\":7,\"expires_at\":\"2026-07-11T20:05:00Z\",\"issued_at\":\"2026-07-11T20:00:00Z\",\"key_id\":\"cp-stop-test\",\"reason\":\"containment\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace-a\"}",
+      "command_sha256": "sha256:745a264455d95ccdfcf52790c56715853156900eafa7bd973a07039cd0af2939",
+      "command_public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+      "acknowledgement": {
+        "contract_version": "emergency-stop-fence.v1",
+        "coverage": "new_governed_dispatches_only",
+        "state": {
+          "contract_version": "emergency-stop-fence.v1",
+          "audience": "kernel-test",
+          "key_id": "cp-stop-test",
+          "command_id": "stop-command-vector-1",
+          "tenant_id": "tenant-a",
+          "workspace_id": "workspace-a",
+          "epoch": 7,
+          "actor_id": "operator-a",
+          "reason": "containment",
+          "issued_at": "2026-07-11T20:00:00Z",
+          "expires_at": "2026-07-11T20:05:00Z",
+          "command_hash": "sha256:745a264455d95ccdfcf52790c56715853156900eafa7bd973a07039cd0af2939",
+          "fenced_at": "2026-07-11T20:00:03Z",
+          "kernel_key_id": "kernel-stop-vector-1",
+          "kernel_signer_profile": "classical",
+          "kernel_public_key": "c96c85cd1899663b60883b965596e13473416759f065da115400532518045873",
+          "receipt_hash": "sha256:4d01d214f5b302556f61b15abf99f1e86c42d79fd15ad3a56b5242d8b4ddfe6a"
+        },
+        "replayed": false,
+        "kernel_signature": "59f24284337943357aea6037e99bb03e8ec6d0e66f348504845d617cf36d6c4b804d87b9076040f733b5cf6b63c89deea89b1c2e539ef78315a39e9f7dae3e04"
+      },
+      "acknowledgement_canonical_payload": "{\"action\":\"FENCE_ACK\",\"actor_id\":\"operator-a\",\"audience\":\"kernel-test\",\"command_hash\":\"sha256:745a264455d95ccdfcf52790c56715853156900eafa7bd973a07039cd0af2939\",\"command_id\":\"stop-command-vector-1\",\"contract_version\":\"emergency-stop-fence.v1\",\"epoch\":7,\"expires_at\":\"2026-07-11T20:05:00Z\",\"fenced_at\":\"2026-07-11T20:00:03Z\",\"issued_at\":\"2026-07-11T20:00:00Z\",\"kernel_key_id\":\"kernel-stop-vector-1\",\"kernel_public_key\":\"c96c85cd1899663b60883b965596e13473416759f065da115400532518045873\",\"kernel_signer_profile\":\"classical\",\"key_id\":\"cp-stop-test\",\"reason\":\"containment\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace-a\"}",
+      "acknowledgement_sha256": "sha256:4d01d214f5b302556f61b15abf99f1e86c42d79fd15ad3a56b5242d8b4ddfe6a"
+    },
+    {
+      "id": "unicode-escaping-and-nanosecond-timestamp",
+      "command": {
+        "contract_version": "emergency-stop-fence.v1",
+        "audience": "kernel-é-🚀",
+        "key_id": "cp-stop-unicode",
+        "command_id": "stop-command-vector-unicode",
+        "tenant_id": "tenant-東京",
+        "workspace_id": "workspace-Δ",
+        "epoch": 8,
+        "actor_id": "operator-Å",
+        "reason": "contain \"panic\" \\\\ path\\nline-2 → 安全",
+        "issued_at": "2026-07-11T20:00:00.123456789Z",
+        "expires_at": "2026-07-11T20:05:00.123456789Z"
+      },
+      "command_envelope": {
+        "command": {
+          "contract_version": "emergency-stop-fence.v1",
+          "audience": "kernel-é-🚀",
+          "key_id": "cp-stop-unicode",
+          "command_id": "stop-command-vector-unicode",
+          "tenant_id": "tenant-東京",
+          "workspace_id": "workspace-Δ",
+          "epoch": 8,
+          "actor_id": "operator-Å",
+          "reason": "contain \"panic\" \\\\ path\\nline-2 → 安全",
+          "issued_at": "2026-07-11T20:00:00.123456789Z",
+          "expires_at": "2026-07-11T20:05:00.123456789Z"
+        },
+        "signature": "5c2b097ca135c99178869605054ddf4841c174d8413bfd0e087cd072311db40adfa1fa8014c331688c8755c597602abd155e412b6edb7de6ce6de0b133155003"
+      },
+      "command_canonical_payload": "{\"action\":\"FENCE\",\"actor_id\":\"operator-Å\",\"audience\":\"kernel-é-🚀\",\"command_id\":\"stop-command-vector-unicode\",\"contract_version\":\"emergency-stop-fence.v1\",\"epoch\":8,\"expires_at\":\"2026-07-11T20:05:00.123456789Z\",\"issued_at\":\"2026-07-11T20:00:00.123456789Z\",\"key_id\":\"cp-stop-unicode\",\"reason\":\"contain \\\"panic\\\" \\\\\\\\ path\\\\nline-2 → 安全\",\"tenant_id\":\"tenant-東京\",\"workspace_id\":\"workspace-Δ\"}",
+      "command_sha256": "sha256:a637673829c55611c00887caf51e59d17fdc6819ceb8200250fa31989fba7b70",
+      "command_public_key": "29acbae141bccaf0b22e1a94d34d0bc7361e526d0bfe12c89794bc9322966dd7",
+      "acknowledgement": {
+        "contract_version": "emergency-stop-fence.v1",
+        "coverage": "new_governed_dispatches_only",
+        "state": {
+          "contract_version": "emergency-stop-fence.v1",
+          "audience": "kernel-é-🚀",
+          "key_id": "cp-stop-unicode",
+          "command_id": "stop-command-vector-unicode",
+          "tenant_id": "tenant-東京",
+          "workspace_id": "workspace-Δ",
+          "epoch": 8,
+          "actor_id": "operator-Å",
+          "reason": "contain \"panic\" \\\\ path\\nline-2 → 安全",
+          "issued_at": "2026-07-11T20:00:00.123456789Z",
+          "expires_at": "2026-07-11T20:05:00.123456789Z",
+          "command_hash": "sha256:a637673829c55611c00887caf51e59d17fdc6819ceb8200250fa31989fba7b70",
+          "fenced_at": "2026-07-11T20:00:03.987654321Z",
+          "kernel_key_id": "kernel-stop-vector-2",
+          "kernel_signer_profile": "classical",
+          "kernel_public_key": "0c2572cede2dc7a1cbb8da5a0ae4766b0a86f93da6002469f8d7d2c183cbc6e9",
+          "receipt_hash": "sha256:aac44ad4f0a5c4d667acd4f327047ad2fea85f8bad00bdf4ba112b15ebc4101b"
+        },
+        "replayed": false,
+        "kernel_signature": "ba64604bb7f56440c786d5570d606bf402431f85b67992bc4e85afc7fc04cc8d2cb3530e3b1ba318ceeb16b9972874c470fb0f472f44f0ac3ba7e488e5912e04"
+      },
+      "acknowledgement_canonical_payload": "{\"action\":\"FENCE_ACK\",\"actor_id\":\"operator-Å\",\"audience\":\"kernel-é-🚀\",\"command_hash\":\"sha256:a637673829c55611c00887caf51e59d17fdc6819ceb8200250fa31989fba7b70\",\"command_id\":\"stop-command-vector-unicode\",\"contract_version\":\"emergency-stop-fence.v1\",\"epoch\":8,\"expires_at\":\"2026-07-11T20:05:00.123456789Z\",\"fenced_at\":\"2026-07-11T20:00:03.987654321Z\",\"issued_at\":\"2026-07-11T20:00:00.123456789Z\",\"kernel_key_id\":\"kernel-stop-vector-2\",\"kernel_public_key\":\"0c2572cede2dc7a1cbb8da5a0ae4766b0a86f93da6002469f8d7d2c183cbc6e9\",\"kernel_signer_profile\":\"classical\",\"key_id\":\"cp-stop-unicode\",\"reason\":\"contain \\\"panic\\\" \\\\\\\\ path\\\\nline-2 → 安全\",\"tenant_id\":\"tenant-東京\",\"workspace_id\":\"workspace-Δ\"}",
+      "acknowledgement_sha256": "sha256:aac44ad4f0a5c4d667acd4f327047ad2fea85f8bad00bdf4ba112b15ebc4101b"
+    },
+    {
+      "id": "unicode-line-and-paragraph-separators",
+      "command": {
+        "contract_version": "emergency-stop-fence.v1",
+        "audience": "kernel-test",
+        "key_id": "cp-stop-separators",
+        "command_id": "stop-command-vector-separators",
+        "tenant_id": "tenant-separators",
+        "workspace_id": "workspace-separators",
+        "epoch": 9,
+        "actor_id": "operator-separators",
+        "reason": "pause new-governed-dispatches until-reviewed",
+        "issued_at": "2026-07-11T20:01:00Z",
+        "expires_at": "2026-07-11T20:06:00Z"
+      },
+      "command_envelope": {
+        "command": {
+          "contract_version": "emergency-stop-fence.v1",
+          "audience": "kernel-test",
+          "key_id": "cp-stop-separators",
+          "command_id": "stop-command-vector-separators",
+          "tenant_id": "tenant-separators",
+          "workspace_id": "workspace-separators",
+          "epoch": 9,
+          "actor_id": "operator-separators",
+          "reason": "pause new-governed-dispatches until-reviewed",
+          "issued_at": "2026-07-11T20:01:00Z",
+          "expires_at": "2026-07-11T20:06:00Z"
+        },
+        "signature": "d4d6c0663cec730d51e98b59a6d678cef03871f6629e75a23363d18a90d3b46bb1a394cab24dc5a7b1ef0ad714b51472b6dd008bccf2395e314309612aaf8105"
+      },
+      "command_canonical_payload": "{\"action\":\"FENCE\",\"actor_id\":\"operator-separators\",\"audience\":\"kernel-test\",\"command_id\":\"stop-command-vector-separators\",\"contract_version\":\"emergency-stop-fence.v1\",\"epoch\":9,\"expires_at\":\"2026-07-11T20:06:00Z\",\"issued_at\":\"2026-07-11T20:01:00Z\",\"key_id\":\"cp-stop-separators\",\"reason\":\"pause new-governed-dispatches until-reviewed\",\"tenant_id\":\"tenant-separators\",\"workspace_id\":\"workspace-separators\"}",
+      "command_sha256": "sha256:1b05eb77ccce2abaed43f4b17993a6a1ea55b595692e7da076136c7597405aa0",
+      "command_public_key": "d702c9430a8a3118cd65a17b69ab761da1e5cb221a659a119697ed349e0da012",
+      "acknowledgement": {
+        "contract_version": "emergency-stop-fence.v1",
+        "coverage": "new_governed_dispatches_only",
+        "state": {
+          "contract_version": "emergency-stop-fence.v1",
+          "audience": "kernel-test",
+          "key_id": "cp-stop-separators",
+          "command_id": "stop-command-vector-separators",
+          "tenant_id": "tenant-separators",
+          "workspace_id": "workspace-separators",
+          "epoch": 9,
+          "actor_id": "operator-separators",
+          "reason": "pause new-governed-dispatches until-reviewed",
+          "issued_at": "2026-07-11T20:01:00Z",
+          "expires_at": "2026-07-11T20:06:00Z",
+          "command_hash": "sha256:1b05eb77ccce2abaed43f4b17993a6a1ea55b595692e7da076136c7597405aa0",
+          "fenced_at": "2026-07-11T20:01:03Z",
+          "kernel_key_id": "kernel-stop-vector-3",
+          "kernel_signer_profile": "classical",
+          "kernel_public_key": "f385aac3fca4ba6722fdbd4b24afe0c0269bb86ea86e5eed38ed9bfebdd1f5a6",
+          "receipt_hash": "sha256:4d3233a8821640528e8bddd10c665d9f3c4c17284357085893f3a4fd63ee943e"
+        },
+        "replayed": false,
+        "kernel_signature": "c2d94ada31c2879d6deab9e2e7dd983aa31779aec49efee94b33f13a5de0955575f05ab05474761f08c5d84fecbbecebe1e0c725e3a46ca7d8bd056d78060b0c"
+      },
+      "acknowledgement_canonical_payload": "{\"action\":\"FENCE_ACK\",\"actor_id\":\"operator-separators\",\"audience\":\"kernel-test\",\"command_hash\":\"sha256:1b05eb77ccce2abaed43f4b17993a6a1ea55b595692e7da076136c7597405aa0\",\"command_id\":\"stop-command-vector-separators\",\"contract_version\":\"emergency-stop-fence.v1\",\"epoch\":9,\"expires_at\":\"2026-07-11T20:06:00Z\",\"fenced_at\":\"2026-07-11T20:01:03Z\",\"issued_at\":\"2026-07-11T20:01:00Z\",\"kernel_key_id\":\"kernel-stop-vector-3\",\"kernel_public_key\":\"f385aac3fca4ba6722fdbd4b24afe0c0269bb86ea86e5eed38ed9bfebdd1f5a6\",\"kernel_signer_profile\":\"classical\",\"key_id\":\"cp-stop-separators\",\"reason\":\"pause new-governed-dispatches until-reviewed\",\"tenant_id\":\"tenant-separators\",\"workspace_id\":\"workspace-separators\"}",
+      "acknowledgement_sha256": "sha256:4d3233a8821640528e8bddd10c665d9f3c4c17284357085893f3a4fd63ee943e"
+    }
+  ],
+  "negative_cases": [
+    {
+      "id": "reject-whitespace-only-audience",
+      "kind": "command_semantics",
+      "command": {
+        "contract_version": "emergency-stop-fence.v1",
+        "audience": " \t ",
+        "key_id": "cp-stop-test",
+        "command_id": "stop-command-vector-1",
+        "tenant_id": "tenant-a",
+        "workspace_id": "workspace-a",
+        "epoch": 7,
+        "actor_id": "operator-a",
+        "reason": "containment",
+        "issued_at": "2026-07-11T20:00:00Z",
+        "expires_at": "2026-07-11T20:05:00Z"
+      },
+      "expected_error": "audience_must_be_nonempty_after_trim"
+    },
+    {
+      "id": "reject-expiry-over-ten-minutes",
+      "kind": "command_semantics",
+      "command": {
+        "contract_version": "emergency-stop-fence.v1",
+        "audience": "kernel-test",
+        "key_id": "cp-stop-test",
+        "command_id": "stop-command-vector-1",
+        "tenant_id": "tenant-a",
+        "workspace_id": "workspace-a",
+        "epoch": 7,
+        "actor_id": "operator-a",
+        "reason": "containment",
+        "issued_at": "2026-07-11T20:00:00Z",
+        "expires_at": "2026-07-11T20:10:01Z"
+      },
+      "expected_error": "expiry_window_exceeds_ten_minutes"
+    },
+    {
+      "id": "reject-expiry-not-after-issue",
+      "kind": "command_semantics",
+      "command": {
+        "contract_version": "emergency-stop-fence.v1",
+        "audience": "kernel-test",
+        "key_id": "cp-stop-test",
+        "command_id": "stop-command-vector-1",
+        "tenant_id": "tenant-a",
+        "workspace_id": "workspace-a",
+        "epoch": 7,
+        "actor_id": "operator-a",
+        "reason": "containment",
+        "issued_at": "2026-07-11T20:00:00Z",
+        "expires_at": "2026-07-11T19:59:59Z"
+      },
+      "expected_error": "expires_at_must_be_after_issued_at"
+    },
+    {
+      "id": "reject-whitespace-around-envelope-signature",
+      "kind": "envelope_lexical",
+      "signature": " 6e3686cc4b01b22e4e1a602abe7bf02a2a7e7ffa8a2435188903a2922a4fe761d4922b2408ad1a90a7a5f0784a8f783680b73cbd2d5480bbfc59a67b812cfc0e",
+      "expected_error": "signature_must_be_exact_lowercase_raw_hex"
+    },
+    {
+      "id": "reject-unknown-kernel-signer-profile",
+      "kind": "ack_trust",
+      "acknowledgement": {
+        "contract_version": "emergency-stop-fence.v1",
+        "coverage": "new_governed_dispatches_only",
+        "state": {
+          "contract_version": "emergency-stop-fence.v1",
+          "audience": "kernel-test",
+          "key_id": "cp-stop-test",
+          "command_id": "stop-command-vector-1",
+          "tenant_id": "tenant-a",
+          "workspace_id": "workspace-a",
+          "epoch": 7,
+          "actor_id": "operator-a",
+          "reason": "containment",
+          "issued_at": "2026-07-11T20:00:00Z",
+          "expires_at": "2026-07-11T20:05:00Z",
+          "command_hash": "sha256:745a264455d95ccdfcf52790c56715853156900eafa7bd973a07039cd0af2939",
+          "fenced_at": "2026-07-11T20:00:03Z",
+          "kernel_key_id": "kernel-stop-vector-1",
+          "kernel_signer_profile": "pqc",
+          "kernel_public_key": "c96c85cd1899663b60883b965596e13473416759f065da115400532518045873",
+          "receipt_hash": "sha256:4d01d214f5b302556f61b15abf99f1e86c42d79fd15ad3a56b5242d8b4ddfe6a"
+        },
+        "replayed": false,
+        "kernel_signature": "59f24284337943357aea6037e99bb03e8ec6d0e66f348504845d617cf36d6c4b804d87b9076040f733b5cf6b63c89deea89b1c2e539ef78315a39e9f7dae3e04"
+      },
+      "expected_error": "kernel_signer_profile_is_not_supported"
+    },
+    {
+      "id": "reject-unbound-kernel-key-id",
+      "kind": "ack_trust",
+      "acknowledgement": {
+        "contract_version": "emergency-stop-fence.v1",
+        "coverage": "new_governed_dispatches_only",
+        "state": {
+          "contract_version": "emergency-stop-fence.v1",
+          "audience": "kernel-test",
+          "key_id": "cp-stop-test",
+          "command_id": "stop-command-vector-1",
+          "tenant_id": "tenant-a",
+          "workspace_id": "workspace-a",
+          "epoch": 7,
+          "actor_id": "operator-a",
+          "reason": "containment",
+          "issued_at": "2026-07-11T20:00:00Z",
+          "expires_at": "2026-07-11T20:05:00Z",
+          "command_hash": "sha256:745a264455d95ccdfcf52790c56715853156900eafa7bd973a07039cd0af2939",
+          "fenced_at": "2026-07-11T20:00:03Z",
+          "kernel_key_id": "kernel-stop-unbound",
+          "kernel_signer_profile": "classical",
+          "kernel_public_key": "c96c85cd1899663b60883b965596e13473416759f065da115400532518045873",
+          "receipt_hash": "sha256:4d01d214f5b302556f61b15abf99f1e86c42d79fd15ad3a56b5242d8b4ddfe6a"
+        },
+        "replayed": false,
+        "kernel_signature": "59f24284337943357aea6037e99bb03e8ec6d0e66f348504845d617cf36d6c4b804d87b9076040f733b5cf6b63c89deea89b1c2e539ef78315a39e9f7dae3e04"
+      },
+      "expected_error": "kernel_key_id_is_not_pinned"
+    }
+  ]
+}

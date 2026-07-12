@@ -53,14 +53,18 @@ flowchart TD
 ```
 
 
-The current published GitHub release and tag is `v0.7.1`. The source tree
-declares `0.7.2`, but `v0.7.2` is neither tagged nor published, so its release
-URL and asset set are unavailable. After a future `v0.7.2` publication, verify
-the actual GitHub assets before naming them here; a complete release is expected
-to include the applicable binaries, `SHA256SUMS.txt`, SBOM, OpenVEX,
-attestation, EvidencePack, `version-status.json`, and matching
-`*.cosign.bundle` files where produced. Browser UI bundles are not Kernel
-release assets.
+The current published GitHub release and tag is `v0.7.1`.
+
+Current source release target: `v0.7.2`. It is not yet a tag or published
+release: the deterministic target URL
+`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2` currently
+has no release behind it and must not be used as release evidence. After a
+successful `v0.7.2` publication, verify the actual attached assets before
+claiming them here. The expected versioned names include
+`v0.7.2.openvex.json` and `v0.7.2.json`, alongside the applicable binaries,
+`SHA256SUMS.txt`, SBOM, attestation, EvidencePack, `version-status.json`, and
+matching `*.cosign.bundle` files where produced. Browser UI bundles are not
+Kernel release assets.
 
 ## Public Release Material
 

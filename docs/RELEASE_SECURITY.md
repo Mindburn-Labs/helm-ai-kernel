@@ -1,6 +1,6 @@
 ---
 title: Release and Security Evidence
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-12
 ---
 
 # HELM AI Kernel Release and Security Evidence
@@ -53,15 +53,14 @@ flowchart TD
 ```
 
 
-Current source release target: `v0.7.2`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2>. The
-release is complete only when GitHub shows Darwin/Linux/Windows binaries,
-`SHA256SUMS.txt`, `sbom.json`, `v0.7.2.openvex.json`,
-`release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
-`sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`,
-`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.7.2.json`,
-`version-status.json`, and matching `*.cosign.bundle` files for each primary
-asset. Browser UI bundles are not Kernel release assets.
+The current published GitHub release and tag is `v0.7.1`. The source tree
+declares `0.7.2`, but `v0.7.2` is neither tagged nor published, so its release
+URL and asset set are unavailable. After a future `v0.7.2` publication, verify
+the actual GitHub assets before naming them here; a complete release is expected
+to include the applicable binaries, `SHA256SUMS.txt`, SBOM, OpenVEX,
+attestation, EvidencePack, `version-status.json`, and matching
+`*.cosign.bundle` files where produced. Browser UI bundles are not Kernel
+release assets.
 
 ## Public Release Material
 

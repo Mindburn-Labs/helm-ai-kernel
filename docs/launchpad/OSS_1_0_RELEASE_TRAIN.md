@@ -19,9 +19,9 @@ published drift evidence for that exact version.
 | Release baseline | `v0.7.1` is the latest published GitHub release and tag. `main` declares `0.7.2`, but `v0.7.2` has neither a tag nor a GitHub Release. | `VERSION`, `gh release view v0.7.1`, `git ls-remote --tags origin v0.7.2` | Keep public release claims on `v0.7.1` until `v0.7.2` is tagged, published, and verified. |
 | Open PR dependencies | Five kernel PRs are open as of this audit; branch presence does not declare release scope. | `gh pr list --state open` on 2026-07-12 | Re-evaluate approved, green prerequisites at the release cut. |
 | Unreleased main delta | `main` source version `0.7.2` remains untagged and unpublished. | `VERSION`, `git ls-remote --tags origin v0.7.2`, `gh release view v0.7.2` | Establish release scope and pass the release gates before tagging. |
-| EvidencePack structure | Mandatory pack structure, optional host evidence, and declared `99_EXT/` extensions exist. | `core/pkg/conform/evidencepack.go:13` | `v0.7.0` should freeze authority and compatibility, not invent a pack layout. |
-| EvidencePack seal and verifier | Native seal and verification paths exist. | `core/pkg/evidence/seal.go:191`, `core/pkg/evidence/seal.go:349` | `v0.7.0` must define exact verifier success and tamper-failure requirements. |
-| ProofGraph | ProofGraph refs are used by runtime adapters, exports, and evidence packs. | `core/pkg/evidence/arc/pack_builder.go:39`, `core/pkg/workstation/evidence.go:63` | `v0.7.0` must freeze ref grammar, pack placement, and replay semantics. |
+| EvidencePack structure | Mandatory pack structure, optional host evidence, and declared `99_EXT/` extensions exist. | `core/pkg/conform/evidencepack.go:13` | Historical `v0.7.0` scope; future release planning must start from the current release state above. |
+| EvidencePack seal and verifier | Native seal and verification paths exist. | `core/pkg/evidence/seal.go:191`, `core/pkg/evidence/seal.go:349` | Historical `v0.7.0` exit criteria; do not treat this row as a current release-gap claim. |
+| ProofGraph | ProofGraph refs are used by runtime adapters, exports, and evidence packs. | `core/pkg/evidence/arc/pack_builder.go:39`, `core/pkg/workstation/evidence.go:63` | Historical `v0.7.0` scope; verify current behavior through source and release evidence. |
 | Agent risk scan | `helm-ai-kernel scan` exists with RiskEnvelope, preview, evidence-pack, receipt projection, and upload gates. | `core/cmd/helm-ai-kernel/scan_cmd.go:31`, `core/pkg/riskscan/scan.go:56` | `v0.8.0` should stabilize and contract-freeze the scan surface. |
 | RiskEnvelope schema | JSON Schema and Go model exist with raw-data non-collection fields. | `protocols/json-schemas/risk-envelope/v1.json:19`, `core/pkg/riskenvelope/envelope.go:142` | `v0.8.0` must decide SDK/API parity and lock schema compatibility. |
 | RiskEnvelope SDK parity | OpenAPI/SDKs expose MCP scan, not the local RiskEnvelope contract. | `api/openapi/helm.openapi.yaml:3204` | Add OpenAPI component and SDK generated types, or explicitly declare CLI-only scope. |
@@ -100,9 +100,13 @@ make release-assets
 15. Close or retarget superseded PRs and update Linear with final release
     evidence.
 
-## `v0.7.0` Missing Parts
+## Historical `v0.7.0` Planning Record
 
-Required implementation:
+`v0.7.0` is already a published historical release. The following original
+planning record is retained for provenance only; it is not a claim that these
+items remain missing from current `main`.
+
+Original planned implementation:
 
 - Define the frozen EvidencePack authority contract:
   - mandatory top-level entries and optional entries;
@@ -147,9 +151,13 @@ Release note boundary:
 - Do not say: customer-grade audit archive, compliance certification, cloud
   attestation, or production legal evidence.
 
-## `v0.7.1` Missing Parts
+## Historical `v0.7.1` Planning Record
 
-Allowed changes:
+`v0.7.1` is the current published release. The following original scope is
+retained for release-history context and does not define an unimplemented
+backlog for current `main`.
+
+Original allowed changes:
 
 - clearer verifier error output;
 - compatibility fixes for packs produced by retained `v0.7.0` writers;

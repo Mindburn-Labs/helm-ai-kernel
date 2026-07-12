@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
-from typing import Any, Optional, Union
+from typing import Any, Literal, NoReturn, Optional, Union
 from urllib.parse import quote
 
 import httpx
@@ -157,6 +157,20 @@ class HelmApiError(Exception):
         self.reason_code = reason_code
         self.details = details
         self.body = body
+
+
+class ApprovalVerificationUnavailableError(HelmApiError):
+    """Raised when an approval path would require an unavailable verifier."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status=503,
+            message="approval verification unavailable",
+            reason_code="APPROVAL_VERIFICATION_UNAVAILABLE",
+        )
+
+
+ApprovalCeremonyTransitionAction = Literal["deny", "revoke"]
 
 
 class HelmClient:
@@ -561,7 +575,14 @@ class HelmClient:
         self._check(resp)
         return resp.json()
 
-    def transition_approval_ceremony(self, approval_id: str, action: str, req: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    def transition_approval_ceremony(
+        self,
+        approval_id: str,
+        action: ApprovalCeremonyTransitionAction,
+        req: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        if action == "approve":
+            raise ApprovalVerificationUnavailableError()
         resp = self._client.post(
             f"/api/v1/approvals/{_path_segment(approval_id, 'approval_id')}/{_path_segment(action, 'action')}",
             json=req or {},
@@ -577,13 +598,9 @@ class HelmClient:
         self._check(resp)
         return resp.json()
 
-    def assert_approval_webauthn_challenge(self, approval_id: str, req: dict[str, Any]) -> dict[str, Any]:
-        resp = self._client.post(
-            f"/api/v1/approvals/{_path_segment(approval_id, 'approval_id')}/webauthn/assert",
-            json=req,
-        )
-        self._check(resp)
-        return resp.json()
+    def assert_approval_webauthn_challenge(self, approval_id: str, req: dict[str, Any]) -> NoReturn:
+        """Fail closed until the server can verify and bind credential assertions."""
+        raise ApprovalVerificationUnavailableError()
 
     def list_budget_ceilings(self) -> list[dict[str, Any]]:
         resp = self._client.get("/api/v1/budgets")

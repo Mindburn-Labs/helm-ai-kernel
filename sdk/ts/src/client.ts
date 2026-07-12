@@ -12,6 +12,7 @@ import type {
   ConformanceResult,
   VersionInfo,
   HelmError,
+  ProblemDetail,
   ReasonCode,
   DecisionRequest,
 } from './types.gen.js';
@@ -167,7 +168,8 @@ export class HelmApiError extends Error {
 
   constructor(status: number, body: HelmError | unknown) {
     const helmBody = isHelmError(body) ? body : undefined;
-    const message = helmBody?.error.message ?? `HELM API request failed with HTTP ${status}`;
+    const problem = isProblemDetail(body) ? body : undefined;
+    const message = helmBody?.error.message ?? problem?.detail ?? `HELM API request failed with HTTP ${status}`;
     super(message);
     this.name = 'HelmApiError';
     this.status = status;
@@ -185,6 +187,14 @@ function isHelmError(body: unknown): body is HelmError {
     && (body as { error?: unknown }).error !== null
     && 'message' in ((body as { error: Record<string, unknown> }).error)
     && 'reason_code' in ((body as { error: Record<string, unknown> }).error);
+}
+
+function isProblemDetail(body: unknown): body is ProblemDetail {
+  return typeof body === 'object'
+    && body !== null
+    && 'type' in body
+    && 'title' in body
+    && 'status' in body;
 }
 
 export interface HelmClientConfig {
@@ -223,7 +233,7 @@ export class HelmClient {
         signal: controller.signal,
       });
       if (!res.ok) {
-        const err = (await res.json()) as HelmError;
+        const err = await res.json();
         throw new HelmApiError(res.status, err);
       }
       return (await res.json()) as T;
@@ -554,16 +564,18 @@ export class HelmClient {
     return this.request<ApprovalCeremony>('POST', '/api/v1/approvals', req);
   }
 
-  async transitionApprovalCeremony(approvalId: string, action: 'approve' | 'deny' | 'revoke', req: SurfaceRecord = {}): Promise<ApprovalCeremony> {
+  async transitionApprovalCeremony(approvalId: string, action: 'deny' | 'revoke', req: SurfaceRecord = {}): Promise<ApprovalCeremony> {
     return this.request<ApprovalCeremony>('POST', `/api/v1/approvals/${encodeURIComponent(approvalId)}/${action}`, req);
   }
 
+  /** Creates an unverified challenge; credential assertion is unavailable. */
   async createApprovalWebAuthnChallenge(approvalId: string, req: SurfaceRecord = {}): Promise<ApprovalWebAuthnChallenge> {
     return this.request<ApprovalWebAuthnChallenge>('POST', `/api/v1/approvals/${encodeURIComponent(approvalId)}/webauthn/challenge`, req);
   }
 
-  async assertApprovalWebAuthnChallenge(approvalId: string, req: ApprovalWebAuthnAssertion): Promise<ApprovalCeremony> {
-    return this.request<ApprovalCeremony>('POST', `/api/v1/approvals/${encodeURIComponent(approvalId)}/webauthn/assert`, req);
+  /** Always rejects until a credential verifier is configured server-side. */
+  async assertApprovalWebAuthnChallenge(approvalId: string, req: ApprovalWebAuthnAssertion): Promise<never> {
+    return this.request<never>('POST', `/api/v1/approvals/${encodeURIComponent(approvalId)}/webauthn/assert`, req);
   }
 
   async listBudgetCeilings(): Promise<BudgetCeiling[]> {

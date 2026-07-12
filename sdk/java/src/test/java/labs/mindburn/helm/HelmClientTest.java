@@ -9,6 +9,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
  * Functional tests for the HELM Java SDK.
  * These test client construction, request building, serialization,
  * and error handling without requiring a live server.
+ * quantum_posture: These tests exercise SDK serialization and fail-closed
+ * error handling; they do not select, implement, or validate cryptographic
+ * primitives or credentials.
  */
 public class HelmClientTest {
     private static final ObjectMapper mapper = new ObjectMapper()
@@ -95,6 +98,26 @@ public class HelmClientTest {
         assertEquals(403, ex.status);
         assertEquals("POLICY_DENIED", ex.reasonCode);
         assertEquals("Access denied by policy", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("Approval verification paths fail closed")
+    void testApprovalVerificationPathsFailClosed() {
+        HelmClient client = new HelmClient("http://127.0.0.1:9");
+
+        HelmClient.HelmApiException transition = assertThrows(
+            HelmClient.HelmApiException.class,
+            () -> client.transitionApprovalCeremony("approval-1", "approve", new Object())
+        );
+        assertEquals(503, transition.status);
+        assertEquals("approval verification unavailable", transition.getMessage());
+
+        HelmClient.HelmApiException assertion = assertThrows(
+            HelmClient.HelmApiException.class,
+            () -> client.assertApprovalWebAuthnChallenge("approval-1", new HelmClient.ApprovalWebAuthnAssertion())
+        );
+        assertEquals(503, assertion.status);
+        assertEquals("approval verification unavailable", assertion.getMessage());
     }
 
     @Test

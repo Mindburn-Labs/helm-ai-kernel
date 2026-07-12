@@ -3669,7 +3669,7 @@ paths:
     post:
       operationId: createApprovalWebAuthnChallenge
       tags: [identity]
-      summary: Create a passkey/WebAuthn approval challenge
+      summary: Create an unverified approval challenge; credential verification is unavailable
       security:
         - AdminBearerAuth: []
       parameters:
@@ -3687,7 +3687,7 @@ paths:
                 ttl_ms: { type: integer }
       responses:
         '201':
-          description: Approval WebAuthn challenge
+          description: Unverified approval challenge
           content:
             application/json:
               schema:
@@ -3701,7 +3701,7 @@ paths:
     post:
       operationId: assertApprovalWebAuthnChallenge
       tags: [identity]
-      summary: Assert a passkey/WebAuthn approval challenge
+      summary: Approval verification unavailable until a credential verifier is configured
       security:
         - AdminBearerAuth: []
       parameters:
@@ -3722,12 +3722,8 @@ paths:
                 receipt_id: { type: string }
                 reason: { type: string }
       responses:
-        '200':
-          description: Approval ceremony
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApprovalCeremony'
+        '503':
+          $ref: '#/components/responses/ApprovalVerificationUnavailable'
         '400':
           $ref: '#/components/responses/HelmError'
         '401':
@@ -3737,7 +3733,7 @@ paths:
     post:
       operationId: transitionApprovalCeremony
       tags: [identity]
-      summary: Approve, deny, or revoke an approval ceremony
+      summary: Deny or revoke an approval ceremony; approval is unavailable pending credential verification
       security:
         - AdminBearerAuth: []
       parameters:
@@ -3751,6 +3747,7 @@ paths:
           schema:
             type: string
             enum: [approve, deny, revoke]
+          description: The approve action returns 503 until a credential verifier is configured.
       requestBody:
         content:
           application/json:
@@ -3767,6 +3764,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApprovalCeremony'
+        '503':
+          $ref: '#/components/responses/ApprovalVerificationUnavailable'
         '400':
           $ref: '#/components/responses/HelmError'
         '401':
@@ -4027,6 +4026,17 @@ components:
               type: object
               description: Additional error context
               additionalProperties: true
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        trace_id: { type: string }
 
     ChatCompletionRequest:
       type: object
@@ -6343,6 +6353,17 @@ components:
               type: "invalid_request"
               code: "tool_not_found"
               reason_code: "DENY_TOOL_NOT_FOUND"
+    ApprovalVerificationUnavailable:
+      description: Credential verification is not configured, so approval remains fail-closed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: "https://helm.mindburn.run/errors/503"
+            title: "Approval verification unavailable"
+            status: 503
+            detail: "approval verification unavailable"
     IdempotencyConflict:
       description: Idempotency key was reused with a different request fingerprint
       content:

@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from helm_sdk import (
+    ApprovalVerificationUnavailableError,
     ApprovalRequest,
     ChatCompletionRequest,
     ChatMessage,
@@ -357,27 +358,39 @@ class TestExecutionBoundarySurfaces:
         mock_client.post.side_effect = [
             mock_response(200, {"checkpoint_id": "cp1", "verdict": "PASS"}),
             mock_response(200, {"challenge_id": "ch1", "approval_id": "ap1"}),
-            mock_response(200, {"approval_id": "ap1", "state": "approved"}),
         ]
 
         client = HelmClient(base_url="http://h")
         payload = client.get_evidence_envelope_payload("env1")
         checkpoint = client.verify_boundary_checkpoint("cp1")
         challenge = client.create_approval_webauthn_challenge("ap1", {"actor": "user:alice"})
-        asserted = client.assert_approval_webauthn_challenge("ap1", {
-            "challenge_id": "ch1",
-            "actor": "user:alice",
-            "assertion": "signed-client-data",
-        })
+        with pytest.raises(ApprovalVerificationUnavailableError, match="approval verification unavailable") as assertion_error:
+            client.assert_approval_webauthn_challenge("ap1", {
+                "challenge_id": "ch1",
+                "actor": "user:alice",
+                "assertion": "signed-client-data",
+            })
 
         mock_client.get.assert_called_once_with("/api/v1/evidence/envelopes/env1/payload")
         assert mock_client.post.call_args_list[0][0][0] == "/api/v1/boundary/checkpoints/cp1/verify"
         assert mock_client.post.call_args_list[1][0][0] == "/api/v1/approvals/ap1/webauthn/challenge"
-        assert mock_client.post.call_args_list[2][0][0] == "/api/v1/approvals/ap1/webauthn/assert"
+        assert mock_client.post.call_count == 2
         assert payload["payload_hash"] == "sha256:payload"
         assert checkpoint["verdict"] == "PASS"
         assert challenge["challenge_id"] == "ch1"
-        assert asserted["state"] == "approved"
+        assert assertion_error.value.status == 503
+
+    @patch("helm_sdk.client.httpx.Client")
+    def test_approval_verification_paths_fail_closed(self, mock_client_cls: MagicMock) -> None:
+        mock_client = mock_client_cls.return_value
+        client = HelmClient(base_url="http://h")
+
+        with pytest.raises(ApprovalVerificationUnavailableError, match="approval verification unavailable"):
+            client.transition_approval_ceremony("ap1", "approve")  # type: ignore[arg-type]
+        with pytest.raises(ApprovalVerificationUnavailableError, match="approval verification unavailable"):
+            client.assert_approval_webauthn_challenge("ap1", {"challenge_id": "ch1", "assertion": "sig"})
+
+        mock_client.post.assert_not_called()
 
     @patch("helm_sdk.client.httpx.Client")
     def test_list_negative_conformance_vectors(self, mock_client_cls: MagicMock) -> None:

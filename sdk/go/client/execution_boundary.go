@@ -1,10 +1,16 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
 )
+
+// ErrApprovalVerificationUnavailable reports that credential verification has
+// not been configured. Approval assertions must never be treated as a valid
+// approval until the server can verify and bind them.
+var ErrApprovalVerificationUnavailable = errors.New("approval verification unavailable")
 
 type EvidenceEnvelopeExportRequest struct {
 	ManifestID         string `json:"manifest_id"`
@@ -385,6 +391,9 @@ func (c *HelmClient) CreateApprovalCeremony(req ApprovalCeremony) (*ApprovalCere
 }
 
 func (c *HelmClient) TransitionApprovalCeremony(approvalID, action string, req SurfaceRecord) (*ApprovalCeremony, error) {
+	if action == "approve" {
+		return nil, ErrApprovalVerificationUnavailable
+	}
 	var out ApprovalCeremony
 	err := c.do("POST", "/api/v1/approvals/"+url.PathEscape(approvalID)+"/"+url.PathEscape(action), req, &out)
 	return &out, err
@@ -396,10 +405,10 @@ func (c *HelmClient) CreateApprovalWebAuthnChallenge(approvalID string, req Surf
 	return &out, err
 }
 
-func (c *HelmClient) AssertApprovalWebAuthnChallenge(approvalID string, req ApprovalWebAuthnAssertion) (*ApprovalCeremony, error) {
-	var out ApprovalCeremony
-	err := c.do("POST", "/api/v1/approvals/"+url.PathEscape(approvalID)+"/webauthn/assert", req, &out)
-	return &out, err
+// AssertApprovalWebAuthnChallenge is unavailable until a credential verifier
+// is configured. It never submits a raw assertion or returns an approval.
+func (c *HelmClient) AssertApprovalWebAuthnChallenge(approvalID string, req ApprovalWebAuthnAssertion) error {
+	return ErrApprovalVerificationUnavailable
 }
 
 func (c *HelmClient) ListBudgetCeilings() ([]BudgetCeiling, error) {

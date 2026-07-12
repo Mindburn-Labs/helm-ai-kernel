@@ -51,6 +51,13 @@ public class HelmClient {
         }
     }
 
+    private static HelmApiException approvalVerificationUnavailable() {
+        return new HelmApiException(
+                503,
+                "approval verification unavailable",
+                "APPROVAL_VERIFICATION_UNAVAILABLE");
+    }
+
     public static class EvidenceEnvelopeExportRequest {
         public String manifest_id;
         public String envelope;
@@ -566,6 +573,9 @@ public class HelmClient {
     }
 
     public JsonElement transitionApprovalCeremony(String approvalId, String action, Object req) {
+        if ("approve".equals(action)) {
+            throw approvalVerificationUnavailable();
+        }
         HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/" + encode(action))
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
         return sendJson(r);
@@ -577,10 +587,11 @@ public class HelmClient {
         return send(r, ApprovalWebAuthnChallenge.class);
     }
 
-    public JsonElement assertApprovalWebAuthnChallenge(String approvalId, ApprovalWebAuthnAssertion req) {
-        HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/webauthn/assert")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
-        return sendJson(r);
+    /**
+     * Always fails closed until the server can verify and bind credential assertions.
+     */
+    public void assertApprovalWebAuthnChallenge(String approvalId, ApprovalWebAuthnAssertion req) {
+        throw approvalVerificationUnavailable();
     }
 
     public JsonElement listBudgetCeilings() {

@@ -1,6 +1,8 @@
 """HELM SDK for Python."""
 
 from .client import (
+    ApprovalCeremonyTransitionAction,
+    ApprovalVerificationUnavailableError,
     EvidenceEnvelopeExportRequest,
     EvidenceEnvelopeManifest,
     HelmApiError,
@@ -37,6 +39,8 @@ VerificationChecks = VerificationResultChecks
 __all__ = [
     "HelmClient",
     "HelmApiError",
+    "ApprovalVerificationUnavailableError",
+    "ApprovalCeremonyTransitionAction",
     "EvidenceEnvelopeExportRequest",
     "EvidenceEnvelopeManifest",
     "NegativeBoundaryVector",

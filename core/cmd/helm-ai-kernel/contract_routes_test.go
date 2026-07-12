@@ -349,7 +349,7 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	}
 }
 
-func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
+func TestApprovalRoutesFailClosedWithoutCredentialVerifier(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	mux := http.NewServeMux()
@@ -383,15 +383,59 @@ func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
 	authorizeTestRequest(assertReq)
 	assertRec := httptest.NewRecorder()
 	mux.ServeHTTP(assertRec, assertReq)
-	if assertRec.Code != http.StatusOK {
+	if assertRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("assert status=%d body=%s", assertRec.Code, assertRec.Body.String())
 	}
-	var approval map[string]any
-	if err := json.Unmarshal(assertRec.Body.Bytes(), &approval); err != nil {
+	var problem struct {
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(assertRec.Body.Bytes(), &problem); err != nil {
 		t.Fatal(err)
 	}
-	if approval["state"] != "approved" || approval["auth_method"] != "passkey" {
-		t.Fatalf("approval did not bind passkey assertion: %+v", approval)
+	if problem.Detail != "approval verification unavailable" {
+		t.Fatalf("assert detail=%q", problem.Detail)
+	}
+
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/approve", strings.NewReader(`{"actor":"user:alice","receipt_id":"rcpt-approval"}`))
+	authorizeTestRequest(approveReq)
+	approveRec := httptest.NewRecorder()
+	mux.ServeHTTP(approveRec, approveReq)
+	if approveRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("approve status=%d body=%s", approveRec.Code, approveRec.Body.String())
+	}
+	var approveProblem struct {
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(approveRec.Body.Bytes(), &approveProblem); err != nil {
+		t.Fatal(err)
+	}
+	if approveProblem.Detail != "approval verification unavailable" {
+		t.Fatalf("approve detail=%q", approveProblem.Detail)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/approvals", nil)
+	authorizeTestRequest(listReq)
+	listRec := httptest.NewRecorder()
+	mux.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list approvals status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var approvals []contracts.ApprovalCeremony
+	if err := json.Unmarshal(listRec.Body.Bytes(), &approvals); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, approval := range approvals {
+		if approval.ApprovalID != "approval-webauthn" {
+			continue
+		}
+		found = true
+		if approval.State != contracts.ApprovalCeremonyPending || approval.AuthMethod != "" || approval.ChallengeID != "" || approval.ChallengeHash != "" || approval.AssertionHash != "" {
+			t.Fatalf("approval transitioned or claimed unverified evidence: %+v", approval)
+		}
+	}
+	if !found {
+		t.Fatal("created approval was not listed")
 	}
 }
 

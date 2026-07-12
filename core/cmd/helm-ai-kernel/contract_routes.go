@@ -1223,6 +1223,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			}
 			approval, err := surfaces.AssertApprovalChallenge(req)
 			if err != nil {
+				if errors.Is(err, boundarypkg.ErrApprovalVerificationUnavailable) {
+					api.WriteError(w, http.StatusServiceUnavailable, "Approval verification unavailable", err.Error())
+					return
+				}
 				api.WriteBadRequest(w, err.Error())
 				return
 			}
@@ -1249,6 +1253,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		approval, err := surfaces.TransitionApproval(approvalID, state, req.Actor, req.ReceiptID, req.Reason)
 		if err != nil {
+			if errors.Is(err, boundarypkg.ErrApprovalVerificationUnavailable) {
+				api.WriteError(w, http.StatusServiceUnavailable, "Approval verification unavailable", err.Error())
+				return
+			}
 			api.WriteBadRequest(w, err.Error())
 			return
 		}

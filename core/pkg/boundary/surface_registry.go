@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,10 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
+
+// ErrApprovalVerificationUnavailable keeps approval assertions fail-closed
+// until a credential verifier is available to bind and consume them.
+var ErrApprovalVerificationUnavailable = errors.New("approval verification unavailable")
 
 // SurfaceRegistry is the OSS-local durable-surface model used by CLI/API/Console
 // wiring. Production runtimes can hydrate it from SQLite; tests and local dev
@@ -461,6 +466,9 @@ func (r *SurfaceRegistry) ListCheckpoints() []contracts.BoundaryCheckpoint {
 }
 
 func (r *SurfaceRegistry) PutApproval(approval contracts.ApprovalCeremony) (contracts.ApprovalCeremony, error) {
+	if approval.State == contracts.ApprovalCeremonyAllowed {
+		return contracts.ApprovalCeremony{}, ErrApprovalVerificationUnavailable
+	}
 	sealed, err := approval.Seal()
 	if err != nil {
 		return contracts.ApprovalCeremony{}, err
@@ -489,6 +497,9 @@ func (r *SurfaceRegistry) ListApprovals() []contracts.ApprovalCeremony {
 }
 
 func (r *SurfaceRegistry) TransitionApproval(id string, state contracts.ApprovalCeremonyState, actor, receiptID, reason string) (contracts.ApprovalCeremony, error) {
+	if state == contracts.ApprovalCeremonyAllowed {
+		return contracts.ApprovalCeremony{}, ErrApprovalVerificationUnavailable
+	}
 	r.mu.RLock()
 	approval, ok := r.approvals[id]
 	r.mu.RUnlock()
@@ -576,49 +587,8 @@ func (r *SurfaceRegistry) CreateApprovalChallenge(approvalID, method string, ttl
 	return record, nil
 }
 
-func (r *SurfaceRegistry) AssertApprovalChallenge(assertion contracts.ApprovalWebAuthnAssertion) (contracts.ApprovalCeremony, error) {
-	if strings.TrimSpace(assertion.ChallengeID) == "" || strings.TrimSpace(assertion.Actor) == "" || strings.TrimSpace(assertion.Assertion) == "" {
-		return contracts.ApprovalCeremony{}, fmt.Errorf("challenge_id, actor, and assertion are required")
-	}
-	r.mu.RLock()
-	challenge, ok := r.challenges[assertion.ChallengeID]
-	r.mu.RUnlock()
-	if !ok {
-		return contracts.ApprovalCeremony{}, fmt.Errorf("approval challenge %q not found", assertion.ChallengeID)
-	}
-	if r.now().UTC().After(challenge.ExpiresAt) {
-		return contracts.ApprovalCeremony{}, fmt.Errorf("approval challenge expired")
-	}
-	assertionHash, err := canonicalize.CanonicalHash(map[string]string{
-		"challenge_id": assertion.ChallengeID,
-		"actor":        assertion.Actor,
-		"assertion":    assertion.Assertion,
-	})
-	if err != nil {
-		return contracts.ApprovalCeremony{}, err
-	}
-	approval, err := r.TransitionApproval(challenge.ApprovalID, contracts.ApprovalCeremonyAllowed, assertion.Actor, assertion.ReceiptID, assertion.Reason)
-	if err != nil {
-		return contracts.ApprovalCeremony{}, err
-	}
-	approval.AuthMethod = challenge.Method
-	approval.ChallengeID = challenge.ChallengeID
-	approval.ChallengeHash = challenge.ChallengeHash
-	approval.AssertionHash = "sha256:" + assertionHash
-	sealed, err := r.PutApproval(approval)
-	if err != nil {
-		return contracts.ApprovalCeremony{}, err
-	}
-	challenge.Verified = sealed.State == contracts.ApprovalCeremonyAllowed
-	challenge.AssertionHash = sealed.AssertionHash
-	r.mu.Lock()
-	r.challenges[challenge.ChallengeID] = challenge
-	err = r.persistLocked()
-	r.mu.Unlock()
-	if err != nil {
-		return contracts.ApprovalCeremony{}, err
-	}
-	return sealed, nil
+func (r *SurfaceRegistry) AssertApprovalChallenge(_ contracts.ApprovalWebAuthnAssertion) (contracts.ApprovalCeremony, error) {
+	return contracts.ApprovalCeremony{}, ErrApprovalVerificationUnavailable
 }
 
 func (r *SurfaceRegistry) PutAuthProfile(profile contracts.MCPAuthorizationProfile) (contracts.MCPAuthorizationProfile, error) {

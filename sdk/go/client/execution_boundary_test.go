@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -30,9 +31,6 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	})
 	mux.HandleFunc("/api/v1/approvals/ap1/webauthn/challenge", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, ApprovalWebAuthnChallenge{"challenge_id": "ch1", "approval_id": "ap1"})
-	})
-	mux.HandleFunc("/api/v1/approvals/ap1/webauthn/assert", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(t, w, ApprovalCeremony{"approval_id": "ap1", "state": "approved"})
 	})
 	mux.HandleFunc("/api/v1/conformance/negative", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, []NegativeBoundaryVector{{ID: "pdp-outage", Category: "policy"}})
@@ -78,9 +76,11 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	if err != nil || (*challenge)["challenge_id"] != "ch1" {
 		t.Fatalf("challenge = %#v, err = %v", challenge, err)
 	}
-	asserted, err := client.AssertApprovalWebAuthnChallenge("ap1", ApprovalWebAuthnAssertion{"challenge_id": "ch1", "assertion": "sig"})
-	if err != nil || (*asserted)["state"] != "approved" {
-		t.Fatalf("asserted = %#v, err = %v", asserted, err)
+	if err := client.AssertApprovalWebAuthnChallenge("ap1", ApprovalWebAuthnAssertion{"challenge_id": "ch1", "assertion": "sig"}); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("assertion error = %v, want %v", err, ErrApprovalVerificationUnavailable)
+	}
+	if _, err := client.TransitionApprovalCeremony("ap1", "approve", SurfaceRecord{"reason": "reviewed"}); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("approval transition error = %v, want %v", err, ErrApprovalVerificationUnavailable)
 	}
 	vectors, err := client.ListNegativeConformanceVectors()
 	if err != nil || vectors[0].ID != "pdp-outage" {
@@ -255,16 +255,12 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			_, err := client.CreateApprovalCeremony(ApprovalCeremony{"approval_id": "a1"})
 			return err
 		}},
-		{"transition approval", "POST /api/v1/approvals/approval%2Fa%20b/approve", func() error {
-			_, err := client.TransitionApprovalCeremony("approval/a b", "approve", SurfaceRecord{"reason": "ok"})
+		{"transition approval", "POST /api/v1/approvals/approval%2Fa%20b/deny", func() error {
+			_, err := client.TransitionApprovalCeremony("approval/a b", "deny", SurfaceRecord{"reason": "ok"})
 			return err
 		}},
 		{"approval webauthn challenge", "POST /api/v1/approvals/approval%2Fa%20b/webauthn/challenge", func() error {
 			_, err := client.CreateApprovalWebAuthnChallenge("approval/a b", SurfaceRecord{"user": "me"})
-			return err
-		}},
-		{"approval webauthn assert", "POST /api/v1/approvals/approval%2Fa%20b/webauthn/assert", func() error {
-			_, err := client.AssertApprovalWebAuthnChallenge("approval/a b", ApprovalWebAuthnAssertion{"credential": "c"})
 			return err
 		}},
 		{"list budgets", "GET /api/v1/budgets", func() error { _, err := client.ListBudgetCeilings(); return err }},

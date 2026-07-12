@@ -41,7 +41,7 @@ describe("HelmClient coverage matrix", () => {
     expect(new HelmApiError(401, { error: { reason_code: "DENY" } }).reasonCode).toBe("ERROR_INTERNAL");
   });
 
-  it("exercises every JSON endpoint wrapper", async () => {
+  it("exercises every available JSON endpoint wrapper", async () => {
     const calls: Array<[string, unknown[]]> = [
       ["evaluateDecision", [{ effect: "read" }]],
       ["runPublicDemo", ["read_ticket", { id: 1 }]],
@@ -96,11 +96,9 @@ describe("HelmClient coverage matrix", () => {
       ["getAuthzSnapshot", ["snapshot/a b"]],
       ["listApprovalCeremonies", []],
       ["createApprovalCeremony", [{ approval_id: "a1" }]],
-      ["transitionApprovalCeremony", ["approval/a b", "approve"]],
       ["transitionApprovalCeremony", ["approval/a b", "deny", { reason: "bad" }]],
       ["createApprovalWebAuthnChallenge", ["approval/a b"]],
       ["createApprovalWebAuthnChallenge", ["approval/a b", { user: "me" }]],
-      ["assertApprovalWebAuthnChallenge", ["approval/a b", { credential: "c" }]],
       ["listBudgetCeilings", []],
       ["putBudgetCeiling", ["budget/a b", { limit: 1 }]],
       ["getCoexistenceCapabilities", []],

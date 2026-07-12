@@ -3,10 +3,11 @@
 
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use std::time::Duration;
 
-pub mod client;
 pub mod canonical;
+pub mod client;
 pub mod types_gen;
 pub use types_gen::*;
 
@@ -49,6 +50,16 @@ impl std::fmt::Display for HelmApiError {
 }
 
 impl std::error::Error for HelmApiError {}
+
+const APPROVAL_VERIFICATION_UNAVAILABLE: &str = "approval verification unavailable";
+
+fn approval_verification_unavailable() -> HelmApiError {
+    HelmApiError {
+        status: 503,
+        message: APPROVAL_VERIFICATION_UNAVAILABLE.into(),
+        reason_code: ReasonCode::ErrorInternal,
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvidenceEnvelopeExportRequest {
@@ -971,6 +982,9 @@ impl HelmClient {
         action: &str,
         req: &T,
     ) -> Result<serde_json::Value, HelmApiError> {
+        if action == "approve" {
+            return Err(approval_verification_unavailable());
+        }
         self.post_value(
             &format!(
                 "/api/v1/approvals/{}/{}",
@@ -997,16 +1011,10 @@ impl HelmClient {
 
     pub fn assert_approval_webauthn_challenge<T: Serialize>(
         &self,
-        approval_id: &str,
-        req: &T,
-    ) -> Result<serde_json::Value, HelmApiError> {
-        self.post_value(
-            &format!(
-                "/api/v1/approvals/{}/webauthn/assert",
-                encode_query(approval_id)
-            ),
-            req,
-        )
+        _approval_id: &str,
+        _req: &T,
+    ) -> Result<Infallible, HelmApiError> {
+        Err(approval_verification_unavailable())
     }
 
     pub fn list_budget_ceilings(&self) -> Result<serde_json::Value, HelmApiError> {
@@ -1151,5 +1159,22 @@ mod tests {
         assert_eq!(json["status"], "degraded");
         assert_eq!(json["receipt_signer"], "unavailable");
         assert_eq!(json["receipt_store"], "unavailable");
+    }
+
+    #[test]
+    fn test_approval_verification_paths_fail_closed() {
+        let client = HelmClient::new("http://127.0.0.1:9");
+
+        let transition = client
+            .transition_approval_ceremony("approval-1", "approve", &serde_json::json!({}))
+            .unwrap_err();
+        assert_eq!(transition.status, 503);
+        assert_eq!(transition.message, APPROVAL_VERIFICATION_UNAVAILABLE);
+
+        let assertion = client
+            .assert_approval_webauthn_challenge("approval-1", &serde_json::json!({}))
+            .unwrap_err();
+        assert_eq!(assertion.status, 503);
+        assert_eq!(assertion.message, APPROVAL_VERIFICATION_UNAVAILABLE);
     }
 }

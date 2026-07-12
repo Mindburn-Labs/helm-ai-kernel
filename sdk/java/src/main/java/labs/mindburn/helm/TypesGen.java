@@ -53399,6 +53399,322 @@ public static class PreflightLaunchpadImport202Response {
 
 
 /**
+ * ProblemDetail
+ */
+@JsonPropertyOrder({
+  ProblemDetail.JSON_PROPERTY_TYPE,
+  ProblemDetail.JSON_PROPERTY_TITLE,
+  ProblemDetail.JSON_PROPERTY_STATUS,
+  ProblemDetail.JSON_PROPERTY_DETAIL,
+  ProblemDetail.JSON_PROPERTY_INSTANCE,
+  ProblemDetail.JSON_PROPERTY_TRACE_ID
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class ProblemDetail {
+  public static final String JSON_PROPERTY_TYPE = "type";
+  private URI type;
+
+  public static final String JSON_PROPERTY_TITLE = "title";
+  private String title;
+
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private Integer status;
+
+  public static final String JSON_PROPERTY_DETAIL = "detail";
+  private String detail;
+
+  public static final String JSON_PROPERTY_INSTANCE = "instance";
+  private String instance;
+
+  public static final String JSON_PROPERTY_TRACE_ID = "trace_id";
+  private String traceId;
+
+  public ProblemDetail() {
+  }
+
+  public ProblemDetail type(URI type) {
+    this.type = type;
+    return this;
+  }
+
+   /**
+   * Get type
+   * @return type
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public URI getType() {
+    return type;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setType(URI type) {
+    this.type = type;
+  }
+
+
+  public ProblemDetail title(String title) {
+    this.title = title;
+    return this;
+  }
+
+   /**
+   * Get title
+   * @return title
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TITLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getTitle() {
+    return title;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TITLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTitle(String title) {
+    this.title = title;
+  }
+
+
+  public ProblemDetail status(Integer status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * Get status
+   * @return status
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Integer getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStatus(Integer status) {
+    this.status = status;
+  }
+
+
+  public ProblemDetail detail(String detail) {
+    this.detail = detail;
+    return this;
+  }
+
+   /**
+   * Get detail
+   * @return detail
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DETAIL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getDetail() {
+    return detail;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DETAIL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDetail(String detail) {
+    this.detail = detail;
+  }
+
+
+  public ProblemDetail instance(String instance) {
+    this.instance = instance;
+    return this;
+  }
+
+   /**
+   * Get instance
+   * @return instance
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_INSTANCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getInstance() {
+    return instance;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_INSTANCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setInstance(String instance) {
+    this.instance = instance;
+  }
+
+
+  public ProblemDetail traceId(String traceId) {
+    this.traceId = traceId;
+    return this;
+  }
+
+   /**
+   * Get traceId
+   * @return traceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TRACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTraceId() {
+    return traceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TRACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTraceId(String traceId) {
+    this.traceId = traceId;
+  }
+
+
+  /**
+   * Return true if this ProblemDetail object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ProblemDetail problemDetail = (ProblemDetail) o;
+    return Objects.equals(this.type, problemDetail.type) &&
+        Objects.equals(this.title, problemDetail.title) &&
+        Objects.equals(this.status, problemDetail.status) &&
+        Objects.equals(this.detail, problemDetail.detail) &&
+        Objects.equals(this.instance, problemDetail.instance) &&
+        Objects.equals(this.traceId, problemDetail.traceId);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(type, title, status, detail, instance, traceId);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class ProblemDetail {\n");
+    sb.append("    type: ").append(toIndentedString(type)).append("\n");
+    sb.append("    title: ").append(toIndentedString(title)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    detail: ").append(toIndentedString(detail)).append("\n");
+    sb.append("    instance: ").append(toIndentedString(instance)).append("\n");
+    sb.append("    traceId: ").append(toIndentedString(traceId)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `type` to the URL query string
+    if (getType() != null) {
+      joiner.add(String.format("%stype%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `title` to the URL query string
+    if (getTitle() != null) {
+      joiner.add(String.format("%stitle%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTitle()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `status` to the URL query string
+    if (getStatus() != null) {
+      joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `detail` to the URL query string
+    if (getDetail() != null) {
+      joiner.add(String.format("%sdetail%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDetail()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `instance` to the URL query string
+    if (getInstance() != null) {
+      joiner.add(String.format("%sinstance%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getInstance()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `trace_id` to the URL query string
+    if (getTraceId() != null) {
+      joiner.add(String.format("%strace_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTraceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * Receipt
  */
 @JsonPropertyOrder({

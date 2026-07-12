@@ -272,7 +272,7 @@ describe('HelmClient', () => {
       expect(checkpoint.verdict).toBe('PASS');
     });
 
-    it('creates and asserts approval WebAuthn ceremonies', async () => {
+    it('reports approval verification unavailable after creating a challenge', async () => {
       fetchSpy
         .mockResolvedValueOnce(jsonResponse({
           challenge_id: 'ch1',
@@ -280,18 +280,19 @@ describe('HelmClient', () => {
           challenge_hash: 'sha256:challenge',
         }))
         .mockResolvedValueOnce(jsonResponse({
-          approval_id: 'ap1',
-          state: 'approved',
-          auth_method: 'passkey',
-        }));
+          type: 'https://helm.mindburn.run/errors/503',
+          title: 'Approval verification unavailable',
+          status: 503,
+          detail: 'approval verification unavailable',
+        }, 503));
       const client = new HelmClient({ baseUrl: 'http://h' });
 
       const challenge = await client.createApprovalWebAuthnChallenge('ap1', { actor: 'user:alice' });
-      const assertion = await client.assertApprovalWebAuthnChallenge('ap1', {
+      await expect(client.assertApprovalWebAuthnChallenge('ap1', {
         challenge_id: 'ch1',
         assertion: 'signed-client-data',
         actor: 'user:alice',
-      });
+      })).rejects.toMatchObject({ status: 503, message: 'approval verification unavailable' });
 
       expect(fetchSpy).toHaveBeenNthCalledWith(
         1,
@@ -304,7 +305,6 @@ describe('HelmClient', () => {
         expect.objectContaining({ method: 'POST' }),
       );
       expect(challenge.challenge_id).toBe('ch1');
-      expect(assertion.state).toBe('approved');
     });
 
     it('lists negative conformance vectors', async () => {

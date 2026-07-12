@@ -487,7 +487,7 @@ func runApprovalsChallenge(args []string, registry *boundarypkg.SurfaceRegistry,
 	cmd := flag.NewFlagSet("approvals challenge", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 	approvalID := cmd.String("approval-id", "approval-bootstrap", "Approval id")
-	method := cmd.String("method", "passkey", "Approval method")
+	method := cmd.String("method", "passkey", "Requested method (verification unavailable)")
 	ttlMs := cmd.Int64("ttl-ms", int64((5*time.Minute)/time.Millisecond), "Challenge TTL in milliseconds")
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
 	if err := cmd.Parse(args); err != nil {
@@ -501,7 +501,7 @@ func runApprovalsChallenge(args []string, registry *boundarypkg.SurfaceRegistry,
 	if *jsonOutput {
 		return writeSurfaceJSON(stdout, challenge)
 	}
-	fmt.Fprintf(stdout, "Approval challenge %s method=%s hash=%s\n", challenge.ChallengeID, challenge.Method, challenge.ChallengeHash)
+	fmt.Fprintf(stdout, "Unverified approval challenge %s method=%s hash=%s\n", challenge.ChallengeID, challenge.Method, challenge.ChallengeHash)
 	return 0
 }
 
@@ -510,9 +510,9 @@ func runApprovalsAssert(args []string, registry *boundarypkg.SurfaceRegistry, st
 	cmd.SetOutput(stderr)
 	challengeID := cmd.String("challenge-id", "", "Challenge id")
 	actor := cmd.String("actor", "user:local-admin", "Actor")
-	assertion := cmd.String("assertion", "", "Passkey/WebAuthn assertion or local signed assertion")
+	assertion := cmd.String("assertion", "", "Credential assertion (verification unavailable)")
 	receiptID := cmd.String("receipt-id", "receipt-local-approval", "Receipt id")
-	reason := cmd.String("reason", "passkey assertion accepted", "Reason")
+	reason := cmd.String("reason", "", "Reason (unused while verification is unavailable)")
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2

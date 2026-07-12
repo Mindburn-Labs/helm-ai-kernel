@@ -462,8 +462,11 @@ case "$MODE" in
         kubectl -n "$NAMESPACE" rollout status "deployment/${RELEASE}-helm-ai-kernel" --timeout=300s
         assert_pod_ready openclaw 6m
         assert_job_succeeded hermes 3m
+        # Successful test hooks self-delete so teardown leaves no Pod behind.
+        # Helm cannot retrieve logs after that deletion, so failures rely on the
+        # trap's namespace diagnostics rather than `helm test --logs`.
         echo "helm test"
-        kube_helm test "$RELEASE" -n "$NAMESPACE" --logs
+        kube_helm test "$RELEASE" -n "$NAMESPACE"
         echo "openclaw kubectl exec healthcheck"
         kubectl -n "$NAMESPACE" exec \
             "deployment/${RELEASE}-helm-ai-kernel-openclaw" \

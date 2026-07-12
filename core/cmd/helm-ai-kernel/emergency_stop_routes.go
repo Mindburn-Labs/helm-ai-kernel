@@ -32,7 +32,12 @@ const (
 )
 
 type emergencyStopCommandVerifier struct {
-	authorities map[string]emergencyStopCommandAuthority
+	authorities map[emergencyStopCommandAuthorityKey]emergencyStopCommandAuthority
+}
+
+type emergencyStopCommandAuthorityKey struct {
+	keyID    string
+	audience string
 }
 
 type emergencyStopCommandAuthority struct {
@@ -214,7 +219,7 @@ func configuredEmergencyStopCommandVerifier() (emergencyStopCommandVerifier, err
 		publicKeys[keyID] = ed25519.PublicKey(decoded)
 	}
 
-	authorities := make(map[string]emergencyStopCommandAuthority, len(publicKeys))
+	authorities := make(map[emergencyStopCommandAuthorityKey]emergencyStopCommandAuthority, len(publicKeys))
 	if rawReplayKeyring := os.Getenv(emergencyStopCommandReplayKeyringEnv); rawReplayKeyring != "" {
 		keyring, err := decodeEmergencyStopCommandReplayKeyring([]byte(rawReplayKeyring))
 		if err != nil {
@@ -227,13 +232,9 @@ func configuredEmergencyStopCommandVerifier() (emergencyStopCommandVerifier, err
 	}
 	for keyID, publicKey := range publicKeys {
 		active := emergencyStopCommandAuthority{keyID: keyID, audience: audience, publicKey: publicKey}
-		if existing, exists := authorities[keyID]; exists {
-			if !sameEmergencyStopCommandAuthority(existing, active) {
-				return emergencyStopCommandVerifier{}, errors.New("emergency-stop command replay keyring conflicts with active authority")
-			}
-			continue
+		if err := addEmergencyStopCommandAuthority(authorities, active); err != nil {
+			return emergencyStopCommandVerifier{}, err
 		}
-		authorities[keyID] = active
 	}
 	return emergencyStopCommandVerifier{authorities: authorities}, nil
 }
@@ -255,7 +256,7 @@ func verifyEmergencyStopFenceEnvelope(envelope emergencyStopFenceEnvelope, verif
 	if err != nil {
 		return err
 	}
-	authority, ok := verifier.authorities[envelope.Command.KeyID]
+	authority, ok := verifier.authorities[emergencyStopCommandAuthorityKey{keyID: envelope.Command.KeyID, audience: envelope.Command.Audience}]
 	if !ok || authority.keyID != envelope.Command.KeyID || envelope.Command.Audience != authority.audience {
 		return errors.New("emergency-stop command does not match a configured authority")
 	}
@@ -291,8 +292,8 @@ func decodeEmergencyStopCommandReplayKeyring(raw []byte) (emergencyStopCommandRe
 	return keyring, nil
 }
 
-func parseEmergencyStopCommandReplayAuthorities(keyring emergencyStopCommandReplayKeyring) (map[string]emergencyStopCommandAuthority, error) {
-	authorities := make(map[string]emergencyStopCommandAuthority, len(keyring.Keys))
+func parseEmergencyStopCommandReplayAuthorities(keyring emergencyStopCommandReplayKeyring) (map[emergencyStopCommandAuthorityKey]emergencyStopCommandAuthority, error) {
+	authorities := make(map[emergencyStopCommandAuthorityKey]emergencyStopCommandAuthority, len(keyring.Keys))
 	if len(keyring.Keys) == 0 {
 		if keyring.KeyringVersion != "" {
 			return nil, errors.New("emergency-stop command replay keyring is invalid")
@@ -302,6 +303,7 @@ func parseEmergencyStopCommandReplayAuthorities(keyring emergencyStopCommandRepl
 	if keyring.KeyringVersion != emergencyStopCommandReplayKeyringVersion || len(keyring.Keys) > 64 {
 		return nil, errors.New("emergency-stop command replay keyring is invalid")
 	}
+	publicKeys := make(map[string]ed25519.PublicKey, len(keyring.Keys))
 	for _, key := range keyring.Keys {
 		if !validEmergencyStopCommandKeyID(key.CommandKeyID) || key.CommandKeyID != strings.TrimSpace(key.CommandKeyID) ||
 			key.CommandAudience == "" || key.CommandAudience != strings.TrimSpace(key.CommandAudience) || len(key.CommandAudience) > 255 {
@@ -314,16 +316,38 @@ func parseEmergencyStopCommandReplayAuthorities(keyring emergencyStopCommandRepl
 		if err != nil || len(publicKey) != ed25519.PublicKeySize {
 			return nil, errors.New("emergency-stop command replay public key is invalid")
 		}
-		if _, exists := authorities[key.CommandKeyID]; exists {
-			return nil, errors.New("emergency-stop command replay keyring has duplicate key id")
+		identity := emergencyStopCommandAuthorityKey{keyID: key.CommandKeyID, audience: key.CommandAudience}
+		if _, exists := authorities[identity]; exists {
+			return nil, errors.New("emergency-stop command replay keyring has duplicate key id and audience")
 		}
-		authorities[key.CommandKeyID] = emergencyStopCommandAuthority{
+		if existing, exists := publicKeys[key.CommandKeyID]; exists && !bytes.Equal(existing, publicKey) {
+			return nil, errors.New("emergency-stop command replay keyring reuses a key id with conflicting public key")
+		}
+		publicKeys[key.CommandKeyID] = ed25519.PublicKey(publicKey)
+		authorities[identity] = emergencyStopCommandAuthority{
 			keyID:     key.CommandKeyID,
 			audience:  key.CommandAudience,
 			publicKey: ed25519.PublicKey(publicKey),
 		}
 	}
 	return authorities, nil
+}
+
+func addEmergencyStopCommandAuthority(authorities map[emergencyStopCommandAuthorityKey]emergencyStopCommandAuthority, authority emergencyStopCommandAuthority) error {
+	identity := emergencyStopCommandAuthorityKey{keyID: authority.keyID, audience: authority.audience}
+	if existing, exists := authorities[identity]; exists {
+		if !sameEmergencyStopCommandAuthority(existing, authority) {
+			return errors.New("emergency-stop command replay keyring conflicts with active authority")
+		}
+		return nil
+	}
+	for _, existing := range authorities {
+		if existing.keyID == authority.keyID && !bytes.Equal(existing.publicKey, authority.publicKey) {
+			return errors.New("emergency-stop command replay keyring reuses a key id with conflicting public key")
+		}
+	}
+	authorities[identity] = authority
+	return nil
 }
 
 func sameEmergencyStopCommandAuthority(left, right emergencyStopCommandAuthority) bool {

@@ -48,6 +48,12 @@
 {{- if and .Values.helm.emergencyStop.enabled (not (or .Values.helm.emergencyStop.commandPublicKeys .Values.helm.emergencyStop.existingSecret)) -}}
 {{- fail "helm.emergencyStop.enabled=true requires helm.emergencyStop.commandPublicKeys or helm.emergencyStop.existingSecret" -}}
 {{- end -}}
+{{- if and .Values.helm.emergencyStop.enabled .Values.helm.emergencyStop.commandReplayKeyring .Values.helm.emergencyStop.commandReplayKeyringSecretKey -}}
+{{- fail "helm.emergencyStop.commandReplayKeyring and commandReplayKeyringSecretKey are mutually exclusive" -}}
+{{- end -}}
+{{- if and .Values.helm.emergencyStop.enabled .Values.helm.emergencyStop.commandReplayKeyringSecretKey (not .Values.helm.emergencyStop.existingSecret) -}}
+{{- fail "helm.emergencyStop.commandReplayKeyringSecretKey requires helm.emergencyStop.existingSecret" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -252,6 +258,17 @@ spec:
               {{- else }}
               value: {{ required "helm.emergencyStop.commandPublicKeys or helm.emergencyStop.existingSecret is required when the scoped emergency-stop fence is enabled" .Values.helm.emergencyStop.commandPublicKeys | quote }}
               {{- end }}
+            {{- if or .Values.helm.emergencyStop.commandReplayKeyring .Values.helm.emergencyStop.commandReplayKeyringSecretKey }}
+            - name: HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING
+              {{- if .Values.helm.emergencyStop.commandReplayKeyringSecretKey }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.helm.emergencyStop.existingSecret }}
+                  key: {{ .Values.helm.emergencyStop.commandReplayKeyringSecretKey }}
+              {{- else }}
+              value: {{ .Values.helm.emergencyStop.commandReplayKeyring | quote }}
+              {{- end }}
+            {{- end }}
             {{- end }}
             {{- if eq .Values.helm.storage.type "postgres" }}
             - name: HELM_DB_MAX_OPEN_CONNS

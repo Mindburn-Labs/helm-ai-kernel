@@ -127,6 +127,14 @@ helm:
     commandPublicKeys: ""
     existingSecret: ""
     commandPublicKeysSecretKey: "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS"
+    # Optional strict JSON replay-authority keyring for queued FENCE commands
+    # signed before a command key or audience rotation. Direct values are
+    # quoted into the Pod environment unchanged.
+    commandReplayKeyring: ""
+    # To source the optional replay keyring from the same existingSecret used
+    # for commandPublicKeys, set this to that Secret's key. Leave empty when
+    # the replay keyring is absent or commandReplayKeyring is used directly.
+    commandReplayKeyringSecretKey: ""
 
   # Signing key configuration
   signing:

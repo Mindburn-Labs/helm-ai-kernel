@@ -11,6 +11,7 @@ files. It is not a complete copy of any GitHub release.
 | --- | --- |
 | `vex.openvex.json` | Baseline OpenVEX document kept in-tree for policy review. |
 | `vex/policies.yaml` | Maintainer policy file consumed by `scripts/release/generate_vex.sh`. |
+| `version-surfaces.yaml` | Version-surface contract consumed by `make prepare-version` and `check_version_drift.py`; every in-tree version claim (SDK manifests, docs, `mcp-bundle.json`) must be listed here. |
 
 ## Current Release Target
 

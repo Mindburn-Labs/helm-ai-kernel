@@ -4,12 +4,15 @@ Typed Go client for the HELM kernel HTTP API.
 
 ## Install
 
+After the `sdk/go/v0.7.2` subdirectory tag is published and verified:
+
 ```bash
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.1
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.2
 ```
 
-Version truth is the repository `VERSION` file (`0.7.1` for this release).
-Tagged Go module releases use the subdirectory tag form `sdk/go/v0.7.1`.
+Version truth is the repository `VERSION` file (`0.7.2` for this source target).
+Tagged Go module releases use the subdirectory tag form `sdk/go/v0.7.2`; this
+source target does not claim that the tag already exists.
 
 ## Local Test
 
@@ -109,4 +112,4 @@ func main() {
 
 ## Release Notes
 
-`0.7.1` is the release-hardening patch with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.
+`0.7.2` is the release-hardening patch with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.

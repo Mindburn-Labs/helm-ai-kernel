@@ -28,6 +28,7 @@ from helm_sdk import (
     VerificationChecks,
     VerificationResult,
 )
+from helm_sdk.types_gen import BoundaryStatus
 
 
 # ── Helpers ──────────────────────────────────────────────
@@ -55,6 +56,22 @@ RECEIPT_DATA = {
     "signature": "s",
     "timestamp": "2026-01-01T00:00:00Z",
     "principal": "pr",
+}
+
+BOUNDARY_STATUS_DATA = {
+    "status": "degraded",
+    "mode": "oss-local",
+    "receipt_signer": "unavailable",
+    "receipt_store": "unavailable",
+    "pdp": "fail-closed",
+    "mcp_firewall": "enabled",
+    "sandbox": "deny-default",
+    "authz": "rebac-snapshot",
+    "evidence_verifier": "offline",
+    "checkpoint_log": "tamper-evident",
+    "open_approval_count": 0,
+    "quarantined_mcp_count": 0,
+    "updated_at": "2026-07-10T12:00:00Z",
 }
 
 
@@ -267,6 +284,25 @@ class TestGeneratedTypes:
             "ml-dsa-65": "mldsa-pub",
         }
         assert receipt.to_dict()["public_key_set"]["ml-dsa-65"] == "mldsa-pub"
+
+    def test_boundary_status_deserialization_preserves_components(self) -> None:
+        payload = {
+            **BOUNDARY_STATUS_DATA,
+            "components": {"mcp": "quarantine+oauth+schema-pin"},
+        }
+
+        from_dict = BoundaryStatus.from_dict(payload)
+        from_json = BoundaryStatus.from_json(json.dumps(payload))
+
+        assert from_dict is not None
+        assert from_json is not None
+        assert from_dict.components == payload["components"]
+        assert from_json.components == payload["components"]
+        assert from_dict.to_dict()["components"] == payload["components"]
+
+    def test_boundary_status_rejects_unknown_status(self) -> None:
+        with pytest.raises(ValueError, match="must be one of enum values"):
+            BoundaryStatus.from_dict({**BOUNDARY_STATUS_DATA, "status": "unknown"})
 
     def test_conformance_request_defaults(self) -> None:
         req = ConformanceRequest(level="L1")

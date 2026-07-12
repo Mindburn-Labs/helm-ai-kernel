@@ -1,6 +1,6 @@
 ---
 title: SDKs
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-10
 ---
 
 # SDKs
@@ -32,20 +32,20 @@ Use `version-status.json` or `make version-drift-published` before making a
 pinned package claim.
 
 Current source identity includes the Java coordinate
-`io.github.mindburnlabs:helm-sdk:0.7.1`; verify registry availability before
+`io.github.mindburnlabs:helm-sdk:0.7.2`; verify registry availability before
 presenting it as an install path.
 
-Source version claims are tied to the repository `VERSION` (`0.7.1` for this release). Current source package coordinates include:
+Source version claims are tied to the repository `VERSION` (`0.7.2` for this release). Current source package coordinates include:
 
-- Go module: `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.1`
-- Go subdirectory tag: `sdk/go/v0.7.1`
+- Go module: `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.2`
+- Go subdirectory tag: `sdk/go/v0.7.2`
 - Java dependency:
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.7.1</version>
+  <version>0.7.2</version>
 </dependency>
 ```
 

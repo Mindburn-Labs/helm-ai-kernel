@@ -169,7 +169,7 @@ from __future__ import annotations
 import json
 import pprint
 from datetime import datetime
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Set, Union
+from typing import Annotated, Any, ClassVar, Dict, List, Literal, Optional, Set, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr, ValidationError, field_validator
 HEADER
@@ -186,6 +186,12 @@ s = path.read_text()
 classmethod_validators = {
     "AccountEntitlements": {"plan_validate_enum"},
     "AccountSession": {"plan_validate_enum"},
+    "BoundaryStatus": {
+        "status_validate_enum", "mode_validate_enum", "receipt_signer_validate_enum",
+        "receipt_store_validate_enum", "pdp_validate_enum", "mcp_firewall_validate_enum",
+        "sandbox_validate_enum", "authz_validate_enum", "evidence_verifier_validate_enum",
+        "checkpoint_log_validate_enum",
+    },
     "EntitlementDecision": {"user_state_validate_enum"},
     "EnvExposurePolicy": {"mode_validate_enum"},
     "EvidenceEnvelopeExportRequest": {"envelope_validate_enum"},
@@ -223,6 +229,20 @@ if '"public_key_set": obj.get("public_key_set")' not in s:
         '            "public_key_set": obj.get("public_key_set"),\n'
         '            "timestamp": obj.get("timestamp"),'
     )
+
+boundary_status_components = (
+    '            "quarantined_mcp_count": obj.get("quarantined_mcp_count"),\n'
+    '            "updated_at": obj.get("updated_at"),'
+)
+if s.count(boundary_status_components) != 1:
+    raise SystemExit("expected exactly one BoundaryStatus from_dict tail")
+s = s.replace(
+    boundary_status_components,
+    '            "quarantined_mcp_count": obj.get("quarantined_mcp_count"),\n'
+    '            "updated_at": obj.get("updated_at"),\n'
+    '            "components": obj.get("components"),',
+    1,
+)
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY

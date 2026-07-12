@@ -57,6 +57,61 @@ func TestContractRoutesServeDocumentedEvidenceProofgraphAndConformancePaths(t *t
 	}
 }
 
+func TestBoundaryStatusRouteReturnsRuntimeContract(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/boundary/status", nil)
+	authorizeTestRequest(req)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("boundary status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var status contracts.BoundaryStatus
+	if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode boundary status: %v", err)
+	}
+	if status.Status != "degraded" || status.Mode != "oss-local" {
+		t.Fatalf("boundary posture = status=%q mode=%q", status.Status, status.Mode)
+	}
+	if status.ReceiptStore != "ready" || status.ReceiptSigner != "unavailable" {
+		t.Fatalf("boundary receipt mechanisms = store=%q signer=%q", status.ReceiptStore, status.ReceiptSigner)
+	}
+	if status.PDP != "fail-closed" || status.MCPFirewall != "enabled" || status.Sandbox != "deny-default" {
+		t.Fatalf("boundary mechanisms = pdp=%q mcp=%q sandbox=%q", status.PDP, status.MCPFirewall, status.Sandbox)
+	}
+	if status.Version == "" || status.LastCheckpointHash == "" || status.UpdatedAt.IsZero() {
+		t.Fatalf("boundary provenance is incomplete: %+v", status)
+	}
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode boundary status keys: %v", err)
+	}
+	for _, key := range []string{
+		"status", "mode", "receipt_signer", "receipt_store", "pdp",
+		"mcp_firewall", "sandbox", "authz", "evidence_verifier",
+		"checkpoint_log", "open_approval_count", "quarantined_mcp_count",
+		"updated_at",
+	} {
+		if _, ok := payload[key]; !ok {
+			t.Errorf("boundary status is missing required key %q", key)
+		}
+	}
+	for _, stale := range []string{
+		"receipt_store_ready", "signer_ready", "open_approvals",
+		"quarantined_mcp_servers", "last_checkpoint_id", "checked_at",
+	} {
+		if _, ok := payload[stale]; ok {
+			t.Errorf("boundary status exposed stale key %q", stale)
+		}
+	}
+}
+
 func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()

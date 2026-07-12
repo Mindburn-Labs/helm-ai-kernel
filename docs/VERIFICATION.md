@@ -1,6 +1,6 @@
 ---
 title: Receipts
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-10
 ---
 
 # Receipts
@@ -88,14 +88,14 @@ EvidencePacks are portable proof bundles for local review and offline replay.
 
 ## Release Evidence
 
-Current source release target: `v0.7.1`.
+Current source release target: `v0.7.2`.
 
-The `v0.7.1` release is complete only after the listed local verification
+The `v0.7.2` release is complete only after the listed local verification
 assets appear on the GitHub release and verify locally.
 
 Check the GitHub release and local verification artifacts together:
 
-- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.1`
-- v0.7.1 Asset Contract
-- `v0.7.1.openvex.json`
-- `v0.7.1.json`
+- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2`
+- v0.7.2 Asset Contract
+- `v0.7.2.openvex.json`
+- `v0.7.2.json`

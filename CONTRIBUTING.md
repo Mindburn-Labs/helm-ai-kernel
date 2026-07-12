@@ -46,9 +46,27 @@ Public contribution lanes and community expectations are in [COMMUNITY.md](COMMU
 3. Keep the OSS scope tight: kernel, CLI, contracts, SDKs, and the retained deployment/examples surface.
 4. Preserve deterministic verification paths when changing receipts, schemas, or evidence handling.
 
+## Developer Certificate of Origin (DCO)
+
+Contributions are accepted under the repository license (Apache-2.0),
+inbound = outbound. There is no CLA and no copyright assignment — the DCO
+is deliberate: it removes any unilateral relicensing option.
+
+Every commit must carry a `Signed-off-by` trailer certifying the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/):
+
+```bash
+git commit -s
+# amend the last commit if you forgot:
+git commit --amend -s
+```
+
+CI rejects pull requests containing commits without a sign-off.
+
 ## Pull Requests
 
 - **Mandatory Peer Review**: Branch protection rules are enforced on all stable branches (`main`). Direct merges are blocked. Every pull request must receive at least one formal approval from an authorized, unaffiliated maintainer (e.g. `@mindburn-labs/helm-platform` codeowners) before merging.
+- **DCO**: every commit is signed off (`git commit -s`); see above.
 - Keep PRs narrow and reviewable.
 - Include the commands you ran.
 - Update docs only when the implementation or release truth changes.

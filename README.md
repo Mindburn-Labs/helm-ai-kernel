@@ -74,6 +74,20 @@ You get:  a signed receipt you can verify offline
 
 It is the open-source execution boundary: policy in, action checked, receipt out.
 
+## Free Forever
+
+The open-source kernel is the complete boundary, not a trial:
+
+- The local execution boundary — verdicts, signed receipts, offline
+  verification — is free forever.
+- Bring your own keys: BYOK and self-hosting are never paywalled.
+- The commercial products are the organizational layer around the boundary
+  (hosted retention, team control plane, certification) — never the boundary
+  itself.
+
+Contributions are Apache-2.0 with a DCO ([CONTRIBUTING.md](CONTRIBUTING.md));
+name and logo use is covered by [TRADEMARK.md](TRADEMARK.md).
+
 ## Source Build
 
 ```bash

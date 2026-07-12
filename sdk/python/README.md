@@ -28,9 +28,18 @@ been run.
 ## Usage
 
 ```python
+import os
+
 from helm_sdk import HelmClient
 
-client = HelmClient(base_url="http://127.0.0.1:7714")
+client = HelmClient(
+    base_url=os.getenv("HELM_BASE_URL", "http://127.0.0.1:7714"),
+    api_key=os.environ["HELM_API_KEY"],
+    tenant_id=os.environ["HELM_TENANT_ID"],
+    principal_id=os.environ["HELM_PRINCIPAL_ID"],
+    # Required only when scoped emergency-stop fencing is enabled.
+    workspace_id=os.getenv("HELM_WORKSPACE_ID"),
+)
 decision = client.evaluate_decision({
     "principal": "example-agent",
     "action": "read-ticket",
@@ -38,6 +47,10 @@ decision = client.evaluate_decision({
 })
 print(decision["verdict"])  # ALLOW, DENY, or ESCALATE
 ```
+
+`/api/v1/evaluate` requires `HELM_API_KEY`, `HELM_TENANT_ID`, and
+`HELM_PRINCIPAL_ID`. Set `HELM_WORKSPACE_ID` only when scoped emergency-stop
+fencing is enabled. Other routes keep these client options optional.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/python_sdk/`.

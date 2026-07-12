@@ -26,6 +26,8 @@ describe("HelmClient coverage matrix", () => {
       baseUrl: "http://helm.test/",
       apiKey: "token",
       tenantId: "tenant-a",
+      principalId: "agent-a",
+      workspaceId: "workspace-a",
       timeout: 5_000,
     });
   });
@@ -119,6 +121,8 @@ describe("HelmClient coverage matrix", () => {
     expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("runtime=runtime&profile=profile&policy_epoch=epoch"))).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers.Authorization === "Bearer token")).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Tenant-ID"] === "tenant-a")).toBe(true);
+    expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Principal-ID"] === "agent-a")).toBe(true);
+    expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Workspace-ID"] === "workspace-a")).toBe(true);
   });
 
   it("extracts governance headers and default values", async () => {

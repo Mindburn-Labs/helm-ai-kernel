@@ -35,7 +35,14 @@ npm run build
 ```ts
 import { HelmClient } from "@mindburn/helm-ai-kernel";
 
-const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
+const client = new HelmClient({
+  baseUrl: process.env.HELM_BASE_URL ?? "http://127.0.0.1:7714",
+  apiKey: process.env.HELM_API_KEY!,
+  tenantId: process.env.HELM_TENANT_ID!,
+  principalId: process.env.HELM_PRINCIPAL_ID!,
+  // Required only when scoped emergency-stop fencing is enabled.
+  workspaceId: process.env.HELM_WORKSPACE_ID,
+});
 const decision = await client.evaluateDecision({
   principal: "example-agent",
   action: "read-ticket",
@@ -43,6 +50,10 @@ const decision = await client.evaluateDecision({
 });
 console.log(decision.verdict); // ALLOW, DENY, or ESCALATE
 ```
+
+`/api/v1/evaluate` requires `HELM_API_KEY`, `HELM_TENANT_ID`, and
+`HELM_PRINCIPAL_ID`. Set `HELM_WORKSPACE_ID` only when scoped emergency-stop
+fencing is enabled. Other routes keep these client options optional.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.

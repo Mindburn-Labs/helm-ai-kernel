@@ -72,12 +72,15 @@ describe('HelmClient', () => {
       expect(callArgs.headers['Authorization']).toBe('Bearer sk-test');
     });
 
-    it('omits Authorization header when apiKey not provided', () => {
+    it('keeps authorization and identity headers optional', () => {
       const client = new HelmClient({ baseUrl: 'http://h' });
       fetchSpy.mockResolvedValue(jsonResponse({ status: 'ok' }));
       client.health();
       const callArgs = fetchSpy.mock.calls[0][1];
       expect(callArgs.headers['Authorization']).toBeUndefined();
+      expect(callArgs.headers['X-Helm-Tenant-ID']).toBeUndefined();
+      expect(callArgs.headers['X-Helm-Principal-ID']).toBeUndefined();
+      expect(callArgs.headers['X-Helm-Workspace-ID']).toBeUndefined();
     });
   });
 

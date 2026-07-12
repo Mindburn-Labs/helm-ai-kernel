@@ -191,6 +191,8 @@ export interface HelmClientConfig {
   baseUrl: string;
   apiKey?: string;
   tenantId?: string;
+  principalId?: string;
+  workspaceId?: string;
   timeout?: number; // ms, default 30000
 }
 
@@ -208,6 +210,12 @@ export class HelmClient {
     }
     if (config.tenantId) {
       this.headers['X-Helm-Tenant-ID'] = config.tenantId;
+    }
+    if (config.principalId) {
+      this.headers['X-Helm-Principal-ID'] = config.principalId;
+    }
+    if (config.workspaceId) {
+      this.headers['X-Helm-Workspace-ID'] = config.workspaceId;
     }
   }
 

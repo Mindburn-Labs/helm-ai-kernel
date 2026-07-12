@@ -266,6 +266,164 @@ func TestEmergencyStopFenceRouteAcceptsExplicitOverlappingKeyRotation(t *testing
 	}
 }
 
+func TestEmergencyStopFenceRouteAcceptsExactPriorAudienceReplayAuthority(t *testing.T) {
+	mux, _, currentPrivateKey := newEmergencyStopFenceRouteForTest(t)
+	priorPublicKey, priorPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(emergencyStopCommandAudienceEnv, "kernel-current")
+	t.Setenv(emergencyStopCommandPublicKeysEnv, "cp-current="+hex.EncodeToString(currentPrivateKey.Public().(ed25519.PublicKey)))
+	t.Setenv(emergencyStopCommandReplayKeyringEnv, emergencyStopCommandReplayKeyringJSON(t, emergencyStopCommandReplayAuthority{
+		CommandKeyID:     "cp-before-rotation",
+		CommandAudience:  "kernel-before-rotation",
+		CommandPublicKey: hex.EncodeToString(priorPublicKey),
+	}))
+
+	command := newEmergencyStopFenceCommand(time.Now().UTC())
+	command.Audience = "kernel-before-rotation"
+	command.KeyID = "cp-before-rotation"
+	command.CommandID = "stop-command-prior-audience"
+	rec := postEmergencyStopFence(t, mux, signedEmergencyStopFenceEnvelope(t, command, priorPrivateKey), "service-stop-test")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("prior-audience replay status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestEmergencyStopFenceRouteRejectsCurrentSignerForPriorAudience(t *testing.T) {
+	mux, store, currentPrivateKey := newEmergencyStopFenceRouteForTest(t)
+	priorPublicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(emergencyStopCommandAudienceEnv, "kernel-current")
+	t.Setenv(emergencyStopCommandPublicKeysEnv, "cp-current="+hex.EncodeToString(currentPrivateKey.Public().(ed25519.PublicKey)))
+	t.Setenv(emergencyStopCommandReplayKeyringEnv, emergencyStopCommandReplayKeyringJSON(t, emergencyStopCommandReplayAuthority{
+		CommandKeyID:     "cp-before-rotation",
+		CommandAudience:  "kernel-before-rotation",
+		CommandPublicKey: hex.EncodeToString(priorPublicKey),
+	}))
+
+	command := newEmergencyStopFenceCommand(time.Now().UTC())
+	command.Audience = "kernel-before-rotation"
+	command.KeyID = "cp-current"
+	command.CommandID = "stop-command-prior-audience-current-signer"
+	rec := postEmergencyStopFence(t, mux, signedEmergencyStopFenceEnvelope(t, command, currentPrivateKey), "service-stop-test")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("current signer for prior audience status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, fenced, err := store.IsFenced(context.Background(), command.Scope()); err != nil || fenced {
+		t.Fatalf("current signer for prior audience mutated fence=%t err=%v", fenced, err)
+	}
+}
+
+func TestEmergencyStopFenceRouteRejectsUnconfiguredPriorAudience(t *testing.T) {
+	mux, store, currentPrivateKey := newEmergencyStopFenceRouteForTest(t)
+	_, priorPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(emergencyStopCommandAudienceEnv, "kernel-current")
+	t.Setenv(emergencyStopCommandPublicKeysEnv, "cp-current="+hex.EncodeToString(currentPrivateKey.Public().(ed25519.PublicKey)))
+	t.Setenv(emergencyStopCommandReplayKeyringEnv, "")
+
+	command := newEmergencyStopFenceCommand(time.Now().UTC())
+	command.Audience = "kernel-before-rotation"
+	command.KeyID = "cp-before-rotation"
+	command.CommandID = "stop-command-unconfigured-prior-audience"
+	rec := postEmergencyStopFence(t, mux, signedEmergencyStopFenceEnvelope(t, command, priorPrivateKey), "service-stop-test")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("unconfigured prior audience status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, fenced, err := store.IsFenced(context.Background(), command.Scope()); err != nil || fenced {
+		t.Fatalf("unconfigured prior audience mutated fence=%t err=%v", fenced, err)
+	}
+}
+
+func TestConfiguredEmergencyStopCommandVerifierRejectsMalformedOrConflictingReplayKeyring(t *testing.T) {
+	currentPublicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	priorPublicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentPublicKeyHex := hex.EncodeToString(currentPublicKey)
+	priorPublicKeyHex := hex.EncodeToString(priorPublicKey)
+	t.Setenv(emergencyStopCommandAudienceEnv, "kernel-current")
+	t.Setenv(emergencyStopCommandPublicKeysEnv, "cp-current="+currentPublicKeyHex)
+
+	validPrior := emergencyStopCommandReplayKeyringJSON(t, emergencyStopCommandReplayAuthority{
+		CommandKeyID:     "cp-before-rotation",
+		CommandAudience:  "kernel-before-rotation",
+		CommandPublicKey: priorPublicKeyHex,
+	})
+	duplicatePrior := emergencyStopCommandReplayKeyringJSON(t,
+		emergencyStopCommandReplayAuthority{CommandKeyID: "cp-before-rotation", CommandAudience: "kernel-before-rotation", CommandPublicKey: priorPublicKeyHex},
+		emergencyStopCommandReplayAuthority{CommandKeyID: "cp-before-rotation", CommandAudience: "kernel-before-rotation", CommandPublicKey: priorPublicKeyHex},
+	)
+	conflictingActive := emergencyStopCommandReplayKeyringJSON(t, emergencyStopCommandReplayAuthority{
+		CommandKeyID:     "cp-current",
+		CommandAudience:  "kernel-before-rotation",
+		CommandPublicKey: currentPublicKeyHex,
+	})
+	tests := []struct {
+		name    string
+		keyring string
+	}{
+		{name: "malformed JSON", keyring: "{"},
+		{name: "unknown field", keyring: strings.TrimSuffix(validPrior, "}") + `,"unexpected":true}`},
+		{name: "unsupported version", keyring: strings.Replace(validPrior, emergencyStopCommandReplayKeyringVersion, "unsupported", 1)},
+		{name: "uppercase public key", keyring: emergencyStopCommandReplayKeyringJSON(t, emergencyStopCommandReplayAuthority{CommandKeyID: "cp-before-rotation", CommandAudience: "kernel-before-rotation", CommandPublicKey: strings.Repeat("A", ed25519.PublicKeySize*2)})},
+		{name: "duplicate key id", keyring: duplicatePrior},
+		{name: "conflicting active authority", keyring: conflictingActive},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(emergencyStopCommandReplayKeyringEnv, tt.keyring)
+			if _, err := configuredEmergencyStopCommandVerifier(); err == nil {
+				t.Fatal("configured verifier unexpectedly accepted invalid replay keyring")
+			}
+		})
+	}
+}
+
+func TestConfiguredEmergencyStopCommandVerifierAcceptsExactRedundantActiveReplayAuthority(t *testing.T) {
+	currentPublicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentPublicKeyHex := hex.EncodeToString(currentPublicKey)
+	t.Setenv(emergencyStopCommandAudienceEnv, "kernel-current")
+	t.Setenv(emergencyStopCommandPublicKeysEnv, "cp-current="+currentPublicKeyHex)
+	t.Setenv(emergencyStopCommandReplayKeyringEnv, emergencyStopCommandReplayKeyringJSON(t, emergencyStopCommandReplayAuthority{
+		CommandKeyID:     "cp-current",
+		CommandAudience:  "kernel-current",
+		CommandPublicKey: currentPublicKeyHex,
+	}))
+
+	verifier, err := configuredEmergencyStopCommandVerifier()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(verifier.authorities) != 1 || !sameEmergencyStopCommandAuthority(verifier.authorities["cp-current"], emergencyStopCommandAuthority{keyID: "cp-current", audience: "kernel-current", publicKey: currentPublicKey}) {
+		t.Fatalf("verifier authorities = %+v", verifier.authorities)
+	}
+}
+
+func emergencyStopCommandReplayKeyringJSON(t *testing.T, keys ...emergencyStopCommandReplayAuthority) string {
+	t.Helper()
+	raw, err := json.Marshal(emergencyStopCommandReplayKeyring{
+		KeyringVersion: emergencyStopCommandReplayKeyringVersion,
+		Keys:           keys,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
 func TestEmergencyStopAcknowledgementIdentityUsesClosedSignerProfiles(t *testing.T) {
 	classicalSigner, err := helmcrypto.NewEd25519Signer("kernel-classical")
 	if err != nil {

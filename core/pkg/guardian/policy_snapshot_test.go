@@ -125,6 +125,37 @@ func TestGuardianEarlyDenyBindsActivePolicySnapshot(t *testing.T) {
 	}
 }
 
+func TestGuardianUnvalidatedSnapshotDenies(t *testing.T) {
+	scope := policyreconcile.DefaultScope
+	store := policyreconcile.NewAtomicSnapshotStore()
+	if err := store.Swap(scope, &policyreconcile.EffectivePolicySnapshot{
+		TenantID:    scope.TenantID,
+		WorkspaceID: scope.WorkspaceID,
+		PolicyEpoch: 1,
+		PolicyHash:  "sha256:unvalidated",
+		Graph:       allowGraphFor("deploy"),
+	}); err != nil {
+		t.Fatalf("swap snapshot: %v", err)
+	}
+
+	decision, err := NewGuardian(
+		&MockSigner{},
+		prg.NewGraph(),
+		pkg_artifact.NewRegistry(NewMockStore(), nil),
+		WithPolicySnapshots(store, scope),
+	).EvaluateDecision(context.Background(), DecisionRequest{
+		Principal: "agent-1",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "deploy",
+	})
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if decision.Verdict != string(contracts.VerdictDeny) || decision.ReasonCode != string(contracts.ReasonPolicyNotReady) {
+		t.Fatalf("expected unvalidated snapshot deny, got %+v", decision)
+	}
+}
+
 func TestGuardianSnapshotWithEmbeddedPDPBindsPolicyHashAndIssuesIntent(t *testing.T) {
 	scope := policyreconcile.DefaultScope
 	store := policyreconcile.NewAtomicSnapshotStore()
@@ -220,5 +251,50 @@ func TestGuardianPolicyEpochChangeBeforeIntentDenies(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), string(contracts.ReasonPolicyEpochChanged)) {
 		t.Fatalf("expected POLICY_EPOCH_CHANGED, got %v", err)
+	}
+}
+
+func TestGuardianInvalidatedSnapshotBeforeIntentDenies(t *testing.T) {
+	scope := policyreconcile.DefaultScope
+	store := policyreconcile.NewAtomicSnapshotStore()
+	if err := store.Swap(scope, &policyreconcile.EffectivePolicySnapshot{
+		TenantID:    scope.TenantID,
+		WorkspaceID: scope.WorkspaceID,
+		PolicyEpoch: 1,
+		PolicyHash:  "sha256:snapshot-1",
+		Validation:  policyreconcile.ValidationStatus{Status: policyreconcile.StatusActive},
+		Graph:       allowGraphFor("deploy"),
+	}); err != nil {
+		t.Fatalf("swap snapshot: %v", err)
+	}
+	g := NewGuardian(
+		&MockSigner{},
+		prg.NewGraph(),
+		pkg_artifact.NewRegistry(NewMockStore(), nil),
+		WithPolicySnapshots(store, scope),
+	)
+	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
+		Principal: "agent-1",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "deploy",
+	})
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if decision.Verdict != string(contracts.VerdictAllow) {
+		t.Fatalf("expected allow, got %+v", decision)
+	}
+
+	if _, ok := store.Invalidate(scope, "last-known-good snapshot expired"); !ok {
+		t.Fatal("invalidate snapshot")
+	}
+
+	_, err = g.IssueExecutionIntent(context.Background(), decision, &contracts.Effect{
+		EffectID:   "effect-1",
+		EffectType: "EXECUTE_TOOL",
+		Params:     map[string]any{"tool_name": "deploy"},
+	})
+	if err == nil || !strings.Contains(err.Error(), string(contracts.ReasonPolicyEpochChanged)) || !strings.Contains(err.Error(), policyreconcile.StatusInvalid) {
+		t.Fatalf("expected invalid policy snapshot to deny intent, got %v", err)
 	}
 }

@@ -3,6 +3,9 @@
 // Policy delivery mechanisms only expose heads and bytes. The reconciler is
 // the authority boundary that verifies, compiles, validates, and atomically
 // swaps immutable policy snapshots used by the runtime.
+//
+// quantum_posture: policy signatures use classical Ed25519 verification;
+// reconciliation fails closed and makes no post-quantum resistance claim.
 package reconcile
 
 import (

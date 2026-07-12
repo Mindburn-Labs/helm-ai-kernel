@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-12T19:34:35Z
-# Commit: 1f599d18d10d73c914f8c883f89c6475fea44fe6
+# Generated: 2026-07-12T19:57:51Z
+# Commit: 97bc804fc0825a98d1ab317ca19863e87a3dc867
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -573,7 +573,7 @@ f3bae08d14fe098e6b6322c7eac60746ae5fd2277e348d82c3a9d3701becb05a  core/pkg/guard
 3bf046b9f5630ade87ed4fc4d31c5a0223e5ef3e24b9427ec7fa268282a2e555  core/pkg/guardian/compliance_checker_test.go
 33b80ff2f4dc9eba8c135cb61ac232deb9be30e84fe63585e31f6ddfeadd19b1  core/pkg/guardian/decision_fuzz_test.go
 d23c84456f34f27e6cb7fd113211028dbd88c34980fe81e3b74a307d701a4bfd  core/pkg/guardian/extended2_test.go
-e6d4621a1962f8ce9d16bcef9fa95a099f69b947e5a63302bd6f1cfeeb734f59  core/pkg/guardian/guardian.go
+60e9d11ffc286aa171e1929069351a8c239380702dd30af996446f9bdfce3cb7  core/pkg/guardian/guardian.go
 9fc820cc5de13baf08dc3a37d97142e2ad3f506f82a06b38b92579e180d93d15  core/pkg/guardian/guardian_additional_coverage_test.go
 05d2907a744570e725955e9967f578b098389dee199fa7af7d54c2381f770a54  core/pkg/guardian/guardian_behavior_coverage_test.go
 2a5ca32bc0c383992332eea7cd839575ee7dd4b6266c2ed64c7bd8a2bfec044f  core/pkg/guardian/guardian_bench_test.go
@@ -592,7 +592,7 @@ ff78b833c6f03eecbf994ddf44b2e41cc65346c3cd8bca55d0c1ed2bbfc4fe7d  core/pkg/guard
 c0118e244adcba44a228c918ffb6c2fddc5be3273b7383914fb81e5f933bdb54  core/pkg/guardian/intervention_test.go
 fa50013f154fd1a1ebe1dcc1448b22f0ef3650990cefef4e7693aed227130b52  core/pkg/guardian/otel.go
 27e480317e91ec0ca763f23b1cc5db4a6fa9bae0090a6f4b0d97954dd25fcdf3  core/pkg/guardian/otel_test.go
-fa1a85d544d0ad5594acfc7845e11c9787382f79325354d6e4e43a708577e926  core/pkg/guardian/policy_snapshot_test.go
+eeebd6f8502e323a06235eec45539764e46aff25e9c8a76adaa4caaba7a6d779  core/pkg/guardian/policy_snapshot_test.go
 ed69d20637a1737e28994d74fcbd2195dbf2ac6972b053143c5839e89015400a  core/pkg/guardian/privilege.go
 1d2c50051328c3c101f74bcbc28527dd0c29dc6606322328e81755c33d49ed4e  core/pkg/guardian/privilege_test.go
 371af3c1394a1c1375eeca544cb7caebbf77a5ec532dbff7a08b7d58b0c2b092  core/pkg/guardian/prompt_armor_test.go

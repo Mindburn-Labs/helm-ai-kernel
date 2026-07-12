@@ -1,5 +1,8 @@
 # Runtime Policy Reconciliation
 
+<!-- quantum_posture: policy bundle verification uses classical Ed25519 when
+configured; this runtime contract makes no post-quantum resistance claim. -->
+
 `--policy` is bootstrap/source configuration. Runtime authority is installed by
 the policy reconciler after source lookup, hash verification, optional signature
 verification, compile, validation, and atomic snapshot swap.

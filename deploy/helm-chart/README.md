@@ -1,5 +1,9 @@
 # HELM Chart
 
+<!-- quantum_posture: Emergency-stop replay configuration carries only pinned
+Ed25519 public verification material. It never supplies a private signing key,
+creates a cryptographic fallback, or changes the Kernel acknowledgement profile. -->
+
 This chart deploys the retained OSS kernel from source in this repository.
 The chart name is `helm-ai-kernel`. Values remain under the `.Values.helm`
 root for one compatibility window.

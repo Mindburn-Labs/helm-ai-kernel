@@ -1023,5 +1023,10 @@ jobs:
             --head "${branch}"; then
             exit 0
           fi
-
-          echo "::warning::Launchpad promotion branch was pushed as ${branch}, but this workflow token could not create a PR. Open the PR manually from the pushed branch."
+          if existing_pr="$(gh pr list --head "${branch}" --state open --json url --jq '.[0].url')" && [ -n "${existing_pr}" ]; then
+            echo "Launchpad promotion PR already exists: ${existing_pr}"
+            exit 0
+          fi
+          echo "::error::Launchpad promotion could not create a PR; removing the run-owned branch ${branch}."
+          git push origin --delete "${branch}" || echo "::warning::Could not remove orphaned branch ${branch}."
+          exit 1

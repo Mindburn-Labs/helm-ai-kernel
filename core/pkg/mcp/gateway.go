@@ -13,6 +13,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/metering"
 )
 
 // GatewayConfig configures the MCP gateway server.
@@ -30,6 +31,41 @@ type Gateway struct {
 	bridge   *bridge.KernelBridge // governance bridge (optional)
 	exec     ToolExecutor
 	sessions *SessionStore // HTTP session store for /mcp transport
+	metering *gatewayMetering
+}
+
+type gatewayMetering struct {
+	client          metering.Client
+	subject         metering.Subject
+	receiptProvider DecisionReceiptProvider
+}
+
+// DecisionReceipt is a trusted, durable pre-dispatch decision. The hosted
+// meter derives its charge class from the referenced receipt rather than from
+// fields supplied by the MCP request or executor.
+type DecisionReceipt struct {
+	ReceiptID string
+	Verdict   contracts.Verdict
+}
+
+func (r DecisionReceipt) validate() error {
+	if strings.TrimSpace(r.ReceiptID) == "" {
+		return fmt.Errorf("decision receipt id is required")
+	}
+	switch r.Verdict {
+	case contracts.VerdictAllow, contracts.VerdictDeny, contracts.VerdictEscalate:
+		return nil
+	default:
+		return fmt.Errorf("decision receipt has non-canonical verdict %q", r.Verdict)
+	}
+}
+
+// DecisionReceiptProvider must be supplied by a trusted ingress that has
+// already persisted the policy decision. It intentionally has no request-body
+// implementation: synthetic IDs and caller-selected verdicts are not valid
+// sources for hosted billing.
+type DecisionReceiptProvider interface {
+	PreDispatchDecisionReceipt(context.Context, ToolExecutionRequest) (DecisionReceipt, error)
 }
 
 // GatewayOption configures optional Gateway settings.
@@ -49,6 +85,22 @@ func WithBridge(kb *bridge.KernelBridge) GatewayOption {
 func WithExecutor(exec ToolExecutor) GatewayOption {
 	return func(g *Gateway) {
 		g.exec = exec
+	}
+}
+
+// WithMetering enables the shared hosted meter for this HTTP gateway only when
+// a trusted pre-dispatch decision-receipt provider is supplied. The optional
+// form preserves source compatibility while failing closed at execution when a
+// caller has not yet wired one.
+func WithMetering(client metering.Client, subject metering.Subject, providers ...DecisionReceiptProvider) GatewayOption {
+	return func(g *Gateway) {
+		if client != nil && client.Enabled() {
+			var receiptProvider DecisionReceiptProvider
+			if len(providers) > 0 {
+				receiptProvider = providers[0]
+			}
+			g.metering = &gatewayMetering{client: client, subject: subject, receiptProvider: receiptProvider}
+		}
 	}
 }
 
@@ -348,7 +400,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		execResp, execErr := g.exec(r.Context(), execReq)
+		execResp, execErr := g.executeWithMetering(r.Context(), tool, argsHash, execReq)
 		if execErr != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -518,7 +570,8 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if !hasAllOAuthScopes(ctx, tool.RequiredScopes) {
 			return writeError(-32001, fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Name, strings.Join(tool.RequiredScopes, ", ")))
 		}
-		if _, err := ValidateToolArguments(tool, req.Arguments); err != nil {
+		argsHash, err := ValidateToolArguments(tool, req.Arguments)
+		if err != nil {
 			return writeError(-32602, fmt.Sprintf("PEP validation failed: %v", err))
 		}
 		if g.exec == nil {
@@ -535,7 +588,7 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 			execReq.OAuthScopes = append([]string(nil), auth.Scopes...)
 			execReq.OAuthResources = append([]string(nil), auth.Resources...)
 		}
-		execResp, err := g.exec(ctx, execReq)
+		execResp, err := g.executeWithMetering(ctx, tool, argsHash, execReq)
 		if err != nil {
 			return writeError(-32603, err.Error())
 		}
@@ -544,6 +597,82 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 	default:
 		return writeError(-32601, fmt.Sprintf("method %q not found", method))
 	}
+}
+
+func (g *Gateway) executeWithMetering(ctx context.Context, tool ToolRef, _ string, execReq ToolExecutionRequest) (ToolExecutionResponse, error) {
+	if g.exec == nil {
+		return ToolExecutionResponse{}, fmt.Errorf("tool executor is not configured")
+	}
+	if g.metering == nil || g.metering.client == nil || !g.metering.client.Enabled() {
+		return g.exec(ctx, execReq)
+	}
+	if err := g.metering.subject.Validate(); err != nil {
+		return ToolExecutionResponse{}, fmt.Errorf("hosted metering subject: %w", err)
+	}
+	if g.metering.receiptProvider == nil {
+		return ToolExecutionResponse{}, fmt.Errorf("hosted MCP metering requires a trusted pre-dispatch decision receipt provider")
+	}
+	decision, err := g.metering.receiptProvider.PreDispatchDecisionReceipt(ctx, execReq)
+	if err != nil {
+		return ToolExecutionResponse{}, fmt.Errorf("hosted MCP decision receipt: %w", err)
+	}
+	if err := decision.validate(); err != nil {
+		return ToolExecutionResponse{}, fmt.Errorf("hosted MCP decision receipt: %w", err)
+	}
+	request := metering.AuthorizationRequest{
+		Subject:           g.metering.subject,
+		Ingress:           metering.IngressMCP,
+		DecisionReceiptID: decision.ReceiptID,
+	}
+	authorization, err := g.metering.client.Authorize(ctx, request)
+	if err != nil {
+		return ToolExecutionResponse{}, fmt.Errorf("hosted metering authorization: %w", err)
+	}
+	if strings.TrimSpace(authorization.AuthorizationID) == "" {
+		return ToolExecutionResponse{}, fmt.Errorf("hosted metering authorization did not return an authorization id")
+	}
+
+	switch decision.Verdict {
+	case contracts.VerdictDeny:
+		if _, err := g.metering.client.Settle(ctx, metering.SettlementRequest{
+			Subject:             g.metering.subject,
+			AuthorizationID:     authorization.AuthorizationID,
+			SettlementReceiptID: decision.ReceiptID,
+		}); err != nil {
+			return ToolExecutionResponse{}, fmt.Errorf("hosted metering denial settlement: %w", err)
+		}
+		return ToolExecutionResponse{
+			Content:   "Access Denied: policy decision denied execution",
+			IsError:   true,
+			Evaluated: true,
+			ReceiptID: decision.ReceiptID,
+		}, nil
+	case contracts.VerdictEscalate:
+		// Escalation is a zero-credit routing state. The approval-ceremony
+		// owner, not this gateway, must reserve and settle the single 10-credit
+		// ceremony from durable start/completion receipts.
+		return ToolExecutionResponse{
+			Content:   "Approval required before execution",
+			IsError:   true,
+			Evaluated: true,
+			ReceiptID: decision.ReceiptID,
+		}, nil
+	}
+
+	execReq.ReceiptID = decision.ReceiptID
+	response, execErr := g.exec(ctx, execReq)
+	if strings.TrimSpace(response.ReceiptID) == "" {
+		return ToolExecutionResponse{}, fmt.Errorf("hosted MCP metering requires a durable settlement receipt from tool executor")
+	}
+	_, settleErr := g.metering.client.Settle(ctx, metering.SettlementRequest{
+		Subject:             g.metering.subject,
+		AuthorizationID:     authorization.AuthorizationID,
+		SettlementReceiptID: response.ReceiptID,
+	})
+	if settleErr != nil {
+		return ToolExecutionResponse{}, fmt.Errorf("hosted metering settlement: %w", settleErr)
+	}
+	return response, execErr
 }
 
 func (g *Gateway) authMode() string {

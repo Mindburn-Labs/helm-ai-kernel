@@ -29,6 +29,7 @@ import (
 	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/merkle"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/metering"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pack"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
@@ -102,6 +103,12 @@ type Services struct {
 	// --- Economic Ledger ---
 	EconLedger *economic.Ledger
 
+	// --- Hosted Metering ---
+	// Disabled in OSS/local mode and until the explicit hosted activation gate
+	// is enabled. When active, ingress handlers must authorize before dispatch
+	// and settle only after a receipt is durable.
+	Metering metering.Client
+
 	// --- Edge Governance ---
 	EdgeAssistant *governance.EdgeAssistant
 
@@ -129,6 +136,18 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	// --- 1. Config ---
 	s.Config = config.Load()
 	logger.Info("subsystem ready", "component", " Config loaded")
+
+	// Hosted metering is opt-in behind an explicit activation gate. A partial
+	// activated configuration must not silently downgrade a hosted deployment
+	// into unmetered dispatch.
+	meterClient, meterErr := metering.FromEnvironment()
+	if meterErr != nil {
+		return nil, fmt.Errorf("hosted metering configuration: %w", meterErr)
+	}
+	s.Metering = meterClient
+	if meterClient.Enabled() {
+		logger.Info("subsystem ready", "component", " Hosted metering client initialized")
+	}
 
 	// --- 2. Observability ---
 	obsCfg := observability.DefaultConfig()

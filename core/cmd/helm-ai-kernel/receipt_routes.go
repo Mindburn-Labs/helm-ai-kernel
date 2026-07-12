@@ -16,6 +16,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/metering"
 )
 
 func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
@@ -82,6 +83,31 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		}); err != nil {
 			api.WriteInternal(w, err)
 			return
+		}
+		w.Header().Set("X-Helm-Receipt-ID", "rcpt_"+decision.ID)
+		if meteringEnabled(svc) {
+			subject, subjectErr := verifiedMeteringSubject(r)
+			if subjectErr != nil {
+				api.WriteForbidden(w, subjectErr.Error())
+				return
+			}
+			receiptID := "rcpt_" + decision.ID
+			reservation, meterErr := reserveMetering(r.Context(), svc, subject, metering.IngressEvaluate, receiptID)
+			if meterErr != nil {
+				api.WriteError(w, http.StatusServiceUnavailable, "Metering authorization unavailable", meterErr.Error())
+				return
+			}
+			// An ESCALATE remains an unbilled routing state. It is not settled
+			// here because this endpoint neither creates nor completes the
+			// separate approval ceremony. That ceremony owns its single 10-credit
+			// reserve/settlement via a durable completion receipt.
+			if meteringLifecycleForVerdict(decision.Verdict).SettleNow {
+				meterErr = reservation.settle(r.Context(), receiptID)
+			}
+			if meterErr != nil {
+				api.WriteError(w, http.StatusBadGateway, "Metering settlement unavailable", meterErr.Error())
+				return
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(decision)

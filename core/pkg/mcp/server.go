@@ -14,6 +14,9 @@ type ToolExecutionRequest struct {
 	ToolName  string                 `json:"tool_name"`
 	Arguments map[string]interface{} `json:"arguments"`
 	SessionID string                 `json:"session_id"`
+	// ReceiptID may be reserved by an ingress before dispatch so an external
+	// authorization and the eventual tool receipt share one correlation id.
+	ReceiptID string `json:"receipt_id,omitempty"`
 
 	// Delegation-aware fields (defense-in-depth, complements Guardian Gate 5).
 	// When DelegationSessionID is set, the firewall enforces tool scope
@@ -151,6 +154,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 				Content:   fmt.Sprintf("Access Denied: %v", err),
 				IsError:   true,
 				Evaluated: true,
+				ReceiptID: req.ReceiptID,
 			}, nil // Return error as response content so agent sees it
 		}
 
@@ -170,7 +174,11 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 					"receipt_id", receipt.ID,
 					"tool", receipt.ToolName,
 				)
-				resp.ReceiptID = receipt.ID
+				if req.ReceiptID != "" {
+					resp.ReceiptID = req.ReceiptID
+				} else {
+					resp.ReceiptID = receipt.ID
+				}
 			}
 		}
 

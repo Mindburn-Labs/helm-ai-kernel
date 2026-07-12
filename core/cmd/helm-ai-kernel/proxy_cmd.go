@@ -28,6 +28,7 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/metering"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
@@ -243,6 +244,13 @@ func extractRequestModel(body []byte) string {
 	return ""
 }
 
+func requireCLIProxyMeteringReceiptProvider(client metering.Client) error {
+	if client != nil && client.Enabled() {
+		return fmt.Errorf("hosted CLI proxy metering requires a trusted pre-dispatch decision receipt provider; this proxy does not expose one")
+	}
+	return nil
+}
+
 // extractGenAIUsage pulls token-count + finish_reason fields from a JSON
 // response. OpenAI: usage.prompt_tokens / usage.completion_tokens / choices[0].finish_reason.
 // Anthropic: usage.input_tokens / usage.output_tokens / stop_reason.
@@ -425,6 +433,16 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	if websocket {
 		_, _ = fmt.Fprintln(stderr, "Error: --websocket is not supported in the OSS proxy runtime")
 		_, _ = fmt.Fprintln(stderr, "Use the HTTP proxy surface at /v1/chat/completions until Responses WebSocket support is implemented.")
+		return 2
+	}
+
+	meterClient, meterErr := metering.FromEnvironment()
+	if meterErr != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: hosted metering configuration: %v\n", meterErr)
+		return 2
+	}
+	if meterErr := requireCLIProxyMeteringReceiptProvider(meterClient); meterErr != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", meterErr)
 		return 2
 	}
 
@@ -788,7 +806,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 			// Persist receipt (JSONL, append-only, causal chain)
 			if storeErr := store.Append(rcpt); storeErr != nil {
-				log.Printf("[ERROR] receipt persist failed: %v", storeErr)
+				return fmt.Errorf("receipt persist failed: %w", storeErr)
 			}
 
 			// Persist ProofGraph (JSON snapshot after each append)
@@ -874,7 +892,6 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = w.Write(data)
 	})
 
-	// Proxy everything else
 	mux.HandleFunc("/", proxy.ServeHTTP)
 
 	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).

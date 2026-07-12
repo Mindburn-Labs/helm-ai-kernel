@@ -67,3 +67,24 @@ func TestWrapMCPAuth_OAuthAllowsValidBearer(t *testing.T) {
 	assert.True(t, called)
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
+
+func TestHostedMeteredMCPRefusesUnauthenticatedHTTPTransport(t *testing.T) {
+	t.Setenv("HELM_METERING_URL", "http://metering.example")
+	t.Setenv("HELM_METERING_SERVICE_TOKEN", "service-token")
+	t.Setenv("HELM_METERING_ACTIVATE", "1")
+
+	_, err := newLocalMCPHTTPServer(0, "none")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires an authenticated HTTP transport")
+}
+
+func TestHostedMeteredMCPRefusesLocalRuntimeWithoutDecisionReceiptProvider(t *testing.T) {
+	t.Setenv("HELM_METERING_URL", "http://metering.example")
+	t.Setenv("HELM_METERING_SERVICE_TOKEN", "service-token")
+	t.Setenv("HELM_METERING_ACTIVATE", "1")
+	t.Setenv("HELM_API_KEY", "test-key")
+
+	_, err := newLocalMCPHTTPServer(0, "static-header")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trusted pre-dispatch decision receipt provider")
+}

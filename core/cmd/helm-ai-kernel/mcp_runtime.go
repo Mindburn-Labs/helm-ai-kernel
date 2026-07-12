@@ -17,6 +17,7 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/metering"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
@@ -75,7 +76,7 @@ func newConfiguredLocalMCPGateway(cfg mcppkg.GatewayConfig) (*mcppkg.Gateway, er
 		return nil, err
 	}
 
-	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+	return newLocalMCPGatewayWithMetering(catalog, cfg, executor)
 }
 
 func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer helmcrypto.Signer) (*mcppkg.Gateway, error) {
@@ -84,7 +85,19 @@ func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer hel
 		return nil, err
 	}
 
-	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+	return newLocalMCPGatewayWithMetering(catalog, cfg, executor)
+}
+
+func newLocalMCPGatewayWithMetering(catalog *mcppkg.ToolCatalog, cfg mcppkg.GatewayConfig, executor mcppkg.ToolExecutor) (*mcppkg.Gateway, error) {
+	opts := []mcppkg.GatewayOption{mcppkg.WithExecutor(executor)}
+	meterClient, err := metering.FromEnvironment()
+	if err != nil {
+		return nil, fmt.Errorf("hosted MCP metering configuration: %w", err)
+	}
+	if meterClient.Enabled() {
+		return nil, fmt.Errorf("hosted MCP metering requires a trusted pre-dispatch decision receipt provider; the local MCP runtime does not expose one")
+	}
+	return mcppkg.NewGateway(catalog, cfg, opts...), nil
 }
 
 func runLocalMCPTool(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
@@ -199,6 +212,13 @@ func resolveLocalMCPPath(rawPath string) (string, error) {
 }
 
 func serveLocalMCPStdio(stdin io.Reader, stdout io.Writer) error {
+	meterClient, err := metering.FromEnvironment()
+	if err != nil {
+		return fmt.Errorf("hosted MCP metering configuration: %w", err)
+	}
+	if meterClient.Enabled() {
+		return fmt.Errorf("hosted metering requires authenticated HTTP MCP transport; stdio has no verified tenant/workspace/principal boundary")
+	}
 	catalog, executor, err := newLocalMCPRuntime()
 	if err != nil {
 		return err
@@ -401,6 +421,13 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 }
 
 func newLocalMCPHTTPServer(port int, authMode string) (*http.Server, error) {
+	meterClient, err := metering.FromEnvironment()
+	if err != nil {
+		return nil, fmt.Errorf("hosted MCP metering configuration: %w", err)
+	}
+	if meterClient.Enabled() && authMode == "none" {
+		return nil, fmt.Errorf("hosted MCP metering requires an authenticated HTTP transport")
+	}
 	// SEC: Default to localhost to prevent accidental network exposure.
 	mcpBind := "127.0.0.1"
 	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {

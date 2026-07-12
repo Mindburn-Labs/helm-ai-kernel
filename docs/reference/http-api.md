@@ -1,6 +1,6 @@
 ---
 title: HTTP API
-last_reviewed: 2026-07-11
+last_reviewed: 2026-07-12
 ---
 
 # HTTP API
@@ -56,6 +56,21 @@ work.
 The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
 unavailable while this fence is enabled because request JSON is not an
 authoritative tenant/workspace binding.
+
+When hosted metering is explicitly activated with
+`HELM_METERING_ACTIVATE=1`, the same OpenAI route becomes tenant-scoped:
+it requires the verified `HELM_RUNTIME_TENANT_ID`,
+`HELM_RUNTIME_WORKSPACE_ID`, and `HELM_RUNTIME_PRINCIPAL_ID` binding before
+the proxy contacts an upstream. The client authorization credential is not
+forwarded to the model provider; configure a server-owned
+`HELM_UPSTREAM_AUTHORIZATION` when the upstream requires a bearer credential.
+Streaming proxy responses are unavailable in hosted metering mode until they
+can settle against a durable receipt.
+
+The internal hosted-meter API is not a public HTTP endpoint. It uses a
+server-owned Bearer token plus verified scope headers and sends only receipt
+identifiers; credit class, pricing, value, and OEM allocation are derived by
+the control plane. See [Hosted Metering Contract](../architecture/hosted-metering-contract.md).
 
 ## Receipt Headers
 

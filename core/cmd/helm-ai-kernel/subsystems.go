@@ -20,6 +20,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/metering"
 	trustregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
@@ -48,9 +49,16 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	// --- OpenAI-Compatible Proxy (governed inference) ---
 	// Wraps api.HandleOpenAIProxy with Guardian governance enforcement and receipt headers.
 	// Requires HELM_UPSTREAM_URL to be set for real upstream forwarding.
-	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+	governedProxy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handleGovernedOpenAIProxy(w, r, svc)
 	})
+	if meteringEnabled(svc) {
+		// Hosted metering needs a verified tenant/workspace/principal boundary.
+		// The local OSS proxy remains usable without hosted credentials.
+		mux.Handle("/v1/chat/completions", protectRuntimeHandler(RouteAuthTenant, governedProxy))
+	} else {
+		mux.Handle("/v1/chat/completions", governedProxy)
+	}
 
 	// --- Evidence Export ---
 	mux.HandleFunc("/api/v1/evidence/soc2", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +253,26 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	if err != nil {
 		log.Printf("[helm] routes: MCP gateway unavailable: %v", err)
 	} else {
-		mcpGateway.RegisterRoutes(mux)
+		if meteringEnabled(svc) {
+			// Register onto a private mux first so hosted MCP calls cannot reach
+			// the static provisioned meter subject without the matching runtime
+			// tenant/workspace/principal authentication boundary.
+			meteredMCPMux := http.NewServeMux()
+			mcpGateway.RegisterRoutes(meteredMCPMux)
+			meteredMCPHandler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+				if _, subjectErr := verifiedMeteringSubject(r); subjectErr != nil {
+					api.WriteForbidden(w, subjectErr.Error())
+					return
+				}
+				meteredMCPMux.ServeHTTP(w, r)
+			})
+			mux.Handle("/mcp", meteredMCPHandler)
+			mux.Handle("/mcp/", meteredMCPHandler)
+			mux.Handle("/.well-known/oauth-protected-resource", meteredMCPHandler)
+			mux.Handle("/.well-known/oauth-protected-resource/mcp", meteredMCPHandler)
+		} else {
+			mcpGateway.RegisterRoutes(mux)
+		}
 		log.Println("[helm] routes: MCP gateway routes registered")
 	}
 
@@ -343,63 +370,175 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 	}
 	// The public proxy has no authenticated tenant/workspace authority. Leaving
 	// it open while a scoped fence is active would let caller JSON select an
-	// unfenced scope, so it is unavailable until an authenticated adapter
-	// contract is installed.
-	if svc != nil && svc.EmergencyStops != nil {
+	// unfenced scope, so it remains unavailable outside the hosted authenticated
+	// boundary below.
+	if svc != nil && svc.EmergencyStops != nil && !meteringEnabled(svc) {
 		api.WriteError(w, http.StatusServiceUnavailable, "Governed proxy unavailable", "scoped emergency-stop fencing requires an authenticated tenant/workspace boundary")
 		return
 	}
 
-	if svc != nil && svc.Guardian != nil {
-		bodyBytes, body, ok := readGovernedOpenAIRequest(w, r)
-		if !ok {
-			return
-		}
+	if svc == nil || svc.Guardian == nil || svc.ReceiptStore == nil || svc.ReceiptSigner == nil {
+		api.WriteError(w, http.StatusServiceUnavailable, "Governed proxy unavailable", "guardian and durable receipt services are required")
+		return
+	}
 
-		model, _ := body["model"].(string)
-		req := guardian.DecisionRequest{
-			Principal: r.Header.Get("X-Helm-Principal"),
-			Action:    "LLM_INFERENCE",
-			Resource:  model,
-			Context:   body,
-		}
-		if req.Principal == "" {
-			req.Principal = "anonymous"
-		}
-
-		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
-		if err != nil {
-			api.WriteInternal(w, err)
-			return
-		}
-
-		w.Header().Set("X-Helm-Decision-ID", decision.ID)
-		w.Header().Set("X-Helm-Verdict", decision.Verdict)
-		w.Header().Set("X-Helm-Policy-Version", decision.PolicyVersion)
-		if decision.PolicyDecisionHash != "" {
-			w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
-		}
-		agentID := r.Header.Get("X-Helm-Agent")
-		if agentID == "" {
-			agentID = r.Header.Get("X-Agent-ID")
-		}
-		if agentID == "" {
-			agentID = req.Principal
-		}
-		persistDecisionReceipt(r.Context(), svc, decision, agentID, bodyBytes, map[string]any{
-			"source":   "openai.proxy",
-			"action":   req.Action,
-			"resource": req.Resource,
-			"reason":   decision.Reason,
-		})
-
-		if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
-			api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)
+	var subject metering.Subject
+	if meteringEnabled(svc) {
+		var subjectErr error
+		subject, subjectErr = verifiedMeteringSubject(r)
+		if subjectErr != nil {
+			api.WriteForbidden(w, subjectErr.Error())
 			return
 		}
 	}
 
-	api.HandleOpenAIProxy(w, r)
+	bodyBytes, body, ok := readGovernedOpenAIRequest(w, r)
+	if !ok {
+		return
+	}
+
+	model, _ := body["model"].(string)
+	decisionRequest := guardian.DecisionRequest{
+		Principal: r.Header.Get("X-Helm-Principal"),
+		Action:    "LLM_INFERENCE",
+		Resource:  model,
+		Context:   body,
+	}
+	if decisionRequest.Principal == "" {
+		decisionRequest.Principal = "anonymous"
+	}
+	if meteringEnabled(svc) {
+		decisionRequest.Principal = subject.PrincipalID
+		body["tenant_id"] = subject.TenantID
+		body["workspace_id"] = subject.WorkspaceID
+		body["principal_id"] = subject.PrincipalID
+	}
+
+	decision, err := svc.Guardian.EvaluateDecision(r.Context(), decisionRequest)
+	if err != nil {
+		api.WriteInternal(w, err)
+		return
+	}
+
+	w.Header().Set("X-Helm-Decision-ID", decision.ID)
+	w.Header().Set("X-Helm-Verdict", decision.Verdict)
+	w.Header().Set("X-Helm-Policy-Version", decision.PolicyVersion)
+	if decision.PolicyDecisionHash != "" {
+		w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
+	}
+	agentID := r.Header.Get("X-Helm-Agent")
+	if agentID == "" {
+		agentID = r.Header.Get("X-Agent-ID")
+	}
+	if agentID == "" {
+		agentID = decisionRequest.Principal
+	}
+	if err := persistDecisionReceipt(r.Context(), svc, decision, agentID, bodyBytes, map[string]any{
+		"source":   "openai.proxy",
+		"action":   decisionRequest.Action,
+		"resource": decisionRequest.Resource,
+		"reason":   decision.Reason,
+	}); err != nil {
+		api.WriteInternal(w, err)
+		return
+	}
+	receiptID := "rcpt_" + decision.ID
+	w.Header().Set("X-Helm-Receipt-ID", receiptID)
+
+	var reservation *meteringReservation
+	if meteringEnabled(svc) {
+		reservation, err = reserveMetering(r.Context(), svc, subject, metering.IngressOpenAIProxy, receiptID)
+		if err != nil {
+			api.WriteError(w, http.StatusServiceUnavailable, "Metering authorization unavailable", err.Error())
+			return
+		}
+	}
+
+	if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
+		// Escalation is a non-billable routing state. Its separate approval
+		// ceremony is responsible for one 10-credit settlement only after a
+		// durable approval completion receipt exists.
+		if reservation != nil && meteringLifecycleForVerdict(decision.Verdict).SettleNow {
+			err = reservation.settle(r.Context(), receiptID)
+		}
+		if err != nil {
+			api.WriteError(w, http.StatusBadGateway, "Metering settlement unavailable", err.Error())
+			return
+		}
+		api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)
+		return
+	}
+
+	if reservation == nil {
+		api.HandleOpenAIProxy(w, r)
+		return
+	}
+
+	// The control-plane authorization header authenticates the client to HELM,
+	// not to the model provider. Never forward it upstream. A hosted deployment
+	// may provide a server-owned upstream credential instead.
+	forwardRequest := r.Clone(r.Context())
+	forwardRequest.Header = r.Header.Clone()
+	forwardRequest.Header.Del("Authorization")
+	if upstreamAuthorization := strings.TrimSpace(os.Getenv("HELM_UPSTREAM_AUTHORIZATION")); upstreamAuthorization != "" {
+		forwardRequest.Header.Set("Authorization", upstreamAuthorization)
+	}
+
+	buffer := newBufferedResponseWriter(w.Header())
+	api.HandleOpenAIProxy(buffer, forwardRequest)
+	if err := reservation.settle(r.Context(), receiptID); err != nil {
+		api.WriteError(w, http.StatusBadGateway, "Metering settlement unavailable", err.Error())
+		return
+	}
+	buffer.flushTo(w)
+}
+
+// bufferedResponseWriter delays a hosted proxy response until its settlement is
+// confirmed. The upstream may already have run; the client is never told that
+// the resulting charge settled when the confirmation call fails.
+type bufferedResponseWriter struct {
+	header http.Header
+	body   bytes.Buffer
+	status int
+}
+
+func newBufferedResponseWriter(initial http.Header) *bufferedResponseWriter {
+	return &bufferedResponseWriter{header: initial.Clone()}
+}
+
+func (w *bufferedResponseWriter) Header() http.Header { return w.header }
+
+func (w *bufferedResponseWriter) WriteHeader(status int) {
+	if w.status == 0 {
+		w.status = status
+	}
+}
+
+func (w *bufferedResponseWriter) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.body.Write(data)
+}
+
+func (w *bufferedResponseWriter) statusCode() int {
+	if w.status == 0 {
+		return http.StatusOK
+	}
+	return w.status
+}
+
+func (w *bufferedResponseWriter) flushTo(destination http.ResponseWriter) {
+	for key := range destination.Header() {
+		destination.Header().Del(key)
+	}
+	for key, values := range w.header {
+		for _, value := range values {
+			destination.Header().Add(key, value)
+		}
+	}
+	destination.WriteHeader(w.statusCode())
+	_, _ = destination.Write(w.body.Bytes())
 }
 
 func readGovernedOpenAIRequest(w http.ResponseWriter, r *http.Request) ([]byte, map[string]interface{}, bool) {

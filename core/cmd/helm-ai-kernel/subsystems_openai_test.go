@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -57,5 +58,42 @@ func TestGovernedOpenAIProxyUnavailableWhenScopedFenceEnabled(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+	}
+}
+
+func TestGovernedOpenAIProxyFailsClosedWithoutGovernanceDependencies(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-test","messages":[]}`))
+	rec := httptest.NewRecorder()
+
+	handleGovernedOpenAIProxy(rec, req, &Services{})
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+	}
+}
+
+func TestGovernedOpenAIProxyFailsClosedWhenReceiptPersistenceFails(t *testing.T) {
+	svc, receipts := newEvaluateRouteTestServices(t)
+	receipts.storeErr = errors.New("receipt store unavailable")
+	upstreamCalled := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	t.Setenv("HELM_UPSTREAM_URL", upstream.URL)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-test","messages":[]}`))
+	rec := httptest.NewRecorder()
+
+	handleGovernedOpenAIProxy(rec, req, svc)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
+	}
+	if rec.Header().Get("X-Helm-Receipt-ID") != "" {
+		t.Fatalf("failed receipt persistence advertised receipt %q", rec.Header().Get("X-Helm-Receipt-ID"))
+	}
+	if upstreamCalled {
+		t.Fatal("receipt persistence failure forwarded the request upstream")
 	}
 }

@@ -83,6 +83,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteInternal(w, err)
 			return
 		}
+		w.Header().Set("X-Helm-Receipt-ID", "rcpt_"+decision.ID)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(decision)
 	}))

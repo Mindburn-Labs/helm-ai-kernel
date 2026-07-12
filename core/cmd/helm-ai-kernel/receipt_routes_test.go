@@ -340,6 +340,9 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	if receipts.stored == nil {
 		t.Fatal("authenticated evaluate did not persist receipt")
 	}
+	if got, want := rec.Header().Get("X-Helm-Receipt-ID"), "rcpt_"+receipts.stored.DecisionID; got != want {
+		t.Fatalf("receipt header = %q, want %q", got, want)
+	}
 	if receipts.stored.ExecutorID != "principal-trusted" {
 		t.Fatalf("receipt executor = %q, want trusted principal", receipts.stored.ExecutorID)
 	}

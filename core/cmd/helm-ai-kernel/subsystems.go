@@ -349,56 +349,61 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 		api.WriteError(w, http.StatusServiceUnavailable, "Governed proxy unavailable", "scoped emergency-stop fencing requires an authenticated tenant/workspace boundary")
 		return
 	}
-
-	if svc != nil && svc.Guardian != nil {
-		bodyBytes, body, ok := readGovernedOpenAIRequest(w, r)
-		if !ok {
-			return
-		}
-
-		model, _ := body["model"].(string)
-		req := guardian.DecisionRequest{
-			Principal: r.Header.Get("X-Helm-Principal"),
-			Action:    "LLM_INFERENCE",
-			Resource:  model,
-			Context:   body,
-		}
-		if req.Principal == "" {
-			req.Principal = "anonymous"
-		}
-
-		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
-		if err != nil {
-			api.WriteInternal(w, err)
-			return
-		}
-
-		w.Header().Set("X-Helm-Decision-ID", decision.ID)
-		w.Header().Set("X-Helm-Verdict", decision.Verdict)
-		w.Header().Set("X-Helm-Policy-Version", decision.PolicyVersion)
-		if decision.PolicyDecisionHash != "" {
-			w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
-		}
-		agentID := r.Header.Get("X-Helm-Agent")
-		if agentID == "" {
-			agentID = r.Header.Get("X-Agent-ID")
-		}
-		if agentID == "" {
-			agentID = req.Principal
-		}
-		persistDecisionReceipt(r.Context(), svc, decision, agentID, bodyBytes, map[string]any{
-			"source":   "openai.proxy",
-			"action":   req.Action,
-			"resource": req.Resource,
-			"reason":   decision.Reason,
-		})
-
-		if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
-			api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)
-			return
-		}
+	if svc == nil || svc.Guardian == nil || svc.ReceiptStore == nil || svc.ReceiptSigner == nil {
+		api.WriteError(w, http.StatusServiceUnavailable, "Governed proxy unavailable", "guardian and signed receipt issuance must be available before forwarding")
+		return
 	}
 
+	bodyBytes, body, ok := readGovernedOpenAIRequest(w, r)
+	if !ok {
+		return
+	}
+
+	model, _ := body["model"].(string)
+	req := guardian.DecisionRequest{
+		Principal: r.Header.Get("X-Helm-Principal"),
+		Action:    "LLM_INFERENCE",
+		Resource:  model,
+		Context:   body,
+	}
+	if req.Principal == "" {
+		req.Principal = "anonymous"
+	}
+
+	decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
+	if err != nil {
+		api.WriteInternal(w, err)
+		return
+	}
+
+	w.Header().Set("X-Helm-Decision-ID", decision.ID)
+	w.Header().Set("X-Helm-Verdict", decision.Verdict)
+	w.Header().Set("X-Helm-Policy-Version", decision.PolicyVersion)
+	if decision.PolicyDecisionHash != "" {
+		w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
+	}
+	agentID := r.Header.Get("X-Helm-Agent")
+	if agentID == "" {
+		agentID = r.Header.Get("X-Agent-ID")
+	}
+	if agentID == "" {
+		agentID = req.Principal
+	}
+	if err := persistDecisionReceipt(r.Context(), svc, decision, agentID, bodyBytes, map[string]any{
+		"source":   "openai.proxy",
+		"action":   req.Action,
+		"resource": req.Resource,
+		"reason":   decision.Reason,
+	}); err != nil {
+		api.WriteInternal(w, err)
+		return
+	}
+	w.Header().Set("X-Helm-Receipt-ID", "rcpt_"+decision.ID)
+
+	if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
+		api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)
+		return
+	}
 	api.HandleOpenAIProxy(w, r)
 }
 

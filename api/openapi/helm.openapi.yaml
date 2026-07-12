@@ -378,6 +378,9 @@ paths:
         '200':
           description: Guardian decision record
           headers:
+            X-Helm-Receipt-ID:
+              schema: { type: string }
+              description: Durable signed receipt reference for this decision.
             X-Helm-Idempotency-Replayed:
               schema: { type: string, enum: ["true"] }
               description: Present when this response was replayed from the idempotency cache.

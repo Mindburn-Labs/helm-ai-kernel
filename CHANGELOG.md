@@ -39,6 +39,7 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
+        A00["[0.7.2] - 2026-07-13"]
         A0["[0.7.1] - 2026-07-07"]
         A1["[0.7.0] - 2026-07-05"]
         A2["[0.6.0] - 2026-07-02"]
@@ -58,7 +59,8 @@ flowchart TD
 
     %% Operational Flow Edges
     Page --> A
-    A --> A0
+    A --> A00
+    A00 --> A0
     A0 --> A1
     A1 --> A2
     A2 --> B
@@ -87,16 +89,27 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-- Prepared the corrective `v0.7.2` source target to align the canonical
-  `BoundaryStatus` OpenAPI schema and generated Java, Python, Rust, and
-  TypeScript models with the JSON already emitted by
-  `GET /api/v1/boundary/status`.
-- Replaced legacy generated properties such as `receipt_store_ready`,
-  `signer_ready`, `last_checkpoint_id`, and `checked_at` with the existing
-  runtime properties, and documented the consumer migration mapping.
-- This correction does not change Kernel runtime JSON behavior and is not a
-  released version until the normal tag-driven release train and published
-  artifact verification complete.
+## [0.7.2] - 2026-07-13
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2>.
+
+<!-- quantum_posture: v0.7.2 release notes cover a Go standard-library toolchain rebuild and an OpenAPI contract alignment only; this release adds no post-quantum cryptographic control. -->
+
+- Rebuilt both container images on Go 1.25.12 (up from 1.25.10) to clear five
+  Go standard-library CVEs baked into the binaries at compile time —
+  `CVE-2026-27145` (`crypto/x509`), `CVE-2026-42504` (`mime`),
+  `CVE-2026-42507` (`net/textproto`), `CVE-2026-39822` (`os.Root`), and
+  `CVE-2026-42505` (Encrypted Client Hello). Rebuild only; no code or runtime
+  behavior change.
+- Aligned the canonical `BoundaryStatus` OpenAPI schema and the generated Java,
+  Python, Rust, and TypeScript models with the JSON already emitted by
+  `GET /api/v1/boundary/status`. Replaced legacy generated properties such as
+  `receipt_store_ready`, `signer_ready`, `last_checkpoint_id`, and `checked_at`
+  with the existing runtime properties, and documented the consumer migration
+  mapping. This correction does not change Kernel runtime JSON behavior.
+
+No RiskEnvelope, scan, upload, cloud, checkout, website, connector
+certification, or Company AI OS GA scope is included.
 
 ## [0.7.1] - 2026-07-07
 

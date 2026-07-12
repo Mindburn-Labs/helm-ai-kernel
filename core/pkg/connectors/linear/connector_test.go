@@ -431,6 +431,28 @@ func TestExecute_DeniesPermitScopeBeforeLinearRequest(t *testing.T) {
 			wantErr: "resource_ref",
 		},
 		{
+			name:   "team resource omitted",
+			tool:   "linear.list_issues",
+			params: map[string]any{"state": "Todo"},
+			permit: func() *effects.EffectPermit {
+				permit := permitFor("linear.list_issues", "nonce-scope-team-omitted", allowedParamsForTool("linear.list_issues")...)
+				permit.ResourceRef = "team:team-1"
+				return permit
+			}(),
+			wantErr: "requires team_id",
+		},
+		{
+			name:   "issue resource omitted",
+			tool:   "linear.get_issue",
+			params: map[string]any{},
+			permit: func() *effects.EffectPermit {
+				permit := permitFor("linear.get_issue", "nonce-scope-issue-omitted", allowedParamsForTool("linear.get_issue")...)
+				permit.ResourceRef = "linear:issue:issue-1"
+				return permit
+			}(),
+			wantErr: "requires issue_id",
+		},
+		{
 			name:    "exact param mismatch",
 			tool:    "linear.add_comment",
 			params:  map[string]any{"issue_id": "issue-1", "body": "LGTM"},
@@ -470,6 +492,15 @@ func TestExecute_RejectsPermitNonceReplayBeforeLinearRequest(t *testing.T) {
 
 	c := NewConnector(Config{BaseURL: server.URL, Token: "lin_api_test"})
 	c.client.httpClient = server.Client()
+	now := time.Now()
+	c.gate = connector.NewZeroTrustGate().WithClock(func() time.Time { return now })
+	c.gate.SetPolicy(&connector.TrustPolicy{
+		ConnectorID:        ConnectorID,
+		TrustLevel:         connector.TrustLevelVerified,
+		MaxTTLSeconds:      3600,
+		AllowedDataClasses: AllowedDataClasses(),
+		RateLimitPerMinute: 2,
+	})
 	permit := permitFor("linear.list_issues", "nonce-replay", allowedParamsForTool("linear.list_issues")...)
 	params := map[string]any{"team_id": "team-1"}
 
@@ -484,5 +515,60 @@ func TestExecute_RejectsPermitNonceReplayBeforeLinearRequest(t *testing.T) {
 	}
 	if requests != 1 {
 		t.Fatalf("replayed permit reached Linear server; requests=%d", requests)
+	}
+
+	// The replay must not consume the second rate-limit slot. A fresh permit
+	// therefore still reaches Linear.
+	freshPermit := permitFor("linear.list_issues", "nonce-replay-fresh", allowedParamsForTool("linear.list_issues")...)
+	if _, err := c.Execute(context.Background(), freshPermit, "linear.list_issues", params); err != nil {
+		t.Fatalf("fresh permit should pass the gate after replay denial: %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("fresh permit reached Linear server %d times, want 2", requests)
+	}
+}
+
+func TestExecute_GateDenialDoesNotConsumePermitNonce(t *testing.T) {
+	c := NewConnector(Config{BaseURL: "https://api.linear.app"})
+	permit := permitFor("linear.list_issues", "nonce-gate-denied", allowedParamsForTool("linear.list_issues")...)
+
+	c.gate.SetPolicy(&connector.TrustPolicy{
+		ConnectorID: ConnectorID,
+		TrustLevel:  connector.TrustLevelUntrusted,
+	})
+	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", nil); err == nil || !strings.Contains(err.Error(), "gate denied") {
+		t.Fatalf("expected gate denial, got %v", err)
+	}
+
+	c.gate.SetPolicy(&connector.TrustPolicy{
+		ConnectorID:        ConnectorID,
+		TrustLevel:         connector.TrustLevelVerified,
+		MaxTTLSeconds:      3600,
+		AllowedDataClasses: AllowedDataClasses(),
+		RateLimitPerMinute: 60,
+	})
+	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", nil); err == nil || strings.Contains(err.Error(), "already used") {
+		t.Fatalf("gate denial must not consume the permit nonce, got %v", err)
+	}
+}
+
+func TestPermitNonceTrackerBoundsAndPrunesExpiredEntries(t *testing.T) {
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	c := NewConnector(Config{BaseURL: "https://api.linear.app"})
+	c.now = func() time.Time { return now }
+	expiresAt := now.Add(time.Minute)
+
+	for i := 0; i < linearPermitNonceMaxEntries; i++ {
+		if err := c.reservePermitNonce(fmt.Sprintf("nonce-bound-%d", i), expiresAt); err != nil {
+			t.Fatalf("reserve nonce %d: %v", i, err)
+		}
+	}
+	if err := c.reservePermitNonce("nonce-overflow", expiresAt); err == nil || !strings.Contains(err.Error(), "tracker is full") {
+		t.Fatalf("expected bounded tracker rejection, got %v", err)
+	}
+
+	now = expiresAt
+	if err := c.reservePermitNonce("nonce-after-expiry", now.Add(time.Minute)); err != nil {
+		t.Fatalf("expired nonce entries should be pruned: %v", err)
 	}
 }

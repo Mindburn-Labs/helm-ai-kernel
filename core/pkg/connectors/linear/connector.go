@@ -27,16 +27,25 @@ var _ effects.Connector = (*Connector)(nil)
 //
 // Every tool call produces an INTENT -> EFFECT chain in the ProofGraph.
 type Connector struct {
-	client      *Client
-	gate        *connector.ZeroTrustGate
-	graph       *proofgraph.Graph
-	connectorID string
-	nonceMu     sync.Mutex
-	usedNonces  map[string]struct{}
-	seq         atomic.Uint64
+	client       *Client
+	gate         *connector.ZeroTrustGate
+	graph        *proofgraph.Graph
+	connectorID  string
+	nonceMu      sync.Mutex
+	permitNonces map[string]permitNonceState
+	now          func() time.Time
+	seq          atomic.Uint64
 }
 
-const linearPermitMaxTTL = time.Hour
+const (
+	linearPermitMaxTTL          = time.Hour
+	linearPermitNonceMaxEntries = 4096
+)
+
+type permitNonceState struct {
+	expiresAt time.Time
+	reserved  bool
+}
 
 var toolEffectTypeMap = map[string]effects.EffectType{
 	"linear.create_issue": effects.EffectTypeWrite,
@@ -86,11 +95,12 @@ func NewConnector(cfg Config) *Connector {
 	}
 
 	return &Connector{
-		client:      client,
-		gate:        gate,
-		graph:       proofgraph.NewGraph(),
-		connectorID: cfg.ConnectorID,
-		usedNonces:  make(map[string]struct{}),
+		client:       client,
+		gate:         gate,
+		graph:        proofgraph.NewGraph(),
+		connectorID:  cfg.ConnectorID,
+		permitNonces: make(map[string]permitNonceState),
+		now:          time.Now,
 	}
 }
 
@@ -122,25 +132,35 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return nil, err
 	}
 
-	// 3. Gate check.
+	// 3. Reserve the nonce before the gate records a call. A replay must not
+	// consume rate-limit capacity, while a gate denial must leave the permit
+	// retryable until it expires.
+	if err := c.reservePermitNonce(permit.Nonce, permit.ExpiresAt); err != nil {
+		return nil, err
+	}
+
+	// 4. Gate check.
 	decision := c.gate.CheckCall(ctx, c.connectorID, dataClass)
 	if !decision.Allowed {
+		c.releasePermitNonce(permit.Nonce)
 		return nil, fmt.Errorf("linear: gate denied: %s (%s)", decision.Reason, decision.Violation)
 	}
 
-	// 4. Compute input hash via canonicalize.CanonicalHash
+	// 5. Compute input hash via canonicalize.CanonicalHash.
 	inputHash, err := canonicalize.CanonicalHash(params)
 	if err != nil {
+		c.releasePermitNonce(permit.Nonce)
 		return nil, fmt.Errorf("linear: canonical hash of params: %w", err)
 	}
 
-	// 5. Consume the single-use permit only after all pre-execution validation
-	// succeeds, but before any ProofGraph intent or Linear GraphQL call is made.
+	// 6. Consume the single-use permit only after all pre-execution validation
+	// and a successful gate, but before any ProofGraph intent or Linear GraphQL
+	// call is made.
 	if err := c.consumePermitNonce(permit.Nonce); err != nil {
 		return nil, err
 	}
 
-	// 6. Append INTENT node to ProofGraph
+	// 7. Append INTENT node to ProofGraph
 	intentPayload, err := json.Marshal(map[string]any{
 		"type":       "linear.intent",
 		"tool":       toolName,
@@ -155,10 +175,10 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return nil, fmt.Errorf("linear: append intent: %w", err)
 	}
 
-	// 7. Dispatch to appropriate client method
+	// 8. Dispatch to appropriate client method
 	result, execErr := c.dispatch(ctx, toolName, params)
 
-	// 8. Append EFFECT node to ProofGraph
+	// 9. Append EFFECT node to ProofGraph
 	effectEntry := map[string]any{
 		"type":       "linear.effect",
 		"tool":       toolName,
@@ -202,7 +222,7 @@ func (c *Connector) validatePermit(permit *effects.EffectPermit, toolName string
 	if permit.EffectType != effectType {
 		return fmt.Errorf("linear: permit effect_type %q does not authorize %q", permit.EffectType, toolName)
 	}
-	now := time.Now().UTC()
+	now := c.now().UTC()
 	if permit.IssuedAt.IsZero() {
 		return fmt.Errorf("linear: permit missing issued_at")
 	}
@@ -273,20 +293,42 @@ func validateParamScope(permit *effects.EffectPermit, toolName string, effectTyp
 func validateResourceScope(permit *effects.EffectPermit, effectType effects.EffectType, params map[string]any) error {
 	teamID := strings.TrimSpace(stringParam(params, "team_id"))
 	issueID := strings.TrimSpace(stringParam(params, "issue_id"))
-	if teamID == "" && issueID == "" {
-		return nil
-	}
 	resourceRef := strings.TrimSpace(permit.ResourceRef)
 	if resourceRef == "" {
-		if effectType == effects.EffectTypeWrite {
+		if effectType == effects.EffectTypeWrite && (teamID != "" || issueID != "") {
 			return fmt.Errorf("linear: write action requires permit resource_ref")
 		}
 		return nil
+	}
+	switch linearResourceRefKind(resourceRef) {
+	case "team":
+		if teamID == "" {
+			return fmt.Errorf("linear: permit resource_ref %q requires team_id", resourceRef)
+		}
+	case "issue":
+		if issueID == "" {
+			return fmt.Errorf("linear: permit resource_ref %q requires issue_id", resourceRef)
+		}
+	default:
+		if teamID == "" && issueID == "" {
+			return fmt.Errorf("linear: permit resource_ref %q requires team_id or issue_id", resourceRef)
+		}
 	}
 	if resourceRefMatchesLinear(resourceRef, teamID, issueID) {
 		return nil
 	}
 	return fmt.Errorf("linear: permit resource_ref %q does not authorize team_id %q or issue_id %q", resourceRef, teamID, issueID)
+}
+
+func linearResourceRefKind(resourceRef string) string {
+	switch {
+	case strings.HasPrefix(resourceRef, "team:"), strings.HasPrefix(resourceRef, "linear:team:"):
+		return "team"
+	case strings.HasPrefix(resourceRef, "issue:"), strings.HasPrefix(resourceRef, "linear:issue:"):
+		return "issue"
+	default:
+		return ""
+	}
 }
 
 func resourceRefMatchesLinear(resourceRef, teamID, issueID string) bool {
@@ -322,14 +364,56 @@ func scopeParamValue(v any) string {
 	}
 }
 
+// ponytail: this bounded, process-local tracker protects one connector process.
+// Use a durable shared nonce store before deploying this connector across replicas.
+func (c *Connector) reservePermitNonce(nonce string, expiresAt time.Time) error {
+	c.nonceMu.Lock()
+	defer c.nonceMu.Unlock()
+	c.pruneExpiredPermitNoncesLocked(c.now().UTC())
+	if _, ok := c.permitNonces[nonce]; ok {
+		return fmt.Errorf("linear: permit nonce %q already used", nonce)
+	}
+	if len(c.permitNonces) >= linearPermitNonceMaxEntries {
+		return fmt.Errorf("linear: permit replay tracker is full")
+	}
+	c.permitNonces[nonce] = permitNonceState{expiresAt: expiresAt.UTC(), reserved: true}
+	return nil
+}
+
+func (c *Connector) releasePermitNonce(nonce string) {
+	c.nonceMu.Lock()
+	defer c.nonceMu.Unlock()
+	if state, ok := c.permitNonces[nonce]; ok && state.reserved {
+		delete(c.permitNonces, nonce)
+	}
+}
+
 func (c *Connector) consumePermitNonce(nonce string) error {
 	c.nonceMu.Lock()
 	defer c.nonceMu.Unlock()
-	if _, ok := c.usedNonces[nonce]; ok {
+	now := c.now().UTC()
+	state, ok := c.permitNonces[nonce]
+	c.pruneExpiredPermitNoncesLocked(now)
+	if !ok {
+		return fmt.Errorf("linear: permit nonce %q was not reserved", nonce)
+	}
+	if !now.Before(state.expiresAt) {
+		return fmt.Errorf("linear: permit nonce %q expired", nonce)
+	}
+	if !state.reserved {
 		return fmt.Errorf("linear: permit nonce %q already used", nonce)
 	}
-	c.usedNonces[nonce] = struct{}{}
+	state.reserved = false
+	c.permitNonces[nonce] = state
 	return nil
+}
+
+func (c *Connector) pruneExpiredPermitNoncesLocked(now time.Time) {
+	for nonce, state := range c.permitNonces {
+		if !now.Before(state.expiresAt) {
+			delete(c.permitNonces, nonce)
+		}
+	}
 }
 
 // dispatch routes to the appropriate client method based on toolName.

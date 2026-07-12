@@ -29,6 +29,8 @@ surface for the `helm-ai-kernel` project.
   signed evidence pack, verifies it offline, and uploads the redacted artifacts.
   It requires the `claude-managed-agents-live` environment with
   `CLAUDE_MANAGED_AGENTS_LIVE_CONFIG_JSON` and `HELM_SIGNING_KEY_HEX` secrets.
+- `dco.yml` verifies every pull-request commit carries a DCO
+  `Signed-off-by` trailer (see CONTRIBUTING.md).
 - `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
   egress-proxy artifacts, then runs gated live local-container conformance when
   manually dispatched with the scoped CI key.

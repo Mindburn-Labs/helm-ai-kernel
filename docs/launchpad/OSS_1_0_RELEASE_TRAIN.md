@@ -3,10 +3,10 @@
 <!-- quantum_posture: this planning doc mentions release signature and provenance assets but does not implement cryptographic controls. -->
 
 Status: internal release planning source, not release notes.
-Current audit date: 2026-07-07.
-Current source base: `origin/main@eed014fa`.
-Current source version: `VERSION=0.7.0`.
-Current public release: `v0.7.0`.
+Current audit date: 2026-07-12.
+Current source base: `origin/main@1f599d18`.
+Current source version: `VERSION=0.7.2` (untagged).
+Current public release and tag: `v0.7.1`.
 
 Do not add this file to the public docs manifest. Future release scope becomes
 public only through tagged release notes, changelog entries, release assets, and
@@ -16,9 +16,9 @@ published drift evidence for that exact version.
 
 | Surface | Current state | Evidence | Plan impact |
 | --- | --- | --- | --- |
-| Release baseline | `v0.7.0` is the latest public GitHub release; `main` has moved past the tag for release-provenance guard work. | `gh release list`, `git log v0.7.0..origin/main` | Cut `v0.7.1` only for evidence/release hardening needed before `v0.8.0`. |
-| Open PR dependencies | No open kernel PR dependency is required for the next patch. | `gh pr list --state open` returned no open PRs on 2026-07-07. | Keep `v0.7.1` independent unless a release repair PR becomes necessary. |
-| Unreleased main delta | Post-`v0.7.0` commits harden npm publication and release provenance checks, not a feature train. | `git diff --stat v0.7.0..origin/main` | Fold into `v0.7.1`; do not mix in RiskEnvelope feature work. |
+| Release baseline | `v0.7.1` is the latest published GitHub release and tag. `main` declares `0.7.2`, but `v0.7.2` has neither a tag nor a GitHub Release. | `VERSION`, `gh release view v0.7.1`, `git ls-remote --tags origin v0.7.2` | Keep public release claims on `v0.7.1` until `v0.7.2` is tagged, published, and verified. |
+| Open PR dependencies | Five kernel PRs are open as of this audit; branch presence does not declare release scope. | `gh pr list --state open` on 2026-07-12 | Re-evaluate approved, green prerequisites at the release cut. |
+| Unreleased main delta | `main` source version `0.7.2` remains untagged and unpublished. | `VERSION`, `git ls-remote --tags origin v0.7.2`, `gh release view v0.7.2` | Establish release scope and pass the release gates before tagging. |
 | EvidencePack structure | Mandatory pack structure, optional host evidence, and declared `99_EXT/` extensions exist. | `core/pkg/conform/evidencepack.go:13` | `v0.7.0` should freeze authority and compatibility, not invent a pack layout. |
 | EvidencePack seal and verifier | Native seal and verification paths exist. | `core/pkg/evidence/seal.go:191`, `core/pkg/evidence/seal.go:349` | `v0.7.0` must define exact verifier success and tamper-failure requirements. |
 | ProofGraph | ProofGraph refs are used by runtime adapters, exports, and evidence packs. | `core/pkg/evidence/arc/pack_builder.go:39`, `core/pkg/workstation/evidence.go:63` | `v0.7.0` must freeze ref grammar, pack placement, and replay semantics. |

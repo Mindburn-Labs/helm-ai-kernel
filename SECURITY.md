@@ -57,11 +57,10 @@ The signing identity is the GitHub Actions workflow itself
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-The current public GitHub release, `v0.5.8`, attaches
-OpenVEX and Cosign bundle material for every primary asset. Verify
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`,
-`release-attestation.json`, offline `evidence-pack.tar`, and matching
-`*.cosign.bundle` files.
+The current public GitHub release and tag is `v0.7.1`. `main` declares
+`0.7.2`, but `v0.7.2` is not tagged or published. Verify only the assets
+attached to the `v0.7.1` GitHub Release. After a future `v0.7.2` publication,
+update this paragraph with its actual assets and GitHub publish timestamp.
 
 ## Continuous Fuzzing
 

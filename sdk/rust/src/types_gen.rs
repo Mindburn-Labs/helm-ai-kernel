@@ -230,6 +230,8 @@ pub enum AccountEntitlementsPlan {
     Team,
     #[serde(rename = "scale")]
     Scale,
+    #[serde(rename = "business")]
+    Business,
     #[serde(rename = "enterprise")]
     Enterprise,
 }
@@ -308,6 +310,8 @@ pub enum AccountSessionPlan {
     Team,
     #[serde(rename = "scale")]
     Scale,
+    #[serde(rename = "business")]
+    Business,
     #[serde(rename = "enterprise")]
     Enterprise,
 }

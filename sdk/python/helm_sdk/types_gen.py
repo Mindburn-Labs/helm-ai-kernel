@@ -417,8 +417,8 @@ class AccountEntitlements(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['free', 'developer', 'team', 'scale', 'enterprise']):
-            raise ValueError("must be one of enum values ('free', 'developer', 'team', 'scale', 'enterprise')")
+        if value not in set(['free', 'developer', 'team', 'scale', 'business', 'enterprise']):
+            raise ValueError("must be one of enum values ('free', 'developer', 'team', 'scale', 'business', 'enterprise')")
         return value
 
     model_config = ConfigDict(
@@ -549,8 +549,8 @@ class AccountSession(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['free', 'developer', 'team', 'scale', 'enterprise']):
-            raise ValueError("must be one of enum values ('free', 'developer', 'team', 'scale', 'enterprise')")
+        if value not in set(['free', 'developer', 'team', 'scale', 'business', 'enterprise']):
+            raise ValueError("must be one of enum values ('free', 'developer', 'team', 'scale', 'business', 'enterprise')")
         return value
 
     model_config = ConfigDict(

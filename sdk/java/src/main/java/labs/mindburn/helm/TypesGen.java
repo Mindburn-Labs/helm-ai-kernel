@@ -1592,6 +1592,8 @@ public static class AccountEntitlements {
 
     SCALE("scale"),
 
+    BUSINESS("business"),
+
     ENTERPRISE("enterprise");
 
     private Object value;
@@ -2081,6 +2083,8 @@ public static class AccountSession {
     TEAM("team"),
 
     SCALE("scale"),
+
+    BUSINESS("business"),
 
     ENTERPRISE("enterprise");
 

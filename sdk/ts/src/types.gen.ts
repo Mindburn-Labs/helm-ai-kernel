@@ -527,6 +527,7 @@ export const AccountEntitlementsPlanEnum = {
     Developer: 'developer',
     Team: 'team',
     Scale: 'scale',
+    Business: 'business',
     Enterprise: 'enterprise'
 } as const;
 export type AccountEntitlementsPlanEnum = typeof AccountEntitlementsPlanEnum[keyof typeof AccountEntitlementsPlanEnum];
@@ -682,6 +683,7 @@ export const AccountSessionPlanEnum = {
     Developer: 'developer',
     Team: 'team',
     Scale: 'scale',
+    Business: 'business',
     Enterprise: 'enterprise'
 } as const;
 export type AccountSessionPlanEnum = typeof AccountSessionPlanEnum[keyof typeof AccountSessionPlanEnum];

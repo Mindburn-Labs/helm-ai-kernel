@@ -11,14 +11,16 @@ Include a clear reproduction path, affected version, and impact summary.
 
 ## Supported Versions
 
-Security fixes are expected on the current minor version and, when practical, the immediately preceding minor.
+This table describes public releases only. The source tree currently declares
+`0.7.2`, but it is not a public release line until its release evidence exists.
+Security fixes are expected on the latest published release and, when practical,
+the immediately preceding public minor.
 
 | Version | Supported |
 | --- | --- |
-| `0.5.x` | Yes |
-| `0.4.x` | Yes |
-| `0.3.x` | Best effort |
-| Older | No |
+| `v0.5.18` | Yes — current published release at the last verification (2026-07-12) |
+| Earlier `0.5.x` | Best effort |
+| `0.4.x` and older | No |
 
 ## Verification Material
 
@@ -57,9 +59,10 @@ The signing identity is the GitHub Actions workflow itself
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-The current public GitHub release, `v0.5.8`, attaches
-OpenVEX and Cosign bundle material for every primary asset. Verify
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`,
+At the last verification (2026-07-12), the current public GitHub release was
+`v0.5.18`; it lists OpenVEX and Cosign bundle material for its primary assets.
+Do not treat the source `0.7.2` version as having equivalent published assets.
+Verify `SHA256SUMS.txt`, `sbom.json`, `v0.5.18.openvex.json`,
 `release-attestation.json`, offline `evidence-pack.tar`, and matching
 `*.cosign.bundle` files.
 

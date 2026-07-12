@@ -8,22 +8,24 @@ commit.
 
 ## Current Baseline
 
-The actual public baseline for the `v0.5.0` release is `v0.4.0`. GitHub has no
-public `v0.4.1` Release object, so release notes and verification docs must not
-describe `v0.4.1` as the current release.
+`VERSION` currently declares `0.7.2`. That is the source baseline, not a
+published-release claim. At the last release-record check (2026-07-12), the
+latest public GitHub Release was `v0.5.18` (published 2026-06-19). Do not
+describe `0.7.2`, or any later source version, as publicly released until its
+tag, assets, attestations, and verification evidence are published.
 
-## Prepare v0.6.0
+## Prepare a release
 
 1. Update `VERSION`, CLI fallback version, OpenAPI `info.version`, SDK
    manifests, generated SDK comments, chart metadata, release docs, and exact
    OpenVEX with the maintained release tooling:
 
 ```bash
-make prepare-version VERSION=0.6.0
+make prepare-version VERSION=<version>
 make vex
 ```
 
-2. Update `CHANGELOG.md` with the `v0.6.0` user-visible delta.
+2. Update `CHANGELOG.md` with the `v<version>` user-visible delta.
 3. Run the maintained merge and release validation targets:
 
 ```bash
@@ -34,7 +36,7 @@ make release-assets
 ```
 
 4. Confirm `dist/release-assets/` contains CLI binaries, `SHA256SUMS.txt`,
-   `sbom.json`, `v0.6.0.openvex.json`, `release-attestation.json`,
+   `sbom.json`, `v<version>.openvex.json`, `release-attestation.json`,
    `evidence-pack.tar`, `release.high_risk.v3.toml`,
    `sample-policy-material.tar`, `helm-ai-kernel.mcpb`, and `helm-ai-kernel.rb`.
 5. Confirm `./bin/helm-ai-kernel verify dist/release-assets/evidence-pack.tar` passes
@@ -43,7 +45,7 @@ make release-assets
 ## Publish
 
 1. Merge the release-prep PR to `main`.
-2. Create the annotated `v0.6.0` tag only after the release commit is on
+2. Create the annotated `v<version>` tag only after the release commit is on
    `main`.
 3. Push the tag and monitor the Release workflow until GitHub Release, GHCR
    images, Cosign bundles, provenance, benchmark pinning, Go SDK subdirectory
@@ -58,7 +60,7 @@ make version-drift-published
 ```
 
 6. Commit the post-publish docs update that changes “current public release”
-   references to `v0.6.0` with the actual GitHub publish timestamp.
+   references to `v<version>` with the actual GitHub publish timestamp.
 
 Package publication for npm, PyPI, crates.io, and Maven-compatible consumers
 requires registry credentials. If required registry credentials are absent, the

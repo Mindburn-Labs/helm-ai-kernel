@@ -131,6 +131,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --set-string launchpadApps.hermes.query="chart smoke" >"$hermes_job_rendered"
 assert_contains "$hermes_job_rendered" "kind: Job"
 assert_contains "$hermes_job_rendered" "helm-ai-kernel-hermes"
+assert_contains "$hermes_job_rendered" "helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded"
 assert_contains "$hermes_job_rendered" "anthropic/claude-3-5-haiku"
 assert_contains "$hermes_job_rendered" "chart smoke"
 assert_contains "$hermes_job_rendered" "--provider"

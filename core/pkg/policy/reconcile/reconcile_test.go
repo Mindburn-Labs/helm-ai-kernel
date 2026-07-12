@@ -12,6 +12,8 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/cpi"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
 )
@@ -73,6 +75,16 @@ func testCompiler(_ context.Context, head PolicyHead, _ []byte) (*EffectivePolic
 		Validation:  ValidationStatus{Status: StatusActive},
 		Graph:       prg.NewGraph(),
 	}, nil
+}
+
+func assertInvalidSnapshot(t *testing.T, snapshot *EffectivePolicySnapshot) {
+	t.Helper()
+	if snapshot == nil || snapshot.Validation.Status != StatusInvalid {
+		t.Fatalf("snapshot was not invalidated: %+v", snapshot)
+	}
+	if snapshot.Graph != nil || snapshot.PDP != nil || len(snapshot.PolicyLayers) != 0 {
+		t.Fatalf("invalid snapshot retained executable policy material: %+v", snapshot)
+	}
 }
 
 func TestReconcilerInstallsInitialSnapshotAndUpdatesOnPoll(t *testing.T) {
@@ -421,6 +433,148 @@ func TestReconcilerInvalidUpdateKeepsLastKnownGood(t *testing.T) {
 	}
 }
 
+func TestReconcilerSourceFaultKeepsFreshLastKnownGood(t *testing.T) {
+	scope := DefaultScope
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	bundle := []byte("policy-v1")
+	source := &mutableSource{
+		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:            source,
+		Store:             store,
+		Compiler:          testCompiler,
+		KeepLastKnownGood: true,
+		Clock:             func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	if reconciler.lkgMaxAge != DefaultLKGMaxAge {
+		t.Fatalf("expected default LKG max age %s, got %s", DefaultLKGMaxAge, reconciler.lkgMaxAge)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), scope); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+	current, ok := store.Get(scope)
+	if !ok || !current.InstalledAt.Equal(now) {
+		t.Fatalf("initial snapshot install time was not recorded: %+v", current)
+	}
+
+	source.err = errors.New("control plane unavailable")
+	now = now.Add(DefaultLKGMaxAge - time.Nanosecond)
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err == nil || status.ReconcileStatus != StatusSourceError || status.SnapshotStatus != StatusActive {
+		t.Fatalf("expected fresh LKG preservation after source fault, got status=%+v err=%v", status, err)
+	}
+	current, ok = store.Get(scope)
+	if !ok || current.Validation.Status != StatusActive || current.Graph == nil {
+		t.Fatalf("fresh LKG was not preserved: %+v", current)
+	}
+}
+
+func TestReconcilerSourceFaultExpiresLastKnownGoodFailClosed(t *testing.T) {
+	scope := DefaultScope
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	bundle := []byte("policy-v1")
+	source := &mutableSource{
+		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:            source,
+		Store:             store,
+		Compiler:          testCompiler,
+		KeepLastKnownGood: true,
+		Clock:             func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), scope); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+	current, ok := store.Get(scope)
+	if !ok {
+		t.Fatal("initial snapshot missing")
+	}
+	current.PDP = pdp.NewHelmPDP("test", nil)
+	current.PolicyLayers = []cpi.PolicyLayer{{Name: "P0"}}
+
+	source.err = errors.New("control plane unavailable")
+	now = now.Add(DefaultLKGMaxAge)
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err == nil || status.ReconcileStatus != StatusSourceError || status.SnapshotStatus != StatusInvalid || !strings.Contains(status.Reason, lkgExpiredReasonText) {
+		t.Fatalf("expected expired LKG failure, got status=%+v err=%v", status, err)
+	}
+	current, ok = store.Get(scope)
+	if !ok || !strings.Contains(current.Validation.Reason, lkgExpiredReasonText) {
+		t.Fatalf("expired LKG was not recorded as invalid: %+v", current)
+	}
+	assertInvalidSnapshot(t, current)
+
+	source.err = nil
+	now = now.Add(time.Second)
+	status, err = reconciler.Reconcile(context.Background(), scope)
+	if err != nil || status.ReconcileStatus != "ok" || status.SnapshotStatus != StatusActive {
+		t.Fatalf("reconciler did not recover an invalidated snapshot: status=%+v err=%v", status, err)
+	}
+}
+
+func TestReconcilerSourceFaultWithoutLKGInvalidatesSnapshot(t *testing.T) {
+	scope := DefaultScope
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	bundle := []byte("policy-v1")
+	source := &mutableSource{
+		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:   source,
+		Store:    store,
+		Compiler: testCompiler,
+		Clock:    func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), scope); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+	current, ok := store.Get(scope)
+	if !ok {
+		t.Fatal("initial snapshot missing")
+	}
+	current.PDP = pdp.NewHelmPDP("test", nil)
+	current.PolicyLayers = []cpi.PolicyLayer{{Name: "P0"}}
+
+	source.err = errors.New("control plane unavailable")
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err == nil || status.ReconcileStatus != StatusSourceError || status.SnapshotStatus != StatusInvalid || !strings.Contains(status.Reason, lkgRetentionDisabledReasonText) {
+		t.Fatalf("expected disabled LKG invalidation, got status=%+v err=%v", status, err)
+	}
+	current, ok = store.Get(scope)
+	if !ok || !strings.Contains(current.Validation.Reason, lkgRetentionDisabledReasonText) {
+		t.Fatalf("disabled LKG was not recorded as invalid: %+v", current)
+	}
+	assertInvalidSnapshot(t, current)
+}
+
+func TestLastKnownGoodRequiresInstallTime(t *testing.T) {
+	reconciler := &Reconciler{
+		keepLastKnownGood: true,
+		lkgMaxAge:         DefaultLKGMaxAge,
+		now:               func() time.Time { return time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC) },
+	}
+	if reconciler.lastKnownGoodFresh(&EffectivePolicySnapshot{Validation: ValidationStatus{Status: StatusActive}}) {
+		t.Fatal("last-known-good snapshot without install time must not be fresh")
+	}
+}
+
 func TestReconcilerInitialSnapshotRequired(t *testing.T) {
 	scope := DefaultScope
 	source := &mutableSource{head: PolicyHead{Scope: scope}, err: ErrPolicyNotReady}
@@ -434,7 +588,7 @@ func TestReconcilerInitialSnapshotRequired(t *testing.T) {
 	if err == nil || !errors.Is(err, ErrPolicyNotReady) {
 		t.Fatalf("expected not ready, got status=%+v err=%v", status, err)
 	}
-	if status.SnapshotStatus != StatusNoPolicy {
+	if status.ReconcileStatus != StatusSourceError || status.SnapshotStatus != StatusNoPolicy {
 		t.Fatalf("unexpected status for missing snapshot: %+v", status)
 	}
 }

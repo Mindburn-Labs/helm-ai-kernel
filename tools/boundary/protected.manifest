@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-11T23:30:34Z
-# Commit: a2c330a74d2c933074d2f6e002d05d5b06591437
+# Generated: 2026-07-12T19:34:35Z
+# Commit: 1f599d18d10d73c914f8c883f89c6475fea44fe6
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -578,7 +578,7 @@ e6d4621a1962f8ce9d16bcef9fa95a099f69b947e5a63302bd6f1cfeeb734f59  core/pkg/guard
 05d2907a744570e725955e9967f578b098389dee199fa7af7d54c2381f770a54  core/pkg/guardian/guardian_behavior_coverage_test.go
 2a5ca32bc0c383992332eea7cd839575ee7dd4b6266c2ed64c7bd8a2bfec044f  core/pkg/guardian/guardian_bench_test.go
 85459f0cd76631d94c0ea0e886eb90237c1b29ae7512b542ed4cd4995101f532  core/pkg/guardian/guardian_contracts_test.go
-b7ff91ea033e301be3b6a9b7b971db4d808060deb90d85034d97ea395bd89604  core/pkg/guardian/guardian_core_coverage_test.go
+319dd02e3426ddfd24144c16e76c2572ae4b919ab3087157366dc947a6efb233  core/pkg/guardian/guardian_core_coverage_test.go
 7c16929281b29d9b1256c185e6b98997470b44e6135a3f6bb1e5e5abeb187ef8  core/pkg/guardian/guardian_delegation_test.go
 1c6069fc10f370e11aefe4cab278c3994d29a72fe616aad5420aa6876bb05bde  core/pkg/guardian/guardian_edge_cases_test.go
 d7ad656ec37a80da9538c9435229f2e06214ccdde857fdf81e86dbb18d4ad7d7  core/pkg/guardian/guardian_intervention_test.go

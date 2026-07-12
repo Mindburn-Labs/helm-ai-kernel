@@ -185,6 +185,43 @@ func (s *receiptStore) Close() error {
 	return s.file.Close()
 }
 
+// persistProxyReceipt records a receipt before exposing its correlation headers
+// to the caller. Returning the append error lets ReverseProxy fail the response
+// instead of implying an audit record exists when it does not.
+func persistProxyReceipt(resp *http.Response, store *receiptStore, rcpt *proxyReceipt) error {
+	if err := store.Append(rcpt); err != nil {
+		return fmt.Errorf("persist proxy receipt: %w", err)
+	}
+
+	resp.Header.Set("X-Helm-Receipt-ID", rcpt.ReceiptID)
+	resp.Header.Set("X-Helm-Output-Hash", rcpt.OutputHash)
+	resp.Header.Set("X-Helm-Lamport-Clock", fmt.Sprintf("%d", rcpt.LamportClock))
+	resp.Header.Set("X-Helm-Status", rcpt.Status)
+	if rcpt.CorrelationID != "" {
+		resp.Header.Set("X-Helm-Correlation-ID", rcpt.CorrelationID)
+	}
+	if rcpt.Traceparent != "" {
+		resp.Header.Set("traceparent", rcpt.Traceparent)
+	}
+	if rcpt.ReasonCode != "" {
+		resp.Header.Set("X-Helm-Reason-Code", rcpt.ReasonCode)
+	}
+	if rcpt.DecisionID != "" {
+		resp.Header.Set("X-Helm-Decision-ID", rcpt.DecisionID)
+	}
+	if rcpt.ProofGraphNodeID != "" {
+		resp.Header.Set("X-Helm-ProofGraph-Node", rcpt.ProofGraphNodeID)
+	}
+	if rcpt.ToolCalls > 0 {
+		resp.Header.Set("X-Helm-Tool-Calls", fmt.Sprintf("%d", rcpt.ToolCalls))
+	}
+	if rcpt.Signature != "" {
+		resp.Header.Set("X-Helm-Signature", rcpt.Signature)
+	}
+
+	return nil
+}
+
 // proxyCtxKey is a unique context key type to stash per-request governance state
 // from Director through to ModifyResponse without collisions with other packages.
 type proxyCtxKey struct{ name string }
@@ -786,40 +823,15 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 				}
 			}
 
-			// Persist receipt (JSONL, append-only, causal chain)
-			if storeErr := store.Append(rcpt); storeErr != nil {
-				log.Printf("[ERROR] receipt persist failed: %v", storeErr)
+			// Persist receipt (JSONL, append-only, causal chain) before exposing
+			// receipt headers. Execution may already have happened upstream.
+			if err := persistProxyReceipt(resp, store, rcpt); err != nil {
+				log.Printf("[ERROR] %v", err)
+				return err
 			}
 
 			// Persist ProofGraph (JSON snapshot after each append)
 			persistProofGraph(pg, filepath.Join(receiptsDir, "proofgraph.json"))
-
-			// Inject receipt headers
-			resp.Header.Set("X-Helm-Receipt-ID", rcpt.ReceiptID)
-			resp.Header.Set("X-Helm-Output-Hash", rcpt.OutputHash)
-			resp.Header.Set("X-Helm-Lamport-Clock", fmt.Sprintf("%d", rcpt.LamportClock))
-			resp.Header.Set("X-Helm-Status", rcpt.Status)
-			if correlationID != "" {
-				resp.Header.Set("X-Helm-Correlation-ID", correlationID)
-			}
-			if traceparent != "" {
-				resp.Header.Set("traceparent", traceparent)
-			}
-			if rcpt.ReasonCode != "" {
-				resp.Header.Set("X-Helm-Reason-Code", rcpt.ReasonCode)
-			}
-			if rcpt.DecisionID != "" {
-				resp.Header.Set("X-Helm-Decision-ID", rcpt.DecisionID)
-			}
-			if rcpt.ProofGraphNodeID != "" {
-				resp.Header.Set("X-Helm-ProofGraph-Node", rcpt.ProofGraphNodeID)
-			}
-			if toolCallCount > 0 {
-				resp.Header.Set("X-Helm-Tool-Calls", fmt.Sprintf("%d", toolCallCount))
-			}
-			if rcpt.Signature != "" {
-				resp.Header.Set("X-Helm-Signature", rcpt.Signature)
-			}
 
 			// Log receipt
 			if jsonOutput {

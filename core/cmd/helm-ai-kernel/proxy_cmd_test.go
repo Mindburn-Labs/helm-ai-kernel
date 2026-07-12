@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -155,5 +158,99 @@ func TestReceiptStoreRejectsBrokenExistingChain(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "prev_hash") {
 		t.Fatalf("expected prev_hash chain error, got %v", err)
+	}
+}
+
+func TestProxyReceiptPersistenceControlsClientResponse(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Helm-Receipt-ID", "upstream-spoof")
+		w.Header().Set("X-Helm-Status", "upstream-spoof")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer upstream.Close()
+
+	target, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct {
+		name        string
+		closeStore  bool
+		wantStatus  int
+		wantReceipt bool
+	}{
+		{name: "durable receipt", wantStatus: http.StatusOK, wantReceipt: true},
+		{name: "append failure", closeStore: true, wantStatus: http.StatusBadGateway},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			expectedHeaders := map[string]string{
+				"X-Helm-Receipt-ID":      "rcpt-proxy-test",
+				"X-Helm-Output-Hash":     "sha256:output",
+				"X-Helm-Lamport-Clock":   "1",
+				"X-Helm-Status":          "APPROVED",
+				"X-Helm-Correlation-ID":  "corr-test",
+				"traceparent":            "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
+				"X-Helm-Reason-Code":     "TEST_REASON",
+				"X-Helm-Decision-ID":     "decision-test",
+				"X-Helm-ProofGraph-Node": "node-test",
+				"X-Helm-Tool-Calls":      "1",
+				"X-Helm-Signature":       "signature-test",
+			}
+			store, err := newReceiptStore(filepath.Join(t.TempDir(), "receipts.jsonl"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.closeStore {
+				if err := store.Close(); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				t.Cleanup(func() { _ = store.Close() })
+			}
+
+			proxy := httputil.NewSingleHostReverseProxy(target)
+			proxy.ModifyResponse = func(resp *http.Response) error {
+				return persistProxyReceipt(resp, store, &proxyReceipt{
+					ReceiptID:        "rcpt-proxy-test",
+					OutputHash:       "sha256:output",
+					Status:           "APPROVED",
+					LamportClock:     1,
+					CorrelationID:    "corr-test",
+					Traceparent:      "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
+					ReasonCode:       "TEST_REASON",
+					DecisionID:       "decision-test",
+					ProofGraphNodeID: "node-test",
+					ToolCalls:        1,
+					Signature:        "signature-test",
+				})
+			}
+			server := httptest.NewServer(proxy)
+			defer server.Close()
+
+			response, err := http.Get(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+
+			if response.StatusCode != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", response.StatusCode, tt.wantStatus)
+			}
+			if tt.wantReceipt {
+				for header, want := range expectedHeaders {
+					if got := response.Header.Get(header); got != want {
+						t.Fatalf("%s = %q, want %q", header, got, want)
+					}
+				}
+				return
+			}
+
+			for header := range expectedHeaders {
+				if got := response.Header.Get(header); got != "" {
+					t.Fatalf("failed response emitted %s=%q", header, got)
+				}
+			}
+		})
 	}
 }

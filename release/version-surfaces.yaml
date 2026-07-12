@@ -10,6 +10,12 @@
       "expected": "{version}"
     },
     {
+      "id": "mcp-bundle-manifest-version",
+      "path": "mcp-bundle.json",
+      "kind": "json",
+      "field": "version"
+    },
+    {
       "id": "helm-chart-version",
       "path": "deploy/helm-chart/Chart.yaml",
       "kind": "regex",

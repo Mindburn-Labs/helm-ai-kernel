@@ -290,6 +290,30 @@ func TestEmergencyStopFenceRouteAcceptsExactPriorAudienceReplayAuthority(t *test
 	}
 }
 
+func TestEmergencyStopFenceRouteAcceptsExactPriorKeyReplayAuthorityAtCurrentAudience(t *testing.T) {
+	mux, _, currentPrivateKey := newEmergencyStopFenceRouteForTest(t)
+	priorPublicKey, priorPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(emergencyStopCommandAudienceEnv, "kernel-current")
+	t.Setenv(emergencyStopCommandPublicKeysEnv, "cp-current="+hex.EncodeToString(currentPrivateKey.Public().(ed25519.PublicKey)))
+	t.Setenv(emergencyStopCommandReplayKeyringEnv, emergencyStopCommandReplayKeyringJSON(t, emergencyStopCommandReplayAuthority{
+		CommandKeyID:     "cp-before-rotation",
+		CommandAudience:  "kernel-current",
+		CommandPublicKey: hex.EncodeToString(priorPublicKey),
+	}))
+
+	command := newEmergencyStopFenceCommand(time.Now().UTC())
+	command.Audience = "kernel-current"
+	command.KeyID = "cp-before-rotation"
+	command.CommandID = "stop-command-prior-key-current-audience"
+	rec := postEmergencyStopFence(t, mux, signedEmergencyStopFenceEnvelope(t, command, priorPrivateKey), "service-stop-test")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("prior-key current-audience replay status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestEmergencyStopFenceRouteRejectsCurrentSignerForPriorAudience(t *testing.T) {
 	mux, store, currentPrivateKey := newEmergencyStopFenceRouteForTest(t)
 	priorPublicKey, _, err := ed25519.GenerateKey(rand.Reader)

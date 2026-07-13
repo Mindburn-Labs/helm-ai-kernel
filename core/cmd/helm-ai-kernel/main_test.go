@@ -60,6 +60,26 @@ func TestRunNoArgsPrintsFrontDoor(t *testing.T) {
 	assert.Empty(t, stderr.String())
 }
 
+func TestRuntimePolicyScopeUsesServerBindings(t *testing.T) {
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
+
+	scope := runtimePolicyScope()
+	if scope.TenantID != "tenant-a" || scope.WorkspaceID != "workspace-a" {
+		t.Fatalf("runtime policy scope = %+v, want tenant-a/workspace-a", scope)
+	}
+}
+
+func TestRuntimePolicyScopeDefaultsToOSSBinding(t *testing.T) {
+	t.Setenv(runtimeTenantIDEnv, "")
+	t.Setenv(runtimeWorkspaceIDEnv, "")
+
+	scope := runtimePolicyScope()
+	if scope.TenantID != "default" || scope.WorkspaceID != "default" {
+		t.Fatalf("default runtime policy scope = %+v, want default/default", scope)
+	}
+}
+
 func TestRunHelpAllPrintsFullCommandList(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	exitCode := Run([]string{"helm", "help", "--all"}, &stdout, &stderr)

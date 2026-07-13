@@ -153,6 +153,10 @@ import json, sys
 payload = json.load(open(sys.argv[1]))
 if str(payload.get("verdict", "")).upper() != "DENY":
     raise SystemExit(f"expected DENY decision: {payload}")
+if payload.get("reason_code") == "POLICY_NOT_READY":
+    raise SystemExit(f"evaluator did not resolve the installed policy snapshot: {payload}")
+if not payload.get("policy_content_hash") or not payload.get("policy_epoch"):
+    raise SystemExit(f"decision was not bound to an installed policy snapshot: {payload}")
 PY
 
 AUTH=(-H "Authorization: Bearer ${ADMIN_KEY}" -H "X-Helm-Tenant-ID: ${TENANT_ID}" -H "X-Helm-Principal-ID: ${AGENT_ID}" -H "X-Helm-Workspace-ID: ${WORKSPACE_ID}")

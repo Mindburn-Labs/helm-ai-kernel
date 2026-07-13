@@ -260,7 +260,11 @@ func runServerWithOptions(opts serverOptions) {
 	// 2.5 PRG & Guardian. --policy remains bootstrap/source configuration;
 	// runtime policy authority is installed only through the reconciler.
 	ruleGraph := prg.NewGraph()
-	policyScope := policyreconcile.DefaultScope
+	// Reconcile the bootstrap policy at the same server-owned tenant/workspace
+	// binding enforced by the evaluator route. A snapshot installed at the
+	// global default scope cannot authorize a request for a configured runtime
+	// tenant, and must never make a deployment appear healthy by accident.
+	policyScope := runtimePolicyScope()
 	var (
 		policyStore      policyreconcile.PolicySnapshotStore
 		policyReconciler *policyreconcile.Reconciler
@@ -627,6 +631,13 @@ func policyPollIntervalFromEnv() time.Duration {
 
 func policyInitialReconcileTimeoutFromEnv() time.Duration {
 	return durationFromEnv("HELM_POLICY_INITIAL_RECONCILE_TIMEOUT", 30*time.Second)
+}
+
+func runtimePolicyScope() policyreconcile.PolicyScope {
+	return policyreconcile.PolicyScope{
+		TenantID:    configuredRuntimeTenantID(),
+		WorkspaceID: configuredRuntimeWorkspaceID(),
+	}.Normalize()
 }
 
 func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (policyreconcile.PolicySource, string, error) {

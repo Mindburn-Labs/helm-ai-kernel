@@ -286,7 +286,7 @@ export class HelmClient {
   // ── Decision Evaluation ──────────────────────────
   async evaluateDecision(req: DecisionRequest): Promise<DecisionRecord> {
     this.assertEvaluateBindings();
-    const body: { action: string; resource: string; context?: object } = {
+    const body: { action: string; resource: string; context?: object | null } = {
       action: req.action,
       resource: req.resource,
     };

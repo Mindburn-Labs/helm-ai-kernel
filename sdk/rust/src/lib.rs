@@ -1204,7 +1204,7 @@ mod tests {
         let request = DecisionRequest {
             action: "EXECUTE_TOOL".to_string(),
             resource: "local.echo".to_string(),
-            context: Some(serde_json::json!({"request_id": "req-1"})),
+            context: Some(Some(serde_json::json!({"request_id": "req-1"}))),
         };
         let decision = HelmClient::new(&format!("http://{address}"))
             .with_api_key("token")

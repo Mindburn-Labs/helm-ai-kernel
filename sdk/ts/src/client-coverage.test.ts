@@ -150,6 +150,21 @@ describe("HelmClient coverage matrix", () => {
     });
   });
 
+  it("preserves an explicit null evaluator context", async () => {
+    await client.evaluateDecision({
+      action: "EXECUTE_TOOL",
+      resource: "local.echo",
+      context: null,
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({
+      action: "EXECUTE_TOOL",
+      resource: "local.echo",
+      context: null,
+    });
+  });
+
   it("extracts governance headers and default values", async () => {
     fetchSpy.mockResolvedValueOnce(jsonResponse(
       { id: "chatcmpl", choices: [] },

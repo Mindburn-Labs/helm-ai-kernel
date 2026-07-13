@@ -5685,7 +5685,7 @@ export interface DecisionRequest {
      * @type {object}
      * @memberof DecisionRequest
      */
-    context?: object;
+    context?: object | null;
 }
 
 /**
@@ -5710,7 +5710,7 @@ export function DecisionRequestFromJSONTyped(json: any, ignoreDiscriminator: boo
             ...json,
         'action': json['action'],
         'resource': json['resource'],
-        'context': json['context'] == null ? undefined : json['context'],
+        'context': json['context'] === undefined ? undefined : json['context'],
     };
 }
 

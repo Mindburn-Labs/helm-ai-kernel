@@ -143,6 +143,37 @@ s = replace_one(
     "}",
 )
 
+def replace_exactly_once(s: str, old: str, new: str, description: str) -> str:
+    count = s.count(old)
+    if count != 1:
+        raise RuntimeError(f"expected exactly one {description} replacement, found {count}")
+    return s.replace(old, new, 1)
+
+decision_request_start = s.find("export interface DecisionRequest {")
+decision_request_end = s.find("\n}\n", decision_request_start)
+if decision_request_start == -1 or decision_request_end == -1:
+    raise RuntimeError("unable to locate DecisionRequest interface")
+decision_request = s[decision_request_start:decision_request_end + 3]
+decision_request = replace_exactly_once(
+    decision_request,
+    "context?: object;",
+    "context?: object | null;",
+    "DecisionRequest context type",
+)
+s = s[:decision_request_start] + decision_request + s[decision_request_end + 3:]
+decision_request_parser_start = s.find("export function DecisionRequestFromJSONTyped")
+decision_request_parser_end = s.find("\n}\n", decision_request_parser_start)
+if decision_request_parser_start == -1 or decision_request_parser_end == -1:
+    raise RuntimeError("unable to locate DecisionRequest parser")
+decision_request_parser = s[decision_request_parser_start:decision_request_parser_end + 3]
+decision_request_parser = replace_exactly_once(
+    decision_request_parser,
+    "'context': json['context'] == null ? undefined : json['context'],",
+    "'context': json['context'] === undefined ? undefined : json['context'],",
+    "DecisionRequest context parser",
+)
+s = s[:decision_request_parser_start] + decision_request_parser + s[decision_request_parser_end + 3:]
+
 if "export type ReasonCode = HelmErrorErrorReasonCodeEnum;" not in s:
     s += "\nexport type ReasonCode = HelmErrorErrorReasonCodeEnum;\n"
 

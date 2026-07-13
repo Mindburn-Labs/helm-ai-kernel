@@ -107,6 +107,17 @@ function expectNoThrow(fn: () => unknown): void {
 }
 
 describe("generated OpenAPI TypeScript helpers", () => {
+  it("preserves an explicitly null DecisionRequest context", () => {
+    const request: openapiTypes.DecisionRequest = {
+      action: "EXECUTE_TOOL",
+      resource: "local.echo",
+      context: null,
+    };
+
+    expect(openapiTypes.DecisionRequestFromJSON(request).context).toBeNull();
+    expect(openapiTypes.DecisionRequestToJSON(request)).toEqual(request);
+  });
+
   it("exercises every generated JSON converter and interface guard", () => {
     const exercised: string[] = [];
 

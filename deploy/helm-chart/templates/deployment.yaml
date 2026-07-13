@@ -135,6 +135,10 @@ spec:
               value: {{ .Values.helm.policy.source.pollInterval | quote }}
             - name: HELM_POLICY_INITIAL_RECONCILE_TIMEOUT
               value: {{ .Values.helm.policy.source.initialReconcileTimeout | quote }}
+            - name: HELM_POLICY_ON_INVALID_UPDATE
+              value: {{ .Values.helm.policy.failClosed.onInvalidUpdate | quote }}
+            - name: HELM_POLICY_LAST_KNOWN_GOOD_MAX_AGE
+              value: {{ .Values.helm.policy.failClosed.lastKnownGoodMaxAge | quote }}
             - name: HELM_POLICY_RELOAD_ENDPOINT
               value: {{ .Values.helm.policy.reloadHints.httpWakeEndpoint | quote }}
             - name: HELM_POLICY_SIGNATURE_REQUIRED

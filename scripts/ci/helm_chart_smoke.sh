@@ -81,6 +81,9 @@ helm_runner template "$RELEASE" "$CHART" \
 assert_contains "$default_rendered" "kind: Deployment"
 assert_contains "$default_rendered" "HELM_POLICY_SOURCE_KIND"
 assert_contains "$default_rendered" "mountedFile"
+assert_contains "$default_rendered" "HELM_POLICY_ON_INVALID_UPDATE"
+assert_contains "$default_rendered" "HELM_POLICY_LAST_KNOWN_GOOD_MAX_AGE"
+assert_contains "$default_rendered" "keepLastKnownGood"
 assert_contains "$default_rendered" "HELM_POLICY_SIGNATURE_REQUIRED"
 assert_contains "$default_rendered" "/etc/helm-ai-kernel/policy/serve-policy.toml"
 assert_contains "$default_rendered" "HELM_RUNTIME_TENANT_ID"
@@ -99,6 +102,16 @@ assert_not_contains "$default_rendered" "configmap-reload"
 assert_not_contains "$default_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
+
+lkg_rendered="$RENDER_DIR/rendered-lkg-policy.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.policy.failClosed.onInvalidUpdate=deny \
+    --set helm.policy.failClosed.lastKnownGoodMaxAge=45s >"$lkg_rendered"
+assert_contains "$lkg_rendered" "HELM_POLICY_ON_INVALID_UPDATE"
+assert_contains "$lkg_rendered" "value: \"deny\""
+assert_contains "$lkg_rendered" "HELM_POLICY_LAST_KNOWN_GOOD_MAX_AGE"
+assert_contains "$lkg_rendered" "value: \"45s\""
 
 emergency_stop_rendered="$RENDER_DIR/rendered-emergency-stop.yaml"
 helm_runner template "$RELEASE" "$CHART" \

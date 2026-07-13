@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // CanonicalMarshal marshals v into canonical JSON format (RFC 8785).
@@ -59,15 +62,57 @@ func CanonicalizeDecisionStrict(id, verdict, reason, phenotypeHash, policyConten
 	return CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest), nil
 }
 
-// CanonicalizeIntent creates a canonical string representation of an intent for signing.
-// New signing paths pass effectDigestHash to bind the intent to the exact
-// effect approved by the decision; the variadic form preserves old callers
-// that only need to inspect the legacy component ordering.
+// CanonicalizeIntent preserves the legacy compact formatter for callers that
+// need to display or inspect old intent identifiers. It is not used for new
+// authorization signatures.
 func CanonicalizeIntent(id, decisionID, allowedTool string, effectDigestHash ...string) string {
 	if len(effectDigestHash) == 0 {
 		return fmt.Sprintf("%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool)
 	}
 	return fmt.Sprintf("%s%s%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool, SigSeparator, effectDigestHash[0])
+}
+
+const intentSignatureVersion = "helm.intent.v2"
+
+// canonicalizeIntentForSignature binds every authority-relevant intent field.
+// It intentionally excludes only Signature itself.
+func canonicalizeIntentForSignature(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
+	if intent == nil {
+		return nil, fmt.Errorf("intent is required for canonicalization")
+	}
+
+	payload := struct {
+		Version                      string   `json:"version"`
+		ID                           string   `json:"id"`
+		DecisionID                   string   `json:"decision_id"`
+		EffectDigestHash             string   `json:"effect_digest_hash"`
+		IdempotencyKey               string   `json:"idempotency_key"`
+		IssuedAt                     string   `json:"issued_at"`
+		ExpiresAt                    string   `json:"expires_at"`
+		Signer                       string   `json:"signer"`
+		SignatureType                string   `json:"signature_type"`
+		AllowedTool                  string   `json:"allowed_tool"`
+		Taint                        []string `json:"taint"`
+		EmergencyActivationID        string   `json:"emergency_activation_id"`
+		EmergencyDelegationSessionID string   `json:"emergency_delegation_session_id"`
+		EmergencyScopeHash           string   `json:"emergency_scope_hash"`
+	}{
+		Version:                      intentSignatureVersion,
+		ID:                           intent.ID,
+		DecisionID:                   intent.DecisionID,
+		EffectDigestHash:             intent.EffectDigestHash,
+		IdempotencyKey:               intent.IdempotencyKey,
+		IssuedAt:                     intent.IssuedAt.UTC().Format(time.RFC3339Nano),
+		ExpiresAt:                    intent.ExpiresAt.UTC().Format(time.RFC3339Nano),
+		Signer:                       intent.Signer,
+		SignatureType:                intent.SignatureType,
+		AllowedTool:                  intent.AllowedTool,
+		Taint:                        contracts.NormalizeTaintLabels(intent.Taint),
+		EmergencyActivationID:        intent.EmergencyActivationID,
+		EmergencyDelegationSessionID: intent.EmergencyDelegationSessionID,
+		EmergencyScopeHash:           intent.EmergencyScopeHash,
+	}
+	return CanonicalMarshal(payload)
 }
 
 // CanonicalizeReceipt creates a canonical string representation of a receipt for signing.

@@ -8,6 +8,7 @@ import (
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
@@ -373,7 +374,17 @@ func TestExt_IssueIntentPropagatesTaint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec := &contracts.DecisionRecord{ID: "dec-taint", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: digest}
+	dec := &contracts.DecisionRecord{
+		ID:              "dec-taint",
+		SubjectID:       "principal:taint-test",
+		Action:          "tool_call",
+		Resource:        "safe_tool",
+		Verdict:         string(contracts.VerdictAllow),
+		Signature:       "sig",
+		SignatureSchema: crypto.DecisionSignatureSchemaV2,
+		SignatureType:   "test:decision",
+		EffectDigest:    digest,
+	}
 	intent, err := g.IssueExecutionIntent(context.Background(), dec, effect)
 	if err != nil {
 		t.Fatalf("IssueExecutionIntent failed: %v", err)

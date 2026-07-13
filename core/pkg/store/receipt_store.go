@@ -19,6 +19,7 @@ type ReceiptStore interface {
 	List(ctx context.Context, limit int) ([]*contracts.Receipt, error)
 	ListSince(ctx context.Context, since uint64, limit int) ([]*contracts.Receipt, error)
 	ListByAgent(ctx context.Context, agentID string, since uint64, limit int) ([]*contracts.Receipt, error)
+	ListBySession(ctx context.Context, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error)
 	Store(ctx context.Context, receipt *contracts.Receipt) error
 	AppendCausal(ctx context.Context, sessionID string, build CausalReceiptBuilder) error
 	// GetLastForSession returns the most recent receipt for a given session (for causal DAG chaining).
@@ -31,23 +32,21 @@ type CausalReceiptBuilder func(previous *contracts.Receipt, lamport uint64, prev
 
 // PostgresReceiptStore is a durable SQL-based implementation.
 type PostgresReceiptStore struct {
-	db            *sql.DB
-	lastMu        sync.Mutex
-	lastBySession map[string]*contracts.Receipt
-	locksMu       sync.Mutex
-	sessionLocks  map[string]*sync.Mutex
+	db           *sql.DB
+	locksMu      sync.Mutex
+	sessionLocks map[string]*sync.Mutex
 }
 
 func NewPostgresReceiptStore(db *sql.DB) *PostgresReceiptStore {
 	return &PostgresReceiptStore{
-		db:            db,
-		lastBySession: map[string]*contracts.Receipt{},
-		sessionLocks:  map[string]*sync.Mutex{},
+		db:           db,
+		sessionLocks: map[string]*sync.Mutex{},
 	}
 }
 
 func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 	query := `
+		CREATE SEQUENCE IF NOT EXISTS receipts_stream_sequence;
 		CREATE TABLE IF NOT EXISTS receipts (
 			receipt_id TEXT PRIMARY KEY,
 			decision_id TEXT,
@@ -58,20 +57,32 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			result BYTEA,
 			timestamp TIMESTAMPTZ,
 			executor_id TEXT,
+			session_id TEXT DEFAULT '',
 			metadata JSONB,
 			signature TEXT,
 			merkle_root TEXT,
 			prev_hash TEXT,
 			lamport_clock BIGINT,
+			stream_sequence BIGINT NOT NULL DEFAULT nextval('receipts_stream_sequence'),
 			output_hash TEXT DEFAULT '',
 			args_hash TEXT DEFAULT '',
 			blob_hash TEXT DEFAULT '',
 			log_id TEXT DEFAULT '',
 			leaf_index BIGINT DEFAULT 0,
-			transparency JSONB
+			transparency JSONB,
+			receipt_envelope JSONB
 		);
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS effect_id TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS external_reference_id TEXT;
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS session_id TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS stream_sequence BIGINT;
+		ALTER TABLE receipts ALTER COLUMN stream_sequence SET DEFAULT nextval('receipts_stream_sequence');
+		UPDATE receipts SET stream_sequence = nextval('receipts_stream_sequence') WHERE stream_sequence IS NULL;
+		SELECT setval(
+			'receipts_stream_sequence',
+			GREATEST(COALESCE((SELECT MAX(stream_sequence) FROM receipts), 1), 1),
+			EXISTS(SELECT 1 FROM receipts WHERE stream_sequence IS NOT NULL)
+		);
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS metadata JSONB;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS merkle_root TEXT;
@@ -81,12 +92,19 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS log_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS leaf_index BIGINT DEFAULT 0;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS transparency JSONB;
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS receipt_envelope JSONB;
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_id ON receipts(executor_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_decision_id ON receipts(decision_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport ON receipts(executor_id, lamport_clock);
+		CREATE INDEX IF NOT EXISTS idx_receipts_session_lamport ON receipts(session_id, lamport_clock);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport_desc ON receipts(executor_id, lamport_clock DESC);
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_executor_lamport_unique ON receipts(executor_id, lamport_clock)
-			WHERE executor_id IS NOT NULL AND executor_id <> '' AND lamport_clock > 0;
+		-- Lamport clocks are scoped to a signed session. Retire the historic
+		-- executor-based uniqueness guard before installing the correct one.
+		DROP INDEX IF EXISTS idx_receipts_executor_lamport_unique;
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_session_lamport_unique ON receipts(session_id, lamport_clock)
+			WHERE session_id IS NOT NULL AND session_id <> '' AND lamport_clock > 0;
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_stream_sequence_unique ON receipts(stream_sequence)
+			WHERE stream_sequence IS NOT NULL;
 		CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp);
 	`
@@ -95,7 +113,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 }
 
 // receiptColumns is the canonical column list for receipt queries.
-const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency`
+const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, COALESCE(stream_sequence, 0) AS stream_sequence, args_hash, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(session_id, '') AS session_id, receipt_envelope`
 
 func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE decision_id = $1`
@@ -130,7 +148,7 @@ func (s *PostgresReceiptStore) List(ctx context.Context, limit int) ([]*contract
 }
 
 func (s *PostgresReceiptStore) ListByAgent(ctx context.Context, agentID string, since uint64, limit int) ([]*contracts.Receipt, error) {
-	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE executor_id = $1 AND lamport_clock > $2 ORDER BY lamport_clock ASC, timestamp ASC LIMIT $3`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE executor_id = $1 AND stream_sequence > $2 ORDER BY stream_sequence ASC LIMIT $3`
 	rows, err := s.db.QueryContext(ctx, query, agentID, since, limit)
 	if err != nil {
 		return nil, err
@@ -151,8 +169,35 @@ func (s *PostgresReceiptStore) ListByAgent(ctx context.Context, agentID string, 
 	return receipts, nil
 }
 
+// ListBySession returns receipts from one signed session. Unlike executor_id,
+// SessionID is part of the v2 receipt envelope and defines the causal chain.
+// Historic records predate SessionID; they are readable under their executor
+// ID only for migration/export compatibility and are never mixed into a v2
+// signed session chain.
+func (s *PostgresReceiptStore) ListBySession(ctx context.Context, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE (COALESCE(session_id, '') = $1 OR (COALESCE(session_id, '') = '' AND executor_id = $1)) AND stream_sequence > $2 ORDER BY stream_sequence ASC LIMIT $3`
+	rows, err := s.db.QueryContext(ctx, query, sessionID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var receipts []*contracts.Receipt
+	for rows.Next() {
+		r, err := scanReceipt(rows)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return receipts, nil
+}
+
 func (s *PostgresReceiptStore) ListSince(ctx context.Context, since uint64, limit int) ([]*contracts.Receipt, error) {
-	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE lamport_clock > $1 ORDER BY lamport_clock ASC, timestamp ASC LIMIT $2`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE stream_sequence > $1 ORDER BY stream_sequence ASC LIMIT $2`
 	rows, err := s.db.QueryContext(ctx, query, since, limit)
 	if err != nil {
 		return nil, err
@@ -184,10 +229,11 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 	var signature sql.NullString
 	var merkleRoot sql.NullString
 	var transparency []byte
+	var envelope []byte
 	err := s.Scan(
 		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
 		&r.BlobHash, &r.OutputHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
-		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.LogID, &r.LeafIndex, &transparency,
+		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.StreamSequence, &r.ArgsHash, &r.LogID, &r.LeafIndex, &transparency, &r.SessionID, &envelope,
 	)
 	if err != nil {
 		return nil, err
@@ -202,7 +248,51 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 	}
 	r.Signature = signature.String
 	r.MerkleRoot = merkleRoot.String
+	if len(envelope) > 0 && string(envelope) != "null" {
+		return decodePersistedReceiptEnvelope(envelope, r)
+	}
 	return &r, nil
+}
+
+// encodeReceiptEnvelope persists the complete receipt contract alongside its
+// indexed SQL columns. Versioned signatures cover fields far beyond the
+// historic column set; rehydrating a v2 receipt from only those columns would
+// silently change its signed preimage and break both verification and causal
+// chaining. Legacy rows deliberately have a NULL envelope and continue to be
+// read through the historic column path.
+func encodeReceiptEnvelope(r *contracts.Receipt) ([]byte, error) {
+	if r == nil {
+		return nil, fmt.Errorf("receipt envelope requires a receipt")
+	}
+	envelope, err := canonicalize.JCS(r)
+	if err != nil {
+		return nil, fmt.Errorf("marshal receipt envelope: %w", err)
+	}
+	return envelope, nil
+}
+
+func decodePersistedReceiptEnvelope(raw []byte, indexed contracts.Receipt) (*contracts.Receipt, error) {
+	var receipt contracts.Receipt
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		return nil, fmt.Errorf("decode receipt envelope: %w", err)
+	}
+	// The indexed columns drive lookup, ordering, and causal locks. Refuse a
+	// mixed row rather than returning an envelope whose signed identity does
+	// not match the row selected by those indexes.
+	if receipt.ReceiptID != indexed.ReceiptID ||
+		receipt.DecisionID != indexed.DecisionID ||
+		receipt.EffectID != indexed.EffectID ||
+		receipt.ExecutorID != indexed.ExecutorID ||
+		receipt.SessionID != indexed.SessionID ||
+		receipt.LamportClock != indexed.LamportClock ||
+		receipt.Signature != indexed.Signature {
+		return nil, fmt.Errorf("persisted receipt envelope does not match indexed receipt identity %q", indexed.ReceiptID)
+	}
+	// The feed cursor is storage-owned and intentionally excluded from the
+	// signed JSON envelope. Preserve the SQL value after envelope rehydration
+	// so pagination and SSE never fall back to the session-local Lamport clock.
+	receipt.StreamSequence = indexed.StreamSequence
+	return &receipt, nil
 }
 
 // decodeTransparencyAnchor deserializes the persisted transparency anchor JSON
@@ -255,11 +345,7 @@ func (s *PostgresReceiptStore) queryOne(ctx context.Context, query string, arg a
 }
 
 func (s *PostgresReceiptStore) Store(ctx context.Context, r *contracts.Receipt) error {
-	if err := insertPostgresReceipt(ctx, s.db, r); err != nil {
-		return err
-	}
-	s.rememberLastReceipt(r)
-	return nil
+	return insertPostgresReceipt(ctx, s.db, r)
 }
 
 type sqlExecer interface {
@@ -269,17 +355,21 @@ type sqlExecer interface {
 func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.Receipt) error {
 	query := `
 		INSERT INTO receipts (
-			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
+			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id, session_id,
 			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, args_hash, blob_hash,
-			log_id, leaf_index, transparency
+			log_id, leaf_index, transparency, receipt_envelope
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
 		return fmt.Errorf("marshal receipt metadata: %w", err)
 	}
 	transparencyJSON, err := encodeTransparencyAnchor(r)
+	if err != nil {
+		return err
+	}
+	envelope, err := encodeReceiptEnvelope(r)
 	if err != nil {
 		return err
 	}
@@ -292,6 +382,7 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		[]byte(r.BlobHash),
 		r.Timestamp,
 		r.ExecutorID,
+		r.SessionID,
 		string(metaJSON),
 		r.Signature,
 		r.MerkleRoot,
@@ -303,6 +394,7 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		r.LogID,
 		r.LeafIndex,
 		nullableJSON(transparencyJSON),
+		nullableJSON(envelope),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
@@ -320,19 +412,6 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 	localLock := s.sessionLock(sessionID)
 	localLock.Lock()
 	defer localLock.Unlock()
-
-	if last := s.cachedLastReceipt(sessionID); last != nil {
-		receipt, err := buildNextCausalReceipt(sessionID, last, build)
-		if err != nil {
-			return err
-		}
-		if err := insertPostgresReceipt(ctx, s.db, receipt); err != nil {
-			s.forgetLastReceipt(sessionID)
-			return err
-		}
-		s.rememberLastReceipt(receipt)
-		return nil
-	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -362,40 +441,12 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 		return fmt.Errorf("commit receipt transaction: %w", err)
 	}
 	committed = true
-	s.rememberLastReceipt(receipt)
 	return nil
 }
 
-// GetLastForSession returns the most recent receipt for a session (by executor_id) for causal DAG chaining.
+// GetLastForSession returns the most recent receipt for a signed session for causal DAG chaining.
 func (s *PostgresReceiptStore) GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error) {
 	return queryLastPostgresReceipt(ctx, s.db, sessionID)
-}
-
-func (s *PostgresReceiptStore) cachedLastReceipt(sessionID string) *contracts.Receipt {
-	s.lastMu.Lock()
-	defer s.lastMu.Unlock()
-	return cloneReceipt(s.lastBySession[sessionID])
-}
-
-func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
-	if r == nil || r.ExecutorID == "" || r.LamportClock == 0 {
-		return
-	}
-	s.lastMu.Lock()
-	defer s.lastMu.Unlock()
-	if s.lastBySession == nil {
-		s.lastBySession = map[string]*contracts.Receipt{}
-	}
-	current := s.lastBySession[r.ExecutorID]
-	if current == nil || r.LamportClock >= current.LamportClock {
-		s.lastBySession[r.ExecutorID] = cloneReceipt(r)
-	}
-}
-
-func (s *PostgresReceiptStore) forgetLastReceipt(sessionID string) {
-	s.lastMu.Lock()
-	defer s.lastMu.Unlock()
-	delete(s.lastBySession, sessionID)
 }
 
 func (s *PostgresReceiptStore) sessionLock(sessionID string) *sync.Mutex {
@@ -416,13 +467,12 @@ func cloneReceipt(r *contracts.Receipt) *contracts.Receipt {
 	if r == nil {
 		return nil
 	}
-	clone := *r
-	if r.Metadata != nil {
-		clone.Metadata = make(map[string]any, len(r.Metadata))
-		for k, v := range r.Metadata {
-			clone.Metadata[k] = v
+	if envelope, err := encodeReceiptEnvelope(r); err == nil {
+		if cloned, err := decodePersistedReceiptEnvelope(envelope, *r); err == nil {
+			return cloned
 		}
 	}
+	clone := *r
 	return &clone
 }
 
@@ -431,7 +481,7 @@ type sqlQueryer interface {
 }
 
 func queryLastPostgresReceipt(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, error) {
-	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE executor_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE COALESCE(session_id, '') = $1 ORDER BY lamport_clock DESC LIMIT 1`
 	row := queryer.QueryRowContext(ctx, query, sessionID)
 	r, err := scanReceipt(row)
 	if err != nil {
@@ -461,11 +511,19 @@ func buildNextCausalReceipt(sessionID string, previous *contracts.Receipt, build
 	if receipt == nil {
 		return nil, fmt.Errorf("causal receipt builder returned nil")
 	}
+	// The callback is allowed to sign the receipt before it returns. Never
+	// mutate a field that is part of the v2 signing envelope afterwards: doing
+	// so would persist a receipt whose signature cannot verify. The caller must
+	// bind the session before signing, and the store only validates that binding
+	// while it owns the causal-chain lock.
 	if receipt.ExecutorID == "" {
-		receipt.ExecutorID = sessionID
+		return nil, fmt.Errorf("receipt executor_id is required for locked session %q", sessionID)
 	}
-	if receipt.ExecutorID != sessionID {
-		return nil, fmt.Errorf("receipt executor %q does not match locked session %q", receipt.ExecutorID, sessionID)
+	if receipt.SessionID == "" {
+		return nil, fmt.Errorf("receipt session_id is required for locked session %q", sessionID)
+	}
+	if receipt.SessionID != sessionID {
+		return nil, fmt.Errorf("receipt session %q does not match locked session %q", receipt.SessionID, sessionID)
 	}
 	if receipt.LamportClock != lamport {
 		return nil, fmt.Errorf("receipt lamport %d does not match assigned lamport %d", receipt.LamportClock, lamport)

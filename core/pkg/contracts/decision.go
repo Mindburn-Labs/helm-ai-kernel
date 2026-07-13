@@ -27,6 +27,13 @@ type DecisionRecord struct {
 	SubjectID string `json:"subject_id"` // Matches PrincipalID
 	Action    string `json:"action"`
 	Resource  string `json:"resource"`
+	// TenantID, WorkspaceID, and SessionID are populated only by a trusted
+	// transport or adapter. They are separately typed and signed so policy,
+	// metering, SafeDep, and receipt-chain authority cannot be selected from
+	// the caller-supplied InputContext map.
+	TenantID    string `json:"tenant_id,omitempty"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	SessionID   string `json:"session_id,omitempty"`
 
 	// V2: Cryptographic binding to effect semantics
 	EffectDigest string `json:"effect_digest,omitempty"`
@@ -135,11 +142,15 @@ type AuthorizedExecutionIntent struct {
 	IdempotencyKey   string    `json:"idempotency_key"`
 	IssuedAt         time.Time `json:"issued_at"`
 	ExpiresAt        time.Time `json:"expires_at"`
-	Signer           string    `json:"signer"`         // Kernel Identity
-	Signature        string    `json:"signature"`      // Sig of the Intent
-	SignatureType    string    `json:"signature_type"` // Algorithm binding (e.g. "ed25519:key-id")
-	AllowedTool      string    `json:"allowed_tool"`   // Constraint
-	Taint            []string  `json:"taint,omitempty"`
+	Signer           string    `json:"signer"`    // Kernel Identity
+	Signature        string    `json:"signature"` // Sig of the Intent
+	// SignatureSchema declares the canonical intent payload. An absent value is
+	// the legacy audit-only preimage; executable intents use the explicit v2
+	// schema so expiry and all authorization-relevant fields are bound.
+	SignatureSchema string   `json:"signature_schema,omitempty"`
+	SignatureType   string   `json:"signature_type"` // Algorithm binding (e.g. "ed25519:key-id")
+	AllowedTool     string   `json:"allowed_tool"`   // Constraint
+	Taint           []string `json:"taint,omitempty"`
 
 	// Safe Deprecation Mode emergency authority bindings. These are populated
 	// only after a prebuilt emergency capsule has passed continuity, hardware

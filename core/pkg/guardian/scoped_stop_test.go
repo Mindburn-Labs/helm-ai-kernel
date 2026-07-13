@@ -34,12 +34,10 @@ func TestScopedStopFenceDeniesExplicitlyScopedDispatch(t *testing.T) {
 	}
 	g := newMinimalGuardian(WithScopedStopReader(reader))
 	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
-		Principal: "agent-a",
-		Action:    "EXECUTE_TOOL",
-		Context: map[string]interface{}{
-			"tenant_id":    "tenant-a",
-			"workspace_id": "workspace-a",
-		},
+		Principal:   "agent-a",
+		Action:      "EXECUTE_TOOL",
+		TenantID:    "tenant-a",
+		WorkspaceID: "workspace-a",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -62,12 +60,10 @@ func TestScopedStopReaderFailureFailsClosedForScopedDispatch(t *testing.T) {
 	reader := &scopedStopReaderStub{err: errors.New("store unavailable")}
 	g := newMinimalGuardian(WithScopedStopReader(reader))
 	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
-		Principal: "agent-a",
-		Action:    "EXECUTE_TOOL",
-		Context: map[string]interface{}{
-			"tenant_id":    "tenant-a",
-			"workspace_id": "workspace-a",
-		},
+		Principal:   "agent-a",
+		Action:      "EXECUTE_TOOL",
+		TenantID:    "tenant-a",
+		WorkspaceID: "workspace-a",
 	})
 	if err != nil {
 		t.Fatal(err)

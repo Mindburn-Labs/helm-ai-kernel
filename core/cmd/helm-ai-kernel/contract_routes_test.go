@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 
@@ -75,10 +78,10 @@ func TestBoundaryStatusRouteReturnsRuntimeContract(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
 		t.Fatalf("decode boundary status: %v", err)
 	}
-	if status.Status != "degraded" || status.Mode != "oss-local" {
+	if status.Status != "ready" || status.Mode != "oss-local" {
 		t.Fatalf("boundary posture = status=%q mode=%q", status.Status, status.Mode)
 	}
-	if status.ReceiptStore != "ready" || status.ReceiptSigner != "unavailable" {
+	if status.ReceiptStore != "ready" || status.ReceiptSigner != "ready" {
 		t.Fatalf("boundary receipt mechanisms = store=%q signer=%q", status.ReceiptStore, status.ReceiptSigner)
 	}
 	if status.PDP != "fail-closed" || status.MCPFirewall != "enabled" || status.Sandbox != "deny-default" {
@@ -347,6 +350,10 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	if result["verdict"] != "FAIL" {
 		t.Fatalf("expected tampered bundle to fail verification, got %+v", result)
 	}
+	checks, _ := result["checks"].(map[string]any)
+	if checks["signatures"] != "FAIL" {
+		t.Fatalf("tampered receipt with a recomputed manifest must fail cryptographic signature verification, got %+v", result)
+	}
 }
 
 func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
@@ -405,10 +412,13 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 		Status:       string(contracts.VerdictAllow),
 		Timestamp:    time.Date(2026, 5, 5, 0, 1, 0, 0, time.UTC),
 		ExecutorID:   "agent.test",
-		Signature:    "sig-broken",
+		SessionID:    "agent.test",
 		PrevHash:     "wrong-prev-hash",
 		LamportClock: 2,
 		ArgsHash:     "args-broken",
+	}
+	if err := svc.ReceiptSigner.SignReceipt(broken); err != nil {
+		t.Fatal(err)
 	}
 	if err := svc.ReceiptStore.Store(context.Background(), broken); err != nil {
 		t.Fatal(err)
@@ -512,11 +522,11 @@ func TestReceiptListReturnsCursorPagination(t *testing.T) {
 	registerReceiptRoutes(mux, svc)
 
 	firstPage := requestReceiptList(t, mux, "/api/v1/receipts?limit=1")
-	if firstPage["count"] != float64(1) || firstPage["has_more"] != true || firstPage["next_cursor"] != "lamport:1" {
+	if firstPage["count"] != float64(1) || firstPage["has_more"] != true || firstPage["next_cursor"] != "stream:1" {
 		t.Fatalf("first page pagination metadata = %+v", firstPage)
 	}
-	secondPage := requestReceiptList(t, mux, "/api/v1/receipts?since=lamport:1&limit=1")
-	if secondPage["count"] != float64(1) || secondPage["has_more"] != false || secondPage["next_cursor"] != "lamport:2" {
+	secondPage := requestReceiptList(t, mux, "/api/v1/receipts?since=stream:1&limit=1")
+	if secondPage["count"] != float64(1) || secondPage["has_more"] != false || secondPage["next_cursor"] != "stream:2" {
 		t.Fatalf("second page pagination metadata = %+v", secondPage)
 	}
 }
@@ -533,22 +543,32 @@ func newContractRouteTestServices(t *testing.T) (*Services, func()) {
 		_ = db.Close()
 		t.Fatal(err)
 	}
+	signer, err := helmcrypto.NewEd25519Signer("contract-route-test")
+	if err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
 	receipt := &contracts.Receipt{
+		Type:         contracts.ReceiptTypeDecision,
 		ReceiptID:    "rcpt-test",
 		DecisionID:   "dec-test",
 		EffectID:     "EXECUTE_TOOL",
 		Status:       string(contracts.VerdictDeny),
 		Timestamp:    time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
 		ExecutorID:   "agent.test",
-		Signature:    "sig-test",
+		SessionID:    "agent.test",
 		LamportClock: 1,
 		ArgsHash:     "args-test",
+	}
+	if err := signer.SignReceipt(receipt); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
 	}
 	if err := receiptStore.Store(context.Background(), receipt); err != nil {
 		_ = db.Close()
 		t.Fatal(err)
 	}
-	return &Services{ReceiptStore: receiptStore}, func() { _ = db.Close() }
+	return &Services{ReceiptStore: receiptStore, ReceiptSigner: signer}, func() { _ = db.Close() }
 }
 
 func requestReceiptList(t *testing.T, mux *http.ServeMux, target string) map[string]any {
@@ -601,6 +621,10 @@ func (s *overflowReceiptStore) ListByAgent(_ context.Context, agentID string, si
 	return overflowReceipts(agentID, since, limit), nil
 }
 
+func (s *overflowReceiptStore) ListBySession(_ context.Context, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	return overflowReceipts(sessionID, since, limit), nil
+}
+
 func (s *overflowReceiptStore) ListSince(_ context.Context, since uint64, limit int) ([]*contracts.Receipt, error) {
 	return overflowReceipts("agent.overflow", since, limit), nil
 }
@@ -630,7 +654,22 @@ func tamperEvidenceReceipt(bundle []byte) ([]byte, error) {
 	}
 	for name, data := range parsed.Files {
 		if strings.HasPrefix(name, "receipts/") {
-			parsed.Files[name] = bytes.Replace(data, []byte("sig-test"), []byte("sig-tampered"), 1)
+			var receipt contracts.Receipt
+			if err := json.Unmarshal(data, &receipt); err != nil {
+				return nil, err
+			}
+			if receipt.Status == string(contracts.VerdictAllow) {
+				receipt.Status = string(contracts.VerdictDeny)
+			} else {
+				receipt.Status = string(contracts.VerdictAllow)
+			}
+			tampered, err := json.Marshal(receipt)
+			if err != nil {
+				return nil, err
+			}
+			parsed.Files[name] = tampered
+			sum := sha256.Sum256(tampered)
+			parsed.Manifest.FileHashes[name] = hex.EncodeToString(sum[:])
 			break
 		}
 	}

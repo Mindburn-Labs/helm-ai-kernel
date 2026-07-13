@@ -175,6 +175,7 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 			Status:       "OK",
 			Timestamp:    time.Now().Add(-time.Second),
 			ExecutorID:   "agent.demo.exec",
+			SessionID:    "agent.demo.exec",
 			PrevHash:     "prev-0",
 			LamportClock: 1,
 			ArgsHash:     "args-1",
@@ -187,6 +188,7 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 			Status:       "OK",
 			Timestamp:    time.Now(),
 			ExecutorID:   "agent.demo.exec",
+			SessionID:    "agent.demo.exec",
 			PrevHash:     "prev-1",
 			LamportClock: 2,
 			ArgsHash:     "args-2",
@@ -199,6 +201,7 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 			Status:       "OK",
 			Timestamp:    time.Now(),
 			ExecutorID:   "agent.other",
+			SessionID:    "agent.other",
 			LamportClock: 3,
 		},
 	}
@@ -244,6 +247,7 @@ func TestSQLiteReceiptRejectsDuplicateExecutorLamport(t *testing.T) {
 		Status:       "OK",
 		Timestamp:    time.Now(),
 		ExecutorID:   "agent.dup",
+		SessionID:    "agent.dup",
 		LamportClock: 9,
 	}
 	second := &contracts.Receipt{
@@ -253,6 +257,7 @@ func TestSQLiteReceiptRejectsDuplicateExecutorLamport(t *testing.T) {
 		Status:       "OK",
 		Timestamp:    time.Now().Add(time.Second),
 		ExecutorID:   "agent.dup",
+		SessionID:    "agent.dup",
 		LamportClock: 9,
 	}
 	if err := store.Store(ctx, first); err != nil {
@@ -275,6 +280,7 @@ func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
 			Status:       "OK",
 			Timestamp:    time.Unix(1700000000, 0).UTC(),
 			ExecutorID:   "agent.causal",
+			SessionID:    "agent.causal",
 			PrevHash:     prevHash,
 			LamportClock: lamport,
 			Signature:    "sig-1",
@@ -294,6 +300,7 @@ func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
 			Status:       "OK",
 			Timestamp:    time.Unix(1700000001, 0).UTC(),
 			ExecutorID:   "agent.causal",
+			SessionID:    "agent.causal",
 			PrevHash:     prevHash,
 			LamportClock: lamport,
 			Signature:    "sig-2",
@@ -402,6 +409,7 @@ func runReceiptAppendCausalLoad(t *testing.T, ctx context.Context, store Receipt
 						Status:       "OK",
 						Timestamp:    time.Unix(1700000000+int64(appendIndex), 0).UTC(),
 						ExecutorID:   sessionID,
+						SessionID:    sessionID,
 						PrevHash:     prevHash,
 						LamportClock: lamport,
 						Signature:    "sig",

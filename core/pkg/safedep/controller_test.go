@@ -77,12 +77,10 @@ func TestControllerActivatesDegradedNarrowingWithCapsuleQuorumAndContinuity(t *t
 		AttestedTime:                 now,
 		ExpiresAt:                    now.Add(time.Minute),
 	}
-	intent := &contracts.AuthorizedExecutionIntent{}
 	result, err := controller.Gate(context.Background(), GateRequest{
 		Signal:     Signal{HazardCode: contracts.HazardCredentialExpired, ActiveClock: true},
 		Checkpoint: cp,
 		Capsule:    &capsule,
-		Intent:     intent,
 		Action:     "credential.rotate.propose",
 		ToolName:   "github",
 	})
@@ -92,8 +90,8 @@ func TestControllerActivatesDegradedNarrowingWithCapsuleQuorumAndContinuity(t *t
 	if !result.DispatchAllowed || !result.NarrowedScope || result.ActivationReceipt == nil {
 		t.Fatalf("activation did not allow narrowed dispatch: %+v", result)
 	}
-	if intent.EmergencyActivationID == "" || intent.EmergencyDelegationSessionID != "session-1" {
-		t.Fatalf("intent did not receive emergency binding: %+v", intent)
+	if result.ActivationReceipt.ActivationID == "" || result.ActivationReceipt.DelegationSessionID != "session-1" {
+		t.Fatalf("activation receipt missing validated emergency authority: %+v", result.ActivationReceipt)
 	}
 	if _, err := controller.Gate(context.Background(), GateRequest{
 		Signal:     Signal{HazardCode: contracts.HazardCredentialExpired, ActiveClock: true},

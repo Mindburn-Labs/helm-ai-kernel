@@ -15,6 +15,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
@@ -33,6 +34,10 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid JSON body")
 			return
 		}
+		if err := rejectReservedDecisionContext(req.Context); err != nil {
+			api.WriteBadRequest(w, err.Error())
+			return
+		}
 		principal, err := helmauth.GetPrincipal(r.Context())
 		if err != nil || principal == nil {
 			api.WriteForbidden(w, "Evaluate route requires authenticated tenant principal context")
@@ -45,6 +50,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
+		sessionID := strings.TrimSpace(r.Header.Get(sessionHeader))
+		if sessionID == "" {
+			api.WriteBadRequest(w, "Evaluate route requires an explicit session binding")
+			return
+		}
 		if svc.EmergencyStops != nil {
 			configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
 			if configuredTenantID == "" || tenantID != configuredTenantID {
@@ -61,6 +71,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			}
 		}
 		req.Principal = principalID
+		req.TenantID = tenantID
+		req.WorkspaceID = workspaceID
+		req.SessionID = sessionID
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
@@ -123,11 +136,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				flusher.Flush()
 			} else {
 				for _, receipt := range receipts {
-					if receipt.LamportClock > cursor {
-						cursor = receipt.LamportClock
+					if receipt.StreamSequence > cursor {
+						cursor = receipt.StreamSequence
 					}
 					data, _ := json.Marshal(receipt)
-					fmt.Fprintf(w, "id: %d\nevent: receipt\ndata: %s\n\n", receipt.LamportClock, data)
+					fmt.Fprintf(w, "id: %d\nevent: receipt\ndata: %s\n\n", receipt.StreamSequence, data)
 					flusher.Flush()
 				}
 			}
@@ -198,6 +211,19 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 	}))
 }
 
+// rejectReservedDecisionContext keeps an HTTP caller from forging security
+// provenance that only a trusted in-process adapter may add. In particular,
+// security_context_trusted must never be accepted from JSON because it gates
+// tainted-egress exemptions in Guardian.
+func rejectReservedDecisionContext(input map[string]interface{}) error {
+	for key := range input {
+		if guardian.IsReservedSecurityContextKey(key) {
+			return fmt.Errorf("context field %q is reserved for a trusted transport", strings.TrimSpace(key))
+		}
+	}
+	return nil
+}
+
 func listReceiptsForCursor(ctx context.Context, svc *Services, agent string, since uint64, limit int) ([]*contracts.Receipt, error) {
 	if agent != "" {
 		return svc.ReceiptStore.ListByAgent(ctx, agent, since, limit)
@@ -206,7 +232,14 @@ func listReceiptsForCursor(ctx context.Context, svc *Services, agent string, sin
 }
 
 func parseReceiptCursor(raw string) (uint64, error) {
-	raw = strings.TrimSpace(strings.TrimPrefix(raw, "lamport:"))
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "lamport:") {
+		// A Lamport clock is scoped to a signed session. Treating it as a
+		// feed cursor can permanently skip another session's receipt, so make
+		// callers migrate explicitly instead of silently returning partial data.
+		return 0, fmt.Errorf("lamport cursors are not valid for receipt feeds; use stream:<sequence>")
+	}
+	raw = strings.TrimPrefix(raw, "stream:")
 	if raw == "" {
 		return 0, nil
 	}
@@ -216,14 +249,14 @@ func parseReceiptCursor(raw string) (uint64, error) {
 func nextReceiptCursor(receipts []*contracts.Receipt) string {
 	var cursor uint64
 	for _, receipt := range receipts {
-		if receipt.LamportClock > cursor {
-			cursor = receipt.LamportClock
+		if receipt.StreamSequence > cursor {
+			cursor = receipt.StreamSequence
 		}
 	}
 	if cursor == 0 {
 		return ""
 	}
-	return fmt.Sprintf("lamport:%d", cursor)
+	return fmt.Sprintf("stream:%d", cursor)
 }
 
 func parseLimit(raw string, fallback, max int) int {
@@ -246,12 +279,26 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 	if svc == nil || svc.ReceiptStore == nil || decision == nil {
 		return fmt.Errorf("receipt persistence unavailable")
 	}
+	if err := helmcrypto.RequireExecutableDecisionSignature(decision); err != nil {
+		return fmt.Errorf("decision receipt requires a request-bound decision: %w", err)
+	}
+	verifier, ok := svc.ReceiptSigner.(helmcrypto.Verifier)
+	if !ok || verifier == nil {
+		return fmt.Errorf("decision receipt verifier unavailable")
+	}
+	valid, err := verifier.VerifyDecision(decision)
+	if err != nil || !valid {
+		if err != nil {
+			return fmt.Errorf("verify decision receipt authority: %w", err)
+		}
+		return fmt.Errorf("verify decision receipt authority: invalid decision signature")
+	}
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {
 		agentID = "anonymous"
 	}
 	argsHash := sha256HexBytes(body)
-	receiptID := "rcpt_" + decision.ID
+	receiptID := "rcpt-decision-" + decision.ID
 	effectID := decision.Action
 	if effectID == "" {
 		if action, ok := metadata["action"].(string); ok {
@@ -265,8 +312,13 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 	if svc.ReceiptSigner == nil {
 		return fmt.Errorf("receipt signer unavailable")
 	}
-	err := svc.ReceiptStore.AppendCausal(ctx, agentID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+	sessionID := strings.TrimSpace(decision.SessionID)
+	if sessionID == "" {
+		return fmt.Errorf("decision receipt requires signed session_id")
+	}
+	err = svc.ReceiptStore.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		receipt := &contracts.Receipt{
+			Type:         contracts.ReceiptTypeDecision,
 			ReceiptID:    receiptID,
 			DecisionID:   decision.ID,
 			EffectID:     effectID,
@@ -275,6 +327,7 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 			OutputHash:   decision.PolicyDecisionHash,
 			Timestamp:    timestamp,
 			ExecutorID:   agentID,
+			SessionID:    sessionID,
 			ReasonCode:   decision.ReasonCode,
 			Metadata:     metadata,
 			PrevHash:     prevHash,
@@ -297,6 +350,73 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 		return fmt.Errorf("store receipt %s: %w", receiptID, err)
 	}
 	return nil
+}
+
+// persistLocalActivityReceipt persists a signed, causal record for a local
+// operator workflow. It deliberately does not manufacture a DecisionRecord:
+// onboarding and similar local activities are useful evidence, but are not
+// governance decisions and must never be interpreted as proof of a governed
+// dispatch.
+func persistLocalActivityReceipt(ctx context.Context, svc *Services, activityID, actorID, sessionID, action, resource, status, reasonCode string, timestamp time.Time, body []byte, metadata map[string]any) (string, error) {
+	if svc == nil || svc.ReceiptStore == nil || svc.ReceiptSigner == nil {
+		return "", fmt.Errorf("local activity receipt persistence unavailable")
+	}
+	activityID = strings.TrimSpace(activityID)
+	actorID = strings.TrimSpace(actorID)
+	sessionID = strings.TrimSpace(sessionID)
+	action = strings.TrimSpace(action)
+	if activityID == "" || actorID == "" || sessionID == "" || action == "" {
+		return "", fmt.Errorf("local activity receipt requires activity, actor, session, and action identifiers")
+	}
+	if timestamp.IsZero() {
+		timestamp = time.Now().UTC()
+	} else {
+		timestamp = timestamp.UTC()
+	}
+	boundMetadata := make(map[string]any, len(metadata)+4)
+	for key, value := range metadata {
+		boundMetadata[key] = value
+	}
+	boundMetadata["receipt_scope"] = "local_activity"
+	boundMetadata["non_governed_activity"] = true
+	boundMetadata["resource"] = resource
+	boundMetadata["action"] = action
+
+	receiptID := "rcpt-local-" + activityID
+	argsHash := sha256HexBytes(body)
+	if err := svc.ReceiptStore.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		receipt := &contracts.Receipt{
+			Type:         contracts.ReceiptTypeLocalActivity,
+			ReceiptID:    receiptID,
+			EffectID:     "local_activity:" + activityID,
+			Status:       status,
+			BlobHash:     argsHash,
+			Timestamp:    timestamp,
+			ExecutorID:   actorID,
+			SessionID:    sessionID,
+			ReasonCode:   reasonCode,
+			Metadata:     boundMetadata,
+			Action:       action,
+			PrevHash:     prevHash,
+			LamportClock: lamport,
+			ArgsHash:     argsHash,
+			Provenance: &contracts.ReceiptProvenance{
+				GeneratedBy: actorID,
+				GeneratedAt: timestamp,
+				Context:     "local_activity",
+			},
+		}
+		if err := svc.ReceiptSigner.SignReceipt(receipt); err != nil {
+			return nil, fmt.Errorf("sign local activity receipt %s: %w", receiptID, err)
+		}
+		if err := anchorReceiptTransparency(svc, receipt); err != nil {
+			return nil, err
+		}
+		return receipt, nil
+	}); err != nil {
+		return "", fmt.Errorf("store local activity receipt %s: %w", receiptID, err)
+	}
+	return receiptID, nil
 }
 
 // TransparencyAppender is the subset of the receipt transparency log needed at

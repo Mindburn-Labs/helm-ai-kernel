@@ -115,31 +115,32 @@ func (h *HybridSigner) SignDecision(d *contracts.DecisionRecord) error {
 
 // SignIntent signs an AuthorizedExecutionIntent using both Ed25519 and ML-DSA-65.
 func (h *HybridSigner) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
-	sig, err := h.Sign([]byte(payload))
+	payload, err := PrepareIntentForSigning(i, SigPrefixHybrid+SigSeparator+h.keyID)
+	if err != nil {
+		return err
+	}
+	sig, err := h.Sign(payload)
 	if err != nil {
 		return err
 	}
 	i.Signature = sig
-	i.SignatureType = SigPrefixHybrid + SigSeparator + h.keyID
 	return nil
 }
 
 // SignReceipt signs a Receipt using both Ed25519 and ML-DSA-65.
 func (h *HybridSigner) SignReceipt(r *contracts.Receipt) error {
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
-	sig, err := h.Sign([]byte(payload))
+	payload, err := PrepareReceiptForSigning(r, ReceiptProfileHybrid, SigPrefixHybrid, h.keyID, map[string]string{
+		SigPrefixEd25519: h.ed25519.PublicKey(),
+		SigPrefixMLDSA65: h.mldsa.PublicKey(),
+	})
+	if err != nil {
+		return err
+	}
+	sig, err := h.Sign(payload)
 	if err != nil {
 		return err
 	}
 	r.Signature = sig
-	r.SignatureProfile = ReceiptProfileHybrid
-	r.SignatureAlgorithm = SigPrefixHybrid
-	r.KeyID = h.keyID
-	r.PublicKeySet = map[string]string{
-		SigPrefixEd25519: h.ed25519.PublicKey(),
-		SigPrefixMLDSA65: h.mldsa.PublicKey(),
-	}
 	return nil
 }
 

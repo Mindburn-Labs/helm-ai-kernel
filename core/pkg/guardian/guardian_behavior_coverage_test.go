@@ -7,6 +7,7 @@ import (
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 )
@@ -37,6 +38,10 @@ func (s *testSigner) PublicKeyBytes() []byte      { return []byte("pk") }
 func (s *testSigner) SignDecision(d *contracts.DecisionRecord) error {
 	if s.fail {
 		return errSignerBroken
+	}
+	if d.SubjectID != "" && d.Action != "" && d.Resource != "" {
+		d.SignatureSchema = crypto.DecisionSignatureSchemaV2
+		d.SignatureType = "test:decision"
 	}
 	d.Signature = "test_sig"
 	return nil

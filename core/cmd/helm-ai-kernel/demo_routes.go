@@ -233,7 +233,15 @@ func buildDemoReceipt(svc *Services, decision *contracts.DecisionRecord, body []
 	if timestamp.IsZero() {
 		timestamp = time.Now().UTC()
 	}
+	boundMetadata := make(map[string]any, len(metadata)+3)
+	for key, value := range metadata {
+		boundMetadata[key] = value
+	}
+	boundMetadata["receipt_scope"] = "simulation"
+	boundMetadata["simulation_only"] = true
+	boundMetadata["side_effect_dispatched"] = false
 	receipt := &contracts.Receipt{
+		Type:         contracts.ReceiptTypeSimulation,
 		ReceiptID:    receiptID,
 		DecisionID:   decision.ID,
 		EffectID:     effectID,
@@ -242,10 +250,17 @@ func buildDemoReceipt(svc *Services, decision *contracts.DecisionRecord, body []
 		OutputHash:   decision.PolicyDecisionHash,
 		Timestamp:    timestamp,
 		ExecutorID:   agentID,
-		Metadata:     metadata,
+		SessionID:    "demo:" + decision.ID,
+		Metadata:     boundMetadata,
+		Action:       decision.Action,
 		PrevHash:     "",
 		LamportClock: 1,
 		ArgsHash:     argsHash,
+		Provenance: &contracts.ReceiptProvenance{
+			GeneratedBy: agentID,
+			GeneratedAt: timestamp,
+			Context:     "simulation",
+		},
 	}
 	if err := svc.ReceiptSigner.SignReceipt(receipt); err != nil {
 		return nil, fmt.Errorf("sign demo receipt %s: %w", receiptID, err)

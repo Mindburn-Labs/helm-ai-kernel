@@ -37,9 +37,65 @@ pub struct DecisionRecord {
     pub policy_decision_hash: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "12")]
     pub input_context: ::prost::alloc::vec::Vec<u8>,
+    /// Request tuple cryptographically bound by signature_schema v2.
+    #[prost(string, tag = "13")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "14")]
+    pub action: ::prost::alloc::string::String,
+    #[prost(string, tag = "15")]
+    pub resource: ::prost::alloc::string::String,
+    /// Empty denotes the legacy v1 decision preimage. v2 currently uses
+    /// "helm.decision.signature.v2" and also binds signature_type.
+    #[prost(string, tag = "16")]
+    pub signature_schema: ::prost::alloc::string::String,
+    #[prost(string, tag = "17")]
+    pub signature_type: ::prost::alloc::string::String,
+    /// Complete additive v2 signing envelope. The legacy fields above remain
+    /// valid for v1 consumers; v2 consumers must preserve these exact fields.
+    #[prost(string, tag = "18")]
+    pub proposal_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "19")]
+    pub step_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "20")]
+    pub phenotype_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "21")]
+    pub policy_version: ::prost::alloc::string::String,
+    #[prost(string, tag = "22")]
+    pub policy_backend: ::prost::alloc::string::String,
+    #[prost(string, tag = "23")]
+    pub policy_content_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "24")]
+    pub policy_epoch: ::prost::alloc::string::String,
+    #[prost(string, tag = "25")]
+    pub state_cursor: ::prost::alloc::string::String,
+    #[prost(string, tag = "26")]
+    pub snapshot: ::prost::alloc::string::String,
+    #[prost(string, tag = "27")]
+    pub env_fingerprint: ::prost::alloc::string::String,
+    /// ReasonCode enum is intentionally narrow; this preserves the canonical
+    /// string registry value that is actually signed.
+    #[prost(string, tag = "28")]
+    pub reason_code_text: ::prost::alloc::string::String,
+    #[prost(double, tag = "29")]
+    pub trajectory_risk_score: f64,
+    #[prost(string, tag = "30")]
+    pub session_centroid_hash: ::prost::alloc::string::String,
+    #[prost(int32, tag = "31")]
+    pub risk_accumulation_window: i32,
+    #[prost(message, optional, tag = "32")]
+    pub intervention: ::core::option::Option<DecisionInterventionMetadata>,
+    /// Trusted scope is signed in the v2 decision envelope. It is populated by
+    /// authenticated adapters, never inferred from input_context.
+    #[prost(string, tag = "33")]
+    pub tenant_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "34")]
+    pub workspace_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "35")]
+    pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizedExecutionIntent {
+    /// Legacy fields retained for v1 consumers.
     #[prost(string, tag = "1")]
     pub intent_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
@@ -56,9 +112,32 @@ pub struct AuthorizedExecutionIntent {
     pub signer_key_id: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub principal: ::prost::alloc::string::String,
+    /// Complete v2 signing envelope. New executable consumers must preserve
+    /// every field below when relaying an intent for independent verification.
+    #[prost(string, tag = "9")]
+    pub effect_digest_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "10")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub signer: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
+    pub signature_schema: ::prost::alloc::string::String,
+    #[prost(string, tag = "13")]
+    pub signature_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "14")]
+    pub allowed_tool: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "15")]
+    pub taint: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "16")]
+    pub emergency_activation_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "17")]
+    pub emergency_delegation_session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "18")]
+    pub emergency_scope_hash: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Receipt {
+    /// Legacy fields retained for v1 consumers.
     #[prost(string, tag = "1")]
     pub receipt_version: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
@@ -94,6 +173,102 @@ pub struct Receipt {
         ::prost::alloc::string::String,
         ::prost::alloc::string::String,
     >,
+    /// Complete v2 receipt signing envelope. Nested evidence objects remain
+    /// canonical JSON bytes so existing SDKs can preserve their exact values
+    /// without a lossy re-modeling of every evidence extension.
+    #[prost(string, tag = "17")]
+    pub signature_schema: ::prost::alloc::string::String,
+    #[prost(string, tag = "18")]
+    pub signature_profile: ::prost::alloc::string::String,
+    #[prost(string, tag = "19")]
+    pub signature_algorithm: ::prost::alloc::string::String,
+    #[prost(string, tag = "20")]
+    pub key_id: ::prost::alloc::string::String,
+    #[prost(map = "string, string", tag = "21")]
+    pub public_key_set: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(string, tag = "22")]
+    pub external_reference_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "23")]
+    pub status: ::prost::alloc::string::String,
+    #[prost(string, tag = "24")]
+    pub blob_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "25")]
+    pub output_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "26")]
+    pub prev_hash: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "27")]
+    pub lamport_clock: u64,
+    #[prost(string, tag = "28")]
+    pub args_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "29")]
+    pub executor_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "30")]
+    pub effect_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "31")]
+    pub tool_fingerprint: ::prost::alloc::string::String,
+    #[prost(string, tag = "32")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "33")]
+    pub tool_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "34")]
+    pub reason_code_text: ::prost::alloc::string::String,
+    #[prost(string, tag = "35")]
+    pub policy_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "36")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "37")]
+    pub scope_hash: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "38")]
+    pub issued_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "39")]
+    pub emergency_activation_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "40")]
+    pub emergency_delegation_session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "41")]
+    pub emergency_scope_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "42")]
+    pub safe_dep_state: ::prost::alloc::string::String,
+    #[prost(string, tag = "43")]
+    pub safe_dep_reason_code: ::prost::alloc::string::String,
+    #[prost(string, tag = "44")]
+    pub network_log_ref: ::prost::alloc::string::String,
+    #[prost(string, tag = "45")]
+    pub secret_events_ref: ::prost::alloc::string::String,
+    #[prost(string, tag = "46")]
+    pub sandbox_lease_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "47")]
+    pub effect_graph_node_id: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "48")]
+    pub port_exposures_json: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "49")]
+    pub replay_script_json: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "50")]
+    pub provenance_json: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "51")]
+    pub bundled_artifacts_json: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "52")]
+    pub transparency_json: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "53")]
+    pub log_id: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "54")]
+    pub leaf_index: u64,
+}
+/// DecisionInterventionMetadata carries the Temporal Guardian fields included
+/// in a v2 decision signing envelope. Durations are encoded as nanoseconds to
+/// preserve Go time.Duration exactly.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DecisionInterventionMetadata {
+    #[prost(string, tag = "1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub reason_code: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub wait_duration_nanos: i64,
+    #[prost(int64, tag = "4")]
+    pub tokens_saved: i64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PdpRequest {

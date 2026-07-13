@@ -110,7 +110,7 @@ func TestDeepEd25519SignReceipt(t *testing.T) {
 
 func TestDeepEd25519SignIntent(t *testing.T) {
 	signer, _ := NewEd25519Signer("key-1")
-	i := &contracts.AuthorizedExecutionIntent{ID: "i1", DecisionID: "d1", AllowedTool: "tool1"}
+	i := executableIntentFixture("i1", "d1", "sha256:effect-i1", "tool1")
 	if err := signer.SignIntent(i); err != nil {
 		t.Fatal(err)
 	}

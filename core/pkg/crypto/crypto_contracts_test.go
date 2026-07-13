@@ -99,7 +99,7 @@ func TestFinal_SignAndVerifyReceipt(t *testing.T) {
 
 func TestFinal_SignAndVerifyIntent(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
-	i := &contracts.AuthorizedExecutionIntent{ID: "i1", DecisionID: "d1", AllowedTool: "tool1"}
+	i := executableIntentFixture("i1", "d1", "sha256:effect-i1", "tool1")
 	if err := s.SignIntent(i); err != nil {
 		t.Fatal(err)
 	}

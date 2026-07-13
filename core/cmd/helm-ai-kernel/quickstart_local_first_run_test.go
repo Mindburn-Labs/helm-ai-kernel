@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
@@ -248,6 +249,9 @@ func TestQuickstartOnboardingRunStepSignsReceiptAndExportsEvidence(t *testing.T)
 		}
 		if receipt.Metadata["onboarding_step"] == "deny" {
 			onboardingReceiptID = receipt.ReceiptID
+			if receipt.Type != contracts.ReceiptTypeLocalActivity || receipt.DecisionID != "" || receipt.Provenance == nil || receipt.Provenance.Context != "local_activity" || receipt.Metadata["non_governed_activity"] != true {
+				t.Fatalf("onboarding event must remain a local activity, not a governed decision or execution: %+v", receipt)
+			}
 			if receipt.Status != "DENY" {
 				t.Fatalf("receipt status = %q", receipt.Status)
 			}

@@ -16,6 +16,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectdigest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
@@ -175,37 +176,45 @@ func WithSafeDepController(controller *safedep.Controller) GuardianOption {
 	return func(g *Guardian) { g.safeDepController = controller }
 }
 
+// WithSafeDepAuthorityResolver injects the server-owned resolver used to
+// recover Safe Deprecation state. Governed decisions must never derive that
+// state from the caller-provided request context.
+func WithSafeDepAuthorityResolver(resolver safedep.AuthorityResolver) GuardianOption {
+	return func(g *Guardian) { g.safeDepAuthorityResolver = resolver }
+}
+
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
-	signer            crypto.Signer
-	prg               *prg.Graph
-	pe                *prg.PolicyEngine
-	registry          *pkg_artifact.Registry
-	clock             Clock
-	tracker           BudgetGate
-	auditLog          *AuditLog
-	temporal          *TemporalGuardian
-	envFprint         string                  // Boot-sequence fingerprint for DecisionRecords
-	pdp               pdp.PolicyDecisionPoint // Optional pluggable policy backend
-	snapshotStore     policyreconcile.PolicySnapshotStore
-	snapshotScope     policyreconcile.PolicyScope
-	complianceChecker ComplianceChecker            // Optional compliance pre-check
-	freezeCtrl        *kernel.FreezeController     // Global kill-switch
-	scopedStopReader  kernel.ScopedStopReader      // Tenant/workspace dispatch fence
-	agentKillSwitch   *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
-	contextGuard      *kernel.ContextGuard         // Environment mismatch detection
-	isolationChecker  *identity.IsolationChecker   // Agent credential reuse detection
-	egressChecker     *firewall.EgressChecker      // Network egress enforcement
-	threatScanner     *threatscan.Scanner          // Canonical threat signal scanner
-	delegationStore   identity.DelegationStore     // Delegation session store (§Gate 5)
-	behavioralScorer  *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
-	privilegeResolver PrivilegeResolver            // Privilege tier resolver
-	sessionRiskMemory *SessionRiskMemory           // Deterministic trajectory authorization gate
-	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
-	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
-	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
-	safeDepController *safedep.Controller          // Safe Deprecation emergency release plane
-	boundaryChain     []BoundaryInterceptor        // Cached request interceptors
+	signer                   crypto.Signer
+	prg                      *prg.Graph
+	pe                       *prg.PolicyEngine
+	registry                 *pkg_artifact.Registry
+	clock                    Clock
+	tracker                  BudgetGate
+	auditLog                 *AuditLog
+	temporal                 *TemporalGuardian
+	envFprint                string                  // Boot-sequence fingerprint for DecisionRecords
+	pdp                      pdp.PolicyDecisionPoint // Optional pluggable policy backend
+	snapshotStore            policyreconcile.PolicySnapshotStore
+	snapshotScope            policyreconcile.PolicyScope
+	complianceChecker        ComplianceChecker            // Optional compliance pre-check
+	freezeCtrl               *kernel.FreezeController     // Global kill-switch
+	scopedStopReader         kernel.ScopedStopReader      // Tenant/workspace dispatch fence
+	agentKillSwitch          *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
+	contextGuard             *kernel.ContextGuard         // Environment mismatch detection
+	isolationChecker         *identity.IsolationChecker   // Agent credential reuse detection
+	egressChecker            *firewall.EgressChecker      // Network egress enforcement
+	threatScanner            *threatscan.Scanner          // Canonical threat signal scanner
+	delegationStore          identity.DelegationStore     // Delegation session store (§Gate 5)
+	behavioralScorer         *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
+	privilegeResolver        PrivilegeResolver            // Privilege tier resolver
+	sessionRiskMemory        *SessionRiskMemory           // Deterministic trajectory authorization gate
+	otel                     *OTelInstrumentation         // Optional OTel tracing & metrics
+	warmLeaseMgr             *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
+	zeroidInterceptor        *ZeroIDInterceptor           // ZeroID identity validator
+	safeDepController        *safedep.Controller          // Safe Deprecation emergency release plane
+	safeDepAuthorityResolver safedep.AuthorityResolver    // Server-owned SafeDep authority source
+	boundaryChain            []BoundaryInterceptor        // Cached request interceptors
 }
 
 // ZeroID returns the registered ZeroIDInterceptor.
@@ -371,6 +380,13 @@ func (g *Guardian) SetSafeDepController(controller *safedep.Controller) {
 	g.safeDepController = controller
 }
 
+// SetSafeDepAuthorityResolver configures the server-owned Safe Deprecation
+// authority source. Deprecated: pass WithSafeDepAuthorityResolver to
+// NewGuardian instead.
+func (g *Guardian) SetSafeDepAuthorityResolver(resolver safedep.AuthorityResolver) {
+	g.safeDepAuthorityResolver = resolver
+}
+
 // SignDecision checks requirements and signs only if met
 func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata) error {
 	return g.signDecisionWithGraph(ctx, decision, effect, evidenceHashes, intervention, g.prg)
@@ -529,6 +545,9 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	if decision.Verdict != string(contracts.VerdictAllow) {
 		return nil, fmt.Errorf("cannot issue intent for denied decision: %s", decision.Verdict)
 	}
+	if err := crypto.RequireExecutableDecisionSignature(decision); err != nil {
+		return nil, fmt.Errorf("cannot issue intent: %w", err)
+	}
 
 	// 2. Verify Decision Signature (using Kernel Key)
 	verifier, ok := g.signer.(interface {
@@ -542,7 +561,7 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	}
 
 	if g.snapshotStore != nil {
-		scope := g.policyScopeFromContext(decision.InputContext)
+		scope := g.policyScopeFromDecision(decision)
 		current, ok := g.snapshotStore.Get(scope)
 		if !ok || current == nil {
 			return nil, fmt.Errorf("%s: policy snapshot missing for %s", contracts.ReasonPolicyEpochChanged, scope.Key())
@@ -581,6 +600,47 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		allowedTool = effect.EffectType
 	}
 
+	// Re-resolve Safe Deprecation authority at intent issuance. A decision can
+	// be evaluated before an emergency condition appears, so an earlier verdict
+	// is never sufficient authority to mint an executable intent. Classification
+	// is read-only here: activation consumes continuity state and belongs to a
+	// dedicated activation lifecycle, not both this path and the executor.
+	if g.safeDepController != nil {
+		if g.safeDepAuthorityResolver == nil {
+			return nil, fmt.Errorf("cannot issue intent: %s: Safe Deprecation authority resolver is unavailable", contracts.ReasonAttestationResultRequired)
+		}
+		authority, resolveErr := g.safeDepAuthorityResolver.Resolve(ctx, safedep.AuthorityRequest{
+			TenantID:         decision.TenantID,
+			WorkspaceID:      decision.WorkspaceID,
+			SessionID:        decision.SessionID,
+			SubjectID:        decision.SubjectID,
+			DecisionID:       decision.ID,
+			EffectDigestHash: effectDigest,
+			EffectType:       effect.EffectType,
+			Action:           decision.Action,
+			ToolName:         allowedTool,
+		})
+		if resolveErr != nil {
+			return nil, fmt.Errorf("cannot issue intent: %s: Safe Deprecation authority could not be verified: %w", contracts.ReasonAttestationResultRequired, resolveErr)
+		}
+		if signal := authority.Signal; !signal.Empty() {
+			classification, classErr := g.safeDepController.Classify(ctx, signal)
+			if classErr != nil {
+				return nil, fmt.Errorf("cannot issue intent: classify Safe Deprecation authority: %w", classErr)
+			}
+			switch classification.State {
+			case contracts.SafeDepTerminalFreeze:
+				return nil, fmt.Errorf("cannot issue intent: %s: Safe Deprecation terminal freeze", classification.ReasonCode)
+			case contracts.SafeDepDeprecatedReadonly:
+				if !safedep.IsInspectionAction(decision.Action, allowedTool) {
+					return nil, fmt.Errorf("cannot issue intent: %s: Safe Deprecation read-only state blocks %s", classification.ReasonCode, allowedTool)
+				}
+			case contracts.SafeDepDegradedNarrowing:
+				return nil, fmt.Errorf("cannot issue intent: %s: Safe Deprecation activation is required before an executable intent can be issued", contracts.ReasonAttestationResultRequired)
+			}
+		}
+	}
+
 	// 3. Create Intent
 	now := g.clock.Now()
 
@@ -594,18 +654,6 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		AllowedTool:      allowedTool,
 		Taint:            contracts.NormalizeTaintLabels(effect.Taint),
 	}
-	if decision.InputContext != nil {
-		if activationID, ok := decision.InputContext["safe_deprecation_activation_id"].(string); ok {
-			intent.EmergencyActivationID = activationID
-		}
-		if sessionID, ok := decision.InputContext["safe_deprecation_delegation_session_id"].(string); ok {
-			intent.EmergencyDelegationSessionID = sessionID
-		}
-		if scopeHash, ok := decision.InputContext["safe_deprecation_scope_hash"].(string); ok {
-			intent.EmergencyScopeHash = scopeHash
-		}
-	}
-
 	// 4. Sign Intent
 	if err := g.signer.SignIntent(intent); err != nil {
 		return nil, fmt.Errorf("failed to sign intent: %w", err)
@@ -615,14 +663,22 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 }
 
 func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
-	if effect == nil {
-		return "", fmt.Errorf("effect is nil")
+	return effectdigest.Canonical(effect)
+}
+
+// cloneDecisionInputContext keeps decision-only explanatory metadata from
+// mutating the map used to calculate the canonical effect digest. It is a
+// shallow copy because the Guardian only adds top-level evidence references
+// after effect construction; nested values remain immutable input data.
+func cloneDecisionInputContext(input map[string]interface{}) map[string]interface{} {
+	if input == nil {
+		return nil
 	}
-	effectBytes, err := canonicalize.JCS(effectDigestEnvelopeFrom(effect))
-	if err != nil {
-		return "", err
+	copy := make(map[string]interface{}, len(input))
+	for key, value := range input {
+		copy[key] = value
 	}
-	return canonicalize.HashBytes(effectBytes), nil
+	return copy
 }
 
 type effectDigestEnvelope struct {
@@ -697,6 +753,11 @@ type DecisionRequest struct {
 	Resource       string                 `json:"resource"` // Tool name or effect type
 	Context        map[string]interface{} `json:"context"`
 	SessionHistory []SessionAction        `json:"session_history,omitempty"`
+	// Trusted scope is supplied by the authenticated transport or an internal
+	// adapter. It intentionally cannot be populated from JSON request fields.
+	TenantID    string `json:"-"`
+	WorkspaceID string `json:"-"`
+	SessionID   string `json:"-"`
 }
 
 // SessionAction represents a previous action in the current session.
@@ -735,7 +796,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		}
 	}
 	if g.snapshotStore != nil {
-		scope := g.policyScopeFromContext(req.Context)
+		scope := g.policyScopeFromRequest(req)
 		snapshot, ok := g.snapshotStore.Get(scope)
 		if !ok || snapshot == nil {
 			decision := &contracts.DecisionRecord{
@@ -747,6 +808,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				InputContext:  req.Context,
 				PolicyVersion: "unavailable",
 			}
+			bindDecisionRequest(decision, req)
 			if signErr := g.signer.SignDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
 			}
@@ -763,6 +825,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				PolicyVersion: snapshot.PolicyHash,
 			}
 			bindRuntimePolicyDecision(decision, snapshot, snapshot.PolicyHash)
+			bindDecisionRequest(decision, req)
 			if signErr := g.signer.SignDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
 			}
@@ -779,34 +842,22 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	}
 
 	if g.safeDepController != nil {
-		signal := safedep.SignalFromContext(req.Context)
-		if !signal.Empty() {
-			classification, classErr := g.safeDepController.Classify(ctx, signal)
-			if classErr != nil {
-				return nil, classErr
+		if g.safeDepAuthorityResolver == nil {
+			decision := &contracts.DecisionRecord{
+				ID:            newDecisionID(),
+				Timestamp:     g.clock.Now(),
+				Verdict:       string(contracts.VerdictDeny),
+				ReasonCode:    string(contracts.ReasonAttestationResultRequired),
+				Reason:        "Safe Deprecation authority resolver is unavailable; denying governed decision.",
+				InputContext:  req.Context,
+				PolicyVersion: policyVersion,
 			}
-			if req.Context == nil {
-				req.Context = make(map[string]interface{})
+			bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
+			bindDecisionRequest(decision, req)
+			if signErr := g.signer.SignDecision(decision); signErr != nil {
+				return nil, fmt.Errorf("failed to sign safe-deprecation authority denial: %w", signErr)
 			}
-			req.Context["safe_deprecation_state"] = string(classification.State)
-			req.Context["safe_deprecation_reason_code"] = string(classification.ReasonCode)
-			if classification.State == contracts.SafeDepTerminalFreeze ||
-				(classification.State == contracts.SafeDepDeprecatedReadonly && !safedep.IsInspectionAction(req.Action, req.Resource)) {
-				decision := &contracts.DecisionRecord{
-					ID:            newDecisionID(),
-					Timestamp:     g.clock.Now(),
-					Verdict:       string(contracts.VerdictDeny),
-					ReasonCode:    string(classification.ReasonCode),
-					Reason:        fmt.Sprintf("%s: safe deprecation state %s blocks %s", classification.ReasonCode, classification.State, req.Action),
-					InputContext:  req.Context,
-					PolicyVersion: policyVersion,
-				}
-				bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
-					return nil, fmt.Errorf("failed to sign safe-deprecation decision: %w", signErr)
-				}
-				return decision, nil
-			}
+			return decision, nil
 		}
 	}
 
@@ -854,6 +905,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				RiskAccumulationWindow: snapshot.RiskAccumulationWindow,
 			}
 			bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
+			bindDecisionRequest(decision, req)
 			if signErr := g.signer.SignDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign session-risk decision: %w", signErr)
 			}
@@ -966,17 +1018,74 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		decision := &contracts.DecisionRecord{
 			ID:             newDecisionID(),
 			Timestamp:      g.clock.Now(),
+			SubjectID:      req.Principal,
+			Action:         req.Action,
+			Resource:       req.Resource,
 			Verdict:        string(contracts.VerdictDeny), // Default deny
 			EffectDigest:   effectDigest,
-			InputContext:   req.Context,
+			InputContext:   cloneDecisionInputContext(req.Context),
 			EnvFingerprint: envFP,
 			PolicyVersion:  eCtx.PolicyVersion,
 		}
+		// The normal decision path does not use signDecisionWithContext, so bind
+		// the authenticated/request scope before any direct signing branch
+		// (including compliance denies) or graph signing path can run.
+		bindDecisionRequest(decision, req)
 		bindRuntimePolicyDecision(decision, eCtx.ActiveSnapshot, eCtx.PolicyVersion)
 		if eCtx.SessionRiskSnapshot != nil {
 			decision.TrajectoryRiskScore = eCtx.SessionRiskSnapshot.TrajectoryRiskScore
 			decision.SessionCentroidHash = eCtx.SessionRiskSnapshot.SessionCentroidHash
 			decision.RiskAccumulationWindow = eCtx.SessionRiskSnapshot.RiskAccumulationWindow
+		}
+
+		// Safe Deprecation authority is resolved only after the canonical effect
+		// digest and decision identity have been constructed. The subsequent
+		// decision signature binds that same tuple; resolving it earlier would
+		// leave authority detached from the effect that is actually signed. Do
+		// not add resolver observations to req.Context here: effect
+		// params retain that map, so a post-digest mutation would make the signed
+		// digest stale. Decision InputContext is an explanatory copy.
+		if g.safeDepController != nil {
+			safeDepToolName := effect.EffectType
+			if toolName, ok := effect.Params["tool_name"].(string); ok && strings.TrimSpace(toolName) != "" {
+				safeDepToolName = toolName
+			}
+			authority, resolveErr := g.safeDepAuthorityResolver.Resolve(ctx, safedep.AuthorityRequest{
+				TenantID:         decision.TenantID,
+				WorkspaceID:      decision.WorkspaceID,
+				SessionID:        decision.SessionID,
+				SubjectID:        decision.SubjectID,
+				DecisionID:       decision.ID,
+				EffectDigestHash: decision.EffectDigest,
+				EffectType:       effect.EffectType,
+				Action:           decision.Action,
+				ToolName:         safeDepToolName,
+			})
+			if resolveErr != nil {
+				decision.Verdict = string(contracts.VerdictDeny)
+				decision.ReasonCode = string(contracts.ReasonAttestationResultRequired)
+				decision.Reason = fmt.Sprintf("Safe Deprecation authority could not be verified: %v", resolveErr)
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, fmt.Errorf("failed to sign safe-deprecation authority denial: %w", signErr)
+				}
+				return decision, nil
+			}
+			if signal := authority.Signal; !signal.Empty() {
+				classification, classErr := g.safeDepController.Classify(ctx, signal)
+				if classErr != nil {
+					return nil, classErr
+				}
+				if classification.State == contracts.SafeDepTerminalFreeze ||
+					(classification.State == contracts.SafeDepDeprecatedReadonly && !safedep.IsInspectionAction(decision.Action, safeDepToolName)) {
+					decision.Verdict = string(contracts.VerdictDeny)
+					decision.ReasonCode = string(classification.ReasonCode)
+					decision.Reason = fmt.Sprintf("%s: safe deprecation state %s blocks %s", classification.ReasonCode, classification.State, decision.Action)
+					if signErr := g.signer.SignDecision(decision); signErr != nil {
+						return nil, fmt.Errorf("failed to sign safe-deprecation decision: %w", signErr)
+					}
+					return decision, nil
+				}
+			}
 		}
 
 		if eCtx.ThreatScanResult != nil && eCtx.ThreatScanResult.FindingCount > 0 {
@@ -1061,12 +1170,26 @@ func responseToIntervention(level ResponseLevel) contracts.InterventionType {
 	}
 }
 
-func (g *Guardian) policyScopeFromContext(ctx map[string]any) policyreconcile.PolicyScope {
+func (g *Guardian) policyScopeFromRequest(req DecisionRequest) policyreconcile.PolicyScope {
 	scope := g.snapshotScope.Normalize()
-	if tenantID, ok := stringContextValue(ctx, "tenant_id", "tenantId", "tenant"); ok {
+	if tenantID := strings.TrimSpace(req.TenantID); tenantID != "" {
 		scope.TenantID = tenantID
 	}
-	if workspaceID, ok := stringContextValue(ctx, "workspace_id", "workspaceId", "workspace"); ok {
+	if workspaceID := strings.TrimSpace(req.WorkspaceID); workspaceID != "" {
+		scope.WorkspaceID = workspaceID
+	}
+	return scope.Normalize()
+}
+
+func (g *Guardian) policyScopeFromDecision(decision *contracts.DecisionRecord) policyreconcile.PolicyScope {
+	scope := g.snapshotScope.Normalize()
+	if decision == nil {
+		return scope
+	}
+	if tenantID := strings.TrimSpace(decision.TenantID); tenantID != "" {
+		scope.TenantID = tenantID
+	}
+	if workspaceID := strings.TrimSpace(decision.WorkspaceID); workspaceID != "" {
 		scope.WorkspaceID = workspaceID
 	}
 	return scope.Normalize()
@@ -1132,15 +1255,10 @@ func taintedEgressDenied(ctx map[string]interface{}, labels []string) bool {
 }
 
 func sessionRiskSessionID(req DecisionRequest) string {
-	if req.Context != nil {
-		if sid, ok := req.Context["session_id"].(string); ok && strings.TrimSpace(sid) != "" {
-			return sid
-		}
-		if sid, ok := req.Context["delegation_session_id"].(string); ok && strings.TrimSpace(sid) != "" {
-			return sid
-		}
+	if sid := strings.TrimSpace(req.SessionID); sid != "" {
+		return sid
 	}
-	return req.Principal
+	return strings.TrimSpace(req.Principal)
 }
 
 func attachSessionRiskContext(ctx map[string]interface{}, snapshot SessionRiskSnapshot) {

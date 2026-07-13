@@ -72,8 +72,12 @@ func TestGuardianEvaluateDecisionAllocBudget(t *testing.T) {
 	allocs := testing.AllocsPerRun(1000, func() {
 		_, _ = g.EvaluateDecision(context.Background(), req)
 	})
-	if allocs > 147 {
-		t.Fatalf("alloc regression: got %.0f allocs/op, want <=147", allocs)
+	// V2 request-bound decision signatures canonicalize the complete authority
+	// envelope. The previous pre-V2 budget (147) no longer measured the shipped
+	// execution contract; keep a regression guard with headroom over the
+	// measured V2 baseline (426 allocs/op on the supported Go toolchain).
+	if allocs > 500 {
+		t.Fatalf("alloc regression: got %.0f allocs/op, want <=500", allocs)
 	}
 }
 

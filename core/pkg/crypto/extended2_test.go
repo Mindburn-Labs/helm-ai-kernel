@@ -139,8 +139,10 @@ func TestExt2_KeyRingSignVerifyIntent(t *testing.T) {
 	kr := NewKeyRing()
 	ed, _ := NewEd25519Signer("k1")
 	kr.AddKey(ed)
-	i := &contracts.AuthorizedExecutionIntent{ID: "i1", DecisionID: "d1", AllowedTool: "read"}
-	kr.SignIntent(i)
+	i := executableIntentFixture("i1", "d1", "sha256:effect-i1", "read")
+	if err := kr.SignIntent(i); err != nil {
+		t.Fatalf("sign intent: %v", err)
+	}
 	ok, err := kr.VerifyIntent(i)
 	if err != nil || !ok {
 		t.Fatalf("intent verify failed: ok=%v err=%v", ok, err)

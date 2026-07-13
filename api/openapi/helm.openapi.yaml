@@ -253,14 +253,21 @@ paths:
       tags: [proxy]
       summary: OpenAI-compatible chat completions
       description: |
-        Drop-in replacement for OpenAI /v1/chat/completions.
-        Tool calls are intercepted, schema-validated, and receipted.
-        Response includes X-Helm-Receipt-ID, X-Helm-Output-Hash, X-Helm-Lamport-Clock headers.
-        When the opt-in scoped emergency-stop fence is enabled, this
-        unauthenticated route returns 503 until an authenticated adapter can
-        bind tenant and workspace scope.
+        Authenticated, governed OpenAI-compatible chat-completions proxy.
+        HELM binds the authenticated tenant and principal plus an explicit
+        causal session before evaluating the inference request and persisting
+        its decision receipt. This route does not accept caller-selected
+        identity from the JSON body. When scoped emergency-stop fencing is
+        enabled, X-Helm-Workspace-ID must also match the configured runtime
+        workspace or the request fails closed.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/HelmTenantIDHeader'
+        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
+        - $ref: '#/components/parameters/HelmWorkspaceIDHeader'
+        - $ref: '#/components/parameters/HelmSessionIDHeader'
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -302,6 +309,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatCompletionResponse'
         '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
@@ -368,6 +377,7 @@ paths:
         - $ref: '#/components/parameters/HelmTenantIDHeader'
         - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - $ref: '#/components/parameters/HelmWorkspaceIDHeader'
+        - $ref: '#/components/parameters/HelmSessionIDHeader'
       requestBody:
         required: true
         content:
@@ -415,7 +425,8 @@ paths:
           schema: { type: integer, default: 100, maximum: 1000 }
         - name: since
           in: query
-          schema: { type: string }
+          description: Opaque global feed cursor returned as `stream:<sequence>`. Session-local Lamport clocks are not valid feed cursors.
+          schema: { type: string, example: stream:42 }
         - name: agent
           in: query
           schema: { type: string }
@@ -450,7 +461,8 @@ paths:
           schema: { type: integer, default: 100, maximum: 1000 }
         - name: since
           in: query
-          schema: { type: string }
+          description: Opaque global feed cursor returned as `stream:<sequence>`. Session-local Lamport clocks are not valid feed cursors.
+          schema: { type: string, example: stream:42 }
         - name: agent
           in: query
           schema: { type: string }
@@ -3974,6 +3986,18 @@ components:
         Workspace binding required to evaluate a governed intent only while
         scoped emergency-stop fencing is enabled. The value must match
         HELM_RUNTIME_WORKSPACE_ID, or the route fails closed with 403.
+    HelmSessionIDHeader:
+      name: X-Helm-Session-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: |
+        Explicit causal session binding for governed request evaluation and
+        receipt issuance. The server signs this session ID into the decision
+        and receipt; callers must use a session identifier appropriate to the
+        authenticated tenant and principal.
     IdempotencyKeyHeader:
       name: Idempotency-Key
       in: header
@@ -4140,19 +4164,59 @@ components:
         tenant_id: { type: string }
         key_id: { type: string }
 
+    AuthorizedExecutionIntent:
+      type: object
+      description: |
+        Signed executable intent. `signature_schema = helm.execution.intent.signature.v2`
+        binds every authorization-relevant field below; an absent schema is a
+        legacy audit-only intent and cannot authorize execution.
+      properties:
+        id: { type: string }
+        decision_id: { type: string }
+        effect_digest_hash: { type: string }
+        idempotency_key: { type: string }
+        issued_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        signer: { type: string }
+        signature: { type: string }
+        signature_schema:
+          type: string
+          enum: [helm.execution.intent.signature.v2]
+        signature_type: { type: string }
+        allowed_tool: { type: string }
+        taint:
+          type: array
+          items: { type: string }
+        emergency_activation_id: { type: string }
+        emergency_delegation_session_id: { type: string }
+        emergency_scope_hash: { type: string }
+
     Receipt:
       type: object
       properties:
         receipt_id: { type: string }
         decision_id: { type: string }
         effect_id: { type: string }
+        external_reference_id: { type: string }
         status: { type: string }
         reason_code: { type: string }
         output_hash: { type: string }
         blob_hash: { type: string }
         prev_hash: { type: string }
         lamport_clock: { type: integer }
+        effect_type: { type: string }
+        tool_fingerprint: { type: string }
+        idempotency_key: { type: string }
+        tool_name: { type: string }
+        policy_hash: { type: string }
+        session_id: { type: string }
+        scope_hash: { type: string }
+        issued_at: { type: string, format: date-time }
         signature: { type: string }
+        signature_schema:
+          type: string
+          enum: [helm.receipt.signature.v2]
+          description: Present on newly-issued receipts whose SafeDep and evidence authority fields are bound by the v2 canonical payload.
         signature_profile:
           type: string
           enum: [classical, hybrid, pqc]
@@ -4172,6 +4236,36 @@ components:
         principal: { type: string }
         executor_id: { type: string }
         args_hash: { type: string }
+        emergency_activation_id: { type: string }
+        emergency_delegation_session_id: { type: string }
+        emergency_scope_hash: { type: string }
+        safe_dep_state: { type: string }
+        safe_dep_reason_code: { type: string }
+        network_log_ref: { type: string }
+        secret_events_ref: { type: string }
+        sandbox_lease_id: { type: string }
+        effect_graph_node_id: { type: string }
+        port_exposures:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        replay_script:
+          type: object
+          additionalProperties: true
+        provenance:
+          type: object
+          additionalProperties: true
+        bundled_artifacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        transparency:
+          type: object
+          additionalProperties: true
+        log_id: { type: string }
+        leaf_index: { type: integer, format: int64 }
         metadata:
           type: object
           additionalProperties: true
@@ -4489,16 +4583,65 @@ components:
           type: object
           additionalProperties: true
 
+    DecisionInterventionMetadata:
+      type: object
+      description: Temporal-guardian metadata included in the signed v2 decision envelope when present.
+      properties:
+        type: { type: string }
+        reason_code: { type: string }
+        wait_duration:
+          type: integer
+          format: int64
+          description: Go duration in nanoseconds.
+        tokens_saved:
+          type: integer
+          format: int64
+
     DecisionRecord:
       type: object
+      description: |
+        Signed policy decision. For `signature_schema = helm.decision.signature.v2`,
+        every semantic decision field except `input_context` and `signature` is part
+        of the canonical signing envelope. The signature is the result of signing
+        that envelope and is therefore not part of its own preimage.
+        Clients that need independent verification must preserve all fields shown here.
       properties:
         id: { type: string }
+        proposal_id: { type: string }
+        step_id: { type: string }
+        phenotype_hash: { type: string }
+        subject_id: { type: string }
         action: { type: string }
         resource: { type: string }
+        tenant_id:
+          type: string
+          description: Trusted tenant scope populated by the authenticated transport and bound by the v2 signature.
+        workspace_id:
+          type: string
+          description: Trusted workspace scope populated by the authenticated transport and bound by the v2 signature.
+        session_id:
+          type: string
+          description: Trusted session scope used for receipt chaining and bound by the v2 signature.
         verdict: { type: string }
         reason: { type: string }
+        reason_code: { type: string }
         policy_version: { type: string }
+        effect_digest: { type: string }
+        policy_backend: { type: string }
+        policy_content_hash: { type: string }
+        policy_epoch: { type: string }
         policy_decision_hash: { type: string }
+        state_cursor: { type: string }
+        snapshot: { type: string }
+        env_fingerprint: { type: string }
+        input_context:
+          type: object
+          additionalProperties: true
+          description: Unsigned explanatory context; it is intentionally excluded from the v2 signing envelope.
+        trajectory_risk_score: { type: number, format: double }
+        session_centroid_hash: { type: string }
+        risk_accumulation_window: { type: integer, format: int32 }
+        requirement_set_hash: { type: string }
         signature: { type: string }
         signature_schema:
           type: string
@@ -4506,6 +4649,12 @@ components:
           description: |
             Present for request-bound decisions signed with the v2 canonical
             decision payload. An absent value denotes a legacy v1 signature.
+        signature_type:
+          type: string
+          description: Signer-selected algorithm and key identifier bound by the v2 signature.
+        timestamp: { type: string, format: date-time }
+        intervention:
+          $ref: '#/components/schemas/DecisionInterventionMetadata'
 
     ConsoleCapabilities:
       type: object

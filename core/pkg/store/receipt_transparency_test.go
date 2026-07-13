@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 // TestSQLiteReceiptPersistsTransparencyAnchor proves the MIN-720 persistence
@@ -151,5 +152,132 @@ func TestTransparencyAnchorFieldsDoNotEnterChainHash(t *testing.T) {
 	}
 	if before != after {
 		t.Fatalf("transparency anchor fields changed chain hash: before=%s after=%s", before, after)
+	}
+}
+
+// TestSQLiteReceiptV2EnvelopeSurvivesAnchorAndCausalReload proves the v2
+// persistence contract: a receipt is signed, receives transparency metadata,
+// survives a full SQLite reload, verifies against its exact KeyID, and remains
+// the byte-stable parent of the next causal receipt. Historic column-only
+// persistence lost the signed V2 fields and broke each of those properties.
+func TestSQLiteReceiptV2EnvelopeSurvivesAnchorAndCausalReload(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	signer, err := crypto.NewEd25519Signer("receipt-v2-store")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ring := crypto.NewKeyRing()
+	ring.AddKey(signer)
+
+	issuedAt := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	receipt := &contracts.Receipt{
+		ReceiptID:                    "rcpt-v2-store",
+		DecisionID:                   "dec-v2-store",
+		EffectID:                     "eff-v2-store",
+		ExternalReferenceID:          "external-v2",
+		Status:                       "SUCCESS",
+		BlobHash:                     "sha256:blob",
+		OutputHash:                   "sha256:output",
+		Timestamp:                    issuedAt,
+		ExecutorID:                   "agent.exec",
+		PrevHash:                     "GENESIS",
+		LamportClock:                 1,
+		ArgsHash:                     "sha256:args",
+		EffectType:                   "EXECUTE_TOOL",
+		ToolFingerprint:              "sha256:tool",
+		IdempotencyKey:               "idem-v2",
+		ToolName:                     "local.echo",
+		ReasonCode:                   "ALLOW",
+		PolicyHash:                   "sha256:policy",
+		SessionID:                    "session-v2",
+		ScopeHash:                    "sha256:scope",
+		IssuedAt:                     issuedAt,
+		EmergencyActivationID:        "activation-v2",
+		EmergencyDelegationSessionID: "delegation-v2",
+		EmergencyScopeHash:           "sha256:emergency",
+		SafeDepState:                 "NORMAL",
+		SafeDepReasonCode:            "NONE",
+		NetworkLogRef:                "cas://network",
+		SecretEventsRef:              "cas://secret-events",
+		PortExposures: []contracts.PortExposureEvent{{
+			Port:         443,
+			Protocol:     "tcp",
+			Direction:    "outbound",
+			StartedAt:    issuedAt,
+			ClosedAt:     issuedAt.Add(time.Second),
+			AllowedPeers: []string{"api.example.test"},
+		}},
+		SandboxLeaseID:    "lease-v2",
+		EffectGraphNodeID: "node-v2",
+		BundledArtifacts: []contracts.ParsedArtifact{{
+			ArtifactID: "artifact-v2",
+			Type:       "tool-output",
+			Hash:       "sha256:artifact",
+		}},
+	}
+	if err := signer.SignReceipt(receipt); err != nil {
+		t.Fatalf("sign receipt: %v", err)
+	}
+	chainHash, err := contracts.ReceiptChainHash(receipt)
+	if err != nil {
+		t.Fatalf("chain hash before anchor: %v", err)
+	}
+
+	// Transparency assignment happens after signing because the log allocates
+	// its leaf position from the signed receipt hash. It is verified externally
+	// against ReceiptChainHash and deliberately does not mutate the v2 preimage.
+	receipt.LogID = "translog-v2"
+	receipt.LeafIndex = 42
+	receipt.Transparency = &contracts.TransparencyAnchor{Backend: "translog", LogID: "translog-v2"}
+	if valid, err := ring.VerifyReceipt(receipt); err != nil || !valid {
+		t.Fatalf("anchored receipt must retain its v2 signature: valid=%v err=%v", valid, err)
+	}
+	if got, err := contracts.ReceiptChainHash(receipt); err != nil || got != chainHash {
+		t.Fatalf("anchor mutated chain hash: got=%q err=%v want=%q", got, err, chainHash)
+	}
+	if err := store.Store(ctx, receipt); err != nil {
+		t.Fatalf("store: %v", err)
+	}
+
+	reloaded, err := store.GetByReceiptID(ctx, receipt.ReceiptID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if valid, err := ring.VerifyReceipt(reloaded); err != nil || !valid {
+		t.Fatalf("reloaded receipt must verify by its exact KeyID: valid=%v err=%v", valid, err)
+	}
+	if reloaded.SafeDepState != receipt.SafeDepState || reloaded.EmergencyScopeHash != receipt.EmergencyScopeHash || reloaded.NetworkLogRef != receipt.NetworkLogRef || len(reloaded.PortExposures) != 1 || len(reloaded.BundledArtifacts) != 1 {
+		t.Fatalf("v2 evidence fields were not preserved: %+v", reloaded)
+	}
+	if got, err := contracts.ReceiptChainHash(reloaded); err != nil || got != chainHash {
+		t.Fatalf("reloaded chain hash: got=%q err=%v want=%q", got, err, chainHash)
+	}
+
+	var assignedPrev *contracts.Receipt
+	if err := store.AppendCausal(ctx, "session-v2", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		assignedPrev = previous
+		if prevHash != chainHash || lamport != 2 {
+			t.Fatalf("causal reload binding: previous=%+v lamport=%d prev_hash=%q", previous, lamport, prevHash)
+		}
+		next := &contracts.Receipt{
+			ReceiptID:    "rcpt-v2-next",
+			DecisionID:   "dec-v2-next",
+			EffectID:     "eff-v2-next",
+			Status:       "SUCCESS",
+			Timestamp:    issuedAt.Add(time.Minute),
+			ExecutorID:   "agent.exec",
+			SessionID:    "session-v2",
+			PrevHash:     prevHash,
+			LamportClock: lamport,
+		}
+		return next, signer.SignReceipt(next)
+	}); err != nil {
+		t.Fatalf("append causal: %v", err)
+	}
+	if assignedPrev == nil || assignedPrev.SignatureSchema != crypto.ReceiptSignatureSchemaV2 {
+		t.Fatalf("causal builder did not receive full v2 parent: %+v", assignedPrev)
 	}
 }

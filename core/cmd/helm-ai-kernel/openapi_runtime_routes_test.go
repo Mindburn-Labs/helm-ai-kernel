@@ -322,7 +322,8 @@ func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {
 			}
 			assertOpenAPIRequiredHeader(t, key, operation, "X-Helm-Tenant-ID", "#/components/parameters/HelmTenantIDHeader")
 			assertOpenAPIRequiredHeader(t, key, operation, "X-Helm-Principal-ID", "#/components/parameters/HelmPrincipalIDHeader")
-			if spec.Path == "/api/v1/evaluate" {
+			if spec.Path == "/api/v1/evaluate" || spec.Path == "/v1/chat/completions" {
+				assertOpenAPIRequiredHeader(t, key, operation, "X-Helm-Session-ID", "#/components/parameters/HelmSessionIDHeader")
 				assertOpenAPIHeader(t, key, operation, "X-Helm-Workspace-ID", "#/components/parameters/HelmWorkspaceIDHeader")
 			}
 		}

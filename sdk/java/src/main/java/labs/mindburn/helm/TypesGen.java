@@ -5213,6 +5213,691 @@ public static class AssertApprovalWebAuthnChallengeRequest {
 
 
 /**
+ * Signed executable intent. &#x60;signature_schema &#x3D; helm.execution.intent.signature.v2&#x60; binds every authorization-relevant field below; an absent schema is a legacy audit-only intent and cannot authorize execution.
+ */
+@JsonPropertyOrder({
+  AuthorizedExecutionIntent.JSON_PROPERTY_ID,
+  AuthorizedExecutionIntent.JSON_PROPERTY_DECISION_ID,
+  AuthorizedExecutionIntent.JSON_PROPERTY_EFFECT_DIGEST_HASH,
+  AuthorizedExecutionIntent.JSON_PROPERTY_IDEMPOTENCY_KEY,
+  AuthorizedExecutionIntent.JSON_PROPERTY_ISSUED_AT,
+  AuthorizedExecutionIntent.JSON_PROPERTY_EXPIRES_AT,
+  AuthorizedExecutionIntent.JSON_PROPERTY_SIGNER,
+  AuthorizedExecutionIntent.JSON_PROPERTY_SIGNATURE,
+  AuthorizedExecutionIntent.JSON_PROPERTY_SIGNATURE_SCHEMA,
+  AuthorizedExecutionIntent.JSON_PROPERTY_SIGNATURE_TYPE,
+  AuthorizedExecutionIntent.JSON_PROPERTY_ALLOWED_TOOL,
+  AuthorizedExecutionIntent.JSON_PROPERTY_TAINT,
+  AuthorizedExecutionIntent.JSON_PROPERTY_EMERGENCY_ACTIVATION_ID,
+  AuthorizedExecutionIntent.JSON_PROPERTY_EMERGENCY_DELEGATION_SESSION_ID,
+  AuthorizedExecutionIntent.JSON_PROPERTY_EMERGENCY_SCOPE_HASH
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class AuthorizedExecutionIntent {
+  public static final String JSON_PROPERTY_ID = "id";
+  private String id;
+
+  public static final String JSON_PROPERTY_DECISION_ID = "decision_id";
+  private String decisionId;
+
+  public static final String JSON_PROPERTY_EFFECT_DIGEST_HASH = "effect_digest_hash";
+  private String effectDigestHash;
+
+  public static final String JSON_PROPERTY_IDEMPOTENCY_KEY = "idempotency_key";
+  private String idempotencyKey;
+
+  public static final String JSON_PROPERTY_ISSUED_AT = "issued_at";
+  private OffsetDateTime issuedAt;
+
+  public static final String JSON_PROPERTY_EXPIRES_AT = "expires_at";
+  private OffsetDateTime expiresAt;
+
+  public static final String JSON_PROPERTY_SIGNER = "signer";
+  private String signer;
+
+  public static final String JSON_PROPERTY_SIGNATURE = "signature";
+  private String signature;
+
+  /**
+   * Gets or Sets signatureSchema
+   */
+  public enum SignatureSchemaEnum {
+    HELM_EXECUTION_INTENT_SIGNATURE_V2("helm.execution.intent.signature.v2");
+
+    private String value;
+
+    SignatureSchemaEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static SignatureSchemaEnum fromValue(String value) {
+      for (SignatureSchemaEnum b : SignatureSchemaEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_SIGNATURE_SCHEMA = "signature_schema";
+  private SignatureSchemaEnum signatureSchema;
+
+  public static final String JSON_PROPERTY_SIGNATURE_TYPE = "signature_type";
+  private String signatureType;
+
+  public static final String JSON_PROPERTY_ALLOWED_TOOL = "allowed_tool";
+  private String allowedTool;
+
+  public static final String JSON_PROPERTY_TAINT = "taint";
+  private List<String> taint;
+
+  public static final String JSON_PROPERTY_EMERGENCY_ACTIVATION_ID = "emergency_activation_id";
+  private String emergencyActivationId;
+
+  public static final String JSON_PROPERTY_EMERGENCY_DELEGATION_SESSION_ID = "emergency_delegation_session_id";
+  private String emergencyDelegationSessionId;
+
+  public static final String JSON_PROPERTY_EMERGENCY_SCOPE_HASH = "emergency_scope_hash";
+  private String emergencyScopeHash;
+
+  public AuthorizedExecutionIntent() {
+  }
+
+  public AuthorizedExecutionIntent id(String id) {
+    this.id = id;
+    return this;
+  }
+
+   /**
+   * Get id
+   * @return id
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getId() {
+    return id;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setId(String id) {
+    this.id = id;
+  }
+
+
+  public AuthorizedExecutionIntent decisionId(String decisionId) {
+    this.decisionId = decisionId;
+    return this;
+  }
+
+   /**
+   * Get decisionId
+   * @return decisionId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DECISION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getDecisionId() {
+    return decisionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DECISION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDecisionId(String decisionId) {
+    this.decisionId = decisionId;
+  }
+
+
+  public AuthorizedExecutionIntent effectDigestHash(String effectDigestHash) {
+    this.effectDigestHash = effectDigestHash;
+    return this;
+  }
+
+   /**
+   * Get effectDigestHash
+   * @return effectDigestHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECT_DIGEST_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEffectDigestHash() {
+    return effectDigestHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECT_DIGEST_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffectDigestHash(String effectDigestHash) {
+    this.effectDigestHash = effectDigestHash;
+  }
+
+
+  public AuthorizedExecutionIntent idempotencyKey(String idempotencyKey) {
+    this.idempotencyKey = idempotencyKey;
+    return this;
+  }
+
+   /**
+   * Get idempotencyKey
+   * @return idempotencyKey
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_IDEMPOTENCY_KEY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getIdempotencyKey() {
+    return idempotencyKey;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_IDEMPOTENCY_KEY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setIdempotencyKey(String idempotencyKey) {
+    this.idempotencyKey = idempotencyKey;
+  }
+
+
+  public AuthorizedExecutionIntent issuedAt(OffsetDateTime issuedAt) {
+    this.issuedAt = issuedAt;
+    return this;
+  }
+
+   /**
+   * Get issuedAt
+   * @return issuedAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ISSUED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getIssuedAt() {
+    return issuedAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ISSUED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setIssuedAt(OffsetDateTime issuedAt) {
+    this.issuedAt = issuedAt;
+  }
+
+
+  public AuthorizedExecutionIntent expiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
+    return this;
+  }
+
+   /**
+   * Get expiresAt
+   * @return expiresAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getExpiresAt() {
+    return expiresAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setExpiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
+  }
+
+
+  public AuthorizedExecutionIntent signer(String signer) {
+    this.signer = signer;
+    return this;
+  }
+
+   /**
+   * Get signer
+   * @return signer
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSigner() {
+    return signer;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSigner(String signer) {
+    this.signer = signer;
+  }
+
+
+  public AuthorizedExecutionIntent signature(String signature) {
+    this.signature = signature;
+    return this;
+  }
+
+   /**
+   * Get signature
+   * @return signature
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignature() {
+    return signature;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignature(String signature) {
+    this.signature = signature;
+  }
+
+
+  public AuthorizedExecutionIntent signatureSchema(SignatureSchemaEnum signatureSchema) {
+    this.signatureSchema = signatureSchema;
+    return this;
+  }
+
+   /**
+   * Get signatureSchema
+   * @return signatureSchema
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_SCHEMA)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public SignatureSchemaEnum getSignatureSchema() {
+    return signatureSchema;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_SCHEMA)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureSchema(SignatureSchemaEnum signatureSchema) {
+    this.signatureSchema = signatureSchema;
+  }
+
+
+  public AuthorizedExecutionIntent signatureType(String signatureType) {
+    this.signatureType = signatureType;
+    return this;
+  }
+
+   /**
+   * Get signatureType
+   * @return signatureType
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignatureType() {
+    return signatureType;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureType(String signatureType) {
+    this.signatureType = signatureType;
+  }
+
+
+  public AuthorizedExecutionIntent allowedTool(String allowedTool) {
+    this.allowedTool = allowedTool;
+    return this;
+  }
+
+   /**
+   * Get allowedTool
+   * @return allowedTool
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ALLOWED_TOOL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAllowedTool() {
+    return allowedTool;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ALLOWED_TOOL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAllowedTool(String allowedTool) {
+    this.allowedTool = allowedTool;
+  }
+
+
+  public AuthorizedExecutionIntent taint(List<String> taint) {
+    this.taint = taint;
+    return this;
+  }
+
+  public AuthorizedExecutionIntent addTaintItem(String taintItem) {
+    if (this.taint == null) {
+      this.taint = new ArrayList<>();
+    }
+    this.taint.add(taintItem);
+    return this;
+  }
+
+   /**
+   * Get taint
+   * @return taint
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TAINT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getTaint() {
+    return taint;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TAINT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTaint(List<String> taint) {
+    this.taint = taint;
+  }
+
+
+  public AuthorizedExecutionIntent emergencyActivationId(String emergencyActivationId) {
+    this.emergencyActivationId = emergencyActivationId;
+    return this;
+  }
+
+   /**
+   * Get emergencyActivationId
+   * @return emergencyActivationId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_ACTIVATION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEmergencyActivationId() {
+    return emergencyActivationId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_ACTIVATION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEmergencyActivationId(String emergencyActivationId) {
+    this.emergencyActivationId = emergencyActivationId;
+  }
+
+
+  public AuthorizedExecutionIntent emergencyDelegationSessionId(String emergencyDelegationSessionId) {
+    this.emergencyDelegationSessionId = emergencyDelegationSessionId;
+    return this;
+  }
+
+   /**
+   * Get emergencyDelegationSessionId
+   * @return emergencyDelegationSessionId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_DELEGATION_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEmergencyDelegationSessionId() {
+    return emergencyDelegationSessionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_DELEGATION_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEmergencyDelegationSessionId(String emergencyDelegationSessionId) {
+    this.emergencyDelegationSessionId = emergencyDelegationSessionId;
+  }
+
+
+  public AuthorizedExecutionIntent emergencyScopeHash(String emergencyScopeHash) {
+    this.emergencyScopeHash = emergencyScopeHash;
+    return this;
+  }
+
+   /**
+   * Get emergencyScopeHash
+   * @return emergencyScopeHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_SCOPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEmergencyScopeHash() {
+    return emergencyScopeHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_SCOPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEmergencyScopeHash(String emergencyScopeHash) {
+    this.emergencyScopeHash = emergencyScopeHash;
+  }
+
+
+  /**
+   * Return true if this AuthorizedExecutionIntent object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    AuthorizedExecutionIntent authorizedExecutionIntent = (AuthorizedExecutionIntent) o;
+    return Objects.equals(this.id, authorizedExecutionIntent.id) &&
+        Objects.equals(this.decisionId, authorizedExecutionIntent.decisionId) &&
+        Objects.equals(this.effectDigestHash, authorizedExecutionIntent.effectDigestHash) &&
+        Objects.equals(this.idempotencyKey, authorizedExecutionIntent.idempotencyKey) &&
+        Objects.equals(this.issuedAt, authorizedExecutionIntent.issuedAt) &&
+        Objects.equals(this.expiresAt, authorizedExecutionIntent.expiresAt) &&
+        Objects.equals(this.signer, authorizedExecutionIntent.signer) &&
+        Objects.equals(this.signature, authorizedExecutionIntent.signature) &&
+        Objects.equals(this.signatureSchema, authorizedExecutionIntent.signatureSchema) &&
+        Objects.equals(this.signatureType, authorizedExecutionIntent.signatureType) &&
+        Objects.equals(this.allowedTool, authorizedExecutionIntent.allowedTool) &&
+        Objects.equals(this.taint, authorizedExecutionIntent.taint) &&
+        Objects.equals(this.emergencyActivationId, authorizedExecutionIntent.emergencyActivationId) &&
+        Objects.equals(this.emergencyDelegationSessionId, authorizedExecutionIntent.emergencyDelegationSessionId) &&
+        Objects.equals(this.emergencyScopeHash, authorizedExecutionIntent.emergencyScopeHash);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id, decisionId, effectDigestHash, idempotencyKey, issuedAt, expiresAt, signer, signature, signatureSchema, signatureType, allowedTool, taint, emergencyActivationId, emergencyDelegationSessionId, emergencyScopeHash);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class AuthorizedExecutionIntent {\n");
+    sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    decisionId: ").append(toIndentedString(decisionId)).append("\n");
+    sb.append("    effectDigestHash: ").append(toIndentedString(effectDigestHash)).append("\n");
+    sb.append("    idempotencyKey: ").append(toIndentedString(idempotencyKey)).append("\n");
+    sb.append("    issuedAt: ").append(toIndentedString(issuedAt)).append("\n");
+    sb.append("    expiresAt: ").append(toIndentedString(expiresAt)).append("\n");
+    sb.append("    signer: ").append(toIndentedString(signer)).append("\n");
+    sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
+    sb.append("    signatureSchema: ").append(toIndentedString(signatureSchema)).append("\n");
+    sb.append("    signatureType: ").append(toIndentedString(signatureType)).append("\n");
+    sb.append("    allowedTool: ").append(toIndentedString(allowedTool)).append("\n");
+    sb.append("    taint: ").append(toIndentedString(taint)).append("\n");
+    sb.append("    emergencyActivationId: ").append(toIndentedString(emergencyActivationId)).append("\n");
+    sb.append("    emergencyDelegationSessionId: ").append(toIndentedString(emergencyDelegationSessionId)).append("\n");
+    sb.append("    emergencyScopeHash: ").append(toIndentedString(emergencyScopeHash)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `id` to the URL query string
+    if (getId() != null) {
+      joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `decision_id` to the URL query string
+    if (getDecisionId() != null) {
+      joiner.add(String.format("%sdecision_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDecisionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `effect_digest_hash` to the URL query string
+    if (getEffectDigestHash() != null) {
+      joiner.add(String.format("%seffect_digest_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectDigestHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `idempotency_key` to the URL query string
+    if (getIdempotencyKey() != null) {
+      joiner.add(String.format("%sidempotency_key%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getIdempotencyKey()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `issued_at` to the URL query string
+    if (getIssuedAt() != null) {
+      joiner.add(String.format("%sissued_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getIssuedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `expires_at` to the URL query string
+    if (getExpiresAt() != null) {
+      joiner.add(String.format("%sexpires_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExpiresAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signer` to the URL query string
+    if (getSigner() != null) {
+      joiner.add(String.format("%ssigner%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSigner()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature` to the URL query string
+    if (getSignature() != null) {
+      joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_schema` to the URL query string
+    if (getSignatureSchema() != null) {
+      joiner.add(String.format("%ssignature_schema%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureSchema()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_type` to the URL query string
+    if (getSignatureType() != null) {
+      joiner.add(String.format("%ssignature_type%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `allowed_tool` to the URL query string
+    if (getAllowedTool() != null) {
+      joiner.add(String.format("%sallowed_tool%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAllowedTool()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `taint` to the URL query string
+    if (getTaint() != null) {
+      for (int i = 0; i < getTaint().size(); i++) {
+        joiner.add(String.format("%staint%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getTaint().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `emergency_activation_id` to the URL query string
+    if (getEmergencyActivationId() != null) {
+      joiner.add(String.format("%semergency_activation_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEmergencyActivationId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `emergency_delegation_session_id` to the URL query string
+    if (getEmergencyDelegationSessionId() != null) {
+      joiner.add(String.format("%semergency_delegation_session_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEmergencyDelegationSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `emergency_scope_hash` to the URL query string
+    if (getEmergencyScopeHash() != null) {
+      joiner.add(String.format("%semergency_scope_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEmergencyScopeHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * AuthzHealth
  */
 @JsonPropertyOrder({
@@ -17407,23 +18092,302 @@ public static class CreateSandboxGrantRequest {
 
 
 /**
- * DecisionRecord
+ * Temporal-guardian metadata included in the signed v2 decision envelope when present.
+ */
+@JsonPropertyOrder({
+  DecisionInterventionMetadata.JSON_PROPERTY_TYPE,
+  DecisionInterventionMetadata.JSON_PROPERTY_REASON_CODE,
+  DecisionInterventionMetadata.JSON_PROPERTY_WAIT_DURATION,
+  DecisionInterventionMetadata.JSON_PROPERTY_TOKENS_SAVED
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class DecisionInterventionMetadata {
+  public static final String JSON_PROPERTY_TYPE = "type";
+  private String type;
+
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_WAIT_DURATION = "wait_duration";
+  private Long waitDuration;
+
+  public static final String JSON_PROPERTY_TOKENS_SAVED = "tokens_saved";
+  private Long tokensSaved;
+
+  public DecisionInterventionMetadata() {
+  }
+
+  public DecisionInterventionMetadata type(String type) {
+    this.type = type;
+    return this;
+  }
+
+   /**
+   * Get type
+   * @return type
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getType() {
+    return type;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setType(String type) {
+    this.type = type;
+  }
+
+
+  public DecisionInterventionMetadata reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public DecisionInterventionMetadata waitDuration(Long waitDuration) {
+    this.waitDuration = waitDuration;
+    return this;
+  }
+
+   /**
+   * Go duration in nanoseconds.
+   * @return waitDuration
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_WAIT_DURATION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getWaitDuration() {
+    return waitDuration;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_WAIT_DURATION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setWaitDuration(Long waitDuration) {
+    this.waitDuration = waitDuration;
+  }
+
+
+  public DecisionInterventionMetadata tokensSaved(Long tokensSaved) {
+    this.tokensSaved = tokensSaved;
+    return this;
+  }
+
+   /**
+   * Get tokensSaved
+   * @return tokensSaved
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOKENS_SAVED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getTokensSaved() {
+    return tokensSaved;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOKENS_SAVED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTokensSaved(Long tokensSaved) {
+    this.tokensSaved = tokensSaved;
+  }
+
+
+  /**
+   * Return true if this DecisionInterventionMetadata object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    DecisionInterventionMetadata decisionInterventionMetadata = (DecisionInterventionMetadata) o;
+    return Objects.equals(this.type, decisionInterventionMetadata.type) &&
+        Objects.equals(this.reasonCode, decisionInterventionMetadata.reasonCode) &&
+        Objects.equals(this.waitDuration, decisionInterventionMetadata.waitDuration) &&
+        Objects.equals(this.tokensSaved, decisionInterventionMetadata.tokensSaved);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(type, reasonCode, waitDuration, tokensSaved);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class DecisionInterventionMetadata {\n");
+    sb.append("    type: ").append(toIndentedString(type)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    waitDuration: ").append(toIndentedString(waitDuration)).append("\n");
+    sb.append("    tokensSaved: ").append(toIndentedString(tokensSaved)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `type` to the URL query string
+    if (getType() != null) {
+      joiner.add(String.format("%stype%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `wait_duration` to the URL query string
+    if (getWaitDuration() != null) {
+      joiner.add(String.format("%swait_duration%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getWaitDuration()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tokens_saved` to the URL query string
+    if (getTokensSaved() != null) {
+      joiner.add(String.format("%stokens_saved%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTokensSaved()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * Signed policy decision. For &#x60;signature_schema &#x3D; helm.decision.signature.v2&#x60;, every semantic decision field except &#x60;input_context&#x60; and &#x60;signature&#x60; is part of the canonical signing envelope. The signature is the result of signing that envelope and is therefore not part of its own preimage. Clients that need independent verification must preserve all fields shown here.
  */
 @JsonPropertyOrder({
   DecisionRecord.JSON_PROPERTY_ID,
+  DecisionRecord.JSON_PROPERTY_PROPOSAL_ID,
+  DecisionRecord.JSON_PROPERTY_STEP_ID,
+  DecisionRecord.JSON_PROPERTY_PHENOTYPE_HASH,
+  DecisionRecord.JSON_PROPERTY_SUBJECT_ID,
   DecisionRecord.JSON_PROPERTY_ACTION,
   DecisionRecord.JSON_PROPERTY_RESOURCE,
+  DecisionRecord.JSON_PROPERTY_TENANT_ID,
+  DecisionRecord.JSON_PROPERTY_WORKSPACE_ID,
+  DecisionRecord.JSON_PROPERTY_SESSION_ID,
   DecisionRecord.JSON_PROPERTY_VERDICT,
   DecisionRecord.JSON_PROPERTY_REASON,
+  DecisionRecord.JSON_PROPERTY_REASON_CODE,
   DecisionRecord.JSON_PROPERTY_POLICY_VERSION,
+  DecisionRecord.JSON_PROPERTY_EFFECT_DIGEST,
+  DecisionRecord.JSON_PROPERTY_POLICY_BACKEND,
+  DecisionRecord.JSON_PROPERTY_POLICY_CONTENT_HASH,
+  DecisionRecord.JSON_PROPERTY_POLICY_EPOCH,
   DecisionRecord.JSON_PROPERTY_POLICY_DECISION_HASH,
+  DecisionRecord.JSON_PROPERTY_STATE_CURSOR,
+  DecisionRecord.JSON_PROPERTY_SNAPSHOT,
+  DecisionRecord.JSON_PROPERTY_ENV_FINGERPRINT,
+  DecisionRecord.JSON_PROPERTY_INPUT_CONTEXT,
+  DecisionRecord.JSON_PROPERTY_TRAJECTORY_RISK_SCORE,
+  DecisionRecord.JSON_PROPERTY_SESSION_CENTROID_HASH,
+  DecisionRecord.JSON_PROPERTY_RISK_ACCUMULATION_WINDOW,
+  DecisionRecord.JSON_PROPERTY_REQUIREMENT_SET_HASH,
   DecisionRecord.JSON_PROPERTY_SIGNATURE,
-  DecisionRecord.JSON_PROPERTY_SIGNATURE_SCHEMA
+  DecisionRecord.JSON_PROPERTY_SIGNATURE_SCHEMA,
+  DecisionRecord.JSON_PROPERTY_SIGNATURE_TYPE,
+  DecisionRecord.JSON_PROPERTY_TIMESTAMP,
+  DecisionRecord.JSON_PROPERTY_INTERVENTION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class DecisionRecord {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
+
+  public static final String JSON_PROPERTY_PROPOSAL_ID = "proposal_id";
+  private String proposalId;
+
+  public static final String JSON_PROPERTY_STEP_ID = "step_id";
+  private String stepId;
+
+  public static final String JSON_PROPERTY_PHENOTYPE_HASH = "phenotype_hash";
+  private String phenotypeHash;
+
+  public static final String JSON_PROPERTY_SUBJECT_ID = "subject_id";
+  private String subjectId;
 
   public static final String JSON_PROPERTY_ACTION = "action";
   private String action;
@@ -17431,17 +18395,65 @@ public static class DecisionRecord {
   public static final String JSON_PROPERTY_RESOURCE = "resource";
   private String resource;
 
+  public static final String JSON_PROPERTY_TENANT_ID = "tenant_id";
+  private String tenantId;
+
+  public static final String JSON_PROPERTY_WORKSPACE_ID = "workspace_id";
+  private String workspaceId;
+
+  public static final String JSON_PROPERTY_SESSION_ID = "session_id";
+  private String sessionId;
+
   public static final String JSON_PROPERTY_VERDICT = "verdict";
   private String verdict;
 
   public static final String JSON_PROPERTY_REASON = "reason";
   private String reason;
 
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
   public static final String JSON_PROPERTY_POLICY_VERSION = "policy_version";
   private String policyVersion;
 
+  public static final String JSON_PROPERTY_EFFECT_DIGEST = "effect_digest";
+  private String effectDigest;
+
+  public static final String JSON_PROPERTY_POLICY_BACKEND = "policy_backend";
+  private String policyBackend;
+
+  public static final String JSON_PROPERTY_POLICY_CONTENT_HASH = "policy_content_hash";
+  private String policyContentHash;
+
+  public static final String JSON_PROPERTY_POLICY_EPOCH = "policy_epoch";
+  private String policyEpoch;
+
   public static final String JSON_PROPERTY_POLICY_DECISION_HASH = "policy_decision_hash";
   private String policyDecisionHash;
+
+  public static final String JSON_PROPERTY_STATE_CURSOR = "state_cursor";
+  private String stateCursor;
+
+  public static final String JSON_PROPERTY_SNAPSHOT = "snapshot";
+  private String snapshot;
+
+  public static final String JSON_PROPERTY_ENV_FINGERPRINT = "env_fingerprint";
+  private String envFingerprint;
+
+  public static final String JSON_PROPERTY_INPUT_CONTEXT = "input_context";
+  private Map<String, Object> inputContext = new HashMap<>();
+
+  public static final String JSON_PROPERTY_TRAJECTORY_RISK_SCORE = "trajectory_risk_score";
+  private Double trajectoryRiskScore;
+
+  public static final String JSON_PROPERTY_SESSION_CENTROID_HASH = "session_centroid_hash";
+  private String sessionCentroidHash;
+
+  public static final String JSON_PROPERTY_RISK_ACCUMULATION_WINDOW = "risk_accumulation_window";
+  private Integer riskAccumulationWindow;
+
+  public static final String JSON_PROPERTY_REQUIREMENT_SET_HASH = "requirement_set_hash";
+  private String requirementSetHash;
 
   public static final String JSON_PROPERTY_SIGNATURE = "signature";
   private String signature;
@@ -17482,6 +18494,15 @@ public static class DecisionRecord {
   public static final String JSON_PROPERTY_SIGNATURE_SCHEMA = "signature_schema";
   private SignatureSchemaEnum signatureSchema;
 
+  public static final String JSON_PROPERTY_SIGNATURE_TYPE = "signature_type";
+  private String signatureType;
+
+  public static final String JSON_PROPERTY_TIMESTAMP = "timestamp";
+  private OffsetDateTime timestamp;
+
+  public static final String JSON_PROPERTY_INTERVENTION = "intervention";
+  private DecisionInterventionMetadata intervention;
+
   public DecisionRecord() {
   }
 
@@ -17507,6 +18528,106 @@ public static class DecisionRecord {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setId(String id) {
     this.id = id;
+  }
+
+
+  public DecisionRecord proposalId(String proposalId) {
+    this.proposalId = proposalId;
+    return this;
+  }
+
+   /**
+   * Get proposalId
+   * @return proposalId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PROPOSAL_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getProposalId() {
+    return proposalId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROPOSAL_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setProposalId(String proposalId) {
+    this.proposalId = proposalId;
+  }
+
+
+  public DecisionRecord stepId(String stepId) {
+    this.stepId = stepId;
+    return this;
+  }
+
+   /**
+   * Get stepId
+   * @return stepId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_STEP_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getStepId() {
+    return stepId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STEP_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setStepId(String stepId) {
+    this.stepId = stepId;
+  }
+
+
+  public DecisionRecord phenotypeHash(String phenotypeHash) {
+    this.phenotypeHash = phenotypeHash;
+    return this;
+  }
+
+   /**
+   * Get phenotypeHash
+   * @return phenotypeHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PHENOTYPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPhenotypeHash() {
+    return phenotypeHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PHENOTYPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPhenotypeHash(String phenotypeHash) {
+    this.phenotypeHash = phenotypeHash;
+  }
+
+
+  public DecisionRecord subjectId(String subjectId) {
+    this.subjectId = subjectId;
+    return this;
+  }
+
+   /**
+   * Get subjectId
+   * @return subjectId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SUBJECT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSubjectId() {
+    return subjectId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SUBJECT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSubjectId(String subjectId) {
+    this.subjectId = subjectId;
   }
 
 
@@ -17560,6 +18681,81 @@ public static class DecisionRecord {
   }
 
 
+  public DecisionRecord tenantId(String tenantId) {
+    this.tenantId = tenantId;
+    return this;
+  }
+
+   /**
+   * Trusted tenant scope populated by the authenticated transport and bound by the v2 signature.
+   * @return tenantId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TENANT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTenantId(String tenantId) {
+    this.tenantId = tenantId;
+  }
+
+
+  public DecisionRecord workspaceId(String workspaceId) {
+    this.workspaceId = workspaceId;
+    return this;
+  }
+
+   /**
+   * Trusted workspace scope populated by the authenticated transport and bound by the v2 signature.
+   * @return workspaceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_WORKSPACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getWorkspaceId() {
+    return workspaceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_WORKSPACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setWorkspaceId(String workspaceId) {
+    this.workspaceId = workspaceId;
+  }
+
+
+  public DecisionRecord sessionId(String sessionId) {
+    this.sessionId = sessionId;
+    return this;
+  }
+
+   /**
+   * Trusted session scope used for receipt chaining and bound by the v2 signature.
+   * @return sessionId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSessionId() {
+    return sessionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSessionId(String sessionId) {
+    this.sessionId = sessionId;
+  }
+
+
   public DecisionRecord verdict(String verdict) {
     this.verdict = verdict;
     return this;
@@ -17610,6 +18806,31 @@ public static class DecisionRecord {
   }
 
 
+  public DecisionRecord reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
   public DecisionRecord policyVersion(String policyVersion) {
     this.policyVersion = policyVersion;
     return this;
@@ -17635,6 +18856,106 @@ public static class DecisionRecord {
   }
 
 
+  public DecisionRecord effectDigest(String effectDigest) {
+    this.effectDigest = effectDigest;
+    return this;
+  }
+
+   /**
+   * Get effectDigest
+   * @return effectDigest
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECT_DIGEST)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEffectDigest() {
+    return effectDigest;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECT_DIGEST)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffectDigest(String effectDigest) {
+    this.effectDigest = effectDigest;
+  }
+
+
+  public DecisionRecord policyBackend(String policyBackend) {
+    this.policyBackend = policyBackend;
+    return this;
+  }
+
+   /**
+   * Get policyBackend
+   * @return policyBackend
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_BACKEND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyBackend() {
+    return policyBackend;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_BACKEND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyBackend(String policyBackend) {
+    this.policyBackend = policyBackend;
+  }
+
+
+  public DecisionRecord policyContentHash(String policyContentHash) {
+    this.policyContentHash = policyContentHash;
+    return this;
+  }
+
+   /**
+   * Get policyContentHash
+   * @return policyContentHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_CONTENT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyContentHash() {
+    return policyContentHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_CONTENT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyContentHash(String policyContentHash) {
+    this.policyContentHash = policyContentHash;
+  }
+
+
+  public DecisionRecord policyEpoch(String policyEpoch) {
+    this.policyEpoch = policyEpoch;
+    return this;
+  }
+
+   /**
+   * Get policyEpoch
+   * @return policyEpoch
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_EPOCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyEpoch() {
+    return policyEpoch;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_EPOCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyEpoch(String policyEpoch) {
+    this.policyEpoch = policyEpoch;
+  }
+
+
   public DecisionRecord policyDecisionHash(String policyDecisionHash) {
     this.policyDecisionHash = policyDecisionHash;
     return this;
@@ -17657,6 +18978,214 @@ public static class DecisionRecord {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setPolicyDecisionHash(String policyDecisionHash) {
     this.policyDecisionHash = policyDecisionHash;
+  }
+
+
+  public DecisionRecord stateCursor(String stateCursor) {
+    this.stateCursor = stateCursor;
+    return this;
+  }
+
+   /**
+   * Get stateCursor
+   * @return stateCursor
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_STATE_CURSOR)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getStateCursor() {
+    return stateCursor;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATE_CURSOR)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setStateCursor(String stateCursor) {
+    this.stateCursor = stateCursor;
+  }
+
+
+  public DecisionRecord snapshot(String snapshot) {
+    this.snapshot = snapshot;
+    return this;
+  }
+
+   /**
+   * Get snapshot
+   * @return snapshot
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SNAPSHOT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSnapshot() {
+    return snapshot;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SNAPSHOT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSnapshot(String snapshot) {
+    this.snapshot = snapshot;
+  }
+
+
+  public DecisionRecord envFingerprint(String envFingerprint) {
+    this.envFingerprint = envFingerprint;
+    return this;
+  }
+
+   /**
+   * Get envFingerprint
+   * @return envFingerprint
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ENV_FINGERPRINT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEnvFingerprint() {
+    return envFingerprint;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENV_FINGERPRINT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEnvFingerprint(String envFingerprint) {
+    this.envFingerprint = envFingerprint;
+  }
+
+
+  public DecisionRecord inputContext(Map<String, Object> inputContext) {
+    this.inputContext = inputContext;
+    return this;
+  }
+
+  public DecisionRecord putInputContextItem(String key, Object inputContextItem) {
+    if (this.inputContext == null) {
+      this.inputContext = new HashMap<>();
+    }
+    this.inputContext.put(key, inputContextItem);
+    return this;
+  }
+
+   /**
+   * Unsigned explanatory context; it is intentionally excluded from the v2 signing envelope.
+   * @return inputContext
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_INPUT_CONTEXT)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getInputContext() {
+    return inputContext;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_INPUT_CONTEXT)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setInputContext(Map<String, Object> inputContext) {
+    this.inputContext = inputContext;
+  }
+
+
+  public DecisionRecord trajectoryRiskScore(Double trajectoryRiskScore) {
+    this.trajectoryRiskScore = trajectoryRiskScore;
+    return this;
+  }
+
+   /**
+   * Get trajectoryRiskScore
+   * @return trajectoryRiskScore
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TRAJECTORY_RISK_SCORE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Double getTrajectoryRiskScore() {
+    return trajectoryRiskScore;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TRAJECTORY_RISK_SCORE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTrajectoryRiskScore(Double trajectoryRiskScore) {
+    this.trajectoryRiskScore = trajectoryRiskScore;
+  }
+
+
+  public DecisionRecord sessionCentroidHash(String sessionCentroidHash) {
+    this.sessionCentroidHash = sessionCentroidHash;
+    return this;
+  }
+
+   /**
+   * Get sessionCentroidHash
+   * @return sessionCentroidHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SESSION_CENTROID_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSessionCentroidHash() {
+    return sessionCentroidHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_CENTROID_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSessionCentroidHash(String sessionCentroidHash) {
+    this.sessionCentroidHash = sessionCentroidHash;
+  }
+
+
+  public DecisionRecord riskAccumulationWindow(Integer riskAccumulationWindow) {
+    this.riskAccumulationWindow = riskAccumulationWindow;
+    return this;
+  }
+
+   /**
+   * Get riskAccumulationWindow
+   * @return riskAccumulationWindow
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RISK_ACCUMULATION_WINDOW)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Integer getRiskAccumulationWindow() {
+    return riskAccumulationWindow;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RISK_ACCUMULATION_WINDOW)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRiskAccumulationWindow(Integer riskAccumulationWindow) {
+    this.riskAccumulationWindow = riskAccumulationWindow;
+  }
+
+
+  public DecisionRecord requirementSetHash(String requirementSetHash) {
+    this.requirementSetHash = requirementSetHash;
+    return this;
+  }
+
+   /**
+   * Get requirementSetHash
+   * @return requirementSetHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIREMENT_SET_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRequirementSetHash() {
+    return requirementSetHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIREMENT_SET_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequirementSetHash(String requirementSetHash) {
+    this.requirementSetHash = requirementSetHash;
   }
 
 
@@ -17710,6 +19239,81 @@ public static class DecisionRecord {
   }
 
 
+  public DecisionRecord signatureType(String signatureType) {
+    this.signatureType = signatureType;
+    return this;
+  }
+
+   /**
+   * Signer-selected algorithm and key identifier bound by the v2 signature.
+   * @return signatureType
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignatureType() {
+    return signatureType;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureType(String signatureType) {
+    this.signatureType = signatureType;
+  }
+
+
+  public DecisionRecord timestamp(OffsetDateTime timestamp) {
+    this.timestamp = timestamp;
+    return this;
+  }
+
+   /**
+   * Get timestamp
+   * @return timestamp
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TIMESTAMP)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getTimestamp() {
+    return timestamp;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TIMESTAMP)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTimestamp(OffsetDateTime timestamp) {
+    this.timestamp = timestamp;
+  }
+
+
+  public DecisionRecord intervention(DecisionInterventionMetadata intervention) {
+    this.intervention = intervention;
+    return this;
+  }
+
+   /**
+   * Get intervention
+   * @return intervention
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_INTERVENTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public DecisionInterventionMetadata getIntervention() {
+    return intervention;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_INTERVENTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setIntervention(DecisionInterventionMetadata intervention) {
+    this.intervention = intervention;
+  }
+
+
   /**
    * Return true if this DecisionRecord object is equal to o.
    */
@@ -17723,19 +19327,42 @@ public static class DecisionRecord {
     }
     DecisionRecord decisionRecord = (DecisionRecord) o;
     return Objects.equals(this.id, decisionRecord.id) &&
+        Objects.equals(this.proposalId, decisionRecord.proposalId) &&
+        Objects.equals(this.stepId, decisionRecord.stepId) &&
+        Objects.equals(this.phenotypeHash, decisionRecord.phenotypeHash) &&
+        Objects.equals(this.subjectId, decisionRecord.subjectId) &&
         Objects.equals(this.action, decisionRecord.action) &&
         Objects.equals(this.resource, decisionRecord.resource) &&
+        Objects.equals(this.tenantId, decisionRecord.tenantId) &&
+        Objects.equals(this.workspaceId, decisionRecord.workspaceId) &&
+        Objects.equals(this.sessionId, decisionRecord.sessionId) &&
         Objects.equals(this.verdict, decisionRecord.verdict) &&
         Objects.equals(this.reason, decisionRecord.reason) &&
+        Objects.equals(this.reasonCode, decisionRecord.reasonCode) &&
         Objects.equals(this.policyVersion, decisionRecord.policyVersion) &&
+        Objects.equals(this.effectDigest, decisionRecord.effectDigest) &&
+        Objects.equals(this.policyBackend, decisionRecord.policyBackend) &&
+        Objects.equals(this.policyContentHash, decisionRecord.policyContentHash) &&
+        Objects.equals(this.policyEpoch, decisionRecord.policyEpoch) &&
         Objects.equals(this.policyDecisionHash, decisionRecord.policyDecisionHash) &&
+        Objects.equals(this.stateCursor, decisionRecord.stateCursor) &&
+        Objects.equals(this.snapshot, decisionRecord.snapshot) &&
+        Objects.equals(this.envFingerprint, decisionRecord.envFingerprint) &&
+        Objects.equals(this.inputContext, decisionRecord.inputContext) &&
+        Objects.equals(this.trajectoryRiskScore, decisionRecord.trajectoryRiskScore) &&
+        Objects.equals(this.sessionCentroidHash, decisionRecord.sessionCentroidHash) &&
+        Objects.equals(this.riskAccumulationWindow, decisionRecord.riskAccumulationWindow) &&
+        Objects.equals(this.requirementSetHash, decisionRecord.requirementSetHash) &&
         Objects.equals(this.signature, decisionRecord.signature) &&
-        Objects.equals(this.signatureSchema, decisionRecord.signatureSchema);
+        Objects.equals(this.signatureSchema, decisionRecord.signatureSchema) &&
+        Objects.equals(this.signatureType, decisionRecord.signatureType) &&
+        Objects.equals(this.timestamp, decisionRecord.timestamp) &&
+        Objects.equals(this.intervention, decisionRecord.intervention);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, action, resource, verdict, reason, policyVersion, policyDecisionHash, signature, signatureSchema);
+    return Objects.hash(id, proposalId, stepId, phenotypeHash, subjectId, action, resource, tenantId, workspaceId, sessionId, verdict, reason, reasonCode, policyVersion, effectDigest, policyBackend, policyContentHash, policyEpoch, policyDecisionHash, stateCursor, snapshot, envFingerprint, inputContext, trajectoryRiskScore, sessionCentroidHash, riskAccumulationWindow, requirementSetHash, signature, signatureSchema, signatureType, timestamp, intervention);
   }
 
   @Override
@@ -17743,14 +19370,37 @@ public static class DecisionRecord {
     StringBuilder sb = new StringBuilder();
     sb.append("class DecisionRecord {\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    proposalId: ").append(toIndentedString(proposalId)).append("\n");
+    sb.append("    stepId: ").append(toIndentedString(stepId)).append("\n");
+    sb.append("    phenotypeHash: ").append(toIndentedString(phenotypeHash)).append("\n");
+    sb.append("    subjectId: ").append(toIndentedString(subjectId)).append("\n");
     sb.append("    action: ").append(toIndentedString(action)).append("\n");
     sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
+    sb.append("    tenantId: ").append(toIndentedString(tenantId)).append("\n");
+    sb.append("    workspaceId: ").append(toIndentedString(workspaceId)).append("\n");
+    sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
     sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
     sb.append("    policyVersion: ").append(toIndentedString(policyVersion)).append("\n");
+    sb.append("    effectDigest: ").append(toIndentedString(effectDigest)).append("\n");
+    sb.append("    policyBackend: ").append(toIndentedString(policyBackend)).append("\n");
+    sb.append("    policyContentHash: ").append(toIndentedString(policyContentHash)).append("\n");
+    sb.append("    policyEpoch: ").append(toIndentedString(policyEpoch)).append("\n");
     sb.append("    policyDecisionHash: ").append(toIndentedString(policyDecisionHash)).append("\n");
+    sb.append("    stateCursor: ").append(toIndentedString(stateCursor)).append("\n");
+    sb.append("    snapshot: ").append(toIndentedString(snapshot)).append("\n");
+    sb.append("    envFingerprint: ").append(toIndentedString(envFingerprint)).append("\n");
+    sb.append("    inputContext: ").append(toIndentedString(inputContext)).append("\n");
+    sb.append("    trajectoryRiskScore: ").append(toIndentedString(trajectoryRiskScore)).append("\n");
+    sb.append("    sessionCentroidHash: ").append(toIndentedString(sessionCentroidHash)).append("\n");
+    sb.append("    riskAccumulationWindow: ").append(toIndentedString(riskAccumulationWindow)).append("\n");
+    sb.append("    requirementSetHash: ").append(toIndentedString(requirementSetHash)).append("\n");
     sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
     sb.append("    signatureSchema: ").append(toIndentedString(signatureSchema)).append("\n");
+    sb.append("    signatureType: ").append(toIndentedString(signatureType)).append("\n");
+    sb.append("    timestamp: ").append(toIndentedString(timestamp)).append("\n");
+    sb.append("    intervention: ").append(toIndentedString(intervention)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -17803,6 +19453,26 @@ public static class DecisionRecord {
       joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `proposal_id` to the URL query string
+    if (getProposalId() != null) {
+      joiner.add(String.format("%sproposal_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProposalId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `step_id` to the URL query string
+    if (getStepId() != null) {
+      joiner.add(String.format("%sstep_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStepId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `phenotype_hash` to the URL query string
+    if (getPhenotypeHash() != null) {
+      joiner.add(String.format("%sphenotype_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPhenotypeHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `subject_id` to the URL query string
+    if (getSubjectId() != null) {
+      joiner.add(String.format("%ssubject_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSubjectId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `action` to the URL query string
     if (getAction() != null) {
       joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -17811,6 +19481,21 @@ public static class DecisionRecord {
     // add `resource` to the URL query string
     if (getResource() != null) {
       joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tenant_id` to the URL query string
+    if (getTenantId() != null) {
+      joiner.add(String.format("%stenant_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTenantId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `workspace_id` to the URL query string
+    if (getWorkspaceId() != null) {
+      joiner.add(String.format("%sworkspace_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getWorkspaceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `session_id` to the URL query string
+    if (getSessionId() != null) {
+      joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `verdict` to the URL query string
@@ -17823,14 +19508,83 @@ public static class DecisionRecord {
       joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `policy_version` to the URL query string
     if (getPolicyVersion() != null) {
       joiner.add(String.format("%spolicy_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `effect_digest` to the URL query string
+    if (getEffectDigest() != null) {
+      joiner.add(String.format("%seffect_digest%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectDigest()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_backend` to the URL query string
+    if (getPolicyBackend() != null) {
+      joiner.add(String.format("%spolicy_backend%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyBackend()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_content_hash` to the URL query string
+    if (getPolicyContentHash() != null) {
+      joiner.add(String.format("%spolicy_content_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyContentHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_epoch` to the URL query string
+    if (getPolicyEpoch() != null) {
+      joiner.add(String.format("%spolicy_epoch%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyEpoch()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `policy_decision_hash` to the URL query string
     if (getPolicyDecisionHash() != null) {
       joiner.add(String.format("%spolicy_decision_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyDecisionHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `state_cursor` to the URL query string
+    if (getStateCursor() != null) {
+      joiner.add(String.format("%sstate_cursor%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStateCursor()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `snapshot` to the URL query string
+    if (getSnapshot() != null) {
+      joiner.add(String.format("%ssnapshot%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSnapshot()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `env_fingerprint` to the URL query string
+    if (getEnvFingerprint() != null) {
+      joiner.add(String.format("%senv_fingerprint%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEnvFingerprint()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `input_context` to the URL query string
+    if (getInputContext() != null) {
+      for (String _key : getInputContext().keySet()) {
+        joiner.add(String.format("%sinput_context%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getInputContext().get(_key), URLEncoder.encode(String.valueOf(getInputContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `trajectory_risk_score` to the URL query string
+    if (getTrajectoryRiskScore() != null) {
+      joiner.add(String.format("%strajectory_risk_score%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTrajectoryRiskScore()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `session_centroid_hash` to the URL query string
+    if (getSessionCentroidHash() != null) {
+      joiner.add(String.format("%ssession_centroid_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionCentroidHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `risk_accumulation_window` to the URL query string
+    if (getRiskAccumulationWindow() != null) {
+      joiner.add(String.format("%srisk_accumulation_window%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRiskAccumulationWindow()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `requirement_set_hash` to the URL query string
+    if (getRequirementSetHash() != null) {
+      joiner.add(String.format("%srequirement_set_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequirementSetHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `signature` to the URL query string
@@ -17841,6 +19595,21 @@ public static class DecisionRecord {
     // add `signature_schema` to the URL query string
     if (getSignatureSchema() != null) {
       joiner.add(String.format("%ssignature_schema%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureSchema()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_type` to the URL query string
+    if (getSignatureType() != null) {
+      joiner.add(String.format("%ssignature_type%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `timestamp` to the URL query string
+    if (getTimestamp() != null) {
+      joiner.add(String.format("%stimestamp%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTimestamp()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `intervention` to the URL query string
+    if (getIntervention() != null) {
+      joiner.add(getIntervention().toUrlQueryString(prefix + "intervention" + suffix));
     }
 
     return joiner.toString();
@@ -53474,13 +55243,23 @@ public static class PreflightLaunchpadImport202Response {
   Receipt.JSON_PROPERTY_RECEIPT_ID,
   Receipt.JSON_PROPERTY_DECISION_ID,
   Receipt.JSON_PROPERTY_EFFECT_ID,
+  Receipt.JSON_PROPERTY_EXTERNAL_REFERENCE_ID,
   Receipt.JSON_PROPERTY_STATUS,
   Receipt.JSON_PROPERTY_REASON_CODE,
   Receipt.JSON_PROPERTY_OUTPUT_HASH,
   Receipt.JSON_PROPERTY_BLOB_HASH,
   Receipt.JSON_PROPERTY_PREV_HASH,
   Receipt.JSON_PROPERTY_LAMPORT_CLOCK,
+  Receipt.JSON_PROPERTY_EFFECT_TYPE,
+  Receipt.JSON_PROPERTY_TOOL_FINGERPRINT,
+  Receipt.JSON_PROPERTY_IDEMPOTENCY_KEY,
+  Receipt.JSON_PROPERTY_TOOL_NAME,
+  Receipt.JSON_PROPERTY_POLICY_HASH,
+  Receipt.JSON_PROPERTY_SESSION_ID,
+  Receipt.JSON_PROPERTY_SCOPE_HASH,
+  Receipt.JSON_PROPERTY_ISSUED_AT,
   Receipt.JSON_PROPERTY_SIGNATURE,
+  Receipt.JSON_PROPERTY_SIGNATURE_SCHEMA,
   Receipt.JSON_PROPERTY_SIGNATURE_PROFILE,
   Receipt.JSON_PROPERTY_SIGNATURE_ALGORITHM,
   Receipt.JSON_PROPERTY_KEY_ID,
@@ -53489,6 +55268,22 @@ public static class PreflightLaunchpadImport202Response {
   Receipt.JSON_PROPERTY_PRINCIPAL,
   Receipt.JSON_PROPERTY_EXECUTOR_ID,
   Receipt.JSON_PROPERTY_ARGS_HASH,
+  Receipt.JSON_PROPERTY_EMERGENCY_ACTIVATION_ID,
+  Receipt.JSON_PROPERTY_EMERGENCY_DELEGATION_SESSION_ID,
+  Receipt.JSON_PROPERTY_EMERGENCY_SCOPE_HASH,
+  Receipt.JSON_PROPERTY_SAFE_DEP_STATE,
+  Receipt.JSON_PROPERTY_SAFE_DEP_REASON_CODE,
+  Receipt.JSON_PROPERTY_NETWORK_LOG_REF,
+  Receipt.JSON_PROPERTY_SECRET_EVENTS_REF,
+  Receipt.JSON_PROPERTY_SANDBOX_LEASE_ID,
+  Receipt.JSON_PROPERTY_EFFECT_GRAPH_NODE_ID,
+  Receipt.JSON_PROPERTY_PORT_EXPOSURES,
+  Receipt.JSON_PROPERTY_REPLAY_SCRIPT,
+  Receipt.JSON_PROPERTY_PROVENANCE,
+  Receipt.JSON_PROPERTY_BUNDLED_ARTIFACTS,
+  Receipt.JSON_PROPERTY_TRANSPARENCY,
+  Receipt.JSON_PROPERTY_LOG_ID,
+  Receipt.JSON_PROPERTY_LEAF_INDEX,
   Receipt.JSON_PROPERTY_METADATA
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
@@ -53501,6 +55296,9 @@ public static class Receipt {
 
   public static final String JSON_PROPERTY_EFFECT_ID = "effect_id";
   private String effectId;
+
+  public static final String JSON_PROPERTY_EXTERNAL_REFERENCE_ID = "external_reference_id";
+  private String externalReferenceId;
 
   public static final String JSON_PROPERTY_STATUS = "status";
   private String status;
@@ -53520,8 +55318,68 @@ public static class Receipt {
   public static final String JSON_PROPERTY_LAMPORT_CLOCK = "lamport_clock";
   private Integer lamportClock;
 
+  public static final String JSON_PROPERTY_EFFECT_TYPE = "effect_type";
+  private String effectType;
+
+  public static final String JSON_PROPERTY_TOOL_FINGERPRINT = "tool_fingerprint";
+  private String toolFingerprint;
+
+  public static final String JSON_PROPERTY_IDEMPOTENCY_KEY = "idempotency_key";
+  private String idempotencyKey;
+
+  public static final String JSON_PROPERTY_TOOL_NAME = "tool_name";
+  private String toolName;
+
+  public static final String JSON_PROPERTY_POLICY_HASH = "policy_hash";
+  private String policyHash;
+
+  public static final String JSON_PROPERTY_SESSION_ID = "session_id";
+  private String sessionId;
+
+  public static final String JSON_PROPERTY_SCOPE_HASH = "scope_hash";
+  private String scopeHash;
+
+  public static final String JSON_PROPERTY_ISSUED_AT = "issued_at";
+  private OffsetDateTime issuedAt;
+
   public static final String JSON_PROPERTY_SIGNATURE = "signature";
   private String signature;
+
+  /**
+   * Present on newly-issued receipts whose SafeDep and evidence authority fields are bound by the v2 canonical payload.
+   */
+  public enum SignatureSchemaEnum {
+    HELM_RECEIPT_SIGNATURE_V2("helm.receipt.signature.v2");
+
+    private String value;
+
+    SignatureSchemaEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static SignatureSchemaEnum fromValue(String value) {
+      for (SignatureSchemaEnum b : SignatureSchemaEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_SIGNATURE_SCHEMA = "signature_schema";
+  private SignatureSchemaEnum signatureSchema;
 
   /**
    * Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
@@ -53583,6 +55441,54 @@ public static class Receipt {
 
   public static final String JSON_PROPERTY_ARGS_HASH = "args_hash";
   private String argsHash;
+
+  public static final String JSON_PROPERTY_EMERGENCY_ACTIVATION_ID = "emergency_activation_id";
+  private String emergencyActivationId;
+
+  public static final String JSON_PROPERTY_EMERGENCY_DELEGATION_SESSION_ID = "emergency_delegation_session_id";
+  private String emergencyDelegationSessionId;
+
+  public static final String JSON_PROPERTY_EMERGENCY_SCOPE_HASH = "emergency_scope_hash";
+  private String emergencyScopeHash;
+
+  public static final String JSON_PROPERTY_SAFE_DEP_STATE = "safe_dep_state";
+  private String safeDepState;
+
+  public static final String JSON_PROPERTY_SAFE_DEP_REASON_CODE = "safe_dep_reason_code";
+  private String safeDepReasonCode;
+
+  public static final String JSON_PROPERTY_NETWORK_LOG_REF = "network_log_ref";
+  private String networkLogRef;
+
+  public static final String JSON_PROPERTY_SECRET_EVENTS_REF = "secret_events_ref";
+  private String secretEventsRef;
+
+  public static final String JSON_PROPERTY_SANDBOX_LEASE_ID = "sandbox_lease_id";
+  private String sandboxLeaseId;
+
+  public static final String JSON_PROPERTY_EFFECT_GRAPH_NODE_ID = "effect_graph_node_id";
+  private String effectGraphNodeId;
+
+  public static final String JSON_PROPERTY_PORT_EXPOSURES = "port_exposures";
+  private List<Map<String, Object>> portExposures;
+
+  public static final String JSON_PROPERTY_REPLAY_SCRIPT = "replay_script";
+  private Map<String, Object> replayScript = new HashMap<>();
+
+  public static final String JSON_PROPERTY_PROVENANCE = "provenance";
+  private Map<String, Object> provenance = new HashMap<>();
+
+  public static final String JSON_PROPERTY_BUNDLED_ARTIFACTS = "bundled_artifacts";
+  private List<Map<String, Object>> bundledArtifacts;
+
+  public static final String JSON_PROPERTY_TRANSPARENCY = "transparency";
+  private Map<String, Object> transparency = new HashMap<>();
+
+  public static final String JSON_PROPERTY_LOG_ID = "log_id";
+  private String logId;
+
+  public static final String JSON_PROPERTY_LEAF_INDEX = "leaf_index";
+  private Long leafIndex;
 
   public static final String JSON_PROPERTY_METADATA = "metadata";
   private Map<String, Object> metadata = new HashMap<>();
@@ -53662,6 +55568,31 @@ public static class Receipt {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setEffectId(String effectId) {
     this.effectId = effectId;
+  }
+
+
+  public Receipt externalReferenceId(String externalReferenceId) {
+    this.externalReferenceId = externalReferenceId;
+    return this;
+  }
+
+   /**
+   * Get externalReferenceId
+   * @return externalReferenceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EXTERNAL_REFERENCE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getExternalReferenceId() {
+    return externalReferenceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EXTERNAL_REFERENCE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setExternalReferenceId(String externalReferenceId) {
+    this.externalReferenceId = externalReferenceId;
   }
 
 
@@ -53815,6 +55746,206 @@ public static class Receipt {
   }
 
 
+  public Receipt effectType(String effectType) {
+    this.effectType = effectType;
+    return this;
+  }
+
+   /**
+   * Get effectType
+   * @return effectType
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECT_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEffectType() {
+    return effectType;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECT_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffectType(String effectType) {
+    this.effectType = effectType;
+  }
+
+
+  public Receipt toolFingerprint(String toolFingerprint) {
+    this.toolFingerprint = toolFingerprint;
+    return this;
+  }
+
+   /**
+   * Get toolFingerprint
+   * @return toolFingerprint
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOOL_FINGERPRINT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getToolFingerprint() {
+    return toolFingerprint;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOOL_FINGERPRINT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setToolFingerprint(String toolFingerprint) {
+    this.toolFingerprint = toolFingerprint;
+  }
+
+
+  public Receipt idempotencyKey(String idempotencyKey) {
+    this.idempotencyKey = idempotencyKey;
+    return this;
+  }
+
+   /**
+   * Get idempotencyKey
+   * @return idempotencyKey
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_IDEMPOTENCY_KEY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getIdempotencyKey() {
+    return idempotencyKey;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_IDEMPOTENCY_KEY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setIdempotencyKey(String idempotencyKey) {
+    this.idempotencyKey = idempotencyKey;
+  }
+
+
+  public Receipt toolName(String toolName) {
+    this.toolName = toolName;
+    return this;
+  }
+
+   /**
+   * Get toolName
+   * @return toolName
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOOL_NAME)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getToolName() {
+    return toolName;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOOL_NAME)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setToolName(String toolName) {
+    this.toolName = toolName;
+  }
+
+
+  public Receipt policyHash(String policyHash) {
+    this.policyHash = policyHash;
+    return this;
+  }
+
+   /**
+   * Get policyHash
+   * @return policyHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyHash() {
+    return policyHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyHash(String policyHash) {
+    this.policyHash = policyHash;
+  }
+
+
+  public Receipt sessionId(String sessionId) {
+    this.sessionId = sessionId;
+    return this;
+  }
+
+   /**
+   * Get sessionId
+   * @return sessionId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSessionId() {
+    return sessionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSessionId(String sessionId) {
+    this.sessionId = sessionId;
+  }
+
+
+  public Receipt scopeHash(String scopeHash) {
+    this.scopeHash = scopeHash;
+    return this;
+  }
+
+   /**
+   * Get scopeHash
+   * @return scopeHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SCOPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getScopeHash() {
+    return scopeHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SCOPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setScopeHash(String scopeHash) {
+    this.scopeHash = scopeHash;
+  }
+
+
+  public Receipt issuedAt(OffsetDateTime issuedAt) {
+    this.issuedAt = issuedAt;
+    return this;
+  }
+
+   /**
+   * Get issuedAt
+   * @return issuedAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ISSUED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getIssuedAt() {
+    return issuedAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ISSUED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setIssuedAt(OffsetDateTime issuedAt) {
+    this.issuedAt = issuedAt;
+  }
+
+
   public Receipt signature(String signature) {
     this.signature = signature;
     return this;
@@ -53837,6 +55968,31 @@ public static class Receipt {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setSignature(String signature) {
     this.signature = signature;
+  }
+
+
+  public Receipt signatureSchema(SignatureSchemaEnum signatureSchema) {
+    this.signatureSchema = signatureSchema;
+    return this;
+  }
+
+   /**
+   * Present on newly-issued receipts whose SafeDep and evidence authority fields are bound by the v2 canonical payload.
+   * @return signatureSchema
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_SCHEMA)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public SignatureSchemaEnum getSignatureSchema() {
+    return signatureSchema;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_SCHEMA)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureSchema(SignatureSchemaEnum signatureSchema) {
+    this.signatureSchema = signatureSchema;
   }
 
 
@@ -54040,6 +56196,446 @@ public static class Receipt {
   }
 
 
+  public Receipt emergencyActivationId(String emergencyActivationId) {
+    this.emergencyActivationId = emergencyActivationId;
+    return this;
+  }
+
+   /**
+   * Get emergencyActivationId
+   * @return emergencyActivationId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_ACTIVATION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEmergencyActivationId() {
+    return emergencyActivationId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_ACTIVATION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEmergencyActivationId(String emergencyActivationId) {
+    this.emergencyActivationId = emergencyActivationId;
+  }
+
+
+  public Receipt emergencyDelegationSessionId(String emergencyDelegationSessionId) {
+    this.emergencyDelegationSessionId = emergencyDelegationSessionId;
+    return this;
+  }
+
+   /**
+   * Get emergencyDelegationSessionId
+   * @return emergencyDelegationSessionId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_DELEGATION_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEmergencyDelegationSessionId() {
+    return emergencyDelegationSessionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_DELEGATION_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEmergencyDelegationSessionId(String emergencyDelegationSessionId) {
+    this.emergencyDelegationSessionId = emergencyDelegationSessionId;
+  }
+
+
+  public Receipt emergencyScopeHash(String emergencyScopeHash) {
+    this.emergencyScopeHash = emergencyScopeHash;
+    return this;
+  }
+
+   /**
+   * Get emergencyScopeHash
+   * @return emergencyScopeHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_SCOPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEmergencyScopeHash() {
+    return emergencyScopeHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EMERGENCY_SCOPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEmergencyScopeHash(String emergencyScopeHash) {
+    this.emergencyScopeHash = emergencyScopeHash;
+  }
+
+
+  public Receipt safeDepState(String safeDepState) {
+    this.safeDepState = safeDepState;
+    return this;
+  }
+
+   /**
+   * Get safeDepState
+   * @return safeDepState
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SAFE_DEP_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSafeDepState() {
+    return safeDepState;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SAFE_DEP_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSafeDepState(String safeDepState) {
+    this.safeDepState = safeDepState;
+  }
+
+
+  public Receipt safeDepReasonCode(String safeDepReasonCode) {
+    this.safeDepReasonCode = safeDepReasonCode;
+    return this;
+  }
+
+   /**
+   * Get safeDepReasonCode
+   * @return safeDepReasonCode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SAFE_DEP_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSafeDepReasonCode() {
+    return safeDepReasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SAFE_DEP_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSafeDepReasonCode(String safeDepReasonCode) {
+    this.safeDepReasonCode = safeDepReasonCode;
+  }
+
+
+  public Receipt networkLogRef(String networkLogRef) {
+    this.networkLogRef = networkLogRef;
+    return this;
+  }
+
+   /**
+   * Get networkLogRef
+   * @return networkLogRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_NETWORK_LOG_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getNetworkLogRef() {
+    return networkLogRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_NETWORK_LOG_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setNetworkLogRef(String networkLogRef) {
+    this.networkLogRef = networkLogRef;
+  }
+
+
+  public Receipt secretEventsRef(String secretEventsRef) {
+    this.secretEventsRef = secretEventsRef;
+    return this;
+  }
+
+   /**
+   * Get secretEventsRef
+   * @return secretEventsRef
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SECRET_EVENTS_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSecretEventsRef() {
+    return secretEventsRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SECRET_EVENTS_REF)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSecretEventsRef(String secretEventsRef) {
+    this.secretEventsRef = secretEventsRef;
+  }
+
+
+  public Receipt sandboxLeaseId(String sandboxLeaseId) {
+    this.sandboxLeaseId = sandboxLeaseId;
+    return this;
+  }
+
+   /**
+   * Get sandboxLeaseId
+   * @return sandboxLeaseId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SANDBOX_LEASE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSandboxLeaseId() {
+    return sandboxLeaseId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SANDBOX_LEASE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSandboxLeaseId(String sandboxLeaseId) {
+    this.sandboxLeaseId = sandboxLeaseId;
+  }
+
+
+  public Receipt effectGraphNodeId(String effectGraphNodeId) {
+    this.effectGraphNodeId = effectGraphNodeId;
+    return this;
+  }
+
+   /**
+   * Get effectGraphNodeId
+   * @return effectGraphNodeId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECT_GRAPH_NODE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEffectGraphNodeId() {
+    return effectGraphNodeId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECT_GRAPH_NODE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffectGraphNodeId(String effectGraphNodeId) {
+    this.effectGraphNodeId = effectGraphNodeId;
+  }
+
+
+  public Receipt portExposures(List<Map<String, Object>> portExposures) {
+    this.portExposures = portExposures;
+    return this;
+  }
+
+  public Receipt addPortExposuresItem(Map<String, Object> portExposuresItem) {
+    if (this.portExposures == null) {
+      this.portExposures = new ArrayList<>();
+    }
+    this.portExposures.add(portExposuresItem);
+    return this;
+  }
+
+   /**
+   * Get portExposures
+   * @return portExposures
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PORT_EXPOSURES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<Map<String, Object>> getPortExposures() {
+    return portExposures;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PORT_EXPOSURES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPortExposures(List<Map<String, Object>> portExposures) {
+    this.portExposures = portExposures;
+  }
+
+
+  public Receipt replayScript(Map<String, Object> replayScript) {
+    this.replayScript = replayScript;
+    return this;
+  }
+
+  public Receipt putReplayScriptItem(String key, Object replayScriptItem) {
+    if (this.replayScript == null) {
+      this.replayScript = new HashMap<>();
+    }
+    this.replayScript.put(key, replayScriptItem);
+    return this;
+  }
+
+   /**
+   * Get replayScript
+   * @return replayScript
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REPLAY_SCRIPT)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getReplayScript() {
+    return replayScript;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REPLAY_SCRIPT)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReplayScript(Map<String, Object> replayScript) {
+    this.replayScript = replayScript;
+  }
+
+
+  public Receipt provenance(Map<String, Object> provenance) {
+    this.provenance = provenance;
+    return this;
+  }
+
+  public Receipt putProvenanceItem(String key, Object provenanceItem) {
+    if (this.provenance == null) {
+      this.provenance = new HashMap<>();
+    }
+    this.provenance.put(key, provenanceItem);
+    return this;
+  }
+
+   /**
+   * Get provenance
+   * @return provenance
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PROVENANCE)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getProvenance() {
+    return provenance;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROVENANCE)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setProvenance(Map<String, Object> provenance) {
+    this.provenance = provenance;
+  }
+
+
+  public Receipt bundledArtifacts(List<Map<String, Object>> bundledArtifacts) {
+    this.bundledArtifacts = bundledArtifacts;
+    return this;
+  }
+
+  public Receipt addBundledArtifactsItem(Map<String, Object> bundledArtifactsItem) {
+    if (this.bundledArtifacts == null) {
+      this.bundledArtifacts = new ArrayList<>();
+    }
+    this.bundledArtifacts.add(bundledArtifactsItem);
+    return this;
+  }
+
+   /**
+   * Get bundledArtifacts
+   * @return bundledArtifacts
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_BUNDLED_ARTIFACTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<Map<String, Object>> getBundledArtifacts() {
+    return bundledArtifacts;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_BUNDLED_ARTIFACTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setBundledArtifacts(List<Map<String, Object>> bundledArtifacts) {
+    this.bundledArtifacts = bundledArtifacts;
+  }
+
+
+  public Receipt transparency(Map<String, Object> transparency) {
+    this.transparency = transparency;
+    return this;
+  }
+
+  public Receipt putTransparencyItem(String key, Object transparencyItem) {
+    if (this.transparency == null) {
+      this.transparency = new HashMap<>();
+    }
+    this.transparency.put(key, transparencyItem);
+    return this;
+  }
+
+   /**
+   * Get transparency
+   * @return transparency
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TRANSPARENCY)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getTransparency() {
+    return transparency;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TRANSPARENCY)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTransparency(Map<String, Object> transparency) {
+    this.transparency = transparency;
+  }
+
+
+  public Receipt logId(String logId) {
+    this.logId = logId;
+    return this;
+  }
+
+   /**
+   * Get logId
+   * @return logId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LOG_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getLogId() {
+    return logId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LOG_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLogId(String logId) {
+    this.logId = logId;
+  }
+
+
+  public Receipt leafIndex(Long leafIndex) {
+    this.leafIndex = leafIndex;
+    return this;
+  }
+
+   /**
+   * Get leafIndex
+   * @return leafIndex
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_LEAF_INDEX)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getLeafIndex() {
+    return leafIndex;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LEAF_INDEX)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setLeafIndex(Long leafIndex) {
+    this.leafIndex = leafIndex;
+  }
+
+
   public Receipt metadata(Map<String, Object> metadata) {
     this.metadata = metadata;
     return this;
@@ -54088,13 +56684,23 @@ public static class Receipt {
     return Objects.equals(this.receiptId, receipt.receiptId) &&
         Objects.equals(this.decisionId, receipt.decisionId) &&
         Objects.equals(this.effectId, receipt.effectId) &&
+        Objects.equals(this.externalReferenceId, receipt.externalReferenceId) &&
         Objects.equals(this.status, receipt.status) &&
         Objects.equals(this.reasonCode, receipt.reasonCode) &&
         Objects.equals(this.outputHash, receipt.outputHash) &&
         Objects.equals(this.blobHash, receipt.blobHash) &&
         Objects.equals(this.prevHash, receipt.prevHash) &&
         Objects.equals(this.lamportClock, receipt.lamportClock) &&
+        Objects.equals(this.effectType, receipt.effectType) &&
+        Objects.equals(this.toolFingerprint, receipt.toolFingerprint) &&
+        Objects.equals(this.idempotencyKey, receipt.idempotencyKey) &&
+        Objects.equals(this.toolName, receipt.toolName) &&
+        Objects.equals(this.policyHash, receipt.policyHash) &&
+        Objects.equals(this.sessionId, receipt.sessionId) &&
+        Objects.equals(this.scopeHash, receipt.scopeHash) &&
+        Objects.equals(this.issuedAt, receipt.issuedAt) &&
         Objects.equals(this.signature, receipt.signature) &&
+        Objects.equals(this.signatureSchema, receipt.signatureSchema) &&
         Objects.equals(this.signatureProfile, receipt.signatureProfile) &&
         Objects.equals(this.signatureAlgorithm, receipt.signatureAlgorithm) &&
         Objects.equals(this.keyId, receipt.keyId) &&
@@ -54103,12 +56709,28 @@ public static class Receipt {
         Objects.equals(this.principal, receipt.principal) &&
         Objects.equals(this.executorId, receipt.executorId) &&
         Objects.equals(this.argsHash, receipt.argsHash) &&
+        Objects.equals(this.emergencyActivationId, receipt.emergencyActivationId) &&
+        Objects.equals(this.emergencyDelegationSessionId, receipt.emergencyDelegationSessionId) &&
+        Objects.equals(this.emergencyScopeHash, receipt.emergencyScopeHash) &&
+        Objects.equals(this.safeDepState, receipt.safeDepState) &&
+        Objects.equals(this.safeDepReasonCode, receipt.safeDepReasonCode) &&
+        Objects.equals(this.networkLogRef, receipt.networkLogRef) &&
+        Objects.equals(this.secretEventsRef, receipt.secretEventsRef) &&
+        Objects.equals(this.sandboxLeaseId, receipt.sandboxLeaseId) &&
+        Objects.equals(this.effectGraphNodeId, receipt.effectGraphNodeId) &&
+        Objects.equals(this.portExposures, receipt.portExposures) &&
+        Objects.equals(this.replayScript, receipt.replayScript) &&
+        Objects.equals(this.provenance, receipt.provenance) &&
+        Objects.equals(this.bundledArtifacts, receipt.bundledArtifacts) &&
+        Objects.equals(this.transparency, receipt.transparency) &&
+        Objects.equals(this.logId, receipt.logId) &&
+        Objects.equals(this.leafIndex, receipt.leafIndex) &&
         Objects.equals(this.metadata, receipt.metadata);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(receiptId, decisionId, effectId, status, reasonCode, outputHash, blobHash, prevHash, lamportClock, signature, signatureProfile, signatureAlgorithm, keyId, publicKeySet, timestamp, principal, executorId, argsHash, metadata);
+    return Objects.hash(receiptId, decisionId, effectId, externalReferenceId, status, reasonCode, outputHash, blobHash, prevHash, lamportClock, effectType, toolFingerprint, idempotencyKey, toolName, policyHash, sessionId, scopeHash, issuedAt, signature, signatureSchema, signatureProfile, signatureAlgorithm, keyId, publicKeySet, timestamp, principal, executorId, argsHash, emergencyActivationId, emergencyDelegationSessionId, emergencyScopeHash, safeDepState, safeDepReasonCode, networkLogRef, secretEventsRef, sandboxLeaseId, effectGraphNodeId, portExposures, replayScript, provenance, bundledArtifacts, transparency, logId, leafIndex, metadata);
   }
 
   @Override
@@ -54118,13 +56740,23 @@ public static class Receipt {
     sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
     sb.append("    decisionId: ").append(toIndentedString(decisionId)).append("\n");
     sb.append("    effectId: ").append(toIndentedString(effectId)).append("\n");
+    sb.append("    externalReferenceId: ").append(toIndentedString(externalReferenceId)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
     sb.append("    outputHash: ").append(toIndentedString(outputHash)).append("\n");
     sb.append("    blobHash: ").append(toIndentedString(blobHash)).append("\n");
     sb.append("    prevHash: ").append(toIndentedString(prevHash)).append("\n");
     sb.append("    lamportClock: ").append(toIndentedString(lamportClock)).append("\n");
+    sb.append("    effectType: ").append(toIndentedString(effectType)).append("\n");
+    sb.append("    toolFingerprint: ").append(toIndentedString(toolFingerprint)).append("\n");
+    sb.append("    idempotencyKey: ").append(toIndentedString(idempotencyKey)).append("\n");
+    sb.append("    toolName: ").append(toIndentedString(toolName)).append("\n");
+    sb.append("    policyHash: ").append(toIndentedString(policyHash)).append("\n");
+    sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
+    sb.append("    scopeHash: ").append(toIndentedString(scopeHash)).append("\n");
+    sb.append("    issuedAt: ").append(toIndentedString(issuedAt)).append("\n");
     sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
+    sb.append("    signatureSchema: ").append(toIndentedString(signatureSchema)).append("\n");
     sb.append("    signatureProfile: ").append(toIndentedString(signatureProfile)).append("\n");
     sb.append("    signatureAlgorithm: ").append(toIndentedString(signatureAlgorithm)).append("\n");
     sb.append("    keyId: ").append(toIndentedString(keyId)).append("\n");
@@ -54133,6 +56765,22 @@ public static class Receipt {
     sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
     sb.append("    executorId: ").append(toIndentedString(executorId)).append("\n");
     sb.append("    argsHash: ").append(toIndentedString(argsHash)).append("\n");
+    sb.append("    emergencyActivationId: ").append(toIndentedString(emergencyActivationId)).append("\n");
+    sb.append("    emergencyDelegationSessionId: ").append(toIndentedString(emergencyDelegationSessionId)).append("\n");
+    sb.append("    emergencyScopeHash: ").append(toIndentedString(emergencyScopeHash)).append("\n");
+    sb.append("    safeDepState: ").append(toIndentedString(safeDepState)).append("\n");
+    sb.append("    safeDepReasonCode: ").append(toIndentedString(safeDepReasonCode)).append("\n");
+    sb.append("    networkLogRef: ").append(toIndentedString(networkLogRef)).append("\n");
+    sb.append("    secretEventsRef: ").append(toIndentedString(secretEventsRef)).append("\n");
+    sb.append("    sandboxLeaseId: ").append(toIndentedString(sandboxLeaseId)).append("\n");
+    sb.append("    effectGraphNodeId: ").append(toIndentedString(effectGraphNodeId)).append("\n");
+    sb.append("    portExposures: ").append(toIndentedString(portExposures)).append("\n");
+    sb.append("    replayScript: ").append(toIndentedString(replayScript)).append("\n");
+    sb.append("    provenance: ").append(toIndentedString(provenance)).append("\n");
+    sb.append("    bundledArtifacts: ").append(toIndentedString(bundledArtifacts)).append("\n");
+    sb.append("    transparency: ").append(toIndentedString(transparency)).append("\n");
+    sb.append("    logId: ").append(toIndentedString(logId)).append("\n");
+    sb.append("    leafIndex: ").append(toIndentedString(leafIndex)).append("\n");
     sb.append("    metadata: ").append(toIndentedString(metadata)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -54196,6 +56844,11 @@ public static class Receipt {
       joiner.add(String.format("%seffect_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `external_reference_id` to the URL query string
+    if (getExternalReferenceId() != null) {
+      joiner.add(String.format("%sexternal_reference_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExternalReferenceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `status` to the URL query string
     if (getStatus() != null) {
       joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -54226,9 +56879,54 @@ public static class Receipt {
       joiner.add(String.format("%slamport_clock%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLamportClock()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `effect_type` to the URL query string
+    if (getEffectType() != null) {
+      joiner.add(String.format("%seffect_type%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tool_fingerprint` to the URL query string
+    if (getToolFingerprint() != null) {
+      joiner.add(String.format("%stool_fingerprint%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getToolFingerprint()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `idempotency_key` to the URL query string
+    if (getIdempotencyKey() != null) {
+      joiner.add(String.format("%sidempotency_key%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getIdempotencyKey()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tool_name` to the URL query string
+    if (getToolName() != null) {
+      joiner.add(String.format("%stool_name%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getToolName()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_hash` to the URL query string
+    if (getPolicyHash() != null) {
+      joiner.add(String.format("%spolicy_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `session_id` to the URL query string
+    if (getSessionId() != null) {
+      joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `scope_hash` to the URL query string
+    if (getScopeHash() != null) {
+      joiner.add(String.format("%sscope_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getScopeHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `issued_at` to the URL query string
+    if (getIssuedAt() != null) {
+      joiner.add(String.format("%sissued_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getIssuedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `signature` to the URL query string
     if (getSignature() != null) {
       joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_schema` to the URL query string
+    if (getSignatureSchema() != null) {
+      joiner.add(String.format("%ssignature_schema%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureSchema()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `signature_profile` to the URL query string
@@ -54269,6 +56967,106 @@ public static class Receipt {
     // add `args_hash` to the URL query string
     if (getArgsHash() != null) {
       joiner.add(String.format("%sargs_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getArgsHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `emergency_activation_id` to the URL query string
+    if (getEmergencyActivationId() != null) {
+      joiner.add(String.format("%semergency_activation_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEmergencyActivationId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `emergency_delegation_session_id` to the URL query string
+    if (getEmergencyDelegationSessionId() != null) {
+      joiner.add(String.format("%semergency_delegation_session_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEmergencyDelegationSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `emergency_scope_hash` to the URL query string
+    if (getEmergencyScopeHash() != null) {
+      joiner.add(String.format("%semergency_scope_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEmergencyScopeHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `safe_dep_state` to the URL query string
+    if (getSafeDepState() != null) {
+      joiner.add(String.format("%ssafe_dep_state%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSafeDepState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `safe_dep_reason_code` to the URL query string
+    if (getSafeDepReasonCode() != null) {
+      joiner.add(String.format("%ssafe_dep_reason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSafeDepReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `network_log_ref` to the URL query string
+    if (getNetworkLogRef() != null) {
+      joiner.add(String.format("%snetwork_log_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getNetworkLogRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `secret_events_ref` to the URL query string
+    if (getSecretEventsRef() != null) {
+      joiner.add(String.format("%ssecret_events_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSecretEventsRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `sandbox_lease_id` to the URL query string
+    if (getSandboxLeaseId() != null) {
+      joiner.add(String.format("%ssandbox_lease_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSandboxLeaseId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `effect_graph_node_id` to the URL query string
+    if (getEffectGraphNodeId() != null) {
+      joiner.add(String.format("%seffect_graph_node_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectGraphNodeId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `port_exposures` to the URL query string
+    if (getPortExposures() != null) {
+      for (int i = 0; i < getPortExposures().size(); i++) {
+        joiner.add(String.format("%sport_exposures%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getPortExposures().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `replay_script` to the URL query string
+    if (getReplayScript() != null) {
+      for (String _key : getReplayScript().keySet()) {
+        joiner.add(String.format("%sreplay_script%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getReplayScript().get(_key), URLEncoder.encode(String.valueOf(getReplayScript().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `provenance` to the URL query string
+    if (getProvenance() != null) {
+      for (String _key : getProvenance().keySet()) {
+        joiner.add(String.format("%sprovenance%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getProvenance().get(_key), URLEncoder.encode(String.valueOf(getProvenance().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `bundled_artifacts` to the URL query string
+    if (getBundledArtifacts() != null) {
+      for (int i = 0; i < getBundledArtifacts().size(); i++) {
+        joiner.add(String.format("%sbundled_artifacts%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getBundledArtifacts().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `transparency` to the URL query string
+    if (getTransparency() != null) {
+      for (String _key : getTransparency().keySet()) {
+        joiner.add(String.format("%stransparency%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getTransparency().get(_key), URLEncoder.encode(String.valueOf(getTransparency().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `log_id` to the URL query string
+    if (getLogId() != null) {
+      joiner.add(String.format("%slog_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLogId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `leaf_index` to the URL query string
+    if (getLeafIndex() != null) {
+      joiner.add(String.format("%sleaf_index%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLeafIndex()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `metadata` to the URL query string

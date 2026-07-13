@@ -19,7 +19,6 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 const (
@@ -284,30 +283,20 @@ func persistOnboardingReceipt(r *http.Request, svc *Services, step onboardingSte
 		return "", fmt.Errorf("onboarding route requires authenticated principal")
 	}
 	now := time.Now().UTC()
-	decision := &contracts.DecisionRecord{
-		ID:                 fmt.Sprintf("onboarding_%s_%d", step.ID, now.UnixNano()),
-		SubjectID:          principal.GetID(),
-		Action:             step.Action,
-		Resource:           step.Resource,
-		Verdict:            step.Verdict,
-		Reason:             step.Description,
-		ReasonCode:         step.ReasonCode,
-		PolicyBackend:      "helm-local-quickstart",
-		PolicyContentHash:  sha256HexBytes([]byte(step.ID + ":" + step.ReasonCode)),
-		PolicyDecisionHash: sha256HexBytes([]byte(step.ID + ":" + step.Verdict)),
-		Timestamp:          now,
-	}
-	err = persistDecisionReceipt(r.Context(), svc, decision, principal.GetID(), []byte(step.Action+":"+step.Resource), map[string]any{
+	activityID := fmt.Sprintf("onboarding_%s_%d", step.ID, now.UnixNano())
+	sessionID := "onboarding:" + strings.TrimSpace(principal.GetTenantID()) + ":" + strings.TrimSpace(principal.GetID())
+	receiptID, err := persistLocalActivityReceipt(r.Context(), svc, activityID, principal.GetID(), sessionID, step.Action, step.Resource, step.Verdict, step.ReasonCode, now, []byte(step.Action+":"+step.Resource), map[string]any{
 		"source":          "onboarding",
 		"onboarding_step": step.ID,
 		"action":          step.Action,
 		"resource":        step.Resource,
 		"reason_code":     step.ReasonCode,
+		"description":     step.Description,
 	})
 	if err != nil {
 		return "", err
 	}
-	return "rcpt_" + decision.ID, nil
+	return receiptID, nil
 }
 
 func exportOnboardingEvidence(r *http.Request, svc *Services, opts serverOptions) (map[string]any, error) {

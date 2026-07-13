@@ -256,7 +256,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		result := verifyEvidenceRequest(r)
+		result := verifyEvidenceRequest(r, receiptVerifierForServices(svc))
 		writeContractJSON(w, http.StatusOK, result)
 	})
 
@@ -592,7 +592,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		result := verifyEvidenceRequest(r)
+		result := verifyEvidenceRequest(r, receiptVerifierForServices(svc))
 		checks, _ := result["checks"].(map[string]string)
 		if checks == nil {
 			checks = map[string]string{}
@@ -1342,7 +1342,7 @@ func contractReceipts(ctx context.Context, svc *Services, sessionID string, limi
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
 	if strings.TrimSpace(sessionID) != "" {
-		return svc.ReceiptStore.ListByAgent(ctx, sessionID, 0, limit)
+		return svc.ReceiptStore.ListBySession(ctx, sessionID, 0, limit)
 	}
 	return listReceiptsForCursor(ctx, svc, "", 0, limit)
 }
@@ -1437,7 +1437,7 @@ func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID str
 		var page []*contracts.Receipt
 		var err error
 		if strings.TrimSpace(sessionID) != "" {
-			page, err = svc.ReceiptStore.ListByAgent(ctx, sessionID, cursor, limit)
+			page, err = svc.ReceiptStore.ListBySession(ctx, sessionID, cursor, limit)
 		} else {
 			page, err = svc.ReceiptStore.ListSince(ctx, cursor, limit)
 		}
@@ -1449,8 +1449,8 @@ func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID str
 		}
 		for _, receipt := range page {
 			receipts = append(receipts, receipt)
-			if receipt.LamportClock > cursor {
-				cursor = receipt.LamportClock
+			if receipt.StreamSequence > cursor {
+				cursor = receipt.StreamSequence
 			}
 		}
 		if len(page) < limit {
@@ -1462,7 +1462,10 @@ func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID str
 func proofgraphSessions(receipts []*contracts.Receipt) []map[string]any {
 	bySession := make(map[string]map[string]any)
 	for _, receipt := range receipts {
-		sessionID := receipt.ExecutorID
+		sessionID := receipt.SessionID
+		if strings.TrimSpace(sessionID) == "" {
+			sessionID = receipt.ExecutorID
+		}
 		if strings.TrimSpace(sessionID) == "" {
 			sessionID = "anonymous"
 		}
@@ -1617,7 +1620,19 @@ func writeTarEntry(tw *tar.Writer, name string, data []byte) error {
 	return nil
 }
 
-func verifyEvidenceRequest(r *http.Request) map[string]any {
+type receiptSignatureVerifier interface {
+	VerifyReceipt(*contracts.Receipt) (bool, error)
+}
+
+func receiptVerifierForServices(svc *Services) receiptSignatureVerifier {
+	if svc == nil || svc.ReceiptSigner == nil {
+		return nil
+	}
+	verifier, _ := svc.ReceiptSigner.(receiptSignatureVerifier)
+	return verifier
+}
+
+func verifyEvidenceRequest(r *http.Request, receiptVerifier receiptSignatureVerifier) map[string]any {
 	bundle, err := readEvidenceBundleRequest(r)
 	if err != nil {
 		return verificationResult([]string{err.Error()}, nil)
@@ -1637,7 +1652,7 @@ func verifyEvidenceRequest(r *http.Request) map[string]any {
 		}
 		receipts = append(receipts, &receipt)
 	}
-	errs := verifyReceiptBundle(parsed, receipts)
+	errs := verifyReceiptBundle(parsed, receipts, receiptVerifier)
 	recordVerification(r.Context(), helmotel.VerificationEvent{
 		EnvelopeID:  parsed.Manifest.SessionID,
 		Verified:    len(errs) == 0,
@@ -1716,7 +1731,7 @@ func readEvidenceBundle(data []byte) (*evidenceBundle, error) {
 	return &evidenceBundle{Manifest: manifest, Files: files}, nil
 }
 
-func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {
+func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt, receiptVerifier receiptSignatureVerifier) []string {
 	var errors []string
 	for name, expected := range bundle.Manifest.FileHashes {
 		data, ok := bundle.Files[name]
@@ -1739,25 +1754,33 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 	}
 	errors = append(errors, verifyHarnessEvidenceRequirements(bundle, receipts)...)
 	sort.Slice(receipts, func(i, j int) bool {
-		if receipts[i].ExecutorID == receipts[j].ExecutorID {
+		leftSession := receiptSessionKey(receipts[i])
+		rightSession := receiptSessionKey(receipts[j])
+		if leftSession == rightSession {
 			return receipts[i].LamportClock < receipts[j].LamportClock
 		}
-		return receipts[i].ExecutorID < receipts[j].ExecutorID
+		return leftSession < rightSession
 	})
-	lastByExecutor := map[string]uint64{}
-	prevByExecutor := map[string]*contracts.Receipt{}
+	lastBySession := map[string]uint64{}
+	prevBySession := map[string]*contracts.Receipt{}
 	for _, receipt := range receipts {
 		if strings.TrimSpace(receipt.Signature) == "" {
 			errors = append(errors, fmt.Sprintf("%s missing signature", receipt.ReceiptID))
+		} else if receiptVerifier == nil {
+			errors = append(errors, fmt.Sprintf("%s trusted receipt signature verifier unavailable", receipt.ReceiptID))
+		} else if valid, err := receiptVerifier.VerifyReceipt(receipt); err != nil {
+			errors = append(errors, fmt.Sprintf("%s signature verification failed: %v", receipt.ReceiptID, err))
+		} else if !valid {
+			errors = append(errors, fmt.Sprintf("%s signature verification failed", receipt.ReceiptID))
 		}
-		executor := receipt.ExecutorID
-		if executor == "" {
-			executor = "anonymous"
+		sessionID := receiptSessionKey(receipt)
+		if sessionID == "" {
+			sessionID = "anonymous"
 		}
-		if last := lastByExecutor[executor]; last != 0 && receipt.LamportClock <= last {
+		if last := lastBySession[sessionID]; last != 0 && receipt.LamportClock <= last {
 			errors = append(errors, fmt.Sprintf("%s non-monotonic lamport clock", receipt.ReceiptID))
 		}
-		if previous := prevByExecutor[executor]; previous == nil {
+		if previous := prevBySession[sessionID]; previous == nil {
 			if !isGenesisPrevHash(receipt.PrevHash) {
 				errors = append(errors, fmt.Sprintf("%s invalid genesis prev_hash %q", receipt.ReceiptID, receipt.PrevHash))
 			}
@@ -1769,10 +1792,22 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 				errors = append(errors, fmt.Sprintf("%s prev_hash mismatch: expected %s got %s", receipt.ReceiptID, expected, receipt.PrevHash))
 			}
 		}
-		lastByExecutor[executor] = receipt.LamportClock
-		prevByExecutor[executor] = receipt
+		lastBySession[sessionID] = receipt.LamportClock
+		prevBySession[sessionID] = receipt
 	}
 	return errors
+}
+
+func receiptSessionKey(receipt *contracts.Receipt) string {
+	if receipt == nil {
+		return ""
+	}
+	if strings.TrimSpace(receipt.SessionID) != "" {
+		return receipt.SessionID
+	}
+	// Historic rows did not have a signed session field. Preserve their prior
+	// executor-scoped interpretation while all new receipts are session-bound.
+	return receipt.ExecutorID
 }
 
 func verifyHarnessEvidenceRequirements(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {

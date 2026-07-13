@@ -226,7 +226,7 @@ func TestStress_Ed25519SignDecision(t *testing.T) {
 
 func TestStress_Ed25519SignIntent(t *testing.T) {
 	signer, _ := NewEd25519Signer("ed-int")
-	i := &contracts.AuthorizedExecutionIntent{ID: "i1", DecisionID: "d1", AllowedTool: "tool"}
+	i := executableIntentFixture("i1", "d1", "sha256:effect-i1", "tool")
 	if err := signer.SignIntent(i); err != nil {
 		t.Fatalf("sign intent: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestStress_MLDSASignDecision(t *testing.T) {
 
 func TestStress_MLDSASignIntent(t *testing.T) {
 	signer, _ := NewMLDSASigner("pq-int")
-	i := &contracts.AuthorizedExecutionIntent{ID: "i2", DecisionID: "d2", AllowedTool: "tool-pq"}
+	i := executableIntentFixture("i2", "d2", "sha256:effect-i2", "tool-pq")
 	if err := signer.SignIntent(i); err != nil {
 		t.Fatalf("sign intent: %v", err)
 	}
@@ -430,8 +430,10 @@ func TestStress_VerifierReceipt(t *testing.T) {
 
 func TestStress_VerifierIntent(t *testing.T) {
 	signer, _ := NewEd25519Signer("vi-key")
-	i := &contracts.AuthorizedExecutionIntent{ID: "i-vi", DecisionID: "d1", AllowedTool: "t"}
-	_ = signer.SignIntent(i)
+	i := executableIntentFixture("i-vi", "d1", "sha256:effect-i-vi", "t")
+	if err := signer.SignIntent(i); err != nil {
+		t.Fatalf("sign intent: %v", err)
+	}
 	verifier, _ := NewEd25519Verifier(signer.PublicKeyBytes())
 	ok, err := verifier.VerifyIntent(i)
 	if err != nil || !ok {

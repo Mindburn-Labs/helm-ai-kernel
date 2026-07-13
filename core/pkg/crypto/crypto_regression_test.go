@@ -46,7 +46,7 @@ func TestClosing_Ed25519_SignVerify_Intent(t *testing.T) {
 	}
 	for _, tool := range []string{"shell.exec", "file.read", "http.get", "db.query"} {
 		t.Run("tool_"+tool, func(t *testing.T) {
-			i := &contracts.AuthorizedExecutionIntent{ID: "i1", DecisionID: "d1", AllowedTool: tool, EffectDigestHash: "sha256:effect-" + tool}
+			i := executableIntentFixture("i1", "d1", "sha256:effect-"+tool, tool)
 			if err := signer.SignIntent(i); err != nil {
 				t.Fatal(err)
 			}
@@ -120,7 +120,7 @@ func TestClosing_MLDSA_SignVerify_Intent(t *testing.T) {
 	}
 	for _, tool := range []string{"shell.exec", "file.read", "http.get"} {
 		t.Run("tool_"+tool, func(t *testing.T) {
-			i := &contracts.AuthorizedExecutionIntent{ID: "i-ml", DecisionID: "d-ml", AllowedTool: tool}
+			i := executableIntentFixture("i-ml", "d-ml", "sha256:effect-"+tool, tool)
 			if err := signer.SignIntent(i); err != nil {
 				t.Fatal(err)
 			}
@@ -242,7 +242,7 @@ func TestClosing_KeyRing_SingleKey_SignVerify(t *testing.T) {
 					t.Fatal("expected valid single-key decision verification")
 				}
 			case "Intent":
-				i := &contracts.AuthorizedExecutionIntent{ID: "kr-i", DecisionID: "kr-d", AllowedTool: "test"}
+				i := executableIntentFixture("kr-i", "kr-d", "sha256:effect-kr-i", "test")
 				if err := kr.SignIntent(i); err != nil {
 					t.Fatal(err)
 				}
@@ -737,8 +737,10 @@ func TestClosing_SigPrefix_IntentFormat(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		i := &contracts.AuthorizedExecutionIntent{ID: "ifmt", DecisionID: "d1", AllowedTool: "test"}
-		_ = s.SignIntent(i)
+		i := executableIntentFixture("ifmt", "d1", "sha256:effect-ifmt", "test")
+		if err := s.SignIntent(i); err != nil {
+			t.Fatal(err)
+		}
 		if !strings.Contains(i.SignatureType, "ml-dsa-65") {
 			t.Fatalf("expected algorithm ml-dsa-65 in signature type: %s", i.SignatureType)
 		}

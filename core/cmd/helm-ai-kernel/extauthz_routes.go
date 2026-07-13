@@ -69,7 +69,13 @@ func registerExtAuthzRoutes(mux *http.ServeMux, svc *Services) {
 
 func authorizeExtAuthzRequest(ctx context.Context, svc *Services, req extauthz.AuthorizationRequest, now time.Time) (extauthz.AuthorizationResponse, error) {
 	decision, err := svc.Guardian.EvaluateDecision(ctx, guardian.DecisionRequest{
-		Principal: req.PrincipalID,
+		Principal:   req.PrincipalID,
+		TenantID:    req.TenantID,
+		WorkspaceID: req.WorkspaceID,
+		// The service-authenticated request ID is the causal session identity
+		// for this authorization exchange. It is passed through the typed,
+		// server-owned field rather than the caller-controlled context map.
+		SessionID: "extauthz:" + req.RequestID,
 		Action:    req.ActionURN,
 		Resource:  req.ToolURN,
 		Context: map[string]interface{}{

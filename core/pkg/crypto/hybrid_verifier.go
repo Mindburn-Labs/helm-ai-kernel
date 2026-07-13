@@ -71,15 +71,21 @@ func (v *HybridVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, erro
 
 // VerifyIntent verifies a hybrid-signed AuthorizedExecutionIntent.
 func (v *HybridVerifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, error) {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool)
-	return v.verifyEnvelope([]byte(payload), i.Signature)
+	payload, err := CanonicalIntentPayload(i)
+	if err != nil {
+		return false, err
+	}
+	return v.verifyEnvelope(payload, i.Signature)
 }
 
 // VerifyReceipt verifies a hybrid-signed Receipt over the canonical receipt
 // preimage (same preimage as the classical profile).
 func (v *HybridVerifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
-	return v.verifyEnvelope([]byte(payload), r.Signature)
+	payload, err := CanonicalReceiptPayload(r)
+	if err != nil {
+		return false, err
+	}
+	return v.verifyEnvelope(payload, r.Signature)
 }
 
 func (v *HybridVerifier) verifyEnvelope(message []byte, envelope string) (bool, error) {
@@ -171,7 +177,10 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 	default:
 		return profile, false, fmt.Errorf("unsupported receipt signature algorithm %q", r.SignatureAlgorithm)
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	payload, err := CanonicalReceiptPayload(r)
+	if err != nil {
+		return profile, false, err
+	}
 
 	switch profile {
 	case ReceiptProfileHybrid:
@@ -190,16 +199,16 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 		if vErr != nil {
 			return profile, false, vErr
 		}
-		ok, vErr := hv.verifyEnvelope([]byte(payload), r.Signature)
+		ok, vErr := hv.verifyEnvelope(payload, r.Signature)
 		return profile, ok, vErr
 	case ReceiptProfilePQC:
 		if mldsaPubHex == "" {
 			return profile, false, fmt.Errorf("pqc receipt requires ml-dsa-65 public key")
 		}
-		ok, vErr := VerifyMLDSA65(mldsaPubHex, r.Signature, []byte(payload))
+		ok, vErr := VerifyMLDSA65(mldsaPubHex, r.Signature, payload)
 		return profile, ok, vErr
 	default:
-		ok, vErr := Verify(edPubHex, r.Signature, []byte(payload))
+		ok, vErr := Verify(edPubHex, r.Signature, payload)
 		return profile, ok, vErr
 	}
 }

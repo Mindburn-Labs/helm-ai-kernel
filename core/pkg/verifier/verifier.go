@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
 )
@@ -436,23 +438,32 @@ func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string
 	if err != nil || len(sigBytes) != ed25519.SignatureSize {
 		return false
 	}
-	var lamport uint64
-	if v := firstUint(document, "lamport_clock"); v != nil {
-		lamport = *v
+
+	// Reconstruct the typed receipt before deriving the preimage so this
+	// offline verifier follows exactly the schema-selected payload used by the
+	// kernel signer. Blank schema remains the retained legacy preimage; v2
+	// receipts must explicitly prove their classical Ed25519 metadata and key.
+	documentBytes, err := json.Marshal(document)
+	if err != nil {
+		return false
 	}
-	// Mirrors crypto.CanonicalizeReceipt — receipt_id:decision_id:effect_id:
-	// status:output_hash:prev_hash:lamport_clock:args_hash.
-	payload := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
-		firstString(document, "receipt_id"),
-		firstString(document, "decision_id"),
-		firstString(document, "effect_id"),
-		firstString(document, "status"),
-		firstString(document, "output_hash"),
-		firstString(document, "prev_hash"),
-		lamport,
-		firstString(document, "args_hash"),
-	)
-	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
+	var receipt contracts.Receipt
+	if err := json.Unmarshal(documentBytes, &receipt); err != nil {
+		return false
+	}
+	if receipt.Signature != sig {
+		return false
+	}
+	if receipt.SignatureSchema == helmcrypto.ReceiptSignatureSchemaV2 {
+		if receipt.SignatureProfile != helmcrypto.ReceiptProfileClassical || receipt.SignatureAlgorithm != helmcrypto.SigPrefixEd25519 || receipt.KeyID == "" || receipt.PublicKeySet[helmcrypto.SigPrefixEd25519] != keyHex {
+			return false
+		}
+	}
+	payload, err := helmcrypto.CanonicalReceiptPayload(&receipt)
+	if err != nil {
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), payload, sigBytes)
 }
 
 // verifyWitnessReceiptSignature verifies a witness attestation: an Ed25519

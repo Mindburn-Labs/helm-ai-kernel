@@ -10,6 +10,17 @@ enum Verdict {
   VERDICT_UNSPECIFIED = 0;
   VERDICT_ALLOW = 1;
   VERDICT_DENY = 2;
+  VERDICT_ESCALATE = 3;
+}
+
+// DecisionInterventionMetadata carries the Temporal Guardian fields included
+// in the v2 decision signing envelope. Durations are encoded as nanoseconds to
+// preserve Go time.Duration exactly.
+message DecisionInterventionMetadata {
+  string type = 1;
+  string reason_code = 2;
+  int64 wait_duration_nanos = 3;
+  int64 tokens_saved = 4;
 }
 
 message DecisionRecord {
@@ -26,4 +37,43 @@ message DecisionRecord {
   double trajectory_risk_score = 11;
   string session_centroid_hash = 12;
   int32 risk_accumulation_window = 13;
+
+  // Request tuple cryptographically bound by signature_schema v2.
+  string subject_id = 14;
+  string action = 15;
+  string resource = 16;
+
+  // Empty denotes the legacy v1 decision preimage. v2 currently uses
+  // "helm.decision.signature.v2" and also binds signature_type.
+  string signature_schema = 17;
+  string signature_type = 18;
+
+  // Complete additive v2 signing envelope. Legacy fields above stay in place
+  // for wire compatibility; v2 consumers must use these explicit fields.
+  string id = 19;
+  string policy_version = 20;
+  string effect_digest = 21;
+  string policy_backend = 22;
+  string policy_content_hash = 23;
+  string policy_epoch = 24;
+  string policy_decision_hash = 25;
+  string snapshot = 26;
+  string reason_code = 27;
+  string requirement_set_hash = 28;
+  DecisionInterventionMetadata intervention = 29;
+
+  // Legacy signature is bytes. v2 preserves its canonical text form so a
+  // decoded record can be verified without an implicit representation change.
+  string signature_text = 30;
+  // Legacy Verdict predates ESCALATE; v2 uses this explicit canonical text.
+  string verdict_text = 31;
+  // InputContext is intentionally unsigned, but retaining it avoids a lossy
+  // EffectInterlock DecisionRecord transport.
+  bytes input_context_json = 32;
+
+  // Trusted scope is signed in the v2 decision envelope. It is populated by
+  // authenticated adapters, never inferred from input_context_json.
+  string tenant_id = 33;
+  string workspace_id = 34;
+  string session_id = 35;
 }

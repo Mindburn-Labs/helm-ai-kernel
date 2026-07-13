@@ -1565,6 +1565,190 @@ export function AssertApprovalWebAuthnChallengeRequestToJSON(value?: AssertAppro
  */
 
 /**
+ * Signed executable intent. `signature_schema = helm.execution.intent.signature.v2`
+ * binds every authorization-relevant field below; an absent schema is a
+ * legacy audit-only intent and cannot authorize execution.
+ *
+ * @export
+ * @interface AuthorizedExecutionIntent
+ */
+export interface AuthorizedExecutionIntent {
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    decision_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    effect_digest_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    idempotency_key?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof AuthorizedExecutionIntent
+     */
+    issued_at?: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof AuthorizedExecutionIntent
+     */
+    expires_at?: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    signer?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    signature?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    signature_schema?: AuthorizedExecutionIntentSignatureSchemaEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    signature_type?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    allowed_tool?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof AuthorizedExecutionIntent
+     */
+    taint?: Array<string>;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    emergency_activation_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    emergency_delegation_session_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AuthorizedExecutionIntent
+     */
+    emergency_scope_hash?: string;
+}
+
+
+/**
+ * @export
+ */
+export const AuthorizedExecutionIntentSignatureSchemaEnum = {
+    HelmExecutionIntentSignatureV2: 'helm.execution.intent.signature.v2'
+} as const;
+export type AuthorizedExecutionIntentSignatureSchemaEnum = typeof AuthorizedExecutionIntentSignatureSchemaEnum[keyof typeof AuthorizedExecutionIntentSignatureSchemaEnum];
+
+
+/**
+ * Check if a given object implements the AuthorizedExecutionIntent interface.
+ */
+export function instanceOfAuthorizedExecutionIntent(value: object): boolean {
+    return true;
+}
+
+export function AuthorizedExecutionIntentFromJSON(json: any): AuthorizedExecutionIntent {
+    return AuthorizedExecutionIntentFromJSONTyped(json, false);
+}
+
+export function AuthorizedExecutionIntentFromJSONTyped(json: any, ignoreDiscriminator: boolean): AuthorizedExecutionIntent {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'id': json['id'] == null ? undefined : json['id'],
+        'decision_id': json['decision_id'] == null ? undefined : json['decision_id'],
+        'effect_digest_hash': json['effect_digest_hash'] == null ? undefined : json['effect_digest_hash'],
+        'idempotency_key': json['idempotency_key'] == null ? undefined : json['idempotency_key'],
+        'issued_at': json['issued_at'] == null ? undefined : (new Date(json['issued_at'])),
+        'expires_at': json['expires_at'] == null ? undefined : (new Date(json['expires_at'])),
+        'signer': json['signer'] == null ? undefined : json['signer'],
+        'signature': json['signature'] == null ? undefined : json['signature'],
+        'signature_schema': json['signature_schema'] == null ? undefined : json['signature_schema'],
+        'signature_type': json['signature_type'] == null ? undefined : json['signature_type'],
+        'allowed_tool': json['allowed_tool'] == null ? undefined : json['allowed_tool'],
+        'taint': json['taint'] == null ? undefined : json['taint'],
+        'emergency_activation_id': json['emergency_activation_id'] == null ? undefined : json['emergency_activation_id'],
+        'emergency_delegation_session_id': json['emergency_delegation_session_id'] == null ? undefined : json['emergency_delegation_session_id'],
+        'emergency_scope_hash': json['emergency_scope_hash'] == null ? undefined : json['emergency_scope_hash'],
+    };
+}
+
+export function AuthorizedExecutionIntentToJSON(value?: AuthorizedExecutionIntent | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'id': value['id'],
+        'decision_id': value['decision_id'],
+        'effect_digest_hash': value['effect_digest_hash'],
+        'idempotency_key': value['idempotency_key'],
+        'issued_at': value['issued_at'] == null ? undefined : ((value['issued_at']).toISOString()),
+        'expires_at': value['expires_at'] == null ? undefined : ((value['expires_at']).toISOString()),
+        'signer': value['signer'],
+        'signature': value['signature'],
+        'signature_schema': value['signature_schema'],
+        'signature_type': value['signature_type'],
+        'allowed_tool': value['allowed_tool'],
+        'taint': value['taint'],
+        'emergency_activation_id': value['emergency_activation_id'],
+        'emergency_delegation_session_id': value['emergency_delegation_session_id'],
+        'emergency_scope_hash': value['emergency_scope_hash'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
  *
  * @export
  * @interface AuthzHealth
@@ -5359,6 +5543,95 @@ export function CreateSandboxGrantRequestToJSON(value?: CreateSandboxGrantReques
  */
 
 /**
+ * Temporal-guardian metadata included in the signed v2 decision envelope when present.
+ * @export
+ * @interface DecisionInterventionMetadata
+ */
+export interface DecisionInterventionMetadata {
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionInterventionMetadata
+     */
+    type?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionInterventionMetadata
+     */
+    reason_code?: string;
+    /**
+     * Go duration in nanoseconds.
+     * @type {number}
+     * @memberof DecisionInterventionMetadata
+     */
+    wait_duration?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof DecisionInterventionMetadata
+     */
+    tokens_saved?: number;
+}
+
+/**
+ * Check if a given object implements the DecisionInterventionMetadata interface.
+ */
+export function instanceOfDecisionInterventionMetadata(value: object): boolean {
+    return true;
+}
+
+export function DecisionInterventionMetadataFromJSON(json: any): DecisionInterventionMetadata {
+    return DecisionInterventionMetadataFromJSONTyped(json, false);
+}
+
+export function DecisionInterventionMetadataFromJSONTyped(json: any, ignoreDiscriminator: boolean): DecisionInterventionMetadata {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'type': json['type'] == null ? undefined : json['type'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
+        'wait_duration': json['wait_duration'] == null ? undefined : json['wait_duration'],
+        'tokens_saved': json['tokens_saved'] == null ? undefined : json['tokens_saved'],
+    };
+}
+
+export function DecisionInterventionMetadataToJSON(value?: DecisionInterventionMetadata | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'type': value['type'],
+        'reason_code': value['reason_code'],
+        'wait_duration': value['wait_duration'],
+        'tokens_saved': value['tokens_saved'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+/**
+ * Signed policy decision. For `signature_schema = helm.decision.signature.v2`,
+ * every semantic decision field except `input_context` and `signature` is part
+ * of the canonical signing envelope. The signature is the result of signing
+ * that envelope and is therefore not part of its own preimage.
+ * Clients that need independent verification must preserve all fields shown here.
  *
  * @export
  * @interface DecisionRecord
@@ -5375,6 +5648,30 @@ export interface DecisionRecord {
      * @type {string}
      * @memberof DecisionRecord
      */
+    proposal_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    step_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    phenotype_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    subject_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
     action?: string;
     /**
      *
@@ -5382,6 +5679,24 @@ export interface DecisionRecord {
      * @memberof DecisionRecord
      */
     resource?: string;
+    /**
+     * Trusted tenant scope populated by the authenticated transport and bound by the v2 signature.
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    tenant_id?: string;
+    /**
+     * Trusted workspace scope populated by the authenticated transport and bound by the v2 signature.
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    workspace_id?: string;
+    /**
+     * Trusted session scope used for receipt chaining and bound by the v2 signature.
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    session_id?: string;
     /**
      *
      * @type {string}
@@ -5399,13 +5714,91 @@ export interface DecisionRecord {
      * @type {string}
      * @memberof DecisionRecord
      */
+    reason_code?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
     policy_version?: string;
     /**
      *
      * @type {string}
      * @memberof DecisionRecord
      */
+    effect_digest?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_backend?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_content_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_epoch?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
     policy_decision_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    state_cursor?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    snapshot?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    env_fingerprint?: string;
+    /**
+     * Unsigned explanatory context; it is intentionally excluded from the v2 signing envelope.
+     * @type {{ [key: string]: any; }}
+     * @memberof DecisionRecord
+     */
+    input_context?: { [key: string]: any; };
+    /**
+     *
+     * @type {number}
+     * @memberof DecisionRecord
+     */
+    trajectory_risk_score?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    session_centroid_hash?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof DecisionRecord
+     */
+    risk_accumulation_window?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    requirement_set_hash?: string;
     /**
      *
      * @type {string}
@@ -5420,6 +5813,24 @@ export interface DecisionRecord {
      * @memberof DecisionRecord
      */
     signature_schema?: DecisionRecordSignatureSchemaEnum;
+    /**
+     * Signer-selected algorithm and key identifier bound by the v2 signature.
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    signature_type?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof DecisionRecord
+     */
+    timestamp?: Date;
+    /**
+     *
+     * @type {DecisionInterventionMetadata}
+     * @memberof DecisionRecord
+     */
+    intervention?: DecisionInterventionMetadata;
 }
 
 
@@ -5450,14 +5861,37 @@ export function DecisionRecordFromJSONTyped(json: any, ignoreDiscriminator: bool
     return {
 
         'id': json['id'] == null ? undefined : json['id'],
+        'proposal_id': json['proposal_id'] == null ? undefined : json['proposal_id'],
+        'step_id': json['step_id'] == null ? undefined : json['step_id'],
+        'phenotype_hash': json['phenotype_hash'] == null ? undefined : json['phenotype_hash'],
+        'subject_id': json['subject_id'] == null ? undefined : json['subject_id'],
         'action': json['action'] == null ? undefined : json['action'],
         'resource': json['resource'] == null ? undefined : json['resource'],
+        'tenant_id': json['tenant_id'] == null ? undefined : json['tenant_id'],
+        'workspace_id': json['workspace_id'] == null ? undefined : json['workspace_id'],
+        'session_id': json['session_id'] == null ? undefined : json['session_id'],
         'verdict': json['verdict'] == null ? undefined : json['verdict'],
         'reason': json['reason'] == null ? undefined : json['reason'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
         'policy_version': json['policy_version'] == null ? undefined : json['policy_version'],
+        'effect_digest': json['effect_digest'] == null ? undefined : json['effect_digest'],
+        'policy_backend': json['policy_backend'] == null ? undefined : json['policy_backend'],
+        'policy_content_hash': json['policy_content_hash'] == null ? undefined : json['policy_content_hash'],
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
         'policy_decision_hash': json['policy_decision_hash'] == null ? undefined : json['policy_decision_hash'],
+        'state_cursor': json['state_cursor'] == null ? undefined : json['state_cursor'],
+        'snapshot': json['snapshot'] == null ? undefined : json['snapshot'],
+        'env_fingerprint': json['env_fingerprint'] == null ? undefined : json['env_fingerprint'],
+        'input_context': json['input_context'] == null ? undefined : json['input_context'],
+        'trajectory_risk_score': json['trajectory_risk_score'] == null ? undefined : json['trajectory_risk_score'],
+        'session_centroid_hash': json['session_centroid_hash'] == null ? undefined : json['session_centroid_hash'],
+        'risk_accumulation_window': json['risk_accumulation_window'] == null ? undefined : json['risk_accumulation_window'],
+        'requirement_set_hash': json['requirement_set_hash'] == null ? undefined : json['requirement_set_hash'],
         'signature': json['signature'] == null ? undefined : json['signature'],
         'signature_schema': json['signature_schema'] == null ? undefined : json['signature_schema'],
+        'signature_type': json['signature_type'] == null ? undefined : json['signature_type'],
+        'timestamp': json['timestamp'] == null ? undefined : (new Date(json['timestamp'])),
+        'intervention': json['intervention'] == null ? undefined : DecisionInterventionMetadataFromJSON(json['intervention']),
     };
 }
 
@@ -5468,14 +5902,37 @@ export function DecisionRecordToJSON(value?: DecisionRecord | null): any {
     return {
 
         'id': value['id'],
+        'proposal_id': value['proposal_id'],
+        'step_id': value['step_id'],
+        'phenotype_hash': value['phenotype_hash'],
+        'subject_id': value['subject_id'],
         'action': value['action'],
         'resource': value['resource'],
+        'tenant_id': value['tenant_id'],
+        'workspace_id': value['workspace_id'],
+        'session_id': value['session_id'],
         'verdict': value['verdict'],
         'reason': value['reason'],
+        'reason_code': value['reason_code'],
         'policy_version': value['policy_version'],
+        'effect_digest': value['effect_digest'],
+        'policy_backend': value['policy_backend'],
+        'policy_content_hash': value['policy_content_hash'],
+        'policy_epoch': value['policy_epoch'],
         'policy_decision_hash': value['policy_decision_hash'],
+        'state_cursor': value['state_cursor'],
+        'snapshot': value['snapshot'],
+        'env_fingerprint': value['env_fingerprint'],
+        'input_context': value['input_context'],
+        'trajectory_risk_score': value['trajectory_risk_score'],
+        'session_centroid_hash': value['session_centroid_hash'],
+        'risk_accumulation_window': value['risk_accumulation_window'],
+        'requirement_set_hash': value['requirement_set_hash'],
         'signature': value['signature'],
         'signature_schema': value['signature_schema'],
+        'signature_type': value['signature_type'],
+        'timestamp': value['timestamp'] == null ? undefined : ((value['timestamp']).toISOString()),
+        'intervention': DecisionInterventionMetadataToJSON(value['intervention']),
     };
 }
 
@@ -15859,6 +16316,12 @@ export interface Receipt {
      * @type {string}
      * @memberof Receipt
      */
+    external_reference_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
     status?: string;
     /**
      *
@@ -15895,7 +16358,61 @@ export interface Receipt {
      * @type {string}
      * @memberof Receipt
      */
+    effect_type?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    tool_fingerprint?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    idempotency_key?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    tool_name?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    policy_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    session_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    scope_hash?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof Receipt
+     */
+    issued_at?: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
     signature?: string;
+    /**
+     * Present on newly-issued receipts whose SafeDep and evidence authority fields are bound by the v2 canonical payload.
+     * @type {string}
+     * @memberof Receipt
+     */
+    signature_schema?: ReceiptSignatureSchemaEnum;
     /**
      * Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
      * @type {string}
@@ -15946,12 +16463,116 @@ export interface Receipt {
     args_hash?: string;
     /**
      *
+     * @type {string}
+     * @memberof Receipt
+     */
+    emergency_activation_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    emergency_delegation_session_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    emergency_scope_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    safe_dep_state?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    safe_dep_reason_code?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    network_log_ref?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    secret_events_ref?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    sandbox_lease_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    effect_graph_node_id?: string;
+    /**
+     *
+     * @type {Array<{ [key: string]: any; }>}
+     * @memberof Receipt
+     */
+    port_exposures?: Array<{ [key: string]: any; }>;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof Receipt
+     */
+    replay_script?: { [key: string]: any; };
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof Receipt
+     */
+    provenance?: { [key: string]: any; };
+    /**
+     *
+     * @type {Array<{ [key: string]: any; }>}
+     * @memberof Receipt
+     */
+    bundled_artifacts?: Array<{ [key: string]: any; }>;
+    /**
+     *
+     * @type {{ [key: string]: any; }}
+     * @memberof Receipt
+     */
+    transparency?: { [key: string]: any; };
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    log_id?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof Receipt
+     */
+    leaf_index?: number;
+    /**
+     *
      * @type {{ [key: string]: any; }}
      * @memberof Receipt
      */
     metadata?: { [key: string]: any; };
 }
 
+
+/**
+ * @export
+ */
+export const ReceiptSignatureSchemaEnum = {
+    HelmReceiptSignatureV2: 'helm.receipt.signature.v2'
+} as const;
+export type ReceiptSignatureSchemaEnum = typeof ReceiptSignatureSchemaEnum[keyof typeof ReceiptSignatureSchemaEnum];
 
 /**
  * @export
@@ -15984,13 +16605,23 @@ export function ReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolean): R
         'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
         'decision_id': json['decision_id'] == null ? undefined : json['decision_id'],
         'effect_id': json['effect_id'] == null ? undefined : json['effect_id'],
+        'external_reference_id': json['external_reference_id'] == null ? undefined : json['external_reference_id'],
         'status': json['status'] == null ? undefined : json['status'],
         'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
         'output_hash': json['output_hash'] == null ? undefined : json['output_hash'],
         'blob_hash': json['blob_hash'] == null ? undefined : json['blob_hash'],
         'prev_hash': json['prev_hash'] == null ? undefined : json['prev_hash'],
         'lamport_clock': json['lamport_clock'] == null ? undefined : json['lamport_clock'],
+        'effect_type': json['effect_type'] == null ? undefined : json['effect_type'],
+        'tool_fingerprint': json['tool_fingerprint'] == null ? undefined : json['tool_fingerprint'],
+        'idempotency_key': json['idempotency_key'] == null ? undefined : json['idempotency_key'],
+        'tool_name': json['tool_name'] == null ? undefined : json['tool_name'],
+        'policy_hash': json['policy_hash'] == null ? undefined : json['policy_hash'],
+        'session_id': json['session_id'] == null ? undefined : json['session_id'],
+        'scope_hash': json['scope_hash'] == null ? undefined : json['scope_hash'],
+        'issued_at': json['issued_at'] == null ? undefined : (new Date(json['issued_at'])),
         'signature': json['signature'] == null ? undefined : json['signature'],
+        'signature_schema': json['signature_schema'] == null ? undefined : json['signature_schema'],
         'signature_profile': json['signature_profile'] == null ? undefined : json['signature_profile'],
         'signature_algorithm': json['signature_algorithm'] == null ? undefined : json['signature_algorithm'],
         'key_id': json['key_id'] == null ? undefined : json['key_id'],
@@ -15999,6 +16630,22 @@ export function ReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolean): R
         'principal': json['principal'] == null ? undefined : json['principal'],
         'executor_id': json['executor_id'] == null ? undefined : json['executor_id'],
         'args_hash': json['args_hash'] == null ? undefined : json['args_hash'],
+        'emergency_activation_id': json['emergency_activation_id'] == null ? undefined : json['emergency_activation_id'],
+        'emergency_delegation_session_id': json['emergency_delegation_session_id'] == null ? undefined : json['emergency_delegation_session_id'],
+        'emergency_scope_hash': json['emergency_scope_hash'] == null ? undefined : json['emergency_scope_hash'],
+        'safe_dep_state': json['safe_dep_state'] == null ? undefined : json['safe_dep_state'],
+        'safe_dep_reason_code': json['safe_dep_reason_code'] == null ? undefined : json['safe_dep_reason_code'],
+        'network_log_ref': json['network_log_ref'] == null ? undefined : json['network_log_ref'],
+        'secret_events_ref': json['secret_events_ref'] == null ? undefined : json['secret_events_ref'],
+        'sandbox_lease_id': json['sandbox_lease_id'] == null ? undefined : json['sandbox_lease_id'],
+        'effect_graph_node_id': json['effect_graph_node_id'] == null ? undefined : json['effect_graph_node_id'],
+        'port_exposures': json['port_exposures'] == null ? undefined : json['port_exposures'],
+        'replay_script': json['replay_script'] == null ? undefined : json['replay_script'],
+        'provenance': json['provenance'] == null ? undefined : json['provenance'],
+        'bundled_artifacts': json['bundled_artifacts'] == null ? undefined : json['bundled_artifacts'],
+        'transparency': json['transparency'] == null ? undefined : json['transparency'],
+        'log_id': json['log_id'] == null ? undefined : json['log_id'],
+        'leaf_index': json['leaf_index'] == null ? undefined : json['leaf_index'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };
 }
@@ -16012,13 +16659,23 @@ export function ReceiptToJSON(value?: Receipt | null): any {
         'receipt_id': value['receipt_id'],
         'decision_id': value['decision_id'],
         'effect_id': value['effect_id'],
+        'external_reference_id': value['external_reference_id'],
         'status': value['status'],
         'reason_code': value['reason_code'],
         'output_hash': value['output_hash'],
         'blob_hash': value['blob_hash'],
         'prev_hash': value['prev_hash'],
         'lamport_clock': value['lamport_clock'],
+        'effect_type': value['effect_type'],
+        'tool_fingerprint': value['tool_fingerprint'],
+        'idempotency_key': value['idempotency_key'],
+        'tool_name': value['tool_name'],
+        'policy_hash': value['policy_hash'],
+        'session_id': value['session_id'],
+        'scope_hash': value['scope_hash'],
+        'issued_at': value['issued_at'] == null ? undefined : ((value['issued_at']).toISOString()),
         'signature': value['signature'],
+        'signature_schema': value['signature_schema'],
         'signature_profile': value['signature_profile'],
         'signature_algorithm': value['signature_algorithm'],
         'key_id': value['key_id'],
@@ -16027,6 +16684,22 @@ export function ReceiptToJSON(value?: Receipt | null): any {
         'principal': value['principal'],
         'executor_id': value['executor_id'],
         'args_hash': value['args_hash'],
+        'emergency_activation_id': value['emergency_activation_id'],
+        'emergency_delegation_session_id': value['emergency_delegation_session_id'],
+        'emergency_scope_hash': value['emergency_scope_hash'],
+        'safe_dep_state': value['safe_dep_state'],
+        'safe_dep_reason_code': value['safe_dep_reason_code'],
+        'network_log_ref': value['network_log_ref'],
+        'secret_events_ref': value['secret_events_ref'],
+        'sandbox_lease_id': value['sandbox_lease_id'],
+        'effect_graph_node_id': value['effect_graph_node_id'],
+        'port_exposures': value['port_exposures'],
+        'replay_script': value['replay_script'],
+        'provenance': value['provenance'],
+        'bundled_artifacts': value['bundled_artifacts'],
+        'transparency': value['transparency'],
+        'log_id': value['log_id'],
+        'leaf_index': value['leaf_index'],
         'metadata': value['metadata'],
     };
 }

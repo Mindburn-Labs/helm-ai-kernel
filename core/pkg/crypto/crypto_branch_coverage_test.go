@@ -250,7 +250,7 @@ func TestVerifierKeyringAndHasherErrorBranches(t *testing.T) {
 		t.Fatal("verifier receipt with bad signature hex should fail")
 	}
 
-	intent := &contracts.AuthorizedExecutionIntent{ID: "intent", DecisionID: "decision", AllowedTool: "tool"}
+	intent := executableIntentFixture("intent", "decision", "sha256:effect-intent", "tool")
 	if err := signer.SignIntent(intent); err != nil {
 		t.Fatalf("SignIntent: %v", err)
 	}
@@ -263,8 +263,8 @@ func TestVerifierKeyringAndHasherErrorBranches(t *testing.T) {
 
 	intent.SignatureType = "malformed"
 	emptyKeyring := NewKeyRing()
-	if _, err := emptyKeyring.VerifyIntent(intent); err == nil || !strings.Contains(err.Error(), "no key verified") {
-		t.Fatalf("empty keyring fallback error = %v", err)
+	if _, err := emptyKeyring.VerifyIntent(intent); err == nil || !strings.Contains(err.Error(), "invalid signature type format") {
+		t.Fatalf("malformed intent signature type error = %v", err)
 	}
 	if verified := emptyKeyring.Verify([]byte("payload"), []byte("sig")); verified {
 		t.Fatal("empty keyring raw verify should fail")

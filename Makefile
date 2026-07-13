@@ -334,6 +334,7 @@ codegen-java:
 	@mkdir -p sdk/java/src/main/java
 	protoc --java_out=sdk/java/src/main/java \
 		-I$(PROTO_DIR) $(PROTO_FILES)
+	@perl -pi -e 's/[ \t]+$$//' sdk/java/src/main/java/helm/kernel/v1/Helm.java
 
 codegen-rust:
 	cd sdk/rust && CARGO_HTTP_MULTIPLEXING=false cargo build --features codegen

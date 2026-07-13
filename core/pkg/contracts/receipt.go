@@ -2,23 +2,45 @@ package contracts
 
 import "time"
 
+const (
+	// ReceiptTypeDecision records a governance verdict at evaluation time. It is
+	// never proof that a governed effect was dispatched.
+	ReceiptTypeDecision = "DECISION"
+	// ReceiptTypeExecution records a successfully dispatched governed effect.
+	// Its idempotency key is the signed execution intent, not the decision.
+	ReceiptTypeExecution = "EXECUTION"
+	// ReceiptTypeLocalActivity records an operator-facing local workflow event,
+	// such as onboarding. It is signed evidence of that local activity, not a
+	// governance verdict and never proof that a governed effect was dispatched.
+	ReceiptTypeLocalActivity = "LOCAL_ACTIVITY"
+	// ReceiptTypeSimulation records a non-production demonstration or replay.
+	// It must remain visually and semantically distinct from a decision or an
+	// execution receipt so sample evidence cannot be counted as runtime proof.
+	ReceiptTypeSimulation = "SIMULATION"
+)
+
 // Receipt represents a proof of effect execution, linked to a decision.
 type Receipt struct {
-	ReceiptID           string            `json:"receipt_id"`
-	DecisionID          string            `json:"decision_id"`
-	EffectID            string            `json:"effect_id"`
-	ExternalReferenceID string            `json:"external_reference_id"`
-	Status              string            `json:"status"`
-	BlobHash            string            `json:"blob_hash,omitempty"`   // Link to Input Snapshot CAS
-	OutputHash          string            `json:"output_hash,omitempty"` // Link to Tool Output CAS
-	Timestamp           time.Time         `json:"timestamp"`
-	ExecutorID          string            `json:"executor_id,omitempty"`
-	Metadata            map[string]any    `json:"metadata,omitempty"`
-	Signature           string            `json:"signature,omitempty"` // Cryptographic proof of execution
-	SignatureProfile    string            `json:"signature_profile,omitempty"`
-	SignatureAlgorithm  string            `json:"signature_algorithm,omitempty"`
-	KeyID               string            `json:"key_id,omitempty"`
-	PublicKeySet        map[string]string `json:"public_key_set,omitempty"`
+	ReceiptID           string         `json:"receipt_id"`
+	DecisionID          string         `json:"decision_id"`
+	EffectID            string         `json:"effect_id"`
+	ExternalReferenceID string         `json:"external_reference_id"`
+	Status              string         `json:"status"`
+	BlobHash            string         `json:"blob_hash,omitempty"`   // Link to Input Snapshot CAS
+	OutputHash          string         `json:"output_hash,omitempty"` // Link to Tool Output CAS
+	Timestamp           time.Time      `json:"timestamp"`
+	ExecutorID          string         `json:"executor_id,omitempty"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
+	Signature           string         `json:"signature,omitempty"` // Cryptographic proof of execution
+	// SignatureSchema declares the canonical receipt payload. An empty value
+	// denotes the retained legacy audit preimage; newly-issued receipts use the
+	// explicit v2 schema so SafeDep and evidence-chain authority fields are
+	// tamper-evident.
+	SignatureSchema    string            `json:"signature_schema,omitempty"`
+	SignatureProfile   string            `json:"signature_profile,omitempty"`
+	SignatureAlgorithm string            `json:"signature_algorithm,omitempty"`
+	KeyID              string            `json:"key_id,omitempty"`
+	PublicKeySet       map[string]string `json:"public_key_set,omitempty"`
 	// V2: Tamper-Evidence
 	MerkleRoot        string             `json:"merkle_root,omitempty"`
 	WitnessSignatures []WitnessSignature `json:"witness_signatures,omitempty"`
@@ -27,6 +49,13 @@ type Receipt struct {
 	PrevHash     string `json:"prev_hash"`           // SHA-256 of the previous canonical signed receipt envelope
 	LamportClock uint64 `json:"lamport_clock"`       // Monotonic logical clock per session
 	ArgsHash     string `json:"args_hash,omitempty"` // SHA-256 of JCS-canonicalized tool args bound at the PEP boundary
+	// StreamSequence is an unsigned, storage-owned global cursor used only for
+	// receipt-feed pagination. LamportClock remains scoped to a signed session;
+	// exposing it as a global cursor would skip receipts from other sessions
+	// that legitimately share the same logical clock. This field is deliberately
+	// excluded from JSON, signatures, and chain hashes because it is allocated
+	// atomically by the persistence backend after the receipt is constructed.
+	StreamSequence uint64 `json:"-"`
 
 	// Receipt-as-First-Class Artifact Extensions
 	ReplayScript     *ReplayScriptRef   `json:"replay_script,omitempty"`     // Link to deterministic replay script

@@ -432,18 +432,40 @@ func TestSchemaAlignment(t *testing.T) {
 		// Verify that DecisionRecord marshals with expected JSON field names
 		// that align with decision.proto.
 		dr := contracts.DecisionRecord{
-			ID:              "dec_1",
-			ProposalID:      "prop_1",
-			StepID:          "step_1",
-			SubjectID:       "subj_1",
-			Action:          "write",
-			Resource:        "file.txt",
-			Verdict:         "ALLOW",
-			Reason:          "Policy allows",
-			Signature:       "sig_abc",
-			SignatureSchema: "helm.decision.signature.v2",
-			SignatureType:   "ed25519",
-			Timestamp:       time.Now().UTC(),
+			ID:                     "dec_1",
+			ProposalID:             "prop_1",
+			StepID:                 "step_1",
+			PhenotypeHash:          "sha256:phenotype",
+			PolicyVersion:          "sha256:policy-version",
+			SubjectID:              "subj_1",
+			Action:                 "write",
+			Resource:               "file.txt",
+			EffectDigest:           "sha256:effect",
+			PolicyBackend:          "helm",
+			PolicyContentHash:      "sha256:policy-content",
+			PolicyEpoch:            "7",
+			PolicyDecisionHash:     "sha256:decision",
+			StateCursor:            "cursor-1",
+			Snapshot:               "sha256:snapshot",
+			EnvFingerprint:         "sha256:environment",
+			Verdict:                "ALLOW",
+			Reason:                 "Policy allows",
+			ReasonCode:             "POLICY_ALLOW",
+			InputContext:           map[string]any{"explanation": "unsigned"},
+			TrajectoryRiskScore:    0.25,
+			SessionCentroidHash:    "sha256:centroid",
+			RiskAccumulationWindow: 3,
+			RequirementSetHash:     "sha256:requirements",
+			Signature:              "sig_abc",
+			SignatureSchema:        "helm.decision.signature.v2",
+			SignatureType:          "ed25519",
+			Timestamp:              time.Now().UTC(),
+			Intervention: &contracts.InterventionMetadata{
+				Type:         contracts.InterventionThrottle,
+				ReasonCode:   "RATE_LIMITED",
+				WaitDuration: time.Second,
+				TokensSaved:  7,
+			},
 		}
 
 		data, err := json.Marshal(dr)
@@ -457,9 +479,13 @@ func TestSchemaAlignment(t *testing.T) {
 		}
 
 		required := []string{
-			"id", "proposal_id", "step_id", "subject_id",
-			"action", "resource", "verdict", "reason",
-			"signature", "signature_schema", "signature_type", "timestamp",
+			"id", "proposal_id", "step_id", "phenotype_hash", "policy_version",
+			"subject_id", "action", "resource", "effect_digest", "policy_backend",
+			"policy_content_hash", "policy_epoch", "policy_decision_hash", "state_cursor",
+			"snapshot", "env_fingerprint", "verdict", "reason", "reason_code",
+			"input_context", "trajectory_risk_score", "session_centroid_hash",
+			"risk_accumulation_window", "requirement_set_hash", "signature",
+			"signature_schema", "signature_type", "timestamp", "intervention",
 		}
 		for _, f := range required {
 			if _, ok := fields[f]; !ok {

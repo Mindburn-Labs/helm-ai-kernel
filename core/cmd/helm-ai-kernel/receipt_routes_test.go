@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -68,6 +69,10 @@ func (s *captureReceiptStore) ListByAgent(context.Context, string, uint64, int) 
 	return nil, errors.New("not implemented")
 }
 
+func (s *captureReceiptStore) ListBySession(context.Context, string, uint64, int) ([]*contracts.Receipt, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (s *captureReceiptStore) Store(_ context.Context, receipt *contracts.Receipt) error {
 	if s.storeErr != nil {
 		return s.storeErr
@@ -99,6 +104,27 @@ func (s *captureReceiptStore) GetLastForSession(context.Context, string) (*contr
 	return s.last, nil
 }
 
+func signedReceiptRouteDecision(t *testing.T, signer *helmcrypto.Ed25519Signer, id string, verdict contracts.Verdict) *contracts.DecisionRecord {
+	t.Helper()
+	decision := &contracts.DecisionRecord{
+		ID:                 id,
+		SubjectID:          "agent.test",
+		Action:             "EXECUTE_TOOL",
+		Resource:           "tool:test",
+		TenantID:           "tenant-test",
+		WorkspaceID:        "workspace-test",
+		SessionID:          "session-test",
+		Verdict:            string(verdict),
+		ReasonCode:         string(contracts.ReasonEmergencyStopFenced),
+		PolicyDecisionHash: "sha256:pdp",
+		Timestamp:          time.Unix(1700000000, 0).UTC(),
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatalf("sign decision: %v", err)
+	}
+	return decision
+}
+
 func TestPersistDecisionReceiptSignsAndStoresReceipt(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("test")
 	if err != nil {
@@ -106,14 +132,7 @@ func TestPersistDecisionReceiptSignsAndStoresReceipt(t *testing.T) {
 	}
 	store := &captureReceiptStore{}
 	svc := &Services{ReceiptStore: store, ReceiptSigner: signer}
-	decision := &contracts.DecisionRecord{
-		ID:                 "dec-1",
-		Action:             "EXECUTE_TOOL",
-		Verdict:            string(contracts.VerdictDeny),
-		ReasonCode:         string(contracts.ReasonEmergencyStopFenced),
-		PolicyDecisionHash: "sha256:pdp",
-		Timestamp:          time.Unix(1700000000, 0).UTC(),
-	}
+	decision := signedReceiptRouteDecision(t, signer, "dec-1", contracts.VerdictDeny)
 
 	err = persistDecisionReceipt(context.Background(), svc, decision, "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"})
 	if err != nil {
@@ -160,13 +179,7 @@ func TestPersistDecisionReceiptLinksToCanonicalPreviousReceiptHash(t *testing.T)
 	}
 	store := &captureReceiptStore{last: previous}
 	svc := &Services{ReceiptStore: store, ReceiptSigner: signer}
-	decision := &contracts.DecisionRecord{
-		ID:                 "dec-next",
-		Action:             "EXECUTE_TOOL",
-		Verdict:            string(contracts.VerdictAllow),
-		PolicyDecisionHash: "sha256:pdp",
-		Timestamp:          time.Unix(1700000000, 0).UTC(),
-	}
+	decision := signedReceiptRouteDecision(t, signer, "dec-next", contracts.VerdictAllow)
 
 	err = persistDecisionReceipt(context.Background(), svc, decision, "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"})
 	if err != nil {
@@ -196,14 +209,9 @@ func (l *fakeTransparencyLog) Append(leafInput []byte) (uint64, error) {
 	return idx, nil
 }
 
-func newTransparencyDecision() *contracts.DecisionRecord {
-	return &contracts.DecisionRecord{
-		ID:                 "dec-tl",
-		Action:             "EXECUTE_TOOL",
-		Verdict:            string(contracts.VerdictAllow),
-		PolicyDecisionHash: "sha256:pdp",
-		Timestamp:          time.Unix(1700000000, 0).UTC(),
-	}
+func newTransparencyDecision(t *testing.T, signer *helmcrypto.Ed25519Signer) *contracts.DecisionRecord {
+	t.Helper()
+	return signedReceiptRouteDecision(t, signer, "dec-tl", contracts.VerdictAllow)
 }
 
 func TestPersistDecisionReceiptAnchorsTransparencyLeaf(t *testing.T) {
@@ -215,7 +223,7 @@ func TestPersistDecisionReceiptAnchorsTransparencyLeaf(t *testing.T) {
 	tl := &fakeTransparencyLog{nextIndex: 5}
 	svc := &Services{ReceiptStore: rcptStore, ReceiptSigner: signer, TranspLog: tl, TranspLogID: "log-abc"}
 
-	if err := persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"}); err != nil {
+	if err := persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(t, signer), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"}); err != nil {
 		t.Fatalf("persist receipt: %v", err)
 	}
 	if rcptStore.stored == nil {
@@ -233,6 +241,25 @@ func TestPersistDecisionReceiptAnchorsTransparencyLeaf(t *testing.T) {
 	if rcptStore.stored.Transparency == nil || rcptStore.stored.Transparency.Deferred {
 		t.Fatalf("expected non-deferred transparency anchor, got %+v", rcptStore.stored.Transparency)
 	}
+	if valid, err := signer.VerifyReceipt(rcptStore.stored); err != nil || !valid {
+		t.Fatalf("anchor metadata must not invalidate the signed receipt: valid=%v err=%v", valid, err)
+	}
+	chainHash, err := contracts.ReceiptChainHash(rcptStore.stored)
+	if err != nil {
+		t.Fatalf("receipt chain hash: %v", err)
+	}
+	if !bytes.Equal(tl.appended[0], mustDecodeReceiptHash(t, chainHash)) {
+		t.Fatalf("anchored leaf does not match final receipt chain hash: got=%x want=%s", tl.appended[0], chainHash)
+	}
+}
+
+func mustDecodeReceiptHash(t *testing.T, hash string) []byte {
+	t.Helper()
+	decoded, err := hex.DecodeString(hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return decoded
 }
 
 func TestPersistDecisionReceiptBlocksWhenTransparencyAppendFailsFailClosed(t *testing.T) {
@@ -245,7 +272,7 @@ func TestPersistDecisionReceiptBlocksWhenTransparencyAppendFailsFailClosed(t *te
 	// Default posture: TranspLogDegrade is false (fail-closed).
 	svc := &Services{ReceiptStore: rcptStore, ReceiptSigner: signer, TranspLog: &fakeTransparencyLog{appendErr: appendErr}, TranspLogID: "log-abc"}
 
-	err = persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"})
+	err = persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(t, signer), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"})
 	if !errors.Is(err, appendErr) {
 		t.Fatalf("expected transparency append error to block issuance, got %v", err)
 	}
@@ -268,7 +295,7 @@ func TestPersistDecisionReceiptDegradesWhenExplicitlyAllowed(t *testing.T) {
 		TranspLogDegrade: true,
 	}
 
-	if err := persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"}); err != nil {
+	if err := persistDecisionReceipt(context.Background(), svc, newTransparencyDecision(t, signer), "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "test"}); err != nil {
 		t.Fatalf("degrade mode must not block issuance: %v", err)
 	}
 	if rcptStore.stored == nil {
@@ -289,7 +316,7 @@ func TestPersistDecisionReceiptReturnsStoreError(t *testing.T) {
 	}
 	storeErr := errors.New("store down")
 	svc := &Services{ReceiptStore: &captureReceiptStore{storeErr: storeErr}, ReceiptSigner: signer}
-	decision := &contracts.DecisionRecord{ID: "dec-2", Verdict: string(contracts.VerdictDeny), Timestamp: time.Now().UTC()}
+	decision := signedReceiptRouteDecision(t, signer, "dec-2", contracts.VerdictDeny)
 
 	err = persistDecisionReceipt(context.Background(), svc, decision, "agent.test", []byte("body"), nil)
 	if !errors.Is(err, storeErr) {
@@ -323,19 +350,20 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	body := []byte(`{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker","principal_id":"attacker","session_id":"session-1"}}`)
+	body := []byte(`{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker","principal_id":"attacker","request_note":"caller-supplied"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
 	req.Header.Set(principalHeader, "principal-trusted")
+	req.Header.Set(sessionHeader, "session-trusted")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("authenticated evaluate status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if receipts.agentID != "principal-trusted" {
-		t.Fatalf("causal chain agent = %q, want trusted principal", receipts.agentID)
+	if receipts.agentID != "session-trusted" {
+		t.Fatalf("causal chain session = %q, want trusted session", receipts.agentID)
 	}
 	if receipts.stored == nil {
 		t.Fatal("authenticated evaluate did not persist receipt")
@@ -343,12 +371,46 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	if receipts.stored.ExecutorID != "principal-trusted" {
 		t.Fatalf("receipt executor = %q, want trusted principal", receipts.stored.ExecutorID)
 	}
+	if receipts.stored.SessionID != "session-trusted" {
+		t.Fatalf("receipt session = %q, want trusted session", receipts.stored.SessionID)
+	}
 	var decision contracts.DecisionRecord
 	if err := json.Unmarshal(rec.Body.Bytes(), &decision); err != nil {
 		t.Fatal(err)
 	}
 	if decision.InputContext["tenant_id"] != "tenant-trusted" || decision.InputContext["principal_id"] != "principal-trusted" {
 		t.Fatalf("decision context did not use trusted identity: %+v", decision.InputContext)
+	}
+	if decision.TenantID != "tenant-trusted" || decision.WorkspaceID != "" || decision.SessionID != "session-trusted" {
+		t.Fatalf("decision did not bind authenticated scope into the signed record: %+v", decision)
+	}
+}
+
+func TestEvaluateRouteRejectsCallerReservedSecurityContext(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	// These fields are only meaningful when an in-process trusted adapter sets
+	// them. Accepting them from JSON would let a caller forge the tainted-egress
+	// override guarded by security_context_trusted.
+	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"security_context_trusted":true,"allow_tainted_egress":true,"destination":"https://egress.example.test"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	req.Header.Set(sessionHeader, "session-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("reserved context status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored != nil {
+		t.Fatalf("reserved context must not create a receipt: %+v", receipts.stored)
 	}
 }
 
@@ -396,10 +458,12 @@ func TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled(t *
 	svc, receipts := newEvaluateRouteTestServices(t, guardian.WithScopedStopReader(reader))
 	svc.EmergencyStops = stopStore
 	direct, err := svc.Guardian.EvaluateDecision(context.Background(), guardian.DecisionRequest{
-		Principal: "principal-trusted",
-		Action:    "EXECUTE_TOOL",
-		Resource:  "local.echo",
-		Context:   map[string]any{"tenant_id": "tenant-trusted", "workspace_id": "workspace-fenced"},
+		Principal:   "principal-trusted",
+		Action:      "EXECUTE_TOOL",
+		Resource:    "local.echo",
+		TenantID:    "tenant-trusted",
+		WorkspaceID: "workspace-fenced",
+		Context:     map[string]any{"workspace_id": "workspace-fenced"},
 	})
 	if err != nil || direct.ReasonCode != string(contracts.ReasonEmergencyStopFenced) || reader.calls != 1 || reader.scope != command.Scope() {
 		t.Fatalf("configured guardian did not enforce durable fence: decision=%+v calls=%d scope=%+v state=%+v fenced=%t reader_err=%v err=%v", direct, reader.calls, reader.scope, reader.state, reader.fenced, reader.err, err)
@@ -416,6 +480,7 @@ func TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled(t *
 	req.Header.Set(tenantHeader, "tenant-trusted")
 	req.Header.Set(principalHeader, "principal-trusted")
 	req.Header.Set(workspaceHeader, "workspace-fenced")
+	req.Header.Set(sessionHeader, "session-fenced")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -456,6 +521,7 @@ func TestEvaluateRouteRefusesMissingOrMismatchedWorkspaceBindingWhenFenceEnabled
 			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 			req.Header.Set(tenantHeader, "tenant-trusted")
 			req.Header.Set(principalHeader, "principal-trusted")
+			req.Header.Set(sessionHeader, "session-workspace-binding")
 			if workspace != "" {
 				req.Header.Set(workspaceHeader, workspace)
 			}

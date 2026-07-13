@@ -16,10 +16,29 @@ type OutboxRecord struct {
 	Status    string                               `json:"status"` // PENDING, DONE, FAILED
 }
 
+// OutboxClaimState describes the durable disposition of an execution-intent
+// reservation. Only Claimed authorizes a ToolDriver invocation.
+type OutboxClaimState string
+
+const (
+	OutboxClaimed    OutboxClaimState = "CLAIMED"
+	OutboxInProgress OutboxClaimState = "IN_PROGRESS"
+	OutboxCompleted  OutboxClaimState = "COMPLETED"
+	OutboxPending    OutboxClaimState = "PENDING"
+)
+
+// OutboxClaimResult is returned by an atomic durable claim. A caller must
+// never infer ownership from the absence of an error: an existing claim is a
+// normal no-dispatch outcome.
+type OutboxClaimResult struct {
+	State OutboxClaimState `json:"state"`
+}
+
 // OutboxStore defines the transactional persistence layer for effects.
 type OutboxStore interface {
-	// Schedule persists the intent to execute.
-	Schedule(ctx context.Context, effect *contracts.Effect, intent *contracts.AuthorizedExecutionIntent) error
+	// Claim atomically reserves an intent before any irreversible driver call.
+	// Only a result with State == OutboxClaimed permits dispatch.
+	Claim(ctx context.Context, effect *contracts.Effect, intent *contracts.AuthorizedExecutionIntent) (OutboxClaimResult, error)
 	// GetPending returns all scheduled but not yet executed records.
 	GetPending(ctx context.Context) ([]*OutboxRecord, error)
 	// MarkDone marks a record as executed (idempotency key).
@@ -28,10 +47,10 @@ type OutboxStore interface {
 
 // ReceiptStore defines the interface for persisting execution receipts.
 type ReceiptStore interface {
-	Get(ctx context.Context, decisionID string) (*contracts.Receipt, error)
-	Store(ctx context.Context, receipt *contracts.Receipt) error
-	// GetLastForSession returns the most recent receipt for a given session (for causal DAG chaining).
-	GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error)
+	GetByReceiptID(ctx context.Context, receiptID string) (*contracts.Receipt, error)
+	// AppendCausal locks a signed session chain, assigns its causal fields, and
+	// persists the signed receipt atomically.
+	AppendCausal(ctx context.Context, sessionID string, build func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error)) error
 }
 
 // MCPClient defines the interface for interacting with the Managed Capability Platform.

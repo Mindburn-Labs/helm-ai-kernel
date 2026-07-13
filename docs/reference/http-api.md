@@ -71,6 +71,11 @@ legacy v1 payload and is accepted only for backward verification. Clients must
 not treat an absent schema as proof that subject, action, or resource were
 cryptographically bound. Unknown schema values fail verification.
 
+At an effect boundary, v1 is audit-only even when its historical signature
+verifies: the Guardian rejects it before issuing an execution intent, and the
+SafeExecutor rejects it before SafeDep evaluation or tool dispatch. New
+executable decisions must use the request-bound v2 schema.
+
 ## Receipt Headers
 
 Some routes return HELM decision metadata:

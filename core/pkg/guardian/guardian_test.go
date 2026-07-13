@@ -10,6 +10,7 @@ import (
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,10 @@ func (m *MockSigner) PublicKeyBytes() []byte { return []byte("mock_key") }
 func (m *MockSigner) SignDecision(d *contracts.DecisionRecord) error {
 	if m.FailSign {
 		return errors.New("signer broken")
+	}
+	if d.SubjectID != "" && d.Action != "" && d.Resource != "" {
+		d.SignatureSchema = crypto.DecisionSignatureSchemaV2
+		d.SignatureType = "mock:decision"
 	}
 	d.Signature = "mock_decision_sig"
 	return nil

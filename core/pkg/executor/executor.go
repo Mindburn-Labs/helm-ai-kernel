@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectdigest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receipts/policies"
@@ -62,6 +64,8 @@ type SafeExecutor struct {
 	meter                UsageMeter
 	outputSchemaRegistry OutputSchemaRegistry
 	safeDepGate          SafeDepGate
+	safeDepResolver      safedep.AuthorityResolver
+	safeDepRequired      bool
 	clock                func() time.Time // Authority clock (KERNEL_TCB §3)
 }
 
@@ -84,6 +88,7 @@ func NewSafeExecutor(verifier crypto.Verifier, signer crypto.Signer, driver Tool
 		meter:                meter,
 		outputSchemaRegistry: outputRegistry,
 		safeDepGate:          safedep.NewController(safedep.ControllerConfig{Clock: clock}),
+		safeDepRequired:      true,
 		clock:                clock,
 	}
 }
@@ -97,6 +102,17 @@ func (e *SafeExecutor) WithClock(clock func() time.Time) *SafeExecutor {
 
 func (e *SafeExecutor) WithSafeDepGate(gate SafeDepGate) *SafeExecutor {
 	e.safeDepGate = gate
+	e.safeDepRequired = true
+	return e
+}
+
+// WithSafeDepAuthorityResolver configures the server-owned source of Safe
+// Deprecation authority. A resolver or gate configured without the other
+// fails closed at the effect boundary rather than falling back to decision
+// InputContext.
+func (e *SafeExecutor) WithSafeDepAuthorityResolver(resolver safedep.AuthorityResolver) *SafeExecutor {
+	e.safeDepResolver = resolver
+	e.safeDepRequired = true
 	return e
 }
 
@@ -107,10 +123,15 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 		return nil, nil, errors.New("execution blocked: missing decision")
 	}
 
-	// 1. Idempotency Check
-	if receipt, ok := e.checkIdempotency(ctx, decision.ID); ok {
-		// Recover artifact if possible, or return a pointer to the receipt
-		// For now, return a synthetic artifact indicating execution already happened
+	// 1. Gating & Verification
+	if err := e.validateGating(decision, intent, effect); err != nil {
+		return nil, nil, err
+	}
+
+	// Idempotency lookup is deliberately after signature and binding checks.
+	// A caller cannot learn or replay a prior receipt by presenting an
+	// unverified decision ID.
+	if receipt, ok := e.checkIdempotency(ctx, intent.ID); ok {
 		artifact := &interfaces.Artifact{
 			SchemaID:    "system/execution-status",
 			ContentType: "application/json",
@@ -118,11 +139,6 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 			Preview:     fmt.Sprintf("Already executed. Receipt: %s", receipt.ReceiptID),
 		}
 		return receipt, artifact, nil
-	}
-
-	// 1. Gating & Verification
-	if err := e.validateGating(decision, intent, effect); err != nil {
-		return nil, nil, err
 	}
 
 	// 2. Snapshot Verification
@@ -145,32 +161,10 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 		return nil, nil, fmt.Errorf("intent violation: allowed_tool '%s' does not match requested '%s'", intent.AllowedTool, toolName)
 	}
 
-	var safeDepResult *safedep.GateResult
-	req := safedep.GateRequestFromContext(decision.InputContext)
-	if e.safeDepGate == nil {
-		return nil, nil, fmt.Errorf("%w: %s: safe deprecation gate unavailable", safedep.ErrDispatchBlocked, contracts.ReasonAttestationResultRequired)
-	}
-	req.Intent = intent
-	req.DecisionID = decision.ID
-	req.EffectID = effect.EffectID
-	req.EffectType = effect.EffectType
-	req.Action = decision.Action
-	req.ToolName = toolName
-	if req.ConnectorID == "" {
-		req.ConnectorID = toolName
-	}
-	gateResult, err := e.safeDepGate.Gate(ctx, req)
+	safeDepResult, err := e.gateSafeDep(ctx, decision, effect, toolName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %v", safedep.ErrDispatchBlocked, err)
+		return nil, nil, err
 	}
-	if !gateResult.DispatchAllowed {
-		reason := gateResult.Reason
-		if reason == "" {
-			reason = string(gateResult.ReasonCode)
-		}
-		return nil, nil, fmt.Errorf("%w: %s", safedep.ErrDispatchBlocked, reason)
-	}
-	safeDepResult = &gateResult
 
 	// 4. Tool verification
 	// Check against dynamic policy enforcer
@@ -178,11 +172,27 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 		return nil, nil, fmt.Errorf("policy violation: tool '%s' is prohibited by active regulation", toolName)
 	}
 
-	// 5. Outbox Scheduling
-	if e.outboxStore != nil {
-		if err := e.outboxStore.Schedule(ctx, effect, intent); err != nil {
-			return nil, nil, fmt.Errorf("failed to schedule effect in outbox: %w", err)
-		}
+	// 5. Atomically reserve this signed intent before the external driver. A
+	// receipt lookup alone cannot prevent two executors from both observing a
+	// missing receipt and dispatching an irreversible effect concurrently.
+	if e.outboxStore == nil {
+		return nil, nil, errors.New("execution blocked: durable outbox claim store is required")
+	}
+	claim, err := e.outboxStore.Claim(ctx, effect, intent)
+	if err != nil {
+		return nil, nil, fmt.Errorf("execution blocked: claim durable outbox reservation: %w", err)
+	}
+	switch claim.State {
+	case OutboxClaimed:
+		// This executor owns the sole dispatch reservation.
+	case OutboxCompleted:
+		return nil, nil, fmt.Errorf("execution blocked: outbox marks intent %q complete but no matching execution receipt exists", intent.ID)
+	case OutboxInProgress:
+		return nil, nil, fmt.Errorf("execution blocked: intent %q already has an active or ambiguous dispatch claim", intent.ID)
+	case OutboxPending:
+		return nil, nil, fmt.Errorf("execution blocked: intent %q is pending asynchronous dispatch and cannot be executed directly", intent.ID)
+	default:
+		return nil, nil, fmt.Errorf("execution blocked: unsupported outbox claim state %q", claim.State)
 	}
 
 	// 5. Dispatch
@@ -232,21 +242,19 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 
 	// 8. Persistence, Metering & Audit
 	// Fail-closed: if receipt signing fails, execution is considered failed.
-	receipt, err := e.createReceipt(ctx, decision, intent, effect, blobHash, artifact.Digest, safeDepResult)
+	receipt, err := e.createReceipt(ctx, decision, intent, effect, toolName, blobHash, artifact.Digest, safeDepResult)
 	if err != nil {
 		return nil, nil, fmt.Errorf("receipt creation failed: %w", err)
 	}
-	if err := e.finalizeExecution(ctx, decision, toolName); err != nil {
+	if err := e.finalizeExecution(ctx, decision, intent, toolName); err != nil {
 		return nil, nil, err
 	}
 
 	// Metering
 	if e.meter != nil {
-		tenantID := "system"
-		if decision.InputContext != nil {
-			if t, ok := decision.InputContext["tenant_id"].(string); ok {
-				tenantID = t
-			}
+		tenantID := decision.TenantID
+		if tenantID == "" {
+			tenantID = "system"
 		}
 		if err := e.meter.Record(ctx, UsageEvent{
 			TenantID:  tenantID,
@@ -271,24 +279,116 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	return receipt, artifact, nil
 }
 
-func (e *SafeExecutor) checkIdempotency(ctx context.Context, decisionID string) (*contracts.Receipt, bool) {
+func executionReceiptID(intentID string) string {
+	return "rcpt-exec-" + intentID
+}
+
+func (e *SafeExecutor) checkIdempotency(ctx context.Context, intentID string) (*contracts.Receipt, bool) {
 	if e.receiptStore != nil {
-		if receipt, err := e.receiptStore.Get(ctx, decisionID); err == nil && receipt != nil {
+		if receipt, err := e.receiptStore.GetByReceiptID(ctx, executionReceiptID(intentID)); err == nil && receipt != nil &&
+			receipt.Type == contracts.ReceiptTypeExecution && receipt.ExternalReferenceID == intentID {
 			return receipt, true
 		}
 	}
 	return nil, false
 }
 
+// gateSafeDep resolves hazard authority from a server-owned source. It never
+// reads DecisionRecord.InputContext: that map is explanatory data and may have
+// originated with the caller before the decision was signed.
+func (e *SafeExecutor) gateSafeDep(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, toolName string) (*safedep.GateResult, error) {
+	if !e.safeDepRequired {
+		return nil, nil
+	}
+	if e.safeDepGate == nil || e.safeDepResolver == nil {
+		return nil, fmt.Errorf("%w: %s: safe deprecation authority resolver and gate are required", safedep.ErrDispatchBlocked, contracts.ReasonAttestationResultRequired)
+	}
+
+	req, err := e.safeDepResolver.Resolve(ctx, safedep.AuthorityRequest{
+		TenantID:         decision.TenantID,
+		WorkspaceID:      decision.WorkspaceID,
+		SessionID:        decision.SessionID,
+		SubjectID:        decision.SubjectID,
+		DecisionID:       decision.ID,
+		EffectDigestHash: decision.EffectDigest,
+		EffectType:       effect.EffectType,
+		Action:           decision.Action,
+		ToolName:         toolName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", safedep.ErrDispatchBlocked, contracts.ReasonAttestationResultRequired, err)
+	}
+	// The resolver may only provide SafeDep authority inputs. The execution
+	// identity always comes from the signed decision/effect tuple.
+	req.Intent = nil
+	req.DecisionID = decision.ID
+	// EffectID is not part of the canonical effect digest and is therefore not
+	// an authority input. Do not expose it to a gate implementation.
+	req.EffectID = ""
+	req.EffectType = effect.EffectType
+	req.Action = decision.Action
+	req.ToolName = toolName
+	if req.ConnectorID == "" {
+		req.ConnectorID = toolName
+	}
+
+	gateResult, err := e.safeDepGate.Gate(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", safedep.ErrDispatchBlocked, err)
+	}
+	if !gateResult.DispatchAllowed {
+		reason := gateResult.Reason
+		if reason == "" {
+			reason = string(gateResult.ReasonCode)
+		}
+		return nil, fmt.Errorf("%w: %s", safedep.ErrDispatchBlocked, reason)
+	}
+	return &gateResult, nil
+}
+
 func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect) error {
 	if decision == nil {
 		return errors.New("execution blocked: missing decision")
+	}
+	if err := crypto.RequireExecutableDecisionSignature(decision); err != nil {
+		return fmt.Errorf("execution blocked: %w", err)
 	}
 	if effect == nil {
 		return errors.New("execution blocked: missing effect")
 	}
 	if intent == nil {
 		return errors.New("execution blocked: missing execution intent")
+	}
+	// A governed effect must never be dispatched if the executor cannot emit a
+	// signed receipt. Check this before the driver so a missing signer cannot
+	// turn into an already-completed but unauditable effect.
+	if e.signer == nil {
+		return errors.New("execution blocked: receipt signer unavailable")
+	}
+	// Verification must be available before the executor considers any durable
+	// reservation. A nil verifier used to panic after the early checks, which
+	// made a malformed composition look like an execution failure instead of a
+	// deterministic fail-closed refusal.
+	if e.verifier == nil {
+		return errors.New("execution blocked: signature verifier unavailable")
+	}
+	// A claim is itself durable authority state. Validate the driver before a
+	// claim so a misconfigured executor cannot leave an otherwise valid intent
+	// ambiguously CLAIMED without ever being capable of dispatching it.
+	if e.driver == nil {
+		return errors.New("execution blocked: tool driver unavailable")
+	}
+	// Causal evidence is a precondition to dispatch, not a best-effort
+	// afterthought. A driver must never run if this executor cannot atomically
+	// persist the signed execution receipt in the decision's bound session.
+	if e.receiptStore == nil {
+		return errors.New("execution blocked: receipt store unavailable")
+	}
+	if strings.TrimSpace(decision.SessionID) == "" {
+		return errors.New("execution blocked: signed decision session_id is required for causal receipt persistence")
+	}
+	if err := crypto.RequireExecutableIntentSignature(intent); err != nil {
+		return fmt.Errorf("execution blocked: %w", err)
 	}
 	if intent.DecisionID != decision.ID {
 		return fmt.Errorf("intent mismatch: intent.decision_id %s != decision.id %s", intent.DecisionID, decision.ID)
@@ -326,7 +426,9 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 	}
 
 	// 4. Expiration Check
-	if e.clock().After(intent.ExpiresAt) {
+	// The validity window is half-open: an intent is no longer executable at
+	// its exact expiry instant.
+	if !e.clock().Before(intent.ExpiresAt) {
 		return fmt.Errorf("execution blocked: intent expired at %s", intent.ExpiresAt)
 	}
 
@@ -334,14 +436,7 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 }
 
 func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
-	if effect == nil {
-		return "", fmt.Errorf("effect is nil")
-	}
-	effectBytes, err := canonicalize.JCS(effectDigestEnvelopeFrom(effect))
-	if err != nil {
-		return "", err
-	}
-	return canonicalize.HashBytes(effectBytes), nil
+	return effectdigest.Canonical(effect)
 }
 
 type effectDigestEnvelope struct {
@@ -392,70 +487,70 @@ func (e *SafeExecutor) verifySnapshot(ctx context.Context, decision *contracts.D
 	return blobHash, nil
 }
 
-func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect, blobHash string, outputHash string, safeDepResult *safedep.GateResult) (*contracts.Receipt, error) {
-	// ProofGraph DAG: query previous receipt to build causal chain
-	prevHash := "GENESIS"
-	lamportClock := uint64(1)
-
-	if e.receiptStore != nil {
-		sessionID := ""
-		if decision.InputContext != nil {
-			if s, ok := decision.InputContext["session_id"].(string); ok {
-				sessionID = s
-			}
-		}
-		if sessionID != "" {
-			if prev, err := e.receiptStore.GetLastForSession(ctx, sessionID); err == nil && prev != nil {
-				prevHash = prev.Signature // Causal link: hash of previous receipt's cryptographic signature
-				lamportClock = prev.LamportClock + 1
-			}
-		}
+func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect, toolName string, blobHash string, outputHash string, safeDepResult *safedep.GateResult) (*contracts.Receipt, error) {
+	if e.signer == nil {
+		return nil, errors.New("receipt signer unavailable")
+	}
+	if e.receiptStore == nil {
+		return nil, errors.New("receipt store unavailable")
+	}
+	chainSessionID := decision.SessionID
+	if chainSessionID == "" {
+		return nil, errors.New("execution blocked: signed decision session_id is required for causal receipt persistence")
 	}
 
-	receipt := &contracts.Receipt{
-		ReceiptID:    "rcpt-" + decision.ID,
-		DecisionID:   decision.ID,
-		EffectID:     effect.EffectID,
-		Status:       "SUCCESS",
-		BlobHash:     blobHash,
-		OutputHash:   outputHash,
-		ArgsHash:     effect.ArgsHash, // PEP boundary hash bound into signed receipt
-		Timestamp:    e.clock(),
-		PrevHash:     prevHash,
-		LamportClock: lamportClock,
-	}
-	if intent != nil {
-		receipt.EmergencyActivationID = intent.EmergencyActivationID
-		receipt.EmergencyDelegationSessionID = intent.EmergencyDelegationSessionID
-		receipt.EmergencyScopeHash = intent.EmergencyScopeHash
-	}
-	if safeDepResult != nil && safeDepResult.Classification.HazardCode != "" {
-		receipt.SafeDepState = string(safeDepResult.Classification.State)
-		receipt.SafeDepReasonCode = string(safeDepResult.ReasonCode)
-		if safeDepResult.ActivationReceipt != nil && receipt.EmergencyActivationID == "" {
-			receipt.EmergencyActivationID = safeDepResult.ActivationReceipt.ActivationID
-			receipt.EmergencyDelegationSessionID = safeDepResult.ActivationReceipt.DelegationSessionID
+	var persisted *contracts.Receipt
+	err := e.receiptStore.AppendCausal(ctx, chainSessionID, func(_ *contracts.Receipt, lamportClock uint64, prevHash string) (*contracts.Receipt, error) {
+		receipt := &contracts.Receipt{
+			Type:                contracts.ReceiptTypeExecution,
+			ReceiptID:           executionReceiptID(intent.ID),
+			DecisionID:          decision.ID,
+			EffectID:            effect.EffectID,
+			ExternalReferenceID: intent.ID,
+			Status:              "SUCCESS",
+			BlobHash:            blobHash,
+			OutputHash:          outputHash,
+			ExecutorID:          decision.SubjectID,
+			EffectType:          effect.EffectType,
+			ToolName:            toolName,
+			IdempotencyKey:      intent.IdempotencyKey,
+			SessionID:           chainSessionID,
+			IssuedAt:            intent.IssuedAt,
+			ArgsHash:            effect.ArgsHash, // PEP boundary hash bound into signed receipt
+			Timestamp:           e.clock(),
+			PrevHash:            prevHash,
+			LamportClock:        lamportClock,
 		}
-	}
-	// Sign Receipt — Fail-Closed: unsigned receipts are never emitted.
-	// Every receipt MUST be signed per the HELM standard.
-	// The signature now covers PrevHash + LamportClock via CanonicalizeReceipt.
-	if e.signer != nil {
+		if safeDepResult != nil && safeDepResult.Classification.HazardCode != "" {
+			receipt.SafeDepState = string(safeDepResult.Classification.State)
+			receipt.SafeDepReasonCode = string(safeDepResult.ReasonCode)
+			if safeDepResult.ActivationReceipt != nil {
+				receipt.EmergencyActivationID = safeDepResult.ActivationReceipt.ActivationID
+				receipt.EmergencyDelegationSessionID = safeDepResult.ActivationReceipt.DelegationSessionID
+				receipt.EmergencyScopeHash = safeDepResult.EmergencyScopeHash
+			}
+		}
+		// Sign only after every causal and session field is assigned under the
+		// store lock. The store validates but never mutates signed fields after
+		// this point.
 		if err := e.signer.SignReceipt(receipt); err != nil {
 			return nil, fmt.Errorf("fail-closed: receipt signing failed: %w", err)
 		}
+		persisted = receipt
+		return receipt, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fail-closed: receipt persistence failed: %w", err)
 	}
-	if e.receiptStore != nil {
-		if storeErr := e.receiptStore.Store(ctx, receipt); storeErr != nil {
-			return nil, fmt.Errorf("fail-closed: receipt persistence failed: %w", storeErr)
-		}
+	if persisted == nil {
+		return nil, errors.New("fail-closed: receipt store completed without a receipt")
 	}
-	return receipt, nil
+	return persisted, nil
 }
 
-func (e *SafeExecutor) finalizeExecution(ctx context.Context, decision *contracts.DecisionRecord, toolName string) error {
+func (e *SafeExecutor) finalizeExecution(ctx context.Context, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, toolName string) error {
 	if e.outboxStore != nil {
-		if err := e.outboxStore.MarkDone(ctx, decision.ID); err != nil {
+		if err := e.outboxStore.MarkDone(ctx, intent.ID); err != nil {
 			return fmt.Errorf("fail-closed: outbox mark-done failed: %w", err)
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
@@ -203,7 +204,7 @@ func TestCoverageGuardianPureHelpers(t *testing.T) {
 		"number":       42,
 	}
 	g := NewGuardian(&testSigner{}, nil, nil, WithPolicySnapshots(nil, policyreconcile.PolicyScope{}))
-	if scope := g.policyScopeFromContext(ctx); scope.Key() != "tenant-1/workspace-1" {
+	if scope := g.policyScopeFromRequest(DecisionRequest{TenantID: " tenant-1 ", WorkspaceID: " workspace-1 "}); scope.Key() != "tenant-1/workspace-1" {
 		t.Fatalf("policy scope = %s", scope.Key())
 	}
 	if value, ok := stringContextValue(ctx, "missing", "number", "blank", "tenantId"); !ok || value != "tenant-1" {
@@ -245,8 +246,8 @@ func TestCoverageGuardianPureHelpers(t *testing.T) {
 		t.Fatal("secret taint to destination should deny")
 	}
 
-	if got := sessionRiskSessionID(DecisionRequest{Principal: "principal", Context: map[string]interface{}{"session_id": "  ", "delegation_session_id": "delegation"}}); got != "delegation" {
-		t.Fatalf("sessionRiskSessionID delegation = %q", got)
+	if got := sessionRiskSessionID(DecisionRequest{Principal: "principal", SessionID: " trusted-session "}); got != "trusted-session" {
+		t.Fatalf("sessionRiskSessionID trusted session = %q", got)
 	}
 	if got := sessionRiskSessionID(DecisionRequest{Principal: "principal"}); got != "principal" {
 		t.Fatalf("sessionRiskSessionID principal = %q", got)
@@ -907,7 +908,17 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowDecision := &contracts.DecisionRecord{ID: "dec-intent", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: allowDigest}
+	allowDecision := &contracts.DecisionRecord{
+		ID:              "dec-intent",
+		SubjectID:       "principal:coverage",
+		Action:          "EXECUTE_TOOL",
+		Resource:        "deploy",
+		Verdict:         string(contracts.VerdictAllow),
+		Signature:       "sig",
+		SignatureSchema: crypto.DecisionSignatureSchemaV2,
+		SignatureType:   "test:decision",
+		EffectDigest:    allowDigest,
+	}
 	if _, err := NewGuardian(&guardianCoverageSignOnly{}, nil, nil, WithClock(clock)).IssueExecutionIntent(ctx, allowDecision, allowEffect); err == nil || !strings.Contains(err.Error(), "VerifyDecision") {
 		t.Fatalf("expected missing verifier error, got %v", err)
 	}
@@ -922,8 +933,13 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 	missingSnapshotGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithPolicySnapshots(&guardianCoverageSnapshotStore{}, scope))
 	snapshotBoundDecision := &contracts.DecisionRecord{
 		ID:                "dec-snapshot-missing",
+		SubjectID:         "principal:coverage",
+		Action:            "EXECUTE_TOOL",
+		Resource:          "deploy",
 		Verdict:           string(contracts.VerdictAllow),
 		Signature:         "sig",
+		SignatureSchema:   crypto.DecisionSignatureSchemaV2,
+		SignatureType:     "test:decision",
 		InputContext:      map[string]any{},
 		PolicyEpoch:       "1",
 		PolicyContentHash: "sha256:policy",
@@ -936,15 +952,31 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 	if err := snapshotStore.Swap(scope, &policyreconcile.EffectivePolicySnapshot{PolicyHash: "sha256:policy", PolicyEpoch: 1, Validation: policyreconcile.ValidationStatus{Status: policyreconcile.StatusActive}}); err != nil {
 		t.Fatal(err)
 	}
-	missingBindingDecision := &contracts.DecisionRecord{ID: "dec-missing-binding", Verdict: string(contracts.VerdictAllow), Signature: "sig", InputContext: map[string]any{}, PolicyEpoch: "not-a-number"}
+	missingBindingDecision := &contracts.DecisionRecord{
+		ID:              "dec-missing-binding",
+		SubjectID:       "principal:coverage",
+		Action:          "EXECUTE_TOOL",
+		Resource:        "deploy",
+		Verdict:         string(contracts.VerdictAllow),
+		Signature:       "sig",
+		SignatureSchema: crypto.DecisionSignatureSchemaV2,
+		SignatureType:   "test:decision",
+		InputContext:    map[string]any{},
+		PolicyEpoch:     "not-a-number",
+	}
 	if _, err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithPolicySnapshots(snapshotStore, scope)).IssueExecutionIntent(ctx, missingBindingDecision, allowEffect); err == nil || !strings.Contains(err.Error(), "missing policy hash/epoch") {
 		t.Fatalf("expected missing policy binding error, got %v", err)
 	}
 
 	safeDepDecision := &contracts.DecisionRecord{
-		ID:        "dec-safedep-intent",
-		Verdict:   string(contracts.VerdictAllow),
-		Signature: "sig",
+		ID:              "dec-safedep-intent",
+		SubjectID:       "principal:coverage",
+		Action:          "CUSTOM_TOOL",
+		Resource:        "CUSTOM_TOOL",
+		Verdict:         string(contracts.VerdictAllow),
+		Signature:       "sig",
+		SignatureSchema: crypto.DecisionSignatureSchemaV2,
+		SignatureType:   "test:decision",
 		InputContext: map[string]any{
 			"safe_deprecation_activation_id":         "act-1",
 			"safe_deprecation_delegation_session_id": "delegation-1",
@@ -958,8 +990,11 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 	}
 	safeDepDecision.EffectDigest = safeDepDigest
 	intent, err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).IssueExecutionIntent(ctx, safeDepDecision, safeDepEffect)
-	if err != nil || intent.AllowedTool != "CUSTOM_TOOL" || intent.EmergencyActivationID != "act-1" || intent.EmergencyDelegationSessionID != "delegation-1" || intent.EmergencyScopeHash != "sha256:scope" {
-		t.Fatalf("intent did not propagate safe-dep fields: intent=%+v err=%v", intent, err)
+	if err != nil || intent.AllowedTool != "CUSTOM_TOOL" {
+		t.Fatalf("intent issuance failed: intent=%+v err=%v", intent, err)
+	}
+	if intent.EmergencyActivationID != "" || intent.EmergencyDelegationSessionID != "" || intent.EmergencyScopeHash != "" {
+		t.Fatalf("caller-controlled decision context minted emergency intent authority: %+v", intent)
 	}
 }
 
@@ -976,10 +1011,15 @@ func TestIssueExecutionIntentRejectsEffectDigestMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	decision := &contracts.DecisionRecord{
-		ID:           "dec-approved",
-		Verdict:      string(contracts.VerdictAllow),
-		Signature:    "sig",
-		EffectDigest: approvedDigest,
+		ID:              "dec-approved",
+		SubjectID:       "principal:coverage",
+		Action:          "EXECUTE_TOOL",
+		Resource:        "deploy",
+		Verdict:         string(contracts.VerdictAllow),
+		Signature:       "sig",
+		SignatureSchema: crypto.DecisionSignatureSchemaV2,
+		SignatureType:   "test:decision",
+		EffectDigest:    approvedDigest,
 	}
 	substitutedEffect := &contracts.Effect{
 		EffectID:   "effect-substituted",
@@ -1051,29 +1091,42 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 		t.Fatalf("expected missing snapshot signing error, got %v", err)
 	}
 
-	safeDepGuardian := NewGuardian(&testSigner{}, allowGraphFor("READ"), nil, WithClock(clock), WithSafeDepController(safedep.NewController(safedep.ControllerConfig{Clock: clock.Now})))
+	terminalSafeDepResolver := safedep.AuthorityResolverFunc(func(context.Context, safedep.AuthorityRequest) (safedep.GateRequest, error) {
+		return safedep.GateRequest{Signal: safedep.Signal{
+			HazardCode:   contracts.HazardDeadManExpired,
+			ActiveClock:  true,
+			HighRiskLane: true,
+		}}, nil
+	})
+	safeDepGuardian := NewGuardian(
+		&testSigner{},
+		allowGraphFor("READ"),
+		nil,
+		WithClock(clock),
+		WithSafeDepController(safedep.NewController(safedep.ControllerConfig{Clock: clock.Now})),
+		WithSafeDepAuthorityResolver(terminalSafeDepResolver),
+	)
 	decision, err = safeDepGuardian.EvaluateDecision(ctx, DecisionRequest{
 		Principal: "agent",
 		Action:    "WRITE",
 		Resource:  "connector",
-		Context: map[string]interface{}{
-			"safe_deprecation_hazard_code":    string(contracts.HazardDeadManExpired),
-			"safe_deprecation_active_clock":   true,
-			"safe_deprecation_high_risk_lane": true,
-		},
+		Context:   map[string]interface{}{},
 	})
-	if err != nil || decision.ReasonCode != string(contracts.ReasonSafeDepTerminalFreeze) || decision.InputContext["safe_deprecation_state"] == nil {
+	if err != nil || decision.ReasonCode != string(contracts.ReasonSafeDepTerminalFreeze) {
 		t.Fatalf("expected safe-dep terminal freeze deny, decision=%+v err=%v", decision, err)
 	}
-	if _, err := NewGuardian(&testSigner{fail: true}, allowGraphFor("READ"), nil, WithClock(clock), WithSafeDepController(safedep.NewController(safedep.ControllerConfig{Clock: clock.Now}))).EvaluateDecision(ctx, DecisionRequest{
+	if _, err := NewGuardian(
+		&testSigner{fail: true},
+		allowGraphFor("READ"),
+		nil,
+		WithClock(clock),
+		WithSafeDepController(safedep.NewController(safedep.ControllerConfig{Clock: clock.Now})),
+		WithSafeDepAuthorityResolver(terminalSafeDepResolver),
+	).EvaluateDecision(ctx, DecisionRequest{
 		Principal: "agent",
 		Action:    "WRITE",
 		Resource:  "connector",
-		Context: map[string]interface{}{
-			"safe_deprecation_hazard_code":    string(contracts.HazardDeadManExpired),
-			"safe_deprecation_active_clock":   true,
-			"safe_deprecation_high_risk_lane": true,
-		},
+		Context:   map[string]interface{}{},
 	}); err == nil || !strings.Contains(err.Error(), "safe-deprecation") {
 		t.Fatalf("expected safe-dep signing error, got %v", err)
 	}
@@ -1211,7 +1264,15 @@ func TestSignDecisionBindsEffectDigestForIntentIssuance(t *testing.T) {
 		EffectType: "CUSTOM_TOOL",
 		Params:     map[string]interface{}{"tool_name": "bind-tool"},
 	}
-	decision := &contracts.DecisionRecord{ID: "dec-bind", ProposalID: "prop-bind", StepID: "step-bind", Timestamp: time.Now()}
+	decision := &contracts.DecisionRecord{
+		ID:         "dec-bind",
+		ProposalID: "prop-bind",
+		StepID:     "step-bind",
+		SubjectID:  "principal:bind",
+		Action:     "CUSTOM_TOOL",
+		Resource:   "bind-tool",
+		Timestamp:  time.Now(),
+	}
 	if err := g.SignDecision(ctx, decision, effect, nil, nil); err != nil {
 		t.Fatalf("SignDecision: %v", err)
 	}

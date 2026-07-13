@@ -30,17 +30,21 @@ type mcpProofScenario struct {
 }
 
 type mcpProofScenarioResult struct {
-	ScenarioID  string                 `json:"scenario_id"`
-	Name        string                 `json:"name"`
-	ThreatClass string                 `json:"threat_class"`
-	ServerID    string                 `json:"server_id"`
-	ToolName    string                 `json:"tool_name"`
-	Verdict     string                 `json:"verdict"`
-	Reason      string                 `json:"reason"`
-	Dispatched  bool                   `json:"dispatched"`
-	ReceiptRef  string                 `json:"receipt_ref"`
-	ReceiptHash string                 `json:"receipt_hash"`
-	Details     map[string]interface{} `json:"details,omitempty"`
+	ScenarioID  string `json:"scenario_id"`
+	Name        string `json:"name"`
+	ThreatClass string `json:"threat_class"`
+	ServerID    string `json:"server_id"`
+	ToolName    string `json:"tool_name"`
+	Verdict     string `json:"verdict"`
+	Reason      string `json:"reason"`
+	Dispatched  bool   `json:"dispatched"`
+	ReceiptRef  string `json:"receipt_ref"`
+	// ReceiptHash is the canonical signed receipt-chain hash used by PrevHash
+	// links. ArtifactHash separately identifies the serialized file in the
+	// EvidencePack manifest.
+	ReceiptHash  string                 `json:"receipt_hash"`
+	ArtifactHash string                 `json:"receipt_artifact_hash"`
+	Details      map[string]interface{} `json:"details,omitempty"`
 }
 
 type mcpProofSummary struct {
@@ -362,6 +366,7 @@ func buildMCPProofArtifacts(runID, scenarioName string, generatedAt time.Time, s
 			OutputHash:   decisionHash,
 			Timestamp:    generatedAt,
 			ExecutorID:   "helm-ai-kernel.mcp.proof",
+			SessionID:    "mcp-proof:" + runID,
 			PrevHash:     previousReceiptHash,
 			LamportClock: uint64(idx + 1),
 			ArgsHash:     argsHash,
@@ -396,28 +401,35 @@ func buildMCPProofArtifacts(runID, scenarioName string, generatedAt time.Time, s
 			return nil, nil, err
 		}
 		receiptData = append(receiptData, '\n')
-		receiptHash := lpreceipts.HashBytes(receiptData)
+		artifactHash := lpreceipts.HashBytes(receiptData)
+		receiptHash, err := contracts.ReceiptChainHash(receipt)
+		if err != nil {
+			return nil, nil, fmt.Errorf("hash signed receipt chain for %s: %w", scenario.ID, err)
+		}
 		previousReceiptHash = receiptHash
 		artifacts["receipts/"+scenario.ID+".json"] = receiptData
 
 		result := mcpProofScenarioResult{
-			ScenarioID:  scenario.ID,
-			Name:        scenario.Name,
-			ThreatClass: scenario.ThreatClass,
-			ServerID:    scenario.Request.ServerID,
-			ToolName:    scenario.Request.ToolName,
-			Verdict:     decision.Verdict,
-			Reason:      decision.Reason,
-			Dispatched:  dispatched,
-			ReceiptRef:  "02_PROOFGRAPH/receipts/" + scenario.ID + ".json",
-			ReceiptHash: receiptHash,
+			ScenarioID:   scenario.ID,
+			Name:         scenario.Name,
+			ThreatClass:  scenario.ThreatClass,
+			ServerID:     scenario.Request.ServerID,
+			ToolName:     scenario.Request.ToolName,
+			Verdict:      decision.Verdict,
+			Reason:       decision.Reason,
+			Dispatched:   dispatched,
+			ReceiptRef:   "02_PROOFGRAPH/receipts/" + scenario.ID + ".json",
+			ReceiptHash:  receiptHash,
+			ArtifactHash: artifactHash,
 			Details: map[string]interface{}{
-				"launch_id":   scenario.Request.LaunchID,
-				"app_id":      scenario.Request.AppID,
-				"principal":   scenario.Request.Principal,
-				"policy_hash": scenario.Request.PolicyHash,
-				"schema_hash": scenario.Request.SchemaHash,
-				"schema_pin":  decision.SchemaPin,
+				"launch_id":             scenario.Request.LaunchID,
+				"app_id":                scenario.Request.AppID,
+				"principal":             scenario.Request.Principal,
+				"policy_hash":           scenario.Request.PolicyHash,
+				"schema_hash":           scenario.Request.SchemaHash,
+				"schema_pin":            decision.SchemaPin,
+				"receipt_artifact_hash": artifactHash,
+				"receipt_chain_hash":    receiptHash,
 			},
 		}
 		results = append(results, result)

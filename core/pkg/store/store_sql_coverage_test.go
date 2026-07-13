@@ -16,6 +16,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectdigest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
 )
 
 type storeCoverageVerifier struct {
@@ -150,10 +153,29 @@ func TestCoveragePGVectorStoreBranches(t *testing.T) {
 func TestCoveragePostgresEffectOutboxStoreBranches(t *testing.T) {
 	ctx := context.Background()
 	effect := &contracts.Effect{EffectID: "effect-1", EffectType: contracts.EffectTypeGeneric, Params: map[string]any{"ok": true}}
-	intent := &contracts.AuthorizedExecutionIntent{ID: "intent-1", DecisionID: "decision-1", AllowedTool: "tool"}
+	digest, err := effectdigest.Canonical(effect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1700000000, 0).UTC()
+	intent := &contracts.AuthorizedExecutionIntent{
+		ID:               "intent-1",
+		DecisionID:       "decision-1",
+		EffectDigestHash: digest,
+		AllowedTool:      "tool",
+		IssuedAt:         now,
+		ExpiresAt:        now.Add(time.Minute),
+		SignatureSchema:  crypto.IntentSignatureSchemaV2,
+		SignatureType:    "ed25519:test",
+	}
 
 	db, mock, cleanup := newStoreCoverageSQLMock(t)
 	defer cleanup()
+
+	nilVerifier := NewPostgresEffectOutboxStore(db, nil)
+	if err := nilVerifier.Schedule(ctx, effect, intent); err == nil || !strings.Contains(err.Error(), "signature verifier unavailable") {
+		t.Fatalf("expected missing verifier to fail closed, got %v", err)
+	}
 
 	errVerifier := NewPostgresEffectOutboxStore(db, storeCoverageVerifier{err: errors.New("verify failed")})
 	if err := errVerifier.Schedule(ctx, effect, intent); err == nil || !strings.Contains(err.Error(), "error verifying intent") {
@@ -175,6 +197,32 @@ func TestCoveragePostgresEffectOutboxStoreBranches(t *testing.T) {
 	mock.ExpectExec("INSERT INTO effect_outbox").WillReturnError(errors.New("insert failed"))
 	if err := outbox.Schedule(ctx, effect, intent); err == nil || !strings.Contains(err.Error(), "failed to schedule effect") {
 		t.Fatalf("expected schedule insert error, got %v", err)
+	}
+
+	for name, row := range map[string]struct {
+		status string
+		want   executor.OutboxClaimState
+	}{
+		"pending":     {status: "PENDING", want: executor.OutboxPending},
+		"in progress": {status: "CLAIMED", want: executor.OutboxInProgress},
+		"completed":   {status: "DONE", want: executor.OutboxCompleted},
+	} {
+		t.Run("claim "+name, func(t *testing.T) {
+			mock.ExpectQuery("INSERT INTO effect_outbox").
+				WithArgs(intent.ID, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+				WillReturnRows(sqlmock.NewRows([]string{"status", "claim_token"}).AddRow(row.status, "other-owner-token"))
+			claim, err := outbox.Claim(ctx, effect, intent)
+			if err != nil {
+				t.Fatalf("Claim: %v", err)
+			}
+			if claim.State != row.want {
+				t.Fatalf("Claim state = %q, want %q", claim.State, row.want)
+			}
+		})
+	}
+	mock.ExpectQuery("INSERT INTO effect_outbox").WillReturnError(errors.New("claim failed"))
+	if _, err := outbox.Claim(ctx, effect, intent); err == nil || !strings.Contains(err.Error(), "claim effect dispatch") {
+		t.Fatalf("expected claim query error, got %v", err)
 	}
 
 	effectJSON, err := json.Marshal(effect)
@@ -228,6 +276,10 @@ func TestCoveragePostgresEffectOutboxStoreBranches(t *testing.T) {
 	if err := outbox.MarkDone(ctx, "intent-2"); err == nil {
 		t.Fatal("expected mark done error")
 	}
+	mock.ExpectExec("UPDATE effect_outbox").WithArgs("intent-3").WillReturnResult(sqlmock.NewResult(0, 0))
+	if err := outbox.MarkDone(ctx, "intent-3"); err == nil || !strings.Contains(err.Error(), "not an active dispatch claim") {
+		t.Fatalf("expected inactive claim error, got %v", err)
+	}
 }
 
 func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
@@ -247,7 +299,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 		t.Fatal("expected init error")
 	}
 
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(21)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	if err := store.Store(ctx, receipt); err != nil {
 		t.Fatalf("Store: %v", err)
 	}
@@ -278,7 +330,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 
 	mock.ExpectQuery("FROM receipts ORDER BY timestamp DESC").WithArgs(2).
 		WillReturnRows(storePostgresReceiptRows(receipt, []byte(`null`)).
-			AddRow("receipt-2", "decision-2", "effect", "", "OK", "blob", "output", now.Add(time.Second), "agent-2", []byte(`{"x":1}`), nil, nil, "", int64(8), "args", "", int64(0), nil))
+			AddRow("receipt-2", "decision-2", "effect", "", "OK", "blob", "output", now.Add(time.Second), "agent-2", []byte(`{"x":1}`), nil, nil, "", int64(8), int64(2), "args", "", int64(0), nil, "", nil))
 	list, err := store.List(ctx, 2)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -292,7 +344,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	}
 	mock.ExpectQuery("FROM receipts ORDER BY timestamp DESC").
 		WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()).
-			AddRow("receipt-bad", "decision-bad", "effect", "", "OK", "blob", "output", "not-time", "agent", []byte(`null`), nil, nil, "", int64(1), "args", "", int64(0), nil))
+			AddRow("receipt-bad", "decision-bad", "effect", "", "OK", "blob", "output", "not-time", "agent", []byte(`null`), nil, nil, "", int64(1), int64(1), "args", "", int64(0), nil, "", nil))
 	if _, err := store.List(ctx, 1); err == nil {
 		t.Fatal("expected list scan error")
 	}
@@ -305,11 +357,11 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	if _, err := store.ListByAgent(ctx, "agent-1", 1, 10); err == nil {
 		t.Fatal("expected ListByAgent query error")
 	}
-	mock.ExpectQuery("FROM receipts WHERE lamport_clock").WithArgs(uint64(1), 10).WillReturnRows(storePostgresReceiptRows(receipt, nil))
+	mock.ExpectQuery("FROM receipts WHERE stream_sequence").WithArgs(uint64(1), 10).WillReturnRows(storePostgresReceiptRows(receipt, nil))
 	if got, err := store.ListSince(ctx, 1, 10); err != nil || len(got) != 1 {
 		t.Fatalf("ListSince got %d err=%v", len(got), err)
 	}
-	mock.ExpectQuery("FROM receipts WHERE lamport_clock").WillReturnError(errors.New("since query failed"))
+	mock.ExpectQuery("FROM receipts WHERE stream_sequence").WillReturnError(errors.New("since query failed"))
 	if _, err := store.ListSince(ctx, 1, 10); err == nil {
 		t.Fatal("expected ListSince query error")
 	}
@@ -319,18 +371,18 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	if _, err := store.ListByAgent(ctx, "agent-row-error", 0, 1); err == nil {
 		t.Fatal("expected ListByAgent rows error")
 	}
-	mock.ExpectQuery("FROM receipts WHERE lamport_clock").WithArgs(uint64(0), 1).
+	mock.ExpectQuery("FROM receipts WHERE stream_sequence").WithArgs(uint64(0), 1).
 		WillReturnRows(storePostgresReceiptRows(receipt, nil).RowError(0, errors.New("since row failed")))
 	if _, err := store.ListSince(ctx, 0, 1); err == nil {
 		t.Fatal("expected ListSince rows error")
 	}
 
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent-1").WillReturnRows(storePostgresReceiptRows(receipt, nil))
+	mock.ExpectQuery("FROM receipts WHERE COALESCE\\(session_id, ''\\)").WithArgs("agent-1").WillReturnRows(storePostgresReceiptRows(receipt, nil))
 	last, err := store.GetLastForSession(ctx, "agent-1")
 	if err != nil || last == nil || last.ReceiptID != receipt.ReceiptID {
 		t.Fatalf("GetLastForSession got %+v err=%v", last, err)
 	}
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("missing").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectQuery("FROM receipts WHERE COALESCE\\(session_id, ''\\)").WithArgs("missing").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	last, err = store.GetLastForSession(ctx, "missing")
 	if err != nil || last != nil {
 		t.Fatalf("expected missing last receipt to be nil, got %+v err=%v", last, err)
@@ -394,10 +446,13 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 		sql.NullString{String: "root", Valid: true},
 		sql.NullString{String: "prev", Valid: true},
 		9,
+		13,
 		sql.NullString{String: "args", Valid: true},
 		sql.NullString{String: "logid", Valid: true},
 		11,
 		sql.NullString{String: `{"backend":"translog","deferred":true}`, Valid: true},
+		sql.NullString{String: "session", Valid: true},
+		sql.NullString{},
 	)
 	if err != nil {
 		t.Fatalf("receiptFromSQLiteFields: %v", err)
@@ -408,7 +463,7 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 	if receipt.LogID != "logid" || receipt.LeafIndex != 11 || receipt.Transparency == nil || !receipt.Transparency.Deferred {
 		t.Fatalf("transparency fields not decoded: %+v", receipt)
 	}
-	if _, err := receiptFromSQLiteFields("r", "d", "e", sql.NullString{}, "OK", "", "", "", sql.NullString{}, sql.NullString{String: `{`, Valid: true}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}); err == nil {
+	if _, err := receiptFromSQLiteFields("r", "d", "e", sql.NullString{}, "OK", "", "", "", sql.NullString{}, sql.NullString{String: `{`, Valid: true}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, 0, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, sql.NullString{}); err == nil {
 		t.Fatal("expected SQLite metadata decode error")
 	}
 
@@ -476,8 +531,8 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery("FROM receipts WHERE COALESCE\\(session_id, ''\\)").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(21)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous != nil || lamport != 1 || prevHash != "" {
@@ -488,7 +543,12 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatalf("AppendCausal genesis: %v", err)
 	}
 
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
+	previous := storeCoverageReceipt("receipt-genesis", "decision-genesis", "agent", 1, now)
+	mock.ExpectQuery("FROM receipts WHERE COALESCE\\(session_id, ''\\)").WithArgs("agent").WillReturnRows(storePostgresReceiptRows(previous, nil))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(21)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous == nil || previous.ReceiptID != "receipt-genesis" || lamport != 2 || prevHash == "" {
 			t.Fatalf("unexpected chained inputs previous=%+v lamport=%d prev=%q", previous, lamport, prevHash)
@@ -500,7 +560,6 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatalf("AppendCausal chained: %v", err)
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnError(errors.New("lock failed"))
 	mock.ExpectRollback()
@@ -508,19 +567,17 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatal("expected lock error")
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnError(errors.New("last failed"))
+	mock.ExpectQuery("FROM receipts WHERE COALESCE\\(session_id, ''\\)").WithArgs("agent").WillReturnError(errors.New("last failed"))
 	mock.ExpectRollback()
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) { return nil, nil }); err == nil {
 		t.Fatal("expected last receipt error")
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectQuery("FROM receipts WHERE COALESCE\\(session_id, ''\\)").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectRollback()
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return nil, errors.New("builder failed")
@@ -528,10 +585,9 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatal("expected builder error")
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectQuery("FROM receipts WHERE COALESCE\\(session_id, ''\\)").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectExec("INSERT INTO receipts").WillReturnError(errors.New("insert failed"))
 	mock.ExpectRollback()
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
@@ -540,11 +596,10 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatal("expected insert error")
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery("FROM receipts WHERE COALESCE\\(session_id, ''\\)").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(21)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return storeCoverageReceipt("receipt-commit-fail", "decision-commit-fail", "agent", 1, now), nil
@@ -565,13 +620,13 @@ func TestCoverageBuildNextCausalReceiptBranches(t *testing.T) {
 	}); err == nil {
 		t.Fatal("expected nil receipt error")
 	}
-	if got, err := buildNextCausalReceipt("agent", nil, func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
+	if _, err := buildNextCausalReceipt("agent", nil, func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return storeCoverageReceipt("receipt-empty-executor", "decision", "", 1, now), nil
-	}); err != nil || got.ExecutorID != "agent" {
-		t.Fatalf("expected default executor, got %+v err=%v", got, err)
+	}); err == nil {
+		t.Fatal("expected unsigned causal builder to require executor and session before signing")
 	}
 	for name, build := range map[string]CausalReceiptBuilder{
-		"wrong executor": func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
+		"wrong session": func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 			return storeCoverageReceipt("receipt", "decision", "other", 1, now), nil
 		},
 		"wrong lamport": func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
@@ -638,6 +693,7 @@ func storeCoverageReceipt(receiptID, decisionID, executorID string, lamport uint
 		OutputHash:          "output",
 		Timestamp:           timestamp,
 		ExecutorID:          executorID,
+		SessionID:           executorID,
 		Metadata:            map[string]any{"source": "coverage"},
 		Signature:           "signature",
 		MerkleRoot:          "merkle",
@@ -663,10 +719,13 @@ func storePostgresReceiptColumns() []string {
 		"merkle_root",
 		"prev_hash",
 		"lamport_clock",
+		"stream_sequence",
 		"args_hash",
 		"log_id",
 		"leaf_index",
 		"transparency",
+		"session_id",
+		"receipt_envelope",
 	}
 }
 
@@ -690,10 +749,13 @@ func storePostgresReceiptRows(receipt *contracts.Receipt, metadata []byte) *sqlm
 			receipt.MerkleRoot,
 			receipt.PrevHash,
 			int64(receipt.LamportClock),
+			int64(receipt.StreamSequence),
 			receipt.ArgsHash,
 			receipt.LogID,
 			int64(receipt.LeafIndex),
 			storePostgresTransparencyValue(receipt),
+			receipt.SessionID,
+			nil,
 		)
 }
 

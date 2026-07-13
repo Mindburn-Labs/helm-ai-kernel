@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
@@ -70,5 +71,43 @@ func TestKeyRing_VerifyKey(t *testing.T) {
 	_, err = kr.VerifyKey("unknown", msg, sigBytes)
 	if err == nil {
 		t.Error("VerifyKey should fail for unknown key")
+	}
+}
+
+func TestKeyRingRawVerifyReleasesReadLockForRotation(t *testing.T) {
+	kr := NewKeyRing()
+	first, err := NewEd25519Signer("first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kr.AddKey(first)
+
+	message := []byte("rotation lock regression")
+	signatureHex, err := first.Sign(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature, err := hex.DecodeString(signatureHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !kr.Verify(message, signature) {
+		t.Fatal("raw keyring verification failed")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		second, createErr := NewEd25519Signer("second")
+		if createErr == nil {
+			kr.AddKey(second)
+			kr.RevokeKey(second.KeyID)
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("keyring rotation blocked after raw verification; read lock was not released")
 	}
 }

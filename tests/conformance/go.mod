@@ -4,6 +4,7 @@ go 1.25.12
 
 require (
 	github.com/Mindburn-Labs/helm-ai-kernel/core v0.0.0
+	github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.0.0
 	github.com/google/cel-go v0.28.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
@@ -131,3 +132,5 @@ require (
 )
 
 replace github.com/Mindburn-Labs/helm-ai-kernel/core => ../../core
+
+replace github.com/Mindburn-Labs/helm-ai-kernel/sdk/go => ../../sdk/go

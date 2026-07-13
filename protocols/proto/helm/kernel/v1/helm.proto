@@ -64,9 +64,46 @@ message DecisionRecord {
   string policy_ref = 10;
   string policy_decision_hash = 11;
   bytes input_context = 12;
+
+  // Request tuple cryptographically bound by signature_schema v2.
+  string subject_id = 13;
+  string action = 14;
+  string resource = 15;
+
+  // Empty denotes the legacy v1 decision preimage. v2 currently uses
+  // "helm.decision.signature.v2" and also binds signature_type.
+  string signature_schema = 16;
+  string signature_type = 17;
+
+  // Complete additive v2 signing envelope. The legacy fields above remain
+  // valid for v1 consumers; v2 consumers must preserve these exact fields.
+  string proposal_id = 18;
+  string step_id = 19;
+  string phenotype_hash = 20;
+  string policy_version = 21;
+  string policy_backend = 22;
+  string policy_content_hash = 23;
+  string policy_epoch = 24;
+  string state_cursor = 25;
+  string snapshot = 26;
+  string env_fingerprint = 27;
+  // ReasonCode enum is intentionally narrow; this preserves the canonical
+  // string registry value that is actually signed.
+  string reason_code_text = 28;
+  double trajectory_risk_score = 29;
+  string session_centroid_hash = 30;
+  int32 risk_accumulation_window = 31;
+  DecisionInterventionMetadata intervention = 32;
+
+  // Trusted scope is signed in the v2 decision envelope. It is populated by
+  // authenticated adapters, never inferred from input_context.
+  string tenant_id = 33;
+  string workspace_id = 34;
+  string session_id = 35;
 }
 
 message AuthorizedExecutionIntent {
+  // Legacy fields retained for v1 consumers.
   string intent_id = 1;
   string decision_id = 2;
   string effect_id = 3;
@@ -75,9 +112,23 @@ message AuthorizedExecutionIntent {
   string signature = 6;
   string signer_key_id = 7;
   string principal = 8;
+
+  // Complete v2 signing envelope. New executable consumers must preserve
+  // every field below when relaying an intent for independent verification.
+  string effect_digest_hash = 9;
+  string idempotency_key = 10;
+  string signer = 11;
+  string signature_schema = 12;
+  string signature_type = 13;
+  string allowed_tool = 14;
+  repeated string taint = 15;
+  string emergency_activation_id = 16;
+  string emergency_delegation_session_id = 17;
+  string emergency_scope_hash = 18;
 }
 
 message Receipt {
+  // Legacy fields retained for v1 consumers.
   string receipt_version = 1;
   string receipt_id = 2;
   string decision_id = 3;
@@ -94,6 +145,58 @@ message Receipt {
   string payload_hash = 14;
   ReasonCode reason_code = 15;
   map<string, string> metadata = 16;
+
+  // Complete v2 receipt signing envelope. Nested evidence objects remain
+  // canonical JSON bytes so existing SDKs can preserve their exact values
+  // without a lossy re-modeling of every evidence extension.
+  string signature_schema = 17;
+  string signature_profile = 18;
+  string signature_algorithm = 19;
+  string key_id = 20;
+  map<string, string> public_key_set = 21;
+  string external_reference_id = 22;
+  string status = 23;
+  string blob_hash = 24;
+  string output_hash = 25;
+  string prev_hash = 26;
+  uint64 lamport_clock = 27;
+  string args_hash = 28;
+  string executor_id = 29;
+  string effect_type = 30;
+  string tool_fingerprint = 31;
+  string idempotency_key = 32;
+  string tool_name = 33;
+  string reason_code_text = 34;
+  string policy_hash = 35;
+  string session_id = 36;
+  string scope_hash = 37;
+  google.protobuf.Timestamp issued_at = 38;
+  string emergency_activation_id = 39;
+  string emergency_delegation_session_id = 40;
+  string emergency_scope_hash = 41;
+  string safe_dep_state = 42;
+  string safe_dep_reason_code = 43;
+  string network_log_ref = 44;
+  string secret_events_ref = 45;
+  string sandbox_lease_id = 46;
+  string effect_graph_node_id = 47;
+  bytes port_exposures_json = 48;
+  bytes replay_script_json = 49;
+  bytes provenance_json = 50;
+  bytes bundled_artifacts_json = 51;
+  bytes transparency_json = 52;
+  string log_id = 53;
+  uint64 leaf_index = 54;
+}
+
+// DecisionInterventionMetadata carries the Temporal Guardian fields included
+// in a v2 decision signing envelope. Durations are encoded as nanoseconds to
+// preserve Go time.Duration exactly.
+message DecisionInterventionMetadata {
+  string type = 1;
+  string reason_code = 2;
+  int64 wait_duration_nanos = 3;
+  int64 tokens_saved = 4;
 }
 
 // ── PDP Service ────────────────────────────────────────────────

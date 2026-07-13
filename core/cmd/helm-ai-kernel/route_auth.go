@@ -15,6 +15,7 @@ const (
 	tenantHeader           = "X-Helm-Tenant-ID"
 	principalHeader        = "X-Helm-Principal-ID"
 	workspaceHeader        = "X-Helm-Workspace-ID"
+	sessionHeader          = "X-Helm-Session-ID"
 	runtimeTenantIDEnv     = "HELM_RUNTIME_TENANT_ID"
 	runtimePrincipalIDEnv  = "HELM_RUNTIME_PRINCIPAL_ID"
 	runtimeWorkspaceIDEnv  = "HELM_RUNTIME_WORKSPACE_ID"

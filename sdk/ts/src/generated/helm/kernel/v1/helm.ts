@@ -227,9 +227,52 @@ export interface DecisionRecord {
   policyRef: string;
   policyDecisionHash: string;
   inputContext: Uint8Array;
+  /** Request tuple cryptographically bound by signature_schema v2. */
+  subjectId: string;
+  action: string;
+  resource: string;
+  /**
+   * Empty denotes the legacy v1 decision preimage. v2 currently uses
+   * "helm.decision.signature.v2" and also binds signature_type.
+   */
+  signatureSchema: string;
+  signatureType: string;
+  /**
+   * Complete additive v2 signing envelope. The legacy fields above remain
+   * valid for v1 consumers; v2 consumers must preserve these exact fields.
+   */
+  proposalId: string;
+  stepId: string;
+  phenotypeHash: string;
+  policyVersion: string;
+  policyBackend: string;
+  policyContentHash: string;
+  policyEpoch: string;
+  stateCursor: string;
+  snapshot: string;
+  envFingerprint: string;
+  /**
+   * ReasonCode enum is intentionally narrow; this preserves the canonical
+   * string registry value that is actually signed.
+   */
+  reasonCodeText: string;
+  trajectoryRiskScore: number;
+  sessionCentroidHash: string;
+  riskAccumulationWindow: number;
+  intervention:
+    | DecisionInterventionMetadata
+    | undefined;
+  /**
+   * Trusted scope is signed in the v2 decision envelope. It is populated by
+   * authenticated adapters, never inferred from input_context.
+   */
+  tenantId: string;
+  workspaceId: string;
+  sessionId: string;
 }
 
 export interface AuthorizedExecutionIntent {
+  /** Legacy fields retained for v1 consumers. */
   intentId: string;
   decisionId: string;
   effectId: string;
@@ -238,9 +281,24 @@ export interface AuthorizedExecutionIntent {
   signature: string;
   signerKeyId: string;
   principal: string;
+  /**
+   * Complete v2 signing envelope. New executable consumers must preserve
+   * every field below when relaying an intent for independent verification.
+   */
+  effectDigestHash: string;
+  idempotencyKey: string;
+  signer: string;
+  signatureSchema: string;
+  signatureType: string;
+  allowedTool: string;
+  taint: string[];
+  emergencyActivationId: string;
+  emergencyDelegationSessionId: string;
+  emergencyScopeHash: string;
 }
 
 export interface Receipt {
+  /** Legacy fields retained for v1 consumers. */
   receiptVersion: string;
   receiptId: string;
   decisionId: string;
@@ -257,11 +315,71 @@ export interface Receipt {
   payloadHash: string;
   reasonCode: ReasonCode;
   metadata: { [key: string]: string };
+  /**
+   * Complete v2 receipt signing envelope. Nested evidence objects remain
+   * canonical JSON bytes so existing SDKs can preserve their exact values
+   * without a lossy re-modeling of every evidence extension.
+   */
+  signatureSchema: string;
+  signatureProfile: string;
+  signatureAlgorithm: string;
+  keyId: string;
+  publicKeySet: { [key: string]: string };
+  externalReferenceId: string;
+  status: string;
+  blobHash: string;
+  outputHash: string;
+  prevHash: string;
+  lamportClock: number;
+  argsHash: string;
+  executorId: string;
+  effectType: string;
+  toolFingerprint: string;
+  idempotencyKey: string;
+  toolName: string;
+  reasonCodeText: string;
+  policyHash: string;
+  sessionId: string;
+  scopeHash: string;
+  issuedAt: Date | undefined;
+  emergencyActivationId: string;
+  emergencyDelegationSessionId: string;
+  emergencyScopeHash: string;
+  safeDepState: string;
+  safeDepReasonCode: string;
+  networkLogRef: string;
+  secretEventsRef: string;
+  sandboxLeaseId: string;
+  effectGraphNodeId: string;
+  portExposuresJson: Uint8Array;
+  replayScriptJson: Uint8Array;
+  provenanceJson: Uint8Array;
+  bundledArtifactsJson: Uint8Array;
+  transparencyJson: Uint8Array;
+  logId: string;
+  leafIndex: number;
 }
 
 export interface Receipt_MetadataEntry {
   key: string;
   value: string;
+}
+
+export interface Receipt_PublicKeySetEntry {
+  key: string;
+  value: string;
+}
+
+/**
+ * DecisionInterventionMetadata carries the Temporal Guardian fields included
+ * in a v2 decision signing envelope. Durations are encoded as nanoseconds to
+ * preserve Go time.Duration exactly.
+ */
+export interface DecisionInterventionMetadata {
+  type: string;
+  reasonCode: string;
+  waitDurationNanos: number;
+  tokensSaved: number;
 }
 
 export interface PDPRequest {
@@ -464,6 +582,29 @@ function createBaseDecisionRecord(): DecisionRecord {
     policyRef: "",
     policyDecisionHash: "",
     inputContext: new Uint8Array(0),
+    subjectId: "",
+    action: "",
+    resource: "",
+    signatureSchema: "",
+    signatureType: "",
+    proposalId: "",
+    stepId: "",
+    phenotypeHash: "",
+    policyVersion: "",
+    policyBackend: "",
+    policyContentHash: "",
+    policyEpoch: "",
+    stateCursor: "",
+    snapshot: "",
+    envFingerprint: "",
+    reasonCodeText: "",
+    trajectoryRiskScore: 0,
+    sessionCentroidHash: "",
+    riskAccumulationWindow: 0,
+    intervention: undefined,
+    tenantId: "",
+    workspaceId: "",
+    sessionId: "",
   };
 }
 
@@ -504,6 +645,75 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     }
     if (message.inputContext.length !== 0) {
       writer.uint32(98).bytes(message.inputContext);
+    }
+    if (message.subjectId !== "") {
+      writer.uint32(106).string(message.subjectId);
+    }
+    if (message.action !== "") {
+      writer.uint32(114).string(message.action);
+    }
+    if (message.resource !== "") {
+      writer.uint32(122).string(message.resource);
+    }
+    if (message.signatureSchema !== "") {
+      writer.uint32(130).string(message.signatureSchema);
+    }
+    if (message.signatureType !== "") {
+      writer.uint32(138).string(message.signatureType);
+    }
+    if (message.proposalId !== "") {
+      writer.uint32(146).string(message.proposalId);
+    }
+    if (message.stepId !== "") {
+      writer.uint32(154).string(message.stepId);
+    }
+    if (message.phenotypeHash !== "") {
+      writer.uint32(162).string(message.phenotypeHash);
+    }
+    if (message.policyVersion !== "") {
+      writer.uint32(170).string(message.policyVersion);
+    }
+    if (message.policyBackend !== "") {
+      writer.uint32(178).string(message.policyBackend);
+    }
+    if (message.policyContentHash !== "") {
+      writer.uint32(186).string(message.policyContentHash);
+    }
+    if (message.policyEpoch !== "") {
+      writer.uint32(194).string(message.policyEpoch);
+    }
+    if (message.stateCursor !== "") {
+      writer.uint32(202).string(message.stateCursor);
+    }
+    if (message.snapshot !== "") {
+      writer.uint32(210).string(message.snapshot);
+    }
+    if (message.envFingerprint !== "") {
+      writer.uint32(218).string(message.envFingerprint);
+    }
+    if (message.reasonCodeText !== "") {
+      writer.uint32(226).string(message.reasonCodeText);
+    }
+    if (message.trajectoryRiskScore !== 0) {
+      writer.uint32(233).double(message.trajectoryRiskScore);
+    }
+    if (message.sessionCentroidHash !== "") {
+      writer.uint32(242).string(message.sessionCentroidHash);
+    }
+    if (message.riskAccumulationWindow !== 0) {
+      writer.uint32(248).int32(message.riskAccumulationWindow);
+    }
+    if (message.intervention !== undefined) {
+      DecisionInterventionMetadata.encode(message.intervention, writer.uint32(258).fork()).join();
+    }
+    if (message.tenantId !== "") {
+      writer.uint32(266).string(message.tenantId);
+    }
+    if (message.workspaceId !== "") {
+      writer.uint32(274).string(message.workspaceId);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(282).string(message.sessionId);
     }
     return writer;
   },
@@ -611,6 +821,190 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
           message.inputContext = reader.bytes();
           continue;
         }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.subjectId = reader.string();
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.action = reader.string();
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.resource = reader.string();
+          continue;
+        }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.signatureSchema = reader.string();
+          continue;
+        }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.signatureType = reader.string();
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.proposalId = reader.string();
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.stepId = reader.string();
+          continue;
+        }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.phenotypeHash = reader.string();
+          continue;
+        }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          message.policyVersion = reader.string();
+          continue;
+        }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.policyBackend = reader.string();
+          continue;
+        }
+        case 23: {
+          if (tag !== 186) {
+            break;
+          }
+
+          message.policyContentHash = reader.string();
+          continue;
+        }
+        case 24: {
+          if (tag !== 194) {
+            break;
+          }
+
+          message.policyEpoch = reader.string();
+          continue;
+        }
+        case 25: {
+          if (tag !== 202) {
+            break;
+          }
+
+          message.stateCursor = reader.string();
+          continue;
+        }
+        case 26: {
+          if (tag !== 210) {
+            break;
+          }
+
+          message.snapshot = reader.string();
+          continue;
+        }
+        case 27: {
+          if (tag !== 218) {
+            break;
+          }
+
+          message.envFingerprint = reader.string();
+          continue;
+        }
+        case 28: {
+          if (tag !== 226) {
+            break;
+          }
+
+          message.reasonCodeText = reader.string();
+          continue;
+        }
+        case 29: {
+          if (tag !== 233) {
+            break;
+          }
+
+          message.trajectoryRiskScore = reader.double();
+          continue;
+        }
+        case 30: {
+          if (tag !== 242) {
+            break;
+          }
+
+          message.sessionCentroidHash = reader.string();
+          continue;
+        }
+        case 31: {
+          if (tag !== 248) {
+            break;
+          }
+
+          message.riskAccumulationWindow = reader.int32();
+          continue;
+        }
+        case 32: {
+          if (tag !== 258) {
+            break;
+          }
+
+          message.intervention = DecisionInterventionMetadata.decode(reader, reader.uint32());
+          continue;
+        }
+        case 33: {
+          if (tag !== 266) {
+            break;
+          }
+
+          message.tenantId = reader.string();
+          continue;
+        }
+        case 34: {
+          if (tag !== 274) {
+            break;
+          }
+
+          message.workspaceId = reader.string();
+          continue;
+        }
+        case 35: {
+          if (tag !== 282) {
+            break;
+          }
+
+          message.sessionId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -662,6 +1056,105 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
         : isSet(object.input_context)
         ? bytesFromBase64(object.input_context)
         : new Uint8Array(0),
+      subjectId: isSet(object.subjectId)
+        ? globalThis.String(object.subjectId)
+        : isSet(object.subject_id)
+        ? globalThis.String(object.subject_id)
+        : "",
+      action: isSet(object.action) ? globalThis.String(object.action) : "",
+      resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+      signatureSchema: isSet(object.signatureSchema)
+        ? globalThis.String(object.signatureSchema)
+        : isSet(object.signature_schema)
+        ? globalThis.String(object.signature_schema)
+        : "",
+      signatureType: isSet(object.signatureType)
+        ? globalThis.String(object.signatureType)
+        : isSet(object.signature_type)
+        ? globalThis.String(object.signature_type)
+        : "",
+      proposalId: isSet(object.proposalId)
+        ? globalThis.String(object.proposalId)
+        : isSet(object.proposal_id)
+        ? globalThis.String(object.proposal_id)
+        : "",
+      stepId: isSet(object.stepId)
+        ? globalThis.String(object.stepId)
+        : isSet(object.step_id)
+        ? globalThis.String(object.step_id)
+        : "",
+      phenotypeHash: isSet(object.phenotypeHash)
+        ? globalThis.String(object.phenotypeHash)
+        : isSet(object.phenotype_hash)
+        ? globalThis.String(object.phenotype_hash)
+        : "",
+      policyVersion: isSet(object.policyVersion)
+        ? globalThis.String(object.policyVersion)
+        : isSet(object.policy_version)
+        ? globalThis.String(object.policy_version)
+        : "",
+      policyBackend: isSet(object.policyBackend)
+        ? globalThis.String(object.policyBackend)
+        : isSet(object.policy_backend)
+        ? globalThis.String(object.policy_backend)
+        : "",
+      policyContentHash: isSet(object.policyContentHash)
+        ? globalThis.String(object.policyContentHash)
+        : isSet(object.policy_content_hash)
+        ? globalThis.String(object.policy_content_hash)
+        : "",
+      policyEpoch: isSet(object.policyEpoch)
+        ? globalThis.String(object.policyEpoch)
+        : isSet(object.policy_epoch)
+        ? globalThis.String(object.policy_epoch)
+        : "",
+      stateCursor: isSet(object.stateCursor)
+        ? globalThis.String(object.stateCursor)
+        : isSet(object.state_cursor)
+        ? globalThis.String(object.state_cursor)
+        : "",
+      snapshot: isSet(object.snapshot) ? globalThis.String(object.snapshot) : "",
+      envFingerprint: isSet(object.envFingerprint)
+        ? globalThis.String(object.envFingerprint)
+        : isSet(object.env_fingerprint)
+        ? globalThis.String(object.env_fingerprint)
+        : "",
+      reasonCodeText: isSet(object.reasonCodeText)
+        ? globalThis.String(object.reasonCodeText)
+        : isSet(object.reason_code_text)
+        ? globalThis.String(object.reason_code_text)
+        : "",
+      trajectoryRiskScore: isSet(object.trajectoryRiskScore)
+        ? globalThis.Number(object.trajectoryRiskScore)
+        : isSet(object.trajectory_risk_score)
+        ? globalThis.Number(object.trajectory_risk_score)
+        : 0,
+      sessionCentroidHash: isSet(object.sessionCentroidHash)
+        ? globalThis.String(object.sessionCentroidHash)
+        : isSet(object.session_centroid_hash)
+        ? globalThis.String(object.session_centroid_hash)
+        : "",
+      riskAccumulationWindow: isSet(object.riskAccumulationWindow)
+        ? globalThis.Number(object.riskAccumulationWindow)
+        : isSet(object.risk_accumulation_window)
+        ? globalThis.Number(object.risk_accumulation_window)
+        : 0,
+      intervention: isSet(object.intervention) ? DecisionInterventionMetadata.fromJSON(object.intervention) : undefined,
+      tenantId: isSet(object.tenantId)
+        ? globalThis.String(object.tenantId)
+        : isSet(object.tenant_id)
+        ? globalThis.String(object.tenant_id)
+        : "",
+      workspaceId: isSet(object.workspaceId)
+        ? globalThis.String(object.workspaceId)
+        : isSet(object.workspace_id)
+        ? globalThis.String(object.workspace_id)
+        : "",
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
     };
   },
 
@@ -703,6 +1196,75 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.inputContext.length !== 0) {
       obj.inputContext = base64FromBytes(message.inputContext);
     }
+    if (message.subjectId !== "") {
+      obj.subjectId = message.subjectId;
+    }
+    if (message.action !== "") {
+      obj.action = message.action;
+    }
+    if (message.resource !== "") {
+      obj.resource = message.resource;
+    }
+    if (message.signatureSchema !== "") {
+      obj.signatureSchema = message.signatureSchema;
+    }
+    if (message.signatureType !== "") {
+      obj.signatureType = message.signatureType;
+    }
+    if (message.proposalId !== "") {
+      obj.proposalId = message.proposalId;
+    }
+    if (message.stepId !== "") {
+      obj.stepId = message.stepId;
+    }
+    if (message.phenotypeHash !== "") {
+      obj.phenotypeHash = message.phenotypeHash;
+    }
+    if (message.policyVersion !== "") {
+      obj.policyVersion = message.policyVersion;
+    }
+    if (message.policyBackend !== "") {
+      obj.policyBackend = message.policyBackend;
+    }
+    if (message.policyContentHash !== "") {
+      obj.policyContentHash = message.policyContentHash;
+    }
+    if (message.policyEpoch !== "") {
+      obj.policyEpoch = message.policyEpoch;
+    }
+    if (message.stateCursor !== "") {
+      obj.stateCursor = message.stateCursor;
+    }
+    if (message.snapshot !== "") {
+      obj.snapshot = message.snapshot;
+    }
+    if (message.envFingerprint !== "") {
+      obj.envFingerprint = message.envFingerprint;
+    }
+    if (message.reasonCodeText !== "") {
+      obj.reasonCodeText = message.reasonCodeText;
+    }
+    if (message.trajectoryRiskScore !== 0) {
+      obj.trajectoryRiskScore = message.trajectoryRiskScore;
+    }
+    if (message.sessionCentroidHash !== "") {
+      obj.sessionCentroidHash = message.sessionCentroidHash;
+    }
+    if (message.riskAccumulationWindow !== 0) {
+      obj.riskAccumulationWindow = Math.round(message.riskAccumulationWindow);
+    }
+    if (message.intervention !== undefined) {
+      obj.intervention = DecisionInterventionMetadata.toJSON(message.intervention);
+    }
+    if (message.tenantId !== "") {
+      obj.tenantId = message.tenantId;
+    }
+    if (message.workspaceId !== "") {
+      obj.workspaceId = message.workspaceId;
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
     return obj;
   },
 
@@ -723,6 +1285,31 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     message.policyRef = object.policyRef ?? "";
     message.policyDecisionHash = object.policyDecisionHash ?? "";
     message.inputContext = object.inputContext ?? new Uint8Array(0);
+    message.subjectId = object.subjectId ?? "";
+    message.action = object.action ?? "";
+    message.resource = object.resource ?? "";
+    message.signatureSchema = object.signatureSchema ?? "";
+    message.signatureType = object.signatureType ?? "";
+    message.proposalId = object.proposalId ?? "";
+    message.stepId = object.stepId ?? "";
+    message.phenotypeHash = object.phenotypeHash ?? "";
+    message.policyVersion = object.policyVersion ?? "";
+    message.policyBackend = object.policyBackend ?? "";
+    message.policyContentHash = object.policyContentHash ?? "";
+    message.policyEpoch = object.policyEpoch ?? "";
+    message.stateCursor = object.stateCursor ?? "";
+    message.snapshot = object.snapshot ?? "";
+    message.envFingerprint = object.envFingerprint ?? "";
+    message.reasonCodeText = object.reasonCodeText ?? "";
+    message.trajectoryRiskScore = object.trajectoryRiskScore ?? 0;
+    message.sessionCentroidHash = object.sessionCentroidHash ?? "";
+    message.riskAccumulationWindow = object.riskAccumulationWindow ?? 0;
+    message.intervention = (object.intervention !== undefined && object.intervention !== null)
+      ? DecisionInterventionMetadata.fromPartial(object.intervention)
+      : undefined;
+    message.tenantId = object.tenantId ?? "";
+    message.workspaceId = object.workspaceId ?? "";
+    message.sessionId = object.sessionId ?? "";
     return message;
   },
 };
@@ -737,6 +1324,16 @@ function createBaseAuthorizedExecutionIntent(): AuthorizedExecutionIntent {
     signature: "",
     signerKeyId: "",
     principal: "",
+    effectDigestHash: "",
+    idempotencyKey: "",
+    signer: "",
+    signatureSchema: "",
+    signatureType: "",
+    allowedTool: "",
+    taint: [],
+    emergencyActivationId: "",
+    emergencyDelegationSessionId: "",
+    emergencyScopeHash: "",
   };
 }
 
@@ -765,6 +1362,36 @@ export const AuthorizedExecutionIntent: MessageFns<AuthorizedExecutionIntent> = 
     }
     if (message.principal !== "") {
       writer.uint32(66).string(message.principal);
+    }
+    if (message.effectDigestHash !== "") {
+      writer.uint32(74).string(message.effectDigestHash);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(82).string(message.idempotencyKey);
+    }
+    if (message.signer !== "") {
+      writer.uint32(90).string(message.signer);
+    }
+    if (message.signatureSchema !== "") {
+      writer.uint32(98).string(message.signatureSchema);
+    }
+    if (message.signatureType !== "") {
+      writer.uint32(106).string(message.signatureType);
+    }
+    if (message.allowedTool !== "") {
+      writer.uint32(114).string(message.allowedTool);
+    }
+    for (const v of message.taint) {
+      writer.uint32(122).string(v!);
+    }
+    if (message.emergencyActivationId !== "") {
+      writer.uint32(130).string(message.emergencyActivationId);
+    }
+    if (message.emergencyDelegationSessionId !== "") {
+      writer.uint32(138).string(message.emergencyDelegationSessionId);
+    }
+    if (message.emergencyScopeHash !== "") {
+      writer.uint32(146).string(message.emergencyScopeHash);
     }
     return writer;
   },
@@ -840,6 +1467,86 @@ export const AuthorizedExecutionIntent: MessageFns<AuthorizedExecutionIntent> = 
           message.principal = reader.string();
           continue;
         }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.effectDigestHash = reader.string();
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.idempotencyKey = reader.string();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.signer = reader.string();
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.signatureSchema = reader.string();
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.signatureType = reader.string();
+          continue;
+        }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.allowedTool = reader.string();
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.taint.push(reader.string());
+          continue;
+        }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.emergencyActivationId = reader.string();
+          continue;
+        }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.emergencyDelegationSessionId = reader.string();
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.emergencyScopeHash = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -883,6 +1590,50 @@ export const AuthorizedExecutionIntent: MessageFns<AuthorizedExecutionIntent> = 
         ? globalThis.String(object.signer_key_id)
         : "",
       principal: isSet(object.principal) ? globalThis.String(object.principal) : "",
+      effectDigestHash: isSet(object.effectDigestHash)
+        ? globalThis.String(object.effectDigestHash)
+        : isSet(object.effect_digest_hash)
+        ? globalThis.String(object.effect_digest_hash)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      signer: isSet(object.signer) ? globalThis.String(object.signer) : "",
+      signatureSchema: isSet(object.signatureSchema)
+        ? globalThis.String(object.signatureSchema)
+        : isSet(object.signature_schema)
+        ? globalThis.String(object.signature_schema)
+        : "",
+      signatureType: isSet(object.signatureType)
+        ? globalThis.String(object.signatureType)
+        : isSet(object.signature_type)
+        ? globalThis.String(object.signature_type)
+        : "",
+      allowedTool: isSet(object.allowedTool)
+        ? globalThis.String(object.allowedTool)
+        : isSet(object.allowed_tool)
+        ? globalThis.String(object.allowed_tool)
+        : "",
+      taint: globalThis.Array.isArray(object?.taint)
+        ? object.taint.map((e: any) => globalThis.String(e))
+        : [],
+      emergencyActivationId: isSet(object.emergencyActivationId)
+        ? globalThis.String(object.emergencyActivationId)
+        : isSet(object.emergency_activation_id)
+        ? globalThis.String(object.emergency_activation_id)
+        : "",
+      emergencyDelegationSessionId: isSet(object.emergencyDelegationSessionId)
+        ? globalThis.String(object.emergencyDelegationSessionId)
+        : isSet(object.emergency_delegation_session_id)
+        ? globalThis.String(object.emergency_delegation_session_id)
+        : "",
+      emergencyScopeHash: isSet(object.emergencyScopeHash)
+        ? globalThis.String(object.emergencyScopeHash)
+        : isSet(object.emergency_scope_hash)
+        ? globalThis.String(object.emergency_scope_hash)
+        : "",
     };
   },
 
@@ -912,6 +1663,36 @@ export const AuthorizedExecutionIntent: MessageFns<AuthorizedExecutionIntent> = 
     if (message.principal !== "") {
       obj.principal = message.principal;
     }
+    if (message.effectDigestHash !== "") {
+      obj.effectDigestHash = message.effectDigestHash;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.signer !== "") {
+      obj.signer = message.signer;
+    }
+    if (message.signatureSchema !== "") {
+      obj.signatureSchema = message.signatureSchema;
+    }
+    if (message.signatureType !== "") {
+      obj.signatureType = message.signatureType;
+    }
+    if (message.allowedTool !== "") {
+      obj.allowedTool = message.allowedTool;
+    }
+    if (message.taint?.length) {
+      obj.taint = message.taint;
+    }
+    if (message.emergencyActivationId !== "") {
+      obj.emergencyActivationId = message.emergencyActivationId;
+    }
+    if (message.emergencyDelegationSessionId !== "") {
+      obj.emergencyDelegationSessionId = message.emergencyDelegationSessionId;
+    }
+    if (message.emergencyScopeHash !== "") {
+      obj.emergencyScopeHash = message.emergencyScopeHash;
+    }
     return obj;
   },
 
@@ -928,6 +1709,16 @@ export const AuthorizedExecutionIntent: MessageFns<AuthorizedExecutionIntent> = 
     message.signature = object.signature ?? "";
     message.signerKeyId = object.signerKeyId ?? "";
     message.principal = object.principal ?? "";
+    message.effectDigestHash = object.effectDigestHash ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.signer = object.signer ?? "";
+    message.signatureSchema = object.signatureSchema ?? "";
+    message.signatureType = object.signatureType ?? "";
+    message.allowedTool = object.allowedTool ?? "";
+    message.taint = object.taint?.map((e) => e) || [];
+    message.emergencyActivationId = object.emergencyActivationId ?? "";
+    message.emergencyDelegationSessionId = object.emergencyDelegationSessionId ?? "";
+    message.emergencyScopeHash = object.emergencyScopeHash ?? "";
     return message;
   },
 };
@@ -950,6 +1741,44 @@ function createBaseReceipt(): Receipt {
     payloadHash: "",
     reasonCode: 0,
     metadata: {},
+    signatureSchema: "",
+    signatureProfile: "",
+    signatureAlgorithm: "",
+    keyId: "",
+    publicKeySet: {},
+    externalReferenceId: "",
+    status: "",
+    blobHash: "",
+    outputHash: "",
+    prevHash: "",
+    lamportClock: 0,
+    argsHash: "",
+    executorId: "",
+    effectType: "",
+    toolFingerprint: "",
+    idempotencyKey: "",
+    toolName: "",
+    reasonCodeText: "",
+    policyHash: "",
+    sessionId: "",
+    scopeHash: "",
+    issuedAt: undefined,
+    emergencyActivationId: "",
+    emergencyDelegationSessionId: "",
+    emergencyScopeHash: "",
+    safeDepState: "",
+    safeDepReasonCode: "",
+    networkLogRef: "",
+    secretEventsRef: "",
+    sandboxLeaseId: "",
+    effectGraphNodeId: "",
+    portExposuresJson: new Uint8Array(0),
+    replayScriptJson: new Uint8Array(0),
+    provenanceJson: new Uint8Array(0),
+    bundledArtifactsJson: new Uint8Array(0),
+    transparencyJson: new Uint8Array(0),
+    logId: "",
+    leafIndex: 0,
   };
 }
 
@@ -1003,6 +1832,120 @@ export const Receipt: MessageFns<Receipt> = {
     globalThis.Object.entries(message.metadata).forEach(([key, value]: [string, string]) => {
       Receipt_MetadataEntry.encode({ key: key as any, value }, writer.uint32(130).fork()).join();
     });
+    if (message.signatureSchema !== "") {
+      writer.uint32(138).string(message.signatureSchema);
+    }
+    if (message.signatureProfile !== "") {
+      writer.uint32(146).string(message.signatureProfile);
+    }
+    if (message.signatureAlgorithm !== "") {
+      writer.uint32(154).string(message.signatureAlgorithm);
+    }
+    if (message.keyId !== "") {
+      writer.uint32(162).string(message.keyId);
+    }
+    globalThis.Object.entries(message.publicKeySet).forEach(([key, value]: [string, string]) => {
+      Receipt_PublicKeySetEntry.encode({ key: key as any, value }, writer.uint32(170).fork()).join();
+    });
+    if (message.externalReferenceId !== "") {
+      writer.uint32(178).string(message.externalReferenceId);
+    }
+    if (message.status !== "") {
+      writer.uint32(186).string(message.status);
+    }
+    if (message.blobHash !== "") {
+      writer.uint32(194).string(message.blobHash);
+    }
+    if (message.outputHash !== "") {
+      writer.uint32(202).string(message.outputHash);
+    }
+    if (message.prevHash !== "") {
+      writer.uint32(210).string(message.prevHash);
+    }
+    if (message.lamportClock !== 0) {
+      writer.uint32(216).uint64(message.lamportClock);
+    }
+    if (message.argsHash !== "") {
+      writer.uint32(226).string(message.argsHash);
+    }
+    if (message.executorId !== "") {
+      writer.uint32(234).string(message.executorId);
+    }
+    if (message.effectType !== "") {
+      writer.uint32(242).string(message.effectType);
+    }
+    if (message.toolFingerprint !== "") {
+      writer.uint32(250).string(message.toolFingerprint);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(258).string(message.idempotencyKey);
+    }
+    if (message.toolName !== "") {
+      writer.uint32(266).string(message.toolName);
+    }
+    if (message.reasonCodeText !== "") {
+      writer.uint32(274).string(message.reasonCodeText);
+    }
+    if (message.policyHash !== "") {
+      writer.uint32(282).string(message.policyHash);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(290).string(message.sessionId);
+    }
+    if (message.scopeHash !== "") {
+      writer.uint32(298).string(message.scopeHash);
+    }
+    if (message.issuedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.issuedAt), writer.uint32(306).fork()).join();
+    }
+    if (message.emergencyActivationId !== "") {
+      writer.uint32(314).string(message.emergencyActivationId);
+    }
+    if (message.emergencyDelegationSessionId !== "") {
+      writer.uint32(322).string(message.emergencyDelegationSessionId);
+    }
+    if (message.emergencyScopeHash !== "") {
+      writer.uint32(330).string(message.emergencyScopeHash);
+    }
+    if (message.safeDepState !== "") {
+      writer.uint32(338).string(message.safeDepState);
+    }
+    if (message.safeDepReasonCode !== "") {
+      writer.uint32(346).string(message.safeDepReasonCode);
+    }
+    if (message.networkLogRef !== "") {
+      writer.uint32(354).string(message.networkLogRef);
+    }
+    if (message.secretEventsRef !== "") {
+      writer.uint32(362).string(message.secretEventsRef);
+    }
+    if (message.sandboxLeaseId !== "") {
+      writer.uint32(370).string(message.sandboxLeaseId);
+    }
+    if (message.effectGraphNodeId !== "") {
+      writer.uint32(378).string(message.effectGraphNodeId);
+    }
+    if (message.portExposuresJson.length !== 0) {
+      writer.uint32(386).bytes(message.portExposuresJson);
+    }
+    if (message.replayScriptJson.length !== 0) {
+      writer.uint32(394).bytes(message.replayScriptJson);
+    }
+    if (message.provenanceJson.length !== 0) {
+      writer.uint32(402).bytes(message.provenanceJson);
+    }
+    if (message.bundledArtifactsJson.length !== 0) {
+      writer.uint32(410).bytes(message.bundledArtifactsJson);
+    }
+    if (message.transparencyJson.length !== 0) {
+      writer.uint32(418).bytes(message.transparencyJson);
+    }
+    if (message.logId !== "") {
+      writer.uint32(426).string(message.logId);
+    }
+    if (message.leafIndex !== 0) {
+      writer.uint32(432).uint64(message.leafIndex);
+    }
     return writer;
   },
 
@@ -1144,6 +2087,313 @@ export const Receipt: MessageFns<Receipt> = {
           }
           continue;
         }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.signatureSchema = reader.string();
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.signatureProfile = reader.string();
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.signatureAlgorithm = reader.string();
+          continue;
+        }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.keyId = reader.string();
+          continue;
+        }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          const entry21 = Receipt_PublicKeySetEntry.decode(reader, reader.uint32());
+          if (entry21.value !== undefined) {
+            message.publicKeySet[entry21.key] = entry21.value;
+          }
+          continue;
+        }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.externalReferenceId = reader.string();
+          continue;
+        }
+        case 23: {
+          if (tag !== 186) {
+            break;
+          }
+
+          message.status = reader.string();
+          continue;
+        }
+        case 24: {
+          if (tag !== 194) {
+            break;
+          }
+
+          message.blobHash = reader.string();
+          continue;
+        }
+        case 25: {
+          if (tag !== 202) {
+            break;
+          }
+
+          message.outputHash = reader.string();
+          continue;
+        }
+        case 26: {
+          if (tag !== 210) {
+            break;
+          }
+
+          message.prevHash = reader.string();
+          continue;
+        }
+        case 27: {
+          if (tag !== 216) {
+            break;
+          }
+
+          message.lamportClock = longToNumber(reader.uint64());
+          continue;
+        }
+        case 28: {
+          if (tag !== 226) {
+            break;
+          }
+
+          message.argsHash = reader.string();
+          continue;
+        }
+        case 29: {
+          if (tag !== 234) {
+            break;
+          }
+
+          message.executorId = reader.string();
+          continue;
+        }
+        case 30: {
+          if (tag !== 242) {
+            break;
+          }
+
+          message.effectType = reader.string();
+          continue;
+        }
+        case 31: {
+          if (tag !== 250) {
+            break;
+          }
+
+          message.toolFingerprint = reader.string();
+          continue;
+        }
+        case 32: {
+          if (tag !== 258) {
+            break;
+          }
+
+          message.idempotencyKey = reader.string();
+          continue;
+        }
+        case 33: {
+          if (tag !== 266) {
+            break;
+          }
+
+          message.toolName = reader.string();
+          continue;
+        }
+        case 34: {
+          if (tag !== 274) {
+            break;
+          }
+
+          message.reasonCodeText = reader.string();
+          continue;
+        }
+        case 35: {
+          if (tag !== 282) {
+            break;
+          }
+
+          message.policyHash = reader.string();
+          continue;
+        }
+        case 36: {
+          if (tag !== 290) {
+            break;
+          }
+
+          message.sessionId = reader.string();
+          continue;
+        }
+        case 37: {
+          if (tag !== 298) {
+            break;
+          }
+
+          message.scopeHash = reader.string();
+          continue;
+        }
+        case 38: {
+          if (tag !== 306) {
+            break;
+          }
+
+          message.issuedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 39: {
+          if (tag !== 314) {
+            break;
+          }
+
+          message.emergencyActivationId = reader.string();
+          continue;
+        }
+        case 40: {
+          if (tag !== 322) {
+            break;
+          }
+
+          message.emergencyDelegationSessionId = reader.string();
+          continue;
+        }
+        case 41: {
+          if (tag !== 330) {
+            break;
+          }
+
+          message.emergencyScopeHash = reader.string();
+          continue;
+        }
+        case 42: {
+          if (tag !== 338) {
+            break;
+          }
+
+          message.safeDepState = reader.string();
+          continue;
+        }
+        case 43: {
+          if (tag !== 346) {
+            break;
+          }
+
+          message.safeDepReasonCode = reader.string();
+          continue;
+        }
+        case 44: {
+          if (tag !== 354) {
+            break;
+          }
+
+          message.networkLogRef = reader.string();
+          continue;
+        }
+        case 45: {
+          if (tag !== 362) {
+            break;
+          }
+
+          message.secretEventsRef = reader.string();
+          continue;
+        }
+        case 46: {
+          if (tag !== 370) {
+            break;
+          }
+
+          message.sandboxLeaseId = reader.string();
+          continue;
+        }
+        case 47: {
+          if (tag !== 378) {
+            break;
+          }
+
+          message.effectGraphNodeId = reader.string();
+          continue;
+        }
+        case 48: {
+          if (tag !== 386) {
+            break;
+          }
+
+          message.portExposuresJson = reader.bytes();
+          continue;
+        }
+        case 49: {
+          if (tag !== 394) {
+            break;
+          }
+
+          message.replayScriptJson = reader.bytes();
+          continue;
+        }
+        case 50: {
+          if (tag !== 402) {
+            break;
+          }
+
+          message.provenanceJson = reader.bytes();
+          continue;
+        }
+        case 51: {
+          if (tag !== 410) {
+            break;
+          }
+
+          message.bundledArtifactsJson = reader.bytes();
+          continue;
+        }
+        case 52: {
+          if (tag !== 418) {
+            break;
+          }
+
+          message.transparencyJson = reader.bytes();
+          continue;
+        }
+        case 53: {
+          if (tag !== 426) {
+            break;
+          }
+
+          message.logId = reader.string();
+          continue;
+        }
+        case 54: {
+          if (tag !== 432) {
+            break;
+          }
+
+          message.leafIndex = longToNumber(reader.uint64());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1211,6 +2461,204 @@ export const Receipt: MessageFns<Receipt> = {
           {},
         )
         : {},
+      signatureSchema: isSet(object.signatureSchema)
+        ? globalThis.String(object.signatureSchema)
+        : isSet(object.signature_schema)
+        ? globalThis.String(object.signature_schema)
+        : "",
+      signatureProfile: isSet(object.signatureProfile)
+        ? globalThis.String(object.signatureProfile)
+        : isSet(object.signature_profile)
+        ? globalThis.String(object.signature_profile)
+        : "",
+      signatureAlgorithm: isSet(object.signatureAlgorithm)
+        ? globalThis.String(object.signatureAlgorithm)
+        : isSet(object.signature_algorithm)
+        ? globalThis.String(object.signature_algorithm)
+        : "",
+      keyId: isSet(object.keyId)
+        ? globalThis.String(object.keyId)
+        : isSet(object.key_id)
+        ? globalThis.String(object.key_id)
+        : "",
+      publicKeySet: isObject(object.publicKeySet)
+        ? (globalThis.Object.entries(object.publicKeySet) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.String(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.public_key_set)
+        ? (globalThis.Object.entries(object.public_key_set) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.String(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      externalReferenceId: isSet(object.externalReferenceId)
+        ? globalThis.String(object.externalReferenceId)
+        : isSet(object.external_reference_id)
+        ? globalThis.String(object.external_reference_id)
+        : "",
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      blobHash: isSet(object.blobHash)
+        ? globalThis.String(object.blobHash)
+        : isSet(object.blob_hash)
+        ? globalThis.String(object.blob_hash)
+        : "",
+      outputHash: isSet(object.outputHash)
+        ? globalThis.String(object.outputHash)
+        : isSet(object.output_hash)
+        ? globalThis.String(object.output_hash)
+        : "",
+      prevHash: isSet(object.prevHash)
+        ? globalThis.String(object.prevHash)
+        : isSet(object.prev_hash)
+        ? globalThis.String(object.prev_hash)
+        : "",
+      lamportClock: isSet(object.lamportClock)
+        ? globalThis.Number(object.lamportClock)
+        : isSet(object.lamport_clock)
+        ? globalThis.Number(object.lamport_clock)
+        : 0,
+      argsHash: isSet(object.argsHash)
+        ? globalThis.String(object.argsHash)
+        : isSet(object.args_hash)
+        ? globalThis.String(object.args_hash)
+        : "",
+      executorId: isSet(object.executorId)
+        ? globalThis.String(object.executorId)
+        : isSet(object.executor_id)
+        ? globalThis.String(object.executor_id)
+        : "",
+      effectType: isSet(object.effectType)
+        ? globalThis.String(object.effectType)
+        : isSet(object.effect_type)
+        ? globalThis.String(object.effect_type)
+        : "",
+      toolFingerprint: isSet(object.toolFingerprint)
+        ? globalThis.String(object.toolFingerprint)
+        : isSet(object.tool_fingerprint)
+        ? globalThis.String(object.tool_fingerprint)
+        : "",
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      toolName: isSet(object.toolName)
+        ? globalThis.String(object.toolName)
+        : isSet(object.tool_name)
+        ? globalThis.String(object.tool_name)
+        : "",
+      reasonCodeText: isSet(object.reasonCodeText)
+        ? globalThis.String(object.reasonCodeText)
+        : isSet(object.reason_code_text)
+        ? globalThis.String(object.reason_code_text)
+        : "",
+      policyHash: isSet(object.policyHash)
+        ? globalThis.String(object.policyHash)
+        : isSet(object.policy_hash)
+        ? globalThis.String(object.policy_hash)
+        : "",
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
+      scopeHash: isSet(object.scopeHash)
+        ? globalThis.String(object.scopeHash)
+        : isSet(object.scope_hash)
+        ? globalThis.String(object.scope_hash)
+        : "",
+      issuedAt: isSet(object.issuedAt)
+        ? fromJsonTimestamp(object.issuedAt)
+        : isSet(object.issued_at)
+        ? fromJsonTimestamp(object.issued_at)
+        : undefined,
+      emergencyActivationId: isSet(object.emergencyActivationId)
+        ? globalThis.String(object.emergencyActivationId)
+        : isSet(object.emergency_activation_id)
+        ? globalThis.String(object.emergency_activation_id)
+        : "",
+      emergencyDelegationSessionId: isSet(object.emergencyDelegationSessionId)
+        ? globalThis.String(object.emergencyDelegationSessionId)
+        : isSet(object.emergency_delegation_session_id)
+        ? globalThis.String(object.emergency_delegation_session_id)
+        : "",
+      emergencyScopeHash: isSet(object.emergencyScopeHash)
+        ? globalThis.String(object.emergencyScopeHash)
+        : isSet(object.emergency_scope_hash)
+        ? globalThis.String(object.emergency_scope_hash)
+        : "",
+      safeDepState: isSet(object.safeDepState)
+        ? globalThis.String(object.safeDepState)
+        : isSet(object.safe_dep_state)
+        ? globalThis.String(object.safe_dep_state)
+        : "",
+      safeDepReasonCode: isSet(object.safeDepReasonCode)
+        ? globalThis.String(object.safeDepReasonCode)
+        : isSet(object.safe_dep_reason_code)
+        ? globalThis.String(object.safe_dep_reason_code)
+        : "",
+      networkLogRef: isSet(object.networkLogRef)
+        ? globalThis.String(object.networkLogRef)
+        : isSet(object.network_log_ref)
+        ? globalThis.String(object.network_log_ref)
+        : "",
+      secretEventsRef: isSet(object.secretEventsRef)
+        ? globalThis.String(object.secretEventsRef)
+        : isSet(object.secret_events_ref)
+        ? globalThis.String(object.secret_events_ref)
+        : "",
+      sandboxLeaseId: isSet(object.sandboxLeaseId)
+        ? globalThis.String(object.sandboxLeaseId)
+        : isSet(object.sandbox_lease_id)
+        ? globalThis.String(object.sandbox_lease_id)
+        : "",
+      effectGraphNodeId: isSet(object.effectGraphNodeId)
+        ? globalThis.String(object.effectGraphNodeId)
+        : isSet(object.effect_graph_node_id)
+        ? globalThis.String(object.effect_graph_node_id)
+        : "",
+      portExposuresJson: isSet(object.portExposuresJson)
+        ? bytesFromBase64(object.portExposuresJson)
+        : isSet(object.port_exposures_json)
+        ? bytesFromBase64(object.port_exposures_json)
+        : new Uint8Array(0),
+      replayScriptJson: isSet(object.replayScriptJson)
+        ? bytesFromBase64(object.replayScriptJson)
+        : isSet(object.replay_script_json)
+        ? bytesFromBase64(object.replay_script_json)
+        : new Uint8Array(0),
+      provenanceJson: isSet(object.provenanceJson)
+        ? bytesFromBase64(object.provenanceJson)
+        : isSet(object.provenance_json)
+        ? bytesFromBase64(object.provenance_json)
+        : new Uint8Array(0),
+      bundledArtifactsJson: isSet(object.bundledArtifactsJson)
+        ? bytesFromBase64(object.bundledArtifactsJson)
+        : isSet(object.bundled_artifacts_json)
+        ? bytesFromBase64(object.bundled_artifacts_json)
+        : new Uint8Array(0),
+      transparencyJson: isSet(object.transparencyJson)
+        ? bytesFromBase64(object.transparencyJson)
+        : isSet(object.transparency_json)
+        ? bytesFromBase64(object.transparency_json)
+        : new Uint8Array(0),
+      logId: isSet(object.logId)
+        ? globalThis.String(object.logId)
+        : isSet(object.log_id)
+        ? globalThis.String(object.log_id)
+        : "",
+      leafIndex: isSet(object.leafIndex)
+        ? globalThis.Number(object.leafIndex)
+        : isSet(object.leaf_index)
+        ? globalThis.Number(object.leaf_index)
+        : 0,
     };
   },
 
@@ -1270,6 +2718,126 @@ export const Receipt: MessageFns<Receipt> = {
         });
       }
     }
+    if (message.signatureSchema !== "") {
+      obj.signatureSchema = message.signatureSchema;
+    }
+    if (message.signatureProfile !== "") {
+      obj.signatureProfile = message.signatureProfile;
+    }
+    if (message.signatureAlgorithm !== "") {
+      obj.signatureAlgorithm = message.signatureAlgorithm;
+    }
+    if (message.keyId !== "") {
+      obj.keyId = message.keyId;
+    }
+    if (message.publicKeySet) {
+      const entries = globalThis.Object.entries(message.publicKeySet) as [string, string][];
+      if (entries.length > 0) {
+        obj.publicKeySet = {};
+        entries.forEach(([k, v]) => {
+          obj.publicKeySet[k] = v;
+        });
+      }
+    }
+    if (message.externalReferenceId !== "") {
+      obj.externalReferenceId = message.externalReferenceId;
+    }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.blobHash !== "") {
+      obj.blobHash = message.blobHash;
+    }
+    if (message.outputHash !== "") {
+      obj.outputHash = message.outputHash;
+    }
+    if (message.prevHash !== "") {
+      obj.prevHash = message.prevHash;
+    }
+    if (message.lamportClock !== 0) {
+      obj.lamportClock = Math.round(message.lamportClock);
+    }
+    if (message.argsHash !== "") {
+      obj.argsHash = message.argsHash;
+    }
+    if (message.executorId !== "") {
+      obj.executorId = message.executorId;
+    }
+    if (message.effectType !== "") {
+      obj.effectType = message.effectType;
+    }
+    if (message.toolFingerprint !== "") {
+      obj.toolFingerprint = message.toolFingerprint;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.toolName !== "") {
+      obj.toolName = message.toolName;
+    }
+    if (message.reasonCodeText !== "") {
+      obj.reasonCodeText = message.reasonCodeText;
+    }
+    if (message.policyHash !== "") {
+      obj.policyHash = message.policyHash;
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
+    if (message.scopeHash !== "") {
+      obj.scopeHash = message.scopeHash;
+    }
+    if (message.issuedAt !== undefined) {
+      obj.issuedAt = message.issuedAt.toISOString();
+    }
+    if (message.emergencyActivationId !== "") {
+      obj.emergencyActivationId = message.emergencyActivationId;
+    }
+    if (message.emergencyDelegationSessionId !== "") {
+      obj.emergencyDelegationSessionId = message.emergencyDelegationSessionId;
+    }
+    if (message.emergencyScopeHash !== "") {
+      obj.emergencyScopeHash = message.emergencyScopeHash;
+    }
+    if (message.safeDepState !== "") {
+      obj.safeDepState = message.safeDepState;
+    }
+    if (message.safeDepReasonCode !== "") {
+      obj.safeDepReasonCode = message.safeDepReasonCode;
+    }
+    if (message.networkLogRef !== "") {
+      obj.networkLogRef = message.networkLogRef;
+    }
+    if (message.secretEventsRef !== "") {
+      obj.secretEventsRef = message.secretEventsRef;
+    }
+    if (message.sandboxLeaseId !== "") {
+      obj.sandboxLeaseId = message.sandboxLeaseId;
+    }
+    if (message.effectGraphNodeId !== "") {
+      obj.effectGraphNodeId = message.effectGraphNodeId;
+    }
+    if (message.portExposuresJson.length !== 0) {
+      obj.portExposuresJson = base64FromBytes(message.portExposuresJson);
+    }
+    if (message.replayScriptJson.length !== 0) {
+      obj.replayScriptJson = base64FromBytes(message.replayScriptJson);
+    }
+    if (message.provenanceJson.length !== 0) {
+      obj.provenanceJson = base64FromBytes(message.provenanceJson);
+    }
+    if (message.bundledArtifactsJson.length !== 0) {
+      obj.bundledArtifactsJson = base64FromBytes(message.bundledArtifactsJson);
+    }
+    if (message.transparencyJson.length !== 0) {
+      obj.transparencyJson = base64FromBytes(message.transparencyJson);
+    }
+    if (message.logId !== "") {
+      obj.logId = message.logId;
+    }
+    if (message.leafIndex !== 0) {
+      obj.leafIndex = Math.round(message.leafIndex);
+    }
     return obj;
   },
 
@@ -1302,6 +2870,52 @@ export const Receipt: MessageFns<Receipt> = {
       },
       {},
     );
+    message.signatureSchema = object.signatureSchema ?? "";
+    message.signatureProfile = object.signatureProfile ?? "";
+    message.signatureAlgorithm = object.signatureAlgorithm ?? "";
+    message.keyId = object.keyId ?? "";
+    message.publicKeySet = (globalThis.Object.entries(object.publicKeySet ?? {}) as [string, string][]).reduce(
+      (acc: { [key: string]: string }, [key, value]: [string, string]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    message.externalReferenceId = object.externalReferenceId ?? "";
+    message.status = object.status ?? "";
+    message.blobHash = object.blobHash ?? "";
+    message.outputHash = object.outputHash ?? "";
+    message.prevHash = object.prevHash ?? "";
+    message.lamportClock = object.lamportClock ?? 0;
+    message.argsHash = object.argsHash ?? "";
+    message.executorId = object.executorId ?? "";
+    message.effectType = object.effectType ?? "";
+    message.toolFingerprint = object.toolFingerprint ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.toolName = object.toolName ?? "";
+    message.reasonCodeText = object.reasonCodeText ?? "";
+    message.policyHash = object.policyHash ?? "";
+    message.sessionId = object.sessionId ?? "";
+    message.scopeHash = object.scopeHash ?? "";
+    message.issuedAt = object.issuedAt ?? undefined;
+    message.emergencyActivationId = object.emergencyActivationId ?? "";
+    message.emergencyDelegationSessionId = object.emergencyDelegationSessionId ?? "";
+    message.emergencyScopeHash = object.emergencyScopeHash ?? "";
+    message.safeDepState = object.safeDepState ?? "";
+    message.safeDepReasonCode = object.safeDepReasonCode ?? "";
+    message.networkLogRef = object.networkLogRef ?? "";
+    message.secretEventsRef = object.secretEventsRef ?? "";
+    message.sandboxLeaseId = object.sandboxLeaseId ?? "";
+    message.effectGraphNodeId = object.effectGraphNodeId ?? "";
+    message.portExposuresJson = object.portExposuresJson ?? new Uint8Array(0);
+    message.replayScriptJson = object.replayScriptJson ?? new Uint8Array(0);
+    message.provenanceJson = object.provenanceJson ?? new Uint8Array(0);
+    message.bundledArtifactsJson = object.bundledArtifactsJson ?? new Uint8Array(0);
+    message.transparencyJson = object.transparencyJson ?? new Uint8Array(0);
+    message.logId = object.logId ?? "";
+    message.leafIndex = object.leafIndex ?? 0;
     return message;
   },
 };
@@ -1378,6 +2992,202 @@ export const Receipt_MetadataEntry: MessageFns<Receipt_MetadataEntry> = {
     const message = createBaseReceipt_MetadataEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseReceipt_PublicKeySetEntry(): Receipt_PublicKeySetEntry {
+  return { key: "", value: "" };
+}
+
+export const Receipt_PublicKeySetEntry: MessageFns<Receipt_PublicKeySetEntry> = {
+  encode(message: Receipt_PublicKeySetEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Receipt_PublicKeySetEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseReceipt_PublicKeySetEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Receipt_PublicKeySetEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: Receipt_PublicKeySetEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Receipt_PublicKeySetEntry>, I>>(base?: I): Receipt_PublicKeySetEntry {
+    return Receipt_PublicKeySetEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Receipt_PublicKeySetEntry>, I>>(object: I): Receipt_PublicKeySetEntry {
+    const message = createBaseReceipt_PublicKeySetEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseDecisionInterventionMetadata(): DecisionInterventionMetadata {
+  return { type: "", reasonCode: "", waitDurationNanos: 0, tokensSaved: 0 };
+}
+
+export const DecisionInterventionMetadata: MessageFns<DecisionInterventionMetadata> = {
+  encode(message: DecisionInterventionMetadata, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.type !== "") {
+      writer.uint32(10).string(message.type);
+    }
+    if (message.reasonCode !== "") {
+      writer.uint32(18).string(message.reasonCode);
+    }
+    if (message.waitDurationNanos !== 0) {
+      writer.uint32(24).int64(message.waitDurationNanos);
+    }
+    if (message.tokensSaved !== 0) {
+      writer.uint32(32).int64(message.tokensSaved);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DecisionInterventionMetadata {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDecisionInterventionMetadata();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.type = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.reasonCode = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.waitDurationNanos = longToNumber(reader.int64());
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.tokensSaved = longToNumber(reader.int64());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DecisionInterventionMetadata {
+    return {
+      type: isSet(object.type) ? globalThis.String(object.type) : "",
+      reasonCode: isSet(object.reasonCode)
+        ? globalThis.String(object.reasonCode)
+        : isSet(object.reason_code)
+        ? globalThis.String(object.reason_code)
+        : "",
+      waitDurationNanos: isSet(object.waitDurationNanos)
+        ? globalThis.Number(object.waitDurationNanos)
+        : isSet(object.wait_duration_nanos)
+        ? globalThis.Number(object.wait_duration_nanos)
+        : 0,
+      tokensSaved: isSet(object.tokensSaved)
+        ? globalThis.Number(object.tokensSaved)
+        : isSet(object.tokens_saved)
+        ? globalThis.Number(object.tokens_saved)
+        : 0,
+    };
+  },
+
+  toJSON(message: DecisionInterventionMetadata): unknown {
+    const obj: any = {};
+    if (message.type !== "") {
+      obj.type = message.type;
+    }
+    if (message.reasonCode !== "") {
+      obj.reasonCode = message.reasonCode;
+    }
+    if (message.waitDurationNanos !== 0) {
+      obj.waitDurationNanos = Math.round(message.waitDurationNanos);
+    }
+    if (message.tokensSaved !== 0) {
+      obj.tokensSaved = Math.round(message.tokensSaved);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DecisionInterventionMetadata>, I>>(base?: I): DecisionInterventionMetadata {
+    return DecisionInterventionMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DecisionInterventionMetadata>, I>>(object: I): DecisionInterventionMetadata {
+    const message = createBaseDecisionInterventionMetadata();
+    message.type = object.type ?? "";
+    message.reasonCode = object.reasonCode ?? "";
+    message.waitDurationNanos = object.waitDurationNanos ?? 0;
+    message.tokensSaved = object.tokensSaved ?? 0;
     return message;
   },
 };

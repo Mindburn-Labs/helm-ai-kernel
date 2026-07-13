@@ -97,8 +97,36 @@ func (c *InterceptorChain) Execute(ctx context.Context, evalCtx *EvaluationConte
 
 // signDecisionWithContext binds runtime policy details and signs a DecisionRecord using the Guardian's signer.
 func (g *Guardian) signDecisionWithContext(decision *contracts.DecisionRecord, evalCtx *EvaluationContext) error {
+	bindDecisionRequest(decision, evalCtx.Request)
 	bindRuntimePolicyDecision(decision, evalCtx.ActiveSnapshot, evalCtx.PolicyVersion)
 	return g.signer.SignDecision(decision)
+}
+
+// bindDecisionRequest copies the evaluated request tuple into the decision
+// before signing. Values already supplied by a trusted caller are retained;
+// this keeps every Guardian-produced decision request-bound under v2.
+func bindDecisionRequest(decision *contracts.DecisionRecord, request DecisionRequest) {
+	if decision == nil {
+		return
+	}
+	if decision.SubjectID == "" {
+		decision.SubjectID = request.Principal
+	}
+	if decision.Action == "" {
+		decision.Action = request.Action
+	}
+	if decision.Resource == "" {
+		decision.Resource = request.Resource
+	}
+	if decision.TenantID == "" {
+		decision.TenantID = request.TenantID
+	}
+	if decision.WorkspaceID == "" {
+		decision.WorkspaceID = request.WorkspaceID
+	}
+	if decision.SessionID == "" {
+		decision.SessionID = request.SessionID
+	}
 }
 
 // ── TemporalInterceptor ──
@@ -209,9 +237,9 @@ func (f *FreezeInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationCon
 	// scope is mandatory: allowing an unscoped dispatch would create a direct
 	// bypass around an active workspace fence.
 	if f.g.scopedStopReader != nil {
-		tenantID, hasTenantID := stringContextValue(evalCtx.Request.Context, "tenant_id", "tenantId", "tenant")
-		workspaceID, hasWorkspaceID := stringContextValue(evalCtx.Request.Context, "workspace_id", "workspaceId", "workspace")
-		if !hasTenantID || !hasWorkspaceID {
+		tenantID := strings.TrimSpace(evalCtx.Request.TenantID)
+		workspaceID := strings.TrimSpace(evalCtx.Request.WorkspaceID)
+		if tenantID == "" || workspaceID == "" {
 			return f.scopedStopDeny(evalCtx, contracts.ReasonEmergencyStopScopeRequired, "Tenant and workspace scope are required while emergency-stop fencing is enabled.", nil)
 		}
 		state, fenced, err := f.g.scopedStopReader.IsFenced(ctx, kernel.StopScope{
@@ -269,7 +297,7 @@ func (f *FreezeInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationCon
 }
 
 func (f *FreezeInterceptor) scopedStopDeny(evalCtx *EvaluationContext, code contracts.ReasonCode, reason string, state *kernel.FenceState) (*contracts.DecisionRecord, error) {
-	inputContext, effectDigest, err := scopedStopDecisionBinding(evalCtx.Request.Context, code, state)
+	inputContext, effectDigest, err := scopedStopDecisionBinding(evalCtx.Request.TenantID, evalCtx.Request.WorkspaceID, code, state)
 	if err != nil {
 		return nil, fmt.Errorf("bind scoped emergency-stop deny decision: %w", err)
 	}
@@ -293,9 +321,9 @@ func (f *FreezeInterceptor) scopedStopDeny(evalCtx *EvaluationContext, code cont
 // acknowledgement hash into EffectDigest. EffectDigest is covered by the
 // legacy DecisionRecord signing payload, so these denial references cannot be
 // modified after signing without invalidating the decision.
-func scopedStopDecisionBinding(requestContext map[string]any, code contracts.ReasonCode, state *kernel.FenceState) (map[string]any, string, error) {
-	tenantID, _ := stringContextValue(requestContext, "tenant_id", "tenantId", "tenant")
-	workspaceID, _ := stringContextValue(requestContext, "workspace_id", "workspaceId", "workspace")
+func scopedStopDecisionBinding(tenantID, workspaceID string, code contracts.ReasonCode, state *kernel.FenceState) (map[string]any, string, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	workspaceID = strings.TrimSpace(workspaceID)
 	scopePayload, err := canonicalize.JCS(struct {
 		TenantID    string `json:"tenant_id"`
 		WorkspaceID string `json:"workspace_id"`

@@ -161,14 +161,7 @@ func TestHybridSigner_SignIntent(t *testing.T) {
 	signer, err := NewHybridSigner("hybrid-key-2")
 	require.NoError(t, err)
 
-	intent := &contracts.AuthorizedExecutionIntent{
-		ID:               "intent-hybrid-001",
-		DecisionID:       "dec-hybrid-001",
-		AllowedTool:      "read_file",
-		EffectDigestHash: "sha256:effect-hybrid-001",
-		IssuedAt:         time.Now(),
-		ExpiresAt:        time.Now().Add(time.Hour),
-	}
+	intent := executableIntentFixture("intent-hybrid-001", "dec-hybrid-001", "sha256:effect-hybrid-001", "read_file")
 
 	err = signer.SignIntent(intent)
 	require.NoError(t, err)
@@ -177,22 +170,25 @@ func TestHybridSigner_SignIntent(t *testing.T) {
 	assert.Equal(t, SigPrefixHybrid+SigSeparator+"hybrid-key-2", intent.SignatureType)
 
 	// Verify
-	payload := CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err := signer.Verify([]byte(payload), intent.Signature)
+	payload, err := CanonicalIntentPayload(intent)
+	require.NoError(t, err)
+	valid, err := signer.Verify(payload, intent.Signature)
 	require.NoError(t, err)
 	assert.True(t, valid)
 
 	// Tamper
 	intent.AllowedTool = "delete_file"
-	payloadTampered := CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err = signer.Verify([]byte(payloadTampered), intent.Signature)
+	payloadTampered, err := CanonicalIntentPayload(intent)
+	require.NoError(t, err)
+	valid, err = signer.Verify(payloadTampered, intent.Signature)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered intent")
 
 	intent.AllowedTool = "read_file"
 	intent.EffectDigestHash = "sha256:tampered-effect"
-	payloadTampered = CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err = signer.Verify([]byte(payloadTampered), intent.Signature)
+	payloadTampered, err = CanonicalIntentPayload(intent)
+	require.NoError(t, err)
+	valid, err = signer.Verify(payloadTampered, intent.Signature)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered effect digest")
 }
@@ -224,15 +220,17 @@ func TestHybridSigner_SignReceiptRoundTrip(t *testing.T) {
 	assert.Equal(t, signer.MLDSASigner().PublicKey(), receipt.PublicKeySet[SigPrefixMLDSA65])
 
 	// Verify round-trip
-	payload := CanonicalizeReceipt(receipt.ReceiptID, receipt.DecisionID, receipt.EffectID, receipt.Status, receipt.OutputHash, receipt.PrevHash, receipt.LamportClock, receipt.ArgsHash)
-	valid, err := signer.Verify([]byte(payload), receipt.Signature)
+	payload, err := CanonicalReceiptPayload(receipt)
+	require.NoError(t, err)
+	valid, err := signer.Verify(payload, receipt.Signature)
 	require.NoError(t, err)
 	assert.True(t, valid, "receipt hybrid signature should verify")
 
 	// Tamper the status
 	receipt.Status = "FAILED"
-	payloadTampered := CanonicalizeReceipt(receipt.ReceiptID, receipt.DecisionID, receipt.EffectID, receipt.Status, receipt.OutputHash, receipt.PrevHash, receipt.LamportClock, receipt.ArgsHash)
-	valid, err = signer.Verify([]byte(payloadTampered), receipt.Signature)
+	payloadTampered, err := CanonicalReceiptPayload(receipt)
+	require.NoError(t, err)
+	valid, err = signer.Verify(payloadTampered, receipt.Signature)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered receipt")
 }

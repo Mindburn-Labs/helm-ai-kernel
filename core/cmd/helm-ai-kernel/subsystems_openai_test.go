@@ -5,9 +5,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 func TestReadGovernedOpenAIRequestResetsBody(t *testing.T) {
@@ -46,16 +50,61 @@ func TestReadGovernedOpenAIRequestRejectsOversize(t *testing.T) {
 	}
 }
 
-func TestGovernedOpenAIProxyUnavailableWhenScopedFenceEnabled(t *testing.T) {
+func TestGovernedOpenAIProxyRejectsMissingAuthenticatedTenantScope(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("openai-scope-test")
+	if err != nil {
+		t.Fatal(err)
+	}
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-test","messages":[]}`))
 	rec := httptest.NewRecorder()
 
-	// This route has no authenticated tenant/workspace binding. It must stay
-	// unavailable rather than accepting a caller-selected scope in JSON while
-	// the scoped fence is active.
-	handleGovernedOpenAIProxy(rec, req, &Services{EmergencyStops: &kernel.ScopedStopStore{}})
+	// The JSON body must never be able to supply the tenant or principal that
+	// the proxy uses for its governed decision.
+	handleGovernedOpenAIProxy(rec, req, &Services{Guardian: guardian.NewGuardian(signer, prg.NewGraph(), nil)})
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
 	}
 }
+
+func TestGovernedOpenAIProxyDoesNotForwardWhenDecisionReceiptPersistenceFails(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("openai-receipt-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var upstreamCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls.Add(1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"should-not-forward"}`))
+	}))
+	defer upstream.Close()
+	t.Setenv("HELM_UPSTREAM_URL", upstream.URL)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-test","messages":[]}`))
+	req.Header.Set(sessionHeader, "session-openai-test")
+	req = req.WithContext(helmauth.WithPrincipal(req.Context(), &helmauth.BasePrincipal{ID: "principal-test", TenantID: "tenant-test"}))
+	rec := httptest.NewRecorder()
+
+	// The empty policy graph yields a signed DENY decision. The important
+	// boundary is that receipt persistence fails before either an allow or deny
+	// decision can be exposed to an upstream provider.
+	handleGovernedOpenAIProxy(rec, req, &Services{
+		Guardian:      guardian.NewGuardian(signer, prg.NewGraph(), nil),
+		ReceiptSigner: signer,
+		ReceiptStore:  &captureReceiptStore{storeErr: errReceiptPersistenceTest},
+	})
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
+	}
+	if got := upstreamCalls.Load(); got != 0 {
+		t.Fatalf("upstream calls = %d, want 0 after receipt persistence failure", got)
+	}
+}
+
+var errReceiptPersistenceTest = &openAIReceiptPersistenceError{}
+
+type openAIReceiptPersistenceError struct{}
+
+func (*openAIReceiptPersistenceError) Error() string { return "receipt persistence unavailable" }

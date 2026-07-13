@@ -123,11 +123,12 @@ func TestMLDSASigner_SignIntent(t *testing.T) {
 	}
 
 	intent := &contracts.AuthorizedExecutionIntent{
-		ID:          "intent-pq-001",
-		DecisionID:  "dec-pq-001",
-		AllowedTool: "read_file",
-		IssuedAt:    time.Now(),
-		ExpiresAt:   time.Now().Add(time.Hour),
+		ID:               "intent-pq-001",
+		DecisionID:       "dec-pq-001",
+		EffectDigestHash: "sha256:effect-pq-001",
+		AllowedTool:      "read_file",
+		IssuedAt:         time.Now(),
+		ExpiresAt:        time.Now().Add(time.Hour),
 	}
 
 	if err := signer.SignIntent(intent); err != nil {

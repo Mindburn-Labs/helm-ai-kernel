@@ -48,9 +48,9 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	// --- OpenAI-Compatible Proxy (governed inference) ---
 	// Wraps api.HandleOpenAIProxy with Guardian governance enforcement and receipt headers.
 	// Requires HELM_UPSTREAM_URL to be set for real upstream forwarding.
-	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/chat/completions", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		handleGovernedOpenAIProxy(w, r, svc)
-	})
+	}))
 
 	// --- Evidence Export ---
 	mux.HandleFunc("/api/v1/evidence/soc2", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -341,30 +341,39 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 		api.WriteMethodNotAllowed(w)
 		return
 	}
-	// The public proxy has no authenticated tenant/workspace authority. Leaving
-	// it open while a scoped fence is active would let caller JSON select an
-	// unfenced scope, so it is unavailable until an authenticated adapter
-	// contract is installed.
-	if svc != nil && svc.EmergencyStops != nil {
-		api.WriteError(w, http.StatusServiceUnavailable, "Governed proxy unavailable", "scoped emergency-stop fencing requires an authenticated tenant/workspace boundary")
-		return
-	}
-
 	if svc != nil && svc.Guardian != nil {
 		bodyBytes, body, ok := readGovernedOpenAIRequest(w, r)
 		if !ok {
 			return
 		}
 
+		principal, err := auth.GetPrincipal(r.Context())
+		if err != nil || principal == nil || strings.TrimSpace(principal.GetID()) == "" || strings.TrimSpace(principal.GetTenantID()) == "" {
+			api.WriteForbidden(w, "Governed proxy requires authenticated tenant principal context")
+			return
+		}
+		workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
+		if svc.EmergencyStops != nil {
+			configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
+			if configuredTenantID == "" || principal.GetTenantID() != configuredTenantID || workspaceID == "" || workspaceID != configuredRuntimeWorkspaceID() {
+				api.WriteForbidden(w, "Governed proxy tenant/workspace binding could not be verified")
+				return
+			}
+		}
+		sessionID := strings.TrimSpace(r.Header.Get(sessionHeader))
+		if sessionID == "" {
+			api.WriteBadRequest(w, "Governed proxy requires an explicit session binding")
+			return
+		}
 		model, _ := body["model"].(string)
 		req := guardian.DecisionRequest{
-			Principal: r.Header.Get("X-Helm-Principal"),
-			Action:    "LLM_INFERENCE",
-			Resource:  model,
-			Context:   body,
-		}
-		if req.Principal == "" {
-			req.Principal = "anonymous"
+			Principal:   strings.TrimSpace(principal.GetID()),
+			TenantID:    strings.TrimSpace(principal.GetTenantID()),
+			WorkspaceID: workspaceID,
+			SessionID:   sessionID,
+			Action:      "LLM_INFERENCE",
+			Resource:    model,
+			Context:     body,
 		}
 
 		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
@@ -379,19 +388,15 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 		if decision.PolicyDecisionHash != "" {
 			w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
 		}
-		agentID := r.Header.Get("X-Helm-Agent")
-		if agentID == "" {
-			agentID = r.Header.Get("X-Agent-ID")
-		}
-		if agentID == "" {
-			agentID = req.Principal
-		}
-		persistDecisionReceipt(r.Context(), svc, decision, agentID, bodyBytes, map[string]any{
+		if err := persistDecisionReceipt(r.Context(), svc, decision, req.Principal, bodyBytes, map[string]any{
 			"source":   "openai.proxy",
 			"action":   req.Action,
 			"resource": req.Resource,
 			"reason":   decision.Reason,
-		})
+		}); err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
 
 		if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
 			api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)

@@ -61,15 +61,18 @@ func (s *SQLiteReceiptStore) migrate() error {
 		output_hash TEXT,
 		timestamp DATETIME,
 		executor_id TEXT,
+		session_id TEXT NOT NULL DEFAULT '',
 		metadata JSON,
 		signature TEXT,
 		merkle_root TEXT,
 		prev_hash TEXT NOT NULL DEFAULT '',
 		lamport_clock INTEGER NOT NULL DEFAULT 0,
+		stream_sequence INTEGER,
 		args_hash TEXT NOT NULL DEFAULT '',
 		log_id TEXT NOT NULL DEFAULT '',
 		leaf_index INTEGER NOT NULL DEFAULT 0,
-		transparency TEXT
+		transparency TEXT,
+		receipt_envelope TEXT
 	);`
 	if _, err := s.db.ExecContext(context.Background(), query); err != nil {
 		return err
@@ -86,11 +89,45 @@ func (s *SQLiteReceiptStore) migrate() error {
 	if err := s.ensureColumn("transparency", "TEXT"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn("session_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("stream_sequence", "INTEGER"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("receipt_envelope", "TEXT"); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(context.Background(), `
+		CREATE TABLE IF NOT EXISTS receipt_stream_sequence (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			next_sequence INTEGER NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create receipt stream sequence: %w", err)
+	}
+	// Existing receipts predate the global feed cursor. Use their immutable
+	// rowid once during migration, then advance the dedicated sequence beyond
+	// the backfill before new receipts are accepted.
+	if _, err := s.db.ExecContext(context.Background(), `UPDATE receipts SET stream_sequence = rowid WHERE stream_sequence IS NULL`); err != nil {
+		return fmt.Errorf("backfill receipt stream sequence: %w", err)
+	}
+	if _, err := s.db.ExecContext(context.Background(), `INSERT OR IGNORE INTO receipt_stream_sequence (id, next_sequence) VALUES (1, 0)`); err != nil {
+		return fmt.Errorf("seed receipt stream sequence: %w", err)
+	}
+	if _, err := s.db.ExecContext(context.Background(), `
+		UPDATE receipt_stream_sequence
+		SET next_sequence = MAX(next_sequence, COALESCE((SELECT MAX(stream_sequence) FROM receipts), 0))
+		WHERE id = 1`); err != nil {
+		return fmt.Errorf("synchronize receipt stream sequence: %w", err)
+	}
 	indexes := []string{
+		`DROP INDEX IF EXISTS idx_receipts_executor_lamport_unique`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_executor_id ON receipts(executor_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_decision_id ON receipts(decision_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport ON receipts(executor_id, lamport_clock)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_executor_lamport_unique ON receipts(executor_id, lamport_clock) WHERE executor_id IS NOT NULL AND executor_id <> '' AND lamport_clock > 0`,
+		`CREATE INDEX IF NOT EXISTS idx_receipts_session_lamport ON receipts(session_id, lamport_clock)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_session_lamport_unique ON receipts(session_id, lamport_clock) WHERE session_id IS NOT NULL AND session_id <> '' AND lamport_clock > 0`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_stream_sequence_unique ON receipts(stream_sequence) WHERE stream_sequence IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp)`,
 	}
@@ -135,7 +172,7 @@ func (s *SQLiteReceiptStore) ensureColumn(name, definition string) error {
 
 func (s *SQLiteReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency
+	        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, stream_sequence, args_hash, log_id, leaf_index, transparency, session_id, receipt_envelope
         FROM receipts
         WHERE decision_id = ?
     `
@@ -144,7 +181,7 @@ func (s *SQLiteReceiptStore) Get(ctx context.Context, decisionID string) (*contr
 
 func (s *SQLiteReceiptStore) GetByReceiptID(ctx context.Context, receiptID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency
+	        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, stream_sequence, args_hash, log_id, leaf_index, transparency, session_id, receipt_envelope
         FROM receipts
         WHERE receipt_id = ?
     `
@@ -153,7 +190,7 @@ func (s *SQLiteReceiptStore) GetByReceiptID(ctx context.Context, receiptID strin
 
 func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency
+	        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, stream_sequence, args_hash, log_id, leaf_index, transparency, session_id, receipt_envelope
         FROM receipts
         ORDER BY timestamp DESC
         LIMIT ?
@@ -180,10 +217,10 @@ func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.
 
 func (s *SQLiteReceiptStore) ListByAgent(ctx context.Context, agentID string, since uint64, limit int) ([]*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency
+	        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, stream_sequence, args_hash, log_id, leaf_index, transparency, session_id, receipt_envelope
         FROM receipts
-        WHERE executor_id = ? AND lamport_clock > ?
-        ORDER BY lamport_clock ASC, timestamp ASC
+	        WHERE executor_id = ? AND stream_sequence > ?
+	        ORDER BY stream_sequence ASC
         LIMIT ?
     `
 	rows, err := s.db.QueryContext(ctx, query, agentID, since, limit)
@@ -206,12 +243,43 @@ func (s *SQLiteReceiptStore) ListByAgent(ctx context.Context, agentID string, si
 	return receipts, nil
 }
 
+// ListBySession returns receipts from one signed causal session. Legacy rows
+// without a SessionID remain exportable via their executor ID, but that
+// compatibility path does not establish a v2 causal session.
+func (s *SQLiteReceiptStore) ListBySession(ctx context.Context, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	query := `
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, stream_sequence, args_hash, log_id, leaf_index, transparency, session_id, receipt_envelope
+        FROM receipts
+        WHERE (session_id = ? OR (COALESCE(session_id, '') = '' AND executor_id = ?)) AND stream_sequence > ?
+        ORDER BY stream_sequence ASC
+        LIMIT ?
+    `
+	rows, err := s.db.QueryContext(ctx, query, sessionID, sessionID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var receipts []*contracts.Receipt
+	for rows.Next() {
+		r, err := scanReceiptRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return receipts, nil
+}
+
 func (s *SQLiteReceiptStore) ListSince(ctx context.Context, since uint64, limit int) ([]*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency
+	        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, stream_sequence, args_hash, log_id, leaf_index, transparency, session_id, receipt_envelope
         FROM receipts
-        WHERE lamport_clock > ?
-        ORDER BY lamport_clock ASC, timestamp ASC
+	        WHERE stream_sequence > ?
+	        ORDER BY stream_sequence ASC
         LIMIT ?
     `
 	rows, err := s.db.QueryContext(ctx, query, since, limit)
@@ -242,8 +310,8 @@ func (s *SQLiteReceiptStore) Store(ctx context.Context, r *contracts.Receipt) er
 
 func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Receipt) error {
 	query := `INSERT INTO receipts (
-		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, session_id, metadata, signature, merkle_root, prev_hash, lamport_clock, stream_sequence, args_hash, log_id, leaf_index, transparency, receipt_envelope
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
@@ -253,15 +321,43 @@ func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Rec
 	if err != nil {
 		return err
 	}
+	envelope, err := encodeReceiptEnvelope(r)
+	if err != nil {
+		return err
+	}
 	timestamp := r.Timestamp.UTC().Format(time.RFC3339Nano)
+	queryer, ok := execer.(sqlQueryer)
+	if !ok {
+		return fmt.Errorf("allocate receipt stream sequence: executor does not support queries")
+	}
+	streamSequence, err := nextSQLiteReceiptSequence(ctx, queryer)
+	if err != nil {
+		return err
+	}
+	r.StreamSequence = streamSequence
 
 	_, err = execer.ExecContext(ctx, query,
-		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.LogID, r.LeafIndex, nullableJSON(transparencyJSON),
+		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, r.SessionID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.StreamSequence, r.ArgsHash, r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), nullableJSON(envelope),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
 	}
 	return nil
+}
+
+func nextSQLiteReceiptSequence(ctx context.Context, queryer sqlQueryer) (uint64, error) {
+	var sequence uint64
+	if err := queryer.QueryRowContext(ctx, `
+		UPDATE receipt_stream_sequence
+		SET next_sequence = next_sequence + 1
+		WHERE id = 1
+		RETURNING next_sequence`).Scan(&sequence); err != nil {
+		return 0, fmt.Errorf("allocate receipt stream sequence: %w", err)
+	}
+	if sequence == 0 {
+		return 0, fmt.Errorf("allocate receipt stream sequence: zero sequence")
+	}
+	return sequence, nil
 }
 
 func (s *SQLiteReceiptStore) AppendCausal(ctx context.Context, sessionID string, build CausalReceiptBuilder) error {
@@ -315,9 +411,9 @@ func (s *SQLiteReceiptStore) GetLastForSession(ctx context.Context, sessionID st
 
 func queryLastSQLiteReceipt(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency
+	        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, stream_sequence, args_hash, log_id, leaf_index, transparency, session_id, receipt_envelope
         FROM receipts
-        WHERE executor_id = ?
+        WHERE session_id = ?
         ORDER BY lamport_clock DESC
         LIMIT 1
     `
@@ -348,19 +444,22 @@ func (s *SQLiteReceiptStore) queryOne(ctx context.Context, query string, arg any
 		merkleRoot   sql.NullString
 		prevHash     sql.NullString
 		lamport      uint64
+		streamSeq    uint64
 		argsHash     sql.NullString
 		logID        sql.NullString
 		leafIndex    uint64
 		transparency sql.NullString
+		sessionID    sql.NullString
+		envelope     sql.NullString
 	)
-	err := row.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash, &logID, &leafIndex, &transparency)
+	err := row.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &streamSeq, &argsHash, &logID, &leafIndex, &transparency, &sessionID, &envelope)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("receipt not found")
 		}
 		return nil, err
 	}
-	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, argsHash, logID, leafIndex, transparency)
+	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, streamSeq, argsHash, logID, leafIndex, transparency, sessionID, envelope)
 }
 
 type sqliteScanner interface {
@@ -383,18 +482,21 @@ func scanSQLiteReceipt(scanner sqliteScanner) (*contracts.Receipt, error) {
 		merkleRoot   sql.NullString
 		prevHash     sql.NullString
 		lamport      uint64
+		streamSeq    uint64
 		argsHash     sql.NullString
 		logID        sql.NullString
 		leafIndex    uint64
 		transparency sql.NullString
+		sessionID    sql.NullString
+		envelope     sql.NullString
 	)
-	if err := scanner.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash, &logID, &leafIndex, &transparency); err != nil {
+	if err := scanner.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &streamSeq, &argsHash, &logID, &leafIndex, &transparency, &sessionID, &envelope); err != nil {
 		return nil, err
 	}
-	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, argsHash, logID, leafIndex, transparency)
+	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, streamSeq, argsHash, logID, leafIndex, transparency, sessionID, envelope)
 }
 
-func receiptFromSQLiteFields(receiptID, decisionID, effectID string, externalID sql.NullString, status, blobHash, outputHash, timestamp string, executorID, metaJSON, signature, merkleRoot, prevHash sql.NullString, lamport uint64, argsHash sql.NullString, logID sql.NullString, leafIndex uint64, transparency sql.NullString) (*contracts.Receipt, error) {
+func receiptFromSQLiteFields(receiptID, decisionID, effectID string, externalID sql.NullString, status, blobHash, outputHash, timestamp string, executorID, metaJSON, signature, merkleRoot, prevHash sql.NullString, lamport, streamSeq uint64, argsHash sql.NullString, logID sql.NullString, leafIndex uint64, transparency, sessionID, envelope sql.NullString) (*contracts.Receipt, error) {
 	parsedTime := parseTime(timestamp)
 
 	var meta map[string]any
@@ -414,11 +516,13 @@ func receiptFromSQLiteFields(receiptID, decisionID, effectID string, externalID 
 		BlobHash:            blobHash,
 		OutputHash:          outputHash,
 		ExecutorID:          executorID.String,
+		SessionID:           sessionID.String,
 		Metadata:            meta,
 		Signature:           signature.String,
 		MerkleRoot:          merkleRoot.String,
 		PrevHash:            prevHash.String,
 		LamportClock:        lamport,
+		StreamSequence:      streamSeq,
 		ArgsHash:            argsHash.String,
 		LogID:               logID.String,
 		LeafIndex:           leafIndex,
@@ -427,6 +531,9 @@ func receiptFromSQLiteFields(receiptID, decisionID, effectID string, externalID 
 		if err := decodeTransparencyAnchor([]byte(transparency.String), receipt); err != nil {
 			return nil, err
 		}
+	}
+	if envelope.Valid && envelope.String != "" && envelope.String != "null" {
+		return decodePersistedReceiptEnvelope([]byte(envelope.String), *receipt)
 	}
 	return receipt, nil
 }

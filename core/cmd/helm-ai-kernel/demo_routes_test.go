@@ -46,6 +46,9 @@ func TestDemoRunVerifyAndTamper(t *testing.T) {
 	if runPayload.Receipt.Signature == "" || runPayload.ProofRefs["receipt_hash"] == "" {
 		t.Fatalf("receipt was not signed or proof refs missing: %+v", runPayload)
 	}
+	if runPayload.Receipt.Type != contracts.ReceiptTypeSimulation || runPayload.Receipt.Provenance == nil || runPayload.Receipt.Provenance.Context != "simulation" || runPayload.Receipt.Metadata["simulation_only"] != true {
+		t.Fatalf("demo receipt must be explicitly non-production simulation evidence: %+v", runPayload.Receipt)
+	}
 	if runPayload.Sandbox != demoSandboxLabel {
 		t.Fatalf("sandbox label = %q", runPayload.Sandbox)
 	}
@@ -162,8 +165,8 @@ func TestDemoVerifyRejectsUnsignedEnvelopeMutation(t *testing.T) {
 	if verifyPayload["valid"] != false {
 		t.Fatalf("mutated envelope valid = %v body=%s", verifyPayload["valid"], verifyRec.Body.String())
 	}
-	if verifyPayload["signature_valid"] != true || verifyPayload["hash_matches"] != false {
-		t.Fatalf("unsigned envelope mutation should keep signature valid but fail hash match: %s", verifyRec.Body.String())
+	if verifyPayload["signature_valid"] != false || verifyPayload["hash_matches"] != false {
+		t.Fatalf("metadata mutation must invalidate both signature and receipt hash: %s", verifyRec.Body.String())
 	}
 }
 

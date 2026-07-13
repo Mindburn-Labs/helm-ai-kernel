@@ -38,7 +38,7 @@ type RuntimeRouteSpec struct {
 
 func RuntimeRouteSpecs() []RuntimeRouteSpec {
 	return []RuntimeRouteSpec{
-		{Method: http.MethodPost, Path: "/v1/chat/completions", MuxPattern: "/v1/chat/completions", Auth: RouteAuthPublic, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "chatCompletions", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: "/v1/chat/completions", MuxPattern: "/v1/chat/completions", Auth: RouteAuthTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "chatCompletions", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/internal/policy/reconcile", MuxPattern: "/internal/policy/reconcile", Auth: RouteAuthService, RateLimit: RouteRateAdmin, ContractStatus: RouteContractInternal, OperationID: "wakePolicyReconciler", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: emergencyStopFencePath, MuxPattern: emergencyStopFencePath, Auth: RouteAuthService, RateLimit: RouteRateAdmin, ContractStatus: RouteContractInternal, OperationID: "fenceEmergencyStop", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/v1/extauthz/authorize", MuxPattern: "/api/v1/extauthz/authorize", Auth: RouteAuthService, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "authorizeExtAuthz", Owner: "core/cmd/helm-ai-kernel"},

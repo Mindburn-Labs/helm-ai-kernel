@@ -167,6 +167,7 @@ func TestChannelClassification(t *testing.T) {
 		oss   bool
 	}{
 		{contracts.PackChannelCore, true, true},
+		{contracts.PackChannelIndividual, true, false},
 		{contracts.PackChannelCommunity, true, true},
 		{contracts.PackChannelTeams, true, false},
 		{contracts.PackChannelEnterprise, true, false},

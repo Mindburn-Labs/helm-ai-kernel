@@ -23,7 +23,8 @@ verification, compile, validation, and atomic snapshot swap.
 - Malformed bundles do not partially install.
 - Source, hash, signature, compile, and validation faults retain an active
   last-known-good snapshot only inside its configured bounded window (10
-  minutes by default); a snapshot without an install time is not fresh. `deny`
+  minutes by default); a snapshot without a successful verification time is not
+  fresh. A successful no-change reconciliation refreshes that time. `deny`
   invalidates immediately.
 - On a fault after expiry, or when last-known-good retention is disabled, the reconciler
   invalidates the snapshot and clears its Graph, PDP, and policy layers, so

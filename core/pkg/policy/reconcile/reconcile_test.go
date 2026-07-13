@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +23,25 @@ type mutableSource struct {
 	head   PolicyHead
 	bundle []byte
 	err    error
+}
+
+type serializedReconcileSource struct {
+	*mutableSource
+	secondHead chan struct{}
+
+	mu        sync.Mutex
+	headCalls int
+}
+
+func (s *serializedReconcileSource) Head(ctx context.Context, scope PolicyScope) (PolicyHead, error) {
+	s.mu.Lock()
+	s.headCalls++
+	call := s.headCalls
+	s.mu.Unlock()
+	if call == 2 {
+		close(s.secondHead)
+	}
+	return s.mutableSource.Head(ctx, scope)
 }
 
 func (s *mutableSource) ListScopes(context.Context) ([]PolicyScope, error) {
@@ -433,6 +453,55 @@ func TestReconcilerInvalidUpdateKeepsLastKnownGood(t *testing.T) {
 	}
 }
 
+func TestReconcilerNoChangeRefreshesLastVerifiedAt(t *testing.T) {
+	scope := DefaultScope
+	verifiedAt := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	initialVerification := verifiedAt
+	bundle := []byte("policy-v1")
+	source := &mutableSource{
+		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{
+		Source:            source,
+		Store:             store,
+		Compiler:          testCompiler,
+		KeepLastKnownGood: true,
+		Clock:             func() time.Time { return verifiedAt },
+	})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), scope); err != nil {
+		t.Fatalf("initial reconcile: %v", err)
+	}
+	installed, ok := store.Get(scope)
+	if !ok || !installed.LastVerifiedAt.Equal(verifiedAt) {
+		t.Fatalf("initial verification time was not recorded: %+v", installed)
+	}
+
+	verifiedAt = verifiedAt.Add(DefaultLKGMaxAge - time.Minute)
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if err != nil || status.ReconcileStatus != StatusNoChange || status.Updated {
+		t.Fatalf("expected no-change reconcile, got status=%+v err=%v", status, err)
+	}
+	refreshed, ok := store.Get(scope)
+	if !ok || refreshed == installed || !refreshed.LastVerifiedAt.Equal(verifiedAt) {
+		t.Fatalf("no-change reconcile did not copy and refresh verification time: %+v", refreshed)
+	}
+	if !installed.LastVerifiedAt.Equal(initialVerification) {
+		t.Fatalf("no-change reconcile mutated the prior immutable snapshot: %+v", installed)
+	}
+
+	source.err = errors.New("control plane unavailable")
+	verifiedAt = verifiedAt.Add(time.Minute)
+	status, err = reconciler.Reconcile(context.Background(), scope)
+	if err == nil || status.ReconcileStatus != StatusSourceError || status.SnapshotStatus != StatusActive {
+		t.Fatalf("refreshed last-known-good did not survive the original expiry boundary: status=%+v err=%v", status, err)
+	}
+}
+
 func TestReconcilerSourceFaultKeepsFreshLastKnownGood(t *testing.T) {
 	scope := DefaultScope
 	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
@@ -459,8 +528,8 @@ func TestReconcilerSourceFaultKeepsFreshLastKnownGood(t *testing.T) {
 		t.Fatalf("initial reconcile: %v", err)
 	}
 	current, ok := store.Get(scope)
-	if !ok || !current.InstalledAt.Equal(now) {
-		t.Fatalf("initial snapshot install time was not recorded: %+v", current)
+	if !ok || !current.LastVerifiedAt.Equal(now) {
+		t.Fatalf("initial snapshot verification time was not recorded: %+v", current)
 	}
 
 	source.err = errors.New("control plane unavailable")
@@ -564,14 +633,94 @@ func TestReconcilerSourceFaultWithoutLKGInvalidatesSnapshot(t *testing.T) {
 	assertInvalidSnapshot(t, current)
 }
 
-func TestLastKnownGoodRequiresInstallTime(t *testing.T) {
+func TestLastKnownGoodRequiresVerificationTime(t *testing.T) {
 	reconciler := &Reconciler{
 		keepLastKnownGood: true,
 		lkgMaxAge:         DefaultLKGMaxAge,
 		now:               func() time.Time { return time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC) },
 	}
 	if reconciler.lastKnownGoodFresh(&EffectivePolicySnapshot{Validation: ValidationStatus{Status: StatusActive}}) {
-		t.Fatal("last-known-good snapshot without install time must not be fresh")
+		t.Fatal("last-known-good snapshot without verification time must not be fresh")
+	}
+	if reason := reconciler.lkgInvalidationReason(&EffectivePolicySnapshot{}); reason != lkgMissingVerificationTimeReasonText {
+		t.Fatalf("missing verification time reason = %q", reason)
+	}
+}
+
+func TestReconcilerSerializesFullReconcile(t *testing.T) {
+	scope := DefaultScope
+	bundle := []byte("policy-v1")
+	source := &serializedReconcileSource{
+		mutableSource: &mutableSource{
+			head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)},
+			bundle: bundle,
+		},
+		secondHead: make(chan struct{}),
+	}
+	firstCompiler := make(chan struct{})
+	releaseFirstCompiler := make(chan struct{})
+	var compilerMu sync.Mutex
+	compilerCalls := 0
+	compiler := func(ctx context.Context, head PolicyHead, bundle []byte) (*EffectivePolicySnapshot, error) {
+		compilerMu.Lock()
+		compilerCalls++
+		call := compilerCalls
+		compilerMu.Unlock()
+		if call == 1 {
+			close(firstCompiler)
+			<-releaseFirstCompiler
+		}
+		return testCompiler(ctx, head, bundle)
+	}
+	reconciler, err := NewReconciler(ReconcilerConfig{Source: source, Store: NewAtomicSnapshotStore(), Compiler: compiler})
+	if err != nil {
+		t.Fatalf("new reconciler: %v", err)
+	}
+	releaseCompiler := func() {
+		select {
+		case <-releaseFirstCompiler:
+		default:
+			close(releaseFirstCompiler)
+		}
+	}
+	defer releaseCompiler()
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := reconciler.Reconcile(context.Background(), scope)
+		firstDone <- err
+	}()
+	select {
+	case <-firstCompiler:
+	case <-time.After(time.Second):
+		t.Fatal("first reconcile did not reach the compiler")
+	}
+
+	secondStarted := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		close(secondStarted)
+		_, err := reconciler.Reconcile(context.Background(), scope)
+		secondDone <- err
+	}()
+	<-secondStarted
+	select {
+	case <-source.secondHead:
+		t.Fatal("second reconcile entered the source before the first completed")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	releaseCompiler()
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first reconcile: %v", err)
+	}
+	select {
+	case <-source.secondHead:
+	case <-time.After(time.Second):
+		t.Fatal("second reconcile did not run after the first completed")
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second reconcile: %v", err)
 	}
 }
 

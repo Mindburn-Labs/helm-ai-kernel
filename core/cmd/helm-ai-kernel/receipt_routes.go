@@ -59,7 +59,8 @@ func isReservedEvaluateContextKey(key string) bool {
 		return true
 	}
 	switch key {
-	case "principal_id", "tenant_id", "tenantId", "tenant", "workspace_id", "workspaceId", "workspace":
+	case "principal_id", "tenant_id", "tenantId", "tenant", "workspace_id", "workspaceId", "workspace",
+		"zeroid_token", "spiffe_uri":
 		return true
 	default:
 		return false
@@ -116,7 +117,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
-		if svc.EmergencyStops != nil {
+		if svc.EmergencyStops != nil || svc.PolicySnapshotStore != nil {
 			configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
 			if configuredTenantID == "" || tenantID != configuredTenantID {
 				api.WriteForbidden(w, "Evaluate route tenant binding could not be verified")

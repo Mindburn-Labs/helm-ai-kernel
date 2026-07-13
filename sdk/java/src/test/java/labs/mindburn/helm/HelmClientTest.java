@@ -1,5 +1,8 @@
 package labs.mindburn.helm;
 
+// quantum_posture: evaluator transport conformance only; no cryptographic
+// algorithm, signer, or post-quantum behavior is added or changed here.
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.fasterxml.jackson.databind.ObjectMapper;

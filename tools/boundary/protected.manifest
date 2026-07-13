@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-13T11:08:17Z
-# Commit: 0ea557e90d5e29f3d413f413150a9510d5f7a13f
+# Generated: 2026-07-13T11:42:10Z
+# Commit: 338422ab807229cc97d0749e493885160ba1e79e
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -553,7 +553,7 @@ e9a5bca9890ef8dabef35ea13d2f8e247ce4db9b2f0013135e8d7b32303026ff  core/pkg/api/m
 1b0bd999c7fbe3a0f103f9d365d47560996884885ab545dd04394fcf8ced9caa  core/pkg/api/migrations/001_create_idempotency_keys.sql
 8417977ea4ed473985b07c615c8e74cd24e7979d4c1e6c61f43769fd5b5b5954  core/pkg/api/openai_proxy.go
 4be8ee8acb6f0b94c82093047ea038445bab9b00159310ed9639f33f6730ba58  core/pkg/api/postgres_idempotency.go
-224e7f3c1233cc2f1c9ab094fe22d3f7d667d453094b98b80c7a2ec25e64f93c  core/pkg/api/server.go
+d53dcf7f750ec992e586b9c874e9b9837de42065e4e18b296106ea348bb073a1  core/pkg/api/server.go
 439d4818ac0f8531e7574ab74f01120f3af0c5018b9fbf226f936c2f883c738e  core/pkg/api/server_test.go
 e888eccb011b8a89de4dcbaa5022783a6db33d439734db6b7f213b624ef689ed  core/pkg/api/test_ingestion_test.go
 9c11ae86654c532e4d33e3f11b77427e496fc08a80aea25bf31c12ee644b2a1c  core/pkg/api/trust/handler.go

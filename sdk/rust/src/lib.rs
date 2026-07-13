@@ -1,5 +1,7 @@
 //! HELM SDK — Rust client for the HELM kernel API.
 //! Minimal deps: reqwest + serde.
+//! quantum_posture: SDK transport-contract alignment only; this module does
+//! not add, remove, or alter cryptographic controls or post-quantum claims.
 
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};

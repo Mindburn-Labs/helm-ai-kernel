@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end Kubernetes smoke using kind and the checked-in Helm chart.
+# quantum_posture: this smoke uses a deterministic test signing key only; it
+# does not add, remove, or claim a production or post-quantum crypto control.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -142,7 +144,7 @@ curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/evaluate" \
     -H "Authorization: Bearer ${ADMIN_KEY}" \
     -H "X-Helm-Tenant-ID: ${TENANT_ID}" \
     -H "X-Helm-Principal-ID: ${AGENT_ID}" \
-    --data-binary "{\"principal\":\"${AGENT_ID}\",\"action\":\"EXECUTE_TOOL\",\"resource\":\"unknown.tool.kind\",\"context\":{\"session_id\":\"${AGENT_ID}\"}}" >"$TMP_DIR/decision.json"
+    --data-binary '{"action":"EXECUTE_TOOL","resource":"unknown.tool.kind","context":{"payload_size":1}}' >"$TMP_DIR/decision.json"
 python3 - "$TMP_DIR/decision.json" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))

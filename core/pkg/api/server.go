@@ -3,6 +3,8 @@
 // The served kernel runtime is cmd/helm-ai-kernel serve. Its canonical
 // POST /api/v1/evaluate contract is defined by api/openapi/helm.openapi.yaml
 // and is not implemented by this in-memory compatibility server.
+// quantum_posture: compatibility-route retirement only; this package does not
+// add, remove, or alter any cryptographic control or post-quantum claim.
 //
 // Compatibility endpoints:
 //

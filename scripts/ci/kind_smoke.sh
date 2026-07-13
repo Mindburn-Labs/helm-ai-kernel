@@ -15,6 +15,7 @@ API_PORT="${HELM_SMOKE_API_PORT:-18080}"
 ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
+WORKSPACE_ID="${HELM_SMOKE_WORKSPACE_ID:-default}"
 KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2}"
 CREATED_CLUSTER=0
 PF_PID=""
@@ -121,6 +122,7 @@ helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --set helm.auth.serviceAPIKey="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}" \
     --set helm.auth.tenantID="$TENANT_ID" \
     --set helm.auth.principalID="$AGENT_ID" \
+    --set helm.auth.workspaceID="$WORKSPACE_ID" \
     --set image.repository="${IMAGE%:*}" \
     --set image.tag="${IMAGE##*:}" \
     --set image.pullPolicy=IfNotPresent \
@@ -144,6 +146,7 @@ curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/evaluate" \
     -H "Authorization: Bearer ${ADMIN_KEY}" \
     -H "X-Helm-Tenant-ID: ${TENANT_ID}" \
     -H "X-Helm-Principal-ID: ${AGENT_ID}" \
+    -H "X-Helm-Workspace-ID: ${WORKSPACE_ID}" \
     --data-binary '{"action":"EXECUTE_TOOL","resource":"unknown.tool.kind","context":{"payload_size":1}}' >"$TMP_DIR/decision.json"
 python3 - "$TMP_DIR/decision.json" <<'PY'
 import json, sys
@@ -152,7 +155,7 @@ if str(payload.get("verdict", "")).upper() != "DENY":
     raise SystemExit(f"expected DENY decision: {payload}")
 PY
 
-AUTH=(-H "Authorization: Bearer ${ADMIN_KEY}" -H "X-Helm-Tenant-ID: ${TENANT_ID}" -H "X-Helm-Principal-ID: ${AGENT_ID}")
+AUTH=(-H "Authorization: Bearer ${ADMIN_KEY}" -H "X-Helm-Tenant-ID: ${TENANT_ID}" -H "X-Helm-Principal-ID: ${AGENT_ID}" -H "X-Helm-Workspace-ID: ${WORKSPACE_ID}")
 status="$(curl -sS -o "$TMP_DIR/no-auth.json" -w '%{http_code}' "http://127.0.0.1:${API_PORT}/api/v1/receipts?limit=1")"
 test "$status" = "401" || { echo "::error::expected 401 without auth, got $status"; exit 1; }
 

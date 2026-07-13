@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
@@ -88,6 +89,45 @@ func TestPolicySourceFromEnvRejectsUnknownKind(t *testing.T) {
 	_, _, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
 	if err == nil || !strings.Contains(err.Error(), "unsupported HELM_POLICY_SOURCE_KIND") {
 		t.Fatalf("expected unknown kind error, got %v", err)
+	}
+}
+
+func TestPolicyLastKnownGoodConfigFromEnv(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		keep, maxAge, err := policyLastKnownGoodConfigFromEnv()
+		if err != nil || !keep || maxAge != policyreconcile.DefaultLKGMaxAge {
+			t.Fatalf("default config = keep=%v maxAge=%s err=%v", keep, maxAge, err)
+		}
+	})
+
+	t.Run("deny", func(t *testing.T) {
+		t.Setenv("HELM_POLICY_ON_INVALID_UPDATE", "deny")
+		keep, maxAge, err := policyLastKnownGoodConfigFromEnv()
+		if err != nil || keep || maxAge != 0 {
+			t.Fatalf("deny config = keep=%v maxAge=%s err=%v", keep, maxAge, err)
+		}
+	})
+
+	t.Run("configured retention", func(t *testing.T) {
+		t.Setenv("HELM_POLICY_ON_INVALID_UPDATE", "keepLastKnownGood")
+		t.Setenv("HELM_POLICY_LAST_KNOWN_GOOD_MAX_AGE", "45s")
+		keep, maxAge, err := policyLastKnownGoodConfigFromEnv()
+		if err != nil || !keep || maxAge != 45*time.Second {
+			t.Fatalf("configured retention = keep=%v maxAge=%s err=%v", keep, maxAge, err)
+		}
+	})
+
+	for _, name := range []string{"unknown action", "invalid duration"} {
+		t.Run(name, func(t *testing.T) {
+			if name == "unknown action" {
+				t.Setenv("HELM_POLICY_ON_INVALID_UPDATE", "allow")
+			} else {
+				t.Setenv("HELM_POLICY_LAST_KNOWN_GOOD_MAX_AGE", "later")
+			}
+			if _, _, err := policyLastKnownGoodConfigFromEnv(); err == nil {
+				t.Fatal("expected invalid LKG config to fail")
+			}
+		})
 	}
 }
 

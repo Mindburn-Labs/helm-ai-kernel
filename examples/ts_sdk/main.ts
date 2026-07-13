@@ -51,20 +51,21 @@ async function requireMcpDenial(client: InstanceType<typeof HelmClient>): Promis
 }
 
 const helmUrl = process.env.HELM_URL ?? 'http://127.0.0.1:7715';
+const principalId = process.env.HELM_PRINCIPAL_ID ?? 'sdk-ts-agent';
 const helm = new HelmClient({
   baseUrl: helmUrl,
   apiKey: process.env.HELM_ADMIN_API_KEY,
-  tenantId: process.env.HELM_TENANT_ID ?? 'sdk-ts-example',
+  tenantId: process.env.HELM_TENANT_ID ?? 'default',
+  principalId,
+  workspaceId: process.env.HELM_WORKSPACE_ID ?? 'default',
 });
 
 const allowed = await helm.evaluateDecision({
-  principal: 'sdk-ts-agent',
   action: 'read-ticket',
   resource: 'ticket:SDK-200',
   context: { example: 'ts-sdk' },
 });
 const denied = await helm.evaluateDecision({
-  principal: 'sdk-ts-agent',
   action: 'dangerous-shell',
   resource: 'system:shell',
   context: { example: 'ts-sdk' },
@@ -89,7 +90,7 @@ const preflight = await helm.preflightSandboxGrant({
 });
 requireVerdict(preflight, 'ALLOW', 'sandbox preflight');
 
-const evidence = await helm.exportEvidence('sdk-ts-agent');
+const evidence = await helm.exportEvidence(principalId);
 const evidenceResult = await helm.verifyEvidence(evidence);
 if (evidenceResult.verdict !== 'PASS') {
   throw new Error(`evidence verification failed: ${JSON.stringify(evidenceResult)}`);

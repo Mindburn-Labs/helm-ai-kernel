@@ -97,6 +97,7 @@ func (c *InterceptorChain) Execute(ctx context.Context, evalCtx *EvaluationConte
 
 // signDecisionWithContext binds runtime policy details and signs a DecisionRecord using the Guardian's signer.
 func (g *Guardian) signDecisionWithContext(decision *contracts.DecisionRecord, evalCtx *EvaluationContext) error {
+	g.bindDecisionToRequest(decision, evalCtx.Request)
 	bindRuntimePolicyDecision(decision, evalCtx.ActiveSnapshot, evalCtx.PolicyVersion)
 	return g.signer.SignDecision(decision)
 }

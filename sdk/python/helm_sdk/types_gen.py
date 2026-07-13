@@ -4934,15 +4934,36 @@ class DecisionRecord(BaseModel):
     """
     DecisionRecord
     """ # noqa: E501
-    id: Optional[StrictStr] = None
-    action: Optional[StrictStr] = None
-    resource: Optional[StrictStr] = None
-    verdict: Optional[StrictStr] = None
-    reason: Optional[StrictStr] = None
-    policy_version: Optional[StrictStr] = None
+    id: StrictStr
+    proposal_id: StrictStr
+    step_id: StrictStr
+    phenotype_hash: StrictStr
+    policy_version: StrictStr
+    subject_id: StrictStr
+    action: StrictStr
+    resource: StrictStr
+    effect_digest: Optional[StrictStr] = None
+    policy_backend: Optional[StrictStr] = None
+    policy_content_hash: Optional[StrictStr] = None
+    policy_epoch: Optional[StrictStr] = None
+    state_cursor: StrictStr
+    snapshot: Optional[StrictStr] = None
+    env_fingerprint: StrictStr
+    verdict: StrictStr
+    reason: StrictStr
+    reason_code: Optional[StrictStr] = None
+    input_context: Optional[Dict[str, Any]] = None
+    trajectory_risk_score: Optional[Union[StrictFloat, StrictInt]] = None
+    session_centroid_hash: Optional[StrictStr] = None
+    risk_accumulation_window: Optional[StrictInt] = None
+    requirement_set_hash: Optional[StrictStr] = None
     policy_decision_hash: Optional[StrictStr] = None
-    signature: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["id", "action", "resource", "verdict", "reason", "policy_version", "policy_decision_hash", "signature"]
+    signature: StrictStr
+    signature_type: StrictStr
+    timestamp: datetime
+    intervention: Optional[InterventionMetadata] = None
+    additional_properties: Dict[str, Any] = {}
+    __properties: ClassVar[List[str]] = ["id", "proposal_id", "step_id", "phenotype_hash", "policy_version", "subject_id", "action", "resource", "effect_digest", "policy_backend", "policy_content_hash", "policy_epoch", "state_cursor", "snapshot", "env_fingerprint", "verdict", "reason", "reason_code", "input_context", "trajectory_risk_score", "session_centroid_hash", "risk_accumulation_window", "requirement_set_hash", "policy_decision_hash", "signature", "signature_type", "timestamp", "intervention"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -4974,8 +4995,10 @@ class DecisionRecord(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
+        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
+            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -4983,6 +5006,14 @@ class DecisionRecord(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of intervention
+        if self.intervention:
+            _dict['intervention'] = self.intervention.to_dict()
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
+
         return _dict
 
     @classmethod
@@ -4996,14 +5027,39 @@ class DecisionRecord(BaseModel):
 
         _obj = cls.model_validate({
             "id": obj.get("id"),
+            "proposal_id": obj.get("proposal_id"),
+            "step_id": obj.get("step_id"),
+            "phenotype_hash": obj.get("phenotype_hash"),
+            "policy_version": obj.get("policy_version"),
+            "subject_id": obj.get("subject_id"),
             "action": obj.get("action"),
             "resource": obj.get("resource"),
+            "effect_digest": obj.get("effect_digest"),
+            "policy_backend": obj.get("policy_backend"),
+            "policy_content_hash": obj.get("policy_content_hash"),
+            "policy_epoch": obj.get("policy_epoch"),
+            "state_cursor": obj.get("state_cursor"),
+            "snapshot": obj.get("snapshot"),
+            "env_fingerprint": obj.get("env_fingerprint"),
             "verdict": obj.get("verdict"),
             "reason": obj.get("reason"),
-            "policy_version": obj.get("policy_version"),
+            "reason_code": obj.get("reason_code"),
+            "input_context": obj.get("input_context"),
+            "trajectory_risk_score": obj.get("trajectory_risk_score"),
+            "session_centroid_hash": obj.get("session_centroid_hash"),
+            "risk_accumulation_window": obj.get("risk_accumulation_window"),
+            "requirement_set_hash": obj.get("requirement_set_hash"),
             "policy_decision_hash": obj.get("policy_decision_hash"),
-            "signature": obj.get("signature")
+            "signature": obj.get("signature"),
+            "signature_type": obj.get("signature_type"),
+            "timestamp": obj.get("timestamp"),
+            "intervention": InterventionMetadata.from_dict(obj["intervention"]) if obj.get("intervention") is not None else None
         })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
         return _obj
 
 
@@ -5024,13 +5080,13 @@ class DecisionRecord(BaseModel):
 
 class DecisionRequest(BaseModel):
     """
-    DecisionRequest
+    Canonical body for POST /api/v1/evaluate. Identity and trusted transport metadata are not accepted in this object; the runtime binds them from verified request headers.
     """ # noqa: E501
-    principal: Optional[StrictStr] = None
     action: StrictStr
     resource: StrictStr
-    context: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["principal", "action", "resource", "context"]
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Application context for policy evaluation. It must not include tenant, principal, workspace, or Guardian reserved security keys; those are owned by the authenticated transport boundary. ")
+    additional_properties: Dict[str, Any] = {}
+    __properties: ClassVar[List[str]] = ["action", "resource", "context"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -5062,8 +5118,10 @@ class DecisionRequest(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
+        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
+            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -5071,6 +5129,11 @@ class DecisionRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
+
         return _dict
 
     @classmethod
@@ -5083,11 +5146,15 @@ class DecisionRequest(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "principal": obj.get("principal"),
             "action": obj.get("action"),
             "resource": obj.get("resource"),
             "context": obj.get("context")
         })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
         return _obj
 
 
@@ -8298,6 +8365,103 @@ class ImportPreflightResult(BaseModel):
             "checks": [PreflightCheck.from_dict(_item) for _item in obj["checks"]] if obj.get("checks") is not None else None,
             "blocked_reasons": obj.get("blocked_reasons"),
             "evidence_ledger": ImportEvidenceLedger.from_dict(obj["evidence_ledger"]) if obj.get("evidence_ledger") is not None else None
+        })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
+        return _obj
+
+
+
+"""
+    HELM Kernel API
+
+    Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+
+    The version of the OpenAPI document: 0.7.2
+    Generated by OpenAPI Generator (https://openapi-generator.tech)
+
+    Do not edit the class manually.
+"""  # noqa: E501
+
+
+
+
+class InterventionMetadata(BaseModel):
+    """
+    InterventionMetadata
+    """ # noqa: E501
+    type: StrictStr
+    reason_code: StrictStr
+    wait_duration: Optional[StrictInt] = None
+    tokens_saved: Optional[StrictInt] = None
+    additional_properties: Dict[str, Any] = {}
+    __properties: ClassVar[List[str]] = ["type", "reason_code", "wait_duration", "tokens_saved"]
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        validate_assignment=True,
+        protected_namespaces=(),
+    )
+
+
+    def to_str(self) -> str:
+        """Returns the string representation of the model using alias"""
+        return pprint.pformat(self.model_dump(by_alias=True))
+
+    def to_json(self) -> str:
+        """Returns the JSON representation of the model using alias"""
+        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
+        return json.dumps(self.to_dict())
+
+    @classmethod
+    def from_json(cls, json_str: str) -> Optional[Self]:
+        """Create an instance of InterventionMetadata from a JSON string"""
+        return cls.from_dict(json.loads(json_str))
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return the dictionary representation of the model using alias.
+
+        This has the following differences from calling pydantic's
+        `self.model_dump(by_alias=True)`:
+
+        * `None` is only added to the output dict for nullable fields that
+          were set at model initialization. Other fields with value `None`
+          are ignored.
+        * Fields in `self.additional_properties` are added to the output dict.
+        """
+        excluded_fields: Set[str] = set([
+            "additional_properties",
+        ])
+
+        _dict = self.model_dump(
+            by_alias=True,
+            exclude=excluded_fields,
+            exclude_none=True,
+        )
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
+
+        return _dict
+
+    @classmethod
+    def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
+        """Create an instance of InterventionMetadata from a dict"""
+        if obj is None:
+            return None
+
+        if not isinstance(obj, dict):
+            return cls.model_validate(obj)
+
+        _obj = cls.model_validate({
+            "type": obj.get("type"),
+            "reason_code": obj.get("reason_code"),
+            "wait_duration": obj.get("wait_duration"),
+            "tokens_saved": obj.get("tokens_saved")
         })
         # store additional fields in additional_properties
         for _key in obj.keys():

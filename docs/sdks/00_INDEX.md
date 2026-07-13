@@ -1,6 +1,6 @@
 ---
 title: SDKs
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-13
 ---
 
 # SDKs
@@ -82,6 +82,15 @@ let client = HelmClient::new("http://127.0.0.1:7714");
 ```java
 HelmClient client = new HelmClient("http://127.0.0.1:7714");
 ```
+
+## Evaluate Contract
+
+For `POST /api/v1/evaluate`, configure a client with the admin key, tenant ID,
+and principal ID. The optional workspace ID is required only when the server's
+scoped emergency-stop fence is active. Pass a typed body containing only
+`action`, `resource`, and optional `context`; body identity, `session_history`,
+and legacy evaluator payloads are rejected. See the [HTTP API reference](../reference/http-api.md#canonical-evaluate-contract)
+for the full migration boundary.
 
 ## Client Behavior
 

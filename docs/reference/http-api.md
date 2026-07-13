@@ -1,6 +1,6 @@
 ---
 title: HTTP API
-last_reviewed: 2026-07-11
+last_reviewed: 2026-07-13
 ---
 
 # HTTP API
@@ -56,6 +56,46 @@ work.
 The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
 unavailable while this fence is enabled because request JSON is not an
 authoritative tenant/workspace binding.
+
+## Canonical Evaluate Contract
+
+`POST /api/v1/evaluate` accepts one strict JSON body:
+
+```json
+{
+  "action": "EXECUTE_TOOL",
+  "resource": "local.echo",
+  "context": {
+    "request_id": "request-123"
+  }
+}
+```
+
+`Authorization: Bearer $HELM_ADMIN_API_KEY`, `X-Helm-Tenant-ID`, and
+`X-Helm-Principal-ID` are required. `X-Helm-Workspace-ID` is optional unless
+the scoped emergency-stop fence is enabled, when it must match the
+server-owned workspace binding.
+
+The body cannot select identity, tenant, workspace, or trusted security
+metadata. Top-level `principal`, `session_history`, legacy evaluator fields,
+and unknown fields are rejected with `400`. `context` must not contain
+`principal_id`, tenant or workspace aliases, or Guardian-owned keys such as
+`security_context_trusted`, `credential_hash`, `session_id`,
+`source_channel`, `trust_level`, or `destination`.
+
+Each invocation is evaluated independently. This route does not advertise
+`Idempotency-Key` replay or conflict semantics. Its response is the typed,
+signed `DecisionRecord`; the authenticated principal, action, and resource are
+bound before it is signed.
+
+### Migration
+
+The former generic/legacy evaluator payload is retired. Do not send
+`tool`, `args`, `agent_id`, `effect_level`, `session_id`, or body `principal`
+to `/api/v1/evaluate`; do not retain a dual-payload fallback. Use the typed
+`DecisionRequest` and SDK identity configuration instead. Framework adapter
+helpers submit governed chat completions and are not direct evaluator
+conformance evidence.
 
 ## Receipt Headers
 

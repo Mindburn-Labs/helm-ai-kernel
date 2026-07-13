@@ -5358,48 +5358,152 @@ export function CreateSandboxGrantRequestToJSON(value?: CreateSandboxGrantReques
  * Do not edit the class manually.
  */
 
+
 /**
  *
  * @export
  * @interface DecisionRecord
  */
 export interface DecisionRecord {
+    [key: string]: any | any;
     /**
      *
      * @type {string}
      * @memberof DecisionRecord
      */
-    id?: string;
+    id: string;
     /**
      *
      * @type {string}
      * @memberof DecisionRecord
      */
-    action?: string;
+    proposal_id: string;
     /**
      *
      * @type {string}
      * @memberof DecisionRecord
      */
-    resource?: string;
+    step_id: string;
     /**
      *
      * @type {string}
      * @memberof DecisionRecord
      */
-    verdict?: string;
+    phenotype_hash: string;
     /**
      *
      * @type {string}
      * @memberof DecisionRecord
      */
-    reason?: string;
+    policy_version: string;
     /**
      *
      * @type {string}
      * @memberof DecisionRecord
      */
-    policy_version?: string;
+    subject_id: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    action: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    resource: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    effect_digest?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_backend?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_content_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_epoch?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    state_cursor: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    snapshot?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    env_fingerprint: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    verdict: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    reason: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    reason_code?: string;
+    /**
+     *
+     * @type {object}
+     * @memberof DecisionRecord
+     */
+    input_context?: object;
+    /**
+     *
+     * @type {number}
+     * @memberof DecisionRecord
+     */
+    trajectory_risk_score?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    session_centroid_hash?: string;
+    /**
+     *
+     * @type {number}
+     * @memberof DecisionRecord
+     */
+    risk_accumulation_window?: number;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    requirement_set_hash?: string;
     /**
      *
      * @type {string}
@@ -5411,13 +5515,46 @@ export interface DecisionRecord {
      * @type {string}
      * @memberof DecisionRecord
      */
-    signature?: string;
+    signature: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    signature_type: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof DecisionRecord
+     */
+    timestamp: Date;
+    /**
+     *
+     * @type {InterventionMetadata}
+     * @memberof DecisionRecord
+     */
+    intervention?: InterventionMetadata;
 }
 
 /**
  * Check if a given object implements the DecisionRecord interface.
  */
 export function instanceOfDecisionRecord(value: object): boolean {
+    if (!('id' in value)) return false;
+    if (!('proposal_id' in value)) return false;
+    if (!('step_id' in value)) return false;
+    if (!('phenotype_hash' in value)) return false;
+    if (!('policy_version' in value)) return false;
+    if (!('subject_id' in value)) return false;
+    if (!('action' in value)) return false;
+    if (!('resource' in value)) return false;
+    if (!('state_cursor' in value)) return false;
+    if (!('env_fingerprint' in value)) return false;
+    if (!('verdict' in value)) return false;
+    if (!('reason' in value)) return false;
+    if (!('signature' in value)) return false;
+    if (!('signature_type' in value)) return false;
+    if (!('timestamp' in value)) return false;
     return true;
 }
 
@@ -5431,14 +5568,35 @@ export function DecisionRecordFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
 
-        'id': json['id'] == null ? undefined : json['id'],
-        'action': json['action'] == null ? undefined : json['action'],
-        'resource': json['resource'] == null ? undefined : json['resource'],
-        'verdict': json['verdict'] == null ? undefined : json['verdict'],
-        'reason': json['reason'] == null ? undefined : json['reason'],
-        'policy_version': json['policy_version'] == null ? undefined : json['policy_version'],
+            ...json,
+        'id': json['id'],
+        'proposal_id': json['proposal_id'],
+        'step_id': json['step_id'],
+        'phenotype_hash': json['phenotype_hash'],
+        'policy_version': json['policy_version'],
+        'subject_id': json['subject_id'],
+        'action': json['action'],
+        'resource': json['resource'],
+        'effect_digest': json['effect_digest'] == null ? undefined : json['effect_digest'],
+        'policy_backend': json['policy_backend'] == null ? undefined : json['policy_backend'],
+        'policy_content_hash': json['policy_content_hash'] == null ? undefined : json['policy_content_hash'],
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
+        'state_cursor': json['state_cursor'],
+        'snapshot': json['snapshot'] == null ? undefined : json['snapshot'],
+        'env_fingerprint': json['env_fingerprint'],
+        'verdict': json['verdict'],
+        'reason': json['reason'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
+        'input_context': json['input_context'] == null ? undefined : json['input_context'],
+        'trajectory_risk_score': json['trajectory_risk_score'] == null ? undefined : json['trajectory_risk_score'],
+        'session_centroid_hash': json['session_centroid_hash'] == null ? undefined : json['session_centroid_hash'],
+        'risk_accumulation_window': json['risk_accumulation_window'] == null ? undefined : json['risk_accumulation_window'],
+        'requirement_set_hash': json['requirement_set_hash'] == null ? undefined : json['requirement_set_hash'],
         'policy_decision_hash': json['policy_decision_hash'] == null ? undefined : json['policy_decision_hash'],
-        'signature': json['signature'] == null ? undefined : json['signature'],
+        'signature': json['signature'],
+        'signature_type': json['signature_type'],
+        'timestamp': (new Date(json['timestamp'])),
+        'intervention': json['intervention'] == null ? undefined : InterventionMetadataFromJSON(json['intervention']),
     };
 }
 
@@ -5448,14 +5606,35 @@ export function DecisionRecordToJSON(value?: DecisionRecord | null): any {
     }
     return {
 
+            ...value,
         'id': value['id'],
+        'proposal_id': value['proposal_id'],
+        'step_id': value['step_id'],
+        'phenotype_hash': value['phenotype_hash'],
+        'policy_version': value['policy_version'],
+        'subject_id': value['subject_id'],
         'action': value['action'],
         'resource': value['resource'],
+        'effect_digest': value['effect_digest'],
+        'policy_backend': value['policy_backend'],
+        'policy_content_hash': value['policy_content_hash'],
+        'policy_epoch': value['policy_epoch'],
+        'state_cursor': value['state_cursor'],
+        'snapshot': value['snapshot'],
+        'env_fingerprint': value['env_fingerprint'],
         'verdict': value['verdict'],
         'reason': value['reason'],
-        'policy_version': value['policy_version'],
+        'reason_code': value['reason_code'],
+        'input_context': value['input_context'],
+        'trajectory_risk_score': value['trajectory_risk_score'],
+        'session_centroid_hash': value['session_centroid_hash'],
+        'risk_accumulation_window': value['risk_accumulation_window'],
+        'requirement_set_hash': value['requirement_set_hash'],
         'policy_decision_hash': value['policy_decision_hash'],
         'signature': value['signature'],
+        'signature_type': value['signature_type'],
+        'timestamp': ((value['timestamp']).toISOString()),
+        'intervention': InterventionMetadataToJSON(value['intervention']),
     };
 }
 
@@ -5474,17 +5653,15 @@ export function DecisionRecordToJSON(value?: DecisionRecord | null): any {
  */
 
 /**
+ * Canonical body for POST /api/v1/evaluate. Identity and trusted
+ * transport metadata are not accepted in this object; the runtime binds
+ * them from verified request headers.
  *
  * @export
  * @interface DecisionRequest
  */
 export interface DecisionRequest {
-    /**
-     *
-     * @type {string}
-     * @memberof DecisionRequest
-     */
-    principal?: string;
+    [key: string]: any | any;
     /**
      *
      * @type {string}
@@ -5498,11 +5675,14 @@ export interface DecisionRequest {
      */
     resource: string;
     /**
+     * Application context for policy evaluation. It must not include
+     * tenant, principal, workspace, or Guardian reserved security keys;
+     * those are owned by the authenticated transport boundary.
      *
-     * @type {{ [key: string]: any; }}
+     * @type {object}
      * @memberof DecisionRequest
      */
-    context?: { [key: string]: any; };
+    context?: object;
 }
 
 /**
@@ -5524,7 +5704,7 @@ export function DecisionRequestFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
 
-        'principal': json['principal'] == null ? undefined : json['principal'],
+            ...json,
         'action': json['action'],
         'resource': json['resource'],
         'context': json['context'] == null ? undefined : json['context'],
@@ -5537,7 +5717,7 @@ export function DecisionRequestToJSON(value?: DecisionRequest | null): any {
     }
     return {
 
-        'principal': value['principal'],
+            ...value,
         'action': value['action'],
         'resource': value['resource'],
         'context': value['context'],
@@ -9219,6 +9399,94 @@ export function ImportPreflightResultToJSON(value?: ImportPreflightResult | null
         'checks': ((value['checks'] as Array<any>).map(PreflightCheckToJSON)),
         'blocked_reasons': value['blocked_reasons'],
         'evidence_ledger': ImportEvidenceLedgerToJSON(value['evidence_ledger']),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface InterventionMetadata
+ */
+export interface InterventionMetadata {
+    [key: string]: any | any;
+    /**
+     *
+     * @type {string}
+     * @memberof InterventionMetadata
+     */
+    type: string;
+    /**
+     *
+     * @type {string}
+     * @memberof InterventionMetadata
+     */
+    reason_code: string;
+    /**
+     *
+     * @type {number}
+     * @memberof InterventionMetadata
+     */
+    wait_duration?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof InterventionMetadata
+     */
+    tokens_saved?: number;
+}
+
+/**
+ * Check if a given object implements the InterventionMetadata interface.
+ */
+export function instanceOfInterventionMetadata(value: object): boolean {
+    if (!('type' in value)) return false;
+    if (!('reason_code' in value)) return false;
+    return true;
+}
+
+export function InterventionMetadataFromJSON(json: any): InterventionMetadata {
+    return InterventionMetadataFromJSONTyped(json, false);
+}
+
+export function InterventionMetadataFromJSONTyped(json: any, ignoreDiscriminator: boolean): InterventionMetadata {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+            ...json,
+        'type': json['type'],
+        'reason_code': json['reason_code'],
+        'wait_duration': json['wait_duration'] == null ? undefined : json['wait_duration'],
+        'tokens_saved': json['tokens_saved'] == null ? undefined : json['tokens_saved'],
+    };
+}
+
+export function InterventionMetadataToJSON(value?: InterventionMetadata | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+            ...value,
+        'type': value['type'],
+        'reason_code': value['reason_code'],
+        'wait_duration': value['wait_duration'],
+        'tokens_saved': value['tokens_saved'],
     };
 }
 

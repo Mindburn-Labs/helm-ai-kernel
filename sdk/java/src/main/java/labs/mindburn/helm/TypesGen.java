@@ -17411,18 +17411,53 @@ public static class CreateSandboxGrantRequest {
  */
 @JsonPropertyOrder({
   DecisionRecord.JSON_PROPERTY_ID,
+  DecisionRecord.JSON_PROPERTY_PROPOSAL_ID,
+  DecisionRecord.JSON_PROPERTY_STEP_ID,
+  DecisionRecord.JSON_PROPERTY_PHENOTYPE_HASH,
+  DecisionRecord.JSON_PROPERTY_POLICY_VERSION,
+  DecisionRecord.JSON_PROPERTY_SUBJECT_ID,
   DecisionRecord.JSON_PROPERTY_ACTION,
   DecisionRecord.JSON_PROPERTY_RESOURCE,
+  DecisionRecord.JSON_PROPERTY_EFFECT_DIGEST,
+  DecisionRecord.JSON_PROPERTY_POLICY_BACKEND,
+  DecisionRecord.JSON_PROPERTY_POLICY_CONTENT_HASH,
+  DecisionRecord.JSON_PROPERTY_POLICY_EPOCH,
+  DecisionRecord.JSON_PROPERTY_STATE_CURSOR,
+  DecisionRecord.JSON_PROPERTY_SNAPSHOT,
+  DecisionRecord.JSON_PROPERTY_ENV_FINGERPRINT,
   DecisionRecord.JSON_PROPERTY_VERDICT,
   DecisionRecord.JSON_PROPERTY_REASON,
-  DecisionRecord.JSON_PROPERTY_POLICY_VERSION,
+  DecisionRecord.JSON_PROPERTY_REASON_CODE,
+  DecisionRecord.JSON_PROPERTY_INPUT_CONTEXT,
+  DecisionRecord.JSON_PROPERTY_TRAJECTORY_RISK_SCORE,
+  DecisionRecord.JSON_PROPERTY_SESSION_CENTROID_HASH,
+  DecisionRecord.JSON_PROPERTY_RISK_ACCUMULATION_WINDOW,
+  DecisionRecord.JSON_PROPERTY_REQUIREMENT_SET_HASH,
   DecisionRecord.JSON_PROPERTY_POLICY_DECISION_HASH,
-  DecisionRecord.JSON_PROPERTY_SIGNATURE
+  DecisionRecord.JSON_PROPERTY_SIGNATURE,
+  DecisionRecord.JSON_PROPERTY_SIGNATURE_TYPE,
+  DecisionRecord.JSON_PROPERTY_TIMESTAMP,
+  DecisionRecord.JSON_PROPERTY_INTERVENTION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class DecisionRecord {
+public static class DecisionRecord extends HashMap<String, Object> {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
+
+  public static final String JSON_PROPERTY_PROPOSAL_ID = "proposal_id";
+  private String proposalId;
+
+  public static final String JSON_PROPERTY_STEP_ID = "step_id";
+  private String stepId;
+
+  public static final String JSON_PROPERTY_PHENOTYPE_HASH = "phenotype_hash";
+  private String phenotypeHash;
+
+  public static final String JSON_PROPERTY_POLICY_VERSION = "policy_version";
+  private String policyVersion;
+
+  public static final String JSON_PROPERTY_SUBJECT_ID = "subject_id";
+  private String subjectId;
 
   public static final String JSON_PROPERTY_ACTION = "action";
   private String action;
@@ -17430,20 +17465,65 @@ public static class DecisionRecord {
   public static final String JSON_PROPERTY_RESOURCE = "resource";
   private String resource;
 
+  public static final String JSON_PROPERTY_EFFECT_DIGEST = "effect_digest";
+  private String effectDigest;
+
+  public static final String JSON_PROPERTY_POLICY_BACKEND = "policy_backend";
+  private String policyBackend;
+
+  public static final String JSON_PROPERTY_POLICY_CONTENT_HASH = "policy_content_hash";
+  private String policyContentHash;
+
+  public static final String JSON_PROPERTY_POLICY_EPOCH = "policy_epoch";
+  private String policyEpoch;
+
+  public static final String JSON_PROPERTY_STATE_CURSOR = "state_cursor";
+  private String stateCursor;
+
+  public static final String JSON_PROPERTY_SNAPSHOT = "snapshot";
+  private String snapshot;
+
+  public static final String JSON_PROPERTY_ENV_FINGERPRINT = "env_fingerprint";
+  private String envFingerprint;
+
   public static final String JSON_PROPERTY_VERDICT = "verdict";
   private String verdict;
 
   public static final String JSON_PROPERTY_REASON = "reason";
   private String reason;
 
-  public static final String JSON_PROPERTY_POLICY_VERSION = "policy_version";
-  private String policyVersion;
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_INPUT_CONTEXT = "input_context";
+  private Object inputContext;
+
+  public static final String JSON_PROPERTY_TRAJECTORY_RISK_SCORE = "trajectory_risk_score";
+  private Double trajectoryRiskScore;
+
+  public static final String JSON_PROPERTY_SESSION_CENTROID_HASH = "session_centroid_hash";
+  private String sessionCentroidHash;
+
+  public static final String JSON_PROPERTY_RISK_ACCUMULATION_WINDOW = "risk_accumulation_window";
+  private Integer riskAccumulationWindow;
+
+  public static final String JSON_PROPERTY_REQUIREMENT_SET_HASH = "requirement_set_hash";
+  private String requirementSetHash;
 
   public static final String JSON_PROPERTY_POLICY_DECISION_HASH = "policy_decision_hash";
   private String policyDecisionHash;
 
   public static final String JSON_PROPERTY_SIGNATURE = "signature";
   private String signature;
+
+  public static final String JSON_PROPERTY_SIGNATURE_TYPE = "signature_type";
+  private String signatureType;
+
+  public static final String JSON_PROPERTY_TIMESTAMP = "timestamp";
+  private OffsetDateTime timestamp;
+
+  public static final String JSON_PROPERTY_INTERVENTION = "intervention";
+  private InterventionMetadata intervention;
 
   public DecisionRecord() {
   }
@@ -17457,9 +17537,9 @@ public static class DecisionRecord {
    * Get id
    * @return id
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_ID)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getId() {
     return id;
@@ -17467,9 +17547,134 @@ public static class DecisionRecord {
 
 
   @JsonProperty(JSON_PROPERTY_ID)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setId(String id) {
     this.id = id;
+  }
+
+
+  public DecisionRecord proposalId(String proposalId) {
+    this.proposalId = proposalId;
+    return this;
+  }
+
+   /**
+   * Get proposalId
+   * @return proposalId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PROPOSAL_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getProposalId() {
+    return proposalId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROPOSAL_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setProposalId(String proposalId) {
+    this.proposalId = proposalId;
+  }
+
+
+  public DecisionRecord stepId(String stepId) {
+    this.stepId = stepId;
+    return this;
+  }
+
+   /**
+   * Get stepId
+   * @return stepId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STEP_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getStepId() {
+    return stepId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STEP_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStepId(String stepId) {
+    this.stepId = stepId;
+  }
+
+
+  public DecisionRecord phenotypeHash(String phenotypeHash) {
+    this.phenotypeHash = phenotypeHash;
+    return this;
+  }
+
+   /**
+   * Get phenotypeHash
+   * @return phenotypeHash
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_PHENOTYPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPhenotypeHash() {
+    return phenotypeHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PHENOTYPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPhenotypeHash(String phenotypeHash) {
+    this.phenotypeHash = phenotypeHash;
+  }
+
+
+  public DecisionRecord policyVersion(String policyVersion) {
+    this.policyVersion = policyVersion;
+    return this;
+  }
+
+   /**
+   * Get policyVersion
+   * @return policyVersion
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_POLICY_VERSION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPolicyVersion() {
+    return policyVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_VERSION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPolicyVersion(String policyVersion) {
+    this.policyVersion = policyVersion;
+  }
+
+
+  public DecisionRecord subjectId(String subjectId) {
+    this.subjectId = subjectId;
+    return this;
+  }
+
+   /**
+   * Get subjectId
+   * @return subjectId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_SUBJECT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getSubjectId() {
+    return subjectId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SUBJECT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSubjectId(String subjectId) {
+    this.subjectId = subjectId;
   }
 
 
@@ -17482,9 +17687,9 @@ public static class DecisionRecord {
    * Get action
    * @return action
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_ACTION)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getAction() {
     return action;
@@ -17492,7 +17697,7 @@ public static class DecisionRecord {
 
 
   @JsonProperty(JSON_PROPERTY_ACTION)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setAction(String action) {
     this.action = action;
   }
@@ -17507,9 +17712,9 @@ public static class DecisionRecord {
    * Get resource
    * @return resource
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_RESOURCE)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getResource() {
     return resource;
@@ -17517,9 +17722,184 @@ public static class DecisionRecord {
 
 
   @JsonProperty(JSON_PROPERTY_RESOURCE)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setResource(String resource) {
     this.resource = resource;
+  }
+
+
+  public DecisionRecord effectDigest(String effectDigest) {
+    this.effectDigest = effectDigest;
+    return this;
+  }
+
+   /**
+   * Get effectDigest
+   * @return effectDigest
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECT_DIGEST)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEffectDigest() {
+    return effectDigest;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECT_DIGEST)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffectDigest(String effectDigest) {
+    this.effectDigest = effectDigest;
+  }
+
+
+  public DecisionRecord policyBackend(String policyBackend) {
+    this.policyBackend = policyBackend;
+    return this;
+  }
+
+   /**
+   * Get policyBackend
+   * @return policyBackend
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_BACKEND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyBackend() {
+    return policyBackend;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_BACKEND)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyBackend(String policyBackend) {
+    this.policyBackend = policyBackend;
+  }
+
+
+  public DecisionRecord policyContentHash(String policyContentHash) {
+    this.policyContentHash = policyContentHash;
+    return this;
+  }
+
+   /**
+   * Get policyContentHash
+   * @return policyContentHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_CONTENT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyContentHash() {
+    return policyContentHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_CONTENT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyContentHash(String policyContentHash) {
+    this.policyContentHash = policyContentHash;
+  }
+
+
+  public DecisionRecord policyEpoch(String policyEpoch) {
+    this.policyEpoch = policyEpoch;
+    return this;
+  }
+
+   /**
+   * Get policyEpoch
+   * @return policyEpoch
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_EPOCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyEpoch() {
+    return policyEpoch;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_EPOCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyEpoch(String policyEpoch) {
+    this.policyEpoch = policyEpoch;
+  }
+
+
+  public DecisionRecord stateCursor(String stateCursor) {
+    this.stateCursor = stateCursor;
+    return this;
+  }
+
+   /**
+   * Get stateCursor
+   * @return stateCursor
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATE_CURSOR)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getStateCursor() {
+    return stateCursor;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATE_CURSOR)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStateCursor(String stateCursor) {
+    this.stateCursor = stateCursor;
+  }
+
+
+  public DecisionRecord snapshot(String snapshot) {
+    this.snapshot = snapshot;
+    return this;
+  }
+
+   /**
+   * Get snapshot
+   * @return snapshot
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SNAPSHOT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSnapshot() {
+    return snapshot;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SNAPSHOT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSnapshot(String snapshot) {
+    this.snapshot = snapshot;
+  }
+
+
+  public DecisionRecord envFingerprint(String envFingerprint) {
+    this.envFingerprint = envFingerprint;
+    return this;
+  }
+
+   /**
+   * Get envFingerprint
+   * @return envFingerprint
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ENV_FINGERPRINT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getEnvFingerprint() {
+    return envFingerprint;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ENV_FINGERPRINT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setEnvFingerprint(String envFingerprint) {
+    this.envFingerprint = envFingerprint;
   }
 
 
@@ -17532,9 +17912,9 @@ public static class DecisionRecord {
    * Get verdict
    * @return verdict
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_VERDICT)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getVerdict() {
     return verdict;
@@ -17542,7 +17922,7 @@ public static class DecisionRecord {
 
 
   @JsonProperty(JSON_PROPERTY_VERDICT)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setVerdict(String verdict) {
     this.verdict = verdict;
   }
@@ -17557,9 +17937,9 @@ public static class DecisionRecord {
    * Get reason
    * @return reason
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_REASON)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getReason() {
     return reason;
@@ -17567,34 +17947,159 @@ public static class DecisionRecord {
 
 
   @JsonProperty(JSON_PROPERTY_REASON)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setReason(String reason) {
     this.reason = reason;
   }
 
 
-  public DecisionRecord policyVersion(String policyVersion) {
-    this.policyVersion = policyVersion;
+  public DecisionRecord reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
     return this;
   }
 
    /**
-   * Get policyVersion
-   * @return policyVersion
+   * Get reasonCode
+   * @return reasonCode
   **/
   @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_POLICY_VERSION)
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
-  public String getPolicyVersion() {
-    return policyVersion;
+  public String getReasonCode() {
+    return reasonCode;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_POLICY_VERSION)
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setPolicyVersion(String policyVersion) {
-    this.policyVersion = policyVersion;
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public DecisionRecord inputContext(Object inputContext) {
+    this.inputContext = inputContext;
+    return this;
+  }
+
+   /**
+   * Get inputContext
+   * @return inputContext
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_INPUT_CONTEXT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Object getInputContext() {
+    return inputContext;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_INPUT_CONTEXT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setInputContext(Object inputContext) {
+    this.inputContext = inputContext;
+  }
+
+
+  public DecisionRecord trajectoryRiskScore(Double trajectoryRiskScore) {
+    this.trajectoryRiskScore = trajectoryRiskScore;
+    return this;
+  }
+
+   /**
+   * Get trajectoryRiskScore
+   * @return trajectoryRiskScore
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TRAJECTORY_RISK_SCORE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Double getTrajectoryRiskScore() {
+    return trajectoryRiskScore;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TRAJECTORY_RISK_SCORE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTrajectoryRiskScore(Double trajectoryRiskScore) {
+    this.trajectoryRiskScore = trajectoryRiskScore;
+  }
+
+
+  public DecisionRecord sessionCentroidHash(String sessionCentroidHash) {
+    this.sessionCentroidHash = sessionCentroidHash;
+    return this;
+  }
+
+   /**
+   * Get sessionCentroidHash
+   * @return sessionCentroidHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SESSION_CENTROID_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSessionCentroidHash() {
+    return sessionCentroidHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_CENTROID_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSessionCentroidHash(String sessionCentroidHash) {
+    this.sessionCentroidHash = sessionCentroidHash;
+  }
+
+
+  public DecisionRecord riskAccumulationWindow(Integer riskAccumulationWindow) {
+    this.riskAccumulationWindow = riskAccumulationWindow;
+    return this;
+  }
+
+   /**
+   * Get riskAccumulationWindow
+   * @return riskAccumulationWindow
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RISK_ACCUMULATION_WINDOW)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Integer getRiskAccumulationWindow() {
+    return riskAccumulationWindow;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RISK_ACCUMULATION_WINDOW)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRiskAccumulationWindow(Integer riskAccumulationWindow) {
+    this.riskAccumulationWindow = riskAccumulationWindow;
+  }
+
+
+  public DecisionRecord requirementSetHash(String requirementSetHash) {
+    this.requirementSetHash = requirementSetHash;
+    return this;
+  }
+
+   /**
+   * Get requirementSetHash
+   * @return requirementSetHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIREMENT_SET_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRequirementSetHash() {
+    return requirementSetHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIREMENT_SET_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequirementSetHash(String requirementSetHash) {
+    this.requirementSetHash = requirementSetHash;
   }
 
 
@@ -17632,9 +18137,9 @@ public static class DecisionRecord {
    * Get signature
    * @return signature
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_SIGNATURE)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getSignature() {
     return signature;
@@ -17642,11 +18147,129 @@ public static class DecisionRecord {
 
 
   @JsonProperty(JSON_PROPERTY_SIGNATURE)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setSignature(String signature) {
     this.signature = signature;
   }
 
+
+  public DecisionRecord signatureType(String signatureType) {
+    this.signatureType = signatureType;
+    return this;
+  }
+
+   /**
+   * Get signatureType
+   * @return signatureType
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getSignatureType() {
+    return signatureType;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSignatureType(String signatureType) {
+    this.signatureType = signatureType;
+  }
+
+
+  public DecisionRecord timestamp(OffsetDateTime timestamp) {
+    this.timestamp = timestamp;
+    return this;
+  }
+
+   /**
+   * Get timestamp
+   * @return timestamp
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TIMESTAMP)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public OffsetDateTime getTimestamp() {
+    return timestamp;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TIMESTAMP)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTimestamp(OffsetDateTime timestamp) {
+    this.timestamp = timestamp;
+  }
+
+
+  public DecisionRecord intervention(InterventionMetadata intervention) {
+    this.intervention = intervention;
+    return this;
+  }
+
+   /**
+   * Get intervention
+   * @return intervention
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_INTERVENTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public InterventionMetadata getIntervention() {
+    return intervention;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_INTERVENTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setIntervention(InterventionMetadata intervention) {
+    this.intervention = intervention;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public DecisionRecord putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
 
   /**
    * Return true if this DecisionRecord object is equal to o.
@@ -17661,32 +18284,76 @@ public static class DecisionRecord {
     }
     DecisionRecord decisionRecord = (DecisionRecord) o;
     return Objects.equals(this.id, decisionRecord.id) &&
+        Objects.equals(this.proposalId, decisionRecord.proposalId) &&
+        Objects.equals(this.stepId, decisionRecord.stepId) &&
+        Objects.equals(this.phenotypeHash, decisionRecord.phenotypeHash) &&
+        Objects.equals(this.policyVersion, decisionRecord.policyVersion) &&
+        Objects.equals(this.subjectId, decisionRecord.subjectId) &&
         Objects.equals(this.action, decisionRecord.action) &&
         Objects.equals(this.resource, decisionRecord.resource) &&
+        Objects.equals(this.effectDigest, decisionRecord.effectDigest) &&
+        Objects.equals(this.policyBackend, decisionRecord.policyBackend) &&
+        Objects.equals(this.policyContentHash, decisionRecord.policyContentHash) &&
+        Objects.equals(this.policyEpoch, decisionRecord.policyEpoch) &&
+        Objects.equals(this.stateCursor, decisionRecord.stateCursor) &&
+        Objects.equals(this.snapshot, decisionRecord.snapshot) &&
+        Objects.equals(this.envFingerprint, decisionRecord.envFingerprint) &&
         Objects.equals(this.verdict, decisionRecord.verdict) &&
         Objects.equals(this.reason, decisionRecord.reason) &&
-        Objects.equals(this.policyVersion, decisionRecord.policyVersion) &&
+        Objects.equals(this.reasonCode, decisionRecord.reasonCode) &&
+        Objects.equals(this.inputContext, decisionRecord.inputContext) &&
+        Objects.equals(this.trajectoryRiskScore, decisionRecord.trajectoryRiskScore) &&
+        Objects.equals(this.sessionCentroidHash, decisionRecord.sessionCentroidHash) &&
+        Objects.equals(this.riskAccumulationWindow, decisionRecord.riskAccumulationWindow) &&
+        Objects.equals(this.requirementSetHash, decisionRecord.requirementSetHash) &&
         Objects.equals(this.policyDecisionHash, decisionRecord.policyDecisionHash) &&
-        Objects.equals(this.signature, decisionRecord.signature);
+        Objects.equals(this.signature, decisionRecord.signature) &&
+        Objects.equals(this.signatureType, decisionRecord.signatureType) &&
+        Objects.equals(this.timestamp, decisionRecord.timestamp) &&
+        Objects.equals(this.intervention, decisionRecord.intervention)&&
+        Objects.equals(this.additionalProperties, decisionRecord.additionalProperties) &&
+        super.equals(o);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, action, resource, verdict, reason, policyVersion, policyDecisionHash, signature);
+    return Objects.hash(id, proposalId, stepId, phenotypeHash, policyVersion, subjectId, action, resource, effectDigest, policyBackend, policyContentHash, policyEpoch, stateCursor, snapshot, envFingerprint, verdict, reason, reasonCode, inputContext, trajectoryRiskScore, sessionCentroidHash, riskAccumulationWindow, requirementSetHash, policyDecisionHash, signature, signatureType, timestamp, intervention, super.hashCode(), additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class DecisionRecord {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    proposalId: ").append(toIndentedString(proposalId)).append("\n");
+    sb.append("    stepId: ").append(toIndentedString(stepId)).append("\n");
+    sb.append("    phenotypeHash: ").append(toIndentedString(phenotypeHash)).append("\n");
+    sb.append("    policyVersion: ").append(toIndentedString(policyVersion)).append("\n");
+    sb.append("    subjectId: ").append(toIndentedString(subjectId)).append("\n");
     sb.append("    action: ").append(toIndentedString(action)).append("\n");
     sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
+    sb.append("    effectDigest: ").append(toIndentedString(effectDigest)).append("\n");
+    sb.append("    policyBackend: ").append(toIndentedString(policyBackend)).append("\n");
+    sb.append("    policyContentHash: ").append(toIndentedString(policyContentHash)).append("\n");
+    sb.append("    policyEpoch: ").append(toIndentedString(policyEpoch)).append("\n");
+    sb.append("    stateCursor: ").append(toIndentedString(stateCursor)).append("\n");
+    sb.append("    snapshot: ").append(toIndentedString(snapshot)).append("\n");
+    sb.append("    envFingerprint: ").append(toIndentedString(envFingerprint)).append("\n");
     sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
-    sb.append("    policyVersion: ").append(toIndentedString(policyVersion)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    inputContext: ").append(toIndentedString(inputContext)).append("\n");
+    sb.append("    trajectoryRiskScore: ").append(toIndentedString(trajectoryRiskScore)).append("\n");
+    sb.append("    sessionCentroidHash: ").append(toIndentedString(sessionCentroidHash)).append("\n");
+    sb.append("    riskAccumulationWindow: ").append(toIndentedString(riskAccumulationWindow)).append("\n");
+    sb.append("    requirementSetHash: ").append(toIndentedString(requirementSetHash)).append("\n");
     sb.append("    policyDecisionHash: ").append(toIndentedString(policyDecisionHash)).append("\n");
     sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
+    sb.append("    signatureType: ").append(toIndentedString(signatureType)).append("\n");
+    sb.append("    timestamp: ").append(toIndentedString(timestamp)).append("\n");
+    sb.append("    intervention: ").append(toIndentedString(intervention)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -17739,6 +18406,31 @@ public static class DecisionRecord {
       joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `proposal_id` to the URL query string
+    if (getProposalId() != null) {
+      joiner.add(String.format("%sproposal_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProposalId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `step_id` to the URL query string
+    if (getStepId() != null) {
+      joiner.add(String.format("%sstep_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStepId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `phenotype_hash` to the URL query string
+    if (getPhenotypeHash() != null) {
+      joiner.add(String.format("%sphenotype_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPhenotypeHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_version` to the URL query string
+    if (getPolicyVersion() != null) {
+      joiner.add(String.format("%spolicy_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `subject_id` to the URL query string
+    if (getSubjectId() != null) {
+      joiner.add(String.format("%ssubject_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSubjectId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `action` to the URL query string
     if (getAction() != null) {
       joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -17747,6 +18439,41 @@ public static class DecisionRecord {
     // add `resource` to the URL query string
     if (getResource() != null) {
       joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `effect_digest` to the URL query string
+    if (getEffectDigest() != null) {
+      joiner.add(String.format("%seffect_digest%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectDigest()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_backend` to the URL query string
+    if (getPolicyBackend() != null) {
+      joiner.add(String.format("%spolicy_backend%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyBackend()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_content_hash` to the URL query string
+    if (getPolicyContentHash() != null) {
+      joiner.add(String.format("%spolicy_content_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyContentHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_epoch` to the URL query string
+    if (getPolicyEpoch() != null) {
+      joiner.add(String.format("%spolicy_epoch%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyEpoch()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `state_cursor` to the URL query string
+    if (getStateCursor() != null) {
+      joiner.add(String.format("%sstate_cursor%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStateCursor()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `snapshot` to the URL query string
+    if (getSnapshot() != null) {
+      joiner.add(String.format("%ssnapshot%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSnapshot()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `env_fingerprint` to the URL query string
+    if (getEnvFingerprint() != null) {
+      joiner.add(String.format("%senv_fingerprint%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEnvFingerprint()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `verdict` to the URL query string
@@ -17759,9 +18486,34 @@ public static class DecisionRecord {
       joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `policy_version` to the URL query string
-    if (getPolicyVersion() != null) {
-      joiner.add(String.format("%spolicy_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `input_context` to the URL query string
+    if (getInputContext() != null) {
+      joiner.add(String.format("%sinput_context%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getInputContext()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `trajectory_risk_score` to the URL query string
+    if (getTrajectoryRiskScore() != null) {
+      joiner.add(String.format("%strajectory_risk_score%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTrajectoryRiskScore()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `session_centroid_hash` to the URL query string
+    if (getSessionCentroidHash() != null) {
+      joiner.add(String.format("%ssession_centroid_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionCentroidHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `risk_accumulation_window` to the URL query string
+    if (getRiskAccumulationWindow() != null) {
+      joiner.add(String.format("%srisk_accumulation_window%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRiskAccumulationWindow()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `requirement_set_hash` to the URL query string
+    if (getRequirementSetHash() != null) {
+      joiner.add(String.format("%srequirement_set_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequirementSetHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `policy_decision_hash` to the URL query string
@@ -17772,6 +18524,21 @@ public static class DecisionRecord {
     // add `signature` to the URL query string
     if (getSignature() != null) {
       joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_type` to the URL query string
+    if (getSignatureType() != null) {
+      joiner.add(String.format("%ssignature_type%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `timestamp` to the URL query string
+    if (getTimestamp() != null) {
+      joiner.add(String.format("%stimestamp%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTimestamp()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `intervention` to the URL query string
+    if (getIntervention() != null) {
+      joiner.add(getIntervention().toUrlQueryString(prefix + "intervention" + suffix));
     }
 
     return joiner.toString();
@@ -17795,19 +18562,15 @@ public static class DecisionRecord {
 
 
 /**
- * DecisionRequest
+ * Canonical body for POST /api/v1/evaluate. Identity and trusted transport metadata are not accepted in this object; the runtime binds them from verified request headers.
  */
 @JsonPropertyOrder({
-  DecisionRequest.JSON_PROPERTY_PRINCIPAL,
   DecisionRequest.JSON_PROPERTY_ACTION,
   DecisionRequest.JSON_PROPERTY_RESOURCE,
   DecisionRequest.JSON_PROPERTY_CONTEXT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class DecisionRequest {
-  public static final String JSON_PROPERTY_PRINCIPAL = "principal";
-  private String principal;
-
+public static class DecisionRequest extends HashMap<String, Object> {
   public static final String JSON_PROPERTY_ACTION = "action";
   private String action;
 
@@ -17815,35 +18578,10 @@ public static class DecisionRequest {
   private String resource;
 
   public static final String JSON_PROPERTY_CONTEXT = "context";
-  private Map<String, Object> context = new HashMap<>();
+  private Object context;
 
   public DecisionRequest() {
   }
-
-  public DecisionRequest principal(String principal) {
-    this.principal = principal;
-    return this;
-  }
-
-   /**
-   * Get principal
-   * @return principal
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public String getPrincipal() {
-    return principal;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setPrincipal(String principal) {
-    this.principal = principal;
-  }
-
 
   public DecisionRequest action(String action) {
     this.action = action;
@@ -17895,38 +18633,73 @@ public static class DecisionRequest {
   }
 
 
-  public DecisionRequest context(Map<String, Object> context) {
+  public DecisionRequest context(Object context) {
     this.context = context;
     return this;
   }
 
-  public DecisionRequest putContextItem(String key, Object contextItem) {
-    if (this.context == null) {
-      this.context = new HashMap<>();
-    }
-    this.context.put(key, contextItem);
-    return this;
-  }
-
    /**
-   * Get context
+   * Application context for policy evaluation. It must not include tenant, principal, workspace, or Guardian reserved security keys; those are owned by the authenticated transport boundary.
    * @return context
   **/
   @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_CONTEXT)
-  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
-  public Map<String, Object> getContext() {
+  public Object getContext() {
     return context;
   }
 
 
   @JsonProperty(JSON_PROPERTY_CONTEXT)
-  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
-  public void setContext(Map<String, Object> context) {
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setContext(Object context) {
     this.context = context;
   }
 
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public DecisionRequest putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
 
   /**
    * Return true if this DecisionRequest object is equal to o.
@@ -17940,25 +18713,27 @@ public static class DecisionRequest {
       return false;
     }
     DecisionRequest decisionRequest = (DecisionRequest) o;
-    return Objects.equals(this.principal, decisionRequest.principal) &&
-        Objects.equals(this.action, decisionRequest.action) &&
+    return Objects.equals(this.action, decisionRequest.action) &&
         Objects.equals(this.resource, decisionRequest.resource) &&
-        Objects.equals(this.context, decisionRequest.context);
+        Objects.equals(this.context, decisionRequest.context)&&
+        Objects.equals(this.additionalProperties, decisionRequest.additionalProperties) &&
+        super.equals(o);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(principal, action, resource, context);
+    return Objects.hash(action, resource, context, super.hashCode(), additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class DecisionRequest {\n");
-    sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    action: ").append(toIndentedString(action)).append("\n");
     sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -18006,11 +18781,6 @@ public static class DecisionRequest {
 
     StringJoiner joiner = new StringJoiner("&");
 
-    // add `principal` to the URL query string
-    if (getPrincipal() != null) {
-      joiner.add(String.format("%sprincipal%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipal()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
     // add `action` to the URL query string
     if (getAction() != null) {
       joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -18023,11 +18793,7 @@ public static class DecisionRequest {
 
     // add `context` to the URL query string
     if (getContext() != null) {
-      for (String _key : getContext().keySet()) {
-        joiner.add(String.format("%scontext%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getContext().get(_key), URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-      }
+      joiner.add(String.format("%scontext%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getContext()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -30446,6 +31212,297 @@ public static class ImportPreflightResult extends HashMap<String, Object> {
     // add `evidence_ledger` to the URL query string
     if (getEvidenceLedger() != null) {
       joiner.add(getEvidenceLedger().toUrlQueryString(prefix + "evidence_ledger" + suffix));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * InterventionMetadata
+ */
+@JsonPropertyOrder({
+  InterventionMetadata.JSON_PROPERTY_TYPE,
+  InterventionMetadata.JSON_PROPERTY_REASON_CODE,
+  InterventionMetadata.JSON_PROPERTY_WAIT_DURATION,
+  InterventionMetadata.JSON_PROPERTY_TOKENS_SAVED
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class InterventionMetadata extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_TYPE = "type";
+  private String type;
+
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_WAIT_DURATION = "wait_duration";
+  private Long waitDuration;
+
+  public static final String JSON_PROPERTY_TOKENS_SAVED = "tokens_saved";
+  private Long tokensSaved;
+
+  public InterventionMetadata() {
+  }
+
+  public InterventionMetadata type(String type) {
+    this.type = type;
+    return this;
+  }
+
+   /**
+   * Get type
+   * @return type
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getType() {
+    return type;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setType(String type) {
+    this.type = type;
+  }
+
+
+  public InterventionMetadata reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public InterventionMetadata waitDuration(Long waitDuration) {
+    this.waitDuration = waitDuration;
+    return this;
+  }
+
+   /**
+   * Get waitDuration
+   * @return waitDuration
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_WAIT_DURATION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getWaitDuration() {
+    return waitDuration;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_WAIT_DURATION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setWaitDuration(Long waitDuration) {
+    this.waitDuration = waitDuration;
+  }
+
+
+  public InterventionMetadata tokensSaved(Long tokensSaved) {
+    this.tokensSaved = tokensSaved;
+    return this;
+  }
+
+   /**
+   * Get tokensSaved
+   * @return tokensSaved
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOKENS_SAVED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getTokensSaved() {
+    return tokensSaved;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOKENS_SAVED)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTokensSaved(Long tokensSaved) {
+    this.tokensSaved = tokensSaved;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public InterventionMetadata putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this InterventionMetadata object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    InterventionMetadata interventionMetadata = (InterventionMetadata) o;
+    return Objects.equals(this.type, interventionMetadata.type) &&
+        Objects.equals(this.reasonCode, interventionMetadata.reasonCode) &&
+        Objects.equals(this.waitDuration, interventionMetadata.waitDuration) &&
+        Objects.equals(this.tokensSaved, interventionMetadata.tokensSaved)&&
+        Objects.equals(this.additionalProperties, interventionMetadata.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(type, reasonCode, waitDuration, tokensSaved, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class InterventionMetadata {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    type: ").append(toIndentedString(type)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    waitDuration: ").append(toIndentedString(waitDuration)).append("\n");
+    sb.append("    tokensSaved: ").append(toIndentedString(tokensSaved)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `type` to the URL query string
+    if (getType() != null) {
+      joiner.add(String.format("%stype%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `wait_duration` to the URL query string
+    if (getWaitDuration() != null) {
+      joiner.add(String.format("%swait_duration%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getWaitDuration()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tokens_saved` to the URL query string
+    if (getTokensSaved() != null) {
+      joiner.add(String.format("%stokens_saved%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTokensSaved()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

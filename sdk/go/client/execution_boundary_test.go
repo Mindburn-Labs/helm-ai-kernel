@@ -121,6 +121,20 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		if r.Header.Get("X-Helm-Principal-ID") != "operator-a" {
 			t.Fatalf("missing principal header for %s %s", r.Method, r.URL.RequestURI())
 		}
+		if r.Header.Get("X-Helm-Workspace-ID") != "workspace-a" {
+			t.Fatalf("missing workspace header for %s %s", r.Method, r.URL.RequestURI())
+		}
+		if r.URL.Path == "/api/v1/evaluate" {
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode evaluate body: %v", err)
+			}
+			if len(body) != 2 || body["action"] != "EXECUTE_TOOL" || body["resource"] != "local.echo" {
+				t.Fatalf("evaluate body must contain only the canonical request fields: %#v", body)
+			}
+			writeJSON(t, w, DecisionRecord{})
+			return
+		}
 		if r.URL.Path == "/v1/chat/completions" {
 			w.Header().Set("X-Helm-Receipt-ID", "receipt-1")
 			w.Header().Set("X-Helm-Status", "ALLOW")
@@ -139,7 +153,7 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		writeJSON(t, w, responseForClientMatrix(r.Method, r.URL))
 	}))
 	defer server.Close()
-	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"))
+	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"), WithWorkspaceID("workspace-a"))
 
 	cases := []struct {
 		name string
@@ -157,7 +171,17 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			}
 			return err
 		}},
-		{"evaluate decision", "POST /api/v1/evaluate", func() error { _, err := client.EvaluateDecision(SurfaceRecord{"effect": "read"}); return err }},
+		{"evaluate decision", "POST /api/v1/evaluate", func() error {
+			_, err := client.EvaluateDecision(DecisionRequest{
+				Action:   "EXECUTE_TOOL",
+				Resource: "local.echo",
+				AdditionalProperties: map[string]interface{}{
+					"principal": "attacker",
+					"tenant":    "attacker-tenant",
+				},
+			})
+			return err
+		}},
 		{"run public demo", "POST /api/demo/run", func() error { _, err := client.RunPublicDemo("read_ticket", SurfaceRecord{"id": 1}); return err }},
 		{"verify public demo receipt", "POST /api/demo/verify", func() error {
 			_, err := client.VerifyPublicDemoReceipt(SurfaceRecord{"receipt_id": "r1"}, "hash")
@@ -283,6 +307,13 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		if got := seen[i]; got != tc.want {
 			t.Fatalf("%s request = %s, want %s", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestEvaluateDecisionRequiresIdentityBindings(t *testing.T) {
+	client := New("http://helm.test")
+	if _, err := client.EvaluateDecision(DecisionRequest{Action: "EXECUTE_TOOL", Resource: "local.echo"}); err == nil {
+		t.Fatal("EvaluateDecision accepted missing API key, tenant, and principal bindings")
 	}
 }
 

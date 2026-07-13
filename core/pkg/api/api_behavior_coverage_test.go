@@ -22,7 +22,7 @@ func TestNewServer_RegistersRoutes(t *testing.T) {
 
 func TestEvaluate_InvalidJSON(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader([]byte(`{invalid`)))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader([]byte(`{invalid`)))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -34,7 +34,7 @@ func TestEvaluate_GeneratesArgsHash(t *testing.T) {
 	srv := newTestServer(t)
 	body := EvaluateRequest{Tool: "read_file", Args: map[string]any{"path": "/x"}, AgentID: "a", SessionID: "s1"}
 	reqBody, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -56,7 +56,7 @@ func TestReceipts_ListAll(t *testing.T) {
 	// Create a receipt first
 	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 	srv.ServeHTTP(httptest.NewRecorder(), req)
 
 	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/receipts/", nil)
@@ -71,7 +71,7 @@ func TestReceipts_CompleteEndpoint(t *testing.T) {
 	srv := newTestServer(t)
 	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	var resp EvaluateResponse

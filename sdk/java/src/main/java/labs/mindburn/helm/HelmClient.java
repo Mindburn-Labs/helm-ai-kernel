@@ -2,6 +2,8 @@ package labs.mindburn.helm;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import labs.mindburn.helm.TypesGen.*;
 
@@ -13,8 +15,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Typed Java client for the HELM kernel API.
@@ -25,14 +30,28 @@ public class HelmClient {
     private final HttpClient httpClient;
     private final Gson gson;
     private final String apiKey;
+    private final String tenantId;
+    private final String principalId;
+    private final String workspaceId;
 
     public HelmClient(String baseUrl) {
-        this(baseUrl, null);
+        this(baseUrl, null, null, null, null);
     }
 
     public HelmClient(String baseUrl, String apiKey) {
+        this(baseUrl, apiKey, null, null, null);
+    }
+
+    public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId) {
+        this(baseUrl, apiKey, tenantId, principalId, null);
+    }
+
+    public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId, String workspaceId) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.apiKey = apiKey;
+        this.tenantId = tenantId;
+        this.principalId = principalId;
+        this.workspaceId = workspaceId;
         this.gson = new Gson();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
@@ -181,6 +200,15 @@ public class HelmClient {
         if (apiKey != null && !apiKey.isEmpty()) {
             b.header("Authorization", "Bearer " + apiKey);
         }
+        if (tenantId != null && !tenantId.isEmpty()) {
+            b.header("X-Helm-Tenant-ID", tenantId);
+        }
+        if (principalId != null && !principalId.isEmpty()) {
+            b.header("X-Helm-Principal-ID", principalId);
+        }
+        if (workspaceId != null && !workspaceId.isEmpty()) {
+            b.header("X-Helm-Workspace-ID", workspaceId);
+        }
         return b;
     }
 
@@ -241,11 +269,154 @@ public class HelmClient {
     }
 
     /** POST /api/v1/evaluate */
-    public JsonElement evaluateDecision(Object req) {
+    public DecisionRecord evaluateDecision(DecisionRequest req) {
+        requireEvaluateBindings();
+        // Generated OpenAPI models extend HashMap so Gson treats them as maps
+        // and silently serializes an empty object. Build the canonical body
+        // from declared accessors instead of forwarding generated internals.
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("action", req.getAction());
+        body.put("resource", req.getResource());
+        if (req.getContext() != null) {
+            body.put("context", req.getContext());
+        }
         HttpRequest r = this.req("POST", "/api/v1/evaluate")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(body)))
                 .build();
-        return sendJson(r);
+        return sendDecisionRecord(r);
+    }
+
+    private void requireEvaluateBindings() {
+        if (apiKey == null || apiKey.isBlank() || tenantId == null || tenantId.isBlank() || principalId == null || principalId.isBlank()) {
+            throw new IllegalStateException("evaluateDecision requires apiKey, tenantId, and principalId");
+        }
+    }
+
+    private DecisionRecord sendDecisionRecord(HttpRequest request) {
+        try {
+            HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 400) {
+                HelmError err = gson.fromJson(resp.body(), HelmError.class);
+                throw new HelmApiException(
+                        resp.statusCode(),
+                        err != null && err.getError() != null ? err.getError().getMessage() : resp.body(),
+                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
+            }
+            return decodeDecisionRecord(resp.body());
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException("HELM API request failed", e);
+        }
+    }
+
+    // Generated DecisionRecord also extends HashMap. Decode its declared
+    // schema fields explicitly so the typed API does not lose data to Gson's
+    // map adapter.
+    private DecisionRecord decodeDecisionRecord(String body) {
+        JsonElement parsed = JsonParser.parseString(body);
+        if (!parsed.isJsonObject()) {
+            throw new IllegalStateException("HELM evaluate response must be a JSON object");
+        }
+        JsonObject json = parsed.getAsJsonObject();
+        DecisionRecord record = new DecisionRecord();
+        record.setId(requiredString(json, "id"));
+        record.setProposalId(requiredString(json, "proposal_id"));
+        record.setStepId(requiredString(json, "step_id"));
+        record.setPhenotypeHash(requiredString(json, "phenotype_hash"));
+        record.setPolicyVersion(requiredString(json, "policy_version"));
+        record.setSubjectId(requiredString(json, "subject_id"));
+        record.setAction(requiredString(json, "action"));
+        record.setResource(requiredString(json, "resource"));
+        record.setEffectDigest(optionalString(json, "effect_digest"));
+        record.setPolicyBackend(optionalString(json, "policy_backend"));
+        record.setPolicyContentHash(optionalString(json, "policy_content_hash"));
+        record.setPolicyEpoch(optionalString(json, "policy_epoch"));
+        record.setStateCursor(requiredString(json, "state_cursor"));
+        record.setSnapshot(optionalString(json, "snapshot"));
+        record.setEnvFingerprint(requiredString(json, "env_fingerprint"));
+        record.setVerdict(requiredString(json, "verdict"));
+        record.setReason(requiredString(json, "reason"));
+        record.setReasonCode(optionalString(json, "reason_code"));
+        if (json.has("input_context") && !json.get("input_context").isJsonNull()) {
+            record.setInputContext(gson.fromJson(json.get("input_context"), Object.class));
+        }
+        record.setTrajectoryRiskScore(optionalDouble(json, "trajectory_risk_score"));
+        record.setSessionCentroidHash(optionalString(json, "session_centroid_hash"));
+        record.setRiskAccumulationWindow(optionalInteger(json, "risk_accumulation_window"));
+        record.setRequirementSetHash(optionalString(json, "requirement_set_hash"));
+        record.setPolicyDecisionHash(optionalString(json, "policy_decision_hash"));
+        record.setSignature(requiredString(json, "signature"));
+        record.setSignatureType(requiredString(json, "signature_type"));
+        try {
+            record.setTimestamp(OffsetDateTime.parse(requiredString(json, "timestamp")));
+        } catch (RuntimeException err) {
+            throw new IllegalStateException("HELM evaluate response has an invalid timestamp", err);
+        }
+        if (json.has("intervention") && !json.get("intervention").isJsonNull()) {
+            JsonElement intervention = json.get("intervention");
+            if (!intervention.isJsonObject()) {
+                throw new IllegalStateException("HELM evaluate response has an invalid intervention");
+            }
+            JsonObject metadata = intervention.getAsJsonObject();
+            InterventionMetadata parsedMetadata = new InterventionMetadata();
+            parsedMetadata.setType(requiredString(metadata, "type"));
+            parsedMetadata.setReasonCode(requiredString(metadata, "reason_code"));
+            parsedMetadata.setWaitDuration(optionalLong(metadata, "wait_duration"));
+            parsedMetadata.setTokensSaved(optionalLong(metadata, "tokens_saved"));
+            record.setIntervention(parsedMetadata);
+        }
+        return record;
+    }
+
+    private static String requiredString(JsonObject json, String field) {
+        String value = optionalString(json, field);
+        if (value == null) {
+            throw new IllegalStateException("HELM evaluate response is missing required field " + field);
+        }
+        return value;
+    }
+
+    private static String optionalString(JsonObject json, String field) {
+        JsonElement value = json.get(field);
+        if (value == null || value.isJsonNull()) {
+            return null;
+        }
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+            throw new IllegalStateException("HELM evaluate response field " + field + " must be a string");
+        }
+        return value.getAsString();
+    }
+
+    private static Double optionalDouble(JsonObject json, String field) {
+        JsonElement value = json.get(field);
+        if (value == null || value.isJsonNull()) {
+            return null;
+        }
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+            throw new IllegalStateException("HELM evaluate response field " + field + " must be a number");
+        }
+        return value.getAsDouble();
+    }
+
+    private static Integer optionalInteger(JsonObject json, String field) {
+        JsonElement value = json.get(field);
+        if (value == null || value.isJsonNull()) {
+            return null;
+        }
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+            throw new IllegalStateException("HELM evaluate response field " + field + " must be an integer");
+        }
+        return value.getAsInt();
+    }
+
+    private static Long optionalLong(JsonObject json, String field) {
+        JsonElement value = json.get(field);
+        if (value == null || value.isJsonNull()) {
+            return null;
+        }
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+            throw new IllegalStateException("HELM evaluate response field " + field + " must be an integer");
+        }
+        return value.getAsLong();
     }
 
     /** POST /api/v1/kernel/approve */

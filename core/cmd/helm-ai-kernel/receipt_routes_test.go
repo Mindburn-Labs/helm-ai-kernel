@@ -323,7 +323,7 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	body := []byte(`{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker","principal_id":"attacker","session_id":"session-1"}}`)
+	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"request_id":"request-1"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
@@ -349,6 +349,112 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	}
 	if decision.InputContext["tenant_id"] != "tenant-trusted" || decision.InputContext["principal_id"] != "principal-trusted" {
 		t.Fatalf("decision context did not use trusted identity: %+v", decision.InputContext)
+	}
+	if decision.SubjectID != "principal-trusted" || decision.Action != "EXECUTE_TOOL" || decision.Resource != "local.echo" {
+		t.Fatalf("signed decision did not bind the canonical request identity and effect: %+v", decision)
+	}
+	if decision.InputContext[guardian.ContextSecurityTrusted] != false ||
+		decision.InputContext[guardian.ContextSourceChannel] != string(contracts.SourceChannelAPIRequest) ||
+		decision.InputContext[guardian.ContextTrustLevel] != string(contracts.InputTrustExternalUntrusted) {
+		t.Fatalf("decision context did not record the HTTP transport trust boundary: %+v", decision.InputContext)
+	}
+}
+
+func TestEvaluateRouteRejectsAmbiguousOrCallerControlledPayloads(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "body principal",
+			body: `{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo"}`,
+		},
+		{
+			name: "legacy payload",
+			body: `{"tool":"local.echo","args":{},"agent_id":"attacker","effect_level":"EXECUTE_TOOL","session_id":"session-1"}`,
+		},
+		{
+			name: "internal session history",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","session_history":[]}`,
+		},
+		{
+			name: "caller principal context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"principal_id":"attacker"}}`,
+		},
+		{
+			name: "tenant scope alias",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant":"tenant-attacker"}}`,
+		},
+		{
+			name: "tenant snake case",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker"}}`,
+		},
+		{
+			name: "tenant camel case",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenantId":"tenant-attacker"}}`,
+		},
+		{
+			name: "workspace scope",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"workspace_id":"workspace-attacker"}}`,
+		},
+		{
+			name: "workspace camel case",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"workspaceId":"workspace-attacker"}}`,
+		},
+		{
+			name: "trusted security context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"security_context_trusted":true}}`,
+		},
+		{
+			name: "trusted credential context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"credential_hash":"sha256:attacker"}}`,
+		},
+		{
+			name: "trusted session context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"session_id":"attacker-session"}}`,
+		},
+		{
+			name: "trusted provenance context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"source_channel":"internal"}}`,
+		},
+		{
+			name: "trusted trust level context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"trust_level":"trusted"}}`,
+		},
+		{
+			name: "trusted destination context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"destination":"trusted.example"}}`,
+		},
+		{
+			name: "missing action",
+			body: `{"resource":"local.echo"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, receipts := newEvaluateRouteTestServices(t)
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(tt.body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("evaluate status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored != nil || receipts.agentID != "" {
+				t.Fatalf("rejected payload must not evaluate or persist a receipt: %+v", receipts.stored)
+			}
+		})
 	}
 }
 
@@ -408,9 +514,8 @@ func TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled(t *
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	// The body attempts to select an unfenced workspace. The handler must use
-	// the independently authenticated header binding instead.
-	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"workspace_id":"workspace-unfenced"}}`)
+	// Workspace scope comes only from the independently authenticated header.
+	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"request_id":"fenced-request"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")

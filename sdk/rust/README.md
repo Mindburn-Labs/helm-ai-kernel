@@ -43,6 +43,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+For the authenticated evaluator, configure identity on the client and use the
+typed canonical body:
+
+```rust
+use helm_sdk::{DecisionRequest, HelmClient};
+
+let decision = HelmClient::new("http://127.0.0.1:7714")
+    .with_api_key("local-admin-key")
+    .with_tenant_id("tenant-a")
+    .with_principal_id("operator-a")
+    .evaluate_decision(&DecisionRequest {
+        action: "EXECUTE_TOOL".to_string(),
+        resource: "local.echo".to_string(),
+        context: None,
+    })?;
+println!("{}", decision.verdict);
+```
+
+Use `with_workspace_id` when a scoped emergency-stop fence is active. The
+body cannot contain principal, tenant, workspace, or legacy evaluator fields.
+
 ## Execution Boundary Methods
 
 `HelmClient` includes calls for evidence envelope manifests, boundary records

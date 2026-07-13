@@ -35,7 +35,7 @@ func TestEvaluate_Allow(t *testing.T) {
 	}
 	reqBody, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -75,7 +75,7 @@ func TestEvaluate_Deny(t *testing.T) {
 	}
 	reqBody, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -90,7 +90,7 @@ func TestEvaluate_RequiresAuthentication(t *testing.T) {
 	helmPDP := pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true})
 	srv := NewServer(ServerConfig{PDP: helmPDP})
 	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "attacker", SessionID: "s"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
@@ -101,7 +101,7 @@ func TestEvaluate_RequiresAuthentication(t *testing.T) {
 func TestEvaluate_UsesAuthenticatedPrincipalNotCallerAgent(t *testing.T) {
 	srv := newTestServer(t)
 	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "victim", SessionID: "s"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -133,11 +133,29 @@ func TestEvaluate_UsesAuthenticatedPrincipalNotCallerAgent(t *testing.T) {
 
 func TestEvaluate_InvalidMethod(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/evaluate", nil)
+	req := httptest.NewRequest(http.MethodGet, legacyEvaluatePath, nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestEvaluate_UnversionedLegacyContractIsRetired(t *testing.T) {
+	srv := newTestServer(t)
+	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "legacy-agent", SessionID: "s"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusGone {
+		t.Fatalf("expected retired legacy route to return 410, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode retirement response: %v", err)
+	}
+	if body["reason_code"] != "LEGACY_EVALUATE_RETIRED" {
+		t.Fatalf("retirement reason_code = %v", body["reason_code"])
 	}
 }
 
@@ -147,7 +165,7 @@ func TestGetReceipt(t *testing.T) {
 	// Evaluate to create a receipt
 	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -190,7 +208,7 @@ func TestVerifyChain(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "test-session"}
 		reqBody, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+		req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 	}
@@ -226,7 +244,7 @@ func TestHealth(t *testing.T) {
 func TestCORS(t *testing.T) {
 	// With no AllowedOrigins configured, CORS headers should NOT be set (secure default).
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodOptions, "/api/v1/evaluate", nil)
+	req := httptest.NewRequest(http.MethodOptions, legacyEvaluatePath, nil)
 	req.Header.Set("Origin", "https://evil.example.com")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -243,7 +261,7 @@ func TestCORS(t *testing.T) {
 		PDP:            helmPDP,
 		AllowedOrigins: []string{"https://app.example.com"},
 	})
-	req2 := httptest.NewRequest(http.MethodOptions, "/api/v1/evaluate", nil)
+	req2 := httptest.NewRequest(http.MethodOptions, legacyEvaluatePath, nil)
 	req2.Header.Set("Origin", "https://app.example.com")
 	w2 := httptest.NewRecorder()
 	srvWithOrigins.ServeHTTP(w2, req2)
@@ -259,7 +277,7 @@ func TestLamportMonotonicity(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
 		reqBody, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+		req := httptest.NewRequest(http.MethodPost, legacyEvaluatePath, bytes.NewReader(reqBody))
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		var resp EvaluateResponse

@@ -42,6 +42,7 @@ package main
 import (
     "fmt"
     "log"
+    "os"
 
     helm "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/client"
 )
@@ -49,6 +50,7 @@ import (
 func main() {
     c := helm.New(
         "http://127.0.0.1:7714",
+        helm.WithAPIKey(os.Getenv("HELM_ADMIN_API_KEY")),
         helm.WithTenantID("tenant-a"),
         helm.WithPrincipalID("operator-a"),
     )
@@ -70,8 +72,23 @@ func main() {
     // Conformance
     conf, _ := c.ConformanceRun(helm.ConformanceRequest{Level: "L2"})
     fmt.Println(conf.Verdict, conf.Gates, "gates")
+
+    // Canonical evaluator body; identity is configured above, not in JSON.
+    decision, err := c.EvaluateDecision(helm.DecisionRequest{
+        Action:   "EXECUTE_TOOL",
+        Resource: "local.echo",
+        Context:  map[string]interface{}{"request_id": "request-123"},
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(decision.Verdict)
 }
 ```
+
+`EvaluateDecision` requires API key, tenant ID, and principal ID. Set
+`WithWorkspaceID` as well when a scoped emergency-stop fence is active. The
+body never accepts principal, tenant, workspace, or legacy evaluator fields.
 
 ## API
 

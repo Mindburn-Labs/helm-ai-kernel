@@ -35,14 +35,23 @@ npm run build
 ```ts
 import { HelmClient } from "@mindburn/helm-ai-kernel";
 
-const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
+const client = new HelmClient({
+  baseUrl: "http://127.0.0.1:7714",
+  apiKey: process.env.HELM_ADMIN_API_KEY,
+  tenantId: "tenant-a",
+  principalId: "operator-a",
+});
 const decision = await client.evaluateDecision({
-  principal: "example-agent",
   action: "read-ticket",
   resource: "ticket:123",
 });
 console.log(decision.verdict); // ALLOW, DENY, or ESCALATE
 ```
+
+`evaluateDecision` requires API key, tenant ID, and principal ID. Set
+`workspaceId` when a scoped emergency-stop fence is active. The request body
+accepts only `action`, `resource`, and optional `context`; body identity and
+legacy evaluator payloads are retired.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.
@@ -50,6 +59,9 @@ from `examples/ts_sdk/`.
 ## Agent Framework Adapters
 
 The TypeScript SDK includes lightweight adapter helpers for LangGraph, CrewAI, OpenAI Agents SDK, PydanticAI, and LlamaIndex tool-call events. These helpers normalize each framework event into a HELM governance request and submit it through `chatCompletionsWithReceipt`, preserving the kernel receipt returned in `X-Helm-*` headers.
+
+They use `chatCompletionsWithReceipt`, not `/api/v1/evaluate`, so they are not
+direct evaluator-contract conformance evidence.
 
 ```ts
 import { HelmClient, createAgentFrameworkAdapter, fromOpenAIAgentsToolCall } from "@mindburn/helm-ai-kernel";

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,6 +19,76 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
+// evaluateRequest is the sole public HTTP payload accepted by the served
+// evaluator. Identity, tenancy, workspace scope, and trusted security context
+// are intentionally absent: the route derives those values from its verified
+// transport bindings before Guardian evaluation.
+type evaluateRequest struct {
+	Action   string         `json:"action"`
+	Resource string         `json:"resource"`
+	Context  map[string]any `json:"context,omitempty"`
+}
+
+func decodeEvaluateRequest(r *http.Request) (evaluateRequest, error) {
+	var request evaluateRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return evaluateRequest{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return evaluateRequest{}, fmt.Errorf("evaluate request must contain exactly one JSON object")
+	}
+
+	request.Action = strings.TrimSpace(request.Action)
+	request.Resource = strings.TrimSpace(request.Resource)
+	if request.Action == "" || request.Resource == "" {
+		return evaluateRequest{}, fmt.Errorf("action and resource are required")
+	}
+	for key := range request.Context {
+		if isReservedEvaluateContextKey(key) {
+			return evaluateRequest{}, fmt.Errorf("context key %q is bound by the authenticated transport", key)
+		}
+	}
+	return request, nil
+}
+
+func isReservedEvaluateContextKey(key string) bool {
+	key = strings.TrimSpace(key)
+	if guardian.IsReservedSecurityContextKey(key) {
+		return true
+	}
+	switch key {
+	case "principal_id", "tenant_id", "tenantId", "tenant", "workspace_id", "workspaceId", "workspace":
+		return true
+	default:
+		return false
+	}
+}
+
+func authenticatedEvaluateDecisionRequest(request evaluateRequest, principalID, tenantID, workspaceID string) guardian.DecisionRequest {
+	context := make(map[string]any, len(request.Context)+6)
+	for key, value := range request.Context {
+		context[key] = value
+	}
+	context["principal_id"] = principalID
+	context["tenant_id"] = tenantID
+	if workspaceID != "" {
+		context["workspace_id"] = workspaceID
+	}
+	// An HTTP caller is an external, untrusted input source. These values are
+	// transport-owned so callers cannot self-assert a trusted security context.
+	context[guardian.ContextSecurityTrusted] = false
+	context[guardian.ContextSourceChannel] = string(contracts.SourceChannelAPIRequest)
+	context[guardian.ContextTrustLevel] = string(contracts.InputTrustExternalUntrusted)
+	return guardian.DecisionRequest{
+		Principal: principalID,
+		Action:    request.Action,
+		Resource:  request.Resource,
+		Context:   context,
+	}
+}
+
 func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 	mux.HandleFunc("/api/v1/evaluate", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -28,9 +99,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Guardian unavailable", "guardian not initialized")
 			return
 		}
-		var req guardian.DecisionRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid JSON body")
+		request, err := decodeEvaluateRequest(r)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid evaluate request")
 			return
 		}
 		principal, err := helmauth.GetPrincipal(r.Context())
@@ -60,15 +131,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 		}
-		req.Principal = principalID
-		if req.Context == nil {
-			req.Context = make(map[string]interface{})
-		}
-		req.Context["principal_id"] = principalID
-		req.Context["tenant_id"] = tenantID
-		if workspaceID != "" {
-			req.Context["workspace_id"] = workspaceID
-		}
+		req := authenticatedEvaluateDecisionRequest(request, principalID, tenantID, workspaceID)
 		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
 		if err != nil {
 			api.WriteInternal(w, err)

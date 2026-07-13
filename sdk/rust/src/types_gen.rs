@@ -2310,35 +2310,95 @@ impl CreateSandboxGrantRequest {
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DecisionRecord {
-    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    #[serde(rename = "action", skip_serializing_if = "Option::is_none")]
-    pub action: Option<String>,
-    #[serde(rename = "resource", skip_serializing_if = "Option::is_none")]
-    pub resource: Option<String>,
-    #[serde(rename = "verdict", skip_serializing_if = "Option::is_none")]
-    pub verdict: Option<String>,
-    #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    #[serde(rename = "policy_version", skip_serializing_if = "Option::is_none")]
-    pub policy_version: Option<String>,
+    #[serde(rename = "id")]
+    pub id: String,
+    #[serde(rename = "proposal_id")]
+    pub proposal_id: String,
+    #[serde(rename = "step_id")]
+    pub step_id: String,
+    #[serde(rename = "phenotype_hash")]
+    pub phenotype_hash: String,
+    #[serde(rename = "policy_version")]
+    pub policy_version: String,
+    #[serde(rename = "subject_id")]
+    pub subject_id: String,
+    #[serde(rename = "action")]
+    pub action: String,
+    #[serde(rename = "resource")]
+    pub resource: String,
+    #[serde(rename = "effect_digest", skip_serializing_if = "Option::is_none")]
+    pub effect_digest: Option<String>,
+    #[serde(rename = "policy_backend", skip_serializing_if = "Option::is_none")]
+    pub policy_backend: Option<String>,
+    #[serde(rename = "policy_content_hash", skip_serializing_if = "Option::is_none")]
+    pub policy_content_hash: Option<String>,
+    #[serde(rename = "policy_epoch", skip_serializing_if = "Option::is_none")]
+    pub policy_epoch: Option<String>,
+    #[serde(rename = "state_cursor")]
+    pub state_cursor: String,
+    #[serde(rename = "snapshot", skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<String>,
+    #[serde(rename = "env_fingerprint")]
+    pub env_fingerprint: String,
+    #[serde(rename = "verdict")]
+    pub verdict: String,
+    #[serde(rename = "reason")]
+    pub reason: String,
+    #[serde(rename = "reason_code", skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    #[serde(rename = "input_context", skip_serializing_if = "Option::is_none")]
+    pub input_context: Option<serde_json::Value>,
+    #[serde(rename = "trajectory_risk_score", skip_serializing_if = "Option::is_none")]
+    pub trajectory_risk_score: Option<f64>,
+    #[serde(rename = "session_centroid_hash", skip_serializing_if = "Option::is_none")]
+    pub session_centroid_hash: Option<String>,
+    #[serde(rename = "risk_accumulation_window", skip_serializing_if = "Option::is_none")]
+    pub risk_accumulation_window: Option<i32>,
+    #[serde(rename = "requirement_set_hash", skip_serializing_if = "Option::is_none")]
+    pub requirement_set_hash: Option<String>,
     #[serde(rename = "policy_decision_hash", skip_serializing_if = "Option::is_none")]
     pub policy_decision_hash: Option<String>,
-    #[serde(rename = "signature", skip_serializing_if = "Option::is_none")]
-    pub signature: Option<String>,
+    #[serde(rename = "signature")]
+    pub signature: String,
+    #[serde(rename = "signature_type")]
+    pub signature_type: String,
+    #[serde(rename = "timestamp")]
+    pub timestamp: String,
+    #[serde(rename = "intervention", skip_serializing_if = "Option::is_none")]
+    pub intervention: Option<Box<InterventionMetadata>>,
 }
 
 impl DecisionRecord {
-    pub fn new() -> DecisionRecord {
+    pub fn new(id: String, proposal_id: String, step_id: String, phenotype_hash: String, policy_version: String, subject_id: String, action: String, resource: String, state_cursor: String, env_fingerprint: String, verdict: String, reason: String, signature: String, signature_type: String, timestamp: String) -> DecisionRecord {
         DecisionRecord {
-            id: None,
-            action: None,
-            resource: None,
-            verdict: None,
-            reason: None,
-            policy_version: None,
+            id,
+            proposal_id,
+            step_id,
+            phenotype_hash,
+            policy_version,
+            subject_id,
+            action,
+            resource,
+            effect_digest: None,
+            policy_backend: None,
+            policy_content_hash: None,
+            policy_epoch: None,
+            state_cursor,
+            snapshot: None,
+            env_fingerprint,
+            verdict,
+            reason,
+            reason_code: None,
+            input_context: None,
+            trajectory_risk_score: None,
+            session_centroid_hash: None,
+            risk_accumulation_window: None,
+            requirement_set_hash: None,
             policy_decision_hash: None,
-            signature: None,
+            signature,
+            signature_type,
+            timestamp,
+            intervention: None,
         }
     }
 }
@@ -2354,22 +2414,22 @@ impl DecisionRecord {
  */
 
 
+/// DecisionRequest : Canonical body for POST /api/v1/evaluate. Identity and trusted transport metadata are not accepted in this object; the runtime binds them from verified request headers.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DecisionRequest {
-    #[serde(rename = "principal", skip_serializing_if = "Option::is_none")]
-    pub principal: Option<String>,
     #[serde(rename = "action")]
     pub action: String,
     #[serde(rename = "resource")]
     pub resource: String,
+    /// Application context for policy evaluation. It must not include tenant, principal, workspace, or Guardian reserved security keys; those are owned by the authenticated transport boundary.
     #[serde(rename = "context", skip_serializing_if = "Option::is_none")]
-    pub context: Option<std::collections::HashMap<String, serde_json::Value>>,
+    pub context: Option<serde_json::Value>,
 }
 
 impl DecisionRequest {
+    /// Canonical body for POST /api/v1/evaluate. Identity and trusted transport metadata are not accepted in this object; the runtime binds them from verified request headers.
     pub fn new(action: String, resource: String) -> DecisionRequest {
         DecisionRequest {
-            principal: None,
             action,
             resource,
             context: None,
@@ -4023,6 +4083,40 @@ impl ImportPreflightResult {
             checks,
             blocked_reasons: None,
             evidence_ledger: Box::new(evidence_ledger),
+        }
+    }
+}
+
+/*
+ * HELM Kernel API
+ *
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ * Generated by: https://openapi-generator.tech
+ */
+
+
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub struct InterventionMetadata {
+    #[serde(rename = "type")]
+    pub r#type: String,
+    #[serde(rename = "reason_code")]
+    pub reason_code: String,
+    #[serde(rename = "wait_duration", skip_serializing_if = "Option::is_none")]
+    pub wait_duration: Option<i64>,
+    #[serde(rename = "tokens_saved", skip_serializing_if = "Option::is_none")]
+    pub tokens_saved: Option<i64>,
+}
+
+impl InterventionMetadata {
+    pub fn new(r#type: String, reason_code: String) -> InterventionMetadata {
+        InterventionMetadata {
+            r#type,
+            reason_code,
+            wait_duration: None,
+            tokens_saved: None,
         }
     }
 }

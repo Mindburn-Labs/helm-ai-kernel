@@ -18,6 +18,7 @@ from .types_gen import (
     ChatCompletionResponse,
     ConformanceRequest,
     ConformanceResult,
+    DecisionRecord,
     DecisionRequest,
     Receipt,
     Session,
@@ -168,13 +169,23 @@ class HelmClient:
         api_key: Optional[str] = None,
         tenant_id: Optional[str] = None,
         timeout: float = 30.0,
+        *,
+        principal_id: Optional[str] = None,
+        workspace_id: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
+        self._api_key = api_key
+        self._tenant_id = tenant_id
+        self._principal_id = principal_id
         headers: dict[str, str] = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         if tenant_id:
             headers["X-Helm-Tenant-ID"] = tenant_id
+        if principal_id:
+            headers["X-Helm-Principal-ID"] = principal_id
+        if workspace_id:
+            headers["X-Helm-Workspace-ID"] = workspace_id
         self._client = httpx.Client(
             base_url=self.base_url,
             headers=headers,
@@ -219,10 +230,34 @@ class HelmClient:
         return result
 
     # ── Decision Evaluation ─────────────────────────
-    def evaluate_decision(self, req: Union[DecisionRequest, dict[str, Any]]) -> dict[str, Any]:
-        resp = self._client.post("/api/v1/evaluate", json=_json_body(req))
+    def evaluate_decision(self, req: DecisionRequest) -> DecisionRecord:
+        self._require_evaluate_bindings()
+        if not isinstance(req, DecisionRequest):
+            raise TypeError("evaluate_decision requires a DecisionRequest; legacy dictionary payloads are retired")
+        payload: dict[str, Any] = {
+            "action": req.action,
+            "resource": req.resource,
+        }
+        if req.context is not None:
+            payload["context"] = req.context
+        resp = self._client.post("/api/v1/evaluate", json=payload)
         self._check(resp)
-        return resp.json()
+        result = DecisionRecord.from_dict(resp.json())
+        assert result is not None
+        return result
+
+    def _require_evaluate_bindings(self) -> None:
+        missing = [
+            name
+            for name, value in (
+                ("api_key", self._api_key),
+                ("tenant_id", self._tenant_id),
+                ("principal_id", self._principal_id),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(f"evaluate_decision requires {', '.join(missing)}")
 
     def run_public_demo(self, action_id: str, args: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         resp = self._client.post(

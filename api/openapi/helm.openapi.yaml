@@ -361,10 +361,15 @@ paths:
       operationId: evaluateDecision
       tags: [console]
       summary: Evaluate a governed intent and emit a receipt
+      description: |
+        The request body contains only the governed action, resource, and
+        caller context. Tenant, principal, workspace, and trusted-security
+        bindings are derived exclusively from the authenticated transport
+        headers. Calls are evaluated independently; this route does not
+        advertise idempotency-key replay semantics.
       security:
         - AdminBearerAuth: []
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
         - $ref: '#/components/parameters/HelmTenantIDHeader'
         - $ref: '#/components/parameters/HelmPrincipalIDHeader'
         - $ref: '#/components/parameters/HelmWorkspaceIDHeader'
@@ -377,10 +382,6 @@ paths:
       responses:
         '200':
           description: Guardian decision record
-          headers:
-            X-Helm-Idempotency-Replayed:
-              schema: { type: string, enum: ["true"] }
-              description: Present when this response was replayed from the idempotency cache.
           content:
             application/json:
               schema:
@@ -391,8 +392,6 @@ paths:
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
-        '409':
-          $ref: '#/components/responses/IdempotencyConflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
@@ -4480,26 +4479,70 @@ components:
 
     DecisionRequest:
       type: object
+      additionalProperties: false
       required: [action, resource]
+      description: |
+        Canonical body for POST /api/v1/evaluate. Identity and trusted
+        transport metadata are not accepted in this object; the runtime binds
+        them from verified request headers.
       properties:
-        principal: { type: string }
         action: { type: string }
         resource: { type: string }
         context:
           type: object
-          additionalProperties: true
+          description: |
+            Application context for policy evaluation. It must not include
+            tenant, principal, workspace, or Guardian reserved security keys;
+            those are owned by the authenticated transport boundary.
 
     DecisionRecord:
       type: object
+      additionalProperties: false
+      required:
+        [id, proposal_id, step_id, phenotype_hash, policy_version, subject_id,
+         action, resource, state_cursor, env_fingerprint, verdict, reason,
+         signature, signature_type, timestamp]
       properties:
         id: { type: string }
+        proposal_id: { type: string }
+        step_id: { type: string }
+        phenotype_hash: { type: string }
+        policy_version: { type: string }
+        subject_id: { type: string }
         action: { type: string }
         resource: { type: string }
+        effect_digest: { type: string }
+        policy_backend: { type: string }
+        policy_content_hash: { type: string }
+        policy_epoch: { type: string }
+        state_cursor: { type: string }
+        snapshot: { type: string }
+        env_fingerprint: { type: string }
         verdict: { type: string }
         reason: { type: string }
-        policy_version: { type: string }
+        reason_code: { type: string }
+        input_context:
+          type: object
+        trajectory_risk_score: { type: number, format: double }
+        session_centroid_hash: { type: string }
+        risk_accumulation_window: { type: integer }
+        requirement_set_hash: { type: string }
         policy_decision_hash: { type: string }
         signature: { type: string }
+        signature_type: { type: string }
+        timestamp: { type: string, format: date-time }
+        intervention:
+          $ref: '#/components/schemas/InterventionMetadata'
+
+    InterventionMetadata:
+      type: object
+      additionalProperties: false
+      required: [type, reason_code]
+      properties:
+        type: { type: string }
+        reason_code: { type: string }
+        wait_duration: { type: integer, format: int64 }
+        tokens_saved: { type: integer, format: int64 }
 
     ConsoleCapabilities:
       type: object

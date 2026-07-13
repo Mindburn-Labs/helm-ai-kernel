@@ -30,6 +30,7 @@ type HelmClient struct {
 	APIKey      string
 	TenantID    string
 	PrincipalID string
+	WorkspaceID string
 	HTTPClient  *http.Client
 }
 
@@ -50,6 +51,16 @@ type GovernanceMetadata struct {
 type ChatCompletionWithReceipt struct {
 	Response   ChatCompletionResponse `json:"response"`
 	Governance GovernanceMetadata     `json:"governance"`
+}
+
+// evaluateDecisionRequest is deliberately narrower than the generated model.
+// Some generators retain an additional-properties map even when OpenAPI marks
+// the top-level object closed; using this DTO guarantees that identity and
+// trusted transport fields can never leak into the evaluator body.
+type evaluateDecisionRequest struct {
+	Action   string                 `json:"action"`
+	Resource string                 `json:"resource"`
+	Context  map[string]interface{} `json:"context,omitempty"`
 }
 
 type DemoRunResult = map[string]any
@@ -85,6 +96,12 @@ func WithTenantID(tenantID string) Option {
 // WithPrincipalID sets the X-Helm-Principal-ID header.
 func WithPrincipalID(principalID string) Option {
 	return func(c *HelmClient) { c.PrincipalID = principalID }
+}
+
+// WithWorkspaceID sets the optional X-Helm-Workspace-ID header used when a
+// scoped emergency-stop fence is active.
+func WithWorkspaceID(workspaceID string) Option {
+	return func(c *HelmClient) { c.WorkspaceID = workspaceID }
 }
 
 // WithTimeout sets the HTTP timeout.
@@ -171,10 +188,17 @@ func (c *HelmClient) ChatCompletionsWithReceipt(req ChatCompletionRequest) (*Cha
 }
 
 // EvaluateDecision calls POST /api/v1/evaluate.
-func (c *HelmClient) EvaluateDecision(req any) (map[string]any, error) {
-	var out map[string]any
-	err := c.do("POST", "/api/v1/evaluate", req, &out)
-	return out, err
+func (c *HelmClient) EvaluateDecision(req DecisionRequest) (*DecisionRecord, error) {
+	if c.APIKey == "" || c.TenantID == "" || c.PrincipalID == "" {
+		return nil, fmt.Errorf("EvaluateDecision requires API key, tenant ID, and principal ID")
+	}
+	var out DecisionRecord
+	err := c.do("POST", "/api/v1/evaluate", evaluateDecisionRequest{
+		Action:   req.Action,
+		Resource: req.Resource,
+		Context:  req.Context,
+	}, &out)
+	return &out, err
 }
 
 // RunPublicDemo calls POST /api/demo/run.
@@ -322,5 +346,8 @@ func (c *HelmClient) applyHeaders(req *http.Request) {
 	}
 	if c.PrincipalID != "" {
 		req.Header.Set("X-Helm-Principal-ID", c.PrincipalID)
+	}
+	if c.WorkspaceID != "" {
+		req.Header.Set("X-Helm-Workspace-ID", c.WorkspaceID)
 	}
 }

@@ -46,9 +46,9 @@ const (
 )
 
 const (
-	lkgExpiredReasonText            = "last-known-good snapshot expired"
-	lkgMissingInstallTimeReasonText = "last-known-good snapshot has no install time"
-	lkgRetentionDisabledReasonText  = "last-known-good retention disabled"
+	lkgExpiredReasonText                 = "last-known-good snapshot expired"
+	lkgMissingVerificationTimeReasonText = "last-known-good snapshot has no verification time"
+	lkgRetentionDisabledReasonText       = "last-known-good retention disabled"
 )
 
 var (
@@ -126,7 +126,7 @@ type EffectivePolicySnapshot struct {
 	EmergencyExpiresAt   time.Time        `json:"emergency_expires_at,omitempty"`
 	SourceRefs           []string         `json:"source_refs,omitempty"`
 	Validation           ValidationStatus `json:"validation"`
-	InstalledAt          time.Time        `json:"installed_at,omitempty"`
+	LastVerifiedAt       time.Time        `json:"last_verified_at,omitempty"`
 
 	Graph        *prg.Graph              `json:"-"`
 	PDP          pdp.PolicyDecisionPoint `json:"-"`
@@ -226,8 +226,9 @@ type Reconciler struct {
 	lkgMaxAge         time.Duration
 	now               func() time.Time
 
-	mu     sync.Mutex
-	status map[string]ReconcileStatus
+	reconcileMu sync.Mutex
+	mu          sync.Mutex
+	status      map[string]ReconcileStatus
 }
 
 type ReconcilerConfig struct {
@@ -292,6 +293,9 @@ func (r *Reconciler) ReconcileAll(ctx context.Context) ([]ReconcileStatus, error
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (ReconcileStatus, error) {
+	r.reconcileMu.Lock()
+	defer r.reconcileMu.Unlock()
+
 	scope = scope.Normalize()
 	status := ReconcileStatus{
 		TenantID:        scope.TenantID,
@@ -322,6 +326,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 		status.InstalledPolicyEpoch = installed.PolicyEpoch
 		status.SnapshotStatus = installed.Validation.Status
 		if installed.Validation.Status == StatusActive && installed.PolicyHash == head.PolicyHash && installed.PolicyEpoch == head.PolicyEpoch {
+			refreshed := *installed
+			refreshed.LastVerifiedAt = r.now().UTC()
+			if err := r.store.Swap(scope, &refreshed); err != nil {
+				status.Reason = err.Error()
+				return status, err
+			}
 			status.ReconcileStatus = StatusNoChange
 			r.remember(status)
 			return status, nil
@@ -386,7 +396,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 		status.Reason = err.Error()
 		return r.invalid(status, err)
 	}
-	snapshot.InstalledAt = r.now().UTC()
+	snapshot.LastVerifiedAt = r.now().UTC()
 	if err := r.store.Swap(scope, snapshot); err != nil {
 		status.Reason = err.Error()
 		return status, err
@@ -458,19 +468,19 @@ func (r *Reconciler) invalid(status ReconcileStatus, err error) (ReconcileStatus
 }
 
 func (r *Reconciler) lastKnownGoodFresh(snapshot *EffectivePolicySnapshot) bool {
-	if snapshot == nil || !r.keepLastKnownGood || snapshot.Validation.Status != StatusActive || snapshot.InstalledAt.IsZero() || r.lkgMaxAge <= 0 {
+	if snapshot == nil || !r.keepLastKnownGood || snapshot.Validation.Status != StatusActive || snapshot.LastVerifiedAt.IsZero() || r.lkgMaxAge <= 0 {
 		return false
 	}
 	now := r.now().UTC()
-	return !now.Before(snapshot.InstalledAt) && now.Before(snapshot.InstalledAt.Add(r.lkgMaxAge))
+	return !now.Before(snapshot.LastVerifiedAt) && now.Before(snapshot.LastVerifiedAt.Add(r.lkgMaxAge))
 }
 
 func (r *Reconciler) lkgInvalidationReason(snapshot *EffectivePolicySnapshot) string {
 	if !r.keepLastKnownGood {
 		return lkgRetentionDisabledReasonText
 	}
-	if snapshot == nil || snapshot.InstalledAt.IsZero() {
-		return lkgMissingInstallTimeReasonText
+	if snapshot == nil || snapshot.LastVerifiedAt.IsZero() {
+		return lkgMissingVerificationTimeReasonText
 	}
 	if snapshot.Validation.Status != StatusActive {
 		return "last-known-good snapshot is not active"

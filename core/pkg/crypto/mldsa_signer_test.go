@@ -146,6 +146,13 @@ func TestMLDSASigner_SignIntent(t *testing.T) {
 		t.Error("VerifyIntent returned false for valid intent")
 	}
 
+	intent.ExpiresAt = intent.ExpiresAt.Add(time.Hour)
+	valid, _ = signer.VerifyIntent(intent)
+	if valid {
+		t.Error("VerifyIntent accepted an intent with a tampered expiry")
+	}
+	intent.ExpiresAt = intent.ExpiresAt.Add(-time.Hour)
+
 	// Tamper
 	intent.AllowedTool = "delete_file"
 	valid, _ = signer.VerifyIntent(intent)

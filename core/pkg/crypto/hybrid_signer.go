@@ -113,13 +113,19 @@ func (h *HybridSigner) SignDecision(d *contracts.DecisionRecord) error {
 
 // SignIntent signs an AuthorizedExecutionIntent using both Ed25519 and ML-DSA-65.
 func (h *HybridSigner) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
-	sig, err := h.Sign([]byte(payload))
+	if i == nil {
+		return fmt.Errorf("intent is required")
+	}
+	i.SignatureType = SigPrefixHybrid + SigSeparator + h.keyID
+	payload, err := canonicalizeIntentForSignature(i)
+	if err != nil {
+		return err
+	}
+	sig, err := h.Sign(payload)
 	if err != nil {
 		return err
 	}
 	i.Signature = sig
-	i.SignatureType = SigPrefixHybrid + SigSeparator + h.keyID
 	return nil
 }
 

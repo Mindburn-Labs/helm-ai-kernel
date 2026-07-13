@@ -128,8 +128,15 @@ func (s *Ed25519Signer) SignDecision(d *contracts.DecisionRecord) error {
 }
 
 func (s *Ed25519Signer) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
-	sig, err := s.Sign([]byte(payload))
+	if i == nil {
+		return fmt.Errorf("intent is required")
+	}
+	i.SignatureType = SigPrefixEd25519 + SigSeparator + s.KeyID
+	payload, err := canonicalizeIntentForSignature(i)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -166,8 +173,11 @@ func (s *Ed25519Signer) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bo
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
-	return Verify(s.PublicKey(), i.Signature, []byte(payload))
+	payload, err := canonicalizeIntentForSignature(i)
+	if err != nil {
+		return false, err
+	}
+	return Verify(s.PublicKey(), i.Signature, payload)
 }
 
 func (s *Ed25519Signer) VerifyReceipt(r *contracts.Receipt) (bool, error) {

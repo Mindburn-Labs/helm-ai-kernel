@@ -91,13 +91,19 @@ func (s *MLDSASigner) SignDecision(d *contracts.DecisionRecord) error {
 
 // SignIntent signs an AuthorizedExecutionIntent using ML-DSA-65.
 func (s *MLDSASigner) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
-	sig, err := s.Sign([]byte(payload))
+	if i == nil {
+		return fmt.Errorf("intent is required")
+	}
+	i.SignatureType = SigPrefixMLDSA65 + SigSeparator + s.keyID
+	payload, err := canonicalizeIntentForSignature(i)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
 	i.Signature = sig
-	i.SignatureType = SigPrefixMLDSA65 + SigSeparator + s.keyID
 	return nil
 }
 
@@ -134,12 +140,15 @@ func (s *MLDSASigner) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
+	payload, err := canonicalizeIntentForSignature(i)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(i.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(s.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(s.publicKey, payload, nil, sig), nil
 }
 
 // VerifyReceipt verifies a Receipt signature using ML-DSA-65.

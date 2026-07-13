@@ -176,25 +176,30 @@ func TestHybridSigner_SignIntent(t *testing.T) {
 	assert.True(t, strings.HasPrefix(intent.Signature, HybridSigPrefix+HybridSigSeparator))
 	assert.Equal(t, SigPrefixHybrid+SigSeparator+"hybrid-key-2", intent.SignatureType)
 
-	// Verify
-	payload := CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err := signer.Verify([]byte(payload), intent.Signature)
+	// Verify through the public-key verifier used by execution paths.
+	verifier, err := NewHybridVerifier(signer.Ed25519Signer().PublicKeyBytes(), signer.MLDSASigner().PublicKeyBytes())
+	require.NoError(t, err)
+	valid, err := verifier.VerifyIntent(intent)
 	require.NoError(t, err)
 	assert.True(t, valid)
 
 	// Tamper
 	intent.AllowedTool = "delete_file"
-	payloadTampered := CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err = signer.Verify([]byte(payloadTampered), intent.Signature)
+	valid, err = verifier.VerifyIntent(intent)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered intent")
 
 	intent.AllowedTool = "read_file"
 	intent.EffectDigestHash = "sha256:tampered-effect"
-	payloadTampered = CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err = signer.Verify([]byte(payloadTampered), intent.Signature)
+	valid, err = verifier.VerifyIntent(intent)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered effect digest")
+
+	intent.EffectDigestHash = "sha256:effect-hybrid-001"
+	intent.ExpiresAt = intent.ExpiresAt.Add(time.Hour)
+	valid, err = verifier.VerifyIntent(intent)
+	require.NoError(t, err)
+	assert.False(t, valid, "should fail for tampered expiry")
 }
 
 func TestHybridSigner_SignReceiptRoundTrip(t *testing.T) {

@@ -5676,8 +5676,11 @@ export interface DecisionRequest {
     resource: string;
     /**
      * Application context for policy evaluation. It must not include
-     * tenant, principal, workspace, or Guardian reserved security keys;
-     * those are owned by the authenticated transport boundary.
+     * `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`,
+     * `workspaceId`, `workspace`, `security_context_trusted`,
+     * `credential_hash`, `session_id`, `source_channel`, `trust_level`,
+     * `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by
+     * the authenticated transport boundary.
      *
      * @type {object}
      * @memberof DecisionRequest

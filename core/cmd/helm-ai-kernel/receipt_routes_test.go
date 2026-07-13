@@ -361,6 +361,52 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	}
 }
 
+func TestEvaluateRouteAcceptsNullContext(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":null}`))
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("evaluate with null context status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored == nil {
+		t.Fatal("evaluate with null context did not persist a receipt")
+	}
+}
+
+func TestEvaluateRouteRejectsUnsupportedMethod(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/evaluate", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("evaluate unsupported method status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored != nil || receipts.agentID != "" {
+		t.Fatalf("unsupported method must not evaluate or persist a receipt: %+v", receipts.stored)
+	}
+}
+
 func TestEvaluateRouteRejectsAmbiguousOrCallerControlledPayloads(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")

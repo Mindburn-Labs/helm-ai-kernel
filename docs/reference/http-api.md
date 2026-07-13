@@ -42,16 +42,16 @@ public docs surface.
 | Class | Behavior |
 | --- | --- |
 | `public` | No runtime admin credential required |
-| `tenant_scoped` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` and matching tenant/principal context |
+| `tenant_scoped` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` plus matching `X-Helm-Tenant-ID` and `X-Helm-Principal-ID` headers; query parameters cannot select a tenant |
 | `admin` / `authenticated` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` |
 | `service_internal` | Requires `Authorization: Bearer $HELM_SERVICE_API_KEY` |
 
-When `HELM_EMERGENCY_STOP_FENCE_ENABLED=1`, `POST /api/v1/evaluate`
-additionally requires an authenticated tenant matching the server-owned
-`HELM_RUNTIME_TENANT_ID` and `X-Helm-Workspace-ID` matching the server-owned
-`HELM_RUNTIME_WORKSPACE_ID`. A request body cannot choose either scope
-binding. This is a dispatch fence only; it does not cancel already running
-work.
+When scoped emergency-stop fencing or runtime policy snapshot authority is
+enabled, `POST /api/v1/evaluate` additionally requires an authenticated tenant
+matching the server-owned `HELM_RUNTIME_TENANT_ID` and
+`X-Helm-Workspace-ID` matching the server-owned `HELM_RUNTIME_WORKSPACE_ID`.
+A request body cannot choose either scope binding. Emergency-stop fencing is a
+dispatch fence only; it does not cancel already running work.
 
 The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
 unavailable while this fence is enabled because request JSON is not an
@@ -73,15 +73,18 @@ authoritative tenant/workspace binding.
 
 `Authorization: Bearer $HELM_ADMIN_API_KEY`, `X-Helm-Tenant-ID`, and
 `X-Helm-Principal-ID` are required. `X-Helm-Workspace-ID` is optional unless
-the scoped emergency-stop fence is enabled, when it must match the
-server-owned workspace binding.
+scoped emergency-stop fencing or runtime policy snapshot authority is enabled,
+when it must match the server-owned workspace binding. A `tenant_id` query
+parameter is never a tenant binding.
 
 The body cannot select identity, tenant, workspace, or trusted security
 metadata. Top-level `principal`, `session_history`, legacy evaluator fields,
-and unknown fields are rejected with `400`. `context` must not contain
-`principal_id`, tenant or workspace aliases, or Guardian-owned keys such as
+and unknown fields are rejected with `400`. `context` may be omitted or
+`null`, but must not contain `principal_id`, `tenant_id`, `tenantId`,
+`tenant`, `workspace_id`, `workspaceId`, `workspace`,
 `security_context_trusted`, `credential_hash`, `session_id`,
-`source_channel`, `trust_level`, or `destination`.
+`source_channel`, `trust_level`, `destination`, `zeroid_token`, or
+`spiffe_uri`.
 
 Each invocation is evaluated independently. This route does not advertise
 `Idempotency-Key` replay or conflict semantics. Its response is the typed,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -90,8 +91,8 @@ func TestBoundaryStatusOpenAPIMatchesRuntimeContract(t *testing.T) {
 
 	for name, property := range schema.Properties {
 		wantType := boundaryStatusOpenAPIType(t, name)
-		if property.Type != wantType {
-			t.Errorf("BoundaryStatus.%s type=%q, want %q", name, property.Type, wantType)
+		if !property.Type.is(wantType) {
+			t.Errorf("BoundaryStatus.%s type=%q, want %q", name, property.Type.String(), wantType)
 		}
 	}
 	if got := schema.Properties["updated_at"].Format; got != "date-time" {
@@ -103,7 +104,7 @@ func TestBoundaryStatusOpenAPIMatchesRuntimeContract(t *testing.T) {
 			t.Errorf("BoundaryStatus.%s minimum=%v, want 0", name, minimum)
 		}
 	}
-	if additional := schema.Properties["components"].AdditionalProperties; additional == nil || additional.Type != "string" {
+	if additional := schema.Properties["components"].AdditionalProperties; additional == nil || !additional.Type.is("string") {
 		t.Errorf("BoundaryStatus.components additionalProperties=%+v, want string values", additional)
 	}
 
@@ -168,11 +169,84 @@ func TestEvaluateOpenAPIContractsMatchServedRuntimeTypes(t *testing.T) {
 	}
 }
 
+func TestEvaluateOpenAPIValidationMatchesRuntime(t *testing.T) {
+	operations := readOpenAPIOperationSecurity(t)
+	operation, ok := operations[http.MethodPost+" /api/v1/evaluate"]
+	if !ok {
+		t.Fatal("OpenAPI is missing POST /api/v1/evaluate")
+	}
+	if response, ok := operation.Responses["405"]; !ok || response.Ref != "#/components/responses/HelmError" {
+		t.Fatalf("evaluate OpenAPI 405 response = %+v, want HelmError", response)
+	}
+
+	schema := readOpenAPIObjectSchema(t, "DecisionRequest")
+	for _, field := range []string{"action", "resource"} {
+		property, ok := schema.Properties[field]
+		if !ok {
+			t.Fatalf("DecisionRequest is missing %s", field)
+		}
+		if property.MinLength == nil || *property.MinLength != 1 {
+			t.Errorf("DecisionRequest.%s minLength=%v, want 1", field, property.MinLength)
+		}
+	}
+	context := schema.Properties["context"]
+	if !context.Type.includes("object") || !context.Type.includes("null") {
+		t.Errorf("DecisionRequest.context type=%q, want object and null", context.Type.String())
+	}
+	for _, key := range []string{
+		"principal_id", "tenant_id", "tenantId", "tenant", "workspace_id", "workspaceId", "workspace",
+		"security_context_trusted", "credential_hash", "session_id", "source_channel", "trust_level", "destination",
+		"zeroid_token", "spiffe_uri",
+	} {
+		if !strings.Contains(context.Description, "`"+key+"`") {
+			t.Errorf("DecisionRequest.context description does not reserve %q", key)
+		}
+	}
+}
+
+type openAPIType []string
+
+func (t *openAPIType) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		*t = []string{value.Value}
+		return nil
+	case yaml.SequenceNode:
+		var values []string
+		if err := value.Decode(&values); err != nil {
+			return err
+		}
+		*t = values
+		return nil
+	default:
+		return fmt.Errorf("openapi type has unexpected YAML node kind %d", value.Kind)
+	}
+}
+
+func (t openAPIType) includes(value string) bool {
+	for _, candidate := range t {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
+}
+
+func (t openAPIType) is(value string) bool {
+	return len(t) == 1 && t[0] == value
+}
+
+func (t openAPIType) String() string {
+	return strings.Join(t, "|")
+}
+
 type openAPISchemaProperty struct {
-	Type                 string                 `yaml:"type"`
+	Type                 openAPIType            `yaml:"type"`
 	Format               string                 `yaml:"format"`
 	Enum                 []string               `yaml:"enum"`
 	Minimum              *int                   `yaml:"minimum"`
+	MinLength            *int                   `yaml:"minLength"`
+	Description          string                 `yaml:"description"`
 	AdditionalProperties *openAPISchemaProperty `yaml:"additionalProperties"`
 }
 
@@ -397,9 +471,13 @@ func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {
 }
 
 type openAPIOperationSecurity struct {
-	Security   []map[string][]string `yaml:"security"`
-	Parameters []openAPIParameter    `yaml:"parameters"`
-	Responses  map[string]any        `yaml:"responses"`
+	Security   []map[string][]string      `yaml:"security"`
+	Parameters []openAPIParameter         `yaml:"parameters"`
+	Responses  map[string]openAPIResponse `yaml:"responses"`
+}
+
+type openAPIResponse struct {
+	Ref string `yaml:"$ref"`
 }
 
 type openAPIParameter struct {

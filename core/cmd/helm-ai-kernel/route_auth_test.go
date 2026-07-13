@@ -58,6 +58,25 @@ func TestTenantScopedRuntimeAuthBindsConfiguredTenantAndPrincipal(t *testing.T) 
 	}
 }
 
+func TestTenantScopedRuntimeAuthRejectsQueryOnlyTenantBinding(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run with only a query tenant binding")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?tenant_id=tenant-a", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(principalHeader, "principal-a")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("tenant-scoped route with query-only tenant status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestTenantScopedRuntimeAuthRejectsExpiredQuickstartSession(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", "quickstart-session")
 	t.Setenv(runtimeTenantIDEnv, "tenant-a")

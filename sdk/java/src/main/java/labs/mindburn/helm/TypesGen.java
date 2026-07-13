@@ -18578,7 +18578,7 @@ public static class DecisionRequest extends HashMap<String, Object> {
   private String resource;
 
   public static final String JSON_PROPERTY_CONTEXT = "context";
-  private Object context;
+  private JsonNullable<Object> context = JsonNullable.<Object>undefined();
 
   public DecisionRequest() {
   }
@@ -18634,27 +18634,35 @@ public static class DecisionRequest extends HashMap<String, Object> {
 
 
   public DecisionRequest context(Object context) {
-    this.context = context;
+    this.context = JsonNullable.<Object>of(context);
     return this;
   }
 
    /**
-   * Application context for policy evaluation. It must not include tenant, principal, workspace, or Guardian reserved security keys; those are owned by the authenticated transport boundary.
+   * Application context for policy evaluation. It must not include &#x60;principal_id&#x60;, &#x60;tenant_id&#x60;, &#x60;tenantId&#x60;, &#x60;tenant&#x60;, &#x60;workspace_id&#x60;, &#x60;workspaceId&#x60;, &#x60;workspace&#x60;, &#x60;security_context_trusted&#x60;, &#x60;credential_hash&#x60;, &#x60;session_id&#x60;, &#x60;source_channel&#x60;, &#x60;trust_level&#x60;, &#x60;destination&#x60;, &#x60;zeroid_token&#x60;, or &#x60;spiffe_uri&#x60;; those are owned by the authenticated transport boundary.
    * @return context
   **/
   @javax.annotation.Nullable
+  @JsonIgnore
+
+  public Object getContext() {
+        return context.orElse(null);
+  }
+
   @JsonProperty(JSON_PROPERTY_CONTEXT)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
-  public Object getContext() {
+  public JsonNullable<Object> getContext_JsonNullable() {
     return context;
   }
 
-
   @JsonProperty(JSON_PROPERTY_CONTEXT)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setContext(Object context) {
+  public void setContext_JsonNullable(JsonNullable<Object> context) {
     this.context = context;
+  }
+
+  public void setContext(Object context) {
+    this.context = JsonNullable.<Object>of(context);
   }
 
   /**
@@ -18715,14 +18723,25 @@ public static class DecisionRequest extends HashMap<String, Object> {
     DecisionRequest decisionRequest = (DecisionRequest) o;
     return Objects.equals(this.action, decisionRequest.action) &&
         Objects.equals(this.resource, decisionRequest.resource) &&
-        Objects.equals(this.context, decisionRequest.context)&&
+        equalsNullable(this.context, decisionRequest.context)&&
         Objects.equals(this.additionalProperties, decisionRequest.additionalProperties) &&
         super.equals(o);
   }
 
+  private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
+    return a == b || (a != null && b != null && a.isPresent() && b.isPresent() && Objects.deepEquals(a.get(), b.get()));
+  }
+
   @Override
   public int hashCode() {
-    return Objects.hash(action, resource, context, super.hashCode(), additionalProperties);
+    return Objects.hash(action, resource, hashCodeNullable(context), super.hashCode(), additionalProperties);
+  }
+
+  private static <T> int hashCodeNullable(JsonNullable<T> a) {
+    if (a == null) {
+      return 1;
+    }
+    return a.isPresent() ? Arrays.deepHashCode(new Object[]{a.get()}) : 31;
   }
 
   @Override

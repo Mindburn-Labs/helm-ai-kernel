@@ -12472,7 +12472,7 @@ var _ MappedNullable = &DecisionRequest{}
 type DecisionRequest struct {
 	Action   string `json:"action"`
 	Resource string `json:"resource"`
-	// Application context for policy evaluation. It must not include tenant, principal, workspace, or Guardian reserved security keys; those are owned by the authenticated transport boundary.
+	// Application context for policy evaluation. It must not include `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`, `workspaceId`, `workspace`, `security_context_trusted`, `credential_hash`, `session_id`, `source_channel`, `trust_level`, `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by the authenticated transport boundary.
 	Context              map[string]interface{} `json:"context,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
@@ -12546,9 +12546,9 @@ func (o *DecisionRequest) SetResource(v string) {
 	o.Resource = v
 }
 
-// GetContext returns the Context field value if set, zero value otherwise.
+// GetContext returns the Context field value if set, zero value otherwise (both if not set or set to explicit null).
 func (o *DecisionRequest) GetContext() map[string]interface{} {
-	if o == nil || IsNil(o.Context) {
+	if o == nil {
 		var ret map[string]interface{}
 		return ret
 	}
@@ -12557,6 +12557,7 @@ func (o *DecisionRequest) GetContext() map[string]interface{} {
 
 // GetContextOk returns a tuple with the Context field value if set, nil otherwise
 // and a boolean to check if the value has been set.
+// NOTE: If the value is an explicit nil, `nil, true` will be returned
 func (o *DecisionRequest) GetContextOk() (map[string]interface{}, bool) {
 	if o == nil || IsNil(o.Context) {
 		return map[string]interface{}{}, false
@@ -12590,7 +12591,7 @@ func (o DecisionRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["action"] = o.Action
 	toSerialize["resource"] = o.Resource
-	if !IsNil(o.Context) {
+	if o.Context != nil {
 		toSerialize["context"] = o.Context
 	}
 

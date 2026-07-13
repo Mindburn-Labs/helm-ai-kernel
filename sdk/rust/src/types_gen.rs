@@ -2421,9 +2421,9 @@ pub struct DecisionRequest {
     pub action: String,
     #[serde(rename = "resource")]
     pub resource: String,
-    /// Application context for policy evaluation. It must not include tenant, principal, workspace, or Guardian reserved security keys; those are owned by the authenticated transport boundary.
-    #[serde(rename = "context", skip_serializing_if = "Option::is_none")]
-    pub context: Option<serde_json::Value>,
+    /// Application context for policy evaluation. It must not include `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`, `workspaceId`, `workspace`, `security_context_trusted`, `credential_hash`, `session_id`, `source_channel`, `trust_level`, `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by the authenticated transport boundary.
+    #[serde(rename = "context", default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<Option<serde_json::Value>>,
 }
 
 impl DecisionRequest {

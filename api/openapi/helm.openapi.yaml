@@ -392,6 +392,8 @@ paths:
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
+        '405':
+          $ref: '#/components/responses/HelmError'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
@@ -3970,9 +3972,10 @@ components:
         type: string
         minLength: 1
       description: |
-        Workspace binding required to evaluate a governed intent only while
-        scoped emergency-stop fencing is enabled. The value must match
-        HELM_RUNTIME_WORKSPACE_ID, or the route fails closed with 403.
+        Workspace binding required to evaluate a governed intent when scoped
+        emergency-stop fencing or runtime policy snapshot authority is enabled.
+        The value must match HELM_RUNTIME_WORKSPACE_ID, or the route fails
+        closed with 403.
     IdempotencyKeyHeader:
       name: Idempotency-Key
       in: header
@@ -4486,14 +4489,17 @@ components:
         transport metadata are not accepted in this object; the runtime binds
         them from verified request headers.
       properties:
-        action: { type: string }
-        resource: { type: string }
+        action: { type: string, minLength: 1 }
+        resource: { type: string, minLength: 1 }
         context:
-          type: object
+          type: ['object', 'null']
           description: |
             Application context for policy evaluation. It must not include
-            tenant, principal, workspace, or Guardian reserved security keys;
-            those are owned by the authenticated transport boundary.
+            `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`,
+            `workspaceId`, `workspace`, `security_context_trusted`,
+            `credential_hash`, `session_id`, `source_channel`, `trust_level`,
+            `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by
+            the authenticated transport boundary.
 
     DecisionRecord:
       type: object

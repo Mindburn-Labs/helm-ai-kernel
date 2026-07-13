@@ -159,8 +159,5 @@ func requireRuntimeService(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 func selectedTenantID(r *http.Request) string {
-	if tenantID := strings.TrimSpace(r.Header.Get(tenantHeader)); tenantID != "" {
-		return tenantID
-	}
-	return strings.TrimSpace(r.URL.Query().Get("tenant_id"))
+	return strings.TrimSpace(r.Header.Get(tenantHeader))
 }

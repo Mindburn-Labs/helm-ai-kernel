@@ -5082,9 +5082,9 @@ class DecisionRequest(BaseModel):
     """
     Canonical body for POST /api/v1/evaluate. Identity and trusted transport metadata are not accepted in this object; the runtime binds them from verified request headers.
     """ # noqa: E501
-    action: StrictStr
-    resource: StrictStr
-    context: Optional[Dict[str, Any]] = Field(default=None, description="Application context for policy evaluation. It must not include tenant, principal, workspace, or Guardian reserved security keys; those are owned by the authenticated transport boundary. ")
+    action: Annotated[str, Field(min_length=1, strict=True)]
+    resource: Annotated[str, Field(min_length=1, strict=True)]
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Application context for policy evaluation. It must not include `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`, `workspaceId`, `workspace`, `security_context_trusted`, `credential_hash`, `session_id`, `source_channel`, `trust_level`, `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by the authenticated transport boundary. ")
     additional_properties: Dict[str, Any] = {}
     __properties: ClassVar[List[str]] = ["action", "resource", "context"]
 
@@ -5133,6 +5133,11 @@ class DecisionRequest(BaseModel):
         if self.additional_properties is not None:
             for _key, _value in self.additional_properties.items():
                 _dict[_key] = _value
+
+        # set to None if context (nullable) is None
+        # and model_fields_set contains the field
+        if self.context is None and "context" in self.model_fields_set:
+            _dict['context'] = None
 
         return _dict
 

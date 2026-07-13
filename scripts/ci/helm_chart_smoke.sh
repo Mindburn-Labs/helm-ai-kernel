@@ -113,6 +113,13 @@ assert_contains "$lkg_rendered" "value: \"deny\""
 assert_contains "$lkg_rendered" "HELM_POLICY_LAST_KNOWN_GOOD_MAX_AGE"
 assert_contains "$lkg_rendered" "value: \"45s\""
 
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.policy.failClosed.onInvalidUpdate=allow >"$RENDER_DIR/rendered-invalid-lkg.yaml" 2>&1; then
+    echo "::error::unsupported LKG allow mode unexpectedly rendered"
+    exit 1
+fi
+
 emergency_stop_rendered="$RENDER_DIR/rendered-emergency-stop.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \

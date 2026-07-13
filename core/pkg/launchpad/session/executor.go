@@ -106,7 +106,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		"unknown_server_policy": compiled.MCPPolicy.UnknownServerPolicy,
 		"unknown_tool_policy":   compiled.MCPPolicy.UnknownToolPolicy,
 		"require_schema_pin":    compiled.MCPPolicy.RequireSchemaPin,
-		"effect":                "unknown MCP servers and tools remain quarantined until approval receipt exists",
+		"effect":                "unknown MCP servers and tools remain quarantined until a credential-verified approval receipt exists",
 	})
 	modelGatewayReceipt := receipts.NewReceipt("launchpad.model_gateway_grant", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
 		"provider":                   compiled.ModelGatewayProvider,

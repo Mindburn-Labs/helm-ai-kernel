@@ -15,13 +15,13 @@ import type {
   ProblemDetail,
   ReasonCode,
   DecisionRequest,
-} from './types.gen.js';
+} from "./types.gen.js";
 
 export type { ReasonCode, HelmError };
 
 export interface EvidenceEnvelopeExportRequest {
   manifest_id: string;
-  envelope: 'dsse' | 'jws' | 'in-toto' | 'slsa' | 'sigstore' | 'scitt' | 'cose';
+  envelope: "dsse" | "jws" | "in-toto" | "slsa" | "sigstore" | "scitt" | "cose";
   native_evidence_hash: string;
   subject?: string;
   experimental?: boolean;
@@ -45,7 +45,7 @@ export interface NegativeBoundaryVector {
   id: string;
   category: string;
   trigger: string;
-  expected_verdict: 'ALLOW' | 'DENY' | 'ESCALATE';
+  expected_verdict: "ALLOW" | "DENY" | "ESCALATE";
   expected_reason_code: string;
   must_emit_receipt: boolean;
   must_not_dispatch: boolean;
@@ -58,7 +58,7 @@ export interface McpRegistryDiscoverRequest {
   transport?: string;
   endpoint?: string;
   tool_names?: string[];
-  risk?: 'unknown' | 'low' | 'medium' | 'high' | 'critical';
+  risk?: "unknown" | "low" | "medium" | "high" | "critical";
   reason?: string;
 }
 
@@ -67,6 +67,16 @@ export interface McpRegistryApprovalRequest {
   approver_id: string;
   approval_receipt_id: string;
   reason?: string;
+  tool_names?: string[];
+  effects?: string[];
+}
+
+export interface McpRegistryPathApprovalRequest {
+  approver_id: string;
+  approval_receipt_id: string;
+  reason?: string;
+  tool_names?: string[];
+  effects?: string[];
 }
 
 export interface McpQuarantineRecord {
@@ -75,8 +85,8 @@ export interface McpQuarantineRecord {
   transport?: string;
   endpoint?: string;
   tool_names?: string[];
-  risk: 'unknown' | 'low' | 'medium' | 'high' | 'critical';
-  state: 'discovered' | 'quarantined' | 'approved' | 'revoked' | 'expired';
+  risk: "unknown" | "low" | "medium" | "high" | "critical";
+  state: "discovered" | "quarantined" | "revoked" | "expired";
   discovered_at: string;
   approved_at?: string;
   approved_by?: string;
@@ -88,7 +98,13 @@ export interface McpQuarantineRecord {
 
 export interface SandboxBackendProfile {
   name: string;
-  kind: 'wasi-wazero' | 'wasi-wasmtime' | 'native-nsjail' | 'native-gvisor' | 'native-firecracker' | 'hosted-adapter';
+  kind:
+    | "wasi-wazero"
+    | "wasi-wasmtime"
+    | "native-nsjail"
+    | "native-gvisor"
+    | "native-firecracker"
+    | "hosted-adapter";
   runtime: string;
   hosted: boolean;
   deny_network_by_default: boolean;
@@ -103,10 +119,28 @@ export interface SandboxGrant {
   profile: string;
   image_digest?: string;
   template_digest?: string;
-  filesystem_preopens?: Array<{ path: string; mode: 'ro' | 'rw'; content_hash?: string }>;
-  env: { mode: 'deny-all' | 'allowlist' | 'redacted'; names?: string[]; names_hash?: string; redacted?: boolean };
-  network: { mode: 'deny-all' | 'allowlist'; destinations?: string[]; cidrs?: string[] };
-  limits?: { memory_bytes?: number; cpu_time?: number; output_bytes?: number; open_files?: number };
+  filesystem_preopens?: Array<{
+    path: string;
+    mode: "ro" | "rw";
+    content_hash?: string;
+  }>;
+  env: {
+    mode: "deny-all" | "allowlist" | "redacted";
+    names?: string[];
+    names_hash?: string;
+    redacted?: boolean;
+  };
+  network: {
+    mode: "deny-all" | "allowlist";
+    destinations?: string[];
+    cidrs?: string[];
+  };
+  limits?: {
+    memory_bytes?: number;
+    cpu_time?: number;
+    output_bytes?: number;
+    open_files?: number;
+  };
   declared_at: string;
   policy_epoch?: string;
   grant_hash?: string;
@@ -169,32 +203,57 @@ export class HelmApiError extends Error {
   constructor(status: number, body: HelmError | unknown) {
     const helmBody = isHelmError(body) ? body : undefined;
     const problem = isProblemDetail(body) ? body : undefined;
-    const message = helmBody?.error.message ?? problem?.detail ?? `HELM API request failed with HTTP ${status}`;
+    const message =
+      helmBody?.error.message ??
+      problem?.detail ??
+      `HELM API request failed with HTTP ${status}`;
     super(message);
-    this.name = 'HelmApiError';
+    this.name = "HelmApiError";
     this.status = status;
-    this.reasonCode = helmBody?.error.reason_code ?? 'ERROR_INTERNAL';
+    this.reasonCode = helmBody?.error.reason_code ?? "ERROR_INTERNAL";
     this.details = helmBody?.error.details;
     this.body = body;
   }
 }
 
+function mcpApprovalVerificationUnavailable(): HelmApiError {
+  return new HelmApiError(503, {
+    type: "https://helm.mindburn.run/errors/503",
+    title: "MCP approval verification unavailable",
+    status: 503,
+    detail: "MCP approval verification unavailable",
+  });
+}
+
+function approvalVerificationUnavailable(): HelmApiError {
+  return new HelmApiError(503, {
+    type: "https://helm.mindburn.run/errors/503",
+    title: "Approval verification unavailable",
+    status: 503,
+    detail: "approval verification unavailable",
+  });
+}
+
 function isHelmError(body: unknown): body is HelmError {
-  return typeof body === 'object'
-    && body !== null
-    && 'error' in body
-    && typeof (body as { error?: unknown }).error === 'object'
-    && (body as { error?: unknown }).error !== null
-    && 'message' in ((body as { error: Record<string, unknown> }).error)
-    && 'reason_code' in ((body as { error: Record<string, unknown> }).error);
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    "error" in body &&
+    typeof (body as { error?: unknown }).error === "object" &&
+    (body as { error?: unknown }).error !== null &&
+    "message" in (body as { error: Record<string, unknown> }).error &&
+    "reason_code" in (body as { error: Record<string, unknown> }).error
+  );
 }
 
 function isProblemDetail(body: unknown): body is ProblemDetail {
-  return typeof body === 'object'
-    && body !== null
-    && 'type' in body
-    && 'title' in body
-    && 'status' in body;
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    "type" in body &&
+    "title" in body &&
+    "status" in body
+  );
 }
 
 export interface HelmClientConfig {
@@ -210,19 +269,23 @@ export class HelmClient {
   private readonly timeout: number;
 
   constructor(config: HelmClientConfig) {
-    this.baseUrl = config.baseUrl.replace(/\/$/, '');
+    this.baseUrl = config.baseUrl.replace(/\/$/, "");
     this.timeout = config.timeout ?? 30_000;
-    this.headers = { 'Content-Type': 'application/json' };
+    this.headers = { "Content-Type": "application/json" };
     if (config.apiKey) {
-      this.headers['Authorization'] = `Bearer ${config.apiKey}`;
+      this.headers["Authorization"] = `Bearer ${config.apiKey}`;
     }
     if (config.tenantId) {
-      this.headers['X-Helm-Tenant-ID'] = config.tenantId;
+      this.headers["X-Helm-Tenant-ID"] = config.tenantId;
     }
   }
 
   // ── Internal ─────────────────────────────────────
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
     try {
@@ -243,8 +306,14 @@ export class HelmClient {
   }
 
   // ── OpenAI Proxy ─────────────────────────────────
-  async chatCompletions(req: ChatCompletionRequest): Promise<ChatCompletionResponse> {
-    return this.request<ChatCompletionResponse>('POST', '/v1/chat/completions', req);
+  async chatCompletions(
+    req: ChatCompletionRequest,
+  ): Promise<ChatCompletionResponse> {
+    return this.request<ChatCompletionResponse>(
+      "POST",
+      "/v1/chat/completions",
+      req,
+    );
   }
 
   /**
@@ -252,12 +321,14 @@ export class HelmClient {
    * from X-Helm-* response headers. Use this instead of chatCompletions() when
    * you need the kernel receipt.
    */
-  async chatCompletionsWithReceipt(req: ChatCompletionRequest): Promise<ChatCompletionWithReceipt> {
+  async chatCompletionsWithReceipt(
+    req: ChatCompletionRequest,
+  ): Promise<ChatCompletionWithReceipt> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
     try {
       const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
-        method: 'POST',
+        method: "POST",
         headers: this.headers,
         body: JSON.stringify(req),
         signal: controller.signal,
@@ -268,15 +339,18 @@ export class HelmClient {
       }
       const response = (await res.json()) as ChatCompletionResponse;
       const governance: GovernanceMetadata = {
-        receiptId: res.headers.get('X-Helm-Receipt-ID') ?? '',
-        status: res.headers.get('X-Helm-Status') ?? '',
-        outputHash: res.headers.get('X-Helm-Output-Hash') ?? '',
-        lamportClock: parseInt(res.headers.get('X-Helm-Lamport-Clock') ?? '0', 10),
-        reasonCode: res.headers.get('X-Helm-Reason-Code') ?? '',
-        decisionId: res.headers.get('X-Helm-Decision-ID') ?? '',
-        proofGraphNode: res.headers.get('X-Helm-ProofGraph-Node') ?? '',
-        signature: res.headers.get('X-Helm-Signature') ?? '',
-        toolCalls: parseInt(res.headers.get('X-Helm-Tool-Calls') ?? '0', 10),
+        receiptId: res.headers.get("X-Helm-Receipt-ID") ?? "",
+        status: res.headers.get("X-Helm-Status") ?? "",
+        outputHash: res.headers.get("X-Helm-Output-Hash") ?? "",
+        lamportClock: parseInt(
+          res.headers.get("X-Helm-Lamport-Clock") ?? "0",
+          10,
+        ),
+        reasonCode: res.headers.get("X-Helm-Reason-Code") ?? "",
+        decisionId: res.headers.get("X-Helm-Decision-ID") ?? "",
+        proofGraphNode: res.headers.get("X-Helm-ProofGraph-Node") ?? "",
+        signature: res.headers.get("X-Helm-Signature") ?? "",
+        toolCalls: parseInt(res.headers.get("X-Helm-Tool-Calls") ?? "0", 10),
       };
       return { response, governance };
     } finally {
@@ -285,20 +359,28 @@ export class HelmClient {
   }
 
   // ── Decision Evaluation ──────────────────────────
-  async evaluateDecision(req: DecisionRequest | SurfaceRecord): Promise<SurfaceRecord> {
-    return this.request<SurfaceRecord>('POST', '/api/v1/evaluate', req);
+  async evaluateDecision(
+    req: DecisionRequest | SurfaceRecord,
+  ): Promise<SurfaceRecord> {
+    return this.request<SurfaceRecord>("POST", "/api/v1/evaluate", req);
   }
 
-  async runPublicDemo(actionId: string, args: SurfaceRecord = {}): Promise<DemoRunResult> {
-    return this.request<DemoRunResult>('POST', '/api/demo/run', {
+  async runPublicDemo(
+    actionId: string,
+    args: SurfaceRecord = {},
+  ): Promise<DemoRunResult> {
+    return this.request<DemoRunResult>("POST", "/api/demo/run", {
       action_id: actionId,
-      policy_id: 'agent_tool_call_boundary',
+      policy_id: "agent_tool_call_boundary",
       args,
     });
   }
 
-  async verifyPublicDemoReceipt(receipt: SurfaceRecord, expectedReceiptHash: string): Promise<DemoReceiptVerification> {
-    return this.request<DemoReceiptVerification>('POST', '/api/demo/verify', {
+  async verifyPublicDemoReceipt(
+    receipt: SurfaceRecord,
+    expectedReceiptHash: string,
+  ): Promise<DemoReceiptVerification> {
+    return this.request<DemoReceiptVerification>("POST", "/api/demo/verify", {
       receipt,
       expected_receipt_hash: expectedReceiptHash,
     });
@@ -306,20 +388,29 @@ export class HelmClient {
 
   // ── Approval Ceremony ────────────────────────────
   async approveIntent(req: ApprovalRequest): Promise<Receipt> {
-    return this.request<Receipt>('POST', '/api/v1/kernel/approve', req);
+    return this.request<Receipt>("POST", "/api/v1/kernel/approve", req);
   }
 
   // ── ProofGraph ───────────────────────────────────
   async listSessions(limit = 50, offset = 0): Promise<Session[]> {
-    return this.request<Session[]>('GET', `/api/v1/proofgraph/sessions?limit=${limit}&offset=${offset}`);
+    return this.request<Session[]>(
+      "GET",
+      `/api/v1/proofgraph/sessions?limit=${limit}&offset=${offset}`,
+    );
   }
 
   async getReceipts(sessionId: string): Promise<Receipt[]> {
-    return this.request<Receipt[]>('GET', `/api/v1/proofgraph/sessions/${sessionId}/receipts`);
+    return this.request<Receipt[]>(
+      "GET",
+      `/api/v1/proofgraph/sessions/${sessionId}/receipts`,
+    );
   }
 
   async getReceipt(receiptHash: string): Promise<Receipt> {
-    return this.request<Receipt>('GET', `/api/v1/proofgraph/receipts/${receiptHash}`);
+    return this.request<Receipt>(
+      "GET",
+      `/api/v1/proofgraph/receipts/${receiptHash}`,
+    );
   }
 
   // ── Evidence ─────────────────────────────────────
@@ -328,12 +419,13 @@ export class HelmClient {
     const timer = setTimeout(() => controller.abort(), this.timeout);
     try {
       const res = await fetch(`${this.baseUrl}/api/v1/evidence/export`, {
-        method: 'POST',
+        method: "POST",
         headers: this.headers,
-        body: JSON.stringify({ session_id: sessionId, format: 'tar.gz' }),
+        body: JSON.stringify({ session_id: sessionId, format: "tar.gz" }),
         signal: controller.signal,
       });
-      if (!res.ok) throw new HelmApiError(res.status, (await res.json()) as HelmError);
+      if (!res.ok)
+        throw new HelmApiError(res.status, (await res.json()) as HelmError);
       return res.blob();
     } finally {
       clearTimeout(timer);
@@ -342,16 +434,17 @@ export class HelmClient {
 
   async verifyEvidence(bundle: Blob): Promise<VerificationResult> {
     const form = new FormData();
-    form.append('bundle', bundle);
+    form.append("bundle", bundle);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
     try {
       const res = await fetch(`${this.baseUrl}/api/v1/evidence/verify`, {
-        method: 'POST',
+        method: "POST",
         body: form,
         signal: controller.signal,
       });
-      if (!res.ok) throw new HelmApiError(res.status, (await res.json()) as HelmError);
+      if (!res.ok)
+        throw new HelmApiError(res.status, (await res.json()) as HelmError);
       return (await res.json()) as VerificationResult;
     } finally {
       clearTimeout(timer);
@@ -360,252 +453,424 @@ export class HelmClient {
 
   async replayVerify(bundle: Blob): Promise<VerificationResult> {
     const form = new FormData();
-    form.append('bundle', bundle);
+    form.append("bundle", bundle);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
     try {
       const res = await fetch(`${this.baseUrl}/api/v1/replay/verify`, {
-        method: 'POST',
+        method: "POST",
         body: form,
         signal: controller.signal,
       });
-      if (!res.ok) throw new HelmApiError(res.status, (await res.json()) as HelmError);
+      if (!res.ok)
+        throw new HelmApiError(res.status, (await res.json()) as HelmError);
       return (await res.json()) as VerificationResult;
     } finally {
       clearTimeout(timer);
     }
   }
 
-  async createEvidenceEnvelopeManifest(req: EvidenceEnvelopeExportRequest): Promise<EvidenceEnvelopeManifest> {
-    return this.request<EvidenceEnvelopeManifest>('POST', '/api/v1/evidence/envelopes', req);
+  async createEvidenceEnvelopeManifest(
+    req: EvidenceEnvelopeExportRequest,
+  ): Promise<EvidenceEnvelopeManifest> {
+    return this.request<EvidenceEnvelopeManifest>(
+      "POST",
+      "/api/v1/evidence/envelopes",
+      req,
+    );
   }
 
   async listEvidenceEnvelopeManifests(): Promise<EvidenceEnvelopeManifest[]> {
-    return this.request<EvidenceEnvelopeManifest[]>('GET', '/api/v1/evidence/envelopes');
+    return this.request<EvidenceEnvelopeManifest[]>(
+      "GET",
+      "/api/v1/evidence/envelopes",
+    );
   }
 
-  async getEvidenceEnvelopeManifest(manifestId: string): Promise<EvidenceEnvelopeManifest> {
-    return this.request<EvidenceEnvelopeManifest>('GET', `/api/v1/evidence/envelopes/${encodeURIComponent(manifestId)}`);
+  async getEvidenceEnvelopeManifest(
+    manifestId: string,
+  ): Promise<EvidenceEnvelopeManifest> {
+    return this.request<EvidenceEnvelopeManifest>(
+      "GET",
+      `/api/v1/evidence/envelopes/${encodeURIComponent(manifestId)}`,
+    );
   }
 
-  async verifyEvidenceEnvelopeManifest(manifestId: string): Promise<EvidenceEnvelopeVerification> {
-    return this.request<EvidenceEnvelopeVerification>('POST', `/api/v1/evidence/envelopes/${encodeURIComponent(manifestId)}/verify`);
+  async verifyEvidenceEnvelopeManifest(
+    manifestId: string,
+  ): Promise<EvidenceEnvelopeVerification> {
+    return this.request<EvidenceEnvelopeVerification>(
+      "POST",
+      `/api/v1/evidence/envelopes/${encodeURIComponent(manifestId)}/verify`,
+    );
   }
 
-  async getEvidenceEnvelopePayload(manifestId: string): Promise<EvidenceEnvelopePayload> {
-    return this.request<EvidenceEnvelopePayload>('GET', `/api/v1/evidence/envelopes/${encodeURIComponent(manifestId)}/payload`);
+  async getEvidenceEnvelopePayload(
+    manifestId: string,
+  ): Promise<EvidenceEnvelopePayload> {
+    return this.request<EvidenceEnvelopePayload>(
+      "GET",
+      `/api/v1/evidence/envelopes/${encodeURIComponent(manifestId)}/payload`,
+    );
   }
 
   // ── Execution Boundary ───────────────────────────
   async getBoundaryStatus(): Promise<BoundaryStatus> {
-    return this.request<BoundaryStatus>('GET', '/api/v1/boundary/status');
+    return this.request<BoundaryStatus>("GET", "/api/v1/boundary/status");
   }
 
   async listBoundaryCapabilities(): Promise<BoundaryCapabilitySummary[]> {
-    return this.request<BoundaryCapabilitySummary[]>('GET', '/api/v1/boundary/capabilities');
+    return this.request<BoundaryCapabilitySummary[]>(
+      "GET",
+      "/api/v1/boundary/capabilities",
+    );
   }
 
-  async listBoundaryRecords(query?: Record<string, string | number | undefined>): Promise<ExecutionBoundaryRecord[]> {
+  async listBoundaryRecords(
+    query?: Record<string, string | number | undefined>,
+  ): Promise<ExecutionBoundaryRecord[]> {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query ?? {})) {
-      if (value !== undefined && value !== '') params.set(key, String(value));
+      if (value !== undefined && value !== "") params.set(key, String(value));
     }
     const qs = params.toString();
-    return this.request<ExecutionBoundaryRecord[]>('GET', `/api/v1/boundary/records${qs ? `?${qs}` : ''}`);
+    return this.request<ExecutionBoundaryRecord[]>(
+      "GET",
+      `/api/v1/boundary/records${qs ? `?${qs}` : ""}`,
+    );
   }
 
   async getBoundaryRecord(recordId: string): Promise<ExecutionBoundaryRecord> {
-    return this.request<ExecutionBoundaryRecord>('GET', `/api/v1/boundary/records/${encodeURIComponent(recordId)}`);
+    return this.request<ExecutionBoundaryRecord>(
+      "GET",
+      `/api/v1/boundary/records/${encodeURIComponent(recordId)}`,
+    );
   }
 
-  async verifyBoundaryRecord(recordId: string): Promise<BoundaryRecordVerification> {
-    return this.request<BoundaryRecordVerification>('POST', `/api/v1/boundary/records/${encodeURIComponent(recordId)}/verify`);
+  async verifyBoundaryRecord(
+    recordId: string,
+  ): Promise<BoundaryRecordVerification> {
+    return this.request<BoundaryRecordVerification>(
+      "POST",
+      `/api/v1/boundary/records/${encodeURIComponent(recordId)}/verify`,
+    );
   }
 
   async listBoundaryCheckpoints(): Promise<BoundaryCheckpoint[]> {
-    return this.request<BoundaryCheckpoint[]>('GET', '/api/v1/boundary/checkpoints');
+    return this.request<BoundaryCheckpoint[]>(
+      "GET",
+      "/api/v1/boundary/checkpoints",
+    );
   }
 
   async createBoundaryCheckpoint(): Promise<BoundaryCheckpoint> {
-    return this.request<BoundaryCheckpoint>('POST', '/api/v1/boundary/checkpoints');
+    return this.request<BoundaryCheckpoint>(
+      "POST",
+      "/api/v1/boundary/checkpoints",
+    );
   }
 
   async verifyBoundaryCheckpoint(checkpointId: string): Promise<SurfaceRecord> {
-    return this.request<SurfaceRecord>('POST', `/api/v1/boundary/checkpoints/${encodeURIComponent(checkpointId)}/verify`);
+    return this.request<SurfaceRecord>(
+      "POST",
+      `/api/v1/boundary/checkpoints/${encodeURIComponent(checkpointId)}/verify`,
+    );
   }
 
   // ── Conformance ──────────────────────────────────
   async conformanceRun(req: ConformanceRequest): Promise<ConformanceResult> {
-    return this.request<ConformanceResult>('POST', '/api/v1/conformance/run', req);
+    return this.request<ConformanceResult>(
+      "POST",
+      "/api/v1/conformance/run",
+      req,
+    );
   }
 
   async getConformanceReport(reportId: string): Promise<ConformanceResult> {
-    return this.request<ConformanceResult>('GET', `/api/v1/conformance/reports/${reportId}`);
+    return this.request<ConformanceResult>(
+      "GET",
+      `/api/v1/conformance/reports/${reportId}`,
+    );
   }
 
   async listConformanceReports(): Promise<ConformanceResult[]> {
-    return this.request<ConformanceResult[]>('GET', '/api/v1/conformance/reports');
+    return this.request<ConformanceResult[]>(
+      "GET",
+      "/api/v1/conformance/reports",
+    );
   }
 
   async listConformanceVectors(): Promise<NegativeBoundaryVector[]> {
-    return this.request<NegativeBoundaryVector[]>('GET', '/api/v1/conformance/vectors');
+    return this.request<NegativeBoundaryVector[]>(
+      "GET",
+      "/api/v1/conformance/vectors",
+    );
   }
 
   async listNegativeConformanceVectors(): Promise<NegativeBoundaryVector[]> {
-    return this.request<NegativeBoundaryVector[]>('GET', '/api/v1/conformance/negative');
+    return this.request<NegativeBoundaryVector[]>(
+      "GET",
+      "/api/v1/conformance/negative",
+    );
   }
 
   // ── MCP Registry ─────────────────────────────────
   async listMcpRegistry(): Promise<McpQuarantineRecord[]> {
-    return this.request<McpQuarantineRecord[]>('GET', '/api/v1/mcp/registry');
+    return this.request<McpQuarantineRecord[]>("GET", "/api/v1/mcp/registry");
   }
 
-  async discoverMcpServer(req: McpRegistryDiscoverRequest): Promise<McpQuarantineRecord> {
-    return this.request<McpQuarantineRecord>('POST', '/api/v1/mcp/registry', req);
+  async discoverMcpServer(
+    req: McpRegistryDiscoverRequest,
+  ): Promise<McpQuarantineRecord> {
+    return this.request<McpQuarantineRecord>(
+      "POST",
+      "/api/v1/mcp/registry",
+      req,
+    );
   }
 
-  async approveMcpServer(req: McpRegistryApprovalRequest): Promise<McpQuarantineRecord> {
-    return this.request<McpQuarantineRecord>('POST', '/api/v1/mcp/registry/approve', req);
+  /** Always rejects locally until a credential verifier can bind MCP approval evidence. */
+  async approveMcpServer(_req: McpRegistryApprovalRequest): Promise<never> {
+    throw mcpApprovalVerificationUnavailable();
   }
 
   async getMcpRegistryRecord(serverId: string): Promise<McpQuarantineRecord> {
-    return this.request<McpQuarantineRecord>('GET', `/api/v1/mcp/registry/${encodeURIComponent(serverId)}`);
+    return this.request<McpQuarantineRecord>(
+      "GET",
+      `/api/v1/mcp/registry/${encodeURIComponent(serverId)}`,
+    );
   }
 
-  async approveMcpRegistryRecord(serverId: string, req: Partial<McpRegistryApprovalRequest>): Promise<McpQuarantineRecord> {
-    return this.request<McpQuarantineRecord>('POST', `/api/v1/mcp/registry/${encodeURIComponent(serverId)}/approve`, req);
+  /** Always rejects locally until a credential verifier can bind MCP approval evidence. */
+  async approveMcpRegistryRecord(
+    _serverId: string,
+    _req: McpRegistryPathApprovalRequest,
+  ): Promise<never> {
+    throw mcpApprovalVerificationUnavailable();
   }
 
-  async revokeMcpRegistryRecord(serverId: string, reason?: string): Promise<McpQuarantineRecord> {
-    return this.request<McpQuarantineRecord>('POST', `/api/v1/mcp/registry/${encodeURIComponent(serverId)}/revoke`, { reason });
+  async revokeMcpRegistryRecord(
+    serverId: string,
+    reason?: string,
+  ): Promise<McpQuarantineRecord> {
+    return this.request<McpQuarantineRecord>(
+      "POST",
+      `/api/v1/mcp/registry/${encodeURIComponent(serverId)}/revoke`,
+      { reason },
+    );
   }
 
   async scanMcpServer(req: MCPScanRequest): Promise<MCPScanResult> {
-    return this.request<MCPScanResult>('POST', '/api/v1/mcp/scan', req);
+    return this.request<MCPScanResult>("POST", "/api/v1/mcp/scan", req);
   }
 
   async listMcpAuthProfiles(): Promise<MCPAuthorizationProfile[]> {
-    return this.request<MCPAuthorizationProfile[]>('GET', '/api/v1/mcp/auth-profiles');
+    return this.request<MCPAuthorizationProfile[]>(
+      "GET",
+      "/api/v1/mcp/auth-profiles",
+    );
   }
 
-  async putMcpAuthProfile(profileId: string, profile: MCPAuthorizationProfile): Promise<MCPAuthorizationProfile> {
-    return this.request<MCPAuthorizationProfile>('PUT', `/api/v1/mcp/auth-profiles/${encodeURIComponent(profileId)}`, profile);
+  async putMcpAuthProfile(
+    profileId: string,
+    profile: MCPAuthorizationProfile,
+  ): Promise<MCPAuthorizationProfile> {
+    return this.request<MCPAuthorizationProfile>(
+      "PUT",
+      `/api/v1/mcp/auth-profiles/${encodeURIComponent(profileId)}`,
+      profile,
+    );
   }
 
-  async authorizeMcpCall(req: MCPAuthorizeCallRequest): Promise<ExecutionBoundaryRecord> {
-    return this.request<ExecutionBoundaryRecord>('POST', '/api/v1/mcp/authorize-call', req);
+  async authorizeMcpCall(
+    req: MCPAuthorizeCallRequest,
+  ): Promise<ExecutionBoundaryRecord> {
+    return this.request<ExecutionBoundaryRecord>(
+      "POST",
+      "/api/v1/mcp/authorize-call",
+      req,
+    );
   }
 
   // ── Sandbox ──────────────────────────────────────
   async inspectSandboxGrants(): Promise<SandboxBackendProfile[]>;
-  async inspectSandboxGrants(runtime: string, profile?: string, policyEpoch?: string): Promise<SandboxGrant>;
-  async inspectSandboxGrants(runtime?: string, profile?: string, policyEpoch?: string): Promise<SandboxBackendProfile[] | SandboxGrant> {
+  async inspectSandboxGrants(
+    runtime: string,
+    profile?: string,
+    policyEpoch?: string,
+  ): Promise<SandboxGrant>;
+  async inspectSandboxGrants(
+    runtime?: string,
+    profile?: string,
+    policyEpoch?: string,
+  ): Promise<SandboxBackendProfile[] | SandboxGrant> {
     const params = new URLSearchParams();
-    if (runtime) params.set('runtime', runtime);
-    if (profile) params.set('profile', profile);
-    if (policyEpoch) params.set('policy_epoch', policyEpoch);
+    if (runtime) params.set("runtime", runtime);
+    if (profile) params.set("profile", profile);
+    if (policyEpoch) params.set("policy_epoch", policyEpoch);
     const query = params.toString();
     return this.request<SandboxBackendProfile[] | SandboxGrant>(
-      'GET',
-      `/api/v1/sandbox/grants/inspect${query ? `?${query}` : ''}`,
+      "GET",
+      `/api/v1/sandbox/grants/inspect${query ? `?${query}` : ""}`,
     );
   }
 
   async listSandboxProfiles(): Promise<SandboxBackendProfile[]> {
-    return this.request<SandboxBackendProfile[]>('GET', '/api/v1/sandbox/profiles');
+    return this.request<SandboxBackendProfile[]>(
+      "GET",
+      "/api/v1/sandbox/profiles",
+    );
   }
 
   async listSandboxGrants(): Promise<SandboxGrant[]> {
-    return this.request<SandboxGrant[]>('GET', '/api/v1/sandbox/grants');
+    return this.request<SandboxGrant[]>("GET", "/api/v1/sandbox/grants");
   }
 
   async createSandboxGrant(req: SurfaceRecord): Promise<SandboxGrant> {
-    return this.request<SandboxGrant>('POST', '/api/v1/sandbox/grants', req);
+    return this.request<SandboxGrant>("POST", "/api/v1/sandbox/grants", req);
   }
 
   async getSandboxGrant(grantId: string): Promise<SandboxGrant> {
-    return this.request<SandboxGrant>('GET', `/api/v1/sandbox/grants/${encodeURIComponent(grantId)}`);
+    return this.request<SandboxGrant>(
+      "GET",
+      `/api/v1/sandbox/grants/${encodeURIComponent(grantId)}`,
+    );
   }
 
   async verifySandboxGrant(grantId: string): Promise<SandboxPreflightResult> {
-    return this.request<SandboxPreflightResult>('POST', `/api/v1/sandbox/grants/${encodeURIComponent(grantId)}/verify`);
+    return this.request<SandboxPreflightResult>(
+      "POST",
+      `/api/v1/sandbox/grants/${encodeURIComponent(grantId)}/verify`,
+    );
   }
 
-  async preflightSandboxGrant(req: SandboxPreflightRequest): Promise<SandboxPreflightResult> {
-    return this.request<SandboxPreflightResult>('POST', '/api/v1/sandbox/preflight', req);
+  async preflightSandboxGrant(
+    req: SandboxPreflightRequest,
+  ): Promise<SandboxPreflightResult> {
+    return this.request<SandboxPreflightResult>(
+      "POST",
+      "/api/v1/sandbox/preflight",
+      req,
+    );
   }
 
   // ── Identity, Authz, Approvals, Budgets ──────────
   async listAgentIdentities(): Promise<AgentIdentityProfile[]> {
-    return this.request<AgentIdentityProfile[]>('GET', '/api/v1/identity/agents');
+    return this.request<AgentIdentityProfile[]>(
+      "GET",
+      "/api/v1/identity/agents",
+    );
   }
 
   async getAuthzHealth(): Promise<AuthzHealth> {
-    return this.request<AuthzHealth>('GET', '/api/v1/authz/health');
+    return this.request<AuthzHealth>("GET", "/api/v1/authz/health");
   }
 
   async checkAuthz(req: SurfaceRecord): Promise<AuthzSnapshot> {
-    return this.request<AuthzSnapshot>('POST', '/api/v1/authz/check', req);
+    return this.request<AuthzSnapshot>("POST", "/api/v1/authz/check", req);
   }
 
   async listAuthzSnapshots(): Promise<AuthzSnapshot[]> {
-    return this.request<AuthzSnapshot[]>('GET', '/api/v1/authz/snapshots');
+    return this.request<AuthzSnapshot[]>("GET", "/api/v1/authz/snapshots");
   }
 
   async getAuthzSnapshot(snapshotId: string): Promise<AuthzSnapshot> {
-    return this.request<AuthzSnapshot>('GET', `/api/v1/authz/snapshots/${encodeURIComponent(snapshotId)}`);
+    return this.request<AuthzSnapshot>(
+      "GET",
+      `/api/v1/authz/snapshots/${encodeURIComponent(snapshotId)}`,
+    );
   }
 
   async listApprovalCeremonies(): Promise<ApprovalCeremony[]> {
-    return this.request<ApprovalCeremony[]>('GET', '/api/v1/approvals');
+    return this.request<ApprovalCeremony[]>("GET", "/api/v1/approvals");
   }
 
-  async createApprovalCeremony(req: ApprovalCeremony): Promise<ApprovalCeremony> {
-    return this.request<ApprovalCeremony>('POST', '/api/v1/approvals', req);
+  async createApprovalCeremony(
+    req: ApprovalCeremony,
+  ): Promise<ApprovalCeremony> {
+    return this.request<ApprovalCeremony>("POST", "/api/v1/approvals", req);
   }
 
-  async transitionApprovalCeremony(approvalId: string, action: 'deny' | 'revoke', req: SurfaceRecord = {}): Promise<ApprovalCeremony> {
-    return this.request<ApprovalCeremony>('POST', `/api/v1/approvals/${encodeURIComponent(approvalId)}/${action}`, req);
+  async transitionApprovalCeremony(
+    approvalId: string,
+    action: "approve" | "deny" | "revoke",
+    req: SurfaceRecord = {},
+  ): Promise<ApprovalCeremony> {
+    if (action === "approve") throw approvalVerificationUnavailable();
+    return this.request<ApprovalCeremony>(
+      "POST",
+      `/api/v1/approvals/${encodeURIComponent(approvalId)}/${action}`,
+      req,
+    );
   }
 
   /** Creates an unverified challenge; credential assertion is unavailable. */
-  async createApprovalWebAuthnChallenge(approvalId: string, req: SurfaceRecord = {}): Promise<ApprovalWebAuthnChallenge> {
-    return this.request<ApprovalWebAuthnChallenge>('POST', `/api/v1/approvals/${encodeURIComponent(approvalId)}/webauthn/challenge`, req);
+  async createApprovalWebAuthnChallenge(
+    approvalId: string,
+    req: SurfaceRecord = {},
+  ): Promise<ApprovalWebAuthnChallenge> {
+    return this.request<ApprovalWebAuthnChallenge>(
+      "POST",
+      `/api/v1/approvals/${encodeURIComponent(approvalId)}/webauthn/challenge`,
+      req,
+    );
   }
 
-  /** Always rejects until a credential verifier is configured server-side. */
-  async assertApprovalWebAuthnChallenge(approvalId: string, req: ApprovalWebAuthnAssertion): Promise<never> {
-    return this.request<never>('POST', `/api/v1/approvals/${encodeURIComponent(approvalId)}/webauthn/assert`, req);
+  /** Always rejects locally until a credential verifier is configured server-side. */
+  async assertApprovalWebAuthnChallenge(
+    _approvalId: string,
+    _req: ApprovalWebAuthnAssertion,
+  ): Promise<never> {
+    throw approvalVerificationUnavailable();
   }
 
   async listBudgetCeilings(): Promise<BudgetCeiling[]> {
-    return this.request<BudgetCeiling[]>('GET', '/api/v1/budgets');
+    return this.request<BudgetCeiling[]>("GET", "/api/v1/budgets");
   }
 
-  async putBudgetCeiling(budgetId: string, req: BudgetCeiling): Promise<BudgetCeiling> {
-    return this.request<BudgetCeiling>('PUT', `/api/v1/budgets/${encodeURIComponent(budgetId)}`, req);
+  async putBudgetCeiling(
+    budgetId: string,
+    req: BudgetCeiling,
+  ): Promise<BudgetCeiling> {
+    return this.request<BudgetCeiling>(
+      "PUT",
+      `/api/v1/budgets/${encodeURIComponent(budgetId)}`,
+      req,
+    );
   }
 
   // ── Telemetry and Coexistence ────────────────────
   async getCoexistenceCapabilities(): Promise<CoexistenceCapabilityManifest> {
-    return this.request<CoexistenceCapabilityManifest>('GET', '/api/v1/coexistence/capabilities');
+    return this.request<CoexistenceCapabilityManifest>(
+      "GET",
+      "/api/v1/coexistence/capabilities",
+    );
   }
 
   async getTelemetryOTelConfig(): Promise<TelemetryOTelConfig> {
-    return this.request<TelemetryOTelConfig>('GET', '/api/v1/telemetry/otel/config');
+    return this.request<TelemetryOTelConfig>(
+      "GET",
+      "/api/v1/telemetry/otel/config",
+    );
   }
 
-  async exportTelemetry(req: TelemetryExportRequest): Promise<TelemetryExportResult> {
-    return this.request<TelemetryExportResult>('POST', '/api/v1/telemetry/export', req);
+  async exportTelemetry(
+    req: TelemetryExportRequest,
+  ): Promise<TelemetryExportResult> {
+    return this.request<TelemetryExportResult>(
+      "POST",
+      "/api/v1/telemetry/export",
+      req,
+    );
   }
 
   // ── System ───────────────────────────────────────
   async health(): Promise<{ status: string; version: string }> {
-    return this.request('GET', '/healthz');
+    return this.request("GET", "/healthz");
   }
 
   async version(): Promise<VersionInfo> {
-    return this.request<VersionInfo>('GET', '/version');
+    return this.request<VersionInfo>("GET", "/version");
   }
 }
 

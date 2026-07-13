@@ -208,7 +208,7 @@ func TestMCPMediationProofSchemaErrorsBlockBeforeExecutor(t *testing.T) {
 	}
 }
 
-func TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports(t *testing.T) {
+func TestMCPMediationProofOpaqueApprovalBlocksDispatchAcrossTransports(t *testing.T) {
 	catalog := proofCatalog(t)
 	var dispatches []mcppkg.ToolExecutionRequest
 	executor := func(_ context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
@@ -250,7 +250,7 @@ func TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports(t *testing.
 	if err != nil {
 		t.Fatalf("stdio side-effect tools/call: %v", err)
 	}
-	if stdioResp.Error != nil || !strings.Contains(string(mustJSON(t, stdioResp.Result)), "ERR_MCP_APPROVAL_RECEIPT_REQUIRED") || len(dispatches) != 0 {
+	if stdioResp.Error != nil || !strings.Contains(string(mustJSON(t, stdioResp.Result)), "ERR_MCP_APPROVAL_VERIFICATION_UNAVAILABLE") || len(dispatches) != 0 {
 		t.Fatalf("stdio side-effect denial dispatched: resp=%#v dispatches=%#v", stdioResp, dispatches)
 	}
 
@@ -262,7 +262,7 @@ func TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports(t *testing.
 	executeReq := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(executeBody))
 	executeRec := httptest.NewRecorder()
 	mux.ServeHTTP(executeRec, executeReq)
-	if executeRec.Code != http.StatusForbidden || !strings.Contains(executeRec.Body.String(), "ERR_MCP_APPROVAL_RECEIPT_REQUIRED") || len(dispatches) != 0 {
+	if executeRec.Code != http.StatusForbidden || !strings.Contains(executeRec.Body.String(), "ERR_MCP_APPROVAL_VERIFICATION_UNAVAILABLE") || len(dispatches) != 0 {
 		t.Fatalf("/mcp/v1/execute side-effect denial dispatched: status=%d body=%s dispatches=%#v", executeRec.Code, executeRec.Body.String(), dispatches)
 	}
 
@@ -279,7 +279,7 @@ func TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports(t *testing.
 	jsonrpcReq.Header.Set("MCP-Protocol-Version", mcppkg.LatestProtocolVersion)
 	jsonrpcRec := httptest.NewRecorder()
 	mux.ServeHTTP(jsonrpcRec, jsonrpcReq)
-	if jsonrpcRec.Code != http.StatusOK || !strings.Contains(jsonrpcRec.Body.String(), "ERR_MCP_APPROVAL_RECEIPT_REQUIRED") || len(dispatches) != 0 {
+	if jsonrpcRec.Code != http.StatusOK || !strings.Contains(jsonrpcRec.Body.String(), "ERR_MCP_APPROVAL_VERIFICATION_UNAVAILABLE") || len(dispatches) != 0 {
 		t.Fatalf("HTTP JSON-RPC side-effect denial dispatched: status=%d body=%s dispatches=%#v", jsonrpcRec.Code, jsonrpcRec.Body.String(), dispatches)
 	}
 }

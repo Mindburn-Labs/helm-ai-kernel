@@ -61,8 +61,8 @@ clean-install gate remains the package/install release gate.
 - [KEEP] Live conformance tests exercise Docker-backed runtime startup and app
   healthchecks.
 - [KEEP] MCP governance tests quarantine unknown servers/tools, require schema
-  pins, deny schema drift, require approval receipts for side-effect tools, and
-  block revoked tools.
+  pins, deny schema drift, reject opaque approval assertions for side-effect
+  tools until credential verification exists, and block revoked tools.
 - [KEEP] MCP mediation proof tests cover stdio, HTTP JSON-RPC,
   `/mcp/v1/execute`, SSE primer behavior, generated client configs, MCPB
   packaging, pre-executor schema denial, side-effect approval denial,

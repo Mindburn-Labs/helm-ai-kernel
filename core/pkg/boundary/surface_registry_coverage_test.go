@@ -201,6 +201,23 @@ func TestSurfaceRegistryDurableObjectFamilies(t *testing.T) {
 	if len(registry.ListMCPServers()) == 0 {
 		t.Fatal("expected MCP server list")
 	}
+	opaque, err := registry.PutMCPServer(mcppkg.ServerQuarantineRecord{
+		ServerID:          "mcp-opaque-approved",
+		State:             mcppkg.QuarantineApproved,
+		ApprovedBy:        "user:opaque",
+		ApprovalReceiptID: "opaque-receipt",
+		ApprovedToolNames: []string{"read_file"},
+		ApprovedEffects:   []string{"read"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opaque.State != mcppkg.QuarantineQuarantined || opaque.ApprovedBy != "" || opaque.ApprovalReceiptID != "" {
+		t.Fatalf("opaque approval persisted as authority: %+v", opaque)
+	}
+	if got, ok := registry.GetMCPServer(opaque.ServerID); !ok || got.State != mcppkg.QuarantineQuarantined {
+		t.Fatalf("opaque approval read as authority: (%+v,%v)", got, ok)
+	}
 
 	if _, err := registry.PutSandboxGrant(contracts.SandboxGrant{}); err == nil {
 		t.Fatal("invalid sandbox grant should fail")

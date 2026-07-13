@@ -87,7 +87,8 @@ HELM AI Kernel does:
 
 - enforce deny-by-default policy at MCP and OpenAI-compatible dispatch boundaries;
 - emit signed receipts for `ALLOW`, `DENY`, and `ESCALATE` decisions;
-- quarantine unknown MCP servers and tools until they are inspected and approved;
+- quarantine unknown MCP servers and tools until a credential-verifying
+  integration records a scope-bound approval;
 - produce offline-verifiable EvidencePacks for source-backed receipt material.
 
 HELM AI Kernel does not:

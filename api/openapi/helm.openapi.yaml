@@ -431,7 +431,7 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '503':
-          $ref: '#/components/responses/HelmError'
+          $ref: '#/components/responses/ServiceUnavailable'
 
         '403':
           $ref: '#/components/responses/HelmError'
@@ -466,7 +466,7 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '503':
-          $ref: '#/components/responses/HelmError'
+          $ref: '#/components/responses/ServiceUnavailable'
 
         '403':
           $ref: '#/components/responses/HelmError'
@@ -1544,19 +1544,19 @@ paths:
     post:
       operationId: approveLaunchpadMcpTools
       tags: [launchpad]
-      summary: Create a scoped MCP approval receipt record
+      summary: Launchpad MCP approval unavailable until credential verification is configured
+      description: This endpoint is disabled. It returns 503 before accepting or evaluating caller-supplied approval metadata.
       security:
         - AdminBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/HelmTenantIDHeader'
         - $ref: '#/components/parameters/HelmPrincipalIDHeader'
       requestBody:
-        required: true
+        description: Optional opaque metadata. It is ignored while credential verification is unavailable.
         content:
           application/json:
             schema:
               type: object
-              required: [server_id, tools, reason]
               properties:
                 server_id: { type: string }
                 tools:
@@ -1566,20 +1566,13 @@ paths:
                 reason: { type: string }
                 approver: { type: string }
       responses:
-        '201':
-          description: MCP approval receipt
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '400':
-          $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'
 
         '403':
           $ref: '#/components/responses/HelmError'
+        '503':
+          $ref: '#/components/responses/MCPApprovalVerificationUnavailable'
   /api/v1/launchpad/secrets:
     get:
       operationId: listLaunchpadSecretGrants
@@ -3039,7 +3032,7 @@ paths:
     get:
       operationId: listMcpRegistry
       tags: [mcp]
-      summary: List quarantined and approved MCP servers
+      summary: List MCP quarantine records (opaque approvals remain quarantined)
       security:
         - AdminBearerAuth: []
       responses:
@@ -3093,33 +3086,23 @@ paths:
     post:
       operationId: approveMcpServer
       tags: [mcp]
-      summary: Approve a quarantined MCP server using an approval receipt
+      summary: MCP approval unavailable until credential verification is configured
+      description: This endpoint is disabled. It returns 503 before accepting or evaluating caller-supplied approval metadata.
       security:
         - AdminBearerAuth: []
       requestBody:
-        required: true
+        description: Optional opaque metadata. It is ignored while credential verification is unavailable.
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/MCPRegistryApprovalRequest'
-            example:
-              server_id: "mcp-local-files"
-              approver_id: "user:security-admin"
-              approval_receipt_id: "rcpt_approval_123"
-              reason: "reviewed tool bundle and schema pins"
       responses:
-        '200':
-          description: Approved MCP server record
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MCPQuarantineRecord'
-        '400':
-          $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
+        '503':
+          $ref: '#/components/responses/MCPApprovalVerificationUnavailable'
 
   /api/v1/mcp/registry/{server_id}:
     get:
@@ -3149,7 +3132,8 @@ paths:
     post:
       operationId: approveMcpRegistryRecord
       tags: [mcp]
-      summary: Approve an MCP server by path id
+      summary: Path-scoped MCP approval unavailable until credential verification is configured
+      description: This endpoint is disabled. It returns 503 before accepting or evaluating caller-supplied approval metadata.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -3158,21 +3142,18 @@ paths:
           required: true
           schema: { type: string }
       requestBody:
+        description: Optional opaque metadata. It is ignored while credential verification is unavailable.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MCPRegistryApprovalRequest'
+              $ref: '#/components/schemas/MCPRegistryPathApprovalRequest'
       responses:
-        '200':
-          description: Approved MCP server record
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MCPQuarantineRecord'
         '401':
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
+        '503':
+          $ref: '#/components/responses/MCPApprovalVerificationUnavailable'
 
   /api/v1/mcp/registry/{server_id}/revoke:
     post:
@@ -3702,6 +3683,7 @@ paths:
       operationId: assertApprovalWebAuthnChallenge
       tags: [identity]
       summary: Approval verification unavailable until a credential verifier is configured
+      description: This endpoint is disabled. It returns 503 before accepting or evaluating a caller-supplied WebAuthn assertion.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -3710,11 +3692,11 @@ paths:
           required: true
           schema: { type: string }
       requestBody:
+        description: Optional assertion material. It is ignored while credential verification is unavailable.
         content:
           application/json:
             schema:
               type: object
-              required: [challenge_id, actor, assertion]
               properties:
                 challenge_id: { type: string }
                 actor: { type: string }
@@ -3724,8 +3706,6 @@ paths:
       responses:
         '503':
           $ref: '#/components/responses/ApprovalVerificationUnavailable'
-        '400':
-          $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'
 
@@ -5580,12 +5560,32 @@ components:
 
     MCPRegistryApprovalRequest:
       type: object
-      required: [server_id, approver_id, approval_receipt_id]
+      description: Optional, ignored approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
       properties:
         server_id: { type: string }
         approver_id: { type: string }
         approval_receipt_id: { type: string }
         reason: { type: string }
+        tool_names:
+          type: array
+          items: { type: string }
+        effects:
+          type: array
+          items: { type: string }
+
+    MCPRegistryPathApprovalRequest:
+      type: object
+      description: Optional, ignored path-scoped approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
+      properties:
+        approver_id: { type: string }
+        approval_receipt_id: { type: string }
+        reason: { type: string }
+        tool_names:
+          type: array
+          items: { type: string }
+        effects:
+          type: array
+          items: { type: string }
 
     MCPQuarantineRecord:
       type: object
@@ -5603,7 +5603,7 @@ components:
           enum: [unknown, low, medium, high, critical]
         state:
           type: string
-          enum: [discovered, quarantined, approved, revoked, expired]
+          enum: [discovered, quarantined, revoked, expired]
         discovered_at: { type: string, format: date-time }
         approved_at: { type: string, format: date-time }
         approved_by: { type: string }
@@ -6364,6 +6364,17 @@ components:
             title: "Approval verification unavailable"
             status: 503
             detail: "approval verification unavailable"
+    MCPApprovalVerificationUnavailable:
+      description: MCP credential verification is not configured, so opaque approval metadata remains quarantined.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          example:
+            type: "https://helm.mindburn.run/errors/503"
+            title: "MCP approval verification unavailable"
+            status: 503
+            detail: "MCP approval verification unavailable"
     IdempotencyConflict:
       description: Idempotency key was reused with a different request fingerprint
       content:

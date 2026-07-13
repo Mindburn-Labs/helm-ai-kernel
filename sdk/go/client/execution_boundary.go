@@ -12,6 +12,12 @@ import (
 // approval until the server can verify and bind them.
 var ErrApprovalVerificationUnavailable = errors.New("approval verification unavailable")
 
+// ErrMCPApprovalVerificationUnavailable reports that MCP approval requests
+// cannot create authority until the SDK can submit verifier-bound evidence.
+// It is local and fail-closed so a stale or misconfigured server cannot turn
+// opaque request fields into an MCP dispatch grant.
+var ErrMCPApprovalVerificationUnavailable = fmt.Errorf("MCP %w", ErrApprovalVerificationUnavailable)
+
 type EvidenceEnvelopeExportRequest struct {
 	ManifestID         string `json:"manifest_id"`
 	Envelope           string `json:"envelope"`
@@ -56,10 +62,12 @@ type MCPRegistryDiscoverRequest struct {
 }
 
 type MCPRegistryApprovalRequest struct {
-	ServerID          string `json:"server_id"`
-	ApproverID        string `json:"approver_id"`
-	ApprovalReceiptID string `json:"approval_receipt_id"`
-	Reason            string `json:"reason,omitempty"`
+	ServerID          string   `json:"server_id"`
+	ApproverID        string   `json:"approver_id"`
+	ApprovalReceiptID string   `json:"approval_receipt_id"`
+	Reason            string   `json:"reason,omitempty"`
+	ToolNames         []string `json:"tool_names,omitempty"`
+	Effects           []string `json:"effects,omitempty"`
 }
 
 type MCPQuarantineRecord struct {
@@ -244,10 +252,10 @@ func (c *HelmClient) DiscoverMCPServer(req MCPRegistryDiscoverRequest) (*MCPQuar
 	return &out, err
 }
 
-func (c *HelmClient) ApproveMCPServer(req MCPRegistryApprovalRequest) (*MCPQuarantineRecord, error) {
-	var out MCPQuarantineRecord
-	err := c.do("POST", "/api/v1/mcp/registry/approve", req, &out)
-	return &out, err
+// ApproveMCPServer always fails closed until credential verification is
+// integrated. It intentionally does not submit opaque approval metadata.
+func (c *HelmClient) ApproveMCPServer(_ MCPRegistryApprovalRequest) (*MCPQuarantineRecord, error) {
+	return nil, ErrMCPApprovalVerificationUnavailable
 }
 
 func (c *HelmClient) GetMCPRegistryRecord(serverID string) (*MCPQuarantineRecord, error) {
@@ -256,10 +264,10 @@ func (c *HelmClient) GetMCPRegistryRecord(serverID string) (*MCPQuarantineRecord
 	return &out, err
 }
 
-func (c *HelmClient) ApproveMCPRegistryRecord(serverID string, req MCPRegistryApprovalRequest) (*MCPQuarantineRecord, error) {
-	var out MCPQuarantineRecord
-	err := c.do("POST", "/api/v1/mcp/registry/"+url.PathEscape(serverID)+"/approve", req, &out)
-	return &out, err
+// ApproveMCPRegistryRecord always fails closed until credential verification
+// is integrated. It intentionally does not submit opaque approval metadata.
+func (c *HelmClient) ApproveMCPRegistryRecord(_ string, _ MCPRegistryPathApprovalRequest) (*MCPQuarantineRecord, error) {
+	return nil, ErrMCPApprovalVerificationUnavailable
 }
 
 func (c *HelmClient) RevokeMCPRegistryRecord(serverID, reason string) (*MCPQuarantineRecord, error) {

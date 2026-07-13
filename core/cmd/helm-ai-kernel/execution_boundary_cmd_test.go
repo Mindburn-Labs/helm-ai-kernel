@@ -62,7 +62,7 @@ func TestRunMCPWrapJSON(t *testing.T) {
 	}
 }
 
-func TestRunMCPApproveJSON(t *testing.T) {
+func TestRunMCPApproveFailsClosedWithoutCredentialVerifier(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runMCPApprove([]string{
 		"--server-id", "srv-1",
@@ -72,22 +72,15 @@ func TestRunMCPApproveJSON(t *testing.T) {
 		"--reason", "test approval",
 		"--json",
 	}, &stdout, &stderr)
-	if code != 0 {
+	if code != 2 {
 		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
 	}
-	var record map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
-		t.Fatalf("parse json: %v\n%s", err, stdout.String())
-	}
-	if record["state"] != "approved" {
-		t.Fatalf("state = %v", record["state"])
-	}
-	if record["approval_receipt_id"] != "approval-r1" {
-		t.Fatalf("approval receipt = %v", record["approval_receipt_id"])
+	if !strings.Contains(stderr.String(), "MCP approval verification unavailable") {
+		t.Fatalf("stderr=%s", stderr.String())
 	}
 }
 
-func TestRunMCPApproveRejectsUnsafeScopes(t *testing.T) {
+func TestRunMCPApproveFailsClosedForAnyScope(t *testing.T) {
 	for _, args := range [][]string{
 		{"--server-id", "srv-wildcard", "--tools", "*", "--reason", "too broad"},
 		{"--server-id", "srv-write", "--tools", "deploy", "--effects", "side_effect", "--ttl", "1h", "--reason", "too long"},
@@ -96,6 +89,9 @@ func TestRunMCPApproveRejectsUnsafeScopes(t *testing.T) {
 		code := runMCPApprove(args, &stdout, &stderr)
 		if code != 2 {
 			t.Fatalf("args %v exit code = %d stdout=%s stderr=%s", args, code, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "MCP approval verification unavailable") {
+			t.Fatalf("args %v stderr=%s", args, stderr.String())
 		}
 	}
 }
@@ -184,8 +180,8 @@ func TestRunMCPAuthorizeCallEscalateJSON(t *testing.T) {
 	if record["verdict"] != "ESCALATE" {
 		t.Fatalf("verdict = %v", record["verdict"])
 	}
-	if record["approval_command"] == "" {
-		t.Fatal("approval_command missing")
+	if _, ok := record["approval_command"]; ok {
+		t.Fatalf("approval_command must be omitted while credential verification is unavailable: %+v", record)
 	}
 	if record["decision_receipt_path"] == "" {
 		t.Fatal("decision_receipt_path missing")
@@ -208,10 +204,9 @@ func TestRunMCPAuthorizeCallEscalateHumanMessage(t *testing.T) {
 	for _, want := range []string{
 		"HELM ESCALATE",
 		"decision: mcp-boundary-",
-		"reason: unknown MCP server requires approval",
+		"reason: unknown MCP server remains quarantined; credential verification is unavailable",
 		"receipt:",
-		"approve:",
-		"helm-ai-kernel mcp approve --server-id shell-mcp-server --tools \"pwd\" --ttl 15m --reason 'read-only repo inspection for local dev'",
+		"approval: credential verification unavailable; the server remains quarantined",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
@@ -224,7 +219,6 @@ func TestRunMCPAuthorizeCallUnknownToolEscalateJSON(t *testing.T) {
 	code := runMCPAuthorizeCall([]string{
 		"--server-id", "srv-cli-unknown-tool",
 		"--tool-name", "local.missing",
-		"--approved",
 		"--json",
 	}, &stdout, &stderr)
 	if code != 1 {
@@ -252,7 +246,6 @@ func TestRunMCPAuthorizeCallMissingSchemaPinEscalateJSON(t *testing.T) {
 	code := runMCPAuthorizeCall([]string{
 		"--server-id", "srv-cli-missing-pin",
 		"--tool-name", "local.echo",
-		"--approved",
 		"--tool-schema-json", string(schemaJSON),
 		"--json",
 	}, &stdout, &stderr)
@@ -268,7 +261,7 @@ func TestRunMCPAuthorizeCallMissingSchemaPinEscalateJSON(t *testing.T) {
 	}
 }
 
-func TestRunMCPAuthorizeCallApprovedPinnedLocalToolAllowJSON(t *testing.T) {
+func TestRunMCPAuthorizeCallApprovedSeedFailsClosed(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -290,18 +283,11 @@ func TestRunMCPAuthorizeCallApprovedPinnedLocalToolAllowJSON(t *testing.T) {
 		"--pinned-schema-hash", hash,
 		"--json",
 	}, &stdout, &stderr)
-	if code != 0 {
+	if code != 2 {
 		t.Fatalf("exit code = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
-	var record map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
-		t.Fatalf("parse json: %v\n%s", err, stdout.String())
-	}
-	if record["verdict"] != "ALLOW" {
-		t.Fatalf("verdict = %v", record["verdict"])
-	}
-	if record["record_hash"] == "" {
-		t.Fatal("record_hash missing")
+	if !strings.Contains(stderr.String(), "MCP approval verification unavailable") {
+		t.Fatalf("stderr=%s", stderr.String())
 	}
 }
 

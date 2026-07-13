@@ -25,30 +25,35 @@ approval scope.
 `DENY` means the action is unsafe, mismatched, expired, revoked, outside scope,
 or policy-forbidden.
 
-`ESCALATE` means a developer can safely resolve the block with an exact local
-approval. HELM writes a receipt and returns a short approval hint. It never
-continues the original action silently.
+`ESCALATE` means HELM blocked the action and wrote a decision receipt. For MCP,
+the bundled CLI and API cannot resolve the block with local approval metadata:
+the server remains quarantined until a credential-verifying integration is
+configured. HELM never continues the original action silently.
 
-## Approvals
+## Credential-verified approvals
 
-Approvals are local-first and narrow:
+The bundled MCP approval surface does not create grants or approval receipts.
+When a credential-verifying integration is available, its approvals must be
+narrow:
 
 - exact server id
 - exact tool list
 - explicit effect scope
 - required reason
 - TTL-bound
-- receipt-backed
+- verifier- and receipt-backed
 - revocable
 
 Read-only is the default effect. Write, deploy, network, and payment effects
-must be approved explicitly and use a shorter TTL.
+must be verifier-approved explicitly and use a shorter TTL.
 
 ## Receipts
 
-Decision, approval, and revocation receipts live under
-`~/.helm-ai-kernel/receipts/`. They are the public proof surface: inspect them,
-export them, or include them in an EvidencePack for offline verification.
+Decision and revocation receipts live under `~/.helm-ai-kernel/receipts/`.
+They are the public proof surface: inspect them, export them, or include them
+in an EvidencePack for offline verification. A future credential-verifying
+integration may add approval receipts; the bundled MCP approval surface does
+not.
 
 ## Boundaries
 

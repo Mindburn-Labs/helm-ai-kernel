@@ -83,8 +83,8 @@ expansion, wrapper, or destructive tool.
 
 ## Prove An Escalation
 
-For MCP-backed local tools, unknown servers and missing scoped approvals should
-pause as `ESCALATE`:
+For MCP-backed local tools, unknown servers and missing credential-verified
+approvals pause as `ESCALATE`:
 
 ```bash
 helm-ai-kernel mcp authorize-call \
@@ -92,8 +92,12 @@ helm-ai-kernel mcp authorize-call \
   --tool-name pwd
 ```
 
-Use the approval loop in [Quickstart](/quickstart#see-an-escalation). Then
-rerun the original action. Approval never resumes it automatically.
+The local `mcp approve` command and public approval API remain fail-closed
+until a credential-verifying integration is configured.
+
+Keep the action blocked. Only after a credential-verifying integration records
+a scope-bound approval may an operator rerun the original action as a new
+evaluation; approval never resumes it automatically.
 
 ## Revoke Access
 

@@ -426,15 +426,15 @@ class TestExecutionBoundarySurfaces:
         discovered = client.discover_mcp_server(MCPRegistryDiscoverRequest(server_id="mcp1", risk="high"))
         assert discovered.state == "quarantined"
 
-        mock_client.post.return_value = mock_response(200, {**record, "state": "approved"})
-        approved = client.approve_mcp_server(
-            MCPRegistryApprovalRequest(
-                server_id="mcp1",
-                approver_id="user1",
-                approval_receipt_id="rcpt1",
+        with pytest.raises(ApprovalVerificationUnavailableError, match="MCP approval verification unavailable"):
+            client.approve_mcp_server(
+                MCPRegistryApprovalRequest(
+                    server_id="mcp1",
+                    approver_id="user1",
+                    approval_receipt_id="rcpt1",
+                )
             )
-        )
-        assert approved.state == "approved"
+        mock_client.post.assert_called_once_with("/api/v1/mcp/registry", json={"server_id": "mcp1", "risk": "high"})
 
     @patch("helm_sdk.client.httpx.Client")
     def test_inspect_sandbox_grants(self, mock_client_cls: MagicMock) -> None:

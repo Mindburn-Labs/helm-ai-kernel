@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
@@ -187,15 +188,27 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 	authorizeTestRequest(approveReq)
 	approveRec := httptest.NewRecorder()
 	mux.ServeHTTP(approveRec, approveReq)
-	if approveRec.Code != http.StatusOK {
+	if approveRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("approve status=%d body=%s", approveRec.Code, approveRec.Body.String())
 	}
-	var approval map[string]any
-	if err := json.Unmarshal(approveRec.Body.Bytes(), &approval); err != nil {
+	if contentType := approveRec.Header().Get("Content-Type"); !strings.Contains(contentType, "application/problem+json") {
+		t.Fatalf("approve content type = %q", contentType)
+	}
+	var approvalProblem struct {
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(approveRec.Body.Bytes(), &approvalProblem); err != nil {
 		t.Fatal(err)
 	}
-	if approval["state"] != "approved" {
-		t.Fatalf("approval state = %+v", approval)
+	if approvalProblem.Detail != mcppkg.ErrApprovalVerificationUnavailable.Error() {
+		t.Fatalf("approval detail = %q", approvalProblem.Detail)
+	}
+	emptyApproveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/approve", strings.NewReader(`{}`))
+	authorizeTestRequest(emptyApproveReq)
+	emptyApproveRec := httptest.NewRecorder()
+	mux.ServeHTTP(emptyApproveRec, emptyApproveReq)
+	if emptyApproveRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("empty approval status=%d body=%s", emptyApproveRec.Code, emptyApproveRec.Body.String())
 	}
 
 	sandboxReq := httptest.NewRequest(http.MethodGet, "/api/v1/sandbox/grants/inspect?runtime=wazero", nil)
@@ -236,7 +249,7 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 	}
 }
 
-func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
+func TestMCPAuthorizeCallAPIFailsClosedWithoutCredentialVerifier(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	mux := http.NewServeMux()
@@ -273,45 +286,90 @@ func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
 		t.Fatalf("discover status=%d body=%s", discoverRec.Code, discoverRec.Body.String())
 	}
 
-	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/api-fixture/approve", strings.NewReader(`{"approver_id":"user:alice","approval_receipt_id":"approval-r1","reason":"reviewed","tool_names":["local.echo"]}`))
-	authorizeTestRequest(approveReq)
-	approveRec := httptest.NewRecorder()
-	mux.ServeHTTP(approveRec, approveReq)
-	if approveRec.Code != http.StatusOK {
-		t.Fatalf("approve status=%d body=%s", approveRec.Code, approveRec.Body.String())
+	for _, approval := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{"collection_well_formed", "/api/v1/mcp/registry/approve", `{"server_id":"api-fixture","approver_id":"user:alice","approval_receipt_id":"approval-r1","reason":"reviewed","tool_names":["local.echo"]}`},
+		{"collection_empty", "/api/v1/mcp/registry/approve", `{}`},
+		{"collection_malformed", "/api/v1/mcp/registry/approve", `{"server_id":`},
+		{"path_well_formed", "/api/v1/mcp/registry/api-fixture/approve", `{"approver_id":"user:alice","approval_receipt_id":"approval-r1","reason":"reviewed","tool_names":["local.echo"]}`},
+		{"path_empty", "/api/v1/mcp/registry/api-fixture/approve", `{}`},
+		{"path_malformed", "/api/v1/mcp/registry/api-fixture/approve", `{"approver_id":`},
+	} {
+		t.Run(approval.name, func(t *testing.T) {
+			approveReq := httptest.NewRequest(http.MethodPost, approval.path, strings.NewReader(approval.body))
+			authorizeTestRequest(approveReq)
+			approveRec := httptest.NewRecorder()
+			mux.ServeHTTP(approveRec, approveReq)
+			if approveRec.Code != http.StatusServiceUnavailable {
+				t.Fatalf("approve %s status=%d body=%s", approval.path, approveRec.Code, approveRec.Body.String())
+			}
+			if contentType := approveRec.Header().Get("Content-Type"); !strings.Contains(contentType, "application/problem+json") {
+				t.Fatalf("approve %s content type = %q", approval.path, contentType)
+			}
+			var problem struct {
+				Detail string `json:"detail"`
+			}
+			if err := json.Unmarshal(approveRec.Body.Bytes(), &problem); err != nil {
+				t.Fatal(err)
+			}
+			if problem.Detail != mcppkg.ErrApprovalVerificationUnavailable.Error() {
+				t.Fatalf("approve %s detail=%q", approval.path, problem.Detail)
+			}
+		})
 	}
 
-	unknownTool := postMCPAuthorizeForTest(t, mux, map[string]any{
-		"server_id": "api-fixture",
-		"tool_name": "local.missing",
-		"args_hash": "sha256:unknown-tool",
-	}, http.StatusForbidden)
-	if unknownTool["verdict"] != "DENY" && unknownTool["verdict"] != "ESCALATE" {
-		t.Fatalf("unknown tool verdict = %+v", unknownTool)
-	}
-
-	missingPin := postMCPAuthorizeForTest(t, mux, map[string]any{
-		"server_id":   "api-fixture",
-		"tool_name":   "local.echo",
-		"args_hash":   "sha256:missing-pin",
-		"tool_schema": schema,
-	}, http.StatusForbidden)
-	if missingPin["verdict"] != "DENY" && missingPin["verdict"] != "ESCALATE" {
-		t.Fatalf("missing pin verdict = %+v", missingPin)
-	}
-
-	allowed := postMCPAuthorizeForTest(t, mux, map[string]any{
+	blocked := postMCPAuthorizeForTest(t, mux, map[string]any{
 		"server_id":          "api-fixture",
 		"tool_name":          "local.echo",
-		"args_hash":          "sha256:pinned-allow",
+		"args_hash":          "sha256:blocked-with-opaque-approval",
 		"tool_schema":        schema,
 		"pinned_schema_hash": hash,
-	}, http.StatusOK)
-	if allowed["verdict"] != "ALLOW" {
-		t.Fatalf("allow verdict = %+v", allowed)
+	}, http.StatusForbidden)
+	if blocked["verdict"] == "ALLOW" {
+		t.Fatalf("opaque approval allowed dispatch: %+v", blocked)
 	}
-	if allowed["record_hash"] == "" {
-		t.Fatal("allowed record_hash missing")
+	if blocked["record_hash"] == "" {
+		t.Fatal("blocked record_hash missing")
+	}
+}
+
+func TestMCPAuthorizeCallDoesNotTrustPersistedApprovedMetadata(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	svc.BoundarySurfaces = boundarypkg.NewSurfaceRegistry(time.Now)
+	if _, err := svc.BoundarySurfaces.PutMCPServer(mcppkg.ServerQuarantineRecord{
+		ServerID:          "persisted-approved",
+		State:             mcppkg.QuarantineApproved,
+		ApprovedBy:        "user:alice",
+		ApprovalReceiptID: "opaque-receipt",
+		ApprovedToolNames: []string{"local.echo"},
+		ApprovedEffects:   []string{"read"},
+	}); err != nil {
+		t.Fatalf("seed persisted record: %v", err)
+	}
+	if record, ok := svc.BoundarySurfaces.GetMCPServer("persisted-approved"); !ok || record.State != mcppkg.QuarantineQuarantined || record.ApprovalReceiptID != "" {
+		t.Fatalf("persisted opaque approval was exposed as authority: (%+v,%v)", record, ok)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	schema := map[string]any{"type": "object"}
+	hash, err := mcppkg.ToolSchemaHash(mcppkg.ToolRef{Name: "local.echo", Schema: schema})
+	if err != nil {
+		t.Fatalf("schema hash: %v", err)
+	}
+	blocked := postMCPAuthorizeForTest(t, mux, map[string]any{
+		"server_id":          "persisted-approved",
+		"tool_name":          "local.echo",
+		"args_hash":          "sha256:persisted-opaque-approval",
+		"tool_schema":        schema,
+		"pinned_schema_hash": hash,
+	}, http.StatusForbidden)
+	if blocked["verdict"] == "ALLOW" {
+		t.Fatalf("persisted opaque approval allowed dispatch: %+v", blocked)
 	}
 }
 
@@ -394,6 +452,20 @@ func TestApprovalRoutesFailClosedWithoutCredentialVerifier(t *testing.T) {
 	}
 	if problem.Detail != "approval verification unavailable" {
 		t.Fatalf("assert detail=%q", problem.Detail)
+	}
+	emptyAssertReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/webauthn/assert", strings.NewReader(`{}`))
+	authorizeTestRequest(emptyAssertReq)
+	emptyAssertRec := httptest.NewRecorder()
+	mux.ServeHTTP(emptyAssertRec, emptyAssertReq)
+	if emptyAssertRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("empty assertion status=%d body=%s", emptyAssertRec.Code, emptyAssertRec.Body.String())
+	}
+	malformedAssertReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/webauthn/assert", strings.NewReader(`{"challenge_id":`))
+	authorizeTestRequest(malformedAssertReq)
+	malformedAssertRec := httptest.NewRecorder()
+	mux.ServeHTTP(malformedAssertRec, malformedAssertReq)
+	if malformedAssertRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("malformed assertion status=%d body=%s", malformedAssertRec.Code, malformedAssertRec.Body.String())
 	}
 
 	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/approve", strings.NewReader(`{"actor":"user:alice","receipt_id":"rcpt-approval"}`))

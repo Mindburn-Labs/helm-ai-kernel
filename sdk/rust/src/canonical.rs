@@ -6,7 +6,9 @@ pub fn canonical_json(value: &Value) -> String {
         Value::Bool(true) => "true".to_string(),
         Value::Bool(false) => "false".to_string(),
         Value::Number(number) => number.to_string(),
-        Value::String(text) => serde_json::to_string(text).expect("string serialization cannot fail"),
+        Value::String(text) => {
+            serde_json::to_string(text).expect("string serialization cannot fail")
+        }
         Value::Array(values) => {
             let parts: Vec<String> = values.iter().map(canonical_json).collect();
             format!("[{}]", parts.join(","))
@@ -64,8 +66,10 @@ mod tests {
 
     #[test]
     fn canonical_json_sorts_keys_and_preserves_array_order() {
-        let value: Value = serde_json::from_str(r#"{"z":3,"a":[2,1],"m":{"b":2,"a":1}}"#)
-            .unwrap();
-        assert_eq!(canonical_json(&value), r#"{"a":[2,1],"m":{"a":1,"b":2},"z":3}"#);
+        let value: Value = serde_json::from_str(r#"{"z":3,"a":[2,1],"m":{"b":2,"a":1}}"#).unwrap();
+        assert_eq!(
+            canonical_json(&value),
+            r#"{"a":[2,1],"m":{"a":1,"b":2},"z":3}"#
+        );
     }
 }

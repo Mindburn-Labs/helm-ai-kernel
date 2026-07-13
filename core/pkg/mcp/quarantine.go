@@ -2,12 +2,16 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
+
+// ErrApprovalVerificationUnavailable prevents opaque caller-supplied approval
+// fields from becoming executable MCP authority.
+var ErrApprovalVerificationUnavailable = errors.New("MCP approval verification unavailable")
 
 type QuarantineState string
 
@@ -30,8 +34,8 @@ const (
 )
 
 // ServerQuarantineRecord tracks the local-first lifecycle for a discovered MCP
-// server. Unknown servers are not executable until an approval ceremony emits a
-// receipt and the registry transitions the record to approved.
+// server. Unknown servers are not executable until a credential-verifying
+// approval integration records an approved state.
 type ServerQuarantineRecord struct {
 	ServerID              string          `json:"server_id"`
 	Name                  string          `json:"name,omitempty"`
@@ -74,6 +78,26 @@ type ApprovalDecision struct {
 	Reason            string
 	ToolNames         []string
 	Effects           []string
+}
+
+// FailClosedUnverifiedApproval removes opaque persisted approval metadata.
+// A credential-verifying integration must own any future transition to
+// QuarantineApproved; the local surface registry must never expose or restore
+// caller-supplied approval fields as executable authority.
+func FailClosedUnverifiedApproval(record ServerQuarantineRecord) ServerQuarantineRecord {
+	if record.State != QuarantineApproved {
+		return record
+	}
+	record.State = QuarantineQuarantined
+	record.ApprovedToolNames = nil
+	record.ApprovedEffects = nil
+	record.ApprovedAt = time.Time{}
+	record.ApprovedBy = ""
+	record.ApprovalReceiptID = ""
+	record.ApprovalReceiptPath = ""
+	record.ExpiresAt = time.Time{}
+	record.Reason = ErrApprovalVerificationUnavailable.Error()
+	return record
 }
 
 type QuarantineRegistry struct {
@@ -130,54 +154,8 @@ func (r *QuarantineRegistry) Discover(ctx context.Context, req DiscoverServerReq
 	return record, nil
 }
 
-func (r *QuarantineRegistry) Approve(ctx context.Context, decision ApprovalDecision) (ServerQuarantineRecord, error) {
-	if decision.ServerID == "" {
-		return ServerQuarantineRecord{}, fmt.Errorf("server id is required")
-	}
-	if decision.ApproverID == "" {
-		return ServerQuarantineRecord{}, fmt.Errorf("approver id is required")
-	}
-	if decision.ApprovalReceiptID == "" {
-		return ServerQuarantineRecord{}, fmt.Errorf("approval receipt id is required")
-	}
-	tools, err := normalizeApprovalScope(decision.ToolNames, "tool")
-	if err != nil {
-		return ServerQuarantineRecord{}, err
-	}
-	effects, err := normalizeApprovalScope(decision.Effects, "effect")
-	if err != nil {
-		return ServerQuarantineRecord{}, err
-	}
-	if len(effects) == 0 {
-		effects = []string{"read"}
-	}
-	if decision.Reason == "" {
-		return ServerQuarantineRecord{}, fmt.Errorf("approval reason is required")
-	}
-	now := decision.ApprovedAt
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	record, ok := r.records[decision.ServerID]
-	if !ok {
-		return ServerQuarantineRecord{}, fmt.Errorf("server %q is not discovered", decision.ServerID)
-	}
-	if record.State == QuarantineRevoked {
-		return ServerQuarantineRecord{}, fmt.Errorf("server %q is revoked", decision.ServerID)
-	}
-	record.State = QuarantineApproved
-	record.ApprovedAt = now
-	record.ApprovedBy = decision.ApproverID
-	record.ApprovalReceiptID = decision.ApprovalReceiptID
-	record.ExpiresAt = decision.ExpiresAt
-	record.Reason = decision.Reason
-	record.ApprovedToolNames = tools
-	record.ApprovedEffects = effects
-	r.records[decision.ServerID] = record
-	return record, nil
+func (r *QuarantineRegistry) Approve(_ context.Context, _ ApprovalDecision) (ServerQuarantineRecord, error) {
+	return ServerQuarantineRecord{}, ErrApprovalVerificationUnavailable
 }
 
 func (r *QuarantineRegistry) Revoke(ctx context.Context, serverID, reason string, at time.Time) (ServerQuarantineRecord, error) {
@@ -250,30 +228,6 @@ func (r *QuarantineRegistry) RequireApprovedTool(ctx context.Context, serverID, 
 		return fmt.Errorf("server %q approval does not include effect %q", serverID, effect)
 	}
 	return nil
-}
-
-func normalizeApprovalScope(values []string, label string) ([]string, error) {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if value == "*" {
-			return nil, fmt.Errorf("%s wildcard approval is not allowed", label)
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	sort.Strings(out)
-	if label == "tool" && len(out) == 0 {
-		return nil, fmt.Errorf("approval tools are required")
-	}
-	return out, nil
 }
 
 func scopeAllows(allowed []string, value string) bool {

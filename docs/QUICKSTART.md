@@ -39,7 +39,7 @@ make build
 | Framework adapters | [framework adapters](INTEGRATIONS/framework-adapters.md) |
 | Skill Packs | `helm-ai-kernel skills search --json` |
 | Agent risk scan | `helm-ai-kernel scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` |
-| MCP approval loop | `mcp authorize-call`, `mcp approve`, `mcp revoke`, `mcp pending`, `mcp receipts` |
+| MCP quarantine loop | `mcp authorize-call`, `mcp revoke`, `mcp pending`, `mcp receipts`; opaque approval requests fail closed |
 | OpenAI proxy | `helm-ai-kernel proxy --port 9090` |
 | Receipts | `helm-ai-kernel mcp receipts --json` and `helm-ai-kernel boundary records --json` |
 | Conformance | `helm-ai-kernel conform --level L1 --json` and `--level L2` |
@@ -91,39 +91,26 @@ Expected client message:
 ```text
 HELM ESCALATE
 decision: mcp-boundary-...
-reason: unknown MCP server requires approval
+reason: unknown MCP server remains quarantined; credential verification is unavailable
 receipt: ~/.helm-ai-kernel/receipts/mcp/...
-approve:
-  helm-ai-kernel mcp approve --server-id helm-demo-shell \
-    --tools "pwd" \
-    --ttl 15m \
-    --reason 'read-only repo inspection for local dev'
+approval: credential verification unavailable; the server remains quarantined
 ```
 
-Nothing runs on `ESCALATE`. The developer either approves the exact scope or
-does nothing.
+Nothing runs on `ESCALATE`. The bundled CLI and API do not accept local,
+caller-supplied approval assertions: a credential-verifying approval
+integration must be configured before an MCP server can leave quarantine. If
+that integration later records a verified approval, rerun the original action;
+approval never silently resumes a blocked action.
 
-Approve a narrow read-only grant:
-
-```bash
-helm-ai-kernel mcp approve \
-  --server-id helm-demo-shell \
-  --tools "pwd,ls,cat" \
-  --ttl 15m \
-  --reason "read-only repo inspection for local dev"
-```
-
-Then rerun the original action. HELM evaluates again against the approval,
-schema, policy, and effect scope. Approval does not silently resume the blocked
-action.
-
-Revoke the grant:
+Revoke a previously verified or legacy grant:
 
 ```bash
 helm-ai-kernel mcp revoke \
   --server-id helm-demo-shell \
   --reason "inspection finished"
 ```
+
+Revocation remains available, but it cannot create new authority.
 
 ## Connect A Local Agent
 

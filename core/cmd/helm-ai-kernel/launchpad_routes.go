@@ -1,12 +1,9 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -20,6 +17,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/repair"
 	lpsecrets "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/secrets"
 	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
+	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
 
 type launchpadPlanRequest struct {
@@ -438,88 +436,8 @@ func handleLaunchpadSandbox(w http.ResponseWriter, _ *http.Request, rest string,
 	})
 }
 
-func handleLaunchpadMCPApproval(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ServerID  string   `json:"server_id"`
-		Tools     []string `json:"tools"`
-		TTL       string   `json:"ttl"`
-		Reason    string   `json:"reason"`
-		Approver  string   `json:"approver"`
-		Revocable bool     `json:"revocable"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.WriteBadRequest(w, "invalid MCP approval request")
-		return
-	}
-	req.ServerID = strings.TrimSpace(req.ServerID)
-	req.Reason = strings.TrimSpace(req.Reason)
-	tools, err := normalizeMCPApprovalTools(req.Tools)
-	if err != nil {
-		api.WriteBadRequest(w, err.Error())
-		return
-	}
-	if req.ServerID == "" || len(tools) == 0 || req.Reason == "" {
-		api.WriteBadRequest(w, "server_id, tools, and reason are required")
-		return
-	}
-	if req.TTL == "" {
-		req.TTL = "1h"
-	}
-	if req.Approver == "" {
-		req.Approver = "local.operator"
-	}
-	ttl, err := time.ParseDuration(req.TTL)
-	if err != nil || ttl <= 0 {
-		api.WriteBadRequest(w, "ttl must be a positive duration")
-		return
-	}
-	now := time.Now().UTC()
-	expiration := now.Add(ttl).Format(time.RFC3339)
-	toolScopeHash := mcpApprovalToolScopeHash(tools)
-	receiptID := "rcp_mcp_approval_" + sanitizeReceiptPart(req.ServerID+"_"+strings.Join(tools, "_")+"_"+toolScopeHash)
-	writeLaunchpadJSON(w, http.StatusCreated, map[string]any{
-		"approval": map[string]any{
-			"server_id":             req.ServerID,
-			"tool_names":            tools,
-			"tool_scope_hash":       toolScopeHash,
-			"risk":                  "scoped-operator-approved",
-			"approver":              req.Approver,
-			"reason":                req.Reason,
-			"receipt_id":            receiptID,
-			"expires_at":            expiration,
-			"revocation_semantics":  "revocable by helm-ai-kernel mcp quarantine or policy epoch change",
-			"side_effects_allowed":  true,
-			"raw_secret_disclosure": false,
-		},
-		"cli_equivalent": "helm-ai-kernel mcp approve " + req.ServerID + " --tools " + strings.Join(tools, ",") + " --ttl " + req.TTL + " --reason " + shellQuote(req.Reason),
-	})
-}
-
-func normalizeMCPApprovalTools(input []string) ([]string, error) {
-	seen := map[string]bool{}
-	tools := make([]string, 0, len(input))
-	for _, tool := range input {
-		tool = strings.TrimSpace(tool)
-		if tool == "" || tool == "*" {
-			return nil, fmt.Errorf("tools must name explicit MCP tools")
-		}
-		if strings.ContainsAny(tool, " \t\r\n") {
-			return nil, fmt.Errorf("tools must not contain whitespace")
-		}
-		if !seen[tool] {
-			seen[tool] = true
-			tools = append(tools, tool)
-		}
-	}
-	sort.Strings(tools)
-	return tools, nil
-}
-
-func mcpApprovalToolScopeHash(tools []string) string {
-	normalized := append([]string(nil), tools...)
-	sort.Strings(normalized)
-	sum := sha256.Sum256([]byte(strings.Join(normalized, "\n")))
-	return "sha256:" + hex.EncodeToString(sum[:])
+func handleLaunchpadMCPApproval(w http.ResponseWriter, _ *http.Request) {
+	api.WriteError(w, http.StatusServiceUnavailable, "MCP approval verification unavailable", mcppkg.ErrApprovalVerificationUnavailable.Error())
 }
 
 func handleLaunchpadSecrets(w http.ResponseWriter, r *http.Request, store *launchsession.Store) {

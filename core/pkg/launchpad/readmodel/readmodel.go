@@ -364,7 +364,7 @@ func EventsFromRun(run session.LaunchRun) []RunEvent {
 	if len(run.MCPRefs) > 0 {
 		mcpVerdict = "ALLOW"
 		mcpReason = ""
-		mcpSummary = "MCP quarantine policy was enforced; unknown tools remain unavailable until approval receipt exists."
+		mcpSummary = "MCP quarantine policy was enforced; unknown tools remain unavailable until a credential-verified approval receipt exists."
 	}
 	events := []RunEvent{
 		event(run, "registry_read", "Registry read", run.KernelVerdict, "", "proven", "Registry spec was read for this run.", first(run.BoundaryRecordRefs), ""),
@@ -560,13 +560,13 @@ func MCPThreatReviews(catalog *registry.Catalog, runs []session.LaunchRun) []MCP
 			ApprovalReceipt:     "",
 			LastDispatchReceipt: "",
 			ProofStatus:         proof,
-			Summary:             "No MCP tool dispatch is allowed until server identity, tool names, risk class, approval receipt, expiration, and revocation semantics are bound.",
+			Summary:             "No MCP tool dispatch is allowed until server identity, tool names, risk class, a credential-verified approval receipt, expiration, and revocation semantics are bound.",
 			FixActions: []FixAction{{
 				Label:       "Review MCP tools",
 				CLI:         "helm-ai-kernel mcp quarantine",
-				Description: "Inspect quarantined MCP servers before issuing a scoped approval.",
+				Description: "Inspect quarantined MCP servers; opaque local approval requests remain unavailable until credential verification is integrated.",
 			}},
-			CLIEquivalent: "helm-ai-kernel mcp approve " + serverID + " --tools <tool> --ttl 1h --reason <reason>",
+			CLIEquivalent: "helm-ai-kernel mcp pending --json",
 		})
 	}
 	return reviews
@@ -888,7 +888,7 @@ func refsWithPrefix(refs []string, prefix string) []string {
 
 func mcpQuarantineState(compiled plan.LaunchPlan, run *session.LaunchRun) (string, string, string) {
 	if len(runRefs(run, "mcp")) > 0 {
-		return "ALLOW", "", "MCP quarantine policy was enforced; unknown tools remain unavailable unless a scoped approval receipt exists."
+		return "ALLOW", "", "MCP quarantine policy was enforced; unknown tools remain unavailable unless a credential-verified scoped approval receipt exists."
 	}
 	if compiled.MCPPolicy.UnknownServerPolicy == "quarantine" || compiled.MCPPolicy.UnknownToolPolicy != "" {
 		return "ESCALATE", "ERR_MCP_QUARANTINE_UNPROVEN", "MCP quarantine is required but no quarantine receipt is attached yet."
@@ -903,7 +903,7 @@ func fixActionsFor(reason, id string) []FixAction {
 	case "ERR_LAUNCHPAD_APP_CONFORMANCE_REQUIRED":
 		return []FixAction{{Label: "Promote verified AppSpec", CLI: "helm-ai-kernel launch promote --app <app> --manifest <promotion-manifest.json> --write", Description: "Attach live conformance evidence before enabling OSS launch."}}
 	case "ERR_MCP_QUARANTINE_UNPROVEN", "ERR_MCP_SERVER_QUARANTINED":
-		return []FixAction{{Label: "Review MCP threat", CLI: "helm-ai-kernel mcp quarantine", Description: "Keep unknown tools quarantined or approve a scoped subset with TTL."}}
+		return []FixAction{{Label: "Review MCP threat", CLI: "helm-ai-kernel mcp quarantine", Description: "Keep unknown tools quarantined. The bundled approval path remains unavailable until credential verification is integrated."}}
 	}
 	if strings.Contains(id, "policy") {
 		return []FixAction{{Label: "Simulate policy", CLI: "helm-ai-kernel policy simulate <app>", Description: "Review least-privilege policy before applying."}}

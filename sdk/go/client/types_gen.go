@@ -3167,24 +3167,19 @@ var _ MappedNullable = &ApproveLaunchpadMcpToolsRequest{}
 
 // ApproveLaunchpadMcpToolsRequest struct for ApproveLaunchpadMcpToolsRequest
 type ApproveLaunchpadMcpToolsRequest struct {
-	ServerId string   `json:"server_id"`
-	Tools    []string `json:"tools"`
+	ServerId *string  `json:"server_id,omitempty"`
+	Tools    []string `json:"tools,omitempty"`
 	Ttl      *string  `json:"ttl,omitempty"`
-	Reason   string   `json:"reason"`
+	Reason   *string  `json:"reason,omitempty"`
 	Approver *string  `json:"approver,omitempty"`
 }
-
-type _ApproveLaunchpadMcpToolsRequest ApproveLaunchpadMcpToolsRequest
 
 // NewApproveLaunchpadMcpToolsRequest instantiates a new ApproveLaunchpadMcpToolsRequest object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewApproveLaunchpadMcpToolsRequest(serverId string, tools []string, reason string) *ApproveLaunchpadMcpToolsRequest {
+func NewApproveLaunchpadMcpToolsRequest() *ApproveLaunchpadMcpToolsRequest {
 	this := ApproveLaunchpadMcpToolsRequest{}
-	this.ServerId = serverId
-	this.Tools = tools
-	this.Reason = reason
 	return &this
 }
 
@@ -3196,50 +3191,66 @@ func NewApproveLaunchpadMcpToolsRequestWithDefaults() *ApproveLaunchpadMcpToolsR
 	return &this
 }
 
-// GetServerId returns the ServerId field value
+// GetServerId returns the ServerId field value if set, zero value otherwise.
 func (o *ApproveLaunchpadMcpToolsRequest) GetServerId() string {
-	if o == nil {
+	if o == nil || IsNil(o.ServerId) {
 		var ret string
 		return ret
 	}
-
-	return o.ServerId
+	return *o.ServerId
 }
 
-// GetServerIdOk returns a tuple with the ServerId field value
+// GetServerIdOk returns a tuple with the ServerId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *ApproveLaunchpadMcpToolsRequest) GetServerIdOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.ServerId) {
 		return nil, false
 	}
-	return &o.ServerId, true
+	return o.ServerId, true
 }
 
-// SetServerId sets field value
+// HasServerId returns a boolean if a field has been set.
+func (o *ApproveLaunchpadMcpToolsRequest) HasServerId() bool {
+	if o != nil && !IsNil(o.ServerId) {
+		return true
+	}
+
+	return false
+}
+
+// SetServerId gets a reference to the given string and assigns it to the ServerId field.
 func (o *ApproveLaunchpadMcpToolsRequest) SetServerId(v string) {
-	o.ServerId = v
+	o.ServerId = &v
 }
 
-// GetTools returns the Tools field value
+// GetTools returns the Tools field value if set, zero value otherwise.
 func (o *ApproveLaunchpadMcpToolsRequest) GetTools() []string {
-	if o == nil {
+	if o == nil || IsNil(o.Tools) {
 		var ret []string
 		return ret
 	}
-
 	return o.Tools
 }
 
-// GetToolsOk returns a tuple with the Tools field value
+// GetToolsOk returns a tuple with the Tools field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *ApproveLaunchpadMcpToolsRequest) GetToolsOk() ([]string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.Tools) {
 		return nil, false
 	}
 	return o.Tools, true
 }
 
-// SetTools sets field value
+// HasTools returns a boolean if a field has been set.
+func (o *ApproveLaunchpadMcpToolsRequest) HasTools() bool {
+	if o != nil && !IsNil(o.Tools) {
+		return true
+	}
+
+	return false
+}
+
+// SetTools gets a reference to the given []string and assigns it to the Tools field.
 func (o *ApproveLaunchpadMcpToolsRequest) SetTools(v []string) {
 	o.Tools = v
 }
@@ -3276,28 +3287,36 @@ func (o *ApproveLaunchpadMcpToolsRequest) SetTtl(v string) {
 	o.Ttl = &v
 }
 
-// GetReason returns the Reason field value
+// GetReason returns the Reason field value if set, zero value otherwise.
 func (o *ApproveLaunchpadMcpToolsRequest) GetReason() string {
-	if o == nil {
+	if o == nil || IsNil(o.Reason) {
 		var ret string
 		return ret
 	}
-
-	return o.Reason
+	return *o.Reason
 }
 
-// GetReasonOk returns a tuple with the Reason field value
+// GetReasonOk returns a tuple with the Reason field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *ApproveLaunchpadMcpToolsRequest) GetReasonOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.Reason) {
 		return nil, false
 	}
-	return &o.Reason, true
+	return o.Reason, true
 }
 
-// SetReason sets field value
+// HasReason returns a boolean if a field has been set.
+func (o *ApproveLaunchpadMcpToolsRequest) HasReason() bool {
+	if o != nil && !IsNil(o.Reason) {
+		return true
+	}
+
+	return false
+}
+
+// SetReason gets a reference to the given string and assigns it to the Reason field.
 func (o *ApproveLaunchpadMcpToolsRequest) SetReason(v string) {
-	o.Reason = v
+	o.Reason = &v
 }
 
 // GetApprover returns the Approver field value if set, zero value otherwise.
@@ -3342,55 +3361,22 @@ func (o ApproveLaunchpadMcpToolsRequest) MarshalJSON() ([]byte, error) {
 
 func (o ApproveLaunchpadMcpToolsRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["server_id"] = o.ServerId
-	toSerialize["tools"] = o.Tools
+	if !IsNil(o.ServerId) {
+		toSerialize["server_id"] = o.ServerId
+	}
+	if !IsNil(o.Tools) {
+		toSerialize["tools"] = o.Tools
+	}
 	if !IsNil(o.Ttl) {
 		toSerialize["ttl"] = o.Ttl
 	}
-	toSerialize["reason"] = o.Reason
+	if !IsNil(o.Reason) {
+		toSerialize["reason"] = o.Reason
+	}
 	if !IsNil(o.Approver) {
 		toSerialize["approver"] = o.Approver
 	}
 	return toSerialize, nil
-}
-
-func (o *ApproveLaunchpadMcpToolsRequest) UnmarshalJSON(data []byte) (err error) {
-	// This validates that all required properties are included in the JSON object
-	// by unmarshalling the object into a generic map with string keys and checking
-	// that every required field exists as a key in the generic map.
-	requiredProperties := []string{
-		"server_id",
-		"tools",
-		"reason",
-	}
-
-	allProperties := make(map[string]interface{})
-
-	err = json.Unmarshal(data, &allProperties)
-
-	if err != nil {
-		return err
-	}
-
-	for _, requiredProperty := range requiredProperties {
-		if _, exists := allProperties[requiredProperty]; !exists {
-			return fmt.Errorf("no value given for required property %v", requiredProperty)
-		}
-	}
-
-	varApproveLaunchpadMcpToolsRequest := _ApproveLaunchpadMcpToolsRequest{}
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varApproveLaunchpadMcpToolsRequest)
-
-	if err != nil {
-		return err
-	}
-
-	*o = ApproveLaunchpadMcpToolsRequest(varApproveLaunchpadMcpToolsRequest)
-
-	return err
 }
 
 type NullableApproveLaunchpadMcpToolsRequest struct {
@@ -3444,24 +3430,19 @@ var _ MappedNullable = &AssertApprovalWebAuthnChallengeRequest{}
 
 // AssertApprovalWebAuthnChallengeRequest struct for AssertApprovalWebAuthnChallengeRequest
 type AssertApprovalWebAuthnChallengeRequest struct {
-	ChallengeId string  `json:"challenge_id"`
-	Actor       string  `json:"actor"`
-	Assertion   string  `json:"assertion"`
+	ChallengeId *string `json:"challenge_id,omitempty"`
+	Actor       *string `json:"actor,omitempty"`
+	Assertion   *string `json:"assertion,omitempty"`
 	ReceiptId   *string `json:"receipt_id,omitempty"`
 	Reason      *string `json:"reason,omitempty"`
 }
-
-type _AssertApprovalWebAuthnChallengeRequest AssertApprovalWebAuthnChallengeRequest
 
 // NewAssertApprovalWebAuthnChallengeRequest instantiates a new AssertApprovalWebAuthnChallengeRequest object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewAssertApprovalWebAuthnChallengeRequest(challengeId string, actor string, assertion string) *AssertApprovalWebAuthnChallengeRequest {
+func NewAssertApprovalWebAuthnChallengeRequest() *AssertApprovalWebAuthnChallengeRequest {
 	this := AssertApprovalWebAuthnChallengeRequest{}
-	this.ChallengeId = challengeId
-	this.Actor = actor
-	this.Assertion = assertion
 	return &this
 }
 
@@ -3473,76 +3454,100 @@ func NewAssertApprovalWebAuthnChallengeRequestWithDefaults() *AssertApprovalWebA
 	return &this
 }
 
-// GetChallengeId returns the ChallengeId field value
+// GetChallengeId returns the ChallengeId field value if set, zero value otherwise.
 func (o *AssertApprovalWebAuthnChallengeRequest) GetChallengeId() string {
-	if o == nil {
+	if o == nil || IsNil(o.ChallengeId) {
 		var ret string
 		return ret
 	}
-
-	return o.ChallengeId
+	return *o.ChallengeId
 }
 
-// GetChallengeIdOk returns a tuple with the ChallengeId field value
+// GetChallengeIdOk returns a tuple with the ChallengeId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *AssertApprovalWebAuthnChallengeRequest) GetChallengeIdOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.ChallengeId) {
 		return nil, false
 	}
-	return &o.ChallengeId, true
+	return o.ChallengeId, true
 }
 
-// SetChallengeId sets field value
+// HasChallengeId returns a boolean if a field has been set.
+func (o *AssertApprovalWebAuthnChallengeRequest) HasChallengeId() bool {
+	if o != nil && !IsNil(o.ChallengeId) {
+		return true
+	}
+
+	return false
+}
+
+// SetChallengeId gets a reference to the given string and assigns it to the ChallengeId field.
 func (o *AssertApprovalWebAuthnChallengeRequest) SetChallengeId(v string) {
-	o.ChallengeId = v
+	o.ChallengeId = &v
 }
 
-// GetActor returns the Actor field value
+// GetActor returns the Actor field value if set, zero value otherwise.
 func (o *AssertApprovalWebAuthnChallengeRequest) GetActor() string {
-	if o == nil {
+	if o == nil || IsNil(o.Actor) {
 		var ret string
 		return ret
 	}
-
-	return o.Actor
+	return *o.Actor
 }
 
-// GetActorOk returns a tuple with the Actor field value
+// GetActorOk returns a tuple with the Actor field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *AssertApprovalWebAuthnChallengeRequest) GetActorOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.Actor) {
 		return nil, false
 	}
-	return &o.Actor, true
+	return o.Actor, true
 }
 
-// SetActor sets field value
+// HasActor returns a boolean if a field has been set.
+func (o *AssertApprovalWebAuthnChallengeRequest) HasActor() bool {
+	if o != nil && !IsNil(o.Actor) {
+		return true
+	}
+
+	return false
+}
+
+// SetActor gets a reference to the given string and assigns it to the Actor field.
 func (o *AssertApprovalWebAuthnChallengeRequest) SetActor(v string) {
-	o.Actor = v
+	o.Actor = &v
 }
 
-// GetAssertion returns the Assertion field value
+// GetAssertion returns the Assertion field value if set, zero value otherwise.
 func (o *AssertApprovalWebAuthnChallengeRequest) GetAssertion() string {
-	if o == nil {
+	if o == nil || IsNil(o.Assertion) {
 		var ret string
 		return ret
 	}
-
-	return o.Assertion
+	return *o.Assertion
 }
 
-// GetAssertionOk returns a tuple with the Assertion field value
+// GetAssertionOk returns a tuple with the Assertion field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *AssertApprovalWebAuthnChallengeRequest) GetAssertionOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.Assertion) {
 		return nil, false
 	}
-	return &o.Assertion, true
+	return o.Assertion, true
 }
 
-// SetAssertion sets field value
+// HasAssertion returns a boolean if a field has been set.
+func (o *AssertApprovalWebAuthnChallengeRequest) HasAssertion() bool {
+	if o != nil && !IsNil(o.Assertion) {
+		return true
+	}
+
+	return false
+}
+
+// SetAssertion gets a reference to the given string and assigns it to the Assertion field.
 func (o *AssertApprovalWebAuthnChallengeRequest) SetAssertion(v string) {
-	o.Assertion = v
+	o.Assertion = &v
 }
 
 // GetReceiptId returns the ReceiptId field value if set, zero value otherwise.
@@ -3619,9 +3624,15 @@ func (o AssertApprovalWebAuthnChallengeRequest) MarshalJSON() ([]byte, error) {
 
 func (o AssertApprovalWebAuthnChallengeRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["challenge_id"] = o.ChallengeId
-	toSerialize["actor"] = o.Actor
-	toSerialize["assertion"] = o.Assertion
+	if !IsNil(o.ChallengeId) {
+		toSerialize["challenge_id"] = o.ChallengeId
+	}
+	if !IsNil(o.Actor) {
+		toSerialize["actor"] = o.Actor
+	}
+	if !IsNil(o.Assertion) {
+		toSerialize["assertion"] = o.Assertion
+	}
 	if !IsNil(o.ReceiptId) {
 		toSerialize["receipt_id"] = o.ReceiptId
 	}
@@ -3629,45 +3640,6 @@ func (o AssertApprovalWebAuthnChallengeRequest) ToMap() (map[string]interface{},
 		toSerialize["reason"] = o.Reason
 	}
 	return toSerialize, nil
-}
-
-func (o *AssertApprovalWebAuthnChallengeRequest) UnmarshalJSON(data []byte) (err error) {
-	// This validates that all required properties are included in the JSON object
-	// by unmarshalling the object into a generic map with string keys and checking
-	// that every required field exists as a key in the generic map.
-	requiredProperties := []string{
-		"challenge_id",
-		"actor",
-		"assertion",
-	}
-
-	allProperties := make(map[string]interface{})
-
-	err = json.Unmarshal(data, &allProperties)
-
-	if err != nil {
-		return err
-	}
-
-	for _, requiredProperty := range requiredProperties {
-		if _, exists := allProperties[requiredProperty]; !exists {
-			return fmt.Errorf("no value given for required property %v", requiredProperty)
-		}
-	}
-
-	varAssertApprovalWebAuthnChallengeRequest := _AssertApprovalWebAuthnChallengeRequest{}
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varAssertApprovalWebAuthnChallengeRequest)
-
-	if err != nil {
-		return err
-	}
-
-	*o = AssertApprovalWebAuthnChallengeRequest(varAssertApprovalWebAuthnChallengeRequest)
-
-	return err
 }
 
 type NullableAssertApprovalWebAuthnChallengeRequest struct {
@@ -33056,6 +33028,269 @@ HELM Kernel API
 Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
 
 API version: 0.7.5
+*/
+
+// Code generated by OpenAPI Generator (https://openapi-generator.tech); DO NOT EDIT.
+
+// checks if the MCPRegistryPathApprovalRequest type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &MCPRegistryPathApprovalRequest{}
+
+// MCPRegistryPathApprovalRequest Optional, ignored path-scoped approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
+type MCPRegistryPathApprovalRequest struct {
+	ApproverId        *string  `json:"approver_id,omitempty"`
+	ApprovalReceiptId *string  `json:"approval_receipt_id,omitempty"`
+	Reason            *string  `json:"reason,omitempty"`
+	ToolNames         []string `json:"tool_names,omitempty"`
+	Effects           []string `json:"effects,omitempty"`
+}
+
+// NewMCPRegistryPathApprovalRequest instantiates a new MCPRegistryPathApprovalRequest object
+// This constructor will assign default values to properties that have it defined,
+// and makes sure properties required by API are set, but the set of arguments
+// will change when the set of required properties is changed
+func NewMCPRegistryPathApprovalRequest() *MCPRegistryPathApprovalRequest {
+	this := MCPRegistryPathApprovalRequest{}
+	return &this
+}
+
+// NewMCPRegistryPathApprovalRequestWithDefaults instantiates a new MCPRegistryPathApprovalRequest object
+// This constructor will only assign default values to properties that have it defined,
+// but it doesn't guarantee that properties required by API are set
+func NewMCPRegistryPathApprovalRequestWithDefaults() *MCPRegistryPathApprovalRequest {
+	this := MCPRegistryPathApprovalRequest{}
+	return &this
+}
+
+// GetApproverId returns the ApproverId field value if set, zero value otherwise.
+func (o *MCPRegistryPathApprovalRequest) GetApproverId() string {
+	if o == nil || IsNil(o.ApproverId) {
+		var ret string
+		return ret
+	}
+	return *o.ApproverId
+}
+
+// GetApproverIdOk returns a tuple with the ApproverId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *MCPRegistryPathApprovalRequest) GetApproverIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ApproverId) {
+		return nil, false
+	}
+	return o.ApproverId, true
+}
+
+// HasApproverId returns a boolean if a field has been set.
+func (o *MCPRegistryPathApprovalRequest) HasApproverId() bool {
+	if o != nil && !IsNil(o.ApproverId) {
+		return true
+	}
+
+	return false
+}
+
+// SetApproverId gets a reference to the given string and assigns it to the ApproverId field.
+func (o *MCPRegistryPathApprovalRequest) SetApproverId(v string) {
+	o.ApproverId = &v
+}
+
+// GetApprovalReceiptId returns the ApprovalReceiptId field value if set, zero value otherwise.
+func (o *MCPRegistryPathApprovalRequest) GetApprovalReceiptId() string {
+	if o == nil || IsNil(o.ApprovalReceiptId) {
+		var ret string
+		return ret
+	}
+	return *o.ApprovalReceiptId
+}
+
+// GetApprovalReceiptIdOk returns a tuple with the ApprovalReceiptId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *MCPRegistryPathApprovalRequest) GetApprovalReceiptIdOk() (*string, bool) {
+	if o == nil || IsNil(o.ApprovalReceiptId) {
+		return nil, false
+	}
+	return o.ApprovalReceiptId, true
+}
+
+// HasApprovalReceiptId returns a boolean if a field has been set.
+func (o *MCPRegistryPathApprovalRequest) HasApprovalReceiptId() bool {
+	if o != nil && !IsNil(o.ApprovalReceiptId) {
+		return true
+	}
+
+	return false
+}
+
+// SetApprovalReceiptId gets a reference to the given string and assigns it to the ApprovalReceiptId field.
+func (o *MCPRegistryPathApprovalRequest) SetApprovalReceiptId(v string) {
+	o.ApprovalReceiptId = &v
+}
+
+// GetReason returns the Reason field value if set, zero value otherwise.
+func (o *MCPRegistryPathApprovalRequest) GetReason() string {
+	if o == nil || IsNil(o.Reason) {
+		var ret string
+		return ret
+	}
+	return *o.Reason
+}
+
+// GetReasonOk returns a tuple with the Reason field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *MCPRegistryPathApprovalRequest) GetReasonOk() (*string, bool) {
+	if o == nil || IsNil(o.Reason) {
+		return nil, false
+	}
+	return o.Reason, true
+}
+
+// HasReason returns a boolean if a field has been set.
+func (o *MCPRegistryPathApprovalRequest) HasReason() bool {
+	if o != nil && !IsNil(o.Reason) {
+		return true
+	}
+
+	return false
+}
+
+// SetReason gets a reference to the given string and assigns it to the Reason field.
+func (o *MCPRegistryPathApprovalRequest) SetReason(v string) {
+	o.Reason = &v
+}
+
+// GetToolNames returns the ToolNames field value if set, zero value otherwise.
+func (o *MCPRegistryPathApprovalRequest) GetToolNames() []string {
+	if o == nil || IsNil(o.ToolNames) {
+		var ret []string
+		return ret
+	}
+	return o.ToolNames
+}
+
+// GetToolNamesOk returns a tuple with the ToolNames field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *MCPRegistryPathApprovalRequest) GetToolNamesOk() ([]string, bool) {
+	if o == nil || IsNil(o.ToolNames) {
+		return nil, false
+	}
+	return o.ToolNames, true
+}
+
+// HasToolNames returns a boolean if a field has been set.
+func (o *MCPRegistryPathApprovalRequest) HasToolNames() bool {
+	if o != nil && !IsNil(o.ToolNames) {
+		return true
+	}
+
+	return false
+}
+
+// SetToolNames gets a reference to the given []string and assigns it to the ToolNames field.
+func (o *MCPRegistryPathApprovalRequest) SetToolNames(v []string) {
+	o.ToolNames = v
+}
+
+// GetEffects returns the Effects field value if set, zero value otherwise.
+func (o *MCPRegistryPathApprovalRequest) GetEffects() []string {
+	if o == nil || IsNil(o.Effects) {
+		var ret []string
+		return ret
+	}
+	return o.Effects
+}
+
+// GetEffectsOk returns a tuple with the Effects field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *MCPRegistryPathApprovalRequest) GetEffectsOk() ([]string, bool) {
+	if o == nil || IsNil(o.Effects) {
+		return nil, false
+	}
+	return o.Effects, true
+}
+
+// HasEffects returns a boolean if a field has been set.
+func (o *MCPRegistryPathApprovalRequest) HasEffects() bool {
+	if o != nil && !IsNil(o.Effects) {
+		return true
+	}
+
+	return false
+}
+
+// SetEffects gets a reference to the given []string and assigns it to the Effects field.
+func (o *MCPRegistryPathApprovalRequest) SetEffects(v []string) {
+	o.Effects = v
+}
+
+func (o MCPRegistryPathApprovalRequest) MarshalJSON() ([]byte, error) {
+	toSerialize, err := o.ToMap()
+	if err != nil {
+		return []byte{}, err
+	}
+	return json.Marshal(toSerialize)
+}
+
+func (o MCPRegistryPathApprovalRequest) ToMap() (map[string]interface{}, error) {
+	toSerialize := map[string]interface{}{}
+	if !IsNil(o.ApproverId) {
+		toSerialize["approver_id"] = o.ApproverId
+	}
+	if !IsNil(o.ApprovalReceiptId) {
+		toSerialize["approval_receipt_id"] = o.ApprovalReceiptId
+	}
+	if !IsNil(o.Reason) {
+		toSerialize["reason"] = o.Reason
+	}
+	if !IsNil(o.ToolNames) {
+		toSerialize["tool_names"] = o.ToolNames
+	}
+	if !IsNil(o.Effects) {
+		toSerialize["effects"] = o.Effects
+	}
+	return toSerialize, nil
+}
+
+type NullableMCPRegistryPathApprovalRequest struct {
+	value *MCPRegistryPathApprovalRequest
+	isSet bool
+}
+
+func (v NullableMCPRegistryPathApprovalRequest) Get() *MCPRegistryPathApprovalRequest {
+	return v.value
+}
+
+func (v *NullableMCPRegistryPathApprovalRequest) Set(val *MCPRegistryPathApprovalRequest) {
+	v.value = val
+	v.isSet = true
+}
+
+func (v NullableMCPRegistryPathApprovalRequest) IsSet() bool {
+	return v.isSet
+}
+
+func (v *NullableMCPRegistryPathApprovalRequest) Unset() {
+	v.value = nil
+	v.isSet = false
+}
+
+func NewNullableMCPRegistryPathApprovalRequest(val *MCPRegistryPathApprovalRequest) *NullableMCPRegistryPathApprovalRequest {
+	return &NullableMCPRegistryPathApprovalRequest{value: val, isSet: true}
+}
+
+func (v NullableMCPRegistryPathApprovalRequest) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.value)
+}
+
+func (v *NullableMCPRegistryPathApprovalRequest) UnmarshalJSON(src []byte) error {
+	v.isSet = true
+	return json.Unmarshal(src, &v.value)
+}
+
+/*
+HELM Kernel API
+
+Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+
+API version: 0.7.2
 */
 
 // Code generated by OpenAPI Generator (https://openapi-generator.tech); DO NOT EDIT.

@@ -15,8 +15,11 @@ or release artifacts.
 - HELM AI Kernel is a fail-closed execution firewall for AI agents.
 - Selected effects can be denied before dispatch when they pass through a HELM
   adapter, wrapper, hook, proxy, or API route.
-- Unknown or unapproved MCP paths can escalate into local scoped approval.
-- Decisions, approvals, and revocations write local receipts.
+- Unknown or unapproved MCP paths remain quarantined until a
+  credential-verifying integration records a scope-bound approval. Opaque
+  local approval requests do not create authority.
+- Decisions and revocations write local receipts; opaque approval metadata
+  cannot create an approval receipt or dispatch authority.
 - EvidencePacks can be checked from local material without trusting a hosted
   service.
 - The public conformance proof path supports `L1` and `L2` CLI shortcuts.

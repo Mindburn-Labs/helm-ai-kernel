@@ -24,6 +24,29 @@ import (
 // until a credential verifier is available to bind and consume them.
 var ErrApprovalVerificationUnavailable = errors.New("approval verification unavailable")
 
+// failClosedUnverifiedApprovalCeremony removes legacy or opaque approval
+// evidence before an approval can be re-exposed from durable state. A future
+// credential verifier must provide its own source-owned restoration path.
+func failClosedUnverifiedApprovalCeremony(approval contracts.ApprovalCeremony) contracts.ApprovalCeremony {
+	if approval.State != contracts.ApprovalCeremonyAllowed {
+		return approval
+	}
+	approval.State = contracts.ApprovalCeremonyPending
+	approval.Approvers = nil
+	approval.AuthMethod = ""
+	approval.ChallengeID = ""
+	approval.ChallengeHash = ""
+	approval.AssertionHash = ""
+	approval.ReceiptID = ""
+	approval.BoundaryRecordID = ""
+	approval.Reason = ErrApprovalVerificationUnavailable.Error()
+	approval.CeremonyHash = ""
+	if sealed, err := approval.Seal(); err == nil {
+		return sealed
+	}
+	return approval
+}
+
 // SurfaceRegistry is the OSS-local durable-surface model used by CLI/API/Console
 // wiring. Production runtimes can hydrate it from SQLite; tests and local dev
 // can use the in-memory instance without creating a second policy authority.
@@ -490,7 +513,7 @@ func (r *SurfaceRegistry) ListApprovals() []contracts.ApprovalCeremony {
 	defer r.mu.RUnlock()
 	out := make([]contracts.ApprovalCeremony, 0, len(r.approvals))
 	for _, approval := range r.approvals {
-		out = append(out, approval)
+		out = append(out, failClosedUnverifiedApprovalCeremony(approval))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ApprovalID < out[j].ApprovalID })
 	return out
@@ -623,6 +646,7 @@ func (r *SurfaceRegistry) PutMCPServer(record mcppkg.ServerQuarantineRecord) (mc
 	if strings.TrimSpace(record.ServerID) == "" {
 		return mcppkg.ServerQuarantineRecord{}, fmt.Errorf("mcp server id is required")
 	}
+	record = mcppkg.FailClosedUnverifiedApproval(record)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mcpServers[record.ServerID] = record
@@ -640,7 +664,7 @@ func (r *SurfaceRegistry) ListMCPServers() []mcppkg.ServerQuarantineRecord {
 	defer r.mu.RUnlock()
 	out := make([]mcppkg.ServerQuarantineRecord, 0, len(r.mcpServers))
 	for _, record := range r.mcpServers {
-		out = append(out, record)
+		out = append(out, mcppkg.FailClosedUnverifiedApproval(record))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ServerID < out[j].ServerID })
 	return out
@@ -650,7 +674,7 @@ func (r *SurfaceRegistry) GetMCPServer(id string) (mcppkg.ServerQuarantineRecord
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	record, ok := r.mcpServers[id]
-	return record, ok
+	return mcppkg.FailClosedUnverifiedApproval(record), ok
 }
 
 func (r *SurfaceRegistry) PutSandboxGrant(grant contracts.SandboxGrant) (contracts.SandboxGrant, error) {
@@ -1158,10 +1182,16 @@ func (r *SurfaceRegistry) loadSnapshot(data []byte) error {
 	}
 	r.records = snap.Records
 	r.checkpoints = snap.Checkpoints
-	r.approvals = snap.Approvals
+	r.approvals = make(map[string]contracts.ApprovalCeremony, len(snap.Approvals))
+	for id, approval := range snap.Approvals {
+		r.approvals[id] = failClosedUnverifiedApprovalCeremony(approval)
+	}
 	r.challenges = snap.Challenges
 	r.authProfiles = snap.AuthProfiles
-	r.mcpServers = snap.MCPServers
+	r.mcpServers = make(map[string]mcppkg.ServerQuarantineRecord, len(snap.MCPServers))
+	for id, record := range snap.MCPServers {
+		r.mcpServers[id] = mcppkg.FailClosedUnverifiedApproval(record)
+	}
 	r.sandboxGrants = snap.SandboxGrants
 	r.authzSnapshots = snap.AuthzSnapshots
 	r.envelopes = snap.Envelopes

@@ -118,6 +118,20 @@ public class HelmClientTest {
         );
         assertEquals(503, assertion.status);
         assertEquals("approval verification unavailable", assertion.getMessage());
+
+        HelmClient.HelmApiException mcpApproval = assertThrows(
+            HelmClient.HelmApiException.class,
+            () -> client.approveMcpServer(new HelmClient.MCPRegistryApprovalRequest())
+        );
+        assertEquals(503, mcpApproval.status);
+        assertEquals("MCP approval verification unavailable", mcpApproval.getMessage());
+
+        HelmClient.HelmApiException mcpApprovalByPath = assertThrows(
+            HelmClient.HelmApiException.class,
+            () -> client.approveMcpRegistryRecord("mcp-1", new HelmClient.MCPRegistryPathApprovalRequest())
+        );
+        assertEquals(503, mcpApprovalByPath.status);
+        assertEquals("MCP approval verification unavailable", mcpApprovalByPath.getMessage());
     }
 
     @Test

@@ -69,4 +69,5 @@ helm-ai-kernel conform --level L1 --json
 ```
 
 Use `DENY` for unsafe or mismatched actions. Use `ESCALATE` only when a
-developer can resolve the block with a local scoped approval.
+source-owned verifier could resolve the block with a credential-verified scoped
+approval; otherwise the action remains blocked.

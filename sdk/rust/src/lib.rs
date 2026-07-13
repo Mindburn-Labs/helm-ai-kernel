@@ -52,11 +52,20 @@ impl std::fmt::Display for HelmApiError {
 impl std::error::Error for HelmApiError {}
 
 const APPROVAL_VERIFICATION_UNAVAILABLE: &str = "approval verification unavailable";
+const MCP_APPROVAL_VERIFICATION_UNAVAILABLE: &str = "MCP approval verification unavailable";
 
 fn approval_verification_unavailable() -> HelmApiError {
     HelmApiError {
         status: 503,
         message: APPROVAL_VERIFICATION_UNAVAILABLE.into(),
+        reason_code: ReasonCode::ErrorInternal,
+    }
+}
+
+fn mcp_approval_verification_unavailable() -> HelmApiError {
+    HelmApiError {
+        status: 503,
+        message: MCP_APPROVAL_VERIFICATION_UNAVAILABLE.into(),
         reason_code: ReasonCode::ErrorInternal,
     }
 }
@@ -142,6 +151,22 @@ pub struct McpRegistryApprovalRequest {
     pub approval_receipt_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct McpRegistryPathApprovalRequest {
+    pub approver_id: String,
+    pub approval_receipt_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -741,27 +766,12 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/mcp/registry/approve
+    /// Always fails closed until a credential verifier can bind MCP approval evidence.
     pub fn approve_mcp_server(
         &self,
-        req: &McpRegistryApprovalRequest,
+        _req: &McpRegistryApprovalRequest,
     ) -> Result<McpQuarantineRecord, HelmApiError> {
-        let resp = self
-            .client
-            .post(self.url("/api/v1/mcp/registry/approve"))
-            .json(req)
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
-        })
+        Err(mcp_approval_verification_unavailable())
     }
 
     pub fn get_mcp_registry_record(
@@ -787,28 +797,10 @@ impl HelmClient {
 
     pub fn approve_mcp_registry_record(
         &self,
-        server_id: &str,
-        req: &McpRegistryApprovalRequest,
+        _server_id: &str,
+        _req: &McpRegistryPathApprovalRequest,
     ) -> Result<McpQuarantineRecord, HelmApiError> {
-        let resp = self
-            .client
-            .post(self.url(&format!(
-                "/api/v1/mcp/registry/{}/approve",
-                encode_query(server_id)
-            )))
-            .json(req)
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
-        })
+        Err(mcp_approval_verification_unavailable())
     }
 
     pub fn revoke_mcp_registry_record(
@@ -1176,5 +1168,33 @@ mod tests {
             .unwrap_err();
         assert_eq!(assertion.status, 503);
         assert_eq!(assertion.message, APPROVAL_VERIFICATION_UNAVAILABLE);
+
+        let mcp = client
+            .approve_mcp_server(&McpRegistryApprovalRequest {
+                server_id: "mcp-1".into(),
+                approver_id: "operator".into(),
+                approval_receipt_id: "opaque".into(),
+                reason: None,
+                tool_names: vec![],
+                effects: vec![],
+            })
+            .unwrap_err();
+        assert_eq!(mcp.status, 503);
+        assert_eq!(mcp.message, MCP_APPROVAL_VERIFICATION_UNAVAILABLE);
+
+        let mcp_by_path = client
+            .approve_mcp_registry_record(
+                "mcp-1",
+                &McpRegistryPathApprovalRequest {
+                    approver_id: "operator".into(),
+                    approval_receipt_id: "opaque".into(),
+                    reason: None,
+                    tool_names: vec![],
+                    effects: vec![],
+                },
+            )
+            .unwrap_err();
+        assert_eq!(mcp_by_path.status, 503);
+        assert_eq!(mcp_by_path.message, MCP_APPROVAL_VERIFICATION_UNAVAILABLE);
     }
 }

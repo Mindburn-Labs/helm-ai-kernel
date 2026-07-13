@@ -90,13 +90,12 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	if err != nil || record.State != "quarantined" {
 		t.Fatalf("discover = %#v, err = %v", record, err)
 	}
-	approved, err := client.ApproveMCPServer(MCPRegistryApprovalRequest{
+	if _, err := client.ApproveMCPServer(MCPRegistryApprovalRequest{
 		ServerID:          "mcp1",
 		ApproverID:        "user1",
 		ApprovalReceiptID: "rcpt1",
-	})
-	if err != nil || approved.State != "approved" {
-		t.Fatalf("approve = %#v, err = %v", approved, err)
+	}); !errors.Is(err, ErrMCPApprovalVerificationUnavailable) {
+		t.Fatalf("MCP approval error = %v, want %v", err, ErrMCPApprovalVerificationUnavailable)
 	}
 	profiles, err := client.ListSandboxBackendProfiles()
 	if err != nil || profiles[0].Runtime != "wazero" {
@@ -211,15 +210,7 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			_, err := client.DiscoverMCPServer(MCPRegistryDiscoverRequest{ServerID: "srv"})
 			return err
 		}},
-		{"approve mcp", "POST /api/v1/mcp/registry/approve", func() error {
-			_, err := client.ApproveMCPServer(MCPRegistryApprovalRequest{ServerID: "srv", ApproverID: "me", ApprovalReceiptID: "receipt"})
-			return err
-		}},
 		{"get mcp record", "GET /api/v1/mcp/registry/srv%2Fa%20b", func() error { _, err := client.GetMCPRegistryRecord("srv/a b"); return err }},
-		{"approve mcp record", "POST /api/v1/mcp/registry/srv%2Fa%20b/approve", func() error {
-			_, err := client.ApproveMCPRegistryRecord("srv/a b", MCPRegistryApprovalRequest{ServerID: "srv", ApproverID: "me", ApprovalReceiptID: "receipt"})
-			return err
-		}},
 		{"revoke mcp record", "POST /api/v1/mcp/registry/srv%2Fa%20b/revoke", func() error { _, err := client.RevokeMCPRegistryRecord("srv/a b", "stale"); return err }},
 		{"scan mcp", "POST /api/v1/mcp/scan", func() error { _, err := client.ScanMCPServer(MCPScanRequest{"server_id": "srv"}); return err }},
 		{"list mcp auth profiles", "GET /api/v1/mcp/auth-profiles", func() error { _, err := client.ListMCPAuthProfiles(); return err }},
@@ -279,6 +270,25 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		if got := seen[i]; got != tc.want {
 			t.Fatalf("%s request = %s, want %s", tc.name, got, tc.want)
 		}
+	}
+	requestCount := len(seen)
+	for _, approve := range []func() (*MCPQuarantineRecord, error){
+		func() (*MCPQuarantineRecord, error) {
+			return client.ApproveMCPServer(MCPRegistryApprovalRequest{ServerID: "srv", ApproverID: "me", ApprovalReceiptID: "receipt"})
+		},
+		func() (*MCPQuarantineRecord, error) {
+			request := NewMCPRegistryPathApprovalRequest()
+			request.SetApproverId("me")
+			request.SetApprovalReceiptId("receipt")
+			return client.ApproveMCPRegistryRecord("srv/a b", *request)
+		},
+	} {
+		if _, err := approve(); !errors.Is(err, ErrMCPApprovalVerificationUnavailable) {
+			t.Fatalf("MCP approval error = %v, want %v", err, ErrMCPApprovalVerificationUnavailable)
+		}
+	}
+	if got := len(seen); got != requestCount {
+		t.Fatalf("MCP approval submitted %d network requests, want none", got-requestCount)
 	}
 }
 

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -26,44 +27,67 @@ func TestQuarantineRegistryDiscoversIntoQuarantine(t *testing.T) {
 	}
 }
 
-func TestQuarantineRegistryApprovalRequiresReceipt(t *testing.T) {
+func TestQuarantineRegistryApprovalFailsClosedWithoutCredentialVerifier(t *testing.T) {
 	registry := NewQuarantineRegistry()
 	if _, err := registry.Discover(context.Background(), DiscoverServerRequest{ServerID: "srv-1"}); err != nil {
 		t.Fatalf("discover: %v", err)
 	}
 	_, err := registry.Approve(context.Background(), ApprovalDecision{
-		ServerID:   "srv-1",
-		ApproverID: "user:alice",
-		Reason:     "reviewed",
-		ToolNames:  []string{"read_file"},
+		ServerID:          "srv-1",
+		ApproverID:        "user:alice",
+		ApprovalReceiptID: "approval-r1",
+		Reason:            "reviewed",
+		ToolNames:         []string{"read_file"},
 	})
-	if err == nil {
-		t.Fatal("approval without receipt should fail")
+	if !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("approve error = %v, want ErrApprovalVerificationUnavailable", err)
 	}
 }
 
-func TestQuarantineRegistryApprovedServerPassesUntilExpiry(t *testing.T) {
+func TestFailClosedUnverifiedApprovalRemovesOpaquePersistedMetadata(t *testing.T) {
+	now := time.Date(2026, 7, 13, 9, 0, 0, 0, time.UTC)
+	record := FailClosedUnverifiedApproval(ServerQuarantineRecord{
+		ServerID:            "srv-opaque",
+		State:               QuarantineApproved,
+		ApprovedToolNames:   []string{"read_file"},
+		ApprovedEffects:     []string{"read"},
+		ApprovedAt:          now,
+		ApprovedBy:          "user:opaque",
+		ApprovalReceiptID:   "opaque-receipt",
+		ApprovalReceiptPath: "/tmp/opaque-receipt.json",
+		ExpiresAt:           now.Add(time.Hour),
+		Reason:              "caller supplied",
+	})
+	if record.State != QuarantineQuarantined {
+		t.Fatalf("state = %s, want %s", record.State, QuarantineQuarantined)
+	}
+	if record.ApprovedBy != "" || record.ApprovalReceiptID != "" || record.ApprovalReceiptPath != "" {
+		t.Fatalf("opaque approval metadata survived: %+v", record)
+	}
+	if len(record.ApprovedToolNames) != 0 || len(record.ApprovedEffects) != 0 || !record.ApprovedAt.IsZero() || !record.ExpiresAt.IsZero() {
+		t.Fatalf("opaque approval scope survived: %+v", record)
+	}
+	if record.Reason != ErrApprovalVerificationUnavailable.Error() {
+		t.Fatalf("reason = %q", record.Reason)
+	}
+}
+
+func TestQuarantineRegistryApprovedRecordPassesUntilExpiry(t *testing.T) {
 	now := time.Date(2026, 5, 5, 9, 0, 0, 0, time.UTC)
 	registry := NewQuarantineRegistry()
 	if _, err := registry.Discover(context.Background(), DiscoverServerRequest{ServerID: "srv-1", DiscoveredAt: now}); err != nil {
 		t.Fatalf("discover: %v", err)
 	}
-	approved, err := registry.Approve(context.Background(), ApprovalDecision{
+	seedVerifiedApprovalFixture(t, registry, ApprovalDecision{
 		ServerID:          "srv-1",
-		ApproverID:        "user:alice",
+		ApproverID:        "verified:fixture",
 		ApprovalReceiptID: "approval-r1",
 		ApprovedAt:        now,
 		ExpiresAt:         now.Add(time.Hour),
-		Reason:            "reviewed",
+		Reason:            "fixture approval",
 		ToolNames:         []string{"read_file"},
 		Effects:           []string{"read"},
 	})
-	if err != nil {
-		t.Fatalf("approve: %v", err)
-	}
-	if approved.State != QuarantineApproved {
-		t.Fatalf("state = %s, want approved", approved.State)
-	}
 	if err := registry.RequireApproved(context.Background(), "srv-1", now.Add(time.Minute)); err != nil {
 		t.Fatalf("approved server denied: %v", err)
 	}
@@ -90,15 +114,13 @@ func TestQuarantineRegistryRevokedServerDenied(t *testing.T) {
 	if _, err := registry.Discover(context.Background(), DiscoverServerRequest{ServerID: "srv-1"}); err != nil {
 		t.Fatalf("discover: %v", err)
 	}
-	if _, err := registry.Approve(context.Background(), ApprovalDecision{
+	seedVerifiedApprovalFixture(t, registry, ApprovalDecision{
 		ServerID:          "srv-1",
-		ApproverID:        "user:alice",
+		ApproverID:        "verified:fixture",
 		ApprovalReceiptID: "approval-r1",
-		Reason:            "reviewed",
+		Reason:            "fixture approval",
 		ToolNames:         []string{"read_file"},
-	}); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
+	})
 	if _, err := registry.Revoke(context.Background(), "srv-1", "tool drift", time.Now().UTC()); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
@@ -165,20 +187,25 @@ func TestQuarantineRegistryLifecycleEdges(t *testing.T) {
 	if _, err := registry.Approve(ctx, ApprovalDecision{ServerID: "srv-a", ApprovalReceiptID: "receipt"}); err == nil {
 		t.Fatal("approve without approver should fail")
 	}
-	approved, err := registry.Approve(ctx, ApprovalDecision{
+	if _, err := registry.Approve(ctx, ApprovalDecision{
 		ServerID:          "srv-a",
 		ApproverID:        "user:alice",
 		ApprovalReceiptID: "receipt-a",
 		ApprovedAt:        now,
 		Reason:            "reviewed",
 		ToolNames:         []string{"read"},
+	}); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("approve srv-a error = %v, want ErrApprovalVerificationUnavailable", err)
+	}
+	seedVerifiedApprovalFixture(t, registry, ApprovalDecision{
+		ServerID:          "srv-a",
+		ApproverID:        "verified:fixture",
+		ApprovalReceiptID: "receipt-a",
+		ApprovedAt:        now,
+		Reason:            "reviewed",
+		ToolNames:         []string{"read"},
+		Effects:           []string{"read"},
 	})
-	if err != nil {
-		t.Fatalf("approve srv-a: %v", err)
-	}
-	if approved.ApprovedAt != now || approved.ApprovedBy != "user:alice" || approved.Reason != "reviewed" {
-		t.Fatalf("approved record = %+v", approved)
-	}
 	rediscoveredApproved, err := registry.Discover(ctx, DiscoverServerRequest{
 		ServerID: "srv-a",
 		Risk:     ServerRiskCritical,

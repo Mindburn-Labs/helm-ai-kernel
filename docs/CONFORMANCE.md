@@ -21,8 +21,9 @@ helm-ai-kernel conform vectors --json
 verification, and checkpoint roots.
 
 `L2` adds the MCP execution firewall: quarantine, tool-list/call consistency,
-schema pinning, direct-bypass denial, scoped approvals, revocation, expiry, and
-receipt emission.
+schema pinning, direct-bypass denial, a credential-verified approval boundary
+(opaque local approval requests are denied), revocation, expiry, and receipt
+emission.
 
 Higher levels are not public shortcuts in the Kernel docs. Treat any `L3` or
 `L4` material as source/test coverage until a public command and test-backed

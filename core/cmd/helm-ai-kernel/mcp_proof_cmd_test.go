@@ -78,10 +78,8 @@ func TestRunMCPProofProducesNoDispatchEvidencePack(t *testing.T) {
 
 	for _, reason := range []string{
 		"ERR_MCP_SERVER_QUARANTINED",
-		"ERR_MCP_APPROVAL_RECEIPT_REQUIRED",
+		"ERR_MCP_APPROVAL_VERIFICATION_UNAVAILABLE",
 		"ERR_MCP_LAUNCH_SCOPE_MISMATCH",
-		"ERR_MCP_TOOL_QUARANTINED",
-		"ERR_MCP_SCHEMA_DRIFT",
 		"ERR_MCP_REPLAY_REORDERING_ATTEMPT",
 	} {
 		if !reasons[reason] {
@@ -106,7 +104,7 @@ func TestRunMCPProofSupportsFocusedScenario(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}
-	if len(summary.Scenarios) != 1 || summary.Scenarios[0].Reason != "ERR_MCP_SCHEMA_DRIFT" {
+	if len(summary.Scenarios) != 1 || summary.Scenarios[0].Reason != "ERR_MCP_APPROVAL_VERIFICATION_UNAVAILABLE" {
 		t.Fatalf("focused scenario summary = %#v", summary.Scenarios)
 	}
 }

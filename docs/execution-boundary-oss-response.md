@@ -6,7 +6,7 @@ HELM AI Kernel is implemented as the proof-bearing execution boundary for agent 
 
 - Boundary kernel: `helm-ai-kernel boundary status|capabilities|records|get|verify|checkpoint` and `/api/v1/boundary/status`, `/api/v1/boundary/capabilities`, `/api/v1/boundary/records`, `/api/v1/boundary/checkpoints`.
 - Negative conformance vectors: `helm-ai-kernel conform negative --json`, `helm-ai-kernel conform vectors --json`, `GET /api/v1/conformance/negative`, and `GET /api/v1/conformance/vectors`.
-- MCP quarantine and approval records: `helm-ai-kernel mcp scan|wrap|list|get|approve|revoke`, `GET|POST /api/v1/mcp/registry`, `POST /api/v1/mcp/registry/{server_id}/approve`, and `POST /api/v1/mcp/registry/{server_id}/revoke`.
+- MCP quarantine and approval containment: `helm-ai-kernel mcp scan|wrap|list|get|approve|revoke`, `GET|POST /api/v1/mcp/registry`, `POST /api/v1/mcp/registry/{server_id}/approve`, and `POST /api/v1/mcp/registry/{server_id}/revoke`. The approve CLI and API return verification-unavailable until a credential-verifying integration is configured; they never create a local grant.
 - MCP execution firewall primitives: `helm-ai-kernel mcp auth-profile list|put|verify`, `helm-ai-kernel mcp authorize-call`, `GET|PUT /api/v1/mcp/auth-profiles`, `POST /api/v1/mcp/authorize-call`, and the MCP protected-resource metadata route.
 - Identity and ReBAC snapshot evidence: `helm-ai-kernel identity agents`, `helm-ai-kernel authz health|check|snapshots|get`, `/api/v1/identity/agents`, `/api/v1/authz/health`, `/api/v1/authz/check`, and `/api/v1/authz/snapshots`.
 - Approval, timelock-ready, and budget surfaces: `helm-ai-kernel approvals list|create|approve|deny|revoke`, `helm-ai-kernel budget list|set|verify`, `/api/v1/approvals`, and `/api/v1/budgets`.

@@ -13,17 +13,21 @@ const (
 )
 
 type ServerRecord struct {
-	ServerID     string            `json:"server_id"`
-	LaunchID     string            `json:"launch_id"`
-	AppID        string            `json:"app_id"`
-	Principal    string            `json:"principal"`
-	PolicyHash   string            `json:"policy_hash"`
-	Approved     bool              `json:"approved"`
-	Revoked      bool              `json:"revoked"`
-	RevokedTools map[string]bool   `json:"revoked_tools,omitempty"`
-	SchemaPins   map[string]string `json:"schema_pins"`
-	ApprovalRefs []string          `json:"approval_refs"`
-	Approvals    []ApprovalGrant   `json:"approvals,omitempty"`
+	ServerID   string `json:"server_id"`
+	LaunchID   string `json:"launch_id"`
+	AppID      string `json:"app_id"`
+	Principal  string `json:"principal"`
+	PolicyHash string `json:"policy_hash"`
+	// Approved is retained for legacy serialized records. It is not
+	// authorization on its own: only a future package-owned credential verifier
+	// may set credentialVerified before AuthorizeAt can allow dispatch.
+	Approved           bool `json:"approved"`
+	credentialVerified bool
+	Revoked            bool              `json:"revoked"`
+	RevokedTools       map[string]bool   `json:"revoked_tools,omitempty"`
+	SchemaPins         map[string]string `json:"schema_pins"`
+	ApprovalRefs       []string          `json:"approval_refs"`
+	Approvals          []ApprovalGrant   `json:"approvals,omitempty"`
 }
 
 type ApprovalGrant struct {
@@ -83,6 +87,11 @@ func AuthorizeAt(record ServerRecord, req CallRequest, now time.Time) Decision {
 	if !record.Approved {
 		decision.Verdict = "ESCALATE"
 		decision.Reason = "ERR_MCP_SERVER_QUARANTINED"
+		return decision
+	}
+	if !record.credentialVerified {
+		decision.Verdict = "ESCALATE"
+		decision.Reason = "ERR_MCP_APPROVAL_VERIFICATION_UNAVAILABLE"
 		return decision
 	}
 	if record.RevokedTools[req.ToolName] {

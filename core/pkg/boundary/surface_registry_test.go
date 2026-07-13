@@ -3,12 +3,14 @@ package boundary
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	_ "modernc.org/sqlite"
 )
 
@@ -105,6 +107,66 @@ func TestPutApprovalFailsClosedWhenAllowedWithoutVerifier(t *testing.T) {
 	persisted := registry.approvals["approval-bootstrap"]
 	if persisted.State != contracts.ApprovalCeremonyPending || persisted.AuthMethod != "" || persisted.AssertionHash != "" || persisted.ReceiptID != "" {
 		t.Fatalf("bootstrap approval mutated by forged write: %+v", persisted)
+	}
+}
+
+func TestLoadSnapshotFailsClosedForLegacyAllowedApprovals(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	allowed := contracts.ApprovalCeremony{
+		ApprovalID:       "approval-legacy",
+		Subject:          "mcp:billing",
+		Action:           "mcp.approve",
+		State:            contracts.ApprovalCeremonyAllowed,
+		RequestedBy:      "agent:legacy",
+		Approvers:        []string{"user:opaque"},
+		AuthMethod:       "passkey",
+		ChallengeID:      "challenge-opaque",
+		ChallengeHash:    "sha256:challenge",
+		AssertionHash:    "sha256:assertion",
+		ReceiptID:        "receipt-opaque",
+		BoundaryRecordID: "record-opaque",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	sealed, err := allowed.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := json.Marshal(surfaceRegistrySnapshot{
+		Version: 2,
+		Approvals: map[string]contracts.ApprovalCeremony{
+			sealed.ApprovalID: sealed,
+		},
+		MCPServers: map[string]mcppkg.ServerQuarantineRecord{
+			"mcp-legacy": {
+				ServerID:          "mcp-legacy",
+				State:             mcppkg.QuarantineApproved,
+				ApprovedBy:        "user:opaque",
+				ApprovalReceiptID: "receipt-opaque",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := newSurfaceRegistry(func() time.Time { return now })
+	if err := registry.loadSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	approvals := registry.ListApprovals()
+	if len(approvals) != 1 {
+		t.Fatalf("approval count = %d, want 1", len(approvals))
+	}
+	approval := approvals[0]
+	if approval.State != contracts.ApprovalCeremonyPending || approval.Reason != ErrApprovalVerificationUnavailable.Error() {
+		t.Fatalf("legacy approval state = %+v", approval)
+	}
+	if len(approval.Approvers) != 0 || approval.AuthMethod != "" || approval.ChallengeID != "" || approval.ChallengeHash != "" || approval.AssertionHash != "" || approval.ReceiptID != "" || approval.BoundaryRecordID != "" {
+		t.Fatalf("legacy approval retained opaque evidence: %+v", approval)
+	}
+	mcpRecord, ok := registry.GetMCPServer("mcp-legacy")
+	if !ok || mcpRecord.State != mcppkg.QuarantineQuarantined || mcpRecord.ApprovedBy != "" || mcpRecord.ApprovalReceiptID != "" {
+		t.Fatalf("legacy MCP approval retained authority: (%+v,%v)", mcpRecord, ok)
 	}
 }
 

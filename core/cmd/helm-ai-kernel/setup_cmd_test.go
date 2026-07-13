@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestSetupNoArgsPrintsChooser(t *testing.T) {
@@ -168,16 +170,15 @@ func TestSetupInstallClaudeWritesHookAndRunsQuickstart(t *testing.T) {
 
 func TestSetupInstallJSONKeepsQuickstartOutputOffStdout(t *testing.T) {
 	tmp := t.TempDir()
-	oldWD, _ := os.Getwd()
-	if err := os.Chdir(tmp); err != nil {
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chdir(oldWD) })
 	stubSetupSideEffects(t)
 
 	var stdout, stderr bytes.Buffer
 	dataDir := filepath.Join(tmp, "helm")
-	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--json", "--data-dir", dataDir}, &stdout, &stderr)
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--json", "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("setup exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
 	}
@@ -197,32 +198,78 @@ func TestSetupInstallJSONKeepsQuickstartOutputOffStdout(t *testing.T) {
 
 func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	tmp := t.TempDir()
-	oldWD, _ := os.Getwd()
-	if err := os.Chdir(tmp); err != nil {
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(filepath.Join(workspace, ".codex"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+	canonicalWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatalf("resolve workspace: %v", err)
+	}
+	configPath := filepath.Join(workspace, ".codex", "config.toml")
+	if err := os.WriteFile(configPath, []byte("model = \"gpt-5\"\n\n[mcp_servers.other]\ncommand = \"other-mcp\"\nargs = [\"serve\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hookPath := filepath.Join(workspace, ".codex", "hooks.json")
+	if err := os.WriteFile(hookPath, []byte("{\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"other-hook\"}]}]}}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	restore := stubSetupSideEffects(t)
 
 	var stdout, stderr bytes.Buffer
 	dataDir := filepath.Join(tmp, "helm")
-	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--data-dir", dataDir}, &stdout, &stderr)
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--no-quickstart", "--json", "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("setup exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
 	}
 	if len(restore.execCalls) != 0 {
 		t.Fatalf("codex project setup should write config directly, exec calls = %#v", restore.execCalls)
 	}
-	codexConfig := filepath.Join(tmp, ".codex", "config.toml")
-	raw, err := os.ReadFile(codexConfig)
+	var installed setupSummary
+	if err := json.Unmarshal(stdout.Bytes(), &installed); err != nil {
+		t.Fatalf("decode setup summary: %v\n%s", err, stdout.String())
+	}
+	if installed.Workspace != canonicalWorkspace || installed.KernelURL != "" || installed.QuickstartStarted {
+		t.Fatalf("unexpected headless setup summary: %#v", installed)
+	}
+	if len(restore.quickstartArgs) != 0 {
+		t.Fatalf("--no-quickstart invoked Quickstart: %#v", restore.quickstartArgs)
+	}
+	if installed.Operation != "install" {
+		t.Fatalf("operation = %q, want install", installed.Operation)
+	}
+	invRaw, err := os.ReadFile(filepath.Join(dataDir, "autoconfigure", "inventory.json"))
+	if err != nil {
+		t.Fatalf("read inventory: %v", err)
+	}
+	var inventory AutoconfigureInventory
+	if err := json.Unmarshal(invRaw, &inventory); err != nil {
+		t.Fatalf("decode inventory: %v", err)
+	}
+	if inventory.ScanRoot != canonicalWorkspace {
+		t.Fatalf("scan root = %q, want selected workspace %q", inventory.ScanRoot, canonicalWorkspace)
+	}
+	if !setupMCPInstalled(setupOptions{Target: "codex", Scope: "project", Workspace: workspace, WorkspaceSet: true, DataDir: dataDir}, configPath) {
+		t.Fatal("semantic status did not recognize the installed Codex MCP server")
+	}
+
+	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("read codex config: %v", err)
 	}
 	if !strings.Contains(string(raw), "[mcp_servers.helm-ai-kernel-governance]") {
 		t.Fatalf("codex config missing MCP table:\n%s", string(raw))
 	}
-	hookConfig := filepath.Join(tmp, ".codex", "hooks.json")
-	raw, err = os.ReadFile(hookConfig)
+	var config codexProjectConfig
+	if _, err := toml.Decode(string(raw), &config); err != nil {
+		t.Fatalf("parse codex config: %v\n%s", err, raw)
+	}
+	server := config.MCPServers[setupMCPServerName]
+	wantArgs := []string{"mcp", "serve", "--transport", "stdio", "--data-dir", dataDir}
+	if !equalSetupStrings(server.Args, wantArgs) {
+		t.Fatalf("MCP args = %#v, want %#v", server.Args, wantArgs)
+	}
+	raw, err = os.ReadFile(hookPath)
 	if err != nil {
 		t.Fatalf("read hook config: %v", err)
 	}
@@ -232,23 +279,97 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	code = Run([]string{"helm-ai-kernel", "setup", "remove", "codex", "--scope", "project", "--yes", "--data-dir", dataDir}, &stdout, &stderr)
+	code = Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--scope", "project", "--workspace", workspace, "--no-quickstart", "--json", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("status exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
+	}
+	var status setupSummary
+	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
+		t.Fatalf("decode status summary: %v\n%s", err, stdout.String())
+	}
+	if !status.MCPInstalled || !status.HookInstalled || status.KernelURL != "" {
+		t.Fatalf("unexpected setup status: %#v", status)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "setup", "remove", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--no-quickstart", "--json", "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("remove exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
 	}
-	raw, err = os.ReadFile(codexConfig)
+	raw, err = os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("read codex config after remove: %v", err)
 	}
 	if strings.Contains(string(raw), "helm-ai-kernel-governance") {
 		t.Fatalf("codex config still contains HELM server:\n%s", string(raw))
 	}
-	raw, err = os.ReadFile(hookConfig)
+	if !strings.Contains(string(raw), "[mcp_servers.other]") || !strings.Contains(string(raw), "model = \"gpt-5\"") {
+		t.Fatalf("remove did not preserve unrelated Codex config:\n%s", string(raw))
+	}
+	raw, err = os.ReadFile(hookPath)
 	if err != nil {
 		t.Fatalf("read hook config after remove: %v", err)
 	}
 	if strings.Contains(string(raw), "hook pre-tool --client codex") {
 		t.Fatalf("hook config still contains HELM command:\n%s", string(raw))
+	}
+	if !strings.Contains(string(raw), "other-hook") {
+		t.Fatalf("remove did not preserve unrelated Codex hook:\n%s", string(raw))
+	}
+}
+
+func TestSetupProjectScopeRequiresExplicitWorkspace(t *testing.T) {
+	tmp := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--dry-run", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "requires an explicit --workspace") {
+		t.Fatalf("project setup without workspace code=%d stderr=%s", code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "user", "--workspace", tmp, "--dry-run", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "only valid with --scope project") {
+		t.Fatalf("user setup with workspace code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestSetupCodexProjectRejectsMalformedConfigWithoutOverwriting(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	configPath := filepath.Join(workspace, ".codex", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	invalid := "[mcp_servers\ncommand = \"broken\"\n"
+	if err := os.WriteFile(configPath, []byte(invalid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stubSetupSideEffects(t)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--no-quickstart", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "parse existing Codex config") {
+		t.Fatalf("malformed config setup code=%d stderr=%s", code, stderr.String())
+	}
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != invalid {
+		t.Fatalf("malformed config was changed:\n%s", raw)
+	}
+}
+
+func TestLocalMCPRuntimeUsesExplicitDataDir(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "kernel-store")
+	if _, _, err := newLocalMCPRuntimeWithDataDir(dataDir); err != nil {
+		t.Fatalf("create local MCP runtime: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "root.key")); err != nil {
+		t.Fatalf("custom MCP data dir did not receive the signer root key: %v", err)
 	}
 }
 

@@ -95,11 +95,11 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
 
 <!-- quantum_posture: v0.7.2 release notes cover a Go standard-library toolchain rebuild and an OpenAPI contract alignment only; this release adds no post-quantum cryptographic control. -->
 
-- Rebuilt both container images on Go 1.25.12 (up from 1.25.10) to clear five
-  Go standard-library CVEs baked into the binaries at compile time —
-  `CVE-2026-27145` (`crypto/x509`), `CVE-2026-42504` (`mime`),
-  `CVE-2026-42507` (`net/textproto`), `CVE-2026-39822` (`os.Root`), and
-  `CVE-2026-42505` (Encrypted Client Hello). Rebuild only; no code or runtime
+- The tag-triggered release workflow will rebuild both container images on Go
+  1.25.12 (up from 1.25.10), which includes the cumulative upstream
+  standard-library security fixes for `crypto/x509`, `mime`, `net/textproto`,
+  `crypto/tls`, and `os`. Post-release Trivy and Artifact Hub evidence is
+  required before claiming any CVE clearance. Rebuild only; no code or runtime
   behavior change.
 - Aligned the canonical `BoundaryStatus` OpenAPI schema and the generated Java,
   Python, Rust, and TypeScript models with the JSON already emitted by

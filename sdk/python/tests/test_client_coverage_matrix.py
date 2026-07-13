@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from helm_sdk.client import (
     EvidenceEnvelopeExportRequest,
@@ -153,9 +154,7 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
 def test_evaluate_uses_only_the_canonical_generated_request_fields() -> None:
     fake = FakeHTTPClient()
     fake.queue(model_payload("DecisionRecord"))
-    request = model_request("DecisionRequest")
-    request.additional_properties["principal"] = "attacker"
-    request.additional_properties["tenant"] = "attacker-tenant"
+    request = DecisionRequest(action="EXECUTE_TOOL", resource="local.echo", context={"request_id": "req-1"})
     with patch("helm_sdk.client.httpx.Client", return_value=fake):
         client = HelmClient(base_url="http://h", api_key="key", tenant_id="tenant", principal_id="principal")
         client.evaluate_decision(request)
@@ -167,6 +166,15 @@ def test_evaluate_uses_only_the_canonical_generated_request_fields() -> None:
             {"json": {"action": request.action, "resource": request.resource, "context": request.context}},
         )
     ]
+
+
+def test_decision_request_rejects_unknown_fields() -> None:
+    payload = {"action": "EXECUTE_TOOL", "resource": "local.echo", "principal": "attacker"}
+
+    with pytest.raises(ValidationError):
+        DecisionRequest(**payload)
+    with pytest.raises(ValidationError):
+        DecisionRequest.from_dict(payload)
 
 
 def test_evaluate_preserves_explicit_null_context() -> None:

@@ -182,7 +182,6 @@ func (c *HelmClient) EvaluateDecision(req DecisionRequest) (*DecisionRecord, err
 	if c.APIKey == "" || c.TenantID == "" || c.PrincipalID == "" {
 		return nil, fmt.Errorf("EvaluateDecision requires API key, tenant ID, and principal ID")
 	}
-	// The generated model retains additional properties for OpenAPI compatibility.
 	// Build the closed evaluator payload explicitly so trusted transport fields
 	// cannot leak into the body while preserving an explicitly-null context.
 	body := map[string]any{

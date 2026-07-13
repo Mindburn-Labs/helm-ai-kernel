@@ -2414,15 +2414,30 @@ impl DecisionRecord {
  */
 
 
+fn deserialize_decision_request_context<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<serde_json::Value>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Some(Option::<serde_json::Value>::deserialize(deserializer)?))
+}
+
 /// DecisionRequest : Canonical body for POST /api/v1/evaluate. Identity and trusted transport metadata are not accepted in this object; the runtime binds them from verified request headers.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DecisionRequest {
     #[serde(rename = "action")]
     pub action: String,
     #[serde(rename = "resource")]
     pub resource: String,
     /// Application context for policy evaluation. It must not include `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`, `workspaceId`, `workspace`, `security_context_trusted`, `credential_hash`, `session_id`, `source_channel`, `trust_level`, `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by the authenticated transport boundary.
-    #[serde(rename = "context", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "context",
+        default,
+        deserialize_with = "deserialize_decision_request_context",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub context: Option<Option<serde_json::Value>>,
 }
 

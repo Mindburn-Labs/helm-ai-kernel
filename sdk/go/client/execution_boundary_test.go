@@ -175,10 +175,6 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			_, err := client.EvaluateDecision(DecisionRequest{
 				Action:   "EXECUTE_TOOL",
 				Resource: "local.echo",
-				AdditionalProperties: map[string]interface{}{
-					"principal": "attacker",
-					"tenant":    "attacker-tenant",
-				},
 			})
 			return err
 		}},
@@ -335,6 +331,40 @@ func TestEvaluateDecisionPreservesExplicitNullContext(t *testing.T) {
 	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"))
 	if _, err := client.EvaluateDecision(*request); err != nil {
 		t.Fatalf("EvaluateDecision returned error: %v", err)
+	}
+}
+
+func TestDecisionRequestRejectsUnknownFieldsAndPreservesContextPresence(t *testing.T) {
+	absent := NewDecisionRequest("EXECUTE_TOOL", "local.echo")
+	absentJSON, err := json.Marshal(absent)
+	if err != nil {
+		t.Fatalf("marshal absent context: %v", err)
+	}
+	var absentBody map[string]any
+	if err := json.Unmarshal(absentJSON, &absentBody); err != nil {
+		t.Fatalf("decode absent context: %v", err)
+	}
+	if _, exists := absentBody["context"]; exists {
+		t.Fatalf("absent context was serialized: %#v", absentBody)
+	}
+
+	explicitNull := NewDecisionRequest("EXECUTE_TOOL", "local.echo")
+	explicitNull.SetContext(nil)
+	explicitNullJSON, err := json.Marshal(explicitNull)
+	if err != nil {
+		t.Fatalf("marshal explicit null context: %v", err)
+	}
+	var explicitNullBody map[string]any
+	if err := json.Unmarshal(explicitNullJSON, &explicitNullBody); err != nil {
+		t.Fatalf("decode explicit null context: %v", err)
+	}
+	if context, exists := explicitNullBody["context"]; !exists || context != nil {
+		t.Fatalf("explicit null context was not preserved: %#v", explicitNullBody)
+	}
+
+	var request DecisionRequest
+	if err := json.Unmarshal([]byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","principal":"attacker"}`), &request); err == nil {
+		t.Fatal("DecisionRequest accepted an undeclared property")
 	}
 }
 

@@ -270,9 +270,8 @@ public class HelmClient {
     /** POST /api/v1/evaluate */
     public DecisionRecord evaluateDecision(DecisionRequest req) {
         requireEvaluateBindings();
-        // Generated OpenAPI models extend HashMap so Gson treats them as maps
-        // and silently serializes an empty object. Build the canonical body
-        // from declared accessors instead of forwarding generated internals.
+        // Build the canonical body from declared accessors so trusted transport
+        // fields cannot be introduced by caller-controlled request data.
         JsonObject body = new JsonObject();
         body.addProperty("action", req.getAction());
         body.addProperty("resource", req.getResource());

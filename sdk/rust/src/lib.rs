@@ -1273,6 +1273,42 @@ mod tests {
     }
 
     #[test]
+    fn decision_request_rejects_unknown_fields_and_preserves_context_presence() {
+        let absent = DecisionRequest {
+            action: "EXECUTE_TOOL".to_string(),
+            resource: "local.echo".to_string(),
+            context: None,
+        };
+        let absent = serde_json::to_value(&absent).unwrap();
+        assert!(absent.get("context").is_none());
+
+        let explicit_null = DecisionRequest {
+            action: "EXECUTE_TOOL".to_string(),
+            resource: "local.echo".to_string(),
+            context: Some(None),
+        };
+        let explicit_null = serde_json::to_value(&explicit_null).unwrap();
+        assert!(explicit_null["context"].is_null());
+
+        let absent = serde_json::from_str::<DecisionRequest>(
+            r#"{"action":"EXECUTE_TOOL","resource":"local.echo"}"#,
+        )
+        .unwrap();
+        assert_eq!(absent.context, None);
+        let explicit_null = serde_json::from_str::<DecisionRequest>(
+            r#"{"action":"EXECUTE_TOOL","resource":"local.echo","context":null}"#,
+        )
+        .unwrap();
+        assert_eq!(explicit_null.context, Some(None));
+
+        let error = serde_json::from_str::<DecisionRequest>(
+            r#"{"action":"EXECUTE_TOOL","resource":"local.echo","principal":"attacker"}"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("unknown field `principal`"));
+    }
+
+    #[test]
     fn evaluate_decision_rejects_missing_authenticated_bindings() {
         let request = DecisionRequest {
             action: "EXECUTE_TOOL".to_string(),

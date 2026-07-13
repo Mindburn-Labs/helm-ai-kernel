@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HelmApiError, HelmClient } from "./client.js";
+import type { DecisionRequest } from "./types.gen.js";
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -133,14 +134,15 @@ describe("HelmClient coverage matrix", () => {
   });
 
   it("serializes only the canonical evaluator body fields", async () => {
-    await client.evaluateDecision({
+    const forged = {
       action: "EXECUTE_TOOL",
       resource: "local.echo",
       context: { request_id: "req-1" },
       principal: "attacker",
       tenant: "attacker-tenant",
       workspace: "attacker-workspace",
-    });
+    } as unknown as DecisionRequest;
+    await client.evaluateDecision(forged);
 
     const [, init] = fetchSpy.mock.calls[0];
     expect(JSON.parse(init.body)).toEqual({

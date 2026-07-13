@@ -5085,13 +5085,13 @@ class DecisionRequest(BaseModel):
     action: Annotated[str, Field(min_length=1, strict=True)]
     resource: Annotated[str, Field(min_length=1, strict=True)]
     context: Optional[Dict[str, Any]] = Field(default=None, description="Application context for policy evaluation. It must not include `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`, `workspaceId`, `workspace`, `security_context_trusted`, `credential_hash`, `session_id`, `source_channel`, `trust_level`, `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by the authenticated transport boundary. ")
-    additional_properties: Dict[str, Any] = {}
     __properties: ClassVar[List[str]] = ["action", "resource", "context"]
 
     model_config = ConfigDict(
         populate_by_name=True,
         validate_assignment=True,
         protected_namespaces=(),
+        extra="forbid",
     )
 
 
@@ -5118,21 +5118,14 @@ class DecisionRequest(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
-        * Fields in `self.additional_properties` are added to the output dict.
         """
-        excluded_fields: Set[str] = set([
-            "additional_properties",
-        ])
+        excluded_fields: Set[str] = set()
 
         _dict = self.model_dump(
             by_alias=True,
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # puts key-value pairs in additional_properties in the top level
-        if self.additional_properties is not None:
-            for _key, _value in self.additional_properties.items():
-                _dict[_key] = _value
 
         # set to None if context (nullable) is None
         # and model_fields_set contains the field
@@ -5146,23 +5139,7 @@ class DecisionRequest(BaseModel):
         """Create an instance of DecisionRequest from a dict"""
         if obj is None:
             return None
-
-        if not isinstance(obj, dict):
-            return cls.model_validate(obj)
-
-        _payload = {
-            "action": obj.get("action"),
-            "resource": obj.get("resource"),
-        }
-        if "context" in obj:
-            _payload["context"] = obj["context"]
-        _obj = cls.model_validate(_payload)
-        # store additional fields in additional_properties
-        for _key in obj.keys():
-            if _key not in cls.__properties:
-                _obj.additional_properties[_key] = obj.get(_key)
-
-        return _obj
+        return cls.model_validate(obj)
 
 
 

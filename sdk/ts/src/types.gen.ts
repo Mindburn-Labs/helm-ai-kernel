@@ -5661,7 +5661,6 @@ export function DecisionRecordToJSON(value?: DecisionRecord | null): any {
  * @interface DecisionRequest
  */
 export interface DecisionRequest {
-    [key: string]: any | any;
     /**
      *
      * @type {string}
@@ -5707,7 +5706,6 @@ export function DecisionRequestFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
 
-            ...json,
         'action': json['action'],
         'resource': json['resource'],
         'context': json['context'] === undefined ? undefined : json['context'],
@@ -5718,13 +5716,14 @@ export function DecisionRequestToJSON(value?: DecisionRequest | null): any {
     if (value == null) {
         return value;
     }
-    return {
-
-            ...value,
+    const body: any = {
         'action': value['action'],
         'resource': value['resource'],
-        'context': value['context'],
     };
+    if (value['context'] !== undefined) {
+        body['context'] = value['context'];
+    }
+    return body;
 }
 
 /* tslint:disable */

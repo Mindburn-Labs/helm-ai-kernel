@@ -12473,9 +12473,8 @@ type DecisionRequest struct {
 	Action   string `json:"action"`
 	Resource string `json:"resource"`
 	// Application context for policy evaluation. It must not include `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`, `workspaceId`, `workspace`, `security_context_trusted`, `credential_hash`, `session_id`, `source_channel`, `trust_level`, `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by the authenticated transport boundary.
-	Context              map[string]interface{} `json:"context,omitempty"`
-	contextSet           bool
-	AdditionalProperties map[string]interface{}
+	Context    map[string]interface{} `json:"context,omitempty"`
+	contextSet bool
 }
 
 type _DecisionRequest DecisionRequest
@@ -12593,10 +12592,6 @@ func (o DecisionRequest) ToMap() (map[string]interface{}, error) {
 		toSerialize["context"] = o.Context
 	}
 
-	for key, value := range o.AdditionalProperties {
-		toSerialize[key] = value
-	}
-
 	return toSerialize, nil
 }
 
@@ -12634,16 +12629,15 @@ func (o *DecisionRequest) UnmarshalJSON(data []byte) (err error) {
 	*o = DecisionRequest(varDecisionRequest)
 	_, o.contextSet = allProperties["context"]
 
-	additionalProperties := make(map[string]interface{})
-
-	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "action")
-		delete(additionalProperties, "resource")
-		delete(additionalProperties, "context")
-		o.AdditionalProperties = additionalProperties
+	for property := range allProperties {
+		switch property {
+		case "action", "resource", "context":
+		default:
+			return fmt.Errorf("unknown property %v", property)
+		}
 	}
 
-	return err
+	return nil
 }
 
 type NullableDecisionRequest struct {

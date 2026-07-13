@@ -18570,7 +18570,7 @@ public static class DecisionRecord extends HashMap<String, Object> {
   DecisionRequest.JSON_PROPERTY_CONTEXT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class DecisionRequest extends HashMap<String, Object> {
+public static class DecisionRequest {
   public static final String JSON_PROPERTY_ACTION = "action";
   private String action;
 
@@ -18665,48 +18665,9 @@ public static class DecisionRequest extends HashMap<String, Object> {
     this.context = JsonNullable.<Object>of(context);
   }
 
-  /**
-   * A container for additional, undeclared properties.
-   * This is a holder for any undeclared properties as specified with
-   * the 'additionalProperties' keyword in the OAS document.
-   */
-  private Map<String, Object> additionalProperties;
-
-  /**
-   * Set the additional (undeclared) property with the specified name and value.
-   * If the property does not already exist, create it otherwise replace it.
-   * @param key the name of the property
-   * @param value the value of the property
-   * @return self reference
-   */
   @JsonAnySetter
-  public DecisionRequest putAdditionalProperty(String key, Object value) {
-    if (this.additionalProperties == null) {
-        this.additionalProperties = new HashMap<String, Object>();
-    }
-    this.additionalProperties.put(key, value);
-    return this;
-  }
-
-  /**
-   * Return the additional (undeclared) properties.
-   * @return the additional (undeclared) properties
-   */
-  @JsonAnyGetter
-  public Map<String, Object> getAdditionalProperties() {
-    return additionalProperties;
-  }
-
-  /**
-   * Return the additional (undeclared) property with the specified name.
-   * @param key the name of the property
-   * @return the additional (undeclared) property with the specified name
-   */
-  public Object getAdditionalProperty(String key) {
-    if (this.additionalProperties == null) {
-        return null;
-    }
-    return this.additionalProperties.get(key);
+  public void rejectUnknownProperty(String key, Object value) {
+    throw new IllegalArgumentException("DecisionRequest does not allow additional property: " + key);
   }
 
   /**
@@ -18723,9 +18684,7 @@ public static class DecisionRequest extends HashMap<String, Object> {
     DecisionRequest decisionRequest = (DecisionRequest) o;
     return Objects.equals(this.action, decisionRequest.action) &&
         Objects.equals(this.resource, decisionRequest.resource) &&
-        equalsNullable(this.context, decisionRequest.context)&&
-        Objects.equals(this.additionalProperties, decisionRequest.additionalProperties) &&
-        super.equals(o);
+        equalsNullable(this.context, decisionRequest.context);
   }
 
   private static <T> boolean equalsNullable(JsonNullable<T> a, JsonNullable<T> b) {
@@ -18734,7 +18693,7 @@ public static class DecisionRequest extends HashMap<String, Object> {
 
   @Override
   public int hashCode() {
-    return Objects.hash(action, resource, hashCodeNullable(context), super.hashCode(), additionalProperties);
+    return Objects.hash(action, resource, hashCodeNullable(context));
   }
 
   private static <T> int hashCodeNullable(JsonNullable<T> a) {
@@ -18748,11 +18707,9 @@ public static class DecisionRequest extends HashMap<String, Object> {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class DecisionRequest {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    action: ").append(toIndentedString(action)).append("\n");
     sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
-    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
     sb.append("}");
     return sb.toString();
   }

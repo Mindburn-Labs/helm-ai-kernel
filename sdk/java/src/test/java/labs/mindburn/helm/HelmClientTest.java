@@ -69,7 +69,6 @@ public class HelmClientTest {
             request.setAction("EXECUTE_TOOL");
             request.setResource("local.echo");
             request.setContext(Map.of("request_id", "req-1"));
-            request.putAdditionalProperty("principal", "attacker");
 
             TypesGen.DecisionRecord decision = client.evaluateDecision(request);
 
@@ -136,6 +135,33 @@ public class HelmClientTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    @DisplayName("DecisionRequest distinguishes absent and explicit-null context")
+    void testDecisionRequestPreservesContextPresence() {
+        TypesGen.DecisionRequest request = new TypesGen.DecisionRequest();
+        request.setAction("EXECUTE_TOOL");
+        request.setResource("local.echo");
+        assertFalse(request.getContext_JsonNullable().isPresent());
+
+        request.setContext(null);
+        assertTrue(request.getContext_JsonNullable().isPresent());
+        assertNull(request.getContext());
+    }
+
+    @Test
+    @DisplayName("DecisionRequest rejects undeclared properties")
+    void testDecisionRequestRejectsUndeclaredProperties() {
+        assertFalse(Map.class.isAssignableFrom(TypesGen.DecisionRequest.class));
+        assertThrows(NoSuchMethodException.class,
+            () -> TypesGen.DecisionRequest.class.getMethod("putAdditionalProperty", String.class, Object.class));
+
+        Exception error = assertThrows(Exception.class, () -> mapper.readValue(
+            "{\"action\":\"EXECUTE_TOOL\",\"resource\":\"local.echo\",\"principal\":\"attacker\"}",
+            TypesGen.DecisionRequest.class
+        ));
+        assertTrue(error.getMessage().contains("DecisionRequest does not allow additional property: principal"));
     }
 
     @Test

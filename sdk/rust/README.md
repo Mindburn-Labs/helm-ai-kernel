@@ -61,8 +61,11 @@ let decision = HelmClient::new("http://127.0.0.1:7714")
 println!("{}", decision.verdict);
 ```
 
-Use `with_workspace_id` when a scoped emergency-stop fence is active. The
-body cannot contain principal, tenant, workspace, or legacy evaluator fields.
+Use `with_workspace_id` whenever scoped emergency-stop fencing or runtime
+policy snapshot authority is enabled. It sends `X-Helm-Workspace-ID`, which
+must match server-owned `HELM_RUNTIME_WORKSPACE_ID`; otherwise
+`POST /api/v1/evaluate` fails closed with `403`. The body cannot contain
+principal, tenant, workspace, or legacy evaluator fields.
 
 ## Execution Boundary Methods
 

@@ -64,9 +64,12 @@ class Example {
 ```
 
 `evaluateDecision` requires API key, tenant ID, and principal ID; use the
-five-argument constructor to add a workspace ID when a scoped emergency-stop
-fence is active. It serializes only `action`, `resource`, and optional
-`context`; body identity and legacy evaluator payloads are not accepted.
+five-argument constructor to set a workspace ID whenever scoped emergency-stop
+fencing or runtime policy snapshot authority is enabled. It sends
+`X-Helm-Workspace-ID`, which must match server-owned
+`HELM_RUNTIME_WORKSPACE_ID`; otherwise `POST /api/v1/evaluate` fails closed
+with `403`. It serializes only `action`, `resource`, and optional `context`;
+body identity and legacy evaluator payloads are not accepted.
 
 The evaluator path has dedicated request/response conformance coverage. It is
 not evidence that every generated Java model is runtime-certified: the broader

@@ -87,8 +87,11 @@ func main() {
 ```
 
 `EvaluateDecision` requires API key, tenant ID, and principal ID. Set
-`WithWorkspaceID` as well when a scoped emergency-stop fence is active. The
-body never accepts principal, tenant, workspace, or legacy evaluator fields.
+`WithWorkspaceID` whenever scoped emergency-stop fencing or runtime policy
+snapshot authority is enabled. It sends `X-Helm-Workspace-ID`, which must match
+server-owned `HELM_RUNTIME_WORKSPACE_ID`; otherwise `POST /api/v1/evaluate`
+fails closed with `403`. The body never accepts principal, tenant, workspace,
+or legacy evaluator fields.
 
 ## API
 

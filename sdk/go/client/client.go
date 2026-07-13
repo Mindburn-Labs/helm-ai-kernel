@@ -88,8 +88,10 @@ func WithPrincipalID(principalID string) Option {
 	return func(c *HelmClient) { c.PrincipalID = principalID }
 }
 
-// WithWorkspaceID sets the optional X-Helm-Workspace-ID header used when a
-// scoped emergency-stop fence is active.
+// WithWorkspaceID sets the optional X-Helm-Workspace-ID header. For
+// POST /api/v1/evaluate, use it whenever scoped emergency-stop fencing or
+// runtime policy snapshot authority is enabled. It must match the server-owned
+// HELM_RUNTIME_WORKSPACE_ID or evaluation fails closed with HTTP 403.
 func WithWorkspaceID(workspaceID string) Option {
 	return func(c *HelmClient) { c.WorkspaceID = workspaceID }
 }

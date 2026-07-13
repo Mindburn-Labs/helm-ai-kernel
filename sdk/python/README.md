@@ -44,8 +44,11 @@ print(decision.verdict)  # ALLOW, DENY, or ESCALATE
 ```
 
 `evaluate_decision` requires API key, tenant ID, and principal ID. Set
-`workspace_id` when a scoped emergency-stop fence is active. It accepts a
-typed `DecisionRequest`, not a legacy dictionary payload or body identity.
+`workspace_id` whenever scoped emergency-stop fencing or runtime policy
+snapshot authority is enabled. It sends `X-Helm-Workspace-ID`, which must match
+server-owned `HELM_RUNTIME_WORKSPACE_ID`; otherwise `POST /api/v1/evaluate`
+fails closed with `403`. It accepts a typed `DecisionRequest`, not a legacy
+dictionary payload or body identity.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/python_sdk/`.

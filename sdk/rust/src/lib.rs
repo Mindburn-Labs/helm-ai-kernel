@@ -250,8 +250,10 @@ impl HelmClient {
         self
     }
 
-    /// Set the optional workspace binding used when a scoped emergency-stop
-    /// fence is active.
+    /// Set the optional workspace binding. For POST /api/v1/evaluate, use it
+    /// whenever scoped emergency-stop fencing or runtime policy snapshot
+    /// authority is enabled. It must match the server-owned
+    /// HELM_RUNTIME_WORKSPACE_ID or evaluation fails closed with HTTP 403.
     pub fn with_workspace_id(mut self, workspace_id: impl Into<String>) -> Self {
         self.workspace_id = Some(workspace_id.into());
         self

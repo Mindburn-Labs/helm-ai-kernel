@@ -637,7 +637,7 @@ func TestEvaluateRouteRefusesMissingOrMismatchedWorkspaceBindingWhenFenceEnabled
 	}
 }
 
-func TestEvaluateRouteRequiresVerifiedWorkspaceBindingForPolicySnapshots(t *testing.T) {
+func TestEvaluateRouteRequiresVerifiedWorkspaceBindingForGuardianPolicySnapshots(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
 	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
@@ -668,7 +668,9 @@ func TestEvaluateRouteRequiresVerifiedWorkspaceBindingForPolicySnapshots(t *test
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, receipts := newEvaluateRouteTestServices(t, guardian.WithPolicySnapshots(store, scope))
-			svc.PolicySnapshotStore = store
+			if svc.PolicySnapshotStore != nil {
+				t.Fatal("test requires Guardian policy snapshots without mirrored service metadata")
+			}
 			mux := http.NewServeMux()
 			registerReceiptRoutes(mux, svc)
 

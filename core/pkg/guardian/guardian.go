@@ -318,6 +318,12 @@ func (g *Guardian) SetPolicySnapshots(store policyreconcile.PolicySnapshotStore,
 	g.snapshotScope = scope.Normalize()
 }
 
+// HasPolicySnapshots reports whether the Guardian resolves policy authority
+// from an installed runtime snapshot store.
+func (g *Guardian) HasPolicySnapshots() bool {
+	return g != nil && g.snapshotStore != nil
+}
+
 // SetComplianceChecker sets a compliance verifier.
 // Deprecated: Use WithComplianceChecker GuardianOption in NewGuardian instead.
 func (g *Guardian) SetComplianceChecker(c ComplianceChecker) {

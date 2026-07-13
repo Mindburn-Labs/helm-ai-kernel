@@ -117,7 +117,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
-		if svc.EmergencyStops != nil || svc.PolicySnapshotStore != nil {
+		if svc.EmergencyStops != nil || svc.Guardian.HasPolicySnapshots() {
 			configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
 			if configuredTenantID == "" || tenantID != configuredTenantID {
 				api.WriteForbidden(w, "Evaluate route tenant binding could not be verified")

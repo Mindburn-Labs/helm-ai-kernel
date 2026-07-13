@@ -4500,6 +4500,12 @@ components:
         policy_version: { type: string }
         policy_decision_hash: { type: string }
         signature: { type: string }
+        signature_schema:
+          type: string
+          enum: [helm.decision.signature.v2]
+          description: |
+            Present for request-bound decisions signed with the v2 canonical
+            decision payload. An absent value denotes a legacy v1 signature.
 
     ConsoleCapabilities:
       type: object

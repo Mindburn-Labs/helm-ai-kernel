@@ -4942,7 +4942,18 @@ class DecisionRecord(BaseModel):
     policy_version: Optional[StrictStr] = None
     policy_decision_hash: Optional[StrictStr] = None
     signature: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["id", "action", "resource", "verdict", "reason", "policy_version", "policy_decision_hash", "signature"]
+    signature_schema: Optional[StrictStr] = Field(default=None, description="Present for request-bound decisions signed with the v2 canonical decision payload. An absent value denotes a legacy v1 signature. ")
+    __properties: ClassVar[List[str]] = ["id", "action", "resource", "verdict", "reason", "policy_version", "policy_decision_hash", "signature", "signature_schema"]
+
+    @field_validator('signature_schema')
+    def signature_schema_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['helm.decision.signature.v2']):
+            raise ValueError("must be one of enum values ('helm.decision.signature.v2')")
+        return value
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -5002,7 +5013,8 @@ class DecisionRecord(BaseModel):
             "reason": obj.get("reason"),
             "policy_version": obj.get("policy_version"),
             "policy_decision_hash": obj.get("policy_decision_hash"),
-            "signature": obj.get("signature")
+            "signature": obj.get("signature"),
+            "signature_schema": obj.get("signature_schema")
         })
         return _obj
 

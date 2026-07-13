@@ -49,10 +49,14 @@ type DecisionRecord struct {
 	SessionCentroidHash    string  `json:"session_centroid_hash,omitempty"`
 	RiskAccumulationWindow int     `json:"risk_accumulation_window,omitempty"`
 	// RequirementSetHash links this decision to the specific Proof Requirement Graph rules satisfied.
-	RequirementSetHash string    `json:"requirement_set_hash,omitempty"`
-	Signature          string    `json:"signature"`
-	SignatureType      string    `json:"signature_type"`
-	Timestamp          time.Time `json:"timestamp"`
+	RequirementSetHash string `json:"requirement_set_hash,omitempty"`
+	Signature          string `json:"signature"`
+	// SignatureSchema declares the canonical decision payload used to create
+	// Signature. An absent value denotes the legacy v1 payload; new request-bound
+	// decisions use the explicit v2 schema.
+	SignatureSchema string    `json:"signature_schema,omitempty"`
+	SignatureType   string    `json:"signature_type"`
+	Timestamp       time.Time `json:"timestamp"`
 
 	// Intervention Metadata (Temporal Guardian)
 	Intervention *InterventionMetadata `json:"intervention,omitempty"`

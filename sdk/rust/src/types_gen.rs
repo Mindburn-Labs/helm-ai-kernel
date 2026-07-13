@@ -2326,6 +2326,9 @@ pub struct DecisionRecord {
     pub policy_decision_hash: Option<String>,
     #[serde(rename = "signature", skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// Present for request-bound decisions signed with the v2 canonical decision payload. An absent value denotes a legacy v1 signature.
+    #[serde(rename = "signature_schema", skip_serializing_if = "Option::is_none")]
+    pub signature_schema: Option<DecisionRecordSignatureSchema>,
 }
 
 impl DecisionRecord {
@@ -2339,7 +2342,20 @@ impl DecisionRecord {
             policy_version: None,
             policy_decision_hash: None,
             signature: None,
+            signature_schema: None,
         }
+    }
+}
+/// Present for request-bound decisions signed with the v2 canonical decision payload. An absent value denotes a legacy v1 signature.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum DecisionRecordSignatureSchema {
+    #[serde(rename = "helm.decision.signature.v2")]
+    HelmPeriodDecisionPeriodSignaturePeriodV2,
+}
+
+impl Default for DecisionRecordSignatureSchema {
+    fn default() -> DecisionRecordSignatureSchema {
+        Self::HelmPeriodDecisionPeriodSignaturePeriodV2
     }
 }
 

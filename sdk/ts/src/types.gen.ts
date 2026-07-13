@@ -5412,7 +5412,25 @@ export interface DecisionRecord {
      * @memberof DecisionRecord
      */
     signature?: string;
+    /**
+     * Present for request-bound decisions signed with the v2 canonical
+     * decision payload. An absent value denotes a legacy v1 signature.
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    signature_schema?: DecisionRecordSignatureSchemaEnum;
 }
+
+
+/**
+ * @export
+ */
+export const DecisionRecordSignatureSchemaEnum = {
+    HelmDecisionSignatureV2: 'helm.decision.signature.v2'
+} as const;
+export type DecisionRecordSignatureSchemaEnum = typeof DecisionRecordSignatureSchemaEnum[keyof typeof DecisionRecordSignatureSchemaEnum];
+
 
 /**
  * Check if a given object implements the DecisionRecord interface.
@@ -5439,6 +5457,7 @@ export function DecisionRecordFromJSONTyped(json: any, ignoreDiscriminator: bool
         'policy_version': json['policy_version'] == null ? undefined : json['policy_version'],
         'policy_decision_hash': json['policy_decision_hash'] == null ? undefined : json['policy_decision_hash'],
         'signature': json['signature'] == null ? undefined : json['signature'],
+        'signature_schema': json['signature_schema'] == null ? undefined : json['signature_schema'],
     };
 }
 
@@ -5456,6 +5475,7 @@ export function DecisionRecordToJSON(value?: DecisionRecord | null): any {
         'policy_version': value['policy_version'],
         'policy_decision_hash': value['policy_decision_hash'],
         'signature': value['signature'],
+        'signature_schema': value['signature_schema'],
     };
 }
 

@@ -432,17 +432,18 @@ func TestSchemaAlignment(t *testing.T) {
 		// Verify that DecisionRecord marshals with expected JSON field names
 		// that align with decision.proto.
 		dr := contracts.DecisionRecord{
-			ID:            "dec_1",
-			ProposalID:    "prop_1",
-			StepID:        "step_1",
-			SubjectID:     "subj_1",
-			Action:        "write",
-			Resource:      "file.txt",
-			Verdict:       "ALLOW",
-			Reason:        "Policy allows",
-			Signature:     "sig_abc",
-			SignatureType: "ed25519",
-			Timestamp:     time.Now().UTC(),
+			ID:              "dec_1",
+			ProposalID:      "prop_1",
+			StepID:          "step_1",
+			SubjectID:       "subj_1",
+			Action:          "write",
+			Resource:        "file.txt",
+			Verdict:         "ALLOW",
+			Reason:          "Policy allows",
+			Signature:       "sig_abc",
+			SignatureSchema: "helm.decision.signature.v2",
+			SignatureType:   "ed25519",
+			Timestamp:       time.Now().UTC(),
 		}
 
 		data, err := json.Marshal(dr)
@@ -458,7 +459,7 @@ func TestSchemaAlignment(t *testing.T) {
 		required := []string{
 			"id", "proposal_id", "step_id", "subject_id",
 			"action", "resource", "verdict", "reason",
-			"signature", "signature_type", "timestamp",
+			"signature", "signature_schema", "signature_type", "timestamp",
 		}
 		for _, f := range required {
 			if _, ok := fields[f]; !ok {

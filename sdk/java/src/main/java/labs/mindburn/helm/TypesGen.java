@@ -17417,7 +17417,8 @@ public static class CreateSandboxGrantRequest {
   DecisionRecord.JSON_PROPERTY_REASON,
   DecisionRecord.JSON_PROPERTY_POLICY_VERSION,
   DecisionRecord.JSON_PROPERTY_POLICY_DECISION_HASH,
-  DecisionRecord.JSON_PROPERTY_SIGNATURE
+  DecisionRecord.JSON_PROPERTY_SIGNATURE,
+  DecisionRecord.JSON_PROPERTY_SIGNATURE_SCHEMA
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class DecisionRecord {
@@ -17444,6 +17445,42 @@ public static class DecisionRecord {
 
   public static final String JSON_PROPERTY_SIGNATURE = "signature";
   private String signature;
+
+  /**
+   * Present for request-bound decisions signed with the v2 canonical decision payload. An absent value denotes a legacy v1 signature.
+   */
+  public enum SignatureSchemaEnum {
+    HELM_DECISION_SIGNATURE_V2("helm.decision.signature.v2");
+
+    private String value;
+
+    SignatureSchemaEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static SignatureSchemaEnum fromValue(String value) {
+      for (SignatureSchemaEnum b : SignatureSchemaEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_SIGNATURE_SCHEMA = "signature_schema";
+  private SignatureSchemaEnum signatureSchema;
 
   public DecisionRecord() {
   }
@@ -17648,6 +17685,31 @@ public static class DecisionRecord {
   }
 
 
+  public DecisionRecord signatureSchema(SignatureSchemaEnum signatureSchema) {
+    this.signatureSchema = signatureSchema;
+    return this;
+  }
+
+   /**
+   * Present for request-bound decisions signed with the v2 canonical decision payload. An absent value denotes a legacy v1 signature.
+   * @return signatureSchema
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_SCHEMA)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public SignatureSchemaEnum getSignatureSchema() {
+    return signatureSchema;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_SCHEMA)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureSchema(SignatureSchemaEnum signatureSchema) {
+    this.signatureSchema = signatureSchema;
+  }
+
+
   /**
    * Return true if this DecisionRecord object is equal to o.
    */
@@ -17667,12 +17729,13 @@ public static class DecisionRecord {
         Objects.equals(this.reason, decisionRecord.reason) &&
         Objects.equals(this.policyVersion, decisionRecord.policyVersion) &&
         Objects.equals(this.policyDecisionHash, decisionRecord.policyDecisionHash) &&
-        Objects.equals(this.signature, decisionRecord.signature);
+        Objects.equals(this.signature, decisionRecord.signature) &&
+        Objects.equals(this.signatureSchema, decisionRecord.signatureSchema);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, action, resource, verdict, reason, policyVersion, policyDecisionHash, signature);
+    return Objects.hash(id, action, resource, verdict, reason, policyVersion, policyDecisionHash, signature, signatureSchema);
   }
 
   @Override
@@ -17687,6 +17750,7 @@ public static class DecisionRecord {
     sb.append("    policyVersion: ").append(toIndentedString(policyVersion)).append("\n");
     sb.append("    policyDecisionHash: ").append(toIndentedString(policyDecisionHash)).append("\n");
     sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
+    sb.append("    signatureSchema: ").append(toIndentedString(signatureSchema)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -17772,6 +17836,11 @@ public static class DecisionRecord {
     // add `signature` to the URL query string
     if (getSignature() != null) {
       joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_schema` to the URL query string
+    if (getSignatureSchema() != null) {
+      joiner.add(String.format("%ssignature_schema%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureSchema()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

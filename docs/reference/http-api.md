@@ -1,6 +1,6 @@
 ---
 title: HTTP API
-last_reviewed: 2026-07-11
+last_reviewed: 2026-07-13
 ---
 
 # HTTP API
@@ -56,6 +56,20 @@ work.
 The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
 unavailable while this fence is enabled because request JSON is not an
 authoritative tenant/workspace binding.
+
+## Decision signature schemas
+
+`DecisionRecord.signature_schema` identifies the canonical payload used for
+its signature. The current request-bound schema is
+`helm.decision.signature.v2`. It binds the authenticated subject, governed
+action and resource, effect/policy hashes, decision outcome, signer-selected
+signature type, and other security-relevant record metadata. A signature fails
+verification if any of those v2-bound values change.
+
+Older stored decisions may omit `signature_schema`; that explicitly denotes the
+legacy v1 payload and is accepted only for backward verification. Clients must
+not treat an absent schema as proof that subject, action, or resource were
+cryptographically bound. Unknown schema values fail verification.
 
 ## Receipt Headers
 

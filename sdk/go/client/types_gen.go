@@ -11431,6 +11431,8 @@ type DecisionRecord struct {
 	PolicyVersion      *string `json:"policy_version,omitempty"`
 	PolicyDecisionHash *string `json:"policy_decision_hash,omitempty"`
 	Signature          *string `json:"signature,omitempty"`
+	// Present for request-bound decisions signed with the v2 canonical decision payload. An absent value denotes a legacy v1 signature.
+	SignatureSchema *string `json:"signature_schema,omitempty"`
 }
 
 // NewDecisionRecord instantiates a new DecisionRecord object
@@ -11706,6 +11708,38 @@ func (o *DecisionRecord) SetSignature(v string) {
 	o.Signature = &v
 }
 
+// GetSignatureSchema returns the SignatureSchema field value if set, zero value otherwise.
+func (o *DecisionRecord) GetSignatureSchema() string {
+	if o == nil || IsNil(o.SignatureSchema) {
+		var ret string
+		return ret
+	}
+	return *o.SignatureSchema
+}
+
+// GetSignatureSchemaOk returns a tuple with the SignatureSchema field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DecisionRecord) GetSignatureSchemaOk() (*string, bool) {
+	if o == nil || IsNil(o.SignatureSchema) {
+		return nil, false
+	}
+	return o.SignatureSchema, true
+}
+
+// HasSignatureSchema returns a boolean if a field has been set.
+func (o *DecisionRecord) HasSignatureSchema() bool {
+	if o != nil && !IsNil(o.SignatureSchema) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignatureSchema gets a reference to the given string and assigns it to the SignatureSchema field.
+func (o *DecisionRecord) SetSignatureSchema(v string) {
+	o.SignatureSchema = &v
+}
+
 func (o DecisionRecord) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -11739,6 +11773,9 @@ func (o DecisionRecord) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Signature) {
 		toSerialize["signature"] = o.Signature
+	}
+	if !IsNil(o.SignatureSchema) {
+		toSerialize["signature_schema"] = o.SignatureSchema
 	}
 	return toSerialize, nil
 }

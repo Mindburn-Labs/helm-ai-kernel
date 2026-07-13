@@ -36,12 +36,15 @@ func (v *MLDSAVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	payload, err := CanonicalDecisionPayload(d)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(d.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(v.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(v.publicKey, payload, nil, sig), nil
 }
 
 // VerifyIntent verifies an AuthorizedExecutionIntent signature using ML-DSA-65.

@@ -84,10 +84,15 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-No public feature claim is active in this section. Keep research scaffolds and
-hardware-backed enforcement language out of the public changelog until a tagged
-release ships source-owned tests, verifier evidence, and release artifacts for
-that exact capability.
+Unreleased implementation work is not a tagged release or a production claim.
+
+- Added `DecisionRecord.signature_schema` and the
+  `helm.decision.signature.v2` canonical payload for request-bound decisions.
+  The new schema binds subject, action, resource, effect/policy metadata, and
+  signature type; verification rejects mutation of any bound field. Decisions
+  that omit the field continue through the explicit legacy-v1 verifier path.
+  Release, migration, and runtime evidence remain required before any public
+  production claim.
 
 ## [0.7.2] - 2026-07-13
 

@@ -1236,6 +1236,43 @@ mod tests {
     }
 
     #[test]
+    fn evaluate_decision_preserves_explicit_null_context() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_http_request(&mut stream);
+            let body = r#"{"id":"decision-1","proposal_id":"proposal-1","step_id":"step-1","phenotype_hash":"sha256:phenotype","policy_version":"policy-v1","subject_id":"principal-a","action":"EXECUTE_TOOL","resource":"local.echo","state_cursor":"cursor-1","env_fingerprint":"sha256:env","verdict":"DENY","reason":"policy denied","signature":"sig","signature_type":"ed25519","timestamp":"2026-07-13T00:00:00Z"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+            request
+        });
+
+        let request = DecisionRequest {
+            action: "EXECUTE_TOOL".to_string(),
+            resource: "local.echo".to_string(),
+            context: Some(None),
+        };
+        HelmClient::new(&format!("http://{address}"))
+            .with_api_key("token")
+            .with_tenant_id("tenant-a")
+            .with_principal_id("principal-a")
+            .evaluate_decision(&request)
+            .unwrap();
+
+        let raw_request = server.join().unwrap();
+        let body = raw_request.split("\r\n\r\n").nth(1).unwrap();
+        let body: serde_json::Value = serde_json::from_str(body).unwrap();
+        assert_eq!(body.as_object().unwrap().len(), 3);
+        assert!(body["context"].is_null());
+    }
+
+    #[test]
     fn evaluate_decision_rejects_missing_authenticated_bindings() {
         let request = DecisionRequest {
             action: "EXECUTE_TOOL".to_string(),

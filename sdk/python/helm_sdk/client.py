@@ -238,7 +238,7 @@ class HelmClient:
             "action": req.action,
             "resource": req.resource,
         }
-        if req.context is not None:
+        if "context" in req.model_fields_set:
             payload["context"] = req.context
         resp = self._client.post("/api/v1/evaluate", json=payload)
         self._check(resp)

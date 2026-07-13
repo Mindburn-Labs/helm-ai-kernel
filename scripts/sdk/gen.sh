@@ -214,6 +214,12 @@ import sys
 path = Path(sys.argv[1])
 s = path.read_text()
 
+def replace_exactly_once(s: str, old: str, new: str, description: str) -> str:
+    count = s.count(old)
+    if count != 1:
+        raise SystemExit(f"expected exactly one {description} replacement, found {count}")
+    return s.replace(old, new, 1)
+
 classmethod_validators = {
     "AccountEntitlements": {"plan_validate_enum"},
     "AccountSession": {"plan_validate_enum"},
@@ -273,6 +279,26 @@ s = s.replace(
     '            "updated_at": obj.get("updated_at"),\n'
     '            "components": obj.get("components"),',
     1,
+)
+
+decision_request_from_dict = (
+    '        _obj = cls.model_validate({\n'
+    '            "action": obj.get("action"),\n'
+    '            "resource": obj.get("resource"),\n'
+    '            "context": obj.get("context")\n'
+    '        })'
+)
+s = replace_exactly_once(
+    s,
+    decision_request_from_dict,
+    '        _payload = {\n'
+    '            "action": obj.get("action"),\n'
+    '            "resource": obj.get("resource"),\n'
+    '        }\n'
+    '        if "context" in obj:\n'
+    '            _payload["context"] = obj["context"]\n'
+    '        _obj = cls.model_validate(_payload)',
+    "DecisionRequest from_dict context",
 )
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
@@ -351,12 +377,57 @@ HEADER
             sed '/^package /d;/^import/,/^)/d' "$f" >> "$PROJECT_ROOT/sdk/go/client/types_gen.go" 2>/dev/null || true
         fi
     done
+    gofmt -w "$PROJECT_ROOT/sdk/go/client/types_gen.go"
     python3 - "$PROJECT_ROOT/sdk/go/client/types_gen.go" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
+
+def replace_exactly_once(s: str, old: str, new: str, description: str) -> str:
+    count = s.count(old)
+    if count != 1:
+        raise SystemExit(f"expected exactly one {description} replacement, found {count}")
+    return s.replace(old, new, 1)
+
+s = replace_exactly_once(
+    s,
+    '\tContext              map[string]interface{} `json:"context,omitempty"`\n\tAdditionalProperties map[string]interface{}',
+    '\tContext              map[string]interface{} `json:"context,omitempty"`\n\tcontextSet           bool\n\tAdditionalProperties map[string]interface{}',
+    "DecisionRequest context presence field",
+)
+s = replace_exactly_once(
+    s,
+    'func (o *DecisionRequest) GetContextOk() (map[string]interface{}, bool) {\n\tif o == nil || IsNil(o.Context) {\n\t\treturn map[string]interface{}{}, false\n\t}\n\treturn o.Context, true\n}',
+    'func (o *DecisionRequest) GetContextOk() (map[string]interface{}, bool) {\n\tif o == nil || (!o.contextSet && o.Context == nil) {\n\t\treturn map[string]interface{}{}, false\n\t}\n\treturn o.Context, true\n}',
+    "DecisionRequest GetContextOk",
+)
+s = replace_exactly_once(
+    s,
+    'func (o *DecisionRequest) HasContext() bool {\n\tif o != nil && !IsNil(o.Context) {\n\t\treturn true\n\t}\n\n\treturn false\n}',
+    'func (o *DecisionRequest) HasContext() bool {\n\treturn o != nil && (o.contextSet || o.Context != nil)\n}',
+    "DecisionRequest HasContext",
+)
+s = replace_exactly_once(
+    s,
+    'func (o *DecisionRequest) SetContext(v map[string]interface{}) {\n\to.Context = v\n}',
+    'func (o *DecisionRequest) SetContext(v map[string]interface{}) {\n\to.Context = v\n\to.contextSet = true\n}',
+    "DecisionRequest SetContext",
+)
+s = replace_exactly_once(
+    s,
+    '\tif o.Context != nil {\n\t\ttoSerialize["context"] = o.Context\n\t}',
+    '\tif o.contextSet || o.Context != nil {\n\t\ttoSerialize["context"] = o.Context\n\t}',
+    "DecisionRequest ToMap context",
+)
+s = replace_exactly_once(
+    s,
+    '\t*o = DecisionRequest(varDecisionRequest)\n\n\tadditionalProperties := make(map[string]interface{})',
+    '\t*o = DecisionRequest(varDecisionRequest)\n\t_, o.contextSet = allProperties["context"]\n\n\tadditionalProperties := make(map[string]interface{})',
+    "DecisionRequest UnmarshalJSON context presence",
+)
+
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
     gofmt -w "$PROJECT_ROOT/sdk/go/client/types_gen.go"

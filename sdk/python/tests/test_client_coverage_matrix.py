@@ -14,6 +14,7 @@ from helm_sdk.client import (
     MCPRegistryDiscoverRequest,
     _json_body,
 )
+from helm_sdk.types_gen import DecisionRequest
 from tests.test_generated_models_coverage import CLASSES, _build_model
 
 
@@ -166,6 +167,25 @@ def test_evaluate_uses_only_the_canonical_generated_request_fields() -> None:
             {"json": {"action": request.action, "resource": request.resource, "context": request.context}},
         )
     ]
+
+
+def test_evaluate_preserves_explicit_null_context() -> None:
+    fake = FakeHTTPClient()
+    fake.queue(model_payload("DecisionRecord"))
+    request = DecisionRequest(action="EXECUTE_TOOL", resource="local.echo", context=None)
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h", api_key="key", tenant_id="tenant", principal_id="principal")
+        client.evaluate_decision(request)
+
+    assert fake.calls == [
+        (
+            "POST",
+            "/api/v1/evaluate",
+            {"json": {"action": "EXECUTE_TOOL", "resource": "local.echo", "context": None}},
+        )
+    ]
+    assert "context" not in DecisionRequest.from_dict({"action": "EXECUTE_TOOL", "resource": "local.echo"}).model_fields_set
+    assert DecisionRequest.from_dict({"action": "EXECUTE_TOOL", "resource": "local.echo", "context": None}).to_dict()["context"] is None
 
 
 def test_json_body_handles_dataclass_generated_model_model_dump_and_plain_dict() -> None:

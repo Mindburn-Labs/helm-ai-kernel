@@ -12474,6 +12474,7 @@ type DecisionRequest struct {
 	Resource string `json:"resource"`
 	// Application context for policy evaluation. It must not include `principal_id`, `tenant_id`, `tenantId`, `tenant`, `workspace_id`, `workspaceId`, `workspace`, `security_context_trusted`, `credential_hash`, `session_id`, `source_channel`, `trust_level`, `destination`, `zeroid_token`, or `spiffe_uri`; those are owned by the authenticated transport boundary.
 	Context              map[string]interface{} `json:"context,omitempty"`
+	contextSet           bool
 	AdditionalProperties map[string]interface{}
 }
 
@@ -12559,7 +12560,7 @@ func (o *DecisionRequest) GetContext() map[string]interface{} {
 // and a boolean to check if the value has been set.
 // NOTE: If the value is an explicit nil, `nil, true` will be returned
 func (o *DecisionRequest) GetContextOk() (map[string]interface{}, bool) {
-	if o == nil || IsNil(o.Context) {
+	if o == nil || (!o.contextSet && o.Context == nil) {
 		return map[string]interface{}{}, false
 	}
 	return o.Context, true
@@ -12567,16 +12568,13 @@ func (o *DecisionRequest) GetContextOk() (map[string]interface{}, bool) {
 
 // HasContext returns a boolean if a field has been set.
 func (o *DecisionRequest) HasContext() bool {
-	if o != nil && !IsNil(o.Context) {
-		return true
-	}
-
-	return false
+	return o != nil && (o.contextSet || o.Context != nil)
 }
 
 // SetContext gets a reference to the given map[string]interface{} and assigns it to the Context field.
 func (o *DecisionRequest) SetContext(v map[string]interface{}) {
 	o.Context = v
+	o.contextSet = true
 }
 
 func (o DecisionRequest) MarshalJSON() ([]byte, error) {
@@ -12591,7 +12589,7 @@ func (o DecisionRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["action"] = o.Action
 	toSerialize["resource"] = o.Resource
-	if o.Context != nil {
+	if o.contextSet || o.Context != nil {
 		toSerialize["context"] = o.Context
 	}
 
@@ -12634,6 +12632,7 @@ func (o *DecisionRequest) UnmarshalJSON(data []byte) (err error) {
 	}
 
 	*o = DecisionRequest(varDecisionRequest)
+	_, o.contextSet = allProperties["context"]
 
 	additionalProperties := make(map[string]interface{})
 

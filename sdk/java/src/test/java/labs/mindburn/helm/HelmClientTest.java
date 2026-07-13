@@ -103,6 +103,42 @@ public class HelmClientTest {
     }
 
     @Test
+    @DisplayName("Evaluate preserves an explicitly null context")
+    void testEvaluateDecisionPreservesExplicitNullContext() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        String response = """
+            {"id":"decision-1","proposal_id":"proposal-1","step_id":"step-1","phenotype_hash":"sha256:phenotype","policy_version":"policy-v1","subject_id":"principal-a","action":"EXECUTE_TOOL","resource":"local.echo","effect_digest":"sha256:effect","state_cursor":"cursor-1","env_fingerprint":"sha256:env","verdict":"DENY","reason":"policy denied","signature":"sig","signature_type":"ed25519","timestamp":"2026-07-13T00:00:00Z"}
+            """;
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/evaluate", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            int port = server.getAddress().getPort();
+            HelmClient client = new HelmClient("http://127.0.0.1:" + port, "token", "tenant-a", "principal-a", "workspace-a");
+            TypesGen.DecisionRequest request = new TypesGen.DecisionRequest();
+            request.setAction("EXECUTE_TOOL");
+            request.setResource("local.echo");
+            request.setContext(null);
+
+            client.evaluateDecision(request);
+
+            var payload = mapper.readTree(requestBody.get());
+            assertEquals(3, payload.size());
+            assertTrue(payload.has("context"));
+            assertTrue(payload.get("context").isNull());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     @DisplayName("Evaluate refuses missing authenticated bindings before making a request")
     void testEvaluateDecisionRequiresBindings() {
         TypesGen.DecisionRequest request = new TypesGen.DecisionRequest();

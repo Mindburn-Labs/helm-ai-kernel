@@ -53,16 +53,6 @@ type ChatCompletionWithReceipt struct {
 	Governance GovernanceMetadata     `json:"governance"`
 }
 
-// evaluateDecisionRequest is deliberately narrower than the generated model.
-// Some generators retain an additional-properties map even when OpenAPI marks
-// the top-level object closed; using this DTO guarantees that identity and
-// trusted transport fields can never leak into the evaluator body.
-type evaluateDecisionRequest struct {
-	Action   string                 `json:"action"`
-	Resource string                 `json:"resource"`
-	Context  map[string]interface{} `json:"context,omitempty"`
-}
-
 type DemoRunResult = map[string]any
 type DemoReceiptVerification = map[string]any
 
@@ -192,12 +182,18 @@ func (c *HelmClient) EvaluateDecision(req DecisionRequest) (*DecisionRecord, err
 	if c.APIKey == "" || c.TenantID == "" || c.PrincipalID == "" {
 		return nil, fmt.Errorf("EvaluateDecision requires API key, tenant ID, and principal ID")
 	}
+	// The generated model retains additional properties for OpenAPI compatibility.
+	// Build the closed evaluator payload explicitly so trusted transport fields
+	// cannot leak into the body while preserving an explicitly-null context.
+	body := map[string]any{
+		"action":   req.Action,
+		"resource": req.Resource,
+	}
+	if context, ok := req.GetContextOk(); ok {
+		body["context"] = context
+	}
 	var out DecisionRecord
-	err := c.do("POST", "/api/v1/evaluate", evaluateDecisionRequest{
-		Action:   req.Action,
-		Resource: req.Resource,
-		Context:  req.Context,
-	}, &out)
+	err := c.do("POST", "/api/v1/evaluate", body, &out)
 	return &out, err
 }
 

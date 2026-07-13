@@ -5150,11 +5150,13 @@ class DecisionRequest(BaseModel):
         if not isinstance(obj, dict):
             return cls.model_validate(obj)
 
-        _obj = cls.model_validate({
+        _payload = {
             "action": obj.get("action"),
             "resource": obj.get("resource"),
-            "context": obj.get("context")
-        })
+        }
+        if "context" in obj:
+            _payload["context"] = obj["context"]
+        _obj = cls.model_validate(_payload)
         # store additional fields in additional_properties
         for _key in obj.keys():
             if _key not in cls.__properties:

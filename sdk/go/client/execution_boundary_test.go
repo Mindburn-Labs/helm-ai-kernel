@@ -310,6 +310,34 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 	}
 }
 
+func TestEvaluateDecisionPreservesExplicitNullContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/evaluate" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode evaluate body: %v", err)
+		}
+		if len(body) != 3 || body["action"] != "EXECUTE_TOOL" || body["resource"] != "local.echo" {
+			t.Fatalf("evaluate body = %#v", body)
+		}
+		context, exists := body["context"]
+		if !exists || context != nil {
+			t.Fatalf("explicit null context was not preserved: %#v", body)
+		}
+		writeJSON(t, w, DecisionRecord{})
+	}))
+	defer server.Close()
+
+	request := NewDecisionRequest("EXECUTE_TOOL", "local.echo")
+	request.SetContext(nil)
+	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"))
+	if _, err := client.EvaluateDecision(*request); err != nil {
+		t.Fatalf("EvaluateDecision returned error: %v", err)
+	}
+}
+
 func TestEvaluateDecisionRequiresIdentityBindings(t *testing.T) {
 	client := New("http://helm.test")
 	if _, err := client.EvaluateDecision(DecisionRequest{Action: "EXECUTE_TOOL", Resource: "local.echo"}); err == nil {

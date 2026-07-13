@@ -2,6 +2,7 @@ package labs.mindburn.helm;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
@@ -17,9 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Typed Java client for the HELM kernel API.
@@ -274,14 +273,14 @@ public class HelmClient {
         // Generated OpenAPI models extend HashMap so Gson treats them as maps
         // and silently serializes an empty object. Build the canonical body
         // from declared accessors instead of forwarding generated internals.
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("action", req.getAction());
-        body.put("resource", req.getResource());
-        if (req.getContext() != null) {
-            body.put("context", req.getContext());
+        JsonObject body = new JsonObject();
+        body.addProperty("action", req.getAction());
+        body.addProperty("resource", req.getResource());
+        if (req.getContext_JsonNullable().isPresent()) {
+            body.add("context", req.getContext() == null ? JsonNull.INSTANCE : gson.toJsonTree(req.getContext()));
         }
         HttpRequest r = this.req("POST", "/api/v1/evaluate")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(body)))
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();
         return sendDecisionRecord(r);
     }

@@ -27,7 +27,7 @@ func (s *Server) handleLaunchpad(w http.ResponseWriter, r *http.Request) {
 	}
 	r = r.WithContext(WithAuthenticatedPrincipal(r.Context(), principal))
 
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/launchpad/")
+	path := strings.TrimPrefix(r.URL.Path, "/api/legacy/v1/launchpad/")
 	catalog, err := registry.LoadCatalog("")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

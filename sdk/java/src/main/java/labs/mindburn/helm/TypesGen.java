@@ -19636,16 +19636,13 @@ public static class DecisionRecord {
  * DecisionRequest
  */
 @JsonPropertyOrder({
-  DecisionRequest.JSON_PROPERTY_PRINCIPAL,
   DecisionRequest.JSON_PROPERTY_ACTION,
   DecisionRequest.JSON_PROPERTY_RESOURCE,
-  DecisionRequest.JSON_PROPERTY_CONTEXT
+  DecisionRequest.JSON_PROPERTY_CONTEXT,
+  DecisionRequest.JSON_PROPERTY_SESSION_HISTORY
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class DecisionRequest {
-  public static final String JSON_PROPERTY_PRINCIPAL = "principal";
-  private String principal;
-
+public static class DecisionRequest extends HashMap<String, Object> {
   public static final String JSON_PROPERTY_ACTION = "action";
   private String action;
 
@@ -19655,33 +19652,11 @@ public static class DecisionRequest {
   public static final String JSON_PROPERTY_CONTEXT = "context";
   private Map<String, Object> context = new HashMap<>();
 
+  public static final String JSON_PROPERTY_SESSION_HISTORY = "session_history";
+  private List<SessionAction> sessionHistory;
+
   public DecisionRequest() {
   }
-
-  public DecisionRequest principal(String principal) {
-    this.principal = principal;
-    return this;
-  }
-
-   /**
-   * Get principal
-   * @return principal
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public String getPrincipal() {
-    return principal;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setPrincipal(String principal) {
-    this.principal = principal;
-  }
-
 
   public DecisionRequest action(String action) {
     this.action = action;
@@ -19766,6 +19741,82 @@ public static class DecisionRequest {
   }
 
 
+  public DecisionRequest sessionHistory(List<SessionAction> sessionHistory) {
+    this.sessionHistory = sessionHistory;
+    return this;
+  }
+
+  public DecisionRequest addSessionHistoryItem(SessionAction sessionHistoryItem) {
+    if (this.sessionHistory == null) {
+      this.sessionHistory = new ArrayList<>();
+    }
+    this.sessionHistory.add(sessionHistoryItem);
+    return this;
+  }
+
+   /**
+   * Prior governed actions in this authenticated session for path-aware policy evaluation.
+   * @return sessionHistory
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SESSION_HISTORY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<SessionAction> getSessionHistory() {
+    return sessionHistory;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_HISTORY)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSessionHistory(List<SessionAction> sessionHistory) {
+    this.sessionHistory = sessionHistory;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public DecisionRequest putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
   /**
    * Return true if this DecisionRequest object is equal to o.
    */
@@ -19778,25 +19829,29 @@ public static class DecisionRequest {
       return false;
     }
     DecisionRequest decisionRequest = (DecisionRequest) o;
-    return Objects.equals(this.principal, decisionRequest.principal) &&
-        Objects.equals(this.action, decisionRequest.action) &&
+    return Objects.equals(this.action, decisionRequest.action) &&
         Objects.equals(this.resource, decisionRequest.resource) &&
-        Objects.equals(this.context, decisionRequest.context);
+        Objects.equals(this.context, decisionRequest.context) &&
+        Objects.equals(this.sessionHistory, decisionRequest.sessionHistory)&&
+        Objects.equals(this.additionalProperties, decisionRequest.additionalProperties) &&
+        super.equals(o);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(principal, action, resource, context);
+    return Objects.hash(action, resource, context, sessionHistory, super.hashCode(), additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class DecisionRequest {\n");
-    sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    action: ").append(toIndentedString(action)).append("\n");
     sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
+    sb.append("    sessionHistory: ").append(toIndentedString(sessionHistory)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -19844,11 +19899,6 @@ public static class DecisionRequest {
 
     StringJoiner joiner = new StringJoiner("&");
 
-    // add `principal` to the URL query string
-    if (getPrincipal() != null) {
-      joiner.add(String.format("%sprincipal%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipal()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
     // add `action` to the URL query string
     if (getAction() != null) {
       joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -19865,6 +19915,16 @@ public static class DecisionRequest {
         joiner.add(String.format("%scontext%s%s=%s", prefix, suffix,
             "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
             getContext().get(_key), URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `session_history` to the URL query string
+    if (getSessionHistory() != null) {
+      for (int i = 0; i < getSessionHistory().size(); i++) {
+        if (getSessionHistory().get(i) != null) {
+          joiner.add(getSessionHistory().get(i).toUrlQueryString(String.format("%ssession_history%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
       }
     }
 
@@ -61576,6 +61636,334 @@ public static class Session {
     // add `last_lamport_clock` to the URL query string
     if (getLastLamportClock() != null) {
       joiner.add(String.format("%slast_lamport_clock%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLastLamportClock()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.2
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * SessionAction
+ */
+@JsonPropertyOrder({
+  SessionAction.JSON_PROPERTY_ACTION,
+  SessionAction.JSON_PROPERTY_RESOURCE,
+  SessionAction.JSON_PROPERTY_VERDICT,
+  SessionAction.JSON_PROPERTY_TIMESTAMP
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class SessionAction extends HashMap<String, Object> {
+  public static final String JSON_PROPERTY_ACTION = "action";
+  private String action;
+
+  public static final String JSON_PROPERTY_RESOURCE = "resource";
+  private String resource;
+
+  /**
+   * Gets or Sets verdict
+   */
+  public enum VerdictEnum {
+    ALLOW("ALLOW"),
+
+    DENY("DENY"),
+
+    ESCALATE("ESCALATE");
+
+    private String value;
+
+    VerdictEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static VerdictEnum fromValue(String value) {
+      for (VerdictEnum b : VerdictEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_VERDICT = "verdict";
+  private VerdictEnum verdict;
+
+  public static final String JSON_PROPERTY_TIMESTAMP = "timestamp";
+  private Long timestamp;
+
+  public SessionAction() {
+  }
+
+  public SessionAction action(String action) {
+    this.action = action;
+    return this;
+  }
+
+   /**
+   * Get action
+   * @return action
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getAction() {
+    return action;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setAction(String action) {
+    this.action = action;
+  }
+
+
+  public SessionAction resource(String resource) {
+    this.resource = resource;
+    return this;
+  }
+
+   /**
+   * Get resource
+   * @return resource
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getResource() {
+    return resource;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setResource(String resource) {
+    this.resource = resource;
+  }
+
+
+  public SessionAction verdict(VerdictEnum verdict) {
+    this.verdict = verdict;
+    return this;
+  }
+
+   /**
+   * Get verdict
+   * @return verdict
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public VerdictEnum getVerdict() {
+    return verdict;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setVerdict(VerdictEnum verdict) {
+    this.verdict = verdict;
+  }
+
+
+  public SessionAction timestamp(Long timestamp) {
+    this.timestamp = timestamp;
+    return this;
+  }
+
+   /**
+   * Unix time in milliseconds.
+   * @return timestamp
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TIMESTAMP)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Long getTimestamp() {
+    return timestamp;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TIMESTAMP)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTimestamp(Long timestamp) {
+    this.timestamp = timestamp;
+  }
+
+  /**
+   * A container for additional, undeclared properties.
+   * This is a holder for any undeclared properties as specified with
+   * the 'additionalProperties' keyword in the OAS document.
+   */
+  private Map<String, Object> additionalProperties;
+
+  /**
+   * Set the additional (undeclared) property with the specified name and value.
+   * If the property does not already exist, create it otherwise replace it.
+   * @param key the name of the property
+   * @param value the value of the property
+   * @return self reference
+   */
+  @JsonAnySetter
+  public SessionAction putAdditionalProperty(String key, Object value) {
+    if (this.additionalProperties == null) {
+        this.additionalProperties = new HashMap<String, Object>();
+    }
+    this.additionalProperties.put(key, value);
+    return this;
+  }
+
+  /**
+   * Return the additional (undeclared) properties.
+   * @return the additional (undeclared) properties
+   */
+  @JsonAnyGetter
+  public Map<String, Object> getAdditionalProperties() {
+    return additionalProperties;
+  }
+
+  /**
+   * Return the additional (undeclared) property with the specified name.
+   * @param key the name of the property
+   * @return the additional (undeclared) property with the specified name
+   */
+  public Object getAdditionalProperty(String key) {
+    if (this.additionalProperties == null) {
+        return null;
+    }
+    return this.additionalProperties.get(key);
+  }
+
+  /**
+   * Return true if this SessionAction object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    SessionAction sessionAction = (SessionAction) o;
+    return Objects.equals(this.action, sessionAction.action) &&
+        Objects.equals(this.resource, sessionAction.resource) &&
+        Objects.equals(this.verdict, sessionAction.verdict) &&
+        Objects.equals(this.timestamp, sessionAction.timestamp)&&
+        Objects.equals(this.additionalProperties, sessionAction.additionalProperties) &&
+        super.equals(o);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(action, resource, verdict, timestamp, super.hashCode(), additionalProperties);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class SessionAction {\n");
+    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    action: ").append(toIndentedString(action)).append("\n");
+    sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
+    sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
+    sb.append("    timestamp: ").append(toIndentedString(timestamp)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `action` to the URL query string
+    if (getAction() != null) {
+      joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `resource` to the URL query string
+    if (getResource() != null) {
+      joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `verdict` to the URL query string
+    if (getVerdict() != null) {
+      joiner.add(String.format("%sverdict%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerdict()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `timestamp` to the URL query string
+    if (getTimestamp() != null) {
+      joiner.add(String.format("%stimestamp%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTimestamp()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

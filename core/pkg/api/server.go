@@ -1,14 +1,18 @@
-// Package api implements the HELM Governance REST API.
+// Package api contains legacy compatibility handlers retained for isolated
+// package tests and migrations. The served HELM API is owned by
+// core/cmd/helm-ai-kernel; its public evaluator contract is POST
+// /api/v1/evaluate and is defined by api/openapi/helm.openapi.yaml.
 //
-// Endpoints:
+// Legacy endpoints:
 //
-//	POST /api/v1/evaluate       — Evaluate a tool call through governance
-//	GET  /api/v1/receipts/:id   — Retrieve a receipt
-//	POST /api/v1/receipts/:id/complete — Record execution outcome
-//	GET  /api/v1/verify/:session — Verify receipt chain for a session
-//	GET  /api/v1/health         — Health check
+//	POST /api/legacy/v1/evaluate       — Legacy evaluator (not SDK/public)
+//	GET  /api/legacy/v1/receipts/:id   — Legacy receipt lookup
+//	POST /api/legacy/v1/receipts/:id/complete — Legacy execution outcome
+//	GET  /api/legacy/v1/verify/:session — Legacy receipt-chain verification
+//	GET  /api/legacy/v1/health         — Legacy health check
 //
-// This server backs Python, TypeScript, and Rust SDKs.
+// Do not expose this server as the public SDK API. It intentionally uses a
+// historical EvaluateRequest shape and remains only for compatibility tests.
 package api
 
 import (
@@ -27,7 +31,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 )
 
-// Server is the HELM Governance REST API server.
+// Server is the legacy HELM Governance REST API compatibility server.
 type Server struct {
 	mu             sync.RWMutex
 	pdp            pdp.PolicyDecisionPoint
@@ -95,7 +99,9 @@ func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
 	}
 }
 
-// EvaluateRequest is the JSON body sent by SDKs.
+// EvaluateRequest is the historical JSON body accepted only under
+// /api/legacy/v1/evaluate. Public SDKs must use the source-owned DecisionRequest
+// contract on the served /api/v1/evaluate route instead.
 type EvaluateRequest struct {
 	Tool        string         `json:"tool"`
 	Args        map[string]any `json:"args"`
@@ -105,7 +111,7 @@ type EvaluateRequest struct {
 	Context     map[string]any `json:"context"`
 }
 
-// EvaluateResponse is the JSON response sent back to SDKs.
+// EvaluateResponse is the historical response emitted only by the legacy route.
 type EvaluateResponse struct {
 	Allow        bool   `json:"allow"`
 	Verdict      string `json:"verdict"`
@@ -125,7 +131,8 @@ type ServerConfig struct {
 	Authenticator  Authenticator
 }
 
-// NewServer creates a new HELM API server.
+// NewServer creates a legacy compatibility server. It is not wired into the
+// cmd/helm-ai-kernel serve runtime and must not be used as a public API server.
 func NewServer(cfg ServerConfig) *Server {
 	s := &Server{
 		pdp:            cfg.PDP,
@@ -140,12 +147,12 @@ func NewServer(cfg ServerConfig) *Server {
 }
 
 func (s *Server) registerRoutes() {
-	s.mux.HandleFunc("/api/v1/evaluate", s.handleEvaluate)
-	s.mux.HandleFunc("/api/v1/guardian/evaluate", s.handleEvaluate)
-	s.mux.HandleFunc("/api/v1/receipts/", s.handleReceipts)
-	s.mux.HandleFunc("/api/v1/verify/", s.handleVerify)
-	s.mux.HandleFunc("/api/v1/launchpad/", s.handleLaunchpad)
-	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
+	s.mux.HandleFunc("/api/legacy/v1/evaluate", s.handleEvaluate)
+	s.mux.HandleFunc("/api/legacy/v1/guardian/evaluate", s.handleEvaluate)
+	s.mux.HandleFunc("/api/legacy/v1/receipts/", s.handleReceipts)
+	s.mux.HandleFunc("/api/legacy/v1/verify/", s.handleVerify)
+	s.mux.HandleFunc("/api/legacy/v1/launchpad/", s.handleLaunchpad)
+	s.mux.HandleFunc("/api/legacy/v1/health", s.handleHealth)
 }
 
 // ServeHTTP implements http.Handler.
@@ -299,9 +306,9 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/receipts/")
+	path := strings.TrimPrefix(r.URL.Path, "/api/legacy/v1/receipts/")
 
-	// POST /api/v1/receipts/:id/complete
+	// POST /api/legacy/v1/receipts/:id/complete
 	if strings.HasSuffix(path, "/complete") && r.Method == http.MethodPost {
 		receiptID := strings.TrimSuffix(path, "/complete")
 		s.mu.RLock()
@@ -319,7 +326,7 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /api/v1/receipts/:id
+	// GET /api/legacy/v1/receipts/:id
 	if r.Method == http.MethodGet && path != "" {
 		s.mu.RLock()
 		receipt, exists := s.receipts[path]
@@ -336,7 +343,7 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /api/v1/receipts/ — list all
+	// GET /api/legacy/v1/receipts/ — list all
 	if r.Method == http.MethodGet {
 		s.mu.RLock()
 		all := make([]*ReceiptDTO, 0, len(s.receipts))
@@ -364,7 +371,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionID := strings.TrimPrefix(r.URL.Path, "/api/v1/verify/")
+	sessionID := strings.TrimPrefix(r.URL.Path, "/api/legacy/v1/verify/")
 	s.mu.RLock()
 	receiptIDs, exists := s.sessions[sessionID]
 	if !exists {

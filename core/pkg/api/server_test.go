@@ -35,7 +35,7 @@ func TestEvaluate_Allow(t *testing.T) {
 	}
 	reqBody, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -75,7 +75,7 @@ func TestEvaluate_Deny(t *testing.T) {
 	}
 	reqBody, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -90,7 +90,7 @@ func TestEvaluate_RequiresAuthentication(t *testing.T) {
 	helmPDP := pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true})
 	srv := NewServer(ServerConfig{PDP: helmPDP})
 	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "attacker", SessionID: "s"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
@@ -101,7 +101,7 @@ func TestEvaluate_RequiresAuthentication(t *testing.T) {
 func TestEvaluate_UsesAuthenticatedPrincipalNotCallerAgent(t *testing.T) {
 	srv := newTestServer(t)
 	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "victim", SessionID: "s"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -113,7 +113,7 @@ func TestEvaluate_UsesAuthenticatedPrincipalNotCallerAgent(t *testing.T) {
 		t.Fatalf("decode evaluate: %v", err)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+evalResp.ReceiptID, nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/legacy/v1/receipts/"+evalResp.ReceiptID, nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -133,7 +133,7 @@ func TestEvaluate_UsesAuthenticatedPrincipalNotCallerAgent(t *testing.T) {
 
 func TestEvaluate_InvalidMethod(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/evaluate", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/evaluate", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
@@ -147,7 +147,7 @@ func TestGetReceipt(t *testing.T) {
 	// Evaluate to create a receipt
 	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -155,7 +155,7 @@ func TestGetReceipt(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&evalResp)
 
 	// Get the receipt
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+evalResp.ReceiptID, nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/legacy/v1/receipts/"+evalResp.ReceiptID, nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -175,7 +175,7 @@ func TestGetReceipt(t *testing.T) {
 
 func TestGetReceipt_NotFound(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/receipts/nonexistent", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
@@ -190,13 +190,13 @@ func TestVerifyChain(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "test-session"}
 		reqBody, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+		req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 	}
 
 	// Verify chain
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/verify/test-session", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/verify/test-session", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -212,7 +212,7 @@ func TestVerifyChain(t *testing.T) {
 
 func TestHealth(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/health", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -226,7 +226,7 @@ func TestHealth(t *testing.T) {
 func TestCORS(t *testing.T) {
 	// With no AllowedOrigins configured, CORS headers should NOT be set (secure default).
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodOptions, "/api/v1/evaluate", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/api/legacy/v1/evaluate", nil)
 	req.Header.Set("Origin", "https://evil.example.com")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -243,7 +243,7 @@ func TestCORS(t *testing.T) {
 		PDP:            helmPDP,
 		AllowedOrigins: []string{"https://app.example.com"},
 	})
-	req2 := httptest.NewRequest(http.MethodOptions, "/api/v1/evaluate", nil)
+	req2 := httptest.NewRequest(http.MethodOptions, "/api/legacy/v1/evaluate", nil)
 	req2.Header.Set("Origin", "https://app.example.com")
 	w2 := httptest.NewRecorder()
 	srvWithOrigins.ServeHTTP(w2, req2)
@@ -259,7 +259,7 @@ func TestLamportMonotonicity(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
 		reqBody, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+		req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		var resp EvaluateResponse

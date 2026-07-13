@@ -552,15 +552,23 @@ func TestCoveragePostgresIdempotencyStore(t *testing.T) {
 		t.Fatalf("expired check got ok=%v cached=%+v", ok, cached)
 	}
 
+	plainHeaders, err := json.Marshal(http.Header{"Content-Type": []string{"text/plain"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyHeaders, err := json.Marshal(http.Header(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
 	mock.ExpectExec("INSERT INTO idempotency_keys").
-		WithArgs("set-key", "request-hash", http.StatusCreated, []byte("{}"), []byte("body")).
+		WithArgs("set-key", "request-hash", http.StatusCreated, plainHeaders, []byte("body")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	if err := store.Set("set-key", "request-hash", http.StatusCreated, http.Header{"Content-Type": []string{"text/plain"}}, []byte("body")); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 
 	mock.ExpectExec("INSERT INTO idempotency_keys").
-		WithArgs("set-error", "request-hash", http.StatusOK, []byte("{}"), []byte("body")).
+		WithArgs("set-error", "request-hash", http.StatusOK, emptyHeaders, []byte("body")).
 		WillReturnError(errors.New("insert failed"))
 	if err := store.Set("set-error", "request-hash", http.StatusOK, nil, []byte("body")); err == nil {
 		t.Fatal("expected Set error")

@@ -17,7 +17,7 @@ func TestLaunchpadAPIPlanLaunchDeleteEvidence(t *testing.T) {
 	t.Setenv("model_gateway", "")
 	srv := newTestServer(t)
 
-	matrixReq := httptest.NewRequest(http.MethodGet, "/api/v1/launchpad/matrix", nil)
+	matrixReq := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/launchpad/matrix", nil)
 	matrixRec := httptest.NewRecorder()
 	srv.ServeHTTP(matrixRec, matrixReq)
 	if matrixRec.Code != http.StatusOK {
@@ -25,7 +25,7 @@ func TestLaunchpadAPIPlanLaunchDeleteEvidence(t *testing.T) {
 	}
 
 	body := []byte(`{"app_id":"openclaw","substrate_id":"local-container","principal":"api-test"}`)
-	launchReq := httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launch", bytes.NewReader(body))
+	launchReq := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/launchpad/launch", bytes.NewReader(body))
 	launchRec := httptest.NewRecorder()
 	srv.ServeHTTP(launchRec, launchReq)
 	if launchRec.Code != http.StatusAccepted {
@@ -45,14 +45,14 @@ func TestLaunchpadAPIPlanLaunchDeleteEvidence(t *testing.T) {
 		t.Fatalf("launch missing authority/proof refs: %#v", run)
 	}
 
-	statusReq := httptest.NewRequest(http.MethodGet, "/api/v1/launchpad/launches/"+run.LaunchID, nil)
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/launchpad/launches/"+run.LaunchID, nil)
 	statusRec := httptest.NewRecorder()
 	srv.ServeHTTP(statusRec, statusReq)
 	if statusRec.Code != http.StatusOK {
 		t.Fatalf("status code=%d body=%s", statusRec.Code, statusRec.Body.String())
 	}
 
-	deleteReq := httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launches/"+run.LaunchID+"/delete", bytes.NewReader([]byte(`{"cascade":true}`)))
+	deleteReq := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/launchpad/launches/"+run.LaunchID+"/delete", bytes.NewReader([]byte(`{"cascade":true}`)))
 	deleteRec := httptest.NewRecorder()
 	srv.ServeHTTP(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusAccepted {
@@ -81,9 +81,9 @@ func TestLaunchpadAPIFailsClosedWithoutAuthentication(t *testing.T) {
 
 	body := []byte(`{"app_id":"openclaw","substrate_id":"local-container","principal":"attacker"}`)
 	for name, req := range map[string]*http.Request{
-		"matrix": httptest.NewRequest(http.MethodGet, "/api/v1/launchpad/matrix", nil),
-		"launch": httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launch", bytes.NewReader(body)),
-		"delete": httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launches/lp-attacker/delete", bytes.NewReader([]byte(`{"cascade":true}`))),
+		"matrix": httptest.NewRequest(http.MethodGet, "/api/legacy/v1/launchpad/matrix", nil),
+		"launch": httptest.NewRequest(http.MethodPost, "/api/legacy/v1/launchpad/launch", bytes.NewReader(body)),
+		"delete": httptest.NewRequest(http.MethodPost, "/api/legacy/v1/launchpad/launches/lp-attacker/delete", bytes.NewReader([]byte(`{"cascade":true}`))),
 	} {
 		t.Run(name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
@@ -117,14 +117,14 @@ func TestLaunchpadAPIRejectsCrossPrincipalAccess(t *testing.T) {
 
 	// operator-1 must not be able to read the victim's run.
 	getRec := httptest.NewRecorder()
-	srv.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/api/v1/launchpad/launches/lp-victim", nil))
+	srv.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/api/legacy/v1/launchpad/launches/lp-victim", nil))
 	if getRec.Code != http.StatusForbidden {
 		t.Fatalf("cross-principal GET status=%d, want 403; body=%s", getRec.Code, getRec.Body.String())
 	}
 
 	// operator-1 must not be able to delete the victim's run.
 	delRec := httptest.NewRecorder()
-	srv.ServeHTTP(delRec, httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/launches/lp-victim/delete", bytes.NewReader([]byte(`{"cascade":true}`))))
+	srv.ServeHTTP(delRec, httptest.NewRequest(http.MethodPost, "/api/legacy/v1/launchpad/launches/lp-victim/delete", bytes.NewReader([]byte(`{"cascade":true}`))))
 	if delRec.Code != http.StatusForbidden {
 		t.Fatalf("cross-principal delete status=%d, want 403; body=%s", delRec.Code, delRec.Body.String())
 	}

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -21,10 +22,11 @@ import (
 )
 
 type captureReceiptStore struct {
-	last     *contracts.Receipt
-	stored   *contracts.Receipt
-	storeErr error
-	agentID  string
+	last       *contracts.Receipt
+	stored     *contracts.Receipt
+	storeErr   error
+	agentID    string
+	storeCalls int
 }
 
 type recordingScopedStopReader struct {
@@ -74,6 +76,7 @@ func (s *captureReceiptStore) ListBySession(context.Context, string, uint64, int
 }
 
 func (s *captureReceiptStore) Store(_ context.Context, receipt *contracts.Receipt) error {
+	s.storeCalls++
 	if s.storeErr != nil {
 		return s.storeErr
 	}
@@ -350,7 +353,7 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	body := []byte(`{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker","principal_id":"attacker","request_note":"caller-supplied"}}`)
+	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker","principal_id":"attacker","request_note":"caller-supplied"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
@@ -383,6 +386,88 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	}
 	if decision.TenantID != "tenant-trusted" || decision.WorkspaceID != "" || decision.SessionID != "session-trusted" {
 		t.Fatalf("decision did not bind authenticated scope into the signed record: %+v", decision)
+	}
+	if rec.Header().Get("X-Helm-Receipt-ID") != "rcpt-decision-"+decision.ID {
+		t.Fatalf("evaluate receipt header = %q, decision=%+v", rec.Header().Get("X-Helm-Receipt-ID"), decision)
+	}
+}
+
+func TestEvaluateRouteRejectsLegacyUnknownAndTrailingPayloads(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	for name, body := range map[string]string{
+		"legacy principal": `{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo"}`,
+		"legacy fields":    `{"tool":"local.echo","args":{},"agent_id":"attacker"}`,
+		"trailing object":  `{"action":"EXECUTE_TOOL","resource":"local.echo"}{}`,
+		"empty action":     `{"action":"  ","resource":"local.echo"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			req.Header.Set(sessionHeader, "session-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if receipts.storeCalls != 0 {
+				t.Fatalf("invalid body persisted %d receipt(s)", receipts.storeCalls)
+			}
+		})
+	}
+}
+
+func TestEvaluateRouteReplaysIdempotentDecisionAndRejectsKeyReuse(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	svc.IdempotencyStore = api.NewIdempotencyStore(time.Hour)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	request := func(body string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(body))
+		req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+		req.Header.Set(tenantHeader, "tenant-trusted")
+		req.Header.Set(principalHeader, "principal-trusted")
+		req.Header.Set(sessionHeader, "session-trusted")
+		req.Header.Set("Idempotency-Key", "evaluate-duplicate")
+		return req
+	}
+
+	first := httptest.NewRecorder()
+	mux.ServeHTTP(first, request(`{"action":"EXECUTE_TOOL","resource":"local.echo"}`))
+	if first.Code != http.StatusOK || receipts.storeCalls != 1 {
+		t.Fatalf("first evaluate status=%d receipts=%d body=%s", first.Code, receipts.storeCalls, first.Body.String())
+	}
+	if receipts.stored == nil || receipts.stored.IdempotencyKey != "evaluate-duplicate" {
+		t.Fatalf("receipt did not bind idempotency key: %+v", receipts.stored)
+	}
+
+	second := httptest.NewRecorder()
+	mux.ServeHTTP(second, request(`{"action":"EXECUTE_TOOL","resource":"local.echo"}`))
+	if second.Code != http.StatusOK || receipts.storeCalls != 1 {
+		t.Fatalf("replay status=%d receipts=%d body=%s", second.Code, receipts.storeCalls, second.Body.String())
+	}
+	if second.Header().Get("X-Helm-Idempotency-Replayed") != "true" {
+		t.Fatalf("replay header=%q", second.Header().Get("X-Helm-Idempotency-Replayed"))
+	}
+	if second.Body.String() != first.Body.String() {
+		t.Fatalf("replayed response changed: first=%s second=%s", first.Body.String(), second.Body.String())
+	}
+
+	conflict := httptest.NewRecorder()
+	mux.ServeHTTP(conflict, request(`{"action":"EXECUTE_TOOL","resource":"local.other"}`))
+	if conflict.Code != http.StatusConflict || receipts.storeCalls != 1 {
+		t.Fatalf("idempotency conflict status=%d receipts=%d body=%s", conflict.Code, receipts.storeCalls, conflict.Body.String())
 	}
 }
 

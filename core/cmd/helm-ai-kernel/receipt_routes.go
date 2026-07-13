@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -19,22 +20,48 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
+// evaluateDecisionRequest is the public, authenticated transport contract for
+// POST /api/v1/evaluate. Identity and scope are headers verified by the route
+// middleware; they must never be selected from the JSON payload.
+type evaluateDecisionRequest struct {
+	Action         string                   `json:"action"`
+	Resource       string                   `json:"resource"`
+	Context        map[string]interface{}   `json:"context,omitempty"`
+	SessionHistory []guardian.SessionAction `json:"session_history,omitempty"`
+}
+
 func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
-	mux.HandleFunc("/api/v1/evaluate", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	evaluateHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		if svc.Guardian == nil {
+		if svc == nil || svc.Guardian == nil {
 			api.WriteError(w, http.StatusServiceUnavailable, "Guardian unavailable", "guardian not initialized")
 			return
 		}
-		var req guardian.DecisionRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if strings.TrimSpace(r.Header.Get("Idempotency-Key")) != "" && svc.IdempotencyStore == nil {
+			api.WriteError(w, http.StatusServiceUnavailable, "Idempotency unavailable", "governed idempotency persistence is not initialized")
+			return
+		}
+		var payload evaluateDecisionRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&payload); err != nil {
 			api.WriteBadRequest(w, "Invalid JSON body")
 			return
 		}
-		if err := rejectReservedDecisionContext(req.Context); err != nil {
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			api.WriteBadRequest(w, "Invalid JSON body")
+			return
+		}
+		payload.Action = strings.TrimSpace(payload.Action)
+		payload.Resource = strings.TrimSpace(payload.Resource)
+		if payload.Action == "" || payload.Resource == "" {
+			api.WriteBadRequest(w, "Evaluate route requires non-empty action and resource")
+			return
+		}
+		if err := rejectReservedDecisionContext(payload.Context); err != nil {
 			api.WriteBadRequest(w, err.Error())
 			return
 		}
@@ -70,10 +97,16 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 		}
-		req.Principal = principalID
-		req.TenantID = tenantID
-		req.WorkspaceID = workspaceID
-		req.SessionID = sessionID
+		req := guardian.DecisionRequest{
+			Principal:      principalID,
+			Action:         payload.Action,
+			Resource:       payload.Resource,
+			Context:        payload.Context,
+			SessionHistory: payload.SessionHistory,
+			TenantID:       tenantID,
+			WorkspaceID:    workspaceID,
+			SessionID:      sessionID,
+		}
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
@@ -88,17 +121,23 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		if err := persistDecisionReceipt(r.Context(), svc, decision, req.Principal, []byte(req.Action+":"+req.Resource), map[string]any{
-			"source":   "api.evaluate",
-			"action":   req.Action,
-			"resource": req.Resource,
-			"reason":   decision.Reason,
+			"source":          "api.evaluate",
+			"action":          req.Action,
+			"resource":        req.Resource,
+			"reason":          decision.Reason,
+			"idempotency_key": strings.TrimSpace(r.Header.Get("Idempotency-Key")),
 		}); err != nil {
 			api.WriteInternal(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Helm-Receipt-ID", "rcpt-decision-"+decision.ID)
 		_ = json.NewEncoder(w).Encode(decision)
-	}))
+	})
+	if svc != nil && svc.IdempotencyStore != nil {
+		evaluateHandler = http.HandlerFunc(api.IdempotencyMiddleware(svc.IdempotencyStore)(evaluateHandler).ServeHTTP)
+	}
+	mux.HandleFunc("/api/v1/evaluate", protectRuntimeHandler(RouteAuthTenant, evaluateHandler))
 
 	mux.HandleFunc("/api/v1/receipts/tail", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -316,23 +355,25 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 	if sessionID == "" {
 		return fmt.Errorf("decision receipt requires signed session_id")
 	}
+	idempotencyKey, _ := metadata["idempotency_key"].(string)
 	err = svc.ReceiptStore.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		receipt := &contracts.Receipt{
-			Type:         contracts.ReceiptTypeDecision,
-			ReceiptID:    receiptID,
-			DecisionID:   decision.ID,
-			EffectID:     effectID,
-			Status:       decision.Verdict,
-			BlobHash:     argsHash,
-			OutputHash:   decision.PolicyDecisionHash,
-			Timestamp:    timestamp,
-			ExecutorID:   agentID,
-			SessionID:    sessionID,
-			ReasonCode:   decision.ReasonCode,
-			Metadata:     metadata,
-			PrevHash:     prevHash,
-			LamportClock: lamport,
-			ArgsHash:     argsHash,
+			Type:           contracts.ReceiptTypeDecision,
+			ReceiptID:      receiptID,
+			DecisionID:     decision.ID,
+			EffectID:       effectID,
+			Status:         decision.Verdict,
+			BlobHash:       argsHash,
+			OutputHash:     decision.PolicyDecisionHash,
+			Timestamp:      timestamp,
+			ExecutorID:     agentID,
+			SessionID:      sessionID,
+			ReasonCode:     decision.ReasonCode,
+			Metadata:       metadata,
+			IdempotencyKey: strings.TrimSpace(idempotencyKey),
+			PrevHash:       prevHash,
+			LamportClock:   lamport,
+			ArgsHash:       argsHash,
 		}
 		if err := svc.ReceiptSigner.SignReceipt(receipt); err != nil {
 			return nil, fmt.Errorf("sign receipt %s: %w", receiptID, err)

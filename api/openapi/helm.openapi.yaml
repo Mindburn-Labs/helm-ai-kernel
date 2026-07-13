@@ -386,11 +386,15 @@ paths:
               $ref: '#/components/schemas/DecisionRequest'
       responses:
         '200':
-          description: Guardian decision record
+          description: Signed Guardian decision record with a persisted decision-receipt reference.
           headers:
+            X-Helm-Receipt-ID:
+              required: true
+              schema: { type: string }
+              description: Persisted signed decision receipt produced by this evaluation.
             X-Helm-Idempotency-Replayed:
               schema: { type: string, enum: ["true"] }
-              description: Present when this response was replayed from the idempotency cache.
+              description: Present when this response was replayed from durable idempotency storage.
           content:
             application/json:
               schema:
@@ -4007,8 +4011,10 @@ components:
         minLength: 1
       description: |
         Optional key for mutating requests. Replays return the original
-        status/body and X-Helm-Idempotency-Replayed: true. Reusing the same key
-        with a different method, path, query, or body returns 409.
+        status/body and X-Helm-Idempotency-Replayed: true from durable runtime
+        storage. The server scopes a raw key to the authenticated tenant,
+        principal, workspace, session, method, and path. Reusing it with a
+        different query or body within that same binding returns 409.
 
   # ── Schemas ─────────────────────────────────────────
   schemas:
@@ -4575,13 +4581,33 @@ components:
     DecisionRequest:
       type: object
       required: [action, resource]
+      additionalProperties: false
       properties:
-        principal: { type: string }
         action: { type: string }
         resource: { type: string }
         context:
           type: object
           additionalProperties: true
+        session_history:
+          type: array
+          description: Prior governed actions in this authenticated session for path-aware policy evaluation.
+          items:
+            $ref: '#/components/schemas/SessionAction'
+
+    SessionAction:
+      type: object
+      required: [action, resource, verdict, timestamp]
+      additionalProperties: false
+      properties:
+        action: { type: string }
+        resource: { type: string }
+        verdict:
+          type: string
+          enum: [ALLOW, DENY, ESCALATE]
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix time in milliseconds.
 
     DecisionInterventionMetadata:
       type: object

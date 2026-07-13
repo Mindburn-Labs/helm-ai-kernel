@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -140,12 +141,10 @@ type responseCapture struct {
 
 func (rc *responseCapture) WriteHeader(code int) {
 	rc.statusCode = code
-	rc.ResponseWriter.WriteHeader(code)
 }
 
 func (rc *responseCapture) Write(b []byte) (int, error) {
-	rc.body.Write(b)
-	return rc.ResponseWriter.Write(b)
+	return rc.body.Write(b)
 }
 
 // IdempotencyMiddleware ensures that mutating requests with an Idempotency-Key
@@ -168,11 +167,12 @@ func IdempotencyMiddleware(store IdempotencyStorer) func(http.Handler) http.Hand
 				return
 			}
 
-			key := r.Header.Get("Idempotency-Key")
-			if key == "" {
+			rawKey := r.Header.Get("Idempotency-Key")
+			if rawKey == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
+			key := scopedIdempotencyKey(r, rawKey)
 			requestHash, err := idempotencyRequestHash(r)
 			if err != nil {
 				WriteBadRequest(w, "invalid idempotent request body")
@@ -204,12 +204,36 @@ func IdempotencyMiddleware(store IdempotencyStorer) func(http.Handler) http.Hand
 				}
 			}
 
-			// Capture response
+			// Buffer the response until the idempotency store accepts it. A
+			// governed route must not report a completed decision response that
+			// cannot be replayed safely on a retry.
 			capture := &responseCapture{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(capture, r)
 
-			_ = store.Set(key, requestHash, capture.statusCode, w.Header().Clone(), capture.body.Bytes())
+			if err := store.Set(key, requestHash, capture.statusCode, w.Header().Clone(), capture.body.Bytes()); err != nil {
+				clearResponseHeaders(w.Header())
+				WriteInternal(w, fmt.Errorf("persist idempotent response: %w", err))
+				return
+			}
+			writeCaptured(w, capture)
 		})
+	}
+}
+
+func scopedIdempotencyKey(r *http.Request, rawKey string) string {
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n", strings.TrimSpace(rawKey), r.Method, r.URL.EscapedPath(), r.Header.Get("X-Helm-Tenant-ID"), r.Header.Get("X-Helm-Principal-ID"), r.Header.Get("X-Helm-Workspace-ID"), r.Header.Get("X-Helm-Session-ID"))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func writeCaptured(w http.ResponseWriter, capture *responseCapture) {
+	w.WriteHeader(capture.statusCode)
+	_, _ = w.Write(capture.body.Bytes())
+}
+
+func clearResponseHeaders(headers http.Header) {
+	for key := range headers {
+		headers.Del(key)
 	}
 }
 

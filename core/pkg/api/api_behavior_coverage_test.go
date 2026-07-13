@@ -20,9 +20,19 @@ func TestNewServer_RegistersRoutes(t *testing.T) {
 	}
 }
 
+func TestLegacyServerDoesNotRegisterPublicEvaluateRoute(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader([]byte(`{"tool":"read_file"}`)))
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("legacy server must not accept the public evaluate path, got %d", w.Code)
+	}
+}
+
 func TestEvaluate_InvalidJSON(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader([]byte(`{invalid`)))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader([]byte(`{invalid`)))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -34,14 +44,14 @@ func TestEvaluate_GeneratesArgsHash(t *testing.T) {
 	srv := newTestServer(t)
 	body := EvaluateRequest{Tool: "read_file", Args: map[string]any{"path": "/x"}, AgentID: "a", SessionID: "s1"}
 	reqBody, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
 	var resp EvaluateResponse
 	_ = json.NewDecoder(w.Body).Decode(&resp)
 	// Fetch receipt to check ArgsHash
-	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+resp.ReceiptID, nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/receipts/"+resp.ReceiptID, nil)
 	w2 := httptest.NewRecorder()
 	srv.ServeHTTP(w2, req2)
 	var receipt ReceiptDTO
@@ -56,10 +66,10 @@ func TestReceipts_ListAll(t *testing.T) {
 	// Create a receipt first
 	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 	srv.ServeHTTP(httptest.NewRecorder(), req)
 
-	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/receipts/", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/receipts/", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req2)
 	if w.Code != http.StatusOK {
@@ -71,13 +81,13 @@ func TestReceipts_CompleteEndpoint(t *testing.T) {
 	srv := newTestServer(t)
 	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	var resp EvaluateResponse
 	_ = json.NewDecoder(w.Body).Decode(&resp)
 
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/receipts/"+resp.ReceiptID+"/complete", nil)
+	req2 := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/receipts/"+resp.ReceiptID+"/complete", nil)
 	w2 := httptest.NewRecorder()
 	srv.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {
@@ -87,7 +97,7 @@ func TestReceipts_CompleteEndpoint(t *testing.T) {
 
 func TestReceipts_CompleteNotFound(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/receipts/nonexistent/complete", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/receipts/nonexistent/complete", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
@@ -97,7 +107,7 @@ func TestReceipts_CompleteNotFound(t *testing.T) {
 
 func TestReceipts_MethodNotAllowed(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/receipts/", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/legacy/v1/receipts/", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
@@ -107,7 +117,7 @@ func TestReceipts_MethodNotAllowed(t *testing.T) {
 
 func TestVerify_SessionNotFound(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/verify/nonexistent-session", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/verify/nonexistent-session", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	var result map[string]any
@@ -119,7 +129,7 @@ func TestVerify_SessionNotFound(t *testing.T) {
 
 func TestVerify_MethodNotAllowed(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/verify/s1", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/legacy/v1/verify/s1", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
@@ -129,7 +139,7 @@ func TestVerify_MethodNotAllowed(t *testing.T) {
 
 func TestHealth_ReportsBackend(t *testing.T) {
 	srv := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/health", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	var result map[string]any
@@ -142,7 +152,7 @@ func TestHealth_ReportsBackend(t *testing.T) {
 func TestCORS_WildcardOrigin(t *testing.T) {
 	p := pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true})
 	srv := NewServer(ServerConfig{PDP: p, AllowedOrigins: []string{"*"}})
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/health", nil)
 	req.Header.Set("Origin", "https://any.example.com")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -154,7 +164,7 @@ func TestCORS_WildcardOrigin(t *testing.T) {
 func TestCORS_NonMatchingOriginIgnored(t *testing.T) {
 	p := pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true})
 	srv := NewServer(ServerConfig{PDP: p, AllowedOrigins: []string{"https://allowed.com"}})
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/legacy/v1/health", nil)
 	req.Header.Set("Origin", "https://evil.com")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

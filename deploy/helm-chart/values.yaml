@@ -206,8 +206,8 @@ helm:
         mountPath: "/etc/helm-ai-kernel/policy"
 
     failClosed:
-      requireInitialSnapshot: true
-      onMissingSnapshot: "deny"
+      # Keep a verified snapshot only while it remains within this age after a
+      # source fault. Set onInvalidUpdate=deny to invalidate immediately.
       onInvalidUpdate: "keepLastKnownGood"
       lastKnownGoodMaxAge: "10m"
 

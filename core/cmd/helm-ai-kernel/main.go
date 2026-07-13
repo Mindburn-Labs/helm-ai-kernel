@@ -62,6 +62,11 @@ type serverOptions struct {
 	Stderr     io.Writer
 }
 
+// utcRuntimeClock is the shared runtime clock for reconciliation and Guardian.
+type utcRuntimeClock struct{}
+
+func (utcRuntimeClock) Now() time.Time { return time.Now().UTC() }
+
 // Run is the entrypoint for testing
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 2 {
@@ -261,6 +266,7 @@ func runServerWithOptions(opts serverOptions) {
 	// runtime policy authority is installed only through the reconciler.
 	ruleGraph := prg.NewGraph()
 	policyScope := policyreconcile.DefaultScope
+	runtimeClock := utcRuntimeClock{}
 	var (
 		policyStore      policyreconcile.PolicySnapshotStore
 		policyReconciler *policyreconcile.Reconciler
@@ -274,14 +280,20 @@ func runServerWithOptions(opts serverOptions) {
 		if verifierErr != nil {
 			log.Fatalf("Failed to configure policy signature verifier: %v", verifierErr)
 		}
+		keepLastKnownGood, lkgMaxAge, lkgConfigErr := policyLastKnownGoodConfigFromEnv()
+		if lkgConfigErr != nil {
+			log.Fatalf("Failed to configure last-known-good policy retention: %v", lkgConfigErr)
+		}
 		policyStore = policyreconcile.NewAtomicSnapshotStore()
 		policyReconciler, err = policyreconcile.NewReconciler(policyreconcile.ReconcilerConfig{
-			Source:            policySource,
-			Store:             policyStore,
-			Compiler:          compileServePolicySnapshot,
-			Verifier:          policyVerifier,
-			RequireSignature:  requirePolicySignature,
-			KeepLastKnownGood: true,
+			Source:              policySource,
+			Store:               policyStore,
+			Compiler:            compileServePolicySnapshot,
+			Verifier:            policyVerifier,
+			RequireSignature:    requirePolicySignature,
+			KeepLastKnownGood:   keepLastKnownGood,
+			LastKnownGoodMaxAge: lkgMaxAge,
+			Clock:               runtimeClock.Now,
 		})
 		if err != nil {
 			log.Fatalf("Failed to initialize policy reconciler: %v", err)
@@ -310,7 +322,7 @@ func runServerWithOptions(opts serverOptions) {
 	}
 
 	// Guardian
-	guardianOpts := []guardian.GuardianOption{}
+	guardianOpts := []guardian.GuardianOption{guardian.WithClock(runtimeClock)}
 	if policyStore != nil {
 		guardianOpts = append(guardianOpts, guardian.WithPolicySnapshots(policyStore, policyScope))
 	}
@@ -627,6 +639,26 @@ func policyPollIntervalFromEnv() time.Duration {
 
 func policyInitialReconcileTimeoutFromEnv() time.Duration {
 	return durationFromEnv("HELM_POLICY_INITIAL_RECONCILE_TIMEOUT", 30*time.Second)
+}
+
+func policyLastKnownGoodConfigFromEnv() (bool, time.Duration, error) {
+	action := strings.TrimSpace(os.Getenv("HELM_POLICY_ON_INVALID_UPDATE"))
+	switch {
+	case action == "" || strings.EqualFold(action, "keepLastKnownGood"):
+		maxAge := policyreconcile.DefaultLKGMaxAge
+		if raw := strings.TrimSpace(os.Getenv("HELM_POLICY_LAST_KNOWN_GOOD_MAX_AGE")); raw != "" {
+			parsed, err := time.ParseDuration(raw)
+			if err != nil || parsed <= 0 {
+				return false, 0, fmt.Errorf("HELM_POLICY_LAST_KNOWN_GOOD_MAX_AGE must be a positive duration")
+			}
+			maxAge = parsed
+		}
+		return true, maxAge, nil
+	case strings.EqualFold(action, "deny"):
+		return false, 0, nil
+	default:
+		return false, 0, fmt.Errorf("HELM_POLICY_ON_INVALID_UPDATE must be deny or keepLastKnownGood")
+	}
 }
 
 func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (policyreconcile.PolicySource, string, error) {

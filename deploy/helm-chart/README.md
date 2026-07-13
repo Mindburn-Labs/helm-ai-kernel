@@ -83,6 +83,8 @@ flowchart TD
 | `helm.limits.loadShed.enabled` | `false` | Enable low-priority load shedding. |
 | `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
 | `helm.policy.source.pollInterval` | `10s` | Runtime reconciler polling interval. Lost hints are recovered by polling. |
+| `helm.policy.failClosed.onInvalidUpdate` | `keepLastKnownGood` | Retain only a fresh verified snapshot after a source fault, or `deny` to invalidate immediately. |
+| `helm.policy.failClosed.lastKnownGoodMaxAge` | `10m` | Positive maximum retention age for a last-known-good snapshot after a source fault. |
 | `helm.policy.signature.required` | `false` | Rejects unsigned policy heads during reconciliation when enabled. |
 | `helm.policy.signature.publicKey` | empty | 64-char hex Ed25519 public key for canonical policy bundle signatures. |
 | `helm.policy.signature.existingSecret` | empty | Existing secret containing `HELM_POLICY_TRUST_PUBLIC_KEY`. |

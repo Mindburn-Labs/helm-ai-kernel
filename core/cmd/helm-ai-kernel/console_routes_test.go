@@ -6,6 +6,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestConsoleBootstrapRequiresCredentials(t *testing.T) {
@@ -53,6 +56,77 @@ func TestConsoleReplaySurfaceUsesVerifierContract(t *testing.T) {
 	}
 	if payload["source"] != "/api/v1/replay/verify" {
 		t.Fatalf("replay surface source = %v", payload["source"])
+	}
+	summary, ok := payload["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("replay surface summary = %#v", payload["summary"])
+	}
+	if summary["replay_verification"] != "not_run" {
+		t.Fatalf("replay verification = %v, want not_run", summary["replay_verification"])
+	}
+	if strings.Contains(strings.ToLower(summary["console_record_scope"].(string)), "bundle") && summary["verification_io"] == "operator-provided evidence bundle" {
+		t.Fatalf("replay surface still implies that the console performed bundle verification: %#v", summary)
+	}
+}
+
+func TestConsoleSeparatesReceiptTypesAndDoesNotClaimReplayVerification(t *testing.T) {
+	now := time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC)
+	receipts := []*contracts.Receipt{
+		{ReceiptID: "decision-allow", Type: contracts.ReceiptTypeDecision, ExecutorID: "agent-a", Status: "ALLOW", Timestamp: now},
+		{ReceiptID: "decision-deny", Type: contracts.ReceiptTypeDecision, ExecutorID: "agent-a", Status: "DENY", Timestamp: now.Add(time.Second)},
+		{ReceiptID: "execution", Type: contracts.ReceiptTypeExecution, ExecutorID: "agent-a", EffectID: "tool.send", Status: "SUCCESS", Timestamp: now.Add(2 * time.Second)},
+		{ReceiptID: "local", Type: contracts.ReceiptTypeLocalActivity, ExecutorID: "agent-a", Status: "RECORDED", Timestamp: now.Add(3 * time.Second)},
+		{ReceiptID: "simulation", Type: contracts.ReceiptTypeSimulation, ExecutorID: "agent-a", EffectID: "demo.action", Status: "SIMULATED", Timestamp: now.Add(4 * time.Second)},
+	}
+
+	actions := aggregateActions(receipts)
+	if len(actions) != 1 || actions[0]["action"] != "tool.send" || actions[0]["count"] != 1 {
+		t.Fatalf("actions should include only dispatched execution receipts, got %#v", actions)
+	}
+
+	agents := aggregateAgents(receipts)
+	if len(agents) != 1 {
+		t.Fatalf("agent records = %#v", agents)
+	}
+	agent := agents[0]
+	for key, want := range map[string]int{
+		"receipts":         5,
+		"evaluated":        2,
+		"executed":         1,
+		"denied":           1,
+		"local_activities": 1,
+		"simulations":      1,
+		"unclassified":     0,
+	} {
+		if got, ok := agent[key].(int); !ok || got != want {
+			t.Fatalf("agent %s = %#v, want %d in %#v", key, agent[key], want, agent)
+		}
+	}
+	if agent["last_event_type"] != "simulation" || agent["last_status"] != "SIMULATED" {
+		t.Fatalf("agent last event = %#v", agent)
+	}
+
+	audit := receiptAuditRecords(receipts)
+	if audit[0]["event_type"] != "decision" || audit[2]["event_type"] != "execution" || audit[3]["event_type"] != "local_activity" || audit[4]["event_type"] != "simulation" {
+		t.Fatalf("audit receipt types = %#v", audit)
+	}
+
+	replay := replayConsoleRecords(nil, receipts)
+	if len(replay) != len(receipts) {
+		t.Fatalf("replay records = %#v", replay)
+	}
+	for _, record := range replay {
+		if _, legacy := record["signature"]; legacy {
+			t.Fatalf("replay record still treats signature presence as verification: %#v", record)
+		}
+		if record["signature_verification"] != "not_configured" || record["replay_verification"] != "not_run" {
+			t.Fatalf("replay record claims verification without a trusted verifier: %#v", record)
+		}
+	}
+
+	summary := receiptTypeSummary(receipts)
+	if summary["decisions"] != 2 || summary["executions"] != 1 || summary["local_activities"] != 1 || summary["simulations"] != 1 || summary["unclassified"] != 0 {
+		t.Fatalf("receipt type summary = %#v", summary)
 	}
 }
 

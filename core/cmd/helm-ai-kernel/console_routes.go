@@ -292,10 +292,11 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 		base["status"] = "ready"
 		base["source"] = "/api/v1/console/bootstrap"
 		base["summary"] = map[string]any{
-			"version":  displayVersion(),
-			"commit":   displayCommit(),
-			"receipts": len(receipts),
-			"policy":   policyStatus(opts),
+			"version":         displayVersion(),
+			"commit":          displayCommit(),
+			"receipts":        len(receipts),
+			"receipt_summary": receiptTypeSummary(receipts),
+			"policy":          policyStatus(opts),
 		}
 		base["records"] = receipts
 	case "agents":
@@ -326,13 +327,19 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 	case "replay":
 		base["status"] = statusFromStore(svc)
 		base["source"] = "/api/v1/replay/verify"
-		base["summary"] = map[string]any{
-			"verifier":        "evidence bundle replay verifier",
-			"receipt_count":   len(receipts),
-			"storage_status":  statusFromStore(svc),
-			"verification_io": "operator-provided evidence bundle",
+		verifierStatus := "not_configured"
+		if receiptVerifierForServices(svc) != nil {
+			verifierStatus = "available_for_per_record_signature_checks"
 		}
-		base["records"] = replayConsoleRecords(receipts)
+		base["summary"] = map[string]any{
+			"receipt_count":          len(receipts),
+			"storage_status":         statusFromStore(svc),
+			"signature_verification": verifierStatus,
+			"replay_verification":    "not_run",
+			"verification_io":        "submit an evidence bundle to /api/v1/replay/verify to verify a replay bundle",
+			"console_record_scope":   "per-record receipt signature status only; no bundle, chain, or replay verification runs in this read-only view",
+		}
+		base["records"] = replayConsoleRecords(svc, receipts)
 	case "audit":
 		base["status"] = statusFromStore(svc)
 		base["source"] = "/api/v1/receipts"
@@ -657,13 +664,23 @@ func statusFromStore(svc *Services) string {
 
 func aggregateAgents(receipts []*contracts.Receipt) []map[string]any {
 	type agentStats struct {
-		ID       string
-		Count    int
-		LastSeen string
-		Verdict  string
+		ID              string
+		Receipts        int
+		Evaluated       int
+		Executed        int
+		Denied          int
+		LocalActivities int
+		Simulations     int
+		Unclassified    int
+		LastSeen        string
+		LastEventType   string
+		LastStatus      string
 	}
 	stats := map[string]*agentStats{}
 	for _, receipt := range receipts {
+		if receipt == nil {
+			continue
+		}
 		id := strings.TrimSpace(receipt.ExecutorID)
 		if id == "" {
 			id = "anonymous"
@@ -673,19 +690,43 @@ func aggregateAgents(receipts []*contracts.Receipt) []map[string]any {
 			entry = &agentStats{ID: id}
 			stats[id] = entry
 		}
-		entry.Count++
-		entry.Verdict = receipt.Status
+		entry.Receipts++
+		eventType := consoleReceiptEventType(receipt)
+		switch eventType {
+		case "decision":
+			entry.Evaluated++
+			if isDeniedDecision(receipt) {
+				entry.Denied++
+			}
+		case "execution":
+			entry.Executed++
+		case "local_activity":
+			entry.LocalActivities++
+		case "simulation":
+			entry.Simulations++
+		default:
+			entry.Unclassified++
+		}
 		if receipt.Timestamp.After(parseTime(entry.LastSeen)) {
 			entry.LastSeen = receipt.Timestamp.UTC().Format(time.RFC3339Nano)
+			entry.LastEventType = eventType
+			entry.LastStatus = receipt.Status
 		}
 	}
 	records := make([]map[string]any, 0, len(stats))
 	for _, stat := range stats {
 		records = append(records, map[string]any{
-			"agent":     stat.ID,
-			"receipts":  stat.Count,
-			"last_seen": stat.LastSeen,
-			"verdict":   stat.Verdict,
+			"agent":            stat.ID,
+			"receipts":         stat.Receipts,
+			"evaluated":        stat.Evaluated,
+			"executed":         stat.Executed,
+			"denied":           stat.Denied,
+			"local_activities": stat.LocalActivities,
+			"simulations":      stat.Simulations,
+			"unclassified":     stat.Unclassified,
+			"last_seen":        stat.LastSeen,
+			"last_event_type":  stat.LastEventType,
+			"last_status":      stat.LastStatus,
 		})
 	}
 	sort.Slice(records, func(i, j int) bool {
@@ -703,6 +744,9 @@ func aggregateActions(receipts []*contracts.Receipt) []map[string]any {
 	}
 	stats := map[string]*actionStats{}
 	for _, receipt := range receipts {
+		if receipt == nil || receipt.Type != contracts.ReceiptTypeExecution {
+			continue
+		}
 		action := strings.TrimSpace(receipt.EffectID)
 		if action == "" {
 			action = metadataString(receipt.Metadata, "action")
@@ -748,11 +792,16 @@ func metadataString(metadata map[string]any, key string) string {
 func receiptAuditRecords(receipts []*contracts.Receipt) []map[string]any {
 	records := make([]map[string]any, 0, len(receipts))
 	for _, receipt := range receipts {
+		if receipt == nil {
+			continue
+		}
 		records = append(records, map[string]any{
 			"event_id":    stableConsoleEventID(receipt),
+			"event_type":  consoleReceiptEventType(receipt),
 			"at":          receipt.Timestamp.UTC().Format(time.RFC3339Nano),
 			"actor":       receipt.ExecutorID,
-			"action":      receipt.EffectID,
+			"effect_id":   receipt.EffectID,
+			"action":      firstNonEmpty(receipt.Action, metadataString(receipt.Metadata, "action")),
 			"status":      receipt.Status,
 			"receipt_id":  receipt.ReceiptID,
 			"decision_id": receipt.DecisionID,
@@ -761,18 +810,85 @@ func receiptAuditRecords(receipts []*contracts.Receipt) []map[string]any {
 	return records
 }
 
-func replayConsoleRecords(receipts []*contracts.Receipt) []map[string]any {
+func replayConsoleRecords(svc *Services, receipts []*contracts.Receipt) []map[string]any {
+	verifier := receiptVerifierForServices(svc)
 	records := make([]map[string]any, 0, len(receipts))
 	for _, receipt := range receipts {
+		if receipt == nil {
+			continue
+		}
+		signatureStatus := "not_configured"
+		if verifier != nil {
+			valid, err := verifier.VerifyReceipt(receipt)
+			if err != nil || !valid {
+				signatureStatus = "invalid"
+			} else {
+				signatureStatus = "verified"
+			}
+		}
 		records = append(records, map[string]any{
-			"receipt_id":    receipt.ReceiptID,
-			"executor_id":   receipt.ExecutorID,
-			"lamport_clock": receipt.LamportClock,
-			"prev_hash":     receipt.PrevHash,
-			"signature":     receipt.Signature != "",
+			"receipt_id":             receipt.ReceiptID,
+			"event_type":             consoleReceiptEventType(receipt),
+			"executor_id":            receipt.ExecutorID,
+			"lamport_clock":          receipt.LamportClock,
+			"prev_hash":              receipt.PrevHash,
+			"signature_present":      strings.TrimSpace(receipt.Signature) != "",
+			"signature_verification": signatureStatus,
+			"replay_verification":    "not_run",
 		})
 	}
 	return records
+}
+
+func receiptTypeSummary(receipts []*contracts.Receipt) map[string]int {
+	summary := map[string]int{
+		"decisions":        0,
+		"executions":       0,
+		"local_activities": 0,
+		"simulations":      0,
+		"unclassified":     0,
+	}
+	for _, receipt := range receipts {
+		switch consoleReceiptEventType(receipt) {
+		case "decision":
+			summary["decisions"]++
+		case "execution":
+			summary["executions"]++
+		case "local_activity":
+			summary["local_activities"]++
+		case "simulation":
+			summary["simulations"]++
+		default:
+			summary["unclassified"]++
+		}
+	}
+	return summary
+}
+
+func consoleReceiptEventType(receipt *contracts.Receipt) string {
+	if receipt == nil {
+		return "unclassified"
+	}
+	switch receipt.Type {
+	case contracts.ReceiptTypeDecision:
+		return "decision"
+	case contracts.ReceiptTypeExecution:
+		return "execution"
+	case contracts.ReceiptTypeLocalActivity:
+		return "local_activity"
+	case contracts.ReceiptTypeSimulation:
+		return "simulation"
+	default:
+		return "unclassified"
+	}
+}
+
+func isDeniedDecision(receipt *contracts.Receipt) bool {
+	if receipt == nil || receipt.Type != contracts.ReceiptTypeDecision {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(receipt.Status), "DENY") ||
+		strings.EqualFold(strings.TrimSpace(receipt.Verdict), "DENY")
 }
 
 func policyRecords(opts serverOptions) []map[string]string {

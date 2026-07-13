@@ -3,6 +3,9 @@ title: Launchpad Launch Conformance Review Oracle
 last_reviewed: 2026-06-24
 ---
 
+<!-- quantum_posture: this oracle checks existing cosign/signature evidence;
+it does not itself implement or claim post-quantum cryptographic controls. -->
+
 # Launchpad Launch Conformance Review Oracle
 
 This is the PR-review oracle for Launchpad changes that can affect

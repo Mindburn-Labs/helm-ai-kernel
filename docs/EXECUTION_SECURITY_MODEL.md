@@ -3,6 +3,9 @@ title: EXECUTION_SECURITY_MODEL
 last_reviewed: 2026-05-05
 ---
 
+<!-- quantum_posture: this model documents current classical Ed25519 receipt
+signing and verification; it does not claim post-quantum cryptographic safety. -->
+
 # Execution Security Model
 
 ## Audience

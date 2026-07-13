@@ -1,5 +1,8 @@
 # Launchpad Security Review
 
+<!-- quantum_posture: this review references artifact signatures and receipts;
+it documents existing controls and makes no post-quantum security claim. -->
+
 Status: Launchpad v1 local-container review passes for OpenClaw and Hermes from
 workflow `26198407296`. OpenCode and Kilo Code are `verify_only`; `--version`
 smoke checks do not count as live-agent F2 coverage. The `v0.5.9`

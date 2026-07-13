@@ -1,3 +1,5 @@
+// quantum_posture: authorization vectors exercise classical RSA/JWKS JWT
+// validation only; they do not claim or provide post-quantum authentication.
 package mcp
 
 // Conformance vectors for the MCP 2026-07-28 release candidate

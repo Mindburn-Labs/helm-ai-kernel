@@ -1,3 +1,5 @@
+// quantum_posture: MCP proof artifacts use classical Ed25519 receipt signing
+// for offline verification; this command does not provide post-quantum safety.
 package main
 
 import (

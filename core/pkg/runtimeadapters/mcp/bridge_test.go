@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -158,6 +159,27 @@ func newAdapter(t *testing.T, cfg BridgeConfig) (*MCPAdapter, *proofgraph.Graph)
 	return adapter, graph
 }
 
+// assertNoDispatchProof proves that a connectorless conformance fixture did
+// not execute an external effect. The outcome must be recorded in the adapter's
+// EFFECT proof node rather than inferred from the absence of a fake connector.
+func assertNoDispatchProof(t *testing.T, graph *proofgraph.Graph, resp *runtimeadapters.AdaptedResponse, want string) {
+	t.Helper()
+	if resp.Result != nil {
+		t.Errorf("connectorless fixture must not return an external result, got %v", resp.Result)
+	}
+	node, ok := graph.Get(resp.ProofGraphNode)
+	if !ok || node.Kind != proofgraph.NodeTypeEffect {
+		t.Fatalf("expected an EFFECT proof node, got %+v", node)
+	}
+	var payload mcpEffectPayload
+	if err := json.Unmarshal(node.Payload, &payload); err != nil {
+		t.Fatalf("decode EFFECT proof payload: %v", err)
+	}
+	if payload.DispatchState != want {
+		t.Errorf("expected dispatch state %q, got %q", want, payload.DispatchState)
+	}
+}
+
 // Smoke 1: a safe read is ALLOWED (policy grants mcp permission; not a write).
 func TestGovernedBridgeAllowsSafeRead(t *testing.T) {
 	adapter, graph := newAdapter(t, BridgeConfig{Profile: operateProfile(), Now: fixedClock()})
@@ -179,12 +201,13 @@ func TestGovernedBridgeAllowsSafeRead(t *testing.T) {
 	if !ok || node.Kind != proofgraph.NodeTypeEffect {
 		t.Errorf("expected an EFFECT proof node, got %+v", node)
 	}
+	assertNoDispatchProof(t, graph, resp, DispatchStateNoDispatch)
 }
 
 // Smoke 2: a write with no operate permission is DENIED (fail-closed policy).
 func TestGovernedBridgeDeniesUnpermittedWrite(t *testing.T) {
 	// Default observe/draft profile: no operate permissions.
-	adapter, _ := newAdapter(t, BridgeConfig{Now: fixedClock()})
+	adapter, graph := newAdapter(t, BridgeConfig{Now: fixedClock()})
 	req := &runtimeadapters.AdaptedRequest{
 		RuntimeType: "mcp", ToolName: "gmail.send",
 		Arguments: map[string]any{"to": "bob@example.com"}, PrincipalID: "ve-assistant",
@@ -199,6 +222,7 @@ func TestGovernedBridgeDeniesUnpermittedWrite(t *testing.T) {
 	if resp.DenyReason == nil || resp.DenyReason.Code == "" {
 		t.Errorf("expected a deny reason code, got %+v", resp.DenyReason)
 	}
+	assertNoDispatchProof(t, graph, resp, DispatchStateNotDispatched)
 }
 
 func TestGovernedBridgeWithoutSigningSeedFailsClosed(t *testing.T) {
@@ -235,7 +259,7 @@ func TestGovernedBridgeEscalatesThenAllowsWrite(t *testing.T) {
 
 	// Without approval: ESCALATE.
 	approvals := NewMemoryApprovalStore()
-	adapter, _ := newAdapter(t, BridgeConfig{Profile: operateProfile(), Approvals: approvals, Now: fixedClock()})
+	adapter, graph := newAdapter(t, BridgeConfig{Profile: operateProfile(), Approvals: approvals, Now: fixedClock()})
 	resp, err := adapter.Intercept(context.Background(), req)
 	if err != nil {
 		t.Fatalf("intercept: %v", err)
@@ -249,10 +273,12 @@ func TestGovernedBridgeEscalatesThenAllowsWrite(t *testing.T) {
 	if resp.DenyReason.Actionable != "request_approval" {
 		t.Errorf("escalation must be actionable via request_approval, got %q", resp.DenyReason.Actionable)
 	}
+	assertNoDispatchProof(t, graph, resp, DispatchStateNotDispatched)
 
 	// Bind approval evidence to this exact request, then retry: ALLOW.
+	// This in-memory fixture proves conformance only; it is not a signed approval protocol.
 	approvals.Grant(inputHash, ApprovalEvidence{ApproverID: "ivan", ApprovalHash: "abc", GrantedScope: "linear.create_issue"})
-	adapter2, _ := newAdapter(t, BridgeConfig{Profile: operateProfile(), Approvals: approvals, Now: fixedClock()})
+	adapter2, graph2 := newAdapter(t, BridgeConfig{Profile: operateProfile(), Approvals: approvals, Now: fixedClock()})
 	resp2, err := adapter2.Intercept(context.Background(), req)
 	if err != nil {
 		t.Fatalf("intercept after approval: %v", err)
@@ -260,6 +286,7 @@ func TestGovernedBridgeEscalatesThenAllowsWrite(t *testing.T) {
 	if !resp2.Allowed {
 		t.Fatalf("expected ALLOW after approval, got %+v", resp2.DenyReason)
 	}
+	assertNoDispatchProof(t, graph2, resp2, DispatchStateNoDispatch)
 }
 
 // Replay: an approved bounded WRITE is single-use. A second identical dispatch
@@ -285,6 +312,7 @@ func TestGovernedBridgeWriteIsSingleUse(t *testing.T) {
 	if err != nil || !first.Allowed {
 		t.Fatalf("first approved write should ALLOW: %v %+v", err, first.DenyReason)
 	}
+	assertNoDispatchProof(t, graph, first, DispatchStateNoDispatch)
 	second, err := adapter.Intercept(context.Background(), req)
 	if err != nil {
 		t.Fatalf("second intercept: %v", err)
@@ -295,6 +323,7 @@ func TestGovernedBridgeWriteIsSingleUse(t *testing.T) {
 	if second.DenyReason == nil || second.DenyReason.Code != string(contracts.ReasonPlanTransactionConflict) {
 		t.Fatalf("expected canonical replay reason, got %+v", second.DenyReason)
 	}
+	assertNoDispatchProof(t, graph, second, DispatchStateNotDispatched)
 }
 
 // Reads are idempotent: the same read may be retried and is allowed each time

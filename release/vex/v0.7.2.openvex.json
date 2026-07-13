@@ -1,0 +1,10 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://mindburn.org/vex/helm-ai-kernel/v0.7.2",
+  "author": "Mindburn-Labs Release Bot <release@mindburn.org>",
+  "role": "Project Maintainer",
+  "timestamp": "2026-07-12T19:32:09Z",
+  "version": 1,
+  "tooling": "helm-ai-kernel/scripts/release/generate_vex.sh",
+  "statements": []
+}

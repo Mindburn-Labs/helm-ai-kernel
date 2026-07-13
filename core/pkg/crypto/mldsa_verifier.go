@@ -1,5 +1,8 @@
 package crypto
 
+// quantum_posture: ML-DSA verification is available when configured; the
+// selected signature profile determines the deployed quantum resistance.
+
 import (
 	"encoding/hex"
 	"fmt"

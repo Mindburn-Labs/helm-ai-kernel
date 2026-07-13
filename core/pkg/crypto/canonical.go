@@ -1,5 +1,8 @@
 package crypto
 
+// quantum_posture: canonical intent payloads bind authorization fields but do
+// not change the security strength of the configured signature algorithm.
+
 import (
 	"bytes"
 	"encoding/json"

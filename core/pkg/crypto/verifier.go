@@ -1,5 +1,8 @@
 package crypto
 
+// quantum_posture: this verifier supports classical Ed25519 signatures and
+// makes no post-quantum assurance claim.
+
 import (
 	"crypto/ed25519"
 	"encoding/hex"

@@ -69,5 +69,5 @@ func writeJSONFixture(t *testing.T, content string) string {
 }
 
 func validReviewJSON() string {
-	return `{"schema":"mindburn.release-review/v1","repository":"Mindburn-Labs/example","pull_request":42,"base_sha":"1111111111111111111111111111111111111111","head_sha":"2222222222222222222222222222222222222222","workflow_sha":"3333333333333333333333333333333333333333","run_id":101,"run_attempt":1,"context_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","reviewer":{"provider":"anthropic","model":"claude-fable-5"},"verdict":"ALLOW","response_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","findings":[]}`
+	return `{"schema":"mindburn.release-review/v1","repository":"Mindburn-Labs/example","pull_request":42,"base_sha":"1111111111111111111111111111111111111111","head_sha":"2222222222222222222222222222222222222222","merge_sha":"4444444444444444444444444444444444444444","merge_tree_sha":"5555555555555555555555555555555555555555","workflow_sha":"3333333333333333333333333333333333333333","run_id":101,"run_attempt":1,"context_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","reviewer":{"provider":"anthropic","model":"claude-fable-5"},"verdict":"ALLOW","response_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","findings":[]}`
 }

@@ -57,6 +57,8 @@ type Review struct {
 	PullRequest    int64     `json:"pull_request"`
 	BaseSHA        string    `json:"base_sha"`
 	HeadSHA        string    `json:"head_sha"`
+	MergeSHA       string    `json:"merge_sha"`
+	MergeTreeSHA   string    `json:"merge_tree_sha"`
 	WorkflowSHA    string    `json:"workflow_sha"`
 	RunID          int64     `json:"run_id"`
 	RunAttempt     int64     `json:"run_attempt"`

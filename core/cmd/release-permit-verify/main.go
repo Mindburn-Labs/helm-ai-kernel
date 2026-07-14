@@ -204,7 +204,8 @@ func validateExactShape(content []byte, destination any) error {
 		}
 	case *releasepermit.Review:
 		if err := requireKeys(root, []string{
-			"schema", "repository", "pull_request", "base_sha", "head_sha", "workflow_sha",
+			"schema", "repository", "pull_request", "base_sha", "head_sha", "merge_sha",
+			"merge_tree_sha", "workflow_sha",
 			"run_id", "run_attempt", "context_sha256", "reviewer", "verdict",
 			"response_sha256", "findings",
 		}, nil, "review"); err != nil {

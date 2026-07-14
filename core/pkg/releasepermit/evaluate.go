@@ -226,6 +226,8 @@ func validateReview(context Context, contextSHA256 string, review Review) (Revie
 		review.PullRequest != context.PullRequest ||
 		review.BaseSHA != context.BaseSHA ||
 		review.HeadSHA != context.HeadSHA ||
+		review.MergeSHA != context.MergeSHA ||
+		review.MergeTreeSHA != context.MergeTreeSHA ||
 		review.WorkflowSHA != context.WorkflowSHA ||
 		review.RunID != context.RunID ||
 		review.RunAttempt != context.RunAttempt {

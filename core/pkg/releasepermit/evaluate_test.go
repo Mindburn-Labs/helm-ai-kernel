@@ -60,6 +60,18 @@ func TestEvaluateDeniesStaleHead(t *testing.T) {
 	assertDeniedFor(t, permit, "REVIEW_METADATA_MISMATCH")
 }
 
+func TestEvaluateDeniesMergeTreeSubstitution(t *testing.T) {
+	context := validContext()
+	reviews := validReviews(context)
+	reviews[0].MergeTreeSHA = "6666666666666666666666666666666666666666"
+
+	permit, err := Evaluate(context, testContextSHA, reviews)
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	assertDeniedFor(t, permit, "REVIEW_METADATA_MISMATCH")
+}
+
 func TestEvaluateDeniesMissingReviewer(t *testing.T) {
 	context := validContext()
 	reviews := validReviews(context)[:1]
@@ -290,6 +302,8 @@ func validReview(context Context, reviewer Reviewer, digest string) Review {
 		PullRequest:    context.PullRequest,
 		BaseSHA:        context.BaseSHA,
 		HeadSHA:        context.HeadSHA,
+		MergeSHA:       context.MergeSHA,
+		MergeTreeSHA:   context.MergeTreeSHA,
 		WorkflowSHA:    context.WorkflowSHA,
 		RunID:          context.RunID,
 		RunAttempt:     context.RunAttempt,

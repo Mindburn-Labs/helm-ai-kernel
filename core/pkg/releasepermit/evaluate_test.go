@@ -245,6 +245,51 @@ func TestEvaluatePermitIDIsIndependentOfInputReviewOrder(t *testing.T) {
 	}
 }
 
+func TestValidateAllowPermitAcceptsReducerOutput(t *testing.T) {
+	context := validContext()
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if err := ValidateAllowPermit(permit); err != nil {
+		t.Fatalf("ValidateAllowPermit() error = %v", err)
+	}
+}
+
+func TestValidateAllowPermitRejectsDigestOrQuorumSubstitution(t *testing.T) {
+	context := validContext()
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	for _, test := range []struct {
+		name   string
+		mutate func(*Permit)
+	}{
+		{
+			name: "digest",
+			mutate: func(candidate *Permit) {
+				candidate.HeadSHA = testBaseSHA
+			},
+		},
+		{
+			name: "duplicate provider",
+			mutate: func(candidate *Permit) {
+				candidate.Reviews[1].Reviewer.Provider = candidate.Reviews[0].Reviewer.Provider
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := permit
+			candidate.Reviews = append([]ReviewSummary(nil), permit.Reviews...)
+			test.mutate(&candidate)
+			if err := ValidateAllowPermit(candidate); err == nil {
+				t.Fatal("ValidateAllowPermit() error = nil, want rejection")
+			}
+		})
+	}
+}
+
 func TestEvaluateDeniesContextSubstitution(t *testing.T) {
 	context := validContext()
 	reviews := validReviews(context)

@@ -30,6 +30,16 @@ func TestDecodeStrictFileRejectsOversizedInputBeforeDecode(t *testing.T) {
 	}
 }
 
+func TestDecodeStrictPermitAcceptsExactShape(t *testing.T) {
+	var permit releasepermit.Permit
+	if _, err := decodeStrictFile(writeJSONFixture(t, validPermitJSON()), &permit); err != nil {
+		t.Fatalf("decodeStrictFile() error = %v", err)
+	}
+	if permit.Reviews == nil || permit.Reasons == nil {
+		t.Fatal("Reviews and Reasons must be explicit arrays")
+	}
+}
+
 func TestDecodeStrictContextRequiresExactAuthorityShape(t *testing.T) {
 	valid := validContextJSON()
 	for _, test := range []struct {
@@ -120,4 +130,8 @@ func validReviewJSON() string {
 
 func validContextJSON() string {
 	return `{"schema":"mindburn.release-permit-context/v2","repository":"Mindburn-Labs/example","event":"pull_request","pull_request":42,"base_ref":"refs/heads/main","base_sha":"1111111111111111111111111111111111111111","head_sha":"2222222222222222222222222222222222222222","merge_sha":"4444444444444444444444444444444444444444","merge_tree_sha":"5555555555555555555555555555555555555555","workflow_repository":"Mindburn-Labs/.github","workflow_path":".github/workflows/ci.yml","workflow_ref":"refs/heads/main","workflow_sha":"3333333333333333333333333333333333333333","run_id":101,"run_attempt":1,"issued_at":"2026-07-14T10:00:00Z","authority":{"schema":"mindburn.release-authority/v1","generation":2,"kernel_sha":"6666666666666666666666666666666666666666","gate_profiles_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","adversarial_corpus_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","parent":{"generation":1,"workflow_sha":"7777777777777777777777777777777777777777"}},"required_reviewers":[{"provider":"anthropic","model":"claude-fable-5"},{"provider":"openai","model":"gpt-5.6-sol"}]}`
+}
+
+func validPermitJSON() string {
+	return `{"schema":"mindburn.release-permit/v2","permit_id":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","decision":"ALLOW","repository":"Mindburn-Labs/example","pull_request":42,"base_ref":"refs/heads/main","base_sha":"1111111111111111111111111111111111111111","head_sha":"2222222222222222222222222222222222222222","merge_sha":"4444444444444444444444444444444444444444","merge_tree_sha":"5555555555555555555555555555555555555555","workflow_repository":"Mindburn-Labs/.github","workflow_path":".github/workflows/ci.yml","workflow_ref":"refs/heads/main","workflow_sha":"3333333333333333333333333333333333333333","run_id":101,"run_attempt":1,"issued_at":"2026-07-14T10:00:00Z","authority":{"schema":"mindburn.release-authority/v1","generation":2,"kernel_sha":"6666666666666666666666666666666666666666","gate_profiles_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","adversarial_corpus_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","parent":{"generation":1,"workflow_sha":"7777777777777777777777777777777777777777"}},"context_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","reviews":[{"reviewer":{"provider":"anthropic","model":"claude-fable-5"},"verdict":"ALLOW","response_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","blocking_findings":0,"advisory_findings":0},{"reviewer":{"provider":"openai","model":"gpt-5.6-sol"},"verdict":"ALLOW","response_sha256":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","blocking_findings":0,"advisory_findings":0}],"reasons":[]}`
 }

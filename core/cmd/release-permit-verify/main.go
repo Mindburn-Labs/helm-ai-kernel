@@ -29,11 +29,30 @@ func (values *repeatedFlag) Set(value string) error {
 func main() {
 	var contextPath string
 	var outputPath string
+	var permitPath string
 	var reviewPaths repeatedFlag
 	flag.StringVar(&contextPath, "context", "", "path to release-permit context JSON")
 	flag.Var(&reviewPaths, "review", "path to review JSON; provide once per required reviewer")
 	flag.StringVar(&outputPath, "output", "release-permit.json", "path for the permit JSON")
+	flag.StringVar(&permitPath, "verify-permit", "", "verify an existing ALLOW permit and exit")
 	flag.Parse()
+	if permitPath != "" {
+		if contextPath != "" || len(reviewPaths) != 0 || flagWasSet("output") {
+			fatal(errors.New("--verify-permit cannot be combined with --context, --review, or --output"))
+		}
+		var permit releasepermit.Permit
+		content, err := decodeStrictFile(permitPath, &permit)
+		if err != nil {
+			fatal(fmt.Errorf("read permit: %w", err))
+		}
+		if err := releasepermit.ValidateAllowPermit(permit); err != nil {
+			fatal(fmt.Errorf("validate ALLOW permit: %w", err))
+		}
+		if _, err := os.Stdout.Write(content); err != nil {
+			fatal(fmt.Errorf("print permit: %w", err))
+		}
+		return
+	}
 
 	if contextPath == "" || len(reviewPaths) == 0 || outputPath == "" {
 		fatal(errors.New("--context, at least one --review, and --output are required"))
@@ -73,6 +92,16 @@ func main() {
 	if permit.Decision != releasepermit.DecisionAllow {
 		os.Exit(3)
 	}
+}
+
+func flagWasSet(name string) bool {
+	set := false
+	flag.Visit(func(current *flag.Flag) {
+		if current.Name == name {
+			set = true
+		}
+	})
+	return set
 }
 
 func decodeStrictFile(path string, destination any) ([]byte, error) {
@@ -239,6 +268,49 @@ func validateExactShape(content []byte, destination any) error {
 				[]string{"path", "line"},
 				fmt.Sprintf("findings[%d]", index),
 			); err != nil {
+				return err
+			}
+		}
+	case *releasepermit.Permit:
+		if err := requireKeys(root, []string{
+			"schema", "permit_id", "decision", "repository", "pull_request", "base_ref",
+			"base_sha", "head_sha", "merge_sha", "merge_tree_sha", "workflow_repository",
+			"workflow_path", "workflow_ref", "workflow_sha", "run_id", "run_attempt",
+			"issued_at", "authority", "context_sha256", "reviews", "reasons",
+		}, nil, "permit"); err != nil {
+			return err
+		}
+		if err := validateAuthority(root["authority"], "authority"); err != nil {
+			return err
+		}
+		reviews, err := decodeArray(root["reviews"], "reviews")
+		if err != nil {
+			return err
+		}
+		for index, raw := range reviews {
+			review, err := decodeObject(raw, fmt.Sprintf("reviews[%d]", index))
+			if err != nil {
+				return err
+			}
+			if err := requireKeys(review, []string{
+				"reviewer", "verdict", "response_sha256", "blocking_findings", "advisory_findings",
+			}, nil, fmt.Sprintf("reviews[%d]", index)); err != nil {
+				return err
+			}
+			if err := validateReviewer(review["reviewer"], fmt.Sprintf("reviews[%d].reviewer", index)); err != nil {
+				return err
+			}
+		}
+		reasons, err := decodeArray(root["reasons"], "reasons")
+		if err != nil {
+			return err
+		}
+		for index, raw := range reasons {
+			reason, err := decodeObject(raw, fmt.Sprintf("reasons[%d]", index))
+			if err != nil {
+				return err
+			}
+			if err := requireKeys(reason, []string{"code", "detail"}, []string{"reviewer"}, fmt.Sprintf("reasons[%d]", index)); err != nil {
 				return err
 			}
 		}

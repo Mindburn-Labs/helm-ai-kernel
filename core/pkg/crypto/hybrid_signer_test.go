@@ -182,6 +182,18 @@ func TestHybridSigner_SignIntent(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, valid)
 
+	// Public-key-only verification must bind the same effect digest as signing.
+	// SafeExecutor depends on this path when a hybrid signer and verifier are
+	// separated across the execution boundary.
+	verifier, err := NewHybridVerifier(
+		signer.Ed25519Signer().PublicKeyBytes(),
+		signer.MLDSASigner().PublicKeyBytes(),
+	)
+	require.NoError(t, err)
+	valid, err = verifier.VerifyIntent(intent)
+	require.NoError(t, err)
+	assert.True(t, valid, "public-key hybrid verifier should accept the signed intent")
+
 	// Tamper
 	intent.AllowedTool = "delete_file"
 	payloadTampered := CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
@@ -195,6 +207,9 @@ func TestHybridSigner_SignIntent(t *testing.T) {
 	valid, err = signer.Verify([]byte(payloadTampered), intent.Signature)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered effect digest")
+	valid, err = verifier.VerifyIntent(intent)
+	require.NoError(t, err)
+	assert.False(t, valid, "public-key hybrid verifier should reject a tampered effect digest")
 }
 
 func TestHybridSigner_SignReceiptRoundTrip(t *testing.T) {

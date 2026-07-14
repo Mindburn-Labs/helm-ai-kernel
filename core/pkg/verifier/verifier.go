@@ -393,8 +393,30 @@ func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts V
 		if firstString(document, "type") == "mcp_policy_decision" {
 			return verifyMCPPolicyDecisionReceiptSignature(document, sig, opts)
 		}
+		if firstString(document, "type") == "mcp_governed_effect_execution" {
+			return verifyMCPGovernedEffectReceiptSignature(document, sig, opts)
+		}
 		return false
 	}
+}
+
+// verifyMCPGovernedEffectReceiptSignature verifies the SafeExecutor receipt
+// emitted by the local positive MCP proof. Like the policy-decision receipt,
+// its disclosed key is trusted only inside a dev-local pack whose seal has
+// already passed. Production profiles require out-of-band trust roots.
+func verifyMCPGovernedEffectReceiptSignature(document map[string]any, sig string, opts VerifyOptions) bool {
+	profile := opts.Profile
+	if profile == "" {
+		profile = evidencepkg.EvidenceTrustProfileDevLocal
+	}
+	if profile != evidencepkg.EvidenceTrustProfileDevLocal || firstString(document, "signature_algorithm") != "ed25519" {
+		return false
+	}
+	keySet, _ := document["public_key_set"].(map[string]any)
+	if keySet == nil {
+		return false
+	}
+	return verifyEd25519CanonicalReceipt(document, sig, firstString(keySet, "ed25519"))
 }
 
 // verifyMCPPolicyDecisionReceiptSignature verifies kernel-issued MCP proof
@@ -428,7 +450,11 @@ func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string
 			return false
 		}
 	}
-	pubBytes, err := hex.DecodeString(keyHex)
+	return verifyEd25519CanonicalReceipt(document, sig, keyHex)
+}
+
+func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) bool {
+	pubBytes, err := hex.DecodeString(strings.TrimSpace(keyHex))
 	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
 		return false
 	}

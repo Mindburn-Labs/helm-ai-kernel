@@ -344,6 +344,13 @@ func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
 	return canonicalize.HashBytes(effectBytes), nil
 }
 
+// CanonicalEffectDigest returns the digest SafeExecutor binds into signed
+// decisions and execution intents. Callers preparing an execution must use
+// this function rather than reimplementing the security-sensitive envelope.
+func CanonicalEffectDigest(effect *contracts.Effect) (string, error) {
+	return canonicalEffectDigest(effect)
+}
+
 type effectDigestEnvelope struct {
 	EffectType     string                `json:"effect_type"`
 	Params         map[string]any        `json:"params,omitempty"`

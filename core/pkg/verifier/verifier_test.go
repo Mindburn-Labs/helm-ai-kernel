@@ -418,6 +418,85 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 	})
 }
 
+func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyHex := hex.EncodeToString(pub)
+	payload := "exec-001:dec-001:mcp.effect/proof.local_write:APPLIED:sha256:out::1:sha256:args"
+	signature := hex.EncodeToString(ed25519.Sign(priv, []byte(payload)))
+	receipt := func(sig, pubKeyHex string) map[string]any {
+		keySet := map[string]any{}
+		if pubKeyHex != "" {
+			keySet["ed25519"] = pubKeyHex
+		}
+		return map[string]any{
+			"type":                "mcp_governed_effect_execution",
+			"receipt_id":          "exec-001",
+			"decision_id":         "dec-001",
+			"effect_id":           "mcp.effect/proof.local_write",
+			"status":              "APPLIED",
+			"output_hash":         "sha256:out",
+			"prev_hash":           "",
+			"lamport_clock":       1,
+			"args_hash":           "sha256:args",
+			"signature":           sig,
+			"signature_algorithm": "ed25519",
+			"public_key_set":      keySet,
+		}
+	}
+
+	t.Run("dev-local trusts seal-anchored key disclosure", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("dev-local governed-effect receipt signature should verify: %+v", check)
+			}
+		}
+	})
+
+	t.Run("tampered signature fails closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		forged := hex.EncodeToString(ed25519.Sign(priv, []byte(payload+"-tampered")))
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(forged, keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("missing key disclosure fails closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, ""))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("non-dev-local profile refuses disclosure trust", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+}
+
 func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {

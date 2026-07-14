@@ -404,6 +404,7 @@ func runServerWithOptions(opts serverOptions) {
 		}
 	}
 	mux := http.NewServeMux()
+	registerDesktopReadyRoute(mux)
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}

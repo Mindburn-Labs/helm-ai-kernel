@@ -70,6 +70,12 @@ You get:  a signed receipt you can verify offline
 
 - Not Kubernetes Helm.
 - Not the hosted HELM Enterprise product.
+- Not HELM Company Builder, Company OS, or HELM Network. Those are target
+  commercial experiences around this boundary, not Kernel features or evidence
+  that they are generally available.
+- Not an app generator, foundation model, social network, bank, escrow service,
+  payment rail, or general ledger. Users may build with any compatible external
+  tool and route consequential actions through this boundary.
 - Not a vague AI-safety claim.
 
 It is the open-source execution boundary: policy in, action checked, receipt out.

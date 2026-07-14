@@ -160,6 +160,27 @@ func TestEvaluateRejectsSelfReviewingAuthorityContext(t *testing.T) {
 	}
 }
 
+func TestEvaluateRejectsCaseAliasedProviderQuorum(t *testing.T) {
+	context := validContext()
+	context.RequiredReviewers[1].Provider = "Anthropic"
+	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+		t.Fatal("Evaluate() error = nil, want non-canonical provider rejection")
+	}
+}
+
+func TestEvaluateRejectsNonBootstrapKernelSelfPin(t *testing.T) {
+	context := validContext()
+	context.Authority.KernelSHA = context.HeadSHA
+	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+		t.Fatal("Evaluate() error = nil, want target-head Kernel rejection")
+	}
+	context.Authority.Generation = 1
+	context.Authority.Parent = nil
+	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err != nil {
+		t.Fatalf("generation 1 bootstrap Evaluate() error = %v", err)
+	}
+}
+
 func TestEvaluateRejectsBrokenAuthorityLineage(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -16,6 +16,7 @@ var (
 	repositoryPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 	hexSHA40Pattern   = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	hexSHA256Pattern  = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	reviewerPattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,127}$`)
 )
 
 // Evaluate validates a two-provider review quorum and returns a deterministic
@@ -62,9 +63,8 @@ func Evaluate(context Context, contextSHA256 string, reviews []Review) (Permit, 
 	for _, review := range reviews {
 		key := reviewerKey(review.Reviewer)
 		provided[key] = append(provided[key], review)
-		if review.Reviewer.Provider == "" || review.Reviewer.Model == "" ||
-			strings.Contains(review.Reviewer.Provider, "/") || strings.Contains(review.Reviewer.Model, "/") {
-			permit.addReason("REVIEW_REVIEWER_INVALID", key, "reviewer provider and model must be non-empty and cannot contain slash")
+		if !reviewerPattern.MatchString(review.Reviewer.Provider) || !reviewerPattern.MatchString(review.Reviewer.Model) {
+			permit.addReason("REVIEW_REVIEWER_INVALID", key, "reviewer provider and model must be canonical lowercase identifiers")
 		}
 		if _, expected := required[key]; !expected {
 			permit.addReason("REVIEW_UNEXPECTED", key, "reviewer is not part of the required quorum")
@@ -170,6 +170,9 @@ func ValidateAllowPermit(permit Permit) error {
 		(permit.WorkflowSHA == permit.HeadSHA || permit.WorkflowSHA == permit.MergeSHA) {
 		problems = append(problems, "authority workflow cannot review its own head or merge commit")
 	}
+	if permit.Authority.Generation > 1 && permit.Authority.KernelSHA == permit.HeadSHA {
+		problems = append(problems, "non-bootstrap authority cannot use the target head as its Kernel")
+	}
 	if permit.RunID <= 0 || permit.RunAttempt <= 0 {
 		problems = append(problems, "run_id and run_attempt must be positive")
 	}
@@ -190,9 +193,8 @@ func ValidateAllowPermit(permit Permit) error {
 		seenProviders := map[string]bool{}
 		for _, review := range permit.Reviews {
 			key := reviewerKey(review.Reviewer)
-			if review.Reviewer.Provider == "" || review.Reviewer.Model == "" ||
-				strings.Contains(review.Reviewer.Provider, "/") || strings.Contains(review.Reviewer.Model, "/") {
-				problems = append(problems, "reviewer provider and model must be non-empty and cannot contain slash")
+			if !reviewerPattern.MatchString(review.Reviewer.Provider) || !reviewerPattern.MatchString(review.Reviewer.Model) {
+				problems = append(problems, "reviewer provider and model must be canonical lowercase identifiers")
 			}
 			if seenKeys[key] || seenProviders[review.Reviewer.Provider] {
 				problems = append(problems, "ALLOW permit reviews must use unique reviewers and distinct providers")
@@ -284,6 +286,9 @@ func validateContext(context Context) error {
 		(context.WorkflowSHA == context.HeadSHA || context.WorkflowSHA == context.MergeSHA) {
 		problems = append(problems, "authority workflow cannot review its own head or merge commit")
 	}
+	if context.Authority.Generation > 1 && context.Authority.KernelSHA == context.HeadSHA {
+		problems = append(problems, "non-bootstrap authority cannot use the target head as its Kernel")
+	}
 	if context.RunID <= 0 || context.RunAttempt <= 0 {
 		problems = append(problems, "run_id and run_attempt must be positive")
 	}
@@ -298,11 +303,8 @@ func validateContext(context Context) error {
 		seenProviders := map[string]bool{}
 		for _, reviewer := range context.RequiredReviewers {
 			key := reviewerKey(reviewer)
-			if reviewer.Provider == "" || reviewer.Model == "" {
-				problems = append(problems, "reviewer provider and model are required")
-			}
-			if strings.Contains(reviewer.Provider, "/") || strings.Contains(reviewer.Model, "/") {
-				problems = append(problems, "reviewer provider and model cannot contain slash")
+			if !reviewerPattern.MatchString(reviewer.Provider) || !reviewerPattern.MatchString(reviewer.Model) {
+				problems = append(problems, "reviewer provider and model must be canonical lowercase identifiers")
 			}
 			if seenKeys[key] {
 				problems = append(problems, "required reviewers must be unique")
@@ -372,9 +374,8 @@ func validateReview(context Context, contextSHA256 string, review Review) (Revie
 	if review.Schema != ReviewSchema {
 		add("REVIEW_SCHEMA_INVALID", "unsupported review schema")
 	}
-	if review.Reviewer.Provider == "" || review.Reviewer.Model == "" ||
-		strings.Contains(review.Reviewer.Provider, "/") || strings.Contains(review.Reviewer.Model, "/") {
-		add("REVIEW_REVIEWER_INVALID", "reviewer provider and model must be non-empty and cannot contain slash")
+	if !reviewerPattern.MatchString(review.Reviewer.Provider) || !reviewerPattern.MatchString(review.Reviewer.Model) {
+		add("REVIEW_REVIEWER_INVALID", "reviewer provider and model must be canonical lowercase identifiers")
 	}
 	if review.Repository != context.Repository ||
 		review.PullRequest != context.PullRequest ||
@@ -435,5 +436,5 @@ func (permit *Permit) addReason(code, reviewer, detail string) {
 }
 
 func reviewerKey(reviewer Reviewer) string {
-	return reviewer.Provider + "/" + reviewer.Model
+	return strings.ToLower(reviewer.Provider) + "/" + strings.ToLower(reviewer.Model)
 }

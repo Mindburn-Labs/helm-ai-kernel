@@ -40,13 +40,9 @@ func main() {
 		if contextPath != "" || len(reviewPaths) != 0 || flagWasSet("output") {
 			fatal(errors.New("--verify-permit cannot be combined with --context, --review, or --output"))
 		}
-		var permit releasepermit.Permit
-		content, err := decodeStrictFile(permitPath, &permit)
+		content, err := verifyPermitFile(permitPath)
 		if err != nil {
-			fatal(fmt.Errorf("read permit: %w", err))
-		}
-		if err := releasepermit.ValidateAllowPermit(permit); err != nil {
-			fatal(fmt.Errorf("validate ALLOW permit: %w", err))
+			fatal(err)
 		}
 		if _, err := os.Stdout.Write(content); err != nil {
 			fatal(fmt.Errorf("print permit: %w", err))
@@ -92,6 +88,18 @@ func main() {
 	if permit.Decision != releasepermit.DecisionAllow {
 		os.Exit(3)
 	}
+}
+
+func verifyPermitFile(path string) ([]byte, error) {
+	var permit releasepermit.Permit
+	content, err := decodeStrictFile(path, &permit)
+	if err != nil {
+		return nil, fmt.Errorf("read permit: %w", err)
+	}
+	if err := releasepermit.ValidateAllowPermit(permit); err != nil {
+		return nil, fmt.Errorf("validate ALLOW permit: %w", err)
+	}
+	return content, nil
 }
 
 func flagWasSet(name string) bool {

@@ -40,6 +40,13 @@ func TestDecodeStrictPermitAcceptsExactShape(t *testing.T) {
 	}
 }
 
+func TestVerifyPermitFileRejectsTamperedPermit(t *testing.T) {
+	path := writeJSONFixture(t, validPermitJSON())
+	if _, err := verifyPermitFile(path); err == nil || !strings.Contains(err.Error(), "permit_id") {
+		t.Fatalf("verifyPermitFile() error = %v, want permit digest rejection", err)
+	}
+}
+
 func TestDecodeStrictContextRequiresExactAuthorityShape(t *testing.T) {
 	valid := validContextJSON()
 	for _, test := range []struct {

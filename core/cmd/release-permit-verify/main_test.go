@@ -19,6 +19,17 @@ func TestDecodeStrictReviewAcceptsExactShape(t *testing.T) {
 	}
 }
 
+func TestDecodeStrictFileRejectsOversizedInputBeforeDecode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "oversized.json")
+	if err := os.WriteFile(path, make([]byte, maxInputBytes+1), 0o600); err != nil {
+		t.Fatalf("write oversized fixture: %v", err)
+	}
+	var review releasepermit.Review
+	if _, err := decodeStrictFile(path, &review); err == nil || !strings.Contains(err.Error(), "input exceeds") {
+		t.Fatalf("decodeStrictFile() error = %v, want input size error", err)
+	}
+}
+
 func TestDecodeStrictContextRequiresExactAuthorityShape(t *testing.T) {
 	valid := validContextJSON()
 	for _, test := range []struct {

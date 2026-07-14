@@ -76,6 +76,13 @@ func main() {
 }
 
 func decodeStrictFile(path string, destination any) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > maxInputBytes {
+		return nil, fmt.Errorf("input exceeds %d bytes", maxInputBytes)
+	}
 	// #nosec G304 -- paths are explicit command inputs in a protected workflow.
 	content, err := os.ReadFile(path)
 	if err != nil {

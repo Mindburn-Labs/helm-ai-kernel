@@ -169,7 +169,7 @@ func validateContext(context Context) error {
 	if !hexSHA40Pattern.MatchString(context.WorkflowSHA) {
 		problems = append(problems, "workflow_sha must be a lowercase 40-character Git SHA")
 	}
-	if context.Repository == context.WorkflowRepository &&
+	if strings.EqualFold(context.Repository, context.WorkflowRepository) &&
 		(context.WorkflowSHA == context.HeadSHA || context.WorkflowSHA == context.MergeSHA) {
 		problems = append(problems, "authority workflow cannot review its own head or merge commit")
 	}

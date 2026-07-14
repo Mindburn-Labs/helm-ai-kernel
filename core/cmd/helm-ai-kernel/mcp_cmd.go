@@ -1,3 +1,5 @@
+// quantum_posture: MCP command metadata describes existing Ed25519 receipt
+// evidence only; this CLI layer does not introduce a cryptographic control.
 package main
 
 import (

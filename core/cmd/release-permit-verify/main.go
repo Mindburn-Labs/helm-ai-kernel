@@ -189,8 +189,11 @@ func validateExactShape(content []byte, destination any) error {
 			"schema", "repository", "event", "pull_request", "base_ref", "base_sha",
 			"head_sha", "merge_sha", "merge_tree_sha", "workflow_repository",
 			"workflow_path", "workflow_ref", "workflow_sha", "run_id", "run_attempt",
-			"issued_at", "required_reviewers",
+			"issued_at", "authority", "required_reviewers",
 		}, nil, "context"); err != nil {
+			return err
+		}
+		if err := validateAuthority(root["authority"], "authority"); err != nil {
 			return err
 		}
 		reviewers, err := decodeArray(root["required_reviewers"], "required_reviewers")
@@ -236,6 +239,33 @@ func validateExactShape(content []byte, destination any) error {
 		return fmt.Errorf("unsupported strict JSON destination %T", destination)
 	}
 	return nil
+}
+
+func validateAuthority(raw json.RawMessage, label string) error {
+	authority, err := decodeObject(raw, label)
+	if err != nil {
+		return err
+	}
+	if err := requireKeys(authority, []string{
+		"schema", "generation", "kernel_sha", "gate_profiles_sha256",
+		"adversarial_corpus_sha256", "parent",
+	}, nil, label); err != nil {
+		return err
+	}
+	parent := bytes.TrimSpace(authority["parent"])
+	if bytes.Equal(parent, []byte("null")) {
+		return nil
+	}
+	parentObject, err := decodeObject(parent, label+".parent")
+	if err != nil {
+		return err
+	}
+	return requireKeys(
+		parentObject,
+		[]string{"generation", "workflow_sha"},
+		nil,
+		label+".parent",
+	)
 }
 
 func validateReviewer(raw json.RawMessage, label string) error {

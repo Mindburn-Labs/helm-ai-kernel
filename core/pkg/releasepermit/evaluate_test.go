@@ -158,6 +158,62 @@ func TestEvaluateRejectsSelfReviewingAuthorityContext(t *testing.T) {
 	}
 }
 
+func TestEvaluateRejectsBrokenAuthorityLineage(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Context)
+	}{
+		{
+			name: "missing parent",
+			mutate: func(context *Context) {
+				context.Authority.Parent = nil
+			},
+		},
+		{
+			name: "skipped generation",
+			mutate: func(context *Context) {
+				context.Authority.Parent.Generation = 7
+			},
+		},
+		{
+			name: "self parent",
+			mutate: func(context *Context) {
+				context.Authority.Parent.WorkflowSHA = context.WorkflowSHA
+			},
+		},
+		{
+			name: "invalid corpus digest",
+			mutate: func(context *Context) {
+				context.Authority.AdversarialCorpusSHA256 = "not-a-digest"
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			context := validContext()
+			test.mutate(&context)
+			if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+				t.Fatal("Evaluate() error = nil, want invalid authority lineage error")
+			}
+		})
+	}
+}
+
+func TestEvaluateAllowsBootstrapAuthorityGeneration(t *testing.T) {
+	context := validContext()
+	context.Authority.Generation = 1
+	context.Authority.Parent = nil
+
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if permit.Decision != DecisionAllow {
+		t.Fatalf("Decision = %q, want %q", permit.Decision, DecisionAllow)
+	}
+}
+
 func TestEvaluateRejectsAmbiguousReviewerIdentity(t *testing.T) {
 	context := validContext()
 	context.RequiredReviewers[0].Provider = "anthropic/team"
@@ -293,6 +349,17 @@ func validContext() Context {
 		RunID:              101,
 		RunAttempt:         1,
 		IssuedAt:           "2026-07-14T10:00:00Z",
+		Authority: Authority{
+			Schema:                  AuthoritySchema,
+			Generation:              2,
+			KernelSHA:               "6666666666666666666666666666666666666666",
+			GateProfilesSHA256:      "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+			AdversarialCorpusSHA256: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+			Parent: &AuthorityParent{
+				Generation:  1,
+				WorkflowSHA: "7777777777777777777777777777777777777777",
+			},
+		},
 		RequiredReviewers: []Reviewer{
 			{Provider: "anthropic", Model: "claude-fable-5"},
 			{Provider: "openai", Model: "gpt-5.6-sol"},

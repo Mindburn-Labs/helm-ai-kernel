@@ -4,13 +4,33 @@
 package releasepermit
 
 const (
-	ContextSchema = "mindburn.release-permit-context/v1"
-	ReviewSchema  = "mindburn.release-review/v1"
-	PermitSchema  = "mindburn.release-permit/v1"
+	ContextSchema   = "mindburn.release-permit-context/v2"
+	ReviewSchema    = "mindburn.release-review/v1"
+	PermitSchema    = "mindburn.release-permit/v2"
+	AuthoritySchema = "mindburn.release-authority/v1"
 
 	DecisionAllow = "ALLOW"
 	DecisionDeny  = "DENY"
 )
+
+// AuthorityParent identifies the immediately preceding immutable workflow
+// generation. The previous generation must review and ratify the complete next
+// generation before an external promotion broker advances the ruleset pin.
+type AuthorityParent struct {
+	Generation  int64  `json:"generation"`
+	WorkflowSHA string `json:"workflow_sha"`
+}
+
+// Authority binds the workflow generation to the exact Kernel verifier and
+// source-owned deterministic/adversarial policy inputs it executes.
+type Authority struct {
+	Schema                  string           `json:"schema"`
+	Generation              int64            `json:"generation"`
+	KernelSHA               string           `json:"kernel_sha"`
+	GateProfilesSHA256      string           `json:"gate_profiles_sha256"`
+	AdversarialCorpusSHA256 string           `json:"adversarial_corpus_sha256"`
+	Parent                  *AuthorityParent `json:"parent"`
+}
 
 // Reviewer identifies one independently executed model review lane.
 type Reviewer struct {
@@ -37,6 +57,7 @@ type Context struct {
 	RunID              int64      `json:"run_id"`
 	RunAttempt         int64      `json:"run_attempt"`
 	IssuedAt           string     `json:"issued_at"`
+	Authority          Authority  `json:"authority"`
 	RequiredReviewers  []Reviewer `json:"required_reviewers"`
 }
 
@@ -106,6 +127,7 @@ type Permit struct {
 	RunID              int64           `json:"run_id"`
 	RunAttempt         int64           `json:"run_attempt"`
 	IssuedAt           string          `json:"issued_at"`
+	Authority          Authority       `json:"authority"`
 	ContextSHA256      string          `json:"context_sha256"`
 	Reviews            []ReviewSummary `json:"reviews"`
 	Reasons            []Reason        `json:"reasons"`

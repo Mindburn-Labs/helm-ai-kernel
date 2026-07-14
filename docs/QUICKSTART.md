@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-14
 ---
 
 # Quickstart
@@ -32,8 +32,8 @@ make build
 | Install | `brew install helm-ai-kernel` or `make build` |
 | CLI chooser | `helm-ai-kernel` or `helm-ai-kernel setup` |
 | Local proof | `helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs` |
-| Codex setup | `helm-ai-kernel setup codex --dry-run --json` |
-| Claude Code setup | `helm-ai-kernel setup claude-code --dry-run --json` |
+| Codex setup | Local config plan preview: `helm-ai-kernel setup codex --dry-run --json` |
+| Claude Code setup | Local setup preview; Claude-owned MCP serialization is not read back: `helm-ai-kernel setup claude-code --dry-run --json` |
 | Cursor / Windsurf / VS Code config | `helm-ai-kernel setup --client cursor --print-config` |
 | OpenClaw / Hermes adapters | [tool runtime adapters](INTEGRATIONS/tool-runtime-adapters.md) |
 | Framework adapters | [framework adapters](INTEGRATIONS/framework-adapters.md) |
@@ -154,6 +154,13 @@ helm-ai-kernel setup --client cursor --print-config
 
 Setup writes local config and draft policy artifacts. It does not approve
 detected tools.
+
+For Codex project scope, setup also records a signed lifecycle receipt and a
+Kernel-only synthetic denial. The summary intentionally keeps
+`client_load_observed=false`: that local proof is not a real client-session
+result. Read the [Native Client Integration
+Boundary](INTEGRATIONS/native-client-boundary.md) before describing the local
+result as a client-session outcome.
 
 ## Inspect
 

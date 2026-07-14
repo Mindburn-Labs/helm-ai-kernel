@@ -1,6 +1,6 @@
 ---
 title: HELM documentation
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-14
 ---
 
 # HELM documentation
@@ -35,6 +35,7 @@ Then choose one path.
 - [Scan agent risk](reference/agent-risk-scan.md)
 - [OpenAI proxy](INTEGRATIONS/openai_baseurl.md)
 - [Verify receipts](VERIFICATION.md)
+- [Native client integration boundary](INTEGRATIONS/native-client-boundary.md)
 
 ## More
 

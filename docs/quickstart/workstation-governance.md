@@ -1,8 +1,8 @@
 # Protect Local Coding Agents
 
 HELM can sit around Codex, Claude Code, and similar local agent workflows. The
-goal is narrow: selected effects cross a HELM boundary before dispatch, and
-each decision leaves a local receipt.
+goal is narrow: selected configured hook effects and routed MCP calls cross a
+HELM boundary before dispatch, and each decision leaves a local receipt.
 
 HELM is not a competing coding agent. It evaluates the actions your agent wants
 to take.
@@ -33,6 +33,20 @@ helm-ai-kernel setup claude-code --yes
 
 Setup writes draft policy and quarantine artifacts. It does not approve tools
 or grant broad operating permissions.
+
+For Codex project scope, setup also writes a project-isolated lifecycle record.
+It proves local configuration and a Kernel-only synthetic denial, not that a
+live client loaded the config. Inspect or recover an interrupted transaction
+with:
+
+```bash
+helm-ai-kernel setup status codex --scope project --json
+helm-ai-kernel setup recover codex --scope project --yes
+```
+
+The [native client integration boundary](../INTEGRATIONS/native-client-boundary.md)
+defines the public proof limit: do not describe local setup output as a
+client-session result.
 
 ## Scan The Agent Surface
 

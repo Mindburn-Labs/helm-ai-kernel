@@ -118,6 +118,62 @@ func TestHookPreToolDeniesCodexMCPButSkipsHelmSelfMCP(t *testing.T) {
 	if receipts := globReceipts(t, tmp); len(receipts) != 1 {
 		t.Fatalf("self HELM MCP call wrote receipt, receipts = %v", receipts)
 	}
+
+	stdout.Reset()
+	stderr.Reset()
+	spoofed := `{"toolName":"mcp__evil-helm-ai-kernel-governance__write","toolInput":{"path":"/tmp/x"}}`
+	code = runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp}, strings.NewReader(spoofed), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+		t.Fatalf("substring-spoofed MCP server escaped hook: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 2 {
+		t.Fatalf("spoofed MCP deny did not persist a receipt, receipts = %v", receipts)
+	}
+}
+
+func TestHookPreToolFailsClosedWhenReceiptPathIsSymlinked(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	external := filepath.Join(t.TempDir(), "external")
+	if err := os.MkdirAll(external, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(tmp, "receipts")); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"tool_name":"Write","tool_input":{"file_path":".env"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "could not be persisted") {
+		t.Fatalf("symlinked hook receipt path did not fail closed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	entries, err := os.ReadDir(external)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("hook receipt escaped through symlink: entries=%v err=%v", entries, err)
+	}
+}
+
+func TestWriteHookDecisionReceiptRejectsSymlinkedFinalPath(t *testing.T) {
+	tmp := t.TempDir()
+	receipt := &contracts.WorkstationPolicyDecisionReceipt{DecisionID: "wpd_test"}
+	receiptDir := filepath.Join(tmp, "receipts", "hooks")
+	if err := os.MkdirAll(receiptDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	external := filepath.Join(t.TempDir(), "external.json")
+	if err := os.WriteFile(external, []byte("do-not-touch"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(receiptDir, receipt.DecisionID+".json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeHookDecisionReceipt(tmp, receipt); err == nil {
+		t.Fatal("symlinked final hook receipt path was accepted")
+	}
+	got, err := os.ReadFile(external)
+	if err != nil || string(got) != "do-not-touch" {
+		t.Fatalf("symlinked final hook receipt target changed: got=%q err=%v", got, err)
+	}
 }
 
 func TestHookPreToolDeniesSensitiveWrite(t *testing.T) {
@@ -131,6 +187,19 @@ func TestHookPreToolDeniesSensitiveWrite(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
 		t.Fatalf("sensitive write should be denied, output = %s", stdout.String())
+	}
+}
+
+func TestHookPreToolFailsClosedForMalformedOrUnnamedPayload(t *testing.T) {
+	tmp := t.TempDir()
+	for _, payload := range []string{"not-json", `{"tool_input":{"path":"/tmp/x"}}`} {
+		t.Run(payload, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+			if code != 0 || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "could not decode") {
+				t.Fatalf("malformed hook payload did not produce structured deny: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+		})
 	}
 }
 

@@ -17,3 +17,7 @@ steps can call the selected-effect wrapper. They are examples only; use the
 documented hook surface for the local Claude Code installation.
 
 The wrapper and hooks do not read secrets, browser sessions, or raw chat history.
+They are not a live Claude Code integration result and do not establish Codex
+project lifecycle parity. Native Claude setup resolves a direct executable via
+`CLAUDE_CODE_BIN` when PATH would select a mise shim; see
+[`docs/INTEGRATIONS/native-client-lifecycle.md`](../../../docs/INTEGRATIONS/native-client-lifecycle.md).

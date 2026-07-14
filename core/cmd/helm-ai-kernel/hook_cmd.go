@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
@@ -95,13 +96,36 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		return 2
 	}
 	opts.Client = client
-	if abs, err := filepath.Abs(opts.DataDir); err == nil {
-		opts.DataDir = abs
+	normalizedDataDir, err := normalizeSetupDataDir(opts.DataDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "hook pre-tool: invalid --data-dir: %v\n", err)
+		return 2
+	}
+	opts.DataDir = normalizedDataDir
+	if opts.Client == "codex" {
+		recoveryRequired, recoveryErr := setupRecoveryRequired(opts.DataDir)
+		if recoveryErr != nil || recoveryRequired {
+			reason := "HELM local Codex setup recovery is pending; tool use is denied until `setup recover` completes"
+			if recoveryErr != nil {
+				reason = "HELM local Codex setup recovery state is invalid; tool use is denied until it is inspected"
+				fmt.Fprintf(stderr, "hook pre-tool: inspect Codex setup recovery state: %v\n", recoveryErr)
+			}
+			_ = json.NewEncoder(stdout).Encode(hookDecisionOutput{HookSpecificOutput: hookSpecificOutput{
+				HookEventName:            "PreToolUse",
+				PermissionDecision:       "deny",
+				PermissionDecisionReason: reason,
+			}})
+			return 0
+		}
+		if err := requireCodexProjectRuntimeAdmission(opts.DataDir); err != nil {
+			fmt.Fprintf(stderr, "hook pre-tool: inspect Codex project runtime provenance: %v\n", err)
+			return emitHookDeny(stdout, "HELM local Codex setup provenance is invalid; tool use is denied until it is repaired")
+		}
 	}
 	payload, err := decodePreToolPayload(stdin)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-		return 2
+		return emitHookDeny(stdout, "HELM could not decode the selected tool effect; tool use is denied")
 	}
 	classification := classifyPreToolPayload(payload)
 	if !classification.ShouldDecide {
@@ -110,15 +134,15 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-		return 1
+		return emitHookDeny(stdout, "HELM could not evaluate the selected tool effect; tool use is denied")
 	}
 	if receipt.Verdict != contracts.WorkstationVerdictDeny {
 		return 0
 	}
-	receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
+	receiptPath, err := writeHookDecisionReceipt(opts.DataDir, receipt)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
-		return 1
+		return emitHookDeny(stdout, "HELM denied the selected tool effect because its decision receipt could not be persisted")
 	}
 	reason := fmt.Sprintf("HELM denied %s: %s (receipt: %s)", classification.Reason, receipt.ReasonCode, receiptPath)
 	out := hookDecisionOutput{HookSpecificOutput: hookSpecificOutput{
@@ -128,6 +152,56 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	}}
 	_ = json.NewEncoder(stdout).Encode(out)
 	return 0
+}
+
+// emitHookDeny deliberately returns the hook's successful protocol exit code:
+// clients consume the structured deny decision, while a non-zero command exit
+// is client-version dependent and must never become an accidental allow.
+func emitHookDeny(stdout io.Writer, reason string) int {
+	_ = json.NewEncoder(stdout).Encode(hookDecisionOutput{HookSpecificOutput: hookSpecificOutput{
+		HookEventName:            "PreToolUse",
+		PermissionDecision:       "deny",
+		PermissionDecisionReason: reason,
+	}})
+	return 0
+}
+
+// writeHookDecisionReceipt confines hook-generated receipts to the already
+// normalized HELM data directory. The generic workstation writer deliberately
+// supports arbitrary operator-selected --out paths, so it must not be used by
+// an unattended client hook.
+func writeHookDecisionReceipt(dataDir string, receipt *contracts.WorkstationPolicyDecisionReceipt) (string, error) {
+	if receipt == nil || !safeHookDecisionFilename(receipt.DecisionID) {
+		return "", fmt.Errorf("hook decision receipt id is invalid")
+	}
+	receiptDir := filepath.Join(dataDir, "receipts", "hooks")
+	if err := ensureSetupAuthoritySubdirectory(dataDir, filepath.Join("receipts", "hooks")); err != nil {
+		return "", fmt.Errorf("prepare hook receipt directory: %w", err)
+	}
+	data, err := canonicalize.JCS(receipt)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(receiptDir, receipt.DecisionID+".json")
+	if filepath.Base(path) != receipt.DecisionID+".json" {
+		return "", fmt.Errorf("hook decision receipt path escapes its data directory")
+	}
+	if err := writeSetupPrivateFile(path, append(data, '\n')); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func safeHookDecisionFilename(value string) bool {
+	if value == "" || filepath.Base(value) != value || strings.ContainsRune(value, '\x00') {
+		return false
+	}
+	for _, char := range value {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' || char == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func printHookUsage(w io.Writer) {
@@ -143,6 +217,10 @@ func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
 	}
 	if payload.ToolName == "" {
 		payload.ToolName = payload.ToolNameCamel
+	}
+	payload.ToolName = strings.TrimSpace(payload.ToolName)
+	if payload.ToolName == "" {
+		return payload, fmt.Errorf("hook payload is missing tool_name")
 	}
 	if payload.ToolInput == nil {
 		payload.ToolInput = payload.ToolInputCamel
@@ -283,8 +361,13 @@ func sensitiveApplyPatchTarget(command string) string {
 }
 
 func isHelmSelfMCPTool(tool string) bool {
-	t := strings.ToLower(tool)
-	return strings.Contains(t, "helm-ai-kernel") || strings.Contains(t, "helm_ai_kernel") || strings.Contains(t, "helm-ai-kernel-governance")
+	// A self-call skip prevents the hook from recursively governing the
+	// governance server. It is intentionally an exact server namespace, not a
+	// substring: a foreign MCP server can otherwise name itself
+	// "evil-helm-ai-kernel" and escape the hook entirely.
+	prefix := "mcp__" + setupMCPServerName + "__"
+	t := strings.ToLower(strings.TrimSpace(tool))
+	return strings.HasPrefix(t, prefix) && len(t) > len(prefix)
 }
 
 func isSensitiveWriteTarget(path string) bool {

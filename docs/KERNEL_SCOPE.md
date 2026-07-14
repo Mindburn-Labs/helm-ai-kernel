@@ -1,6 +1,6 @@
 ---
 title: KERNEL_SCOPE
-last_reviewed: 2026-05-12
+last_reviewed: 2026-07-14
 ---
 
 # HELM AI Kernel Scope
@@ -153,6 +153,15 @@ not an adapter. It provides:
 The governed proxy (`/v1/chat/completions`) intercepts OpenAI-compatible
 tool calls and routes them through the PEP boundary.
 
+### Native Client Setup
+
+The CLI can write selected local Codex and Claude Code configuration. Codex
+project scope additionally has an owner-checked workspace-hash namespace, signed
+lifecycle evidence, and crash recovery. This is configuration and local
+authority management, not an agent runtime: only configured hook classes and
+MCP calls routed through HELM can cross the Kernel boundary. A matching config
+or synthetic denial does not prove a live client session.
+
 ### Bounded-Surface Primitives
 
 The OSS kernel includes configurable surface containment primitives
@@ -176,6 +185,8 @@ OSS includes:
 - **MCP interceptor** — first-class governed MCP surface
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs
 - **Headless API contract** — HTTP routes, schemas, receipts, SDKs, and conformance fixtures for external clients
+- **Native setup lifecycle** — private local authority checks, project-scoped
+  Codex binding/recovery state, and selected client configuration
 - Adapters and integration surfaces
 
 OSS does not include:
@@ -187,6 +198,7 @@ OSS does not include:
 - Managed federation or hosted trust registries
 - Private entitlement, seat management, usage metering, or account-management systems
 - Non-OSS connector certification programs
+- General native-client, desktop, browser, or OS-wide enforcement
 
 The invariant is simple: OSS must stay fully useful on its own as a developer-first execution kernel: Go CLI, HTTP/API contracts, SDKs, evidence export, offline verification, replay, conformance, and release artifacts. Hosted, organization-specific, and browser UI operations live outside this repository and integrate through those public contracts.
 

@@ -4,6 +4,11 @@ These examples package the manifest-first workstation adapter for local Codex or
 
 They do not use private vendor APIs. The wrapper records a local artifact directory, then HELM imports that directory into a signed Agent Run Receipt and deterministic ProofGraph.
 
+They do not install or exercise the native-client lifecycle. A wrapper receipt
+is not proof that Codex or Claude Code loaded HELM configuration; use
+[`docs/INTEGRATIONS/native-client-lifecycle.md`](../../docs/INTEGRATIONS/native-client-lifecycle.md)
+for the project-scoped setup and sterile-session review boundary.
+
 ## Codex-style run
 
 See `codex/README.md` for the local wrapper boundary.

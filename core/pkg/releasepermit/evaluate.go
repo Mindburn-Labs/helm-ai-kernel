@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -120,11 +121,43 @@ func Evaluate(context Context, contextSHA256 string, reviews []Review) (Permit, 
 }
 
 // ValidateAllowPermit verifies that an existing serialized permit is a complete,
-// internally consistent ALLOW decision issued by this reducer schema. Callers
-// must still bind the permit artifact to the expected Actions run and candidate
-// tree; this function owns permit semantics and canonical digest verification.
-func ValidateAllowPermit(permit Permit) error {
+// internally consistent ALLOW decision bound to an independently trusted
+// context and exact reviewer quorum. This is semantic validation, not artifact
+// authentication: callers must first verify the permit's signed provenance.
+func ValidateAllowPermit(permit Permit, trustedContext Context, contextSHA256 string) error {
 	var problems []string
+	if err := validateContext(trustedContext); err != nil {
+		problems = append(problems, "trusted context is invalid: "+err.Error())
+	}
+	if !hexSHA256Pattern.MatchString(contextSHA256) {
+		problems = append(problems, "trusted context_sha256 must be lowercase hexadecimal")
+	}
+	contextMatch := func(label string, matches bool) {
+		if !matches {
+			problems = append(problems, label+" does not match the trusted context")
+		}
+	}
+	contextMatch("repository", permit.Repository == trustedContext.Repository)
+	contextMatch("pull_request", permit.PullRequest == trustedContext.PullRequest)
+	contextMatch("base_ref", permit.BaseRef == trustedContext.BaseRef)
+	contextMatch("base_sha", permit.BaseSHA == trustedContext.BaseSHA)
+	contextMatch("head_sha", permit.HeadSHA == trustedContext.HeadSHA)
+	contextMatch("merge_sha", permit.MergeSHA == trustedContext.MergeSHA)
+	contextMatch("merge_tree_sha", permit.MergeTreeSHA == trustedContext.MergeTreeSHA)
+	contextMatch("workflow_repository", permit.WorkflowRepository == trustedContext.WorkflowRepository)
+	contextMatch("workflow_path", permit.WorkflowPath == trustedContext.WorkflowPath)
+	contextMatch("workflow_ref", permit.WorkflowRef == trustedContext.WorkflowRef)
+	contextMatch("workflow_sha", permit.WorkflowSHA == trustedContext.WorkflowSHA)
+	contextMatch("run_id", permit.RunID == trustedContext.RunID)
+	contextMatch("run_attempt", permit.RunAttempt == trustedContext.RunAttempt)
+	contextMatch("issued_at", permit.IssuedAt == trustedContext.IssuedAt)
+	contextMatch("authority", reflect.DeepEqual(permit.Authority, trustedContext.Authority))
+	contextMatch("context_sha256", permit.ContextSHA256 == contextSHA256)
+
+	expectedReviewers := make(map[string]struct{}, len(trustedContext.RequiredReviewers))
+	for _, reviewer := range trustedContext.RequiredReviewers {
+		expectedReviewers[reviewerKey(reviewer)] = struct{}{}
+	}
 	if permit.Schema != PermitSchema {
 		problems = append(problems, "unsupported permit schema")
 	}
@@ -200,6 +233,9 @@ func ValidateAllowPermit(permit Permit) error {
 			if seenKeys[key] || seenProviders[review.Reviewer.Provider] {
 				problems = append(problems, "ALLOW permit reviews must use unique reviewers and distinct providers")
 			}
+			if _, expected := expectedReviewers[key]; !expected {
+				problems = append(problems, "ALLOW permit reviewer is not in the trusted context quorum")
+			}
 			seenKeys[key] = true
 			seenProviders[review.Reviewer.Provider] = true
 			if review.Verdict != DecisionAllow || review.BlockingFindings != 0 {
@@ -211,6 +247,9 @@ func ValidateAllowPermit(permit Permit) error {
 			if !hexSHA256Pattern.MatchString(review.ResponseSHA256) {
 				problems = append(problems, "review response_sha256 must be lowercase hexadecimal")
 			}
+		}
+		if len(seenKeys) != len(expectedReviewers) {
+			problems = append(problems, "ALLOW permit reviewer quorum does not match the trusted context")
 		}
 	}
 	permitID, err := calculatePermitID(permit)

@@ -2,6 +2,7 @@ package releasepermit
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -274,7 +275,7 @@ func TestValidateAllowPermitAcceptsReducerOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
-	if err := ValidateAllowPermit(permit); err != nil {
+	if err := ValidateAllowPermit(permit, context, testContextSHA); err != nil {
 		t.Fatalf("ValidateAllowPermit() error = %v", err)
 	}
 }
@@ -306,7 +307,7 @@ func TestValidateAllowPermitRejectsDigestOrQuorumSubstitution(t *testing.T) {
 			candidate := permit
 			candidate.Reviews = append([]ReviewSummary(nil), permit.Reviews...)
 			test.mutate(&candidate)
-			if err := ValidateAllowPermit(candidate); err == nil {
+			if err := ValidateAllowPermit(candidate, context, testContextSHA); err == nil {
 				t.Fatal("ValidateAllowPermit() error = nil, want rejection")
 			}
 		})
@@ -326,9 +327,43 @@ func TestValidateAllowPermitRejectsRecomputedKernelSelfPin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("calculatePermitID() error = %v", err)
 		}
-		if err := ValidateAllowPermit(candidate); err == nil {
+		if err := ValidateAllowPermit(candidate, context, testContextSHA); err == nil {
 			t.Fatalf("ValidateAllowPermit() error = nil for recomputed Kernel SHA %q", kernelSHA)
 		}
+	}
+}
+
+func TestValidateAllowPermitRejectsRecomputedContextSubstitution(t *testing.T) {
+	context := validContext()
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	permit.HeadSHA = testBaseSHA
+	permit.PermitID, err = calculatePermitID(permit)
+	if err != nil {
+		t.Fatalf("calculatePermitID() error = %v", err)
+	}
+	if err := ValidateAllowPermit(permit, context, testContextSHA); err == nil ||
+		!strings.Contains(err.Error(), "head_sha does not match the trusted context") {
+		t.Fatalf("ValidateAllowPermit() error = %v, want trusted context rejection", err)
+	}
+}
+
+func TestValidateAllowPermitRejectsRecomputedReviewerSubstitution(t *testing.T) {
+	context := validContext()
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	permit.Reviews[1].Reviewer.Model = "substituted-model"
+	permit.PermitID, err = calculatePermitID(permit)
+	if err != nil {
+		t.Fatalf("calculatePermitID() error = %v", err)
+	}
+	if err := ValidateAllowPermit(permit, context, testContextSHA); err == nil ||
+		!strings.Contains(err.Error(), "reviewer is not in the trusted context quorum") {
+		t.Fatalf("ValidateAllowPermit() error = %v, want trusted quorum rejection", err)
 	}
 }
 

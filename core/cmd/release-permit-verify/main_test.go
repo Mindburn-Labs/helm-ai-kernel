@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,8 +45,52 @@ func TestDecodeStrictPermitAcceptsExactShape(t *testing.T) {
 
 func TestVerifyPermitFileRejectsTamperedPermit(t *testing.T) {
 	path := writeJSONFixture(t, validPermitJSON())
-	if _, err := verifyPermitFile(path); err == nil || !strings.Contains(err.Error(), "permit_id") {
+	contextPath := writeJSONFixture(t, validContextJSON())
+	if _, err := verifyPermitFile(path, contextPath); err == nil || !strings.Contains(err.Error(), "permit_id") {
 		t.Fatalf("verifyPermitFile() error = %v, want permit digest rejection", err)
+	}
+}
+
+func TestVerifyPermitFileAcceptsReducerPermitAgainstTrustedContext(t *testing.T) {
+	contextContent := []byte(validContextJSON())
+	var context releasepermit.Context
+	if err := json.Unmarshal(contextContent, &context); err != nil {
+		t.Fatalf("decode context fixture: %v", err)
+	}
+	contextDigest := sha256.Sum256(contextContent)
+	contextSHA256 := hex.EncodeToString(contextDigest[:])
+	reviews := make([]releasepermit.Review, 0, len(context.RequiredReviewers))
+	for index, reviewer := range context.RequiredReviewers {
+		reviews = append(reviews, releasepermit.Review{
+			Schema:         releasepermit.ReviewSchema,
+			Repository:     context.Repository,
+			PullRequest:    context.PullRequest,
+			BaseSHA:        context.BaseSHA,
+			HeadSHA:        context.HeadSHA,
+			MergeSHA:       context.MergeSHA,
+			MergeTreeSHA:   context.MergeTreeSHA,
+			WorkflowSHA:    context.WorkflowSHA,
+			RunID:          context.RunID,
+			RunAttempt:     context.RunAttempt,
+			ContextSHA256:  contextSHA256,
+			Reviewer:       reviewer,
+			Verdict:        releasepermit.DecisionAllow,
+			ResponseSHA256: strings.Repeat(string(rune('a'+index)), 64),
+			Findings:       []releasepermit.Finding{},
+		})
+	}
+	permit, err := releasepermit.Evaluate(context, contextSHA256, reviews)
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	permitContent, err := json.Marshal(permit)
+	if err != nil {
+		t.Fatalf("encode permit: %v", err)
+	}
+	permitPath := writeJSONFixture(t, string(permitContent))
+	contextPath := writeJSONFixture(t, string(contextContent))
+	if _, err := verifyPermitFile(permitPath, contextPath); err != nil {
+		t.Fatalf("verifyPermitFile() error = %v", err)
 	}
 }
 

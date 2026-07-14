@@ -34,13 +34,16 @@ func main() {
 	flag.StringVar(&contextPath, "context", "", "path to release-permit context JSON")
 	flag.Var(&reviewPaths, "review", "path to review JSON; provide once per required reviewer")
 	flag.StringVar(&outputPath, "output", "release-permit.json", "path for the permit JSON")
-	flag.StringVar(&permitPath, "verify-permit", "", "verify an existing ALLOW permit and exit")
+	flag.StringVar(&permitPath, "verify-permit", "", "semantically validate an ALLOW permit against trusted --context; verify signed provenance separately")
 	flag.Parse()
 	if permitPath != "" {
-		if contextPath != "" || len(reviewPaths) != 0 || flagWasSet("output") {
-			fatal(errors.New("--verify-permit cannot be combined with --context, --review, or --output"))
+		if contextPath == "" {
+			fatal(errors.New("--verify-permit requires an independently trusted --context"))
 		}
-		content, err := verifyPermitFile(permitPath)
+		if len(reviewPaths) != 0 || flagWasSet("output") {
+			fatal(errors.New("--verify-permit cannot be combined with --review or --output"))
+		}
+		content, err := verifyPermitFile(permitPath, contextPath)
 		if err != nil {
 			fatal(err)
 		}
@@ -90,13 +93,21 @@ func main() {
 	}
 }
 
-func verifyPermitFile(path string) ([]byte, error) {
+func verifyPermitFile(path, contextPath string) ([]byte, error) {
+	var trustedContext releasepermit.Context
+	contextContent, err := decodeStrictFile(contextPath, &trustedContext)
+	if err != nil {
+		return nil, fmt.Errorf("read trusted context: %w", err)
+	}
+	contextDigest := sha256.Sum256(contextContent)
+	contextSHA256 := hex.EncodeToString(contextDigest[:])
+
 	var permit releasepermit.Permit
 	content, err := decodeStrictFile(path, &permit)
 	if err != nil {
 		return nil, fmt.Errorf("read permit: %w", err)
 	}
-	if err := releasepermit.ValidateAllowPermit(permit); err != nil {
+	if err := releasepermit.ValidateAllowPermit(permit, trustedContext, contextSHA256); err != nil {
 		return nil, fmt.Errorf("validate ALLOW permit: %w", err)
 	}
 	return content, nil

@@ -169,15 +169,17 @@ func TestEvaluateRejectsCaseAliasedProviderQuorum(t *testing.T) {
 }
 
 func TestEvaluateRejectsNonBootstrapKernelSelfPin(t *testing.T) {
-	context := validContext()
-	context.Authority.KernelSHA = context.HeadSHA
-	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
-		t.Fatal("Evaluate() error = nil, want target-head Kernel rejection")
-	}
-	context.Authority.Generation = 1
-	context.Authority.Parent = nil
-	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err != nil {
-		t.Fatalf("generation 1 bootstrap Evaluate() error = %v", err)
+	for _, kernelSHA := range []string{testHeadSHA, testMergeSHA} {
+		context := validContext()
+		context.Authority.KernelSHA = kernelSHA
+		if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+			t.Fatalf("Evaluate() error = nil for Kernel SHA %q, want target-tree Kernel rejection", kernelSHA)
+		}
+		context.Authority.Generation = 1
+		context.Authority.Parent = nil
+		if _, err := Evaluate(context, testContextSHA, validReviews(context)); err != nil {
+			t.Fatalf("generation 1 bootstrap Evaluate() error = %v", err)
+		}
 	}
 }
 

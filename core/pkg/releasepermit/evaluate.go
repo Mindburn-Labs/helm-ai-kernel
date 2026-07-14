@@ -286,8 +286,9 @@ func validateContext(context Context) error {
 		(context.WorkflowSHA == context.HeadSHA || context.WorkflowSHA == context.MergeSHA) {
 		problems = append(problems, "authority workflow cannot review its own head or merge commit")
 	}
-	if context.Authority.Generation > 1 && context.Authority.KernelSHA == context.HeadSHA {
-		problems = append(problems, "non-bootstrap authority cannot use the target head as its Kernel")
+	if context.Authority.Generation > 1 &&
+		(context.Authority.KernelSHA == context.HeadSHA || context.Authority.KernelSHA == context.MergeSHA) {
+		problems = append(problems, "non-bootstrap authority cannot use the target head or merge commit as its Kernel")
 	}
 	if context.RunID <= 0 || context.RunAttempt <= 0 {
 		problems = append(problems, "run_id and run_attempt must be positive")

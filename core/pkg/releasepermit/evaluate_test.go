@@ -9,6 +9,9 @@ const (
 	testBaseSHA     = "1111111111111111111111111111111111111111"
 	testHeadSHA     = "2222222222222222222222222222222222222222"
 	testWorkflowSHA = "3333333333333333333333333333333333333333"
+	testMergeSHA    = "4444444444444444444444444444444444444444"
+	testMergeTree   = "5555555555555555555555555555555555555555"
+	testContextSHA  = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 	testResponseA   = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	testResponseB   = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
@@ -18,7 +21,7 @@ func TestEvaluateAllowsTwoProviderQuorum(t *testing.T) {
 	reviews := validReviews(context)
 	reviews[0].Findings = []Finding{{Severity: "P3", Code: "STYLE", Summary: "Non-blocking naming improvement"}}
 
-	permit, err := Evaluate(context, reviews)
+	permit, err := Evaluate(context, testContextSHA, reviews)
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
@@ -38,7 +41,7 @@ func TestEvaluateDeniesBlockingFinding(t *testing.T) {
 	reviews := validReviews(context)
 	reviews[1].Findings = []Finding{{Severity: "P1", Code: "AUTH_BYPASS", Summary: "Authorization is bypassed"}}
 
-	permit, err := Evaluate(context, reviews)
+	permit, err := Evaluate(context, testContextSHA, reviews)
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
@@ -50,7 +53,7 @@ func TestEvaluateDeniesStaleHead(t *testing.T) {
 	reviews := validReviews(context)
 	reviews[0].HeadSHA = "4444444444444444444444444444444444444444"
 
-	permit, err := Evaluate(context, reviews)
+	permit, err := Evaluate(context, testContextSHA, reviews)
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
@@ -61,7 +64,7 @@ func TestEvaluateDeniesMissingReviewer(t *testing.T) {
 	context := validContext()
 	reviews := validReviews(context)[:1]
 
-	permit, err := Evaluate(context, reviews)
+	permit, err := Evaluate(context, testContextSHA, reviews)
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
@@ -74,7 +77,7 @@ func TestEvaluateDeniesDuplicateReviewer(t *testing.T) {
 	reviews := validReviews(context)
 	reviews[1].Reviewer = reviews[0].Reviewer
 
-	permit, err := Evaluate(context, reviews)
+	permit, err := Evaluate(context, testContextSHA, reviews)
 	if err != nil {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
@@ -82,11 +85,29 @@ func TestEvaluateDeniesDuplicateReviewer(t *testing.T) {
 	assertDeniedFor(t, permit, "REVIEW_MISSING")
 }
 
+func TestEvaluateDuplicateEvidenceIsOrderIndependent(t *testing.T) {
+	context := validContext()
+	firstReview := validReview(context, context.RequiredReviewers[0], testResponseA)
+	secondReview := validReview(context, context.RequiredReviewers[0], testResponseB)
+
+	first, err := Evaluate(context, testContextSHA, []Review{firstReview, secondReview})
+	if err != nil {
+		t.Fatalf("Evaluate(first) error = %v", err)
+	}
+	second, err := Evaluate(context, testContextSHA, []Review{secondReview, firstReview})
+	if err != nil {
+		t.Fatalf("Evaluate(second) error = %v", err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("duplicate permits differ by input order:\nfirst: %#v\nsecond: %#v", first, second)
+	}
+}
+
 func TestEvaluateRejectsInvalidContext(t *testing.T) {
 	context := validContext()
 	context.RequiredReviewers[1].Provider = context.RequiredReviewers[0].Provider
 
-	if _, err := Evaluate(context, validReviews(context)); err == nil {
+	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
 		t.Fatal("Evaluate() error = nil, want invalid distinct-provider context error")
 	}
 }
@@ -94,12 +115,12 @@ func TestEvaluateRejectsInvalidContext(t *testing.T) {
 func TestEvaluatePermitIDIsIndependentOfInputReviewOrder(t *testing.T) {
 	context := validContext()
 	reviews := validReviews(context)
-	first, err := Evaluate(context, reviews)
+	first, err := Evaluate(context, testContextSHA, reviews)
 	if err != nil {
 		t.Fatalf("Evaluate(first) error = %v", err)
 	}
 	reversed := []Review{reviews[1], reviews[0]}
-	second, err := Evaluate(context, reversed)
+	second, err := Evaluate(context, testContextSHA, reversed)
 	if err != nil {
 		t.Fatalf("Evaluate(second) error = %v", err)
 	}
@@ -111,6 +132,30 @@ func TestEvaluatePermitIDIsIndependentOfInputReviewOrder(t *testing.T) {
 	}
 }
 
+func TestEvaluateDeniesContextSubstitution(t *testing.T) {
+	context := validContext()
+	reviews := validReviews(context)
+	reviews[0].ContextSHA256 = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+
+	permit, err := Evaluate(context, testContextSHA, reviews)
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	assertDeniedFor(t, permit, "REVIEW_CONTEXT_MISMATCH")
+}
+
+func TestEvaluateDeniesNilFindings(t *testing.T) {
+	context := validContext()
+	reviews := validReviews(context)
+	reviews[0].Findings = nil
+
+	permit, err := Evaluate(context, testContextSHA, reviews)
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	assertDeniedFor(t, permit, "REVIEW_FINDINGS_INVALID")
+}
+
 func validContext() Context {
 	return Context{
 		Schema:             ContextSchema,
@@ -120,6 +165,8 @@ func validContext() Context {
 		BaseRef:            "refs/heads/main",
 		BaseSHA:            testBaseSHA,
 		HeadSHA:            testHeadSHA,
+		MergeSHA:           testMergeSHA,
+		MergeTreeSHA:       testMergeTree,
 		WorkflowRepository: "Mindburn-Labs/.github",
 		WorkflowPath:       ".github/workflows/autonomous-release-permit.yml",
 		WorkflowRef:        "refs/heads/main",
@@ -151,6 +198,7 @@ func validReview(context Context, reviewer Reviewer, digest string) Review {
 		WorkflowSHA:    context.WorkflowSHA,
 		RunID:          context.RunID,
 		RunAttempt:     context.RunAttempt,
+		ContextSHA256:  testContextSHA,
 		Reviewer:       reviewer,
 		Verdict:        DecisionAllow,
 		ResponseSHA256: digest,

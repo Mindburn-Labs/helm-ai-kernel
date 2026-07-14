@@ -22,9 +22,12 @@ var (
 // permit. A structurally invalid context is an error because no trustworthy
 // decision can be bound to it. Invalid, stale, missing, or denying reviews
 // produce a well-formed DENY permit.
-func Evaluate(context Context, reviews []Review) (Permit, error) {
+func Evaluate(context Context, contextSHA256 string, reviews []Review) (Permit, error) {
 	if err := validateContext(context); err != nil {
 		return Permit{}, err
+	}
+	if !hexSHA256Pattern.MatchString(contextSHA256) {
+		return Permit{}, errors.New("context_sha256 must be lowercase hexadecimal")
 	}
 
 	permit := Permit{
@@ -35,6 +38,8 @@ func Evaluate(context Context, reviews []Review) (Permit, error) {
 		BaseRef:            context.BaseRef,
 		BaseSHA:            context.BaseSHA,
 		HeadSHA:            context.HeadSHA,
+		MergeSHA:           context.MergeSHA,
+		MergeTreeSHA:       context.MergeTreeSHA,
 		WorkflowRepository: context.WorkflowRepository,
 		WorkflowPath:       context.WorkflowPath,
 		WorkflowRef:        context.WorkflowRef,
@@ -42,6 +47,7 @@ func Evaluate(context Context, reviews []Review) (Permit, error) {
 		RunID:              context.RunID,
 		RunAttempt:         context.RunAttempt,
 		IssuedAt:           context.IssuedAt,
+		ContextSHA256:      contextSHA256,
 		Reviews:            make([]ReviewSummary, 0, len(context.RequiredReviewers)),
 		Reasons:            []Reason{},
 	}
@@ -51,28 +57,33 @@ func Evaluate(context Context, reviews []Review) (Permit, error) {
 		required[reviewerKey(reviewer)] = reviewer
 	}
 
-	provided := make(map[string]Review, len(reviews))
+	provided := make(map[string][]Review, len(reviews))
 	for _, review := range reviews {
 		key := reviewerKey(review.Reviewer)
-		if _, exists := provided[key]; exists {
-			permit.addReason("REVIEW_DUPLICATE", key, "more than one review used the same provider and model")
-			continue
-		}
-		provided[key] = review
+		provided[key] = append(provided[key], review)
 		if _, expected := required[key]; !expected {
 			permit.addReason("REVIEW_UNEXPECTED", key, "reviewer is not part of the required quorum")
+		}
+	}
+	for key, group := range provided {
+		if len(group) > 1 {
+			permit.addReason("REVIEW_DUPLICATE", key, "more than one review used the same provider and model")
 		}
 	}
 
 	for _, expected := range context.RequiredReviewers {
 		key := reviewerKey(expected)
-		review, ok := provided[key]
-		if !ok {
+		group := provided[key]
+		if len(group) == 0 {
 			permit.addReason("REVIEW_MISSING", key, "required reviewer did not produce a result")
 			continue
 		}
+		if len(group) > 1 {
+			permit.addReason("REVIEW_MISSING", key, "required reviewer did not produce one unique result")
+			continue
+		}
 
-		summary, reasons := validateReview(context, review)
+		summary, reasons := validateReview(context, contextSHA256, group[0])
 		permit.Reviews = append(permit.Reviews, summary)
 		for _, reason := range reasons {
 			permit.addReason(reason.Code, reason.Reviewer, reason.Detail)
@@ -129,6 +140,12 @@ func validateContext(context Context) error {
 	if !hexSHA40Pattern.MatchString(context.HeadSHA) {
 		problems = append(problems, "head_sha must be a lowercase 40-character Git SHA")
 	}
+	if !hexSHA40Pattern.MatchString(context.MergeSHA) {
+		problems = append(problems, "merge_sha must be a lowercase 40-character Git SHA")
+	}
+	if !hexSHA40Pattern.MatchString(context.MergeTreeSHA) {
+		problems = append(problems, "merge_tree_sha must be a lowercase 40-character Git SHA")
+	}
 	if !repositoryPattern.MatchString(context.WorkflowRepository) {
 		problems = append(problems, "invalid workflow_repository")
 	}
@@ -174,7 +191,7 @@ func validateContext(context Context) error {
 	return nil
 }
 
-func validateReview(context Context, review Review) (ReviewSummary, []Reason) {
+func validateReview(context Context, contextSHA256 string, review Review) (ReviewSummary, []Reason) {
 	key := reviewerKey(review.Reviewer)
 	summary := ReviewSummary{
 		Reviewer:       review.Reviewer,
@@ -198,6 +215,9 @@ func validateReview(context Context, review Review) (ReviewSummary, []Reason) {
 		review.RunAttempt != context.RunAttempt {
 		add("REVIEW_METADATA_MISMATCH", "review is not bound to the requested repository, commit, workflow, and run")
 	}
+	if review.ContextSHA256 != contextSHA256 {
+		add("REVIEW_CONTEXT_MISMATCH", "review is not bound to the complete permit context")
+	}
 	if !hexSHA256Pattern.MatchString(review.ResponseSHA256) {
 		add("REVIEW_DIGEST_INVALID", "response_sha256 must be lowercase hexadecimal")
 	}
@@ -206,8 +226,8 @@ func validateReview(context Context, review Review) (ReviewSummary, []Reason) {
 	} else if review.Verdict == DecisionDeny {
 		add("REVIEW_DENIED", "reviewer denied the proposed change")
 	}
-	if len(review.Findings) > 200 {
-		add("REVIEW_FINDINGS_INVALID", "review contains more than 200 findings")
+	if review.Findings == nil || len(review.Findings) > 200 {
+		add("REVIEW_FINDINGS_INVALID", "review findings must be an explicit array of at most 200 items")
 	}
 	for _, finding := range review.Findings {
 		if finding.Code == "" || finding.Summary == "" || len(finding.Code) > 120 || len(finding.Summary) > 2000 {

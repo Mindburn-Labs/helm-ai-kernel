@@ -28,6 +28,8 @@ type Context struct {
 	BaseRef            string     `json:"base_ref"`
 	BaseSHA            string     `json:"base_sha"`
 	HeadSHA            string     `json:"head_sha"`
+	MergeSHA           string     `json:"merge_sha"`
+	MergeTreeSHA       string     `json:"merge_tree_sha"`
 	WorkflowRepository string     `json:"workflow_repository"`
 	WorkflowPath       string     `json:"workflow_path"`
 	WorkflowRef        string     `json:"workflow_ref"`
@@ -58,6 +60,7 @@ type Review struct {
 	WorkflowSHA    string    `json:"workflow_sha"`
 	RunID          int64     `json:"run_id"`
 	RunAttempt     int64     `json:"run_attempt"`
+	ContextSHA256  string    `json:"context_sha256"`
 	Reviewer       Reviewer  `json:"reviewer"`
 	Verdict        string    `json:"verdict"`
 	ResponseSHA256 string    `json:"response_sha256"`
@@ -92,6 +95,8 @@ type Permit struct {
 	BaseRef            string          `json:"base_ref"`
 	BaseSHA            string          `json:"base_sha"`
 	HeadSHA            string          `json:"head_sha"`
+	MergeSHA           string          `json:"merge_sha"`
+	MergeTreeSHA       string          `json:"merge_tree_sha"`
 	WorkflowRepository string          `json:"workflow_repository"`
 	WorkflowPath       string          `json:"workflow_path"`
 	WorkflowRef        string          `json:"workflow_ref"`
@@ -99,6 +104,7 @@ type Permit struct {
 	RunID              int64           `json:"run_id"`
 	RunAttempt         int64           `json:"run_attempt"`
 	IssuedAt           string          `json:"issued_at"`
+	ContextSHA256      string          `json:"context_sha256"`
 	Reviews            []ReviewSummary `json:"reviews"`
 	Reasons            []Reason        `json:"reasons"`
 }

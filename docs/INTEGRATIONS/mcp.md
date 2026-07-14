@@ -93,11 +93,16 @@ helm-ai-kernel mcp receipts --json
 helm-ai-kernel mcp get --server-id helm-demo-shell --json
 ```
 
-Run the no-dispatch proof:
+Run the 60-second positive-and-negative governed-effect proof:
 
 ```bash
 helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
 ```
+
+It dispatches one fixed reversible local-file effect through `SafeExecutor`,
+proves identical sequential replay does not redispatch, proves every negative
+case remains at zero dispatch, seals and verifies the EvidencePack offline,
+and requires a tampered copy to fail verification.
 
 ## What Still Blocks
 

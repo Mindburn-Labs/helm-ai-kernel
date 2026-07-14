@@ -49,8 +49,9 @@ bash scripts/launch/demo-mcp.sh
 The sanitized transcript is checked in at
 [`examples/launch/assets/mcp-quarantine.transcript.txt`](../../examples/launch/assets/mcp-quarantine.transcript.txt).
 
-For a source-owned proof bundle with signed denial/escalation receipts, sealed
-EvidencePack output, and offline verifier output, run:
+For a source-owned proof bundle with one approved reversible local effect,
+signed allow/denial/escalation receipts, sealed EvidencePack output, offline
+verification, and a required tamper-negative check, run:
 
 ```bash
 helm-ai-kernel mcp proof \
@@ -61,10 +62,13 @@ helm-ai-kernel mcp proof \
   --json
 ```
 
-The command covers malicious or unknown MCP servers, prompt-injected tool
-output, excessive agency, confused-deputy scope mismatch, missing schema pins,
-schema drift, and replay or reordering attempts. Every case must report
-`dispatched=false`.
+The command covers one pinned, scoped-approval path that dispatches exactly
+once through `SafeExecutor`, then proves identical sequential replay does not
+redispatch. It also covers malicious or unknown MCP servers, prompt-injected
+tool output, excessive agency, invalid approval scope, confused-deputy scope
+mismatch, missing schema pins, schema drift, and replay or reordering attempts.
+Every negative case must report `dispatched=false`, and the complete proof must
+finish in under 60 seconds.
 
 See [MCP competitive threat conformance](../security/mcp-competitive-threat-conformance.md)
 for the source files and validation commands.

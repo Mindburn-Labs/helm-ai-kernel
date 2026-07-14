@@ -1,6 +1,6 @@
 ---
 title: HELM Proof Loop
-last_reviewed: 2026-07-02
+last_reviewed: 2026-07-14
 ---
 
 # HELM Proof Loop
@@ -19,7 +19,7 @@ agent proposes action
 -> receipt and EvidencePack material can be verified offline
 ```
 
-## One Local Path
+## One 60-Second Local Path
 
 Install the kernel, run the local proof, then verify the bundle:
 
@@ -29,6 +29,28 @@ brew install helm-ai-kernel
 helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
 helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --json
 ```
+
+`mcp proof` runs both sides of the boundary in one deterministic sequence:
+
+1. A pinned tool with a valid scoped approval writes one fixed file inside the
+   proof output directory through the real `SafeExecutor` path.
+2. Replaying the identical authorized effect returns the stored signed receipt;
+   the local driver remains at one dispatch.
+3. Missing and invalid approval paths, along with the remaining threat cases,
+   produce `DENY` or `ESCALATE` receipts and never call the driver.
+4. The command seals an EvidencePack, verifies it offline, mutates a copied
+   pack, and requires that tampered copy to fail verification.
+5. The command exits non-zero unless the complete proof finishes in under
+   60 seconds. `12_REPORTS/60_second_gate.json` records the governed-scenario
+   timing inside the sealed pack; `summary.json` records the complete command
+   timing.
+
+The effect is deliberately local and reversible: the only dispatched tool can
+write the fixed `effects/reversible_effect.txt` path beneath that proof run.
+The pack contains its content at `04_EXPORTS/reversible_effect.txt`, plus the
+policy receipt, signed execution receipt, and replay tape. The replay guarantee
+demonstrated here is sequential same-effect idempotency; it is not a claim of
+concurrent or crash-recovery exactly-once execution.
 
 For one workstation receipt:
 

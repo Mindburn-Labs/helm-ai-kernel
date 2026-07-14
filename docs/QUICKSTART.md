@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-14
 ---
 
 # Quickstart
@@ -55,14 +55,33 @@ Expected shape:
 
 ```json
 {
-  "schema_version": "helm.mcp.proof/v1",
+  "schema_version": "helm.mcp.proof/v2",
   "offline_verified": true,
+  "tamper_rejected": true,
+  "negative_cases_no_dispatch": true,
+  "dispatch_count": 1,
+  "replay_no_redispatch": true,
+  "duration_gate_pass": true,
   "scenarios": [
-    { "verdict": "ESCALATE", "dispatched": false },
+    {
+      "scenario_id": "approved_reversible_local_effect",
+      "verdict": "ALLOW",
+      "dispatched": true,
+      "dispatch_count": 1,
+      "replay_no_redispatch": true
+    },
     { "verdict": "DENY", "dispatched": false }
   ]
 }
 ```
+
+The positive case writes one fixed, reversible file under the proof output
+directory through `SafeExecutor`. Replaying the same authorized intent returns
+the stored receipt without a second dispatch. Missing or invalid approvals,
+schema drift, confused-deputy scope, and the other negative cases remain at
+zero dispatch. The command fails unless the complete run—including pack seal,
+offline verification, and a required tamper-negative check—finishes in under
+60 seconds.
 
 Verify the generated EvidencePack offline:
 
@@ -70,9 +89,9 @@ Verify the generated EvidencePack offline:
 helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --json
 ```
 
-When the `v0.7.2` GitHub Release publishes an `evidence-pack.tar`, use that
-release asset for release verification instead of a local proof bundle. Until
-then, the local proof bundle above is the verifiable path.
+For a tagged release, use its published `evidence-pack.tar` asset for release
+verification. The local command above is the reproducible workstation proof
+for the installed binary or a source build.
 
 For the full public flow, see [HELM Proof Loop](PROOF_LOOP.md).
 

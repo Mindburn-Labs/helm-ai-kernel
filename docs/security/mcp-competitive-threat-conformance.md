@@ -1,6 +1,6 @@
 ---
 title: MCP Competitive Threat Conformance
-last_reviewed: 2026-06-09
+last_reviewed: 2026-07-14
 ---
 
 # MCP Competitive Threat Conformance
@@ -31,17 +31,23 @@ helm-ai-kernel verify --bundle /tmp/helm-mcp-proof/public_mcp_proof/evidencepack
 
 | Scenario | Expected boundary result |
 | --- | --- |
+| `approved_reversible_local_effect` | Valid scoped approval and pinned schema dispatch exactly one local file effect through `SafeExecutor`; identical sequential replay returns its stored receipt with no redispatch. |
 | `malicious_unknown_mcp` | Unknown or malicious MCP server returns `ESCALATE` with no dispatch. |
 | `prompt_injected_tool_output` | Tool-output instruction cannot trigger a side effect without an approval receipt. |
 | `excessive_agency` | Destructive autonomous action returns `DENY` before dispatch. |
+| `invalid_approval_scope` | Unrecognized or out-of-scope approval receipt returns `DENY` before dispatch. |
 | `confused_deputy_scope_mismatch` | Launch or principal scope mismatch returns `DENY`. |
 | `missing_schema_pin` | Approved server without a pinned tool schema returns `ESCALATE`. |
 | `schema_drift` | Caller schema hash mismatch returns `DENY`. |
 | `replay_reordering_attempt` | Replay or reordering attempt is marked invalid and returns `DENY`. |
 
-Every scenario must emit `dispatched=false`, a receipt under
-`02_PROOFGRAPH/receipts/`, and a decision hash. The pack seal lives at
-`07_ATTESTATIONS/evidence_pack.sig`.
+Every negative scenario must emit `dispatched=false`, a receipt under
+`02_PROOFGRAPH/receipts/`, and a decision hash. The positive scenario emits
+exactly one dispatch, a signed execution receipt, the local effect artifact,
+and a replay tape proving that an identical sequential replay did not
+redispatch. The pack seal lives at `07_ATTESTATIONS/evidence_pack.sig`; the CLI
+also requires offline verification, tamper rejection, and a complete duration
+below 60 seconds.
 
 ## Source Truth
 
@@ -54,5 +60,5 @@ Every scenario must emit `dispatched=false`, a receipt under
 
 ```bash
 go test ./core/cmd/helm-ai-kernel -run 'TestRunMCPProof|TestRunMCPCmdHelpIncludesProof'
-go test ./core/pkg/launchpad/mcp ./core/pkg/evidence ./core/pkg/verifier ./core/pkg/runtimeadapters/mcp ./core/pkg/launchpad/receipts
+go test ./core/pkg/launchpad/mcp ./core/pkg/evidence ./core/pkg/verifier ./core/pkg/runtimeadapters/mcp ./core/pkg/launchpad/receipts ./core/pkg/executor ./core/pkg/crypto
 ```

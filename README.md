@@ -57,7 +57,7 @@ You get:  a signed receipt you can verify offline
 
 | Need | Link |
 | --- | --- |
-| 5-minute local proof | [Quickstart](docs/QUICKSTART.md) |
+| 60-second governed-effect proof | [Quickstart](docs/QUICKSTART.md) |
 | End-to-end proof loop | [HELM Proof Loop](docs/PROOF_LOOP.md) |
 | Local AI-agent risk audit | [Agent Risk Scan](docs/reference/agent-risk-scan.md) |
 | CLI commands | [CLI reference](docs/reference/cli.md) |

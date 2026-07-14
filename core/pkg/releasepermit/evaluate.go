@@ -47,6 +47,7 @@ func Evaluate(context Context, contextSHA256 string, reviews []Review) (Permit, 
 		RunID:              context.RunID,
 		RunAttempt:         context.RunAttempt,
 		IssuedAt:           context.IssuedAt,
+		Authority:          context.Authority,
 		ContextSHA256:      contextSHA256,
 		Reviews:            make([]ReviewSummary, 0, len(context.RequiredReviewers)),
 		Reasons:            []Reason{},
@@ -178,6 +179,7 @@ func validateContext(context Context) error {
 	if _, err := time.Parse(time.RFC3339, context.IssuedAt); err != nil {
 		problems = append(problems, "issued_at must be RFC3339")
 	}
+	problems = append(problems, validateAuthority(context.Authority, context.WorkflowSHA)...)
 	if len(context.RequiredReviewers) != 2 {
 		problems = append(problems, "exactly two reviewers are required")
 	} else {
@@ -205,6 +207,43 @@ func validateContext(context Context) error {
 		return errors.New(strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+func validateAuthority(authority Authority, workflowSHA string) []string {
+	var problems []string
+	if authority.Schema != AuthoritySchema {
+		problems = append(problems, "unsupported authority schema")
+	}
+	if authority.Generation <= 0 {
+		problems = append(problems, "authority generation must be positive")
+	}
+	if !hexSHA40Pattern.MatchString(authority.KernelSHA) {
+		problems = append(problems, "authority kernel_sha must be a lowercase 40-character Git SHA")
+	}
+	if !hexSHA256Pattern.MatchString(authority.GateProfilesSHA256) {
+		problems = append(problems, "authority gate_profiles_sha256 must be lowercase hexadecimal")
+	}
+	if !hexSHA256Pattern.MatchString(authority.AdversarialCorpusSHA256) {
+		problems = append(problems, "authority adversarial_corpus_sha256 must be lowercase hexadecimal")
+	}
+	if authority.Generation == 1 {
+		if authority.Parent != nil {
+			problems = append(problems, "authority generation 1 cannot declare a parent")
+		}
+		return problems
+	}
+	if authority.Parent == nil {
+		return append(problems, "authority generations after 1 require a parent")
+	}
+	if authority.Parent.Generation != authority.Generation-1 {
+		problems = append(problems, "authority parent generation must immediately precede the current generation")
+	}
+	if !hexSHA40Pattern.MatchString(authority.Parent.WorkflowSHA) {
+		problems = append(problems, "authority parent workflow_sha must be a lowercase 40-character Git SHA")
+	} else if authority.Parent.WorkflowSHA == workflowSHA {
+		problems = append(problems, "authority cannot name its own workflow SHA as its parent")
+	}
+	return problems
 }
 
 func validateReview(context Context, contextSHA256 string, review Review) (ReviewSummary, []Reason) {

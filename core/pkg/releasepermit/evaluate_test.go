@@ -146,6 +146,18 @@ func TestEvaluateRejectsMismatchedGitHubWorkflowRefIdentity(t *testing.T) {
 	}
 }
 
+func TestEvaluateRejectsSelfReviewingAuthorityContext(t *testing.T) {
+	for _, authoritySHA := range []string{testHeadSHA, testMergeSHA} {
+		context := validContext()
+		context.Repository = context.WorkflowRepository
+		context.WorkflowSHA = authoritySHA
+
+		if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+			t.Fatalf("Evaluate() error = nil for workflow SHA %q, want self-reviewing authority context error", authoritySHA)
+		}
+	}
+}
+
 func TestEvaluateRejectsAmbiguousReviewerIdentity(t *testing.T) {
 	context := validContext()
 	context.RequiredReviewers[0].Provider = "anthropic/team"

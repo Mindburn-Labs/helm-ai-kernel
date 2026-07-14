@@ -112,6 +112,37 @@ func TestEvaluateRejectsInvalidContext(t *testing.T) {
 	}
 }
 
+func TestEvaluateAcceptsGitHubWorkflowRefIdentity(t *testing.T) {
+	context := validContext()
+	context.WorkflowRef = context.WorkflowRepository + "/" + context.WorkflowPath + "@refs/heads/codex/autonomous-release-permit"
+
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if permit.Decision != DecisionAllow {
+		t.Fatalf("Decision = %q, want %q; reasons = %#v", permit.Decision, DecisionAllow, permit.Reasons)
+	}
+}
+
+func TestEvaluateRejectsMismatchedGitHubWorkflowRefIdentity(t *testing.T) {
+	context := validContext()
+	context.WorkflowRef = "Mindburn-Labs/other/.github/workflows/ci.yml@refs/heads/main"
+
+	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+		t.Fatal("Evaluate() error = nil, want mismatched workflow identity error")
+	}
+}
+
+func TestEvaluateRejectsAmbiguousReviewerIdentity(t *testing.T) {
+	context := validContext()
+	context.RequiredReviewers[0].Provider = "anthropic/team"
+
+	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+		t.Fatal("Evaluate() error = nil, want ambiguous reviewer identity error")
+	}
+}
+
 func TestEvaluatePermitIDIsIndependentOfInputReviewOrder(t *testing.T) {
 	context := validContext()
 	reviews := validReviews(context)
@@ -154,6 +185,70 @@ func TestEvaluateDeniesNilFindings(t *testing.T) {
 		t.Fatalf("Evaluate() error = %v", err)
 	}
 	assertDeniedFor(t, permit, "REVIEW_FINDINGS_INVALID")
+}
+
+func TestEvaluateDeniesInvalidReviewFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Review)
+		code   string
+	}{
+		{
+			name: "empty reviewer",
+			mutate: func(review *Review) {
+				review.Reviewer.Provider = ""
+			},
+			code: "REVIEW_REVIEWER_INVALID",
+		},
+		{
+			name: "invalid verdict",
+			mutate: func(review *Review) {
+				review.Verdict = "MAYBE"
+			},
+			code: "REVIEW_VERDICT_INVALID",
+		},
+		{
+			name: "denied verdict",
+			mutate: func(review *Review) {
+				review.Verdict = DecisionDeny
+			},
+			code: "REVIEW_DENIED",
+		},
+		{
+			name: "invalid response digest",
+			mutate: func(review *Review) {
+				review.ResponseSHA256 = "not-a-digest"
+			},
+			code: "REVIEW_DIGEST_INVALID",
+		},
+		{
+			name: "invalid finding severity",
+			mutate: func(review *Review) {
+				review.Findings = []Finding{{Severity: "P4", Code: "BAD", Summary: "invalid severity"}}
+			},
+			code: "REVIEW_FINDINGS_INVALID",
+		},
+		{
+			name: "too many findings",
+			mutate: func(review *Review) {
+				review.Findings = make([]Finding, 201)
+			},
+			code: "REVIEW_FINDINGS_INVALID",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			context := validContext()
+			reviews := validReviews(context)
+			test.mutate(&reviews[0])
+			permit, err := Evaluate(context, testContextSHA, reviews)
+			if err != nil {
+				t.Fatalf("Evaluate() error = %v", err)
+			}
+			assertDeniedFor(t, permit, test.code)
+		})
+	}
 }
 
 func validContext() Context {

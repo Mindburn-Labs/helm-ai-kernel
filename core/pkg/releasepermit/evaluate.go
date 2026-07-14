@@ -61,6 +61,10 @@ func Evaluate(context Context, contextSHA256 string, reviews []Review) (Permit, 
 	for _, review := range reviews {
 		key := reviewerKey(review.Reviewer)
 		provided[key] = append(provided[key], review)
+		if review.Reviewer.Provider == "" || review.Reviewer.Model == "" ||
+			strings.Contains(review.Reviewer.Provider, "/") || strings.Contains(review.Reviewer.Model, "/") {
+			permit.addReason("REVIEW_REVIEWER_INVALID", key, "reviewer provider and model must be non-empty and cannot contain slash")
+		}
 		if _, expected := required[key]; !expected {
 			permit.addReason("REVIEW_UNEXPECTED", key, "reviewer is not part of the required quorum")
 		}
@@ -153,7 +157,12 @@ func validateContext(context Context) error {
 		(!strings.HasSuffix(context.WorkflowPath, ".yml") && !strings.HasSuffix(context.WorkflowPath, ".yaml")) {
 		problems = append(problems, "workflow_path must name a GitHub Actions workflow")
 	}
-	if !strings.HasPrefix(context.WorkflowRef, "refs/heads/") && !strings.HasPrefix(context.WorkflowRef, "refs/tags/") {
+	workflowRef := context.WorkflowRef
+	workflowIdentityPrefix := context.WorkflowRepository + "/" + context.WorkflowPath + "@"
+	if strings.HasPrefix(workflowRef, workflowIdentityPrefix) {
+		workflowRef = strings.TrimPrefix(workflowRef, workflowIdentityPrefix)
+	}
+	if !strings.HasPrefix(workflowRef, "refs/heads/") && !strings.HasPrefix(workflowRef, "refs/tags/") {
 		problems = append(problems, "workflow_ref must be a branch or tag ref")
 	}
 	if !hexSHA40Pattern.MatchString(context.WorkflowSHA) {
@@ -174,6 +183,9 @@ func validateContext(context Context) error {
 			key := reviewerKey(reviewer)
 			if reviewer.Provider == "" || reviewer.Model == "" {
 				problems = append(problems, "reviewer provider and model are required")
+			}
+			if strings.Contains(reviewer.Provider, "/") || strings.Contains(reviewer.Model, "/") {
+				problems = append(problems, "reviewer provider and model cannot contain slash")
 			}
 			if seenKeys[key] {
 				problems = append(problems, "required reviewers must be unique")
@@ -205,6 +217,10 @@ func validateReview(context Context, contextSHA256 string, review Review) (Revie
 
 	if review.Schema != ReviewSchema {
 		add("REVIEW_SCHEMA_INVALID", "unsupported review schema")
+	}
+	if review.Reviewer.Provider == "" || review.Reviewer.Model == "" ||
+		strings.Contains(review.Reviewer.Provider, "/") || strings.Contains(review.Reviewer.Model, "/") {
+		add("REVIEW_REVIEWER_INVALID", "reviewer provider and model must be non-empty and cannot contain slash")
 	}
 	if review.Repository != context.Repository ||
 		review.PullRequest != context.PullRequest ||

@@ -170,8 +170,9 @@ func ValidateAllowPermit(permit Permit) error {
 		(permit.WorkflowSHA == permit.HeadSHA || permit.WorkflowSHA == permit.MergeSHA) {
 		problems = append(problems, "authority workflow cannot review its own head or merge commit")
 	}
-	if permit.Authority.Generation > 1 && permit.Authority.KernelSHA == permit.HeadSHA {
-		problems = append(problems, "non-bootstrap authority cannot use the target head as its Kernel")
+	if permit.Authority.Generation > 1 &&
+		(permit.Authority.KernelSHA == permit.HeadSHA || permit.Authority.KernelSHA == permit.MergeSHA) {
+		problems = append(problems, "non-bootstrap authority cannot use the target head or merge commit as its Kernel")
 	}
 	if permit.RunID <= 0 || permit.RunAttempt <= 0 {
 		problems = append(problems, "run_id and run_attempt must be positive")

@@ -28,14 +28,17 @@ func TestDemoMCPAlias(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
 		t.Fatalf("demo mcp output is not valid summary JSON: %v\noutput: %s", err, stdout.String())
 	}
-	if summary.SchemaVersion != "helm.mcp.proof/v1" {
+	if summary.SchemaVersion != "helm.mcp.proof/v2" {
 		t.Errorf("unexpected schema version %q", summary.SchemaVersion)
 	}
-	if !summary.OfflineVerified {
-		t.Errorf("MCP proof EvidencePack should verify offline")
+	if !summary.OfflineVerified || !summary.TamperRejected {
+		t.Errorf("MCP proof should verify offline and reject tampering")
 	}
-	if len(summary.Scenarios) == 0 {
-		t.Errorf("MCP proof should run at least one scenario")
+	if summary.DispatchCount != 1 || !summary.NegativeCasesNoDispatch || !summary.ReplayNoRedispatch {
+		t.Errorf("MCP proof should dispatch once, preserve negative no-dispatch, and replay idempotently: %+v", summary)
+	}
+	if !summary.DurationGatePass || len(summary.Scenarios) != 9 {
+		t.Errorf("MCP proof should complete its nine cases inside the duration gate: %+v", summary)
 	}
 }
 

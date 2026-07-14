@@ -313,6 +313,25 @@ func TestValidateAllowPermitRejectsDigestOrQuorumSubstitution(t *testing.T) {
 	}
 }
 
+func TestValidateAllowPermitRejectsRecomputedKernelSelfPin(t *testing.T) {
+	context := validContext()
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	for _, kernelSHA := range []string{testHeadSHA, testMergeSHA} {
+		candidate := permit
+		candidate.Authority.KernelSHA = kernelSHA
+		candidate.PermitID, err = calculatePermitID(candidate)
+		if err != nil {
+			t.Fatalf("calculatePermitID() error = %v", err)
+		}
+		if err := ValidateAllowPermit(candidate); err == nil {
+			t.Fatalf("ValidateAllowPermit() error = nil for recomputed Kernel SHA %q", kernelSHA)
+		}
+	}
+}
+
 func TestEvaluateDeniesContextSubstitution(t *testing.T) {
 	context := validContext()
 	reviews := validReviews(context)

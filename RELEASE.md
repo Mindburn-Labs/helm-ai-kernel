@@ -6,6 +6,18 @@ The retained release process is PR-first and tag-driven. `main` is protected;
 prepare releases on a branch, merge only after gates pass, and tag the merged
 commit.
 
+## Execution Authority Boundary
+
+For a code merge, follow the current `GOVERNANCE.md` contract: green required
+deterministic checks on the pull request's current merge commit, with all
+review threads resolved. The live `main protection` ruleset (`16024605`) is
+the enforcement source; consult it rather than this release process for its
+current configuration.
+
+The distinct-provider exact-head machine interlock remains an R&D track and is
+not current merge authority. Release tags and package publishes require an
+explicit maintainer action.
+
 ## Source target
 
 `VERSION` identifies the source release target. It is not evidence that a tag,

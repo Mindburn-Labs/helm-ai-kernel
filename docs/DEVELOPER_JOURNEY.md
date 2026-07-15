@@ -12,8 +12,8 @@ how your agent runs.
 
 | If you want to... | Read |
 | --- | --- |
-| Protect Codex | [Codex integration](INTEGRATIONS/codex.md) |
-| Protect Claude Code | [Claude Code integration](INTEGRATIONS/claude-code.md) |
+| Configure Codex hooks and routed MCP paths | [Codex integration](INTEGRATIONS/codex.md) |
+| Configure Claude Code hooks and routed MCP paths | [Claude Code integration](INTEGRATIONS/claude-code.md) |
 | Scan an agent before enforcement | [Agent Risk Scan](reference/agent-risk-scan.md) |
 | Govern MCP tools | [Govern MCP tools](guides/govern-mcp-tools.md) |
 | Keep an OpenAI-compatible client | [Use the OpenAI-compatible proxy](guides/use-openai-compatible-proxy.md) |
@@ -91,6 +91,23 @@ Source builds use:
 ```
 
 The local policy boundary defaults to `127.0.0.1:7714`.
+
+## Local Client Setup Is Not Client Proof
+
+Inspect a Codex project setup before writing it:
+
+```bash
+helm-ai-kernel setup codex --scope project --dry-run --json
+helm-ai-kernel mcp print-config --client codex
+```
+
+Those commands create or describe local configuration only. They intentionally
+leave `client_load_observed=false`; they do not show that Codex or Claude Code
+loaded the configuration, started the server, or blocked a real client action.
+A client claim requires a sterile client home and disposable workspace that
+loads the configured server and exercises only the configured hook classes and
+routed MCP calls. Direct upstream calls and unconfigured client actions remain
+outside that proof.
 
 ## Verify A Decision
 

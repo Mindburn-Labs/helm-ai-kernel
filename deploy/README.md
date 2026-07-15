@@ -43,7 +43,8 @@ Included:
 - optional `Ingress`
 - generated or existing signing-key `Secret`
 - root-only authority-state init that materializes the signing key as a private,
-  runtime-owned file in the data volume
+  runtime-owned file in the data volume with only `CHOWN` capability; it exits
+  before the non-root kernel starts
 - generated or existing runtime-auth `Secret`
 - policy source configuration with default mounted-file delivery
 - optional mounted-file policy `ConfigMap` or `Secret`

@@ -1,6 +1,6 @@
 ---
 title: Govern MCP Tools
-last_reviewed: 2026-06-29
+last_reviewed: 2026-07-15
 ---
 
 # Govern MCP Tools
@@ -37,17 +37,32 @@ Claude Code uses:
 helm-ai-kernel mcp install --client claude-code
 ```
 
-## 4. Verify Behavior
+These commands describe or request only a configured MCP route. Printing a
+Codex command or asking a client CLI to install a server does not prove that a
+native client loaded the configuration, and it does not cover direct upstream
+calls or unconfigured client actions. Local setup evidence remains
+`client_load_observed=false` until a sterile client session visibly loads the
+configured server.
+
+## 4. Verify The Local MCP Boundary
 
 ```bash
 ./scripts/launch/demo-mcp.sh
 ```
+
+This demo starts a local HELM boundary and fixture server. It verifies local MCP
+authorization paths only; it does not start Codex or Claude Code or demonstrate
+that either client loaded its configuration. A native-client claim requires a
+sterile session that exercises the configured routed MCP call (and any
+configured hook class).
 
 ## 5. Inspect Receipts
 
 ```bash
 helm-ai-kernel receipts tail --agent mcp-demo-agent --server http://127.0.0.1:7714
 ```
+
+These receipts cover only calls that reached the configured HELM server.
 
 ## Source Truth
 

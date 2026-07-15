@@ -90,6 +90,11 @@ spec:
             capabilities:
               drop:
                 - ALL
+              # The initializer must change the mounted volume's owner before
+              # the non-root kernel starts. Keep this to the one capability
+              # required for chown; it is not a privileged container.
+              add:
+                - CHOWN
             readOnlyRootFilesystem: true
             runAsNonRoot: false
             runAsUser: 0
@@ -113,7 +118,7 @@ spec:
               fi
 
               mkdir -p "$data_dir"
-              chown "$runtime_uid:$runtime_gid" "$data_dir"
+              chown 0:0 "$data_dir"
               chmod 0700 "$data_dir"
 
               if [ -L "$root_key" ]; then
@@ -126,20 +131,22 @@ spec:
               fi
 
               if [ -f "$root_key" ]; then
+                chown 0:0 "$root_key"
+                chmod 0600 "$root_key"
                 if ! cmp -s "$source_key" "$root_key"; then
                   echo "durable authority root key differs from signing Secret; refusing silent rotation" >&2
                   exit 1
                 fi
-                chown "$runtime_uid:$runtime_gid" "$root_key"
-                chmod 0600 "$root_key"
               else
                 tmp_key="$data_dir/.root.key.init.$$"
                 rm -f "$tmp_key"
                 cp "$source_key" "$tmp_key"
-                chown "$runtime_uid:$runtime_gid" "$tmp_key"
                 chmod 0600 "$tmp_key"
                 mv -f "$tmp_key" "$root_key"
               fi
+              chmod 0600 "$root_key"
+              chown "$runtime_uid:$runtime_gid" "$root_key"
+              chown "$runtime_uid:$runtime_gid" "$data_dir"
           env:
             - name: HELM_AUTHORITY_DATA_DIR
               value: {{ .Values.helm.dataDir | quote }}

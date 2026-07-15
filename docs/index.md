@@ -1,6 +1,6 @@
 ---
 title: HELM documentation
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-15
 ---
 
 # HELM documentation
@@ -31,10 +31,20 @@ Then choose one path.
 
 - [Quickstart](QUICKSTART.md)
 - [HELM proof loop](PROOF_LOOP.md)
-- [Protect local coding agents](quickstart/workstation-governance.md)
+- [Configure local coding-agent hooks and routed MCP paths](quickstart/workstation-governance.md)
 - [Scan agent risk](reference/agent-risk-scan.md)
 - [OpenAI proxy](INTEGRATIONS/openai_baseurl.md)
 - [Verify receipts](VERIFICATION.md)
+
+## Local Client Setup Boundary
+
+Codex setup and printed MCP configuration can record exact local configuration,
+but intentionally leave `client_load_observed=false`. They do not prove that
+Codex or Claude Code loaded the configuration in a real session. A native
+client claim needs a sterile client home and disposable workspace that loads the
+configured server, exercises only configured hook classes and routed MCP calls,
+and verifies resulting receipts. Direct upstream and unconfigured client paths
+remain outside that review.
 
 ## More
 

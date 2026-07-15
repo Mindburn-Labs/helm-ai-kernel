@@ -105,6 +105,10 @@ flowchart TD
   init container. It creates `helm.dataDir` with exact `0700` permissions and
   copies a runtime-owned `root.key` with exact `0600`; the main kernel container
   receives the data volume, not a Secret `subPath`.
+- The initializer runs as UID/GID 0 only to temporarily own and materialize the
+  volume, then hand its directory and key to the configured runtime UID/GID.
+  It drops all capabilities except `CHOWN`, disables privilege escalation, has a
+  read-only root filesystem, and exits before the non-root kernel starts.
 - A durable `root.key` must match the configured signing Secret. A mismatch
   fails startup rather than silently rotating signing authority; use an explicit
   operator-approved key migration rather than changing a live Secret in place.

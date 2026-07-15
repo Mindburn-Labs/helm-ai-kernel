@@ -57,6 +57,13 @@ starts, it sets `helm.dataDir` to exact `0700` and the configured
 regular `root.key` with exact `0600` and the same owner. The kernel container
 receives the data volume, not a signing-key Secret `subPath`.
 
+The initializer runs as UID/GID 0 only for that materialization step. It first
+takes temporary ownership of the data directory and any durable key,
+materializes and verifies the key, then hands both back to the configured
+runtime UID/GID. It drops all Linux capabilities then adds only `CHOWN`,
+disables privilege escalation, uses a read-only root filesystem, and exits
+before the main kernel container starts; the main container remains non-root.
+
 If a durable `root.key` exists, it must match the signing Secret. A mismatch
 fails closed instead of silently changing receipt-signing authority. Treat a
 key change as an explicit operator migration; do not rely on `fsGroup`, a live

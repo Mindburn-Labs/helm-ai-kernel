@@ -23,10 +23,10 @@ seats once the maintainer set reaches three or more members.
 
 There are three roles:
 
-- **Maintainer** — full commit access, may merge after a single review,
-  approves releases, votes on governance changes.
-- **Reviewer** — may approve PRs in a defined area; cannot merge; named
-  in `MAINTAINERS.md` under the relevant area.
+- **Maintainer** — may maintain repository code, propose releases, and vote on
+  governance changes. Commit access and a review do not grant merge authority.
+- **Reviewer** — supplies review evidence in a defined area; cannot merge;
+  named in `MAINTAINERS.md` under the relevant area.
 - **Contributor** — anyone who opens a PR or issue. No formal status; the
   project welcomes contributions per `CONTRIBUTING.md`.
 
@@ -52,23 +52,31 @@ six months) are moved to "Emeritus" status by lazy consensus.
 
 The default decision rule is **lazy consensus**: any maintainer may propose
 a change, and absence of objection for the configured review window is
-treated as approval.
+treated as project consensus. It does not authorize a protected-branch merge.
 
 | Decision Type | Rule | Window |
 | --- | --- | --- |
-| Routine code change | One maintainer review (Mandatory PR Approval) | Same day |
+| Routine code change | Maintainer review evidence | Same day |
 | Architectural change | Lazy consensus | 72 hours |
 | Breaking API change | Super-majority (2/3) | 7 days |
 | Governance change | Super-majority (2/3) | 14 days |
 | Maintainer addition | Lazy consensus | 7 days |
 | Maintainer removal | Super-majority (2/3) | 14 days |
 
-### Branch Protection & Review Policies
+### Merge Authority
 
-To satisfy OpenSSF and CNCF compliance, branch protection rules are strictly enforced on the default branch (`main`) in the GitHub repository:
-1. **Mandatory Peer Review**: All merges to the default branch must occur via Pull Requests. Each Pull Request requires at least one formal approval from an authorized, unaffiliated maintainer or codeowner prior to merge. Direct pushes are structurally blocked.
-2. **Mandatory Status Checks**: The continuous integration suite (`ci.yml`) and vulnerability scanner must pass successfully before a merge is permitted.
-3. **Cryptographic Signing**: All commit contributions must be cryptographically signed by the committer.
+For every protected-branch merge, authority comes only from all three
+source-owned controls:
+
+1. deterministic repository gates for the exact candidate;
+2. a distinct-provider 2-of-2 permit; and
+3. an exact-head approval-only App interlock.
+
+Reviews, CI statuses, CodeQL or Scorecard results, labels, human identities,
+commit trailers, DCO sign-off, and governance consensus are evidence for those
+controls, not substitutes for any of them. Direct pushes remain blocked.
+Private and internal repositories remain merge-held until GitHub entitlement
+and the equivalent machine interlock are live-proven.
 
 A breaking API change is any change to `protocols/`, `api/openapi/`, the
 public CLI flag set, or the `core/pkg/contracts/` types. Such changes
@@ -96,11 +104,14 @@ Cosign bundle and OpenVEX verification apply when those files are attached to
 the GitHub release; the current public `v0.5.8` release attaches those
 assets. Per-release benchmark snapshots are pinned by `scripts/release/pin_benchmarks.sh`.
 
-A release is approved when:
+A release candidate has the required release evidence when:
 
 1. CI passes on the tagged commit.
 2. The reproducibility job in `release.yml` confirms byte-identical builds.
 3. At least one maintainer has signed off on the release notes.
+
+Those artifacts do not authorize a merge or tag by themselves. The candidate
+must first reach `main` through the three machine controls above.
 
 ## Security Policy
 

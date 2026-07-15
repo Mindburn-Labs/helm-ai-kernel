@@ -3,8 +3,12 @@
 <!-- quantum_posture: release process docs mention existing Cosign verification only; this page adds no post-quantum cryptographic control. -->
 
 The retained release process is PR-first and tag-driven. `main` is protected;
-prepare releases on a branch, merge only after gates pass, and tag the merged
-commit.
+prepare releases on a branch, then merge only when the exact candidate passes
+source-owned deterministic gates, has a distinct-provider 2-of-2 permit, and
+has an exact-head approval-only App interlock. CI, reviews, labels, and human
+approval are evidence for those controls, not merge authority. Private and
+internal repositories remain merge-held until GitHub entitlement and the
+equivalent machine interlock are live-proven.
 
 ## Current Baseline
 
@@ -33,6 +37,9 @@ make release-readiness
 make release-assets
 ```
 
+Passing these targets is necessary deterministic evidence; it does not replace
+the permit or exact-head App interlock.
+
 4. Confirm `dist/release-assets/` contains CLI binaries, `SHA256SUMS.txt`,
    `sbom.json`, `v0.6.0.openvex.json`, `release-attestation.json`,
    `evidence-pack.tar`, `release.high_risk.v3.toml`,
@@ -42,7 +49,8 @@ make release-assets
 
 ## Publish
 
-1. Merge the release-prep PR to `main`.
+1. Merge the release-prep PR to `main` only through the three machine controls
+   above. Do not treat a green CI run, review, or human approval as authority.
 2. Create the annotated `v0.6.0` tag only after the release commit is on
    `main`.
 3. Push the tag and monitor the Release workflow until GitHub Release, GHCR

@@ -476,10 +476,15 @@ func runSetupAutoconfigure(dataDir, workspace string) (string, string, error) {
 func installSetupMCP(opts setupOptions, bin string) error {
 	switch opts.Target {
 	case "claude-code":
+		if opts.Scope == "project" {
+			if _, err := privateFileWritePath(setupClientConfigPath(opts), setupPrivateFileRoot(opts)); err != nil {
+				return err
+			}
+		}
 		return setupExecCommand(setupCommandDir(opts), "claude", "mcp", "add", "--transport", "stdio", "--scope", opts.Scope, setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio", "--data-dir", opts.DataDir)
 	case "codex":
 		if opts.Scope == "project" {
-			return upsertCodexProjectMCP(setupClientConfigPath(opts), bin, opts.DataDir)
+			return upsertCodexProjectMCP(setupClientConfigPath(opts), bin, opts.DataDir, setupPrivateFileRoot(opts))
 		}
 		return setupExecCommand(setupCommandDir(opts), "codex", "mcp", "add", setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio", "--data-dir", opts.DataDir)
 	default:
@@ -490,10 +495,15 @@ func installSetupMCP(opts setupOptions, bin string) error {
 func removeSetupMCP(opts setupOptions) error {
 	switch opts.Target {
 	case "claude-code":
+		if opts.Scope == "project" {
+			if _, err := privateFileWritePath(setupClientConfigPath(opts), setupPrivateFileRoot(opts)); err != nil {
+				return err
+			}
+		}
 		return setupExecCommand(setupCommandDir(opts), "claude", "mcp", "remove", "--scope", opts.Scope, setupMCPServerName)
 	case "codex":
 		if opts.Scope == "project" {
-			return removeCodexProjectMCP(setupClientConfigPath(opts))
+			return removeCodexProjectMCP(setupClientConfigPath(opts), setupPrivateFileRoot(opts))
 		}
 		return setupExecCommand(setupCommandDir(opts), "codex", "mcp", "remove", setupMCPServerName)
 	default:
@@ -508,12 +518,19 @@ func setupCommandDir(opts setupOptions) string {
 	return ""
 }
 
+func setupPrivateFileRoot(opts setupOptions) string {
+	if opts.Scope == "project" {
+		return opts.Workspace
+	}
+	return ""
+}
+
 func installSetupHook(opts setupOptions, bin string) error {
-	return upsertHookConfig(setupHookConfigPath(opts), setupHookMatcher(opts.Target), setupHookCommand(opts, bin))
+	return upsertHookConfig(setupHookConfigPath(opts), setupHookMatcher(opts.Target), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
 }
 
 func removeSetupHook(opts setupOptions, bin string) error {
-	return removeHookConfig(setupHookConfigPath(opts), setupHookCommand(opts, bin))
+	return removeHookConfig(setupHookConfigPath(opts), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
 }
 
 func setupMCPInstalled(opts setupOptions, path string) bool {
@@ -587,7 +604,10 @@ func setupHookCommand(opts setupOptions, bin string) string {
 	return shellQuote(bin) + " hook pre-tool --client " + opts.Target + " --data-dir " + shellQuote(opts.DataDir)
 }
 
-func upsertHookConfig(path, matcher, command string) error {
+func upsertHookConfig(path, matcher, command, allowedRoot string) error {
+	if _, err := privateFileWritePath(path, allowedRoot); err != nil {
+		return err
+	}
 	root, err := readJSONObject(path)
 	if err != nil {
 		return err
@@ -595,7 +615,7 @@ func upsertHookConfig(path, matcher, command string) error {
 	hooks := objectValue(root, "hooks")
 	pre := arrayValue(hooks, "PreToolUse")
 	if hookCommandPresent(pre, command) {
-		return writeJSONObject(path, root)
+		return writeJSONObject(path, root, allowedRoot)
 	}
 	entry := map[string]any{
 		"matcher": matcher,
@@ -610,10 +630,13 @@ func upsertHookConfig(path, matcher, command string) error {
 	}
 	hooks["PreToolUse"] = append(pre, entry)
 	root["hooks"] = hooks
-	return writeJSONObject(path, root)
+	return writeJSONObject(path, root, allowedRoot)
 }
 
-func removeHookConfig(path, command string) error {
+func removeHookConfig(path, command, allowedRoot string) error {
+	if _, err := privateFileWritePath(path, allowedRoot); err != nil {
+		return err
+	}
 	root, err := readJSONObject(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -648,7 +671,7 @@ func removeHookConfig(path, command string) error {
 	}
 	hooks["PreToolUse"] = filtered
 	root["hooks"] = hooks
-	return writeJSONObject(path, root)
+	return writeJSONObject(path, root, allowedRoot)
 }
 
 func readJSONObject(path string) (map[string]any, error) {
@@ -672,12 +695,12 @@ func readJSONObject(path string) (map[string]any, error) {
 	return root, nil
 }
 
-func writeJSONObject(path string, root map[string]any) error {
+func writeJSONObject(path string, root map[string]any, allowedRoot string) error {
 	data, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
 		return err
 	}
-	return writePrivateFileAtomic(path, append(data, '\n'))
+	return writePrivateFileAtomic(path, append(data, '\n'), allowedRoot)
 }
 
 func objectValue(root map[string]any, key string) map[string]any {
@@ -724,7 +747,10 @@ func hookCommandFromAny(v any) string {
 	return command
 }
 
-func upsertCodexProjectMCP(path, bin, dataDir string) error {
+func upsertCodexProjectMCP(path, bin, dataDir, allowedRoot string) error {
+	if _, err := privateFileWritePath(path, allowedRoot); err != nil {
+		return err
+	}
 	current := ""
 	if raw, err := os.ReadFile(path); err == nil {
 		current = string(raw)
@@ -744,10 +770,13 @@ func upsertCodexProjectMCP(path, bin, dataDir string) error {
 	if err := validateCodexProjectTOML(next); err != nil {
 		return fmt.Errorf("validate updated Codex config: %w", err)
 	}
-	return writePrivateFileAtomic(path, []byte(next))
+	return writePrivateFileAtomic(path, []byte(next), allowedRoot)
 }
 
-func removeCodexProjectMCP(path string) error {
+func removeCodexProjectMCP(path, allowedRoot string) error {
+	if _, err := privateFileWritePath(path, allowedRoot); err != nil {
+		return err
+	}
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -762,7 +791,7 @@ func removeCodexProjectMCP(path string) error {
 	if err := validateCodexProjectTOML(next); err != nil {
 		return fmt.Errorf("validate updated Codex config: %w", err)
 	}
-	return writePrivateFileAtomic(path, []byte(next))
+	return writePrivateFileAtomic(path, []byte(next), allowedRoot)
 }
 
 type codexProjectConfig struct {
@@ -812,8 +841,8 @@ func equalSetupStrings(left, right []string) bool {
 	return true
 }
 
-func writePrivateFileAtomic(path string, data []byte) error {
-	writePath, err := privateFileWritePath(path)
+func writePrivateFileAtomic(path string, data []byte, allowedRoot string) error {
+	writePath, err := privateFileWritePath(path, allowedRoot)
 	if err != nil {
 		return err
 	}
@@ -840,33 +869,107 @@ func writePrivateFileAtomic(path string, data []byte) error {
 	return os.Rename(tmpPath, writePath)
 }
 
-func privateFileWritePath(path string) (string, error) {
-	info, err := os.Lstat(path)
-	if os.IsNotExist(err) {
-		return path, nil
+func privateFileWritePath(path, allowedRoot string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve private config path %q: %w", path, err)
 	}
+
+	var writePath string
+	_, err = os.Lstat(absPath)
+	switch {
+	case err == nil:
+		resolved, resolveErr := filepath.EvalSymlinks(absPath)
+		if resolveErr != nil {
+			return "", fmt.Errorf("resolve private config path %q: %w", path, resolveErr)
+		}
+		targetInfo, statErr := os.Stat(resolved)
+		if statErr != nil {
+			return "", fmt.Errorf("stat private config target %q: %w", path, statErr)
+		}
+		if !targetInfo.Mode().IsRegular() {
+			return "", fmt.Errorf("private config path %q targets a non-regular file", path)
+		}
+		writePath = resolved
+	case os.IsNotExist(err):
+		resolvedParent, resolveErr := resolvePrivateFileParent(filepath.Dir(absPath))
+		if resolveErr != nil {
+			return "", fmt.Errorf("resolve private config parent for %q: %w", path, resolveErr)
+		}
+		writePath = filepath.Join(resolvedParent, filepath.Base(absPath))
+	default:
+		return "", err
+	}
+
+	if allowedRoot == "" {
+		return writePath, nil
+	}
+	root, err := canonicalPrivateFileRoot(allowedRoot)
 	if err != nil {
 		return "", err
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		if !info.Mode().IsRegular() {
-			return "", fmt.Errorf("private config path %q is not a regular file", path)
-		}
-		return path, nil
+	if !privateFilePathWithinRoot(root, writePath) || !privateFilePathWithinRoot(root, filepath.Dir(writePath)) {
+		return "", fmt.Errorf("private config path %q resolves outside project workspace %q", path, root)
 	}
+	return writePath, nil
+}
 
-	resolved, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", fmt.Errorf("resolve private config symlink %q: %w", path, err)
+func resolvePrivateFileParent(parent string) (string, error) {
+	missing := make([]string, 0, 2)
+	for current := parent; ; current = filepath.Dir(current) {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			info, statErr := os.Stat(resolved)
+			if statErr != nil {
+				return "", statErr
+			}
+			if !info.IsDir() {
+				return "", fmt.Errorf("private config parent %q is not a directory", current)
+			}
+			for i := len(missing) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missing[i])
+			}
+			return resolved, nil
+		}
+
+		if info, lstatErr := os.Lstat(current); lstatErr == nil {
+			return "", fmt.Errorf("resolve private config parent %q: %w (mode %v)", current, err, info.Mode())
+		} else if !os.IsNotExist(lstatErr) {
+			return "", lstatErr
+		}
+		next := filepath.Dir(current)
+		if next == current {
+			return "", err
+		}
+		missing = append(missing, filepath.Base(current))
 	}
-	targetInfo, err := os.Stat(resolved)
+}
+
+func canonicalPrivateFileRoot(root string) (string, error) {
+	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return "", fmt.Errorf("stat private config symlink target %q: %w", path, err)
+		return "", fmt.Errorf("resolve project workspace %q: %w", root, err)
 	}
-	if !targetInfo.Mode().IsRegular() {
-		return "", fmt.Errorf("private config symlink %q targets a non-regular file", path)
+	resolved, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve project workspace %q: %w", root, err)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", fmt.Errorf("stat project workspace %q: %w", root, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("project workspace %q is not a directory", root)
 	}
 	return resolved, nil
+}
+
+func privateFilePathWithinRoot(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || filepath.IsAbs(rel) || rel == ".." {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func removeTOMLTable(input, table string) string {

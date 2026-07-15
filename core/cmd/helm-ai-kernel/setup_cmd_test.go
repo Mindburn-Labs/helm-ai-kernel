@@ -426,7 +426,7 @@ func TestSetupClaudeProjectMCPCommandsUseSelectedWorkspace(t *testing.T) {
 func TestSetupClaudeProjectPreservesSymlinkedHookConfig(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "workspace")
-	targetDir := filepath.Join(tmp, "managed-dotfiles", "claude")
+	targetDir := filepath.Join(workspace, ".managed-dotfiles", "claude")
 	for _, dir := range []string{filepath.Join(workspace, ".claude"), targetDir} {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatal(err)
@@ -464,7 +464,7 @@ func TestSetupClaudeProjectPreservesSymlinkedHookConfig(t *testing.T) {
 func TestSetupCodexProjectPreservesSymlinkedConfigFiles(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "workspace")
-	targetDir := filepath.Join(tmp, "managed-dotfiles", "codex")
+	targetDir := filepath.Join(workspace, ".managed-dotfiles", "codex")
 	for _, dir := range []string{filepath.Join(workspace, ".codex"), targetDir} {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatal(err)
@@ -522,6 +522,154 @@ func TestSetupCodexProjectPreservesSymlinkedConfigFiles(t *testing.T) {
 	assertNoSetupTempFiles(t, filepath.Dir(configLink), targetDir)
 }
 
+func TestSetupProjectRejectsConfigSymlinkEscapes(t *testing.T) {
+	t.Run("claude MCP config", func(t *testing.T) {
+		tmp := t.TempDir()
+		workspace := filepath.Join(tmp, "workspace")
+		outside := filepath.Join(tmp, "outside")
+		for _, dir := range []string{workspace, outside} {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}
+		target := filepath.Join(outside, "mcp.json")
+		original := []byte("{\"mcpServers\":{}}\n")
+		if err := os.WriteFile(target, original, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(workspace, ".mcp.json")
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		state := stubSetupSideEffects(t)
+		opts := setupOptions{Target: "claude-code", Scope: "project", Workspace: workspace, DataDir: filepath.Join(tmp, "helm")}
+		if err := installSetupMCP(opts, filepath.Join(tmp, "helm-ai-kernel")); err == nil || !strings.Contains(err.Error(), "outside project workspace") {
+			t.Fatalf("Claude project MCP escape error = %v", err)
+		}
+		if len(state.execCalls) != 0 {
+			t.Fatalf("Claude CLI ran after config escape: %#v", state.execCalls)
+		}
+		assertSetupFileUnchanged(t, link, target, original)
+		assertNoSetupTempFiles(t, workspace, outside)
+	})
+
+	t.Run("claude hook config", func(t *testing.T) {
+		tmp := t.TempDir()
+		workspace := filepath.Join(tmp, "workspace")
+		outside := filepath.Join(tmp, "outside")
+		for _, dir := range []string{filepath.Join(workspace, ".claude"), outside} {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}
+		target := filepath.Join(outside, "settings.json")
+		original := []byte("{\"hooks\":{\"PreToolUse\":[]}}\n")
+		if err := os.WriteFile(target, original, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(workspace, ".claude", "settings.json")
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		opts := setupOptions{Target: "claude-code", Scope: "project", Workspace: workspace, DataDir: filepath.Join(tmp, "helm")}
+		if err := installSetupHook(opts, filepath.Join(tmp, "helm-ai-kernel")); err == nil || !strings.Contains(err.Error(), "outside project workspace") {
+			t.Fatalf("Claude project hook escape error = %v", err)
+		}
+		assertSetupFileUnchanged(t, link, target, original)
+		assertNoSetupTempFiles(t, filepath.Dir(link), outside)
+	})
+
+	t.Run("codex config", func(t *testing.T) {
+		tmp := t.TempDir()
+		workspace := filepath.Join(tmp, "workspace")
+		outside := filepath.Join(tmp, "outside")
+		for _, dir := range []string{filepath.Join(workspace, ".codex"), outside} {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}
+		target := filepath.Join(outside, "config.toml")
+		original := []byte("model = \"gpt-5\"\n")
+		if err := os.WriteFile(target, original, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(workspace, ".codex", "config.toml")
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		opts := setupOptions{Target: "codex", Scope: "project", Workspace: workspace, DataDir: filepath.Join(tmp, "helm")}
+		if err := installSetupMCP(opts, filepath.Join(tmp, "helm-ai-kernel")); err == nil || !strings.Contains(err.Error(), "outside project workspace") {
+			t.Fatalf("Codex project config escape error = %v", err)
+		}
+		assertSetupFileUnchanged(t, link, target, original)
+		assertNoSetupTempFiles(t, filepath.Dir(link), outside)
+	})
+
+	t.Run("codex parent directory", func(t *testing.T) {
+		tmp := t.TempDir()
+		workspace := filepath.Join(tmp, "workspace")
+		outside := filepath.Join(tmp, "outside")
+		for _, dir := range []string{workspace, outside} {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}
+		link := filepath.Join(workspace, ".codex")
+		if err := os.Symlink(outside, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		opts := setupOptions{Target: "codex", Scope: "project", Workspace: workspace, DataDir: filepath.Join(tmp, "helm")}
+		if err := installSetupMCP(opts, filepath.Join(tmp, "helm-ai-kernel")); err == nil || !strings.Contains(err.Error(), "outside project workspace") {
+			t.Fatalf("Codex project parent escape error = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(outside, "config.toml")); !os.IsNotExist(err) {
+			t.Fatalf("Codex config was created outside workspace, stat error = %v", err)
+		}
+		if info, err := os.Lstat(link); err != nil {
+			t.Fatalf("Codex directory symlink was removed: %v", err)
+		} else if info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("Codex directory mode = %v, want symlink", info.Mode())
+		}
+		assertNoSetupTempFiles(t, outside)
+	})
+}
+
+func TestSetupUserScopePreservesExternalHookSymlinks(t *testing.T) {
+	for _, target := range []string{"claude-code", "codex"} {
+		t.Run(target, func(t *testing.T) {
+			tmp := t.TempDir()
+			home := filepath.Join(tmp, "home")
+			external := filepath.Join(tmp, "managed-dotfiles", target)
+			if err := os.MkdirAll(external, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("HOME", home)
+			opts := setupOptions{Target: target, Scope: "user", DataDir: filepath.Join(tmp, "helm")}
+			link := setupHookConfigPath(opts)
+			if err := os.MkdirAll(filepath.Dir(link), 0o750); err != nil {
+				t.Fatal(err)
+			}
+			managed := filepath.Join(external, "hooks.json")
+			if err := os.WriteFile(managed, []byte("{\"hooks\":{\"PreToolUse\":[]}}\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(managed, link); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			bin := filepath.Join(tmp, "helm-ai-kernel")
+			if err := installSetupHook(opts, bin); err != nil {
+				t.Fatalf("install user hook through external symlink: %v", err)
+			}
+			assertSetupSymlinkTarget(t, link, managed, 0o600, "hook pre-tool --client "+target)
+			if err := removeSetupHook(opts, bin); err != nil {
+				t.Fatalf("remove user hook through external symlink: %v", err)
+			}
+			assertSetupSymlinkTarget(t, link, managed, 0o600, "")
+			assertNoSetupTempFiles(t, filepath.Dir(link), external)
+		})
+	}
+}
+
 func TestWritePrivateFileAtomicRejectsUnsafeSymlinkTargets(t *testing.T) {
 	tmp := t.TempDir()
 	for _, test := range []struct {
@@ -545,7 +693,7 @@ func TestWritePrivateFileAtomicRejectsUnsafeSymlinkTargets(t *testing.T) {
 			if err := os.Symlink(test.target, link); err != nil {
 				t.Skipf("symlinks unavailable: %v", err)
 			}
-			if err := writePrivateFileAtomic(link, []byte("{}\n")); err == nil {
+			if err := writePrivateFileAtomic(link, []byte("{}\n"), ""); err == nil {
 				t.Fatal("unsafe symlink target unexpectedly accepted")
 			}
 			if info, err := os.Lstat(link); err != nil {
@@ -666,6 +814,24 @@ func assertSetupSymlinkTarget(t *testing.T, link, target string, mode os.FileMod
 	}
 	if got := targetInfo.Mode().Perm(); got != mode {
 		t.Fatalf("target %s mode = %o, want %o", target, got, mode)
+	}
+}
+
+func assertSetupFileUnchanged(t *testing.T, link, target string, original []byte) {
+	t.Helper()
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatalf("lstat %s: %v", link, err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("%s mode = %v, want preserved symlink", link, info.Mode())
+	}
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target %s: %v", target, err)
+	}
+	if !bytes.Equal(raw, original) {
+		t.Fatalf("target %s changed:\n%s", target, raw)
 	}
 }
 

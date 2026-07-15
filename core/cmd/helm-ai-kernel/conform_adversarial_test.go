@@ -262,7 +262,7 @@ func TestConformAdversarialPassesVerifiedPackDeterministically(t *testing.T) {
 }
 
 func TestConformAdversarialFailsVerifiedMaliciousPack(t *testing.T) {
-	configureAdversarialCommandTest(t)
+	attestationPublicKeyHex := configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)
 	populatePassingCampaignPack(t, packDir)
 	resealAdversarialPack(t, packDir)
@@ -286,6 +286,17 @@ func TestConformAdversarialFailsVerifiedMaliciousPack(t *testing.T) {
 	}
 	if report.Status != adversarialCampaignStatusAdversarialFailed || report.ExecutedSuites != 10 || report.FailedSuites == 0 {
 		t.Fatalf("malicious campaign did not execute/fail mandatory suites: %+v", report)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runConform([]string{
+		"adversarial", "verify-report",
+		"--report", reportPath,
+		"--trusted-public-key", attestationPublicKeyHex,
+	}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stdout.String(), "attestation: verified") {
+		t.Fatalf("failed report verify exit=%d, want authenticated failure; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }
 

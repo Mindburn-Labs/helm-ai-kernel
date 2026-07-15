@@ -317,10 +317,17 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 		_, _ = fmt.Fprintf(stderr, "Error: executable digest mismatch: got %s want %s\n", report.RunnerProvenance.ExecutableSHA256, expected)
 		return 1
 	}
+	if report.Pass != (report.Status == adversarialCampaignStatusPassed) {
+		_, _ = fmt.Fprintln(stderr, "Error: campaign report pass/status fields are inconsistent")
+		return 1
+	}
 	if jsonOutput {
 		_, _ = stdout.Write(data)
 	} else {
 		_, _ = fmt.Fprintf(stdout, "Kernel adversarial campaign attestation: verified\n  Status: %s\n  Kernel commit: %s\n  Executable: %s\n", report.Status, report.RunnerProvenance.KernelCommit, report.RunnerProvenance.ExecutableSHA256)
+	}
+	if !report.Pass {
+		return 1
 	}
 	return 0
 }

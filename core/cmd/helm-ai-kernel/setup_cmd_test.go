@@ -1,3 +1,6 @@
+// quantum_posture: setup tests cover classical Ed25519 receipts and optional
+// ML-DSA-65 lifecycle artifacts; fixtures are regression evidence, not a
+// production quantum-security certification.
 package main
 
 import (

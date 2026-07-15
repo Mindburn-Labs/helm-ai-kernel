@@ -1,3 +1,6 @@
+// quantum_posture: MCP CLI discovery/config output describes existing
+// Ed25519-signed receipt semantics; this command does not add a cryptographic
+// control or prove a client has loaded generated configuration.
 package main
 
 import (

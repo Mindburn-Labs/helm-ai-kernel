@@ -1,3 +1,6 @@
+// quantum_posture: local receipt roots default to classical Ed25519; an
+// explicitly selected hybrid profile adds ML-DSA-65 and must not be described
+// as a universal or certified quantum-safe posture.
 package main
 
 import (

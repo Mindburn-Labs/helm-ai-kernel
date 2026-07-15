@@ -28,6 +28,9 @@ import (
 //	1 = any gate failed
 //	2 = runtime error
 func runConform(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "adversarial" {
+		return runConformAdversarial(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "managed-agents" {
 		return runConformManagedAgents(args[1:], stdout, stderr)
 	}
@@ -615,5 +618,5 @@ func (f *multiFlag) Set(value string) error {
 }
 
 func init() {
-	Register(Subcommand{Name: "conform", Aliases: []string{"conformance"}, Usage: "Run conformance gates (--level L1|L2 or --profile, --json)", RunFn: runConform})
+	Register(Subcommand{Name: "conform", Aliases: []string{"conformance"}, Usage: "Run conformance gates, including strict EvidencePack adversarial campaigns (adversarial --bundle --profile --report)", RunFn: runConform})
 }

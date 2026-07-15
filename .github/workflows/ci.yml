@@ -127,6 +127,8 @@ jobs:
         run: bash scripts/ci/go_module_tests.sh
       - name: Command tests
         run: go test ./core/cmd/helm-ai-kernel -count=1
+      - name: Kernel bounty fail-closed campaign contract
+        run: go test ./core/cmd/helm-ai-kernel -run '^TestConformAdversarial' -count=1
       - name: Launchpad promotion drift
         run: make launchpad-promotion-check
       - name: Fetch main ref for proto compatibility checks

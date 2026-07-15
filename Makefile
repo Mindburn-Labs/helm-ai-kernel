@@ -1,4 +1,4 @@
-.PHONY: build test test-cli test-race test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking docker-verify release-readiness crucible bounty-kernel proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -9,6 +9,7 @@ BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
 QUALITY := python3 scripts/ci/quality.py
 PYTHON ?= python3
+HELM_BOUNTY_REPORT ?= artifacts/bounty/kernel-adversarial-campaign.json
 
 build:
 	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
@@ -90,6 +91,19 @@ release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalo
 
 crucible: build
 	bash scripts/usecases/run_all.sh
+
+# Strict source-owned adversarial campaign gate. The EvidencePack and trust
+# profile are deliberately required so a missing fixture can never become a
+# release green and dev-local trust can never be selected implicitly.
+bounty-kernel: build
+	@test -n "$(HELM_BOUNTY_EVIDENCEPACK)" || (echo "HELM_BOUNTY_EVIDENCEPACK is required" >&2; exit 2)
+	@test -n "$(HELM_BOUNTY_PROFILE)" || (echo "HELM_BOUNTY_PROFILE is required (dev-local, team, customer, or high-assurance)" >&2; exit 2)
+	./bin/helm-ai-kernel conform adversarial \
+		--bundle "$(HELM_BOUNTY_EVIDENCEPACK)" \
+		--profile "$(HELM_BOUNTY_PROFILE)" \
+		--config "$(HELM_BOUNTY_CONFIG)" \
+		--storage-receipt "$(HELM_BOUNTY_STORAGE_RECEIPT)" \
+		--report "$(HELM_BOUNTY_REPORT)"
 
 proxy: build
 	./bin/helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1

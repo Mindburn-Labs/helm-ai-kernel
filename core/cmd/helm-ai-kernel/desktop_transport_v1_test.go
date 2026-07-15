@@ -129,6 +129,27 @@ func TestDesktopTransportV1ReadinessRecordBindsNonceOriginAndMAC(t *testing.T) {
 	}
 }
 
+func TestDesktopTransportV1DoesNotDependOnLegacyFixedPortAvailability(t *testing.T) {
+	legacy, err := net.Listen("tcp", "127.0.0.1:8420")
+	if err != nil {
+		t.Skipf("cannot pre-bind legacy fixed port in this environment: %v", err)
+	}
+	defer legacy.Close()
+
+	transport := &desktopTransportV1{
+		key:   strings.Repeat("a", desktopTransportV1SecretLength),
+		nonce: strings.Repeat("b", desktopTransportV1SecretLength),
+	}
+	listener, origin, err := transport.bind()
+	if err != nil {
+		t.Fatalf("dynamic Desktop transport bind failed while legacy port was occupied: %v", err)
+	}
+	defer listener.Close()
+	if origin == "http://127.0.0.1:8420" {
+		t.Fatal("dynamic Desktop transport reused the pre-bound legacy port")
+	}
+}
+
 func desktopTransportTestMAC(key, nonce, origin string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	_, _ = mac.Write([]byte(desktopTransportV1Schema + "\n" + nonce + "\n" + origin))

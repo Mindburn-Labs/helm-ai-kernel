@@ -137,9 +137,9 @@ type AuthorizedExecutionIntent struct {
 	AllowedTool      string    `json:"allowed_tool"`   // Constraint
 	Taint            []string  `json:"taint,omitempty"`
 
-	// Safe Deprecation Mode emergency authority bindings. These are populated
-	// only after a prebuilt emergency capsule has passed continuity, hardware
-	// quorum, attestation-result, and delegation validation.
+	// Safe Deprecation Mode emergency authority bindings. When present, these
+	// are immutable signature-bound constraints. Runtime activation evidence is
+	// carried separately by the SafeDep gate result and execution receipt.
 	EmergencyActivationID        string `json:"emergency_activation_id,omitempty"`
 	EmergencyDelegationSessionID string `json:"emergency_delegation_session_id,omitempty"`
 	EmergencyScopeHash           string `json:"emergency_scope_hash,omitempty"`

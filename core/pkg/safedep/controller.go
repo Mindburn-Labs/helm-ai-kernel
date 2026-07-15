@@ -66,15 +66,16 @@ type GateRequest struct {
 }
 
 type GateResult struct {
-	Classification    contracts.HazardClassification `json:"classification"`
-	DispatchAllowed   bool                           `json:"dispatch_allowed"`
-	ReadOnly          bool                           `json:"read_only"`
-	NarrowedScope     bool                           `json:"narrowed_scope"`
-	ReasonCode        contracts.ReasonCode           `json:"reason_code"`
-	Reason            string                         `json:"reason,omitempty"`
-	ActivationReceipt *contracts.ActivationReceipt   `json:"activation_receipt,omitempty"`
-	ProofGraphRef     string                         `json:"proof_graph_ref,omitempty"`
-	EvidencePackRef   string                         `json:"evidence_pack_ref,omitempty"`
+	Classification     contracts.HazardClassification `json:"classification"`
+	DispatchAllowed    bool                           `json:"dispatch_allowed"`
+	ReadOnly           bool                           `json:"read_only"`
+	NarrowedScope      bool                           `json:"narrowed_scope"`
+	ReasonCode         contracts.ReasonCode           `json:"reason_code"`
+	Reason             string                         `json:"reason,omitempty"`
+	ActivationReceipt  *contracts.ActivationReceipt   `json:"activation_receipt,omitempty"`
+	EmergencyScopeHash string                         `json:"emergency_scope_hash,omitempty"`
+	ProofGraphRef      string                         `json:"proof_graph_ref,omitempty"`
+	EvidencePackRef    string                         `json:"evidence_pack_ref,omitempty"`
 }
 
 type ContinuityState struct {
@@ -243,13 +244,9 @@ func (c *Controller) Gate(ctx context.Context, req GateRequest) (GateResult, err
 		}
 		result.DispatchAllowed = true
 		result.ActivationReceipt = &receipt
+		result.EmergencyScopeHash = firstScopeHash(req.Capsule.Delegation)
 		result.ProofGraphRef = receipt.ProofGraphRef
 		result.EvidencePackRef = receipt.EvidencePackRef
-		if req.Intent != nil {
-			req.Intent.EmergencyActivationID = receipt.ActivationID
-			req.Intent.EmergencyDelegationSessionID = receipt.DelegationSessionID
-			req.Intent.EmergencyScopeHash = firstScopeHash(req.Capsule.Delegation)
-		}
 		return result, nil
 	default:
 		c.attachEvidence(ctx, &result, "safedep.unknown_hazard", nil, nil)

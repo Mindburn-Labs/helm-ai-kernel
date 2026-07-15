@@ -150,7 +150,11 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	if e.safeDepGate == nil {
 		return nil, nil, fmt.Errorf("%w: %s: safe deprecation gate unavailable", safedep.ErrDispatchBlocked, contracts.ReasonAttestationResultRequired)
 	}
-	req.Intent = intent
+	// The intent has already crossed the signature-verification boundary and is
+	// immutable from this point onward. Give the gate a defensive copy so a gate
+	// implementation cannot invalidate the shared intent before outbox
+	// re-verification.
+	req.Intent = cloneAuthorizedExecutionIntent(intent)
 	req.DecisionID = decision.ID
 	req.EffectID = effect.EffectID
 	req.EffectType = effect.EffectType
@@ -169,6 +173,9 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 			reason = string(gateResult.ReasonCode)
 		}
 		return nil, nil, fmt.Errorf("%w: %s", safedep.ErrDispatchBlocked, reason)
+	}
+	if err := validateSafeDepIntentBinding(intent, gateResult); err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", safedep.ErrDispatchBlocked, err)
 	}
 	safeDepResult = &gateResult
 
@@ -333,6 +340,32 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 	return nil
 }
 
+func cloneAuthorizedExecutionIntent(intent *contracts.AuthorizedExecutionIntent) *contracts.AuthorizedExecutionIntent {
+	if intent == nil {
+		return nil
+	}
+	clone := *intent
+	clone.Taint = append([]string(nil), intent.Taint...)
+	return &clone
+}
+
+func validateSafeDepIntentBinding(intent *contracts.AuthorizedExecutionIntent, result safedep.GateResult) error {
+	if intent == nil || result.ActivationReceipt == nil {
+		return nil
+	}
+	activation := result.ActivationReceipt
+	if intent.EmergencyActivationID != "" && intent.EmergencyActivationID != activation.ActivationID {
+		return fmt.Errorf("safe dep activation %q does not match signed intent binding %q", activation.ActivationID, intent.EmergencyActivationID)
+	}
+	if intent.EmergencyDelegationSessionID != "" && intent.EmergencyDelegationSessionID != activation.DelegationSessionID {
+		return fmt.Errorf("safe dep delegation session %q does not match signed intent binding %q", activation.DelegationSessionID, intent.EmergencyDelegationSessionID)
+	}
+	if intent.EmergencyScopeHash != "" && intent.EmergencyScopeHash != result.EmergencyScopeHash {
+		return fmt.Errorf("safe dep scope %q does not match signed intent binding %q", result.EmergencyScopeHash, intent.EmergencyScopeHash)
+	}
+	return nil
+}
+
 func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
 	if effect == nil {
 		return "", fmt.Errorf("effect is nil")
@@ -432,9 +465,10 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 	if safeDepResult != nil && safeDepResult.Classification.HazardCode != "" {
 		receipt.SafeDepState = string(safeDepResult.Classification.State)
 		receipt.SafeDepReasonCode = string(safeDepResult.ReasonCode)
-		if safeDepResult.ActivationReceipt != nil && receipt.EmergencyActivationID == "" {
+		if safeDepResult.ActivationReceipt != nil {
 			receipt.EmergencyActivationID = safeDepResult.ActivationReceipt.ActivationID
 			receipt.EmergencyDelegationSessionID = safeDepResult.ActivationReceipt.DelegationSessionID
+			receipt.EmergencyScopeHash = safeDepResult.EmergencyScopeHash
 		}
 	}
 	// Sign Receipt — Fail-Closed: unsigned receipts are never emitted.

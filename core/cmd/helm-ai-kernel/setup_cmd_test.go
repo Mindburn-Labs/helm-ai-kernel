@@ -319,20 +319,107 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	}
 }
 
-func TestSetupProjectScopeRequiresExplicitWorkspace(t *testing.T) {
+func TestSetupProjectScopeDefaultsToCurrentDirectory(t *testing.T) {
 	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(workspace)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--dry-run", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), "requires an explicit --workspace") {
-		t.Fatalf("project setup without workspace code=%d stderr=%s", code, stderr.String())
+	if code != 0 {
+		t.Fatalf("project setup without explicit workspace code=%d stderr=%s", code, stderr.String())
+	}
+	var summary setupSummary
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("decode project setup summary: %v\n%s", err, stdout.String())
+	}
+	canonicalWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatalf("resolve workspace: %v", err)
+	}
+	if summary.Workspace != canonicalWorkspace {
+		t.Fatalf("workspace = %q, want current directory %q", summary.Workspace, canonicalWorkspace)
+	}
+	if summary.ClientConfigPath != filepath.Join(canonicalWorkspace, ".codex", "config.toml") {
+		t.Fatalf("client config path = %q", summary.ClientConfigPath)
+	}
+
+	restore := stubSetupSideEffects(t)
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--no-quickstart", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("project install without explicit workspace code=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if len(restore.execCalls) != 0 {
+		t.Fatalf("Codex project install should write config directly, exec calls = %#v", restore.execCalls)
+	}
+	if !setupMCPInstalled(setupOptions{Target: "codex", Scope: "project", Workspace: canonicalWorkspace, DataDir: filepath.Join(tmp, "helm")}, summary.ClientConfigPath) {
+		t.Fatal("Codex project install did not write MCP config under the current directory")
+	}
+	if _, err := os.Stat(filepath.Join(canonicalWorkspace, ".codex", "hooks.json")); err != nil {
+		t.Fatalf("Codex project install did not write hook config under the current directory: %v", err)
 	}
 
 	stdout.Reset()
 	stderr.Reset()
-	code = Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "user", "--workspace", tmp, "--dry-run", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
+	code = Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "user", "--workspace", workspace, "--dry-run", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "only valid with --scope project") {
 		t.Fatalf("user setup with workspace code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestSetupClaudeProjectMCPCommandsUseSelectedWorkspace(t *testing.T) {
+	tmp := t.TempDir()
+	caller := filepath.Join(tmp, "caller")
+	workspace := filepath.Join(tmp, "workspace")
+	for _, dir := range []string{caller, workspace} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(caller)
+	canonicalWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatalf("resolve workspace: %v", err)
+	}
+	restore := stubSetupSideEffects(t)
+	dataDir := filepath.Join(tmp, "helm")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "claude-code", "--scope", "project", "--workspace", workspace, "--yes", "--no-quickstart", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("project setup exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
+	}
+	if len(restore.execCalls) != 1 || len(restore.execDirs) != 1 {
+		t.Fatalf("project setup exec calls = %#v dirs = %#v", restore.execCalls, restore.execDirs)
+	}
+	if restore.execDirs[0] != canonicalWorkspace {
+		t.Fatalf("project setup exec dir = %q, want %q", restore.execDirs[0], canonicalWorkspace)
+	}
+	if !strings.Contains(strings.Join(restore.execCalls[0], " "), "claude mcp add --transport stdio --scope project") {
+		t.Fatalf("project setup exec call = %#v", restore.execCalls[0])
+	}
+
+	restore.execCalls = nil
+	restore.execDirs = nil
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "setup", "remove", "claude-code", "--scope", "project", "--workspace", workspace, "--yes", "--no-quickstart", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("project remove exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
+	}
+	if len(restore.execCalls) != 1 || len(restore.execDirs) != 1 {
+		t.Fatalf("project remove exec calls = %#v dirs = %#v", restore.execCalls, restore.execDirs)
+	}
+	if restore.execDirs[0] != canonicalWorkspace {
+		t.Fatalf("project remove exec dir = %q, want %q", restore.execDirs[0], canonicalWorkspace)
+	}
+	if !strings.Contains(strings.Join(restore.execCalls[0], " "), "claude mcp remove --scope project") {
+		t.Fatalf("project remove exec call = %#v", restore.execCalls[0])
 	}
 }
 
@@ -386,6 +473,7 @@ func TestSetupRequiresYesForInstall(t *testing.T) {
 
 type setupStubState struct {
 	execCalls      [][]string
+	execDirs       []string
 	quickstartArgs []string
 }
 
@@ -394,9 +482,10 @@ func stubSetupSideEffects(t *testing.T) *setupStubState {
 	state := &setupStubState{}
 	oldExec := setupExecCommand
 	oldQuickstart := setupRunQuickstart
-	setupExecCommand = func(name string, args ...string) error {
+	setupExecCommand = func(dir, name string, args ...string) error {
 		call := append([]string{name}, args...)
 		state.execCalls = append(state.execCalls, call)
+		state.execDirs = append(state.execDirs, dir)
 		return nil
 	}
 	setupRunQuickstart = func(args []string, stdout, stderr io.Writer) int {

@@ -18,8 +18,11 @@ const setupMCPServerName = "helm-ai-kernel-governance"
 
 var (
 	setupRunQuickstart = runQuickstartCmd
-	setupExecCommand   = func(name string, args ...string) error {
+	setupExecCommand   = func(dir, name string, args ...string) error {
 		cmd := exec.Command(name, args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
@@ -255,7 +258,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Scope, "scope", opts.Scope, "Install scope: user or project")
-	fs.StringVar(&opts.Workspace, "workspace", "", "Workspace to scan and configure (required for project scope)")
+	fs.StringVar(&opts.Workspace, "workspace", "", "Workspace to scan and configure (defaults to the current directory for project scope)")
 	fs.BoolVar(&opts.Yes, "yes", false, "Install without prompting")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
@@ -282,7 +285,7 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Scope, "scope", opts.Scope, "Install scope: user or project")
-	fs.StringVar(&opts.Workspace, "workspace", "", "Workspace to inspect or remove from (required for project scope)")
+	fs.StringVar(&opts.Workspace, "workspace", "", "Workspace to inspect or remove from (defaults to the current directory for project scope)")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Report a headless setup without a Quickstart server")
@@ -316,10 +319,6 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 	opts.Scope = strings.ToLower(strings.TrimSpace(opts.Scope))
 	if opts.Scope != "user" && opts.Scope != "project" {
 		fmt.Fprintf(stderr, "setup: --scope must be user or project, got %q\n", opts.Scope)
-		return opts, 2
-	}
-	if opts.Scope == "project" && !opts.WorkspaceSet {
-		fmt.Fprintln(stderr, "setup: --scope project requires an explicit --workspace DIR")
 		return opts, 2
 	}
 	if opts.Scope == "user" && opts.WorkspaceSet {
@@ -477,12 +476,12 @@ func runSetupAutoconfigure(dataDir, workspace string) (string, string, error) {
 func installSetupMCP(opts setupOptions, bin string) error {
 	switch opts.Target {
 	case "claude-code":
-		return setupExecCommand("claude", "mcp", "add", "--transport", "stdio", "--scope", opts.Scope, setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio", "--data-dir", opts.DataDir)
+		return setupExecCommand(setupCommandDir(opts), "claude", "mcp", "add", "--transport", "stdio", "--scope", opts.Scope, setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio", "--data-dir", opts.DataDir)
 	case "codex":
 		if opts.Scope == "project" {
 			return upsertCodexProjectMCP(setupClientConfigPath(opts), bin, opts.DataDir)
 		}
-		return setupExecCommand("codex", "mcp", "add", setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio", "--data-dir", opts.DataDir)
+		return setupExecCommand(setupCommandDir(opts), "codex", "mcp", "add", setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio", "--data-dir", opts.DataDir)
 	default:
 		return fmt.Errorf("unsupported target %q", opts.Target)
 	}
@@ -491,15 +490,22 @@ func installSetupMCP(opts setupOptions, bin string) error {
 func removeSetupMCP(opts setupOptions) error {
 	switch opts.Target {
 	case "claude-code":
-		return setupExecCommand("claude", "mcp", "remove", "--scope", opts.Scope, setupMCPServerName)
+		return setupExecCommand(setupCommandDir(opts), "claude", "mcp", "remove", "--scope", opts.Scope, setupMCPServerName)
 	case "codex":
 		if opts.Scope == "project" {
 			return removeCodexProjectMCP(setupClientConfigPath(opts))
 		}
-		return setupExecCommand("codex", "mcp", "remove", setupMCPServerName)
+		return setupExecCommand(setupCommandDir(opts), "codex", "mcp", "remove", setupMCPServerName)
 	default:
 		return fmt.Errorf("unsupported target %q", opts.Target)
 	}
+}
+
+func setupCommandDir(opts setupOptions) string {
+	if opts.Scope == "project" {
+		return opts.Workspace
+	}
+	return ""
 }
 
 func installSetupHook(opts setupOptions, bin string) error {

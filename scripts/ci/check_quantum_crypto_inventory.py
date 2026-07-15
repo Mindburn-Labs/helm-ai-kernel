@@ -131,6 +131,20 @@ def needs_annotation(path: pathlib.Path) -> bool:
         return False
     if "quantum_posture:" in text:
         return False
+    # The adversarial reference campaign is a sealed, hash-pinned EvidencePack.
+    # Keep its signed payload bytes immutable and bind their posture at the
+    # owning pack boundary instead of inserting metadata into signed JSON.
+    adversarial_payload_root = pathlib.Path("reference_packs/adversarial/kernel-v1")
+    try:
+        path.relative_to(adversarial_payload_root)
+    except ValueError:
+        pass
+    else:
+        posture = adversarial_payload_root.parent / "README.md"
+        try:
+            return "quantum_posture:" not in posture.read_text(encoding="utf-8")
+        except (FileNotFoundError, UnicodeDecodeError):
+            return True
     # Reference-pack vectors are copied byte-for-byte from an external source
     # authority and are hash-pinned by their consumer.  Keep that payload
     # immutable; require its local SOURCE-MANIFEST to carry the posture note.

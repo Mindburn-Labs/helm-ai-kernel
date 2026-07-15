@@ -4,6 +4,12 @@
 the built `helm-ai-kernel conform adversarial` binary in CI. It is deliberately
 `dev-local` evidence and is not customer, production, or release authority.
 
+quantum_posture: The reference campaign uses classical Ed25519 signatures for
+CI contract coverage only; it makes no post-quantum authorization or report
+attestation claim. This pack-level annotation applies to the immutable,
+hash-pinned payloads under `kernel-v1/` so their signed bytes are not modified
+solely to carry documentation metadata.
+
 The pack is sealed and its campaign-only authorization receipts and tool
 manifest are signed. CI supplies the corresponding public campaign trust root:
 

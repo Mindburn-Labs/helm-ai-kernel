@@ -229,15 +229,17 @@ func TestHybridSigner_SignReceiptRoundTrip(t *testing.T) {
 	assert.Equal(t, signer.MLDSASigner().PublicKey(), receipt.PublicKeySet[SigPrefixMLDSA65])
 
 	// Verify round-trip
-	payload := CanonicalizeReceipt(receipt.ReceiptID, receipt.DecisionID, receipt.EffectID, receipt.Status, receipt.OutputHash, receipt.PrevHash, receipt.LamportClock, receipt.ArgsHash)
-	valid, err := signer.Verify([]byte(payload), receipt.Signature)
+	payload, err := canonicalizeReceiptForVerification(receipt)
+	require.NoError(t, err)
+	valid, err := signer.Verify(payload, receipt.Signature)
 	require.NoError(t, err)
 	assert.True(t, valid, "receipt hybrid signature should verify")
 
 	// Tamper the status
 	receipt.Status = "FAILED"
-	payloadTampered := CanonicalizeReceipt(receipt.ReceiptID, receipt.DecisionID, receipt.EffectID, receipt.Status, receipt.OutputHash, receipt.PrevHash, receipt.LamportClock, receipt.ArgsHash)
-	valid, err = signer.Verify([]byte(payloadTampered), receipt.Signature)
+	payloadTampered, err := canonicalizeReceiptForVerification(receipt)
+	require.NoError(t, err)
+	valid, err = signer.Verify(payloadTampered, receipt.Signature)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered receipt")
 }

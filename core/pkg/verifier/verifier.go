@@ -14,6 +14,7 @@ package verifier
 // post-quantum assurance is claimed by this verifier path.
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -25,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
 )
@@ -436,23 +438,65 @@ func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string
 	if err != nil || len(sigBytes) != ed25519.SignatureSize {
 		return false
 	}
+	payload, err := canonicalizeEmbeddedKernelReceipt(document)
+	if err != nil {
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), payload, sigBytes)
+}
+
+// canonicalizeEmbeddedKernelReceipt mirrors the kernel receipt signature
+// contract without importing the signer implementation into the standalone
+// verifier trust boundary. Legacy receipts retain their compact preimage;
+// v2 receipts bind the full SafeDep emergency authority evidence set.
+func canonicalizeEmbeddedKernelReceipt(document map[string]any) ([]byte, error) {
 	var lamport uint64
 	if v := firstUint(document, "lamport_clock"); v != nil {
 		lamport = *v
 	}
-	// Mirrors crypto.CanonicalizeReceipt — receipt_id:decision_id:effect_id:
-	// status:output_hash:prev_hash:lamport_clock:args_hash.
-	payload := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
-		firstString(document, "receipt_id"),
-		firstString(document, "decision_id"),
-		firstString(document, "effect_id"),
-		firstString(document, "status"),
-		firstString(document, "output_hash"),
-		firstString(document, "prev_hash"),
-		lamport,
-		firstString(document, "args_hash"),
-	)
-	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
+
+	switch version := firstString(document, "signature_version"); version {
+	case "":
+		return []byte(fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
+			firstString(document, "receipt_id"),
+			firstString(document, "decision_id"),
+			firstString(document, "effect_id"),
+			firstString(document, "status"),
+			firstString(document, "output_hash"),
+			firstString(document, "prev_hash"),
+			lamport,
+			firstString(document, "args_hash"),
+		)), nil
+	case contracts.ReceiptSignatureVersionV2:
+		return canonicalMarshalEmbeddedReceipt(map[string]any{
+			"args_hash":                       firstString(document, "args_hash"),
+			"decision_id":                     firstString(document, "decision_id"),
+			"effect_id":                       firstString(document, "effect_id"),
+			"emergency_activation_id":         firstString(document, "emergency_activation_id"),
+			"emergency_delegation_session_id": firstString(document, "emergency_delegation_session_id"),
+			"emergency_scope_hash":            firstString(document, "emergency_scope_hash"),
+			"lamport_clock":                   lamport,
+			"output_hash":                     firstString(document, "output_hash"),
+			"prev_hash":                       firstString(document, "prev_hash"),
+			"receipt_id":                      firstString(document, "receipt_id"),
+			"safe_dep_reason_code":            firstString(document, "safe_dep_reason_code"),
+			"safe_dep_state":                  firstString(document, "safe_dep_state"),
+			"status":                          firstString(document, "status"),
+			"version":                         version,
+		})
+	default:
+		return nil, fmt.Errorf("unsupported receipt signature version %q", version)
+	}
+}
+
+func canonicalMarshalEmbeddedReceipt(payload map[string]any) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(payload); err != nil {
+		return nil, fmt.Errorf("canonical receipt encoding failed: %w", err)
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
 }
 
 // verifyWitnessReceiptSignature verifies a witness attestation: an Ed25519

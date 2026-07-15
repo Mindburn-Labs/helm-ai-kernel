@@ -68,12 +68,15 @@ func (v *MLDSAVerifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if r.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	payload, err := canonicalizeReceiptForVerification(r)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(r.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(v.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(v.publicKey, payload, nil, sig), nil
 }
 
 // VerifyMLDSA65 verifies a hex-encoded ML-DSA-65 signature against a hex-encoded public key.

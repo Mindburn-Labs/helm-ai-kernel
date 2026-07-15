@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
@@ -416,6 +418,90 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		}
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
+}
+
+func TestVerifyBundleMCPPolicyDecisionReceiptV2Trust(t *testing.T) {
+	buildReceipt := func(t *testing.T) map[string]any {
+		t.Helper()
+		signer, err := helmcrypto.NewEd25519Signer("mcp-proof-v2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		receipt := &contracts.Receipt{
+			ReceiptID:                    "rcpt-v2-001",
+			DecisionID:                   "dec-v2-001",
+			EffectID:                     "mcp.tools.call/proof.read",
+			Status:                       "DENY",
+			OutputHash:                   "sha256:out-v2",
+			PrevHash:                     "sha256:prev-v2",
+			LamportClock:                 2,
+			ArgsHash:                     "sha256:args-v2",
+			Type:                         "mcp_policy_decision",
+			EmergencyActivationID:        "activation-v2",
+			EmergencyDelegationSessionID: "delegation-v2",
+			EmergencyScopeHash:           "sha256:scope-v2",
+			SafeDepState:                 "degraded_narrowing",
+			SafeDepReasonCode:            "SAFE_DEP_DEGRADED_NARROWING",
+			Metadata: map[string]any{
+				"signature_key_type":     "ed25519",
+				"signature_key_ref":      "ed25519:" + signer.PublicKey()[:16],
+				"signing_public_key_hex": signer.PublicKey(),
+			},
+		}
+		if err := signer.SignReceipt(receipt); err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := json.Marshal(receipt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document map[string]any
+		if err := json.Unmarshal(encoded, &document); err != nil {
+			t.Fatal(err)
+		}
+		return document
+	}
+
+	t.Run("valid v2 receipt verifies", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-v2.json"), buildReceipt(t))
+		sealVerifierFixture(t, dir, "test-session-v2")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !report.Verified {
+			t.Fatalf("v2 MCP proof receipt signature should verify: %+v", report.Checks)
+		}
+	})
+
+	tamperCases := []struct {
+		name  string
+		field string
+		value string
+	}{
+		{name: "activation", field: "emergency_activation_id", value: "activation-tampered"},
+		{name: "delegation", field: "emergency_delegation_session_id", value: "delegation-tampered"},
+		{name: "scope", field: "emergency_scope_hash", value: "sha256:scope-tampered"},
+		{name: "state", field: "safe_dep_state", value: "terminal_freeze"},
+		{name: "reason", field: "safe_dep_reason_code", value: "SAFE_DEP_TERMINAL_FREEZE"},
+		{name: "version downgrade", field: "signature_version", value: ""},
+		{name: "unknown version", field: "signature_version", value: "helm.receipt.v99"},
+	}
+	for _, tc := range tamperCases {
+		t.Run(tc.name+" tamper fails closed", func(t *testing.T) {
+			dir := createValidBundleFixture(t)
+			receipt := buildReceipt(t)
+			receipt[tc.field] = tc.value
+			writeJSON(t, filepath.Join(dir, "receipts", "receipt-v2.json"), receipt)
+			sealVerifierFixture(t, dir, "test-session-v2")
+			report, err := VerifyBundle(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertEmbeddedSignatureTrustFails(t, report)
+		})
+	}
 }
 
 func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {

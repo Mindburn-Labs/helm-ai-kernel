@@ -86,10 +86,13 @@ func (v *Ed25519Verifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if r.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	payload, err := canonicalizeReceiptForVerification(r)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(r.Signature)
 	if err != nil {
 		return false, err
 	}
-	return v.Verify([]byte(payload), sig), nil
+	return v.Verify(payload, sig), nil
 }

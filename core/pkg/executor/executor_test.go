@@ -365,6 +365,17 @@ func TestSafeExecutorPreservesSignedIntentThroughSafeDepOutboxReverification(t *
 	if receipt.SafeDepState != string(contracts.SafeDepDegradedNarrowing) || receipt.SafeDepReasonCode != string(contracts.ReasonSafeDepDegradedNarrowing) {
 		t.Fatalf("receipt missing SafeDep state: %+v", receipt)
 	}
+	if receipt.SignatureVersion != contracts.ReceiptSignatureVersionV2 {
+		t.Fatalf("receipt signature version = %q", receipt.SignatureVersion)
+	}
+	if valid, verifyErr := signer.VerifyReceipt(receipt); verifyErr != nil || !valid {
+		t.Fatalf("SafeDep receipt signature did not verify: valid=%v err=%v", valid, verifyErr)
+	}
+	tamperedReceipt := *receipt
+	tamperedReceipt.EmergencyActivationID = "act-tampered"
+	if valid, verifyErr := signer.VerifyReceipt(&tamperedReceipt); verifyErr == nil && valid {
+		t.Fatal("receipt signature accepted tampered SafeDep activation evidence")
+	}
 }
 
 func TestSafeExecutor_WithClock(t *testing.T) {

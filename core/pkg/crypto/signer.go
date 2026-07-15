@@ -146,9 +146,11 @@ func (s *Ed25519Signer) SignIntent(i *contracts.AuthorizedExecutionIntent) error
 
 // SignReceipt signs a Receipt
 func (s *Ed25519Signer) SignReceipt(r *contracts.Receipt) error {
-	// Canonicalize: ID:DecisionID:EffectID:Status:OutputHash
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
-	sig, err := s.Sign([]byte(payload))
+	payload, err := canonicalizeReceiptForSigning(r)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -184,8 +186,11 @@ func (s *Ed25519Signer) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if r.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
-	return Verify(s.PublicKey(), r.Signature, []byte(payload))
+	payload, err := canonicalizeReceiptForVerification(r)
+	if err != nil {
+		return false, err
+	}
+	return Verify(s.PublicKey(), r.Signature, payload)
 }
 
 // SignCounterfactualReceipt seals (if needed) and signs a counterfactual

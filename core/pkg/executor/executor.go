@@ -482,7 +482,8 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 	}
 	// Sign Receipt — Fail-Closed: unsigned receipts are never emitted.
 	// Every receipt MUST be signed per the HELM standard.
-	// The signature now covers PrevHash + LamportClock via CanonicalizeReceipt.
+	// The v2 signature covers the causal chain, PEP arguments, and every
+	// SafeDep authority field populated above.
 	if e.signer != nil {
 		if err := e.signer.SignReceipt(receipt); err != nil {
 			return nil, fmt.Errorf("fail-closed: receipt signing failed: %w", err)

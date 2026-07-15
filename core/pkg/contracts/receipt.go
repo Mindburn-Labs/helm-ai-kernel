@@ -2,6 +2,10 @@ package contracts
 
 import "time"
 
+// ReceiptSignatureVersionV2 identifies the receipt preimage that binds SafeDep
+// emergency authority evidence in addition to the legacy causal fields.
+const ReceiptSignatureVersionV2 = "helm.receipt.v2"
+
 // Receipt represents a proof of effect execution, linked to a decision.
 type Receipt struct {
 	ReceiptID           string            `json:"receipt_id"`
@@ -15,6 +19,7 @@ type Receipt struct {
 	ExecutorID          string            `json:"executor_id,omitempty"`
 	Metadata            map[string]any    `json:"metadata,omitempty"`
 	Signature           string            `json:"signature,omitempty"` // Cryptographic proof of execution
+	SignatureVersion    string            `json:"signature_version,omitempty"`
 	SignatureProfile    string            `json:"signature_profile,omitempty"`
 	SignatureAlgorithm  string            `json:"signature_algorithm,omitempty"`
 	KeyID               string            `json:"key_id,omitempty"`

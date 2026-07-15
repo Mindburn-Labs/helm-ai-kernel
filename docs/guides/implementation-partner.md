@@ -70,11 +70,8 @@ endpoint.
 
 ## 5. Apply Route Authentication
 
-Protected operations use:
-
-```text
-Authorization: Bearer $HELM_ADMIN_API_KEY
-```
+Protected operations use the exported `HELM_ADMIN_API_KEY` as the HTTP bearer
+credential.
 
 Tenant-scoped routes also bind tenant and principal identity. When the scoped
 emergency fence is enabled, the server can additionally require
@@ -115,7 +112,7 @@ export HELM_PRINCIPAL_ID='<server-owned-principal-id>'
 
 curl --fail-with-body --silent --show-error \
   -X POST "$HELM_BASE_URL/api/v1/evaluate" \
-  --oauth2-bearer "$HELM_ADMIN_API_KEY" \
+  -H "Authorization: ${HELM_AUTH_SCHEME:-Bearer} ${HELM_ADMIN_API_KEY:?HELM_ADMIN_API_KEY is required}" \
   -H "X-Helm-Tenant-ID: $HELM_TENANT_ID" \
   -H "X-Helm-Principal-ID: $HELM_PRINCIPAL_ID" \
   -H "Idempotency-Key: navigotech-local-read-001" \
@@ -124,7 +121,7 @@ curl --fail-with-body --silent --show-error \
 
 curl --fail-with-body --silent --show-error \
   "$HELM_BASE_URL/api/v1/receipts?limit=10" \
-  --oauth2-bearer "$HELM_ADMIN_API_KEY" \
+  -H "Authorization: ${HELM_AUTH_SCHEME:-Bearer} ${HELM_ADMIN_API_KEY:?HELM_ADMIN_API_KEY is required}" \
   -H "X-Helm-Tenant-ID: $HELM_TENANT_ID" \
   -H "X-Helm-Principal-ID: $HELM_PRINCIPAL_ID"
 ```

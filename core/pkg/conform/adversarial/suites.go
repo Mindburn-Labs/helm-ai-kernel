@@ -344,8 +344,7 @@ func adv08ToolManifestForge() *Suite {
 		Run: func(evidenceDir string) *SuiteResult {
 			result := &SuiteResult{SuiteID: "ADV-08", Name: "Tool Manifest Forgery", Pass: true}
 
-			manifestDir := filepath.Join(evidenceDir, "10_TOOLS")
-			files, _ := filepath.Glob(filepath.Join(manifestDir, "*.json"))
+			files := toolManifestFiles(evidenceDir)
 
 			t := TestResult{TestID: "ADV-08-T1", Name: "Tool manifests have signatures field"}
 			unsigned := 0
@@ -384,7 +383,7 @@ func adv09ReceiptEmissionPanicHijack() *Suite {
 
 			t := TestResult{TestID: "ADV-09-T1", Name: "No receipts after panic record"}
 
-			panicFile := filepath.Join(evidenceDir, "panic.json")
+			panicFile := panicEvidencePath(evidenceDir)
 			if _, err := os.Stat(panicFile); err != nil {
 				t.Pass = true
 				t.Reason = "no panic record (normal operation)"
@@ -474,6 +473,23 @@ func adv10HighFinalityUnsigned() *Suite {
 }
 
 // --- Helpers ---
+
+func toolManifestFiles(evidenceDir string) []string {
+	// Canonical packs carry adversarial-only tool fixtures as a declared
+	// extension. The legacy 10_TOOLS location remains readable for historical
+	// detector fixtures but is rejected by strict EvidencePack verification.
+	canonical, _ := filepath.Glob(filepath.Join(evidenceDir, "99_EXT", "adversarial", "tools", "*.json"))
+	legacy, _ := filepath.Glob(filepath.Join(evidenceDir, "10_TOOLS", "*.json"))
+	return append(canonical, legacy...)
+}
+
+func panicEvidencePath(evidenceDir string) string {
+	canonical := filepath.Join(evidenceDir, "06_LOGS", "receipt_emission_panic.json")
+	if _, err := os.Stat(canonical); err == nil {
+		return canonical
+	}
+	return filepath.Join(evidenceDir, "panic.json")
+}
 
 func loadReceipt(path string) map[string]interface{} {
 	data, err := os.ReadFile(path)

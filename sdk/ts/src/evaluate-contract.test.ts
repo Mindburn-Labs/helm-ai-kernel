@@ -158,4 +158,15 @@ describe("evaluateDecisionWithScope", () => {
     await expect(client.evaluateDecision({ principal: "spoofed" })).rejects.toThrow("evaluateDecision is retired");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it("rejects governed chat without its explicit session binding", async () => {
+    const client = new HelmClient({
+      baseUrl: "http://helm.test",
+      apiKey: "token",
+      tenantId: "tenant-a",
+      principalId: "principal-a",
+    });
+    await expect(client.chatCompletions({ model: "test", messages: [] })).rejects.toThrow("sessionId is required");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

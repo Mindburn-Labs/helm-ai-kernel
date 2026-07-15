@@ -35,6 +35,7 @@ client = HelmClient(
     api_key="...",
     tenant_id="tenant-a",
     principal_id="example-agent",
+    session_id="session-a",
 )
 result = client.evaluate_decision_with_scope(
     DecisionRequest(action="read-ticket", resource="ticket:123"),
@@ -47,7 +48,7 @@ print(result.decision.verdict, result.receipt_id, result.replayed)
 The evaluator JSON body is limited to `action`, `resource`, optional
 `context`, and optional `session_history`; identity belongs in
 `EvaluationScope`. `evaluate_decision()` remains only as a deprecated
-source-compatibility shim and fails locally with a migration error. `tenant_id`, `principal_id`, and optional `workspace_id`
+source-compatibility shim and fails locally with a migration error. `tenant_id`, `principal_id`, `session_id`, and optional `workspace_id`
 also bind other protected runtime calls made through this client.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly

@@ -52,6 +52,7 @@ func main() {
         helm.WithAPIKey("..."),
         helm.WithTenantID("tenant-a"),
         helm.WithPrincipalID("operator-a"),
+        helm.WithSessionID("session-a"),
         helm.WithWorkspaceID("workspace-a"),
     )
 
@@ -74,6 +75,10 @@ func main() {
     fmt.Println(conf.Verdict, conf.Gates, "gates")
 }
 ```
+
+`ChatCompletions` and `ChatCompletionsWithReceipt` are governed, tenant-scoped
+calls. They require an API key plus tenant, principal, and session bindings;
+use `WithWorkspaceID` when the runtime requires workspace scope.
 
 ## API
 

@@ -159,6 +159,7 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
             api_key="key",
             tenant_id="tenant",
             principal_id="principal",
+            session_id="session",
             workspace_id="workspace",
             timeout=2.5,
         )
@@ -173,6 +174,7 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
         "Authorization": "Bearer key",
         "X-Helm-Tenant-ID": "tenant",
         "X-Helm-Principal-ID": "principal",
+        "X-Helm-Session-ID": "session",
         "X-Helm-Workspace-ID": "workspace",
     }
 

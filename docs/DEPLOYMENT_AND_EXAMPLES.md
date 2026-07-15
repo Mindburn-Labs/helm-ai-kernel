@@ -64,9 +64,9 @@ flowchart TD
 | Go client | `examples/go_client/` | You want direct Go SDK integration. |
 | Java client | `examples/java_client/` | You want JVM integration. |
 | Rust client | `examples/rust_client/` | You want Rust receipt or policy client behavior. |
-| Python OpenAI base URL | `examples/python_openai_baseurl/` | You want an OpenAI-compatible Python client behind HELM. |
-| TypeScript OpenAI base URL | `examples/ts_openai_baseurl/` | You want typed JavaScript/TypeScript proxy integration. |
-| JavaScript OpenAI base URL | `examples/js_openai_baseurl/` | You want a minimal JavaScript proxy example. |
+| Python governed chat | `examples/python_openai_baseurl/` | You want a typed Python client for the tenant-scoped OpenAI-compatible runtime route. |
+| TypeScript governed chat | `examples/ts_openai_baseurl/` | You want a typed TypeScript client for the tenant-scoped OpenAI-compatible runtime route. |
+| JavaScript governed fetch | `examples/js_openai_baseurl/` | You want a minimal authenticated JavaScript chat request to the runtime route. |
 | MCP client | `examples/mcp_client/` | You want MCP invocation through HELM. |
 | Receipt verification | `examples/receipt_verification/` | You want offline verification examples. |
 | Starters | `examples/starters/` | You want provider starter layouts for OpenAI, Anthropic, Google, or Codex-style agents. |

@@ -208,6 +208,7 @@ export interface HelmClientConfig {
   apiKey?: string;
   tenantId?: string;
   principalId?: string;
+  sessionId?: string;
   workspaceId?: string;
   timeout?: number; // ms, default 30000
 }
@@ -231,6 +232,9 @@ export class HelmClient {
     }
     if (config.principalId) {
       this.headers['X-Helm-Principal-ID'] = config.principalId;
+    }
+    if (config.sessionId) {
+      this.headers['X-Helm-Session-ID'] = config.sessionId;
     }
     if (config.workspaceId) {
       this.headers['X-Helm-Workspace-ID'] = config.workspaceId;
@@ -260,6 +264,7 @@ export class HelmClient {
 
   // ── OpenAI Proxy ─────────────────────────────────
   async chatCompletions(req: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+    this.validateChatScope();
     return this.request<ChatCompletionResponse>('POST', '/v1/chat/completions', req);
   }
 
@@ -269,6 +274,7 @@ export class HelmClient {
    * you need the kernel receipt.
    */
   async chatCompletionsWithReceipt(req: ChatCompletionRequest): Promise<ChatCompletionWithReceipt> {
+    this.validateChatScope();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
     try {
@@ -297,6 +303,19 @@ export class HelmClient {
       return { response, governance };
     } finally {
       clearTimeout(timer);
+    }
+  }
+
+  private validateChatScope(): void {
+    for (const [name, value] of Object.entries({
+      apiKey: this.apiKey,
+      tenantId: this.headers['X-Helm-Tenant-ID'],
+      principalId: this.headers['X-Helm-Principal-ID'],
+      sessionId: this.headers['X-Helm-Session-ID'],
+    })) {
+      if (typeof value !== 'string' || !value.trim()) {
+        throw new Error(`${name} is required for governed chat`);
+      }
     }
   }
 

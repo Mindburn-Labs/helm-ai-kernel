@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	helm "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/client"
 )
@@ -17,7 +18,16 @@ func main() {
 	if baseURL == "" {
 		baseURL = "http://127.0.0.1:7714"
 	}
-	client := helm.New(baseURL)
+	opts := []helm.Option{
+		helm.WithAPIKey(requiredEnv("HELM_ADMIN_API_KEY")),
+		helm.WithTenantID(requiredEnv("HELM_TENANT_ID")),
+		helm.WithPrincipalID(requiredEnv("HELM_PRINCIPAL_ID")),
+		helm.WithSessionID(requiredEnv("HELM_SESSION_ID")),
+	}
+	if workspaceID := strings.TrimSpace(os.Getenv("HELM_WORKSPACE_ID")); workspaceID != "" {
+		opts = append(opts, helm.WithWorkspaceID(workspaceID))
+	}
+	client := helm.New(baseURL, opts...)
 
 	// 1. Chat completions (governed by HELM)
 	fmt.Println("=== Chat Completions ===")
@@ -67,4 +77,12 @@ func main() {
 	} else {
 		fmt.Printf("Status: %v\n", health)
 	}
+}
+
+func requiredEnv(name string) string {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		log.Fatalf("%s is required for the governed serve runtime", name)
+	}
+	return value
 }

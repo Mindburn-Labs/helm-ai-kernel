@@ -59,9 +59,11 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
   header or ext-authz request. Missing or unverified scope denies fail-closed.
 - `POST /api/v1/evaluate` uses `X-Helm-Workspace-ID` matched against
   `HELM_RUNTIME_WORKSPACE_ID`; it never trusts a workspace supplied in JSON.
-- The unauthenticated OpenAI-compatible proxy is unavailable while the fence
-  is enabled, because it cannot establish a tenant/workspace binding. It may
-  only return after an authenticated adapter contract binds that scope.
+- `POST /v1/chat/completions` served by the Kernel is tenant-authenticated and
+  requires an explicit session binding. While the fence is enabled, it also
+  requires `X-Helm-Workspace-ID` to match `HELM_RUNTIME_WORKSPACE_ID`; missing
+  or mismatched scope denies fail-closed. The standalone proxy sidecar is a
+  separate local integration surface, not this tenant-scoped runtime route.
 - The fence covers new governed dispatches only.
 - It does not revoke existing permits, cancel in-flight work, stop unmanaged
   adapters, or implement release/unfence. Those remain separate contracts.

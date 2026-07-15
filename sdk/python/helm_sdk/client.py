@@ -186,9 +186,13 @@ class HelmClient:
         principal_id: Optional[str] = None,
         workspace_id: Optional[str] = None,
         timeout: float = 30.0,
+        session_id: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self._api_key = api_key
+        self._tenant_id = tenant_id
+        self._principal_id = principal_id
+        self._session_id = session_id
         headers: dict[str, str] = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -196,6 +200,8 @@ class HelmClient:
             headers["X-Helm-Tenant-ID"] = tenant_id
         if principal_id:
             headers["X-Helm-Principal-ID"] = principal_id
+        if session_id:
+            headers["X-Helm-Session-ID"] = session_id
         if workspace_id:
             headers["X-Helm-Workspace-ID"] = workspace_id
         self._client = httpx.Client(
@@ -235,11 +241,22 @@ class HelmClient:
 
     # ── OpenAI Proxy ────────────────────────────────
     def chat_completions(self, req: ChatCompletionRequest) -> ChatCompletionResponse:
+        self._validate_chat_scope()
         resp = self._client.post("/v1/chat/completions", json=_json_body(req))
         self._check(resp)
         result = ChatCompletionResponse.from_dict(resp.json())
         assert result is not None
         return result
+
+    def _validate_chat_scope(self) -> None:
+        for name, value in {
+            "api_key": self._api_key,
+            "tenant_id": self._tenant_id,
+            "principal_id": self._principal_id,
+            "session_id": self._session_id,
+        }.items():
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} is required for governed chat")
 
     # ── Decision Evaluation ─────────────────────────
     def evaluate_decision(self, _req: Union[DecisionRequest, dict[str, Any]]) -> dict[str, Any]:

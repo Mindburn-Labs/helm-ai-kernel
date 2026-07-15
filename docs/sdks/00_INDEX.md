@@ -5,16 +5,18 @@ last_reviewed: 2026-07-10
 
 # SDKs
 
-Use an SDK when you want typed access to the local HELM HTTP API. Use the
-OpenAI-compatible proxy when an existing app can set `base_url` or `baseURL`.
+Use an SDK when you want typed access to the local HELM HTTP API. The governed
+chat route served by the runtime requires an admin bearer key plus matching
+tenant, principal, and session bindings. The standalone OpenAI-compatible
+proxy is a separate local sidecar for apps that can set `base_url` or `baseURL`.
 
 ## Local Base URLs
 
 | Surface | Base URL |
 | --- | --- |
-| HELM boundary | `http://127.0.0.1:7714` |
-| API server | `http://127.0.0.1:8080` |
-| OpenAI proxy | `http://127.0.0.1:9090/v1` |
+| `serve` runtime | `http://127.0.0.1:7714` |
+| `server` runtime | `http://127.0.0.1:8080` |
+| Standalone OpenAI proxy sidecar | `http://127.0.0.1:9090/v1` |
 
 ## Clients In This Repository
 

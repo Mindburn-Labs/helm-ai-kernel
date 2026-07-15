@@ -10,6 +10,11 @@ and can set a custom base URL. HELM stays local, evaluates requests before they
 reach the upstream, and writes receipts for allowed, denied, or escalated
 decisions.
 
+This page covers the standalone `helm-ai-kernel proxy` sidecar on `:9090`.
+It is separate from the tenant-authenticated governed chat route served by
+`helm-ai-kernel serve` on `:7714`; see
+[`HTTP API`](../reference/http-api.md) for that runtime contract.
+
 ## Start Locally
 
 Build the CLI:

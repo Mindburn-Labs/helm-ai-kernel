@@ -44,7 +44,9 @@ class Example {
         "http://127.0.0.1:7714",
         System.getenv("HELM_ADMIN_API_KEY"),
         "tenant-a",
-        "example-agent"
+        "example-agent",
+        "workspace-a",
+        "session-a"
     );
     ChatCompletionRequest req = new ChatCompletionRequest()
         .model("gpt-4")
@@ -55,6 +57,10 @@ class Example {
   }
 }
 ```
+
+`chatCompletions` is a governed, tenant-scoped proxy call. It requires an API
+key plus tenant, principal, and session bindings; include workspace when the
+runtime requires workspace scope.
 
 ## Scoped decision evaluation
 
@@ -76,8 +82,8 @@ HelmClient.EvaluationResult result = client.evaluateDecisionWithScope(
 System.out.println(result.decision.getVerdict());
 ```
 
-Construct `HelmClient` with its API key, tenant, principal, and optional
-workspace. `evaluateDecision(Object)` remains only as a deprecated
+Construct `HelmClient` with its API key, tenant, principal, required session,
+and optional workspace. `evaluateDecision(Object)` remains only as a deprecated
 source-compatibility shim and fails locally with a migration error.
 
 ## Execution Boundary Methods

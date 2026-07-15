@@ -121,6 +121,9 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		if r.Header.Get("X-Helm-Principal-ID") != "operator-a" {
 			t.Fatalf("missing principal header for %s %s", r.Method, r.URL.RequestURI())
 		}
+		if r.Header.Get("X-Helm-Session-ID") != "session-a" {
+			t.Fatalf("missing session header for %s %s", r.Method, r.URL.RequestURI())
+		}
 		if r.Header.Get("X-Helm-Workspace-ID") != "workspace-a" {
 			t.Fatalf("missing workspace header for %s %s", r.Method, r.URL.RequestURI())
 		}
@@ -142,7 +145,7 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		writeJSON(t, w, responseForClientMatrix(r.Method, r.URL))
 	}))
 	defer server.Close()
-	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"), WithWorkspaceID("workspace-a"))
+	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"), WithSessionID("session-a"), WithWorkspaceID("workspace-a"))
 
 	cases := []struct {
 		name string

@@ -34,25 +34,31 @@ public class HelmClient {
     private final String tenantId;
     private final String principalId;
     private final String workspaceId;
+    private final String sessionId;
 
     public HelmClient(String baseUrl) {
-        this(baseUrl, null, null, null, null);
+        this(baseUrl, null, null, null, null, null);
     }
 
     public HelmClient(String baseUrl, String apiKey) {
-        this(baseUrl, apiKey, null, null, null);
+        this(baseUrl, apiKey, null, null, null, null);
     }
 
     public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId) {
-        this(baseUrl, apiKey, tenantId, principalId, null);
+        this(baseUrl, apiKey, tenantId, principalId, null, null);
     }
 
     public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId, String workspaceId) {
+        this(baseUrl, apiKey, tenantId, principalId, workspaceId, null);
+    }
+
+    public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId, String workspaceId, String sessionId) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.apiKey = apiKey;
         this.tenantId = tenantId;
         this.principalId = principalId;
         this.workspaceId = workspaceId;
+        this.sessionId = sessionId;
         this.gson = new Gson();
         this.objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
@@ -246,6 +252,9 @@ public class HelmClient {
         if (principalId != null && !principalId.isBlank()) {
             b.header("X-Helm-Principal-ID", principalId);
         }
+        if (sessionId != null && !sessionId.isBlank()) {
+            b.header("X-Helm-Session-ID", sessionId);
+        }
         if (includeWorkspace && workspaceId != null && !workspaceId.isBlank()) {
             b.header("X-Helm-Workspace-ID", workspaceId);
         }
@@ -302,10 +311,26 @@ public class HelmClient {
 
     /** POST /v1/chat/completions */
     public ChatCompletionResponse chatCompletions(ChatCompletionRequest req) {
+        validateChatScope();
         HttpRequest r = req("POST", "/v1/chat/completions")
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
                 .build();
         return send(r, ChatCompletionResponse.class);
+    }
+
+    private void validateChatScope() {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalArgumentException("apiKey is required for governed chat");
+        }
+        if (tenantId == null || tenantId.isBlank()) {
+            throw new IllegalArgumentException("tenantId is required for governed chat");
+        }
+        if (principalId == null || principalId.isBlank()) {
+            throw new IllegalArgumentException("principalId is required for governed chat");
+        }
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("sessionId is required for governed chat");
+        }
     }
 
     /**

@@ -177,6 +177,7 @@ public class HelmClientTest {
                 "authorization", exchange.getRequestHeaders().getFirst("Authorization"),
                 "tenant", exchange.getRequestHeaders().getFirst("X-Helm-Tenant-ID"),
                 "principal", exchange.getRequestHeaders().getFirst("X-Helm-Principal-ID"),
+                "session", exchange.getRequestHeaders().getFirst("X-Helm-Session-ID"),
                 "workspace", exchange.getRequestHeaders().getFirst("X-Helm-Workspace-ID")
             ));
             byte[] response = "{}".getBytes(StandardCharsets.UTF_8);
@@ -223,7 +224,8 @@ public class HelmClientTest {
                 "token",
                 "tenant-default",
                 "principal-default",
-                "workspace-default"
+                "workspace-default",
+                "session-default"
             );
             client.getBoundaryStatus();
 
@@ -237,6 +239,7 @@ public class HelmClientTest {
             assertEquals("Bearer token", genericHeaders.get().get("authorization"));
             assertEquals("tenant-default", genericHeaders.get().get("tenant"));
             assertEquals("principal-default", genericHeaders.get().get("principal"));
+            assertEquals("session-default", genericHeaders.get().get("session"));
             assertEquals("workspace-default", genericHeaders.get().get("workspace"));
             assertEquals("Bearer token", headers.get().get("authorization"));
             assertEquals("tenant-a", headers.get().get("tenant"));
@@ -277,6 +280,18 @@ public class HelmClientTest {
     }
 
     @Test
+    @DisplayName("Governed chat rejects a missing session binding locally")
+    void testChatCompletionsRejectsMissingSession() {
+        TypesGen.ChatCompletionRequest request = new TypesGen.ChatCompletionRequest();
+        request.setModel("test");
+        request.setMessages(List.of());
+        assertThrows(IllegalArgumentException.class, () ->
+            new HelmClient("http://127.0.0.1:1", "token", "tenant-a", "principal-a")
+                .chatCompletions(request)
+        );
+    }
+
+    @Test
     @DisplayName("Retired generic evaluation fails locally")
     void testEvaluateDecisionIsRetiredLocally() {
         assertThrows(UnsupportedOperationException.class, () ->
@@ -308,7 +323,8 @@ public class HelmClientTest {
                 "token",
                 "tenant-default",
                 "principal-default",
-                "workspace-default"
+                "workspace-default",
+                "session-default"
             ).evaluateDecisionWithScope(
                 request,
                 new HelmClient.EvaluationScope("tenant-a", "principal-a", "session-a")

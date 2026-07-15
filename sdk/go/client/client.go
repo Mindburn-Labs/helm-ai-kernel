@@ -31,6 +31,7 @@ type HelmClient struct {
 	APIKey      string
 	TenantID    string
 	PrincipalID string
+	SessionID   string
 	WorkspaceID string
 	HTTPClient  *http.Client
 }
@@ -107,6 +108,11 @@ func WithPrincipalID(principalID string) Option {
 	return func(c *HelmClient) { c.PrincipalID = principalID }
 }
 
+// WithSessionID sets the X-Helm-Session-ID header for governed chat calls.
+func WithSessionID(sessionID string) Option {
+	return func(c *HelmClient) { c.SessionID = sessionID }
+}
+
 // WithWorkspaceID sets the X-Helm-Workspace-ID header.
 func WithWorkspaceID(workspaceID string) Option {
 	return func(c *HelmClient) { c.WorkspaceID = workspaceID }
@@ -151,6 +157,9 @@ func (c *HelmClient) do(method, path string, body any, out any) error {
 
 // ChatCompletions calls POST /v1/chat/completions.
 func (c *HelmClient) ChatCompletions(req ChatCompletionRequest) (*ChatCompletionResponse, error) {
+	if err := validateChatScope(c); err != nil {
+		return nil, err
+	}
 	var out ChatCompletionResponse
 	err := c.do("POST", "/v1/chat/completions", req, &out)
 	return &out, err
@@ -158,6 +167,9 @@ func (c *HelmClient) ChatCompletions(req ChatCompletionRequest) (*ChatCompletion
 
 // ChatCompletionsWithReceipt calls POST /v1/chat/completions and extracts X-Helm-* governance headers.
 func (c *HelmClient) ChatCompletionsWithReceipt(req ChatCompletionRequest) (*ChatCompletionWithReceipt, error) {
+	if err := validateChatScope(c); err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -219,25 +231,28 @@ func (c *HelmClient) EvaluateDecisionWithScope(req DecisionRequest, scope Evalua
 		Timestamp int64  `json:"timestamp"`
 	}
 	payload := struct {
-		Action         string                 `json:"action"`
-		Resource       string                 `json:"resource"`
-		Context        map[string]interface{} `json:"context,omitempty"`
-		SessionHistory []sessionActionPayload `json:"session_history,omitempty"`
+		Action         string                  `json:"action"`
+		Resource       string                  `json:"resource"`
+		Context        *map[string]interface{} `json:"context,omitempty"`
+		SessionHistory *[]sessionActionPayload `json:"session_history,omitempty"`
 	}{
 		Action:   req.Action,
 		Resource: req.Resource,
-		Context:  req.Context,
+	}
+	if req.Context != nil {
+		payload.Context = &req.Context
 	}
 	if req.SessionHistory != nil {
-		payload.SessionHistory = make([]sessionActionPayload, len(req.SessionHistory))
+		history := make([]sessionActionPayload, len(req.SessionHistory))
 		for i, action := range req.SessionHistory {
-			payload.SessionHistory[i] = sessionActionPayload{
+			history[i] = sessionActionPayload{
 				Action:    action.Action,
 				Resource:  action.Resource,
 				Verdict:   action.Verdict,
 				Timestamp: action.Timestamp,
 			}
 		}
+		payload.SessionHistory = &history
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -433,6 +448,9 @@ func (c *HelmClient) applyHeaders(req *http.Request) {
 	if c.PrincipalID != "" {
 		req.Header.Set("X-Helm-Principal-ID", c.PrincipalID)
 	}
+	if c.SessionID != "" {
+		req.Header.Set("X-Helm-Session-ID", c.SessionID)
+	}
 	if c.WorkspaceID != "" {
 		req.Header.Set("X-Helm-Workspace-ID", c.WorkspaceID)
 	}
@@ -450,6 +468,28 @@ func validateEvaluationScope(c *HelmClient, scope EvaluationScope) error {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("governed evaluation requires %s", name)
 		}
+	}
+	if scope.WorkspaceID != "" && strings.TrimSpace(scope.WorkspaceID) == "" {
+		return fmt.Errorf("governed evaluation requires workspace_id to be non-empty when provided")
+	}
+	return nil
+}
+
+func validateChatScope(c *HelmClient) error {
+	if c == nil {
+		return fmt.Errorf("governed chat requires a client")
+	}
+	if strings.TrimSpace(c.APIKey) == "" {
+		return fmt.Errorf("governed chat requires API key")
+	}
+	if strings.TrimSpace(c.TenantID) == "" {
+		return fmt.Errorf("governed chat requires tenant_id")
+	}
+	if strings.TrimSpace(c.PrincipalID) == "" {
+		return fmt.Errorf("governed chat requires principal_id")
+	}
+	if strings.TrimSpace(c.SessionID) == "" {
+		return fmt.Errorf("governed chat requires session_id")
 	}
 	return nil
 }

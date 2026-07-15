@@ -27,6 +27,7 @@ describe("HelmClient coverage matrix", () => {
       apiKey: "token",
       tenantId: "tenant-a",
       principalId: "principal-a",
+      sessionId: "session-a",
       workspaceId: "workspace-a",
       timeout: 5_000,
     });
@@ -121,6 +122,7 @@ describe("HelmClient coverage matrix", () => {
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers.Authorization === "Bearer token")).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Tenant-ID"] === "tenant-a")).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Principal-ID"] === "principal-a")).toBe(true);
+    expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Session-ID"] === "session-a")).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Workspace-ID"] === "workspace-a")).toBe(true);
   });
 

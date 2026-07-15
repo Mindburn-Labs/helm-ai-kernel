@@ -6,8 +6,23 @@ import { HelmClient, HelmApiError } from '../../sdk/ts/src/index.js';
 
 const HELM_URL = process.env.HELM_URL || 'http://127.0.0.1:7714';
 
+function requiredEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required for the governed serve runtime`);
+  }
+  return value;
+}
+
 async function main() {
-  const helm = new HelmClient({ baseUrl: HELM_URL });
+  const helm = new HelmClient({
+    baseUrl: HELM_URL,
+    apiKey: requiredEnv('HELM_ADMIN_API_KEY'),
+    tenantId: requiredEnv('HELM_TENANT_ID'),
+    principalId: requiredEnv('HELM_PRINCIPAL_ID'),
+    sessionId: requiredEnv('HELM_SESSION_ID'),
+    workspaceId: process.env.HELM_WORKSPACE_ID?.trim() || undefined,
+  });
 
   // 1. Chat completions (governed by HELM)
   console.log('=== Chat Completions ===');
@@ -59,4 +74,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
+  process.exitCode = 2;
+});

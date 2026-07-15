@@ -96,11 +96,63 @@ func TestEvaluateDecisionWithScopeFailsLocallyWithoutRequiredBinding(t *testing.
 	}
 }
 
+func TestEvaluateDecisionWithScopeRejectsBlankOptionalWorkspace(t *testing.T) {
+	client := New("http://127.0.0.1:1", WithAPIKey("token"))
+	_, err := client.EvaluateDecisionWithScope(DecisionRequest{Action: "read", Resource: "ticket:1"}, EvaluationScope{
+		TenantID:    "tenant-a",
+		PrincipalID: "operator-a",
+		SessionID:   "session-a",
+		WorkspaceID: "   ",
+	}, "")
+	if err == nil || err.Error() != "governed evaluation requires workspace_id to be non-empty when provided" {
+		t.Fatalf("unexpected blank workspace error: %v", err)
+	}
+}
+
+func TestEvaluateDecisionWithScopePreservesExplicitEmptyContextAndHistory(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		context, ok := body["context"].(map[string]any)
+		if !ok || len(context) != 0 {
+			t.Fatalf("context = %#v", body["context"])
+		}
+		history, ok := body["session_history"].([]any)
+		if !ok || len(history) != 0 {
+			t.Fatalf("session_history = %#v", body["session_history"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Helm-Receipt-ID", "rcpt-decision-empty")
+		_, _ = w.Write([]byte(`{"id":"decision-empty"}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, WithAPIKey("token"))
+	_, err := client.EvaluateDecisionWithScope(
+		DecisionRequest{Action: "read", Resource: "ticket:empty", Context: map[string]interface{}{}, SessionHistory: []SessionAction{}},
+		EvaluationScope{TenantID: "tenant-a", PrincipalID: "operator-a", SessionID: "session-a"},
+		"",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEvaluateDecisionIsRetiredLocally(t *testing.T) {
 	client := New("http://127.0.0.1:1")
 	_, err := client.EvaluateDecision(SurfaceRecord{"principal": "spoofed"})
 	if err == nil || err.Error() != "EvaluateDecision is retired; use EvaluateDecisionWithScope with EvaluationScope" {
 		t.Fatalf("unexpected legacy evaluator error: %v", err)
+	}
+}
+
+func TestChatCompletionsFailsLocallyWithoutGovernedScope(t *testing.T) {
+	client := New("http://127.0.0.1:1", WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"))
+	_, err := client.ChatCompletions(ChatCompletionRequest{})
+	if err == nil || err.Error() != "governed chat requires session_id" {
+		t.Fatalf("unexpected governed chat error: %v", err)
 	}
 }
 

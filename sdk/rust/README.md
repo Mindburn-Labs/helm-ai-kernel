@@ -30,7 +30,10 @@ Protobuf bindings under `src/generated/` are generated from
 use helm_sdk::{ChatCompletionRequest, ChatCompletionRequestMessagesInner, HelmClient, Role};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = HelmClient::new("http://127.0.0.1:7714");
+    let client = HelmClient::new("http://127.0.0.1:7714")
+        .with_api_key("...")
+        .with_identity("tenant-a", "example-agent")
+        .with_session_id("session-a");
     let result = client.chat_completions(&ChatCompletionRequest::new(
         "gpt-4".to_string(),
         vec![ChatCompletionRequestMessagesInner::new(
@@ -43,6 +46,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+`chat_completions` is a governed, tenant-scoped proxy call. It requires an API
+key plus tenant, principal, and session bindings; add `with_workspace_id()`
+when the runtime requires workspace scope.
+
 ## Scoped decision evaluation
 
 `POST /api/v1/evaluate` accepts only `action`, `resource`, optional `context`,
@@ -53,7 +60,8 @@ use helm_sdk::{DecisionRequest, EvaluationScope, HelmClient};
 
 let client = HelmClient::new("http://127.0.0.1:7714")
     .with_api_key("...")
-    .with_identity("tenant-a", "example-agent");
+    .with_identity("tenant-a", "example-agent")
+    .with_session_id("session-a");
 let result = client.evaluate_decision_with_scope(
     &DecisionRequest::new("read-ticket".into(), "ticket:123".into()),
     &EvaluationScope::new("tenant-a", "example-agent", "session-a"),

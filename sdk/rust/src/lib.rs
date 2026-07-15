@@ -252,6 +252,7 @@ pub struct HelmClient {
     api_key: Option<String>,
     tenant_id: Option<String>,
     principal_id: Option<String>,
+    session_id: Option<String>,
     workspace_id: Option<String>,
 }
 
@@ -260,13 +261,14 @@ impl HelmClient {
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
-            client: Self::configured_client(None, None, None, None),
+            client: Self::configured_client(None, None, None, None, None),
             // Deliberately has no default identity or workspace headers. The
             // typed evaluator binds its complete scope explicitly per call.
-            evaluation_client: Self::configured_client(None, None, None, None),
+            evaluation_client: Self::configured_client(None, None, None, None, None),
             api_key: None,
             tenant_id: None,
             principal_id: None,
+            session_id: None,
             workspace_id: None,
         }
     }
@@ -290,6 +292,13 @@ impl HelmClient {
         self
     }
 
+    /// Attach a session header for governed chat calls.
+    pub fn with_session_id(mut self, session_id: impl Into<String>) -> Self {
+        self.session_id = Some(session_id.into());
+        self.rebuild_client();
+        self
+    }
+
     /// Attach an optional workspace header for workspace-scoped routes.
     pub fn with_workspace_id(mut self, workspace_id: impl Into<String>) -> Self {
         self.workspace_id = Some(workspace_id.into());
@@ -301,6 +310,7 @@ impl HelmClient {
         api_key: Option<&str>,
         tenant_id: Option<&str>,
         principal_id: Option<&str>,
+        session_id: Option<&str>,
         workspace_id: Option<&str>,
     ) -> Client {
         let mut headers = HeaderMap::new();
@@ -312,6 +322,7 @@ impl HelmClient {
         for (name, value) in [
             ("X-Helm-Tenant-ID", tenant_id),
             ("X-Helm-Principal-ID", principal_id),
+            ("X-Helm-Session-ID", session_id),
             ("X-Helm-Workspace-ID", workspace_id),
         ] {
             if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
@@ -332,6 +343,7 @@ impl HelmClient {
             self.api_key.as_deref(),
             self.tenant_id.as_deref(),
             self.principal_id.as_deref(),
+            self.session_id.as_deref(),
             self.workspace_id.as_deref(),
         );
     }
@@ -484,6 +496,7 @@ impl HelmClient {
         &self,
         req: &ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, HelmApiError> {
+        self.validate_chat_scope()?;
         let resp = self
             .client
             .post(self.url("/v1/chat/completions"))
@@ -500,6 +513,43 @@ impl HelmClient {
             message: e.to_string(),
             reason_code: ReasonCode::ErrorInternal,
         })
+    }
+
+    fn validate_chat_scope(&self) -> Result<(), HelmApiError> {
+        let invalid = |message: &str| HelmApiError {
+            status: 0,
+            message: message.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        };
+        if self
+            .api_key
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(invalid("api_key is required for governed chat"));
+        }
+        if self
+            .tenant_id
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(invalid("tenant_id is required for governed chat"));
+        }
+        if self
+            .principal_id
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(invalid("principal_id is required for governed chat"));
+        }
+        if self
+            .session_id
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(invalid("session_id is required for governed chat"));
+        }
+        Ok(())
     }
 
     /// Source-compatibility shim for the retired generic evaluator.
@@ -1380,6 +1430,7 @@ mod tests {
         HelmClient::new(&format!("http://{address}"))
             .with_api_key("token")
             .with_identity("tenant-a", "principal-a")
+            .with_session_id("session-a")
             .with_workspace_id("workspace-a")
             .get_boundary_status()
             .unwrap();
@@ -1388,6 +1439,7 @@ mod tests {
         assert!(request.contains("authorization: bearer token"));
         assert!(request.contains("x-helm-tenant-id: tenant-a"));
         assert!(request.contains("x-helm-principal-id: principal-a"));
+        assert!(request.contains("x-helm-session-id: session-a"));
         assert!(request.contains("x-helm-workspace-id: workspace-a"));
     }
 
@@ -1564,6 +1616,17 @@ mod tests {
             .unwrap_err();
         assert_eq!(missing_session.status, 0);
         assert!(missing_session.message.contains("session_id is required"));
+    }
+
+    #[test]
+    fn governed_chat_rejects_missing_session_locally() {
+        let request = ChatCompletionRequest::new("test".to_string(), vec![]);
+        let error = HelmClient::new("http://127.0.0.1:1")
+            .with_api_key("token")
+            .with_identity("tenant-a", "principal-a")
+            .chat_completions(&request)
+            .unwrap_err();
+        assert!(error.message.contains("session_id is required"));
     }
 
     #[test]

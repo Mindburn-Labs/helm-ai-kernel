@@ -11,10 +11,22 @@ Runs against a local HELM boundary at `HELM_URL` and validates the primary devel
 
 ```bash
 make build
-HELM_ADMIN_API_KEY=local-admin-key ./bin/helm-ai-kernel serve --policy examples/launch/policies/agent_tool_call_boundary.toml
-HELM_URL=http://127.0.0.1:7715 HELM_ADMIN_API_KEY=local-admin-key HELM_TENANT_ID=local-demo python examples/python_sdk/main.py
+HELM_ADMIN_API_KEY=local-admin-key \
+HELM_RUNTIME_TENANT_ID=default \
+HELM_RUNTIME_PRINCIPAL_ID=sdk-python-agent \
+./bin/helm-ai-kernel serve --policy examples/launch/policies/agent_tool_call_boundary.toml
+
+# In a second terminal:
+PYTHONPATH=sdk/python \
+HELM_URL=http://127.0.0.1:7715 \
+HELM_ADMIN_API_KEY=local-admin-key \
+HELM_TENANT_ID=default \
+HELM_PRINCIPAL_ID=sdk-python-agent \
+HELM_SESSION_ID=sdk-python-session \
+python examples/python_sdk/main.py
 ```
 
-The script uses sample policy data and local receipts only. `HELM_ADMIN_API_KEY`
-is needed only for the local sandbox preflight admin route; `HELM_TENANT_ID`
-scopes the local evidence export.
+The script uses sample policy data and local receipts only. The admin key is
+required for its governed tenant-scoped calls. The server's runtime tenant and
+principal must match the client values; `HELM_SESSION_ID` binds evaluator and
+evidence records to one causal session.

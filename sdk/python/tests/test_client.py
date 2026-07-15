@@ -120,7 +120,13 @@ class TestChatCompletions:
             "choices": [],
         })
 
-        client = HelmClient(base_url="http://h")
+        client = HelmClient(
+            base_url="http://h",
+            api_key="key",
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            session_id="session-a",
+        )
         req = ChatCompletionRequest(model="gpt-4", messages=[ChatMessage(role="user", content="hi")])
         result = client.chat_completions(req)
 
@@ -128,6 +134,12 @@ class TestChatCompletions:
         call_args = mock_client.post.call_args
         assert call_args[0][0] == "/v1/chat/completions"
         assert result.id == "chatcmpl-1"
+
+    def test_rejects_missing_governed_scope(self) -> None:
+        client = HelmClient(base_url="http://h", api_key="key", tenant_id="tenant-a", principal_id="principal-a")
+        req = ChatCompletionRequest(model="gpt-4", messages=[ChatMessage(role="user", content="hi")])
+        with pytest.raises(ValueError, match="session_id is required"):
+            client.chat_completions(req)
 
 
 # ── Approve Intent ───────────────────────────────────────

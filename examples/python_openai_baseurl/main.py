@@ -9,13 +9,26 @@ import os
 import sys
 sys.path.insert(0, "../../sdk/python")
 
-from helm_sdk import HelmClient, HelmApiError, ChatCompletionRequest, ConformanceRequest
-from helm_sdk.types_gen import ChatMessage
+from helm_sdk import ChatCompletionRequest, ChatMessage, ConformanceRequest, HelmApiError, HelmClient
 
 HELM_URL = os.environ.get("HELM_URL", "http://127.0.0.1:7714")
 
+
+def required_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise SystemExit(f"{name} is required for the governed serve runtime")
+    return value
+
 def main():
-    helm = HelmClient(base_url=HELM_URL)
+    helm = HelmClient(
+        base_url=HELM_URL,
+        api_key=required_env("HELM_ADMIN_API_KEY"),
+        tenant_id=required_env("HELM_TENANT_ID"),
+        principal_id=required_env("HELM_PRINCIPAL_ID"),
+        workspace_id=os.environ.get("HELM_WORKSPACE_ID", "").strip() or None,
+        session_id=required_env("HELM_SESSION_ID"),
+    )
 
     # 1. Chat completions (governed by HELM)
     print("=== Chat Completions ===")
@@ -25,8 +38,8 @@ def main():
             messages=[ChatMessage(role="user", content="List files in /tmp")],
         ))
         print(f"Response: {res.choices[0].message.content if res.choices else 'no choices'}")
-    except HelmApiError as e:
-        print(f"Denied: {e.reason_code} — {e}")
+    except (HelmApiError, ValueError) as e:
+        print(f"Denied: {getattr(e, 'reason_code', 'LOCAL_VALIDATION')} — {e}")
 
     # 2. Export + verify evidence
     print("\n=== Evidence ===")

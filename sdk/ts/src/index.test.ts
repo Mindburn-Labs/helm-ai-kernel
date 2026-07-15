@@ -109,7 +109,13 @@ describe('HelmClient', () => {
     it('POSTs to /v1/chat/completions with request body', async () => {
       const mockRes = { id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: 'gpt-4', choices: [] };
       fetchSpy.mockResolvedValue(jsonResponse(mockRes));
-      const client = new HelmClient({ baseUrl: 'http://h' });
+      const client = new HelmClient({
+        baseUrl: 'http://h',
+        apiKey: 'token',
+        tenantId: 'tenant-a',
+        principalId: 'principal-a',
+        sessionId: 'session-a',
+      });
 
       const result = await client.chatCompletions({
         model: 'gpt-4',
@@ -118,7 +124,15 @@ describe('HelmClient', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://h/v1/chat/completions',
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer token',
+            'X-Helm-Tenant-ID': 'tenant-a',
+            'X-Helm-Principal-ID': 'principal-a',
+            'X-Helm-Session-ID': 'session-a',
+          }),
+        }),
       );
       expect(result.id).toBe('chatcmpl-1');
     });

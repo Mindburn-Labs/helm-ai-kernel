@@ -1,0 +1,17 @@
+{
+  "action_type": "effect_attempt",
+  "decision_hash": "sha256:decision-1",
+  "decision_id": "decision-1",
+  "effect_class": "E4",
+  "envelope_hash": "sha256:envelope",
+  "envelope_id": "envelope-1",
+  "lamport_clock": 5,
+  "parent_receipt_hashes": [
+    "receipt-4"
+  ],
+  "receipt_hash": "receipt-5",
+  "receipt_id": "receipt-5",
+  "seq": 5,
+  "status": "APPLIED",
+  "tenant_id": "tenant-1"
+}

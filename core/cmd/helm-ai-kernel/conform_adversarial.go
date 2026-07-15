@@ -4,6 +4,9 @@ package main
 // classical Ed25519 trust profiles; no post-quantum assurance is claimed.
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform/adversarial"
@@ -30,13 +34,16 @@ const (
 )
 
 // adversarialCampaignReport intentionally omits wall-clock timestamps and
-// machine-local paths. The same sealed EvidencePack must produce byte-identical
-// campaign reports on repeated offline runs with the same verifier version.
+// machine-local paths. Repeated offline runs are byte-identical when the sealed
+// pack, verifier version, explicit trust inputs, and time-sensitive trust
+// verdicts are unchanged.
 type adversarialCampaignReport struct {
 	SchemaVersion          string                      `json:"schema_version"`
 	Pass                   bool                        `json:"pass"`
 	Status                 adversarialCampaignStatus   `json:"status"`
 	TrustProfile           string                      `json:"trust_profile"`
+	EvaluationTime         string                      `json:"evaluation_time"`
+	CampaignTrustKeyID     string                      `json:"campaign_trust_key_id"`
 	BundleVerified         bool                        `json:"bundle_verified"`
 	VerifierVersion        string                      `json:"verifier_version"`
 	VerificationSummary    string                      `json:"verification_summary"`
@@ -56,6 +63,21 @@ type adversarialCampaignReport struct {
 	Suites                 []*adversarial.SuiteResult  `json:"suites,omitempty"`
 	UntestedRegions        []string                    `json:"untested_regions"`
 	KnownLimitations       []string                    `json:"known_limitations"`
+	RunnerProvenance       adversarialRunnerProvenance `json:"runner_provenance"`
+	Attestation            adversarialAttestation      `json:"attestation"`
+}
+
+type adversarialRunnerProvenance struct {
+	KernelCommit             string `json:"kernel_commit"`
+	ExecutableSHA256         string `json:"executable_sha256"`
+	DetectorRevision         string `json:"detector_revision"`
+	DetectorDefinitionSHA256 string `json:"detector_definition_sha256"`
+}
+
+type adversarialAttestation struct {
+	Algorithm string `json:"algorithm"`
+	KeyID     string `json:"key_id"`
+	Signature string `json:"signature"`
 }
 
 // runConformAdversarial implements `helm-ai-kernel conform adversarial`.
@@ -66,19 +88,25 @@ type adversarialCampaignReport struct {
 //	1 = EvidencePack verification or any adversarial suite fails
 //	2 = invalid configuration or runtime/report-writing error
 func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "verify-report" {
+		return runVerifyAdversarialCampaignReport(args[1:], stdout, stderr)
+	}
 	cmd := flag.NewFlagSet("conform adversarial", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 
 	var (
-		bundle           string
-		profile          string
-		configPath       string
-		storageReceipt   string
-		externalHostKey  string
-		trustedPublicKey string
-		managedAgentKey  string
-		reportPath       string
-		jsonOutput       bool
+		bundle            string
+		profile           string
+		configPath        string
+		storageReceipt    string
+		externalHostKey   string
+		trustedPublicKey  string
+		managedAgentKey   string
+		campaignPublicKey string
+		evaluationTimeRaw string
+		kernelCommit      string
+		reportPath        string
+		jsonOutput        bool
 	)
 	cmd.StringVar(&bundle, "bundle", "", "Path to a sealed EvidencePack directory or archive")
 	cmd.StringVar(&profile, "profile", "", "Required EvidencePack trust profile: dev-local, team, customer, or high-assurance")
@@ -87,6 +115,9 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&externalHostKey, "external-host-public-key", strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")), "Trusted Ed25519 key for external host evidence")
 	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Trusted Ed25519 key for conformance report signatures")
 	cmd.StringVar(&managedAgentKey, "managed-agent-receipt-public-key", strings.TrimSpace(os.Getenv("HELM_MANAGED_AGENT_RECEIPT_PUBLIC_KEY_HEX")), "Trusted Ed25519 key for embedded managed-agent receipts")
+	cmd.StringVar(&campaignPublicKey, "campaign-public-key", strings.TrimSpace(os.Getenv("HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX")), "Required external Ed25519 trust root for campaign authorization and tool signatures")
+	cmd.StringVar(&evaluationTimeRaw, "evaluation-time", strings.TrimSpace(os.Getenv("HELM_BOUNTY_EVALUATION_TIME_RFC3339")), "Required RFC3339 trust-evaluation time for deterministic replay")
+	cmd.StringVar(&kernelCommit, "kernel-commit", strings.TrimSpace(os.Getenv("HELM_KERNEL_COMMIT")), "Required exact Kernel commit for runner provenance")
 	cmd.StringVar(&reportPath, "report", "", "Required output path for the deterministic campaign report (must be outside the sealed pack)")
 	cmd.BoolVar(&jsonOutput, "json", false, "Also emit the deterministic campaign report as JSON to stdout")
 	if err := cmd.Parse(args); err != nil {
@@ -113,13 +144,53 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "Error: --report is required so every campaign has a durable deterministic artifact")
 		return 2
 	}
+	campaignTrustKeyID, err := adversarial.CampaignKeyID(campaignPublicKey)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: --campaign-public-key is required and invalid: %v\n", err)
+		return 2
+	}
+	evaluationTime, err := time.Parse(time.RFC3339, strings.TrimSpace(evaluationTimeRaw))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: --evaluation-time must be RFC3339: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(kernelCommit) == "" {
+		_, _ = fmt.Fprintln(stderr, "Error: --kernel-commit is required for exact runner provenance")
+		return 2
+	}
+	embeddedCommit := strings.TrimSpace(commit)
+	if embeddedCommit == "" || embeddedCommit == "unknown" {
+		_, _ = fmt.Fprintln(stderr, "Error: campaign runner binary has no embedded source commit")
+		return 2
+	}
+	if strings.TrimSpace(kernelCommit) != embeddedCommit {
+		_, _ = fmt.Fprintf(stderr, "Error: --kernel-commit %s does not match embedded runner commit %s\n", strings.TrimSpace(kernelCommit), embeddedCommit)
+		return 2
+	}
+	executableDigest, err := currentExecutableSHA256()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: cannot hash campaign executable: %v\n", err)
+		return 2
+	}
+	detectorDigest, err := adversarial.DefinitionDigest()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: cannot hash detector definition: %v\n", err)
+		return 2
+	}
+	runner := adversarialRunnerProvenance{
+		KernelCommit:             strings.TrimSpace(kernelCommit),
+		ExecutableSHA256:         executableDigest,
+		DetectorRevision:         adversarial.DetectorRevision,
+		DetectorDefinitionSHA256: detectorDigest,
+	}
+	verificationOpts := adversarial.VerificationOptions{CampaignPublicKeyHex: campaignPublicKey}
 
 	bundleInfo, err := os.Stat(bundle)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot open EvidencePack: %v\n", err)
 		return 2
 	}
-	if bundleInfo.IsDir() && pathWithin(reportPath, bundle) {
+	if pathWithin(reportPath, bundle) {
 		_, _ = fmt.Fprintln(stderr, "Error: --report must be outside the sealed EvidencePack")
 		return 2
 	}
@@ -129,7 +200,7 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 	}
 
 	var campaign adversarialCampaignReport
-	err = withEvidenceBundleDir(bundle, func(packDir string) error {
+	err = withAdversarialEvidenceSnapshot(bundle, func(packDir string) error {
 		verification, verifyErr := verifyAdversarialCampaignBundle(packDir, adversarialBundleVerifyOptions{
 			Profile:               trustProfile,
 			ConfigPath:            configPath,
@@ -138,15 +209,16 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 			ExternalHostKeyHex:    externalHostKey,
 			TrustedPublicKeyHex:   trustedPublicKey,
 			ManagedAgentPublicKey: managedAgentKey,
+			Now:                   evaluationTime.UTC(),
 		})
 		if verifyErr != nil {
 			return verifyErr
 		}
-		campaign = newAdversarialCampaignReport(trustProfile, verification)
+		campaign = newAdversarialCampaignReport(trustProfile, evaluationTime.UTC(), campaignTrustKeyID, runner, verification)
 		if !verification.Verified {
 			return nil
 		}
-		coverage := adversarial.EvaluateCoverage(packDir)
+		coverage := adversarial.EvaluateCoverageWithOptions(packDir, verificationOpts)
 		campaign.CoverageVerified = coverage.Pass
 		campaign.CoveredSuites = coverage.CoveredSuites
 		campaign.MissingSuites = coverage.MissingSuites
@@ -156,7 +228,7 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 			return nil
 		}
 
-		result := adversarial.RunAll(packDir)
+		result := adversarial.RunAllWithOptions(packDir, verificationOpts)
 		campaign.ExecutedSuites = len(result.Suites)
 		campaign.PassedSuites = result.PassedSuites
 		campaign.FailedSuites = result.FailedSuites
@@ -171,6 +243,10 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: adversarial campaign failed to run: %v\n", err)
+		return 2
+	}
+	if err := signAdversarialCampaignReport(&campaign); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: cannot attest campaign report: %v\n", err)
 		return 2
 	}
 
@@ -198,6 +274,57 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer) int {
+	cmd := flag.NewFlagSet("conform adversarial verify-report", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+	var reportPath, trustedPublicKey, expectedKernelCommit, expectedExecutableSHA string
+	var jsonOutput bool
+	cmd.StringVar(&reportPath, "report", "", "Path to an attested adversarial campaign report")
+	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Externally trusted Ed25519 report-attestation public key")
+	cmd.StringVar(&expectedKernelCommit, "expected-kernel-commit", "", "Optional exact Kernel commit required by downstream policy")
+	cmd.StringVar(&expectedExecutableSHA, "expected-executable-sha256", "", "Optional exact runner executable digest required by downstream policy")
+	cmd.BoolVar(&jsonOutput, "json", false, "Emit the authenticated campaign report as JSON")
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+	if cmd.NArg() != 0 || strings.TrimSpace(reportPath) == "" || strings.TrimSpace(trustedPublicKey) == "" {
+		_, _ = fmt.Fprintln(stderr, "Error: --report and --trusted-public-key are required")
+		return 2
+	}
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: cannot read campaign report: %v\n", err)
+		return 2
+	}
+	var report adversarialCampaignReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: cannot decode campaign report: %v\n", err)
+		return 2
+	}
+	if report.SchemaVersion != adversarialCampaignSchemaVersion || report.RunnerProvenance.KernelCommit == "" || report.RunnerProvenance.ExecutableSHA256 == "" || report.RunnerProvenance.DetectorDefinitionSHA256 == "" {
+		_, _ = fmt.Fprintln(stderr, "Error: campaign report provenance is incomplete or unsupported")
+		return 1
+	}
+	if err := verifyAdversarialCampaignReportAttestation(report, trustedPublicKey); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+	if expected := strings.TrimSpace(expectedKernelCommit); expected != "" && report.RunnerProvenance.KernelCommit != expected {
+		_, _ = fmt.Fprintf(stderr, "Error: kernel commit mismatch: got %s want %s\n", report.RunnerProvenance.KernelCommit, expected)
+		return 1
+	}
+	if expected := strings.TrimSpace(expectedExecutableSHA); expected != "" && report.RunnerProvenance.ExecutableSHA256 != expected {
+		_, _ = fmt.Fprintf(stderr, "Error: executable digest mismatch: got %s want %s\n", report.RunnerProvenance.ExecutableSHA256, expected)
+		return 1
+	}
+	if jsonOutput {
+		_, _ = stdout.Write(data)
+	} else {
+		_, _ = fmt.Fprintf(stdout, "Kernel adversarial campaign attestation: verified\n  Status: %s\n  Kernel commit: %s\n  Executable: %s\n", report.Status, report.RunnerProvenance.KernelCommit, report.RunnerProvenance.ExecutableSHA256)
+	}
+	return 0
+}
+
 type adversarialBundleVerifyOptions struct {
 	Profile               evidencepkg.EvidenceTrustProfile
 	ConfigPath            string
@@ -206,6 +333,7 @@ type adversarialBundleVerifyOptions struct {
 	ExternalHostKeyHex    string
 	TrustedPublicKeyHex   string
 	ManagedAgentPublicKey string
+	Now                   time.Time
 }
 
 func verifyAdversarialCampaignBundle(packDir string, opts adversarialBundleVerifyOptions) (*verifier.VerifyReport, error) {
@@ -223,6 +351,7 @@ func verifyAdversarialCampaignBundle(packDir string, opts adversarialBundleVerif
 		StorageObjectPath:                 opts.StorageObjectPath,
 		ExternalHostKeyHex:                opts.ExternalHostKeyHex,
 		ManagedAgentReceiptPublicKeyHex:   opts.ManagedAgentPublicKey,
+		Now:                               opts.Now,
 		AllowVerifiedConformanceSignature: allowVerifiedConformanceSignature,
 	})
 	if err != nil {
@@ -249,17 +378,21 @@ func verifyAdversarialCampaignBundle(packDir string, opts adversarialBundleVerif
 		{Source: opts.StorageReceiptPath, Replacement: "<storage-receipt>"},
 		{Source: opts.StorageObjectPath, Replacement: "<storage-object>"},
 		{Source: opts.ConfigPath, Replacement: "<trust-config>"},
+		{Source: strings.TrimSpace(os.Getenv("HELM_EVIDENCE_TRUST_CONFIG")), Replacement: "<trust-config>"},
+		{Source: evidencepkg.EvidencePackTrustConfigPath(""), Replacement: "<trust-config>"},
 		{Source: packDir, Replacement: "<evidence-pack>"},
 	})
 	return report, nil
 }
 
-func newAdversarialCampaignReport(profile evidencepkg.EvidenceTrustProfile, verification *verifier.VerifyReport) adversarialCampaignReport {
+func newAdversarialCampaignReport(profile evidencepkg.EvidenceTrustProfile, evaluationTime time.Time, campaignTrustKeyID string, runner adversarialRunnerProvenance, verification *verifier.VerifyReport) adversarialCampaignReport {
 	return adversarialCampaignReport{
 		SchemaVersion:          adversarialCampaignSchemaVersion,
 		Pass:                   false,
 		Status:                 adversarialCampaignStatusBundleVerificationFailed,
 		TrustProfile:           string(profile),
+		EvaluationTime:         evaluationTime.Format(time.RFC3339),
+		CampaignTrustKeyID:     campaignTrustKeyID,
 		BundleVerified:         verification.Verified,
 		VerifierVersion:        verification.VerifierVer,
 		VerificationSummary:    verification.Summary,
@@ -280,6 +413,7 @@ func newAdversarialCampaignReport(profile evidencepkg.EvidenceTrustProfile, veri
 			"a passing report is conformance evidence, not a bug-free or production-ready claim",
 			"producer, verifier, and patcher identity separation is enforced by the HELM control plane, not this offline command",
 		},
+		RunnerProvenance: runner,
 	}
 }
 
@@ -368,6 +502,162 @@ func resolveExistingSymlinks(path string) string {
 		missing = append(missing, filepath.Base(current))
 		current = parent
 	}
+}
+
+func withAdversarialEvidenceSnapshot(bundle string, fn func(string) error) error {
+	info, err := os.Stat(bundle)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return withEvidenceBundleDir(bundle, fn)
+	}
+	tempDir, err := os.MkdirTemp("", "helm-adversarial-snapshot-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+	snapshot := filepath.Join(tempDir, "evidence-pack")
+	if err := copyAdversarialEvidenceDirectory(bundle, snapshot); err != nil {
+		return err
+	}
+	return fn(snapshot)
+}
+
+func copyAdversarialEvidenceDirectory(source, destination string) error {
+	var copiedBytes int64
+	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("EvidencePack snapshot rejects symlink: %s", entry.Name())
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destination, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o750)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("EvidencePack snapshot rejects non-regular file: %s", entry.Name())
+		}
+		copiedBytes += info.Size()
+		if info.Size() > maxEvidenceBundleBytes || copiedBytes > maxEvidenceBundleBytes {
+			return fmt.Errorf("EvidencePack snapshot exceeds %d bytes", maxEvidenceBundleBytes)
+		}
+		input, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		openedInfo, statErr := input.Stat()
+		if statErr != nil || !os.SameFile(info, openedInfo) || !openedInfo.Mode().IsRegular() {
+			input.Close() //nolint:errcheck
+			return fmt.Errorf("EvidencePack changed while snapshotting: %s", entry.Name())
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+			input.Close() //nolint:errcheck
+			return err
+		}
+		output, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			input.Close() //nolint:errcheck
+			return err
+		}
+		_, copyErr := io.Copy(output, io.LimitReader(input, info.Size()+1))
+		closeOutputErr := output.Close()
+		closeInputErr := input.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeOutputErr != nil {
+			return closeOutputErr
+		}
+		if closeInputErr != nil {
+			return closeInputErr
+		}
+		finalInfo, err := os.Stat(target)
+		if err != nil || finalInfo.Size() != info.Size() {
+			return fmt.Errorf("EvidencePack changed while snapshotting: %s", entry.Name())
+		}
+		return nil
+	})
+}
+
+func currentExecutableSHA256() (string, error) {
+	path, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func signAdversarialCampaignReport(report *adversarialCampaignReport) error {
+	privateKey, publicKeyHex, err := externalFailureSigningKey()
+	if err != nil {
+		return fmt.Errorf("HELM_SIGNING_KEY_HEX is required for campaign attestation: %w", err)
+	}
+	publicKey, err := hex.DecodeString(publicKeyHex)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("derive campaign attestation public key")
+	}
+	keyHash := sha256.Sum256(publicKey)
+	report.Attestation = adversarialAttestation{
+		Algorithm: "ed25519",
+		KeyID:     "sha256:" + hex.EncodeToString(keyHash[:]),
+	}
+	payload, err := canonicalAdversarialCampaignReport(*report)
+	if err != nil {
+		return err
+	}
+	report.Attestation.Signature = hex.EncodeToString(ed25519.Sign(privateKey, payload))
+	return nil
+}
+
+func canonicalAdversarialCampaignReport(report adversarialCampaignReport) ([]byte, error) {
+	report.Attestation.Signature = ""
+	return canonicalJSON(report)
+}
+
+func verifyAdversarialCampaignReportAttestation(report adversarialCampaignReport, trustedPublicKeyHex string) error {
+	if report.Attestation.Algorithm != "ed25519" {
+		return fmt.Errorf("unsupported campaign attestation algorithm %q", report.Attestation.Algorithm)
+	}
+	publicKey, err := hex.DecodeString(strings.TrimSpace(trustedPublicKeyHex))
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("trusted campaign attestation key must be Ed25519 hex")
+	}
+	keyHash := sha256.Sum256(publicKey)
+	if report.Attestation.KeyID != "sha256:"+hex.EncodeToString(keyHash[:]) {
+		return fmt.Errorf("campaign attestation key id mismatch")
+	}
+	signature, err := hex.DecodeString(strings.TrimSpace(report.Attestation.Signature))
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return fmt.Errorf("invalid campaign attestation signature encoding")
+	}
+	payload, err := canonicalAdversarialCampaignReport(report)
+	if err != nil {
+		return err
+	}
+	if !ed25519.Verify(ed25519.PublicKey(publicKey), payload, signature) {
+		return fmt.Errorf("campaign attestation signature verification failed")
+	}
+	return nil
 }
 
 type adversarialPathReplacement struct {

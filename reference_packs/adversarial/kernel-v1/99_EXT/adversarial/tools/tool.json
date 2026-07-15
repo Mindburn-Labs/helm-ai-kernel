@@ -1,0 +1,10 @@
+{
+  "name": "campaign-tool",
+  "signatures": [
+    {
+      "algorithm": "ed25519",
+      "key_id": "sha256:71f0d29c284018b2fcc8084155cf78ece22ffd3ba34e9130e229169502de4424",
+      "signature": "d5d6cbbbdaa1c97c0da9596902e7201cc790726455f9a1f9f2b6ea72b07dfa39af6f240c4763d89d17ddffc2625399286b0b15bfbe807d14c63ab23eeff8fa07"
+    }
+  ]
+}

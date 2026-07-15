@@ -1,0 +1,68 @@
+{
+  "entries": [
+    {
+      "path": "01_SCORE.json",
+      "sha256": "63b684854bd4961bcb515b09823ea700dda69135486c5e11352bb1d7850f534e"
+    },
+    {
+      "path": "02_PROOFGRAPH/proofgraph.json",
+      "sha256": "ac08ce34ba4f8123618661bef2425f7028ffb9ac740578a3ee88684d2523fee8"
+    },
+    {
+      "path": "02_PROOFGRAPH/receipts/001.json",
+      "sha256": "3ac453843cc8722797b1475013a40ff5344ff79ff67cb43e68b1c33f1bf02113"
+    },
+    {
+      "path": "02_PROOFGRAPH/receipts/002.json",
+      "sha256": "f2a4f6f31824482629896ce30544e09c6bce0fdceccf7233bd9fd72806c407f4"
+    },
+    {
+      "path": "02_PROOFGRAPH/receipts/003.json",
+      "sha256": "5182a402f074d4c3063dd33eace497d4bb2b11e2a540fecb1849c6d0af144691"
+    },
+    {
+      "path": "02_PROOFGRAPH/receipts/004.json",
+      "sha256": "44dfcbe18f00367c1d6c85eb1fa2b04937683ea415e56e9e9a79f4ebbfbd0f32"
+    },
+    {
+      "path": "02_PROOFGRAPH/receipts/005.json",
+      "sha256": "fcf8ad9d045fb5c9620bc000fa7a552cadd142ca16daa2ccbf995bcae464a62a"
+    },
+    {
+      "path": "03_TELEMETRY/.keep",
+      "sha256": "1b94452a31c02ccc8384d5546f35e9fcafb05982b6e4d69298088f9644df6aa1"
+    },
+    {
+      "path": "04_EXPORTS/.keep",
+      "sha256": "1b94452a31c02ccc8384d5546f35e9fcafb05982b6e4d69298088f9644df6aa1"
+    },
+    {
+      "path": "05_DIFFS/.keep",
+      "sha256": "1b94452a31c02ccc8384d5546f35e9fcafb05982b6e4d69298088f9644df6aa1"
+    },
+    {
+      "path": "06_LOGS/receipt_emission_panic.json",
+      "sha256": "c1db7e5cdd768f1620bb05bb2e60b38f8bba3a0344ee2a9b8f25b40b952b9298"
+    },
+    {
+      "path": "08_TAPES/entry_001.json",
+      "sha256": "440f36108e388c27b6717f023ab364609dab82cc588b2451ffa830e7be7f688b"
+    },
+    {
+      "path": "09_SCHEMAS/.keep",
+      "sha256": "1b94452a31c02ccc8384d5546f35e9fcafb05982b6e4d69298088f9644df6aa1"
+    },
+    {
+      "path": "12_REPORTS/.keep",
+      "sha256": "1b94452a31c02ccc8384d5546f35e9fcafb05982b6e4d69298088f9644df6aa1"
+    },
+    {
+      "path": "99_EXT/adversarial/tools/tool.json",
+      "sha256": "52ea5f2e56a4022320911d531777f346698db278370dede04c313684be97250c"
+    }
+  ],
+  "extensions": [
+    "adversarial"
+  ],
+  "version": "1.0.0"
+}

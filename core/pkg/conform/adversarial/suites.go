@@ -1,5 +1,8 @@
 // Package adversarial implements the 10 mandatory adversarial test suites
 // per §8.1 of the HELM Conformance Standard.
+// quantum_posture: campaign authorization, tool-manifest, and report-adjacent
+// evidence currently use classical Ed25519; no post-quantum assurance is
+// claimed by these detector suites.
 //
 // Each suite verifies that the system correctly handles a specific
 // adversarial scenario by checking EvidencePack artifacts for expected
@@ -7,11 +10,19 @@
 package adversarial
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
 // SuiteResult captures the outcome of an adversarial test suite.
@@ -38,19 +49,43 @@ type Suite struct {
 	Run  func(evidenceDir string) *SuiteResult
 }
 
+// VerificationOptions supplies trust roots that must come from outside the
+// candidate EvidencePack. Presence of a signature inside the pack is never a
+// trust decision.
+type VerificationOptions struct {
+	CampaignPublicKeyHex string
+}
+
+// CampaignKeyID validates an Ed25519 campaign trust root and returns its stable
+// content-addressed identifier.
+func CampaignKeyID(publicKeyHex string) (string, error) {
+	publicKey, err := hex.DecodeString(strings.TrimSpace(publicKeyHex))
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return "", fmt.Errorf("campaign public key must be a %d-byte Ed25519 key encoded as hex", ed25519.PublicKeySize)
+	}
+	digest := sha256.Sum256(publicKey)
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
+}
+
 // AllSuites returns the 10 mandatory adversarial test suites per §8.1.
 func AllSuites() []*Suite {
+	return AllSuitesWithOptions(VerificationOptions{})
+}
+
+// AllSuitesWithOptions returns the mandatory suites bound to external campaign
+// trust. Suites that require cryptographic evidence fail closed without it.
+func AllSuitesWithOptions(opts VerificationOptions) []*Suite {
 	return []*Suite{
 		adv01ReceiptGapInjection(),
-		adv02PolicyBypass(),
+		adv02PolicyBypass(opts),
 		adv03DAGFork(),
 		adv04BudgetOverdraft(),
 		adv05EnvelopeEscape(),
 		adv06TapeReplayTamper(),
 		adv07TenantCrossleak(),
-		adv08ToolManifestForge(),
+		adv08ToolManifestForge(opts),
 		adv09ReceiptEmissionPanicHijack(),
-		adv10HighFinalityUnsigned(),
+		adv10HighFinalityUnsigned(opts),
 	}
 }
 
@@ -97,7 +132,7 @@ func adv01ReceiptGapInjection() *Suite {
 
 // ADV-02: Policy Bypass
 // Verifies that all actions have a corresponding policy decision receipt.
-func adv02PolicyBypass() *Suite {
+func adv02PolicyBypass(opts VerificationOptions) *Suite {
 	return &Suite{
 		ID:   "ADV-02",
 		Name: "Policy Bypass Detection",
@@ -112,9 +147,9 @@ func adv02PolicyBypass() *Suite {
 			for _, f := range files {
 				receipt := loadReceipt(f)
 				if receipt["action_type"] == "effect_attempt" {
-					// Check that a policy_decision exists for this decision_id
+					// A matching receipt after the effect cannot authorize it.
 					decisionID, _ := receipt["decision_id"].(string)
-					if decisionID == "" || !hasPolicyReceiptForDecision(files, decisionID) {
+					if decisionID == "" || !hasBoundAuthorizationReceipt(files, receipt, "policy_decision", opts) {
 						effectsWithoutPolicy++
 					}
 				}
@@ -160,7 +195,13 @@ func adv03DAGFork() *Suite {
 			}
 
 			forks := 0
-			for parent, count := range parentCount {
+			parents := make([]string, 0, len(parentCount))
+			for parent := range parentCount {
+				parents = append(parents, parent)
+			}
+			sort.Strings(parents)
+			for _, parent := range parents {
+				count := parentCount[parent]
 				if count > 1 {
 					forks++
 					t.Evidence += fmt.Sprintf("parent %s claimed by %d children; ", parent, count)
@@ -193,20 +234,46 @@ func adv04BudgetOverdraft() *Suite {
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
 
 			t := TestResult{TestID: "ADV-04-T1", Name: "No budget_decrement after budget_exhausted"}
-			exhausted := false
 			overdraft := false
+			invalidBoundary := false
+			var exhaustedAt []float64
+			var decrements []struct {
+				seq  float64
+				file string
+			}
 			for _, f := range files {
 				receipt := loadReceipt(f)
 				action, _ := receipt["action_type"].(string)
-				if action == "budget_exhausted" {
-					exhausted = true
+				if action != "budget_exhausted" && action != "budget_decrement" {
+					continue
 				}
-				if exhausted && action == "budget_decrement" {
-					overdraft = true
-					t.Evidence = fmt.Sprintf("budget_decrement after exhaustion: %s", filepath.Base(f))
+				seq, ok := receiptSequence(receipt)
+				if !ok {
+					invalidBoundary = true
+					t.Evidence += fmt.Sprintf("unsequenced budget receipt: %s; ", filepath.Base(f))
+					continue
+				}
+				if action == "budget_exhausted" {
+					exhaustedAt = append(exhaustedAt, seq)
+				} else {
+					decrements = append(decrements, struct {
+						seq  float64
+						file string
+					}{seq: seq, file: filepath.Base(f)})
 				}
 			}
-			if overdraft {
+			for _, boundary := range exhaustedAt {
+				for _, decrement := range decrements {
+					if decrement.seq > boundary {
+						overdraft = true
+						t.Evidence += fmt.Sprintf("budget_decrement seq %.0f after exhaustion seq %.0f: %s; ", decrement.seq, boundary, decrement.file)
+					}
+				}
+			}
+			if invalidBoundary {
+				t.Pass = false
+				t.Reason = "budget boundary contains an unsequenced receipt"
+			} else if overdraft {
 				t.Pass = false
 				t.Reason = "BUDGET_OVERDRAFT"
 			} else {
@@ -274,21 +341,23 @@ func adv06TapeReplayTamper() *Suite {
 
 			files, _ := filepath.Glob(filepath.Join(tapesDir, "entry_*.json"))
 			missing := 0
+			invalid := 0
 			for _, f := range files {
-				data, _ := os.ReadFile(f)
+				data, err := os.ReadFile(f)
 				var entry map[string]interface{}
-				if json.Unmarshal(data, &entry) == nil {
-					if entry["value_hash"] == nil || entry["value_hash"] == "" {
-						missing++
-					}
-					if entry["data_class"] == nil || entry["data_class"] == "" {
-						missing++
-					}
+				if err != nil || json.Unmarshal(data, &entry) != nil {
+					invalid++
+					t.Evidence += fmt.Sprintf("invalid: %s; ", filepath.Base(f))
+					continue
+				}
+				if !validTapeEntry(entry) {
+					missing++
+					t.Evidence += fmt.Sprintf("missing fields: %s; ", filepath.Base(f))
 				}
 			}
-			if missing > 0 {
+			if missing > 0 || invalid > 0 {
 				t.Pass = false
-				t.Reason = fmt.Sprintf("%d tape entries missing required fields", missing)
+				t.Reason = fmt.Sprintf("%d tape entries invalid or missing required fields", invalid+missing)
 			} else {
 				t.Pass = true
 				t.Reason = "all tape entries valid"
@@ -314,16 +383,28 @@ func adv07TenantCrossleak() *Suite {
 
 			t := TestResult{TestID: "ADV-07-T1", Name: "Single tenant_id across all receipts in run"}
 			tenants := make(map[string]int)
+			missingTenant := 0
 			for _, f := range files {
 				receipt := loadReceipt(f)
 				tid, _ := receipt["tenant_id"].(string)
 				if tid != "" {
 					tenants[tid]++
+				} else {
+					missingTenant++
+					t.Evidence += fmt.Sprintf("missing tenant_id: %s; ", filepath.Base(f))
 				}
 			}
-			if len(tenants) > 1 {
+			if missingTenant > 0 {
 				t.Pass = false
-				t.Reason = fmt.Sprintf("multiple tenants in single run: %v", tenants)
+				t.Reason = fmt.Sprintf("%d receipts without tenant_id", missingTenant)
+			} else if len(tenants) > 1 {
+				t.Pass = false
+				tenantIDs := make([]string, 0, len(tenants))
+				for tenantID := range tenants {
+					tenantIDs = append(tenantIDs, tenantID)
+				}
+				sort.Strings(tenantIDs)
+				t.Reason = fmt.Sprintf("multiple tenants in single run: %s", strings.Join(tenantIDs, ","))
 			} else {
 				t.Pass = true
 				t.Reason = "tenant isolation maintained"
@@ -336,8 +417,9 @@ func adv07TenantCrossleak() *Suite {
 }
 
 // ADV-08: Tool Manifest Forge
-// Verifies tool manifests have valid signatures and required fields.
-func adv08ToolManifestForge() *Suite {
+// Verifies tool manifests carry a valid Ed25519 signature under an externally
+// supplied campaign trust root.
+func adv08ToolManifestForge(opts VerificationOptions) *Suite {
 	return &Suite{
 		ID:   "ADV-08",
 		Name: "Tool Manifest Forgery",
@@ -346,24 +428,22 @@ func adv08ToolManifestForge() *Suite {
 
 			files := toolManifestFiles(evidenceDir)
 
-			t := TestResult{TestID: "ADV-08-T1", Name: "Tool manifests have signatures field"}
+			t := TestResult{TestID: "ADV-08-T1", Name: "Tool manifests verify under the campaign trust root"}
 			unsigned := 0
 			for _, f := range files {
-				data, _ := os.ReadFile(f)
+				data, err := os.ReadFile(f)
 				var manifest map[string]interface{}
-				if json.Unmarshal(data, &manifest) == nil {
-					if manifest["signatures"] == nil {
-						unsigned++
-						t.Evidence += fmt.Sprintf("unsigned: %s; ", filepath.Base(f))
-					}
+				if err != nil || json.Unmarshal(data, &manifest) != nil || !verifyCampaignSignatures(manifest, "signatures", opts.CampaignPublicKeyHex) {
+					unsigned++
+					t.Evidence += fmt.Sprintf("invalid or unsigned: %s; ", filepath.Base(f))
 				}
 			}
 			if unsigned > 0 {
 				t.Pass = false
-				t.Reason = fmt.Sprintf("%d tool manifests without signatures", unsigned)
+				t.Reason = fmt.Sprintf("%d tool manifests invalid or without signatures", unsigned)
 			} else {
 				t.Pass = true
-				t.Reason = "all tool manifests signed"
+				t.Reason = "all tool manifests cryptographically verified"
 			}
 			result.TestResults = append(result.TestResults, t)
 			result.Pass = t.Pass
@@ -431,7 +511,7 @@ func adv09ReceiptEmissionPanicHijack() *Suite {
 
 // ADV-10: High-Finality Unsigned Action
 // Verifies that high-finality actions (delete, deploy, financial) have HITL approval receipts.
-func adv10HighFinalityUnsigned() *Suite {
+func adv10HighFinalityUnsigned(opts VerificationOptions) *Suite {
 	return &Suite{
 		ID:   "ADV-10",
 		Name: "High-Finality Unsigned Action",
@@ -452,7 +532,7 @@ func adv10HighFinalityUnsigned() *Suite {
 				// High-finality: E4 (irreversible) or E5 (catastrophic)
 				if isHighFinality(effectClass, action) {
 					decisionID, _ := receipt["decision_id"].(string)
-					if decisionID == "" || !hasApprovalForDecision(files, decisionID) {
+					if decisionID == "" || !hasBoundAuthorizationReceipt(files, receipt, "approval_action", opts) {
 						unsigned++
 						t.Evidence += fmt.Sprintf("unapproved high-finality: %s (class=%s); ", filepath.Base(f), effectClass)
 					}
@@ -509,13 +589,22 @@ func loadSequenceNumbers(files []string) []uint64 {
 			seqs = append(seqs, uint64(seq))
 		}
 	}
+	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
 	return seqs
 }
 
 func hasPolicyReceiptForDecision(files []string, decisionID string) bool {
+	return hasReceiptForDecision(files, "policy_decision", decisionID)
+}
+
+func hasApprovalForDecision(files []string, decisionID string) bool {
+	return hasReceiptForDecision(files, "approval_action", decisionID)
+}
+
+func hasReceiptForDecision(files []string, actionType, decisionID string) bool {
 	for _, f := range files {
 		receipt := loadReceipt(f)
-		if receipt["action_type"] == "policy_decision" {
+		if receipt["action_type"] == actionType {
 			if did, ok := receipt["decision_id"].(string); ok && did == decisionID {
 				return true
 			}
@@ -524,16 +613,165 @@ func hasPolicyReceiptForDecision(files []string, decisionID string) bool {
 	return false
 }
 
-func hasApprovalForDecision(files []string, decisionID string) bool {
+func hasPrecedingReceiptForDecision(files []string, actionType, decisionID string, beforeSeq float64) bool {
 	for _, f := range files {
 		receipt := loadReceipt(f)
-		if receipt["action_type"] == "approval_action" {
-			if did, ok := receipt["decision_id"].(string); ok && did == decisionID {
-				return true
-			}
+		if receipt["action_type"] != actionType || receipt["decision_id"] != decisionID {
+			continue
+		}
+		seq, ok := receiptSequence(receipt)
+		if ok && seq < beforeSeq {
+			return true
 		}
 	}
 	return false
+}
+
+func hasBoundAuthorizationReceipt(files []string, effect map[string]interface{}, actionType string, opts VerificationOptions) bool {
+	receipts := make([]map[string]interface{}, 0, len(files))
+	for _, path := range files {
+		if receipt := loadReceipt(path); receipt != nil {
+			receipts = append(receipts, receipt)
+		}
+	}
+	return hasBoundAuthorization(receipts, effect, actionType, opts)
+}
+
+func hasBoundAuthorization(receipts []map[string]interface{}, effect map[string]interface{}, actionType string, opts VerificationOptions) bool {
+	effectSeq, ok := receiptSequence(effect)
+	if !ok || !hasNonEmptyString(effect, "decision_id") || !hasNonEmptyString(effect, "envelope_id") || !hasNonEmptyString(effect, "envelope_hash") {
+		return false
+	}
+	decisionID := effect["decision_id"]
+	for _, receipt := range receipts {
+		if receipt["action_type"] != actionType || receipt["decision_id"] != decisionID || receipt["envelope_id"] != effect["envelope_id"] || receipt["envelope_hash"] != effect["envelope_hash"] {
+			continue
+		}
+		seq, sequenced := receiptSequence(receipt)
+		if !sequenced || seq >= effectSeq || !receiptIsAncestor(receipts, effect, receipt) {
+			continue
+		}
+		if verifyCampaignSignatures(receipt, "campaign_signatures", opts.CampaignPublicKeyHex) {
+			return true
+		}
+	}
+	return false
+}
+
+func receiptIsAncestor(receipts []map[string]interface{}, descendant, ancestor map[string]interface{}) bool {
+	ancestorID := receiptIdentity(ancestor)
+	if ancestorID == "" {
+		return false
+	}
+	index := make(map[string]map[string]interface{}, len(receipts)*2)
+	for _, receipt := range receipts {
+		if id, _ := receipt["receipt_id"].(string); id != "" {
+			index[id] = receipt
+		}
+		if hash, _ := receipt["receipt_hash"].(string); hash != "" {
+			index[hash] = receipt
+		}
+	}
+	queue := receiptParentRefs(descendant)
+	seen := map[string]bool{}
+	for len(queue) > 0 {
+		parent := queue[0]
+		queue = queue[1:]
+		if parent == ancestorID {
+			return true
+		}
+		if seen[parent] {
+			continue
+		}
+		seen[parent] = true
+		if receipt := index[parent]; receipt != nil {
+			queue = append(queue, receiptParentRefs(receipt)...)
+		}
+	}
+	return false
+}
+
+func receiptIdentity(receipt map[string]interface{}) string {
+	if value, _ := receipt["receipt_hash"].(string); value != "" {
+		return value
+	}
+	value, _ := receipt["receipt_id"].(string)
+	return value
+}
+
+func receiptParentRefs(receipt map[string]interface{}) []string {
+	raw, _ := receipt["parent_receipt_hashes"].([]interface{})
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if value, _ := item.(string); value != "" && value != "genesis" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func receiptSequence(receipt map[string]interface{}) (float64, bool) {
+	seq, ok := receipt["seq"].(float64)
+	return seq, ok && seq >= 0 && seq <= math.MaxUint64 && math.Trunc(seq) == seq
+}
+
+func hasNonEmptyString(value map[string]interface{}, key string) bool {
+	raw, ok := value[key].(string)
+	return ok && strings.TrimSpace(raw) != ""
+}
+
+func verifyCampaignSignatures(document map[string]interface{}, field, trustedPublicKeyHex string) bool {
+	publicKey, err := hex.DecodeString(strings.TrimSpace(trustedPublicKeyHex))
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return false
+	}
+	rawSignatures, ok := document[field].([]interface{})
+	if !ok || len(rawSignatures) == 0 {
+		return false
+	}
+	payload := make(map[string]interface{}, len(document)-1)
+	for key, value := range document {
+		if key != field {
+			payload[key] = value
+		}
+	}
+	canonical, err := canonicalize.JCS(payload)
+	if err != nil {
+		return false
+	}
+	wantKeyID, err := CampaignKeyID(trustedPublicKeyHex)
+	if err != nil {
+		return false
+	}
+	for _, raw := range rawSignatures {
+		signature, ok := raw.(map[string]interface{})
+		if !ok || signature["algorithm"] != "ed25519" || signature["key_id"] != wantKeyID {
+			return false
+		}
+		signatureHex, _ := signature["signature"].(string)
+		signatureBytes, err := hex.DecodeString(strings.TrimPrefix(strings.TrimSpace(signatureHex), "hex:"))
+		if err != nil || len(signatureBytes) != ed25519.SignatureSize || !ed25519.Verify(ed25519.PublicKey(publicKey), canonical, signatureBytes) {
+			return false
+		}
+	}
+	return true
+}
+
+func validTapeEntry(entry map[string]interface{}) bool {
+	valueHash, ok := entry["value_hash"].(string)
+	if !ok || !hasNonEmptyString(entry, "data_class") {
+		return false
+	}
+	encodedValue, present := entry["value"].(string)
+	if !present {
+		return false
+	}
+	value, err := base64.StdEncoding.DecodeString(encodedValue)
+	if err != nil {
+		return false
+	}
+	digest := sha256.Sum256(value)
+	return strings.EqualFold(strings.TrimPrefix(valueHash, "sha256:"), hex.EncodeToString(digest[:]))
 }
 
 func isHighFinality(effectClass, actionType string) bool {

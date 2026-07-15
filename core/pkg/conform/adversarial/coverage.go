@@ -29,6 +29,12 @@ type CoverageCheck struct {
 // detectors run. The canonical EvidencePack verifier is responsible for
 // proving that these files are indexed, hashed, and sealed.
 func EvaluateCoverage(evidenceDir string) CoverageResult {
+	return EvaluateCoverageWithOptions(evidenceDir, VerificationOptions{})
+}
+
+// EvaluateCoverageWithOptions proves positive controls using externally rooted
+// cryptographic evidence where the suite contract requires it.
+func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) CoverageResult {
 	receiptFiles, _ := filepath.Glob(filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts", "*.json"))
 	receipts := make([]map[string]interface{}, 0, len(receiptFiles))
 	for _, path := range receiptFiles {
@@ -37,15 +43,15 @@ func EvaluateCoverage(evidenceDir string) CoverageResult {
 
 	checks := []CoverageCheck{
 		receiptSequenceCoverage(receipts),
-		policyDecisionCoverage(receipts),
+		policyDecisionCoverage(receipts, opts),
 		proofGraphParentCoverage(receipts),
 		budgetBoundaryCoverage(receipts),
 		envelopeBindingCoverage(receipts),
 		tapeCoverage(evidenceDir),
 		tenantCoverage(receipts),
-		toolManifestCoverage(evidenceDir),
+		toolManifestCoverage(evidenceDir, opts),
 		panicBoundaryCoverage(evidenceDir),
-		highFinalityApprovalCoverage(receipts),
+		highFinalityApprovalCoverage(receipts, opts),
 	}
 	result := CoverageResult{Pass: true, Checks: checks}
 	for _, check := range checks {
@@ -69,18 +75,18 @@ func receiptSequenceCoverage(receipts []map[string]interface{}) CoverageCheck {
 	return coverageCheck("ADV-01", count >= 2, count, "requires at least two sequenced receipts")
 }
 
-func policyDecisionCoverage(receipts []map[string]interface{}) CoverageCheck {
+func policyDecisionCoverage(receipts []map[string]interface{}, opts VerificationOptions) CoverageCheck {
 	count := 0
 	for _, receipt := range receipts {
 		if receipt["action_type"] != "effect_attempt" {
 			continue
 		}
 		decisionID, _ := receipt["decision_id"].(string)
-		if decisionID != "" && hasPolicyReceipt(receipts, decisionID) {
+		if decisionID != "" && hasBoundAuthorization(receipts, receipt, "policy_decision", opts) {
 			count++
 		}
 	}
-	return coverageCheck("ADV-02", count > 0, count, "requires an effect_attempt with a matching policy_decision")
+	return coverageCheck("ADV-02", count > 0, count, "requires an effect_attempt with a preceding, ancestor-linked, envelope-bound, trusted policy_decision")
 }
 
 func proofGraphParentCoverage(receipts []map[string]interface{}) CoverageCheck {
@@ -145,13 +151,11 @@ func tapeCoverage(evidenceDir string) CoverageCheck {
 		if err != nil || json.Unmarshal(data, &entry) != nil {
 			continue
 		}
-		valueHash, _ := entry["value_hash"].(string)
-		dataClass, _ := entry["data_class"].(string)
-		if valueHash != "" && dataClass != "" {
+		if validTapeEntry(entry) {
 			count++
 		}
 	}
-	return coverageCheck("ADV-06", count > 0, count, "requires at least one valid replay tape entry")
+	return coverageCheck("ADV-06", count > 0, count, "requires a replay tape entry whose value_hash matches its decoded value")
 }
 
 func tenantCoverage(receipts []map[string]interface{}) CoverageCheck {
@@ -164,7 +168,7 @@ func tenantCoverage(receipts []map[string]interface{}) CoverageCheck {
 	return coverageCheck("ADV-07", count > 0, count, "requires tenant-bound receipts")
 }
 
-func toolManifestCoverage(evidenceDir string) CoverageCheck {
+func toolManifestCoverage(evidenceDir string, opts VerificationOptions) CoverageCheck {
 	files := toolManifestFiles(evidenceDir)
 	count := 0
 	for _, path := range files {
@@ -173,18 +177,11 @@ func toolManifestCoverage(evidenceDir string) CoverageCheck {
 		if err != nil || json.Unmarshal(data, &manifest) != nil {
 			continue
 		}
-		switch signatures := manifest["signatures"].(type) {
-		case []interface{}:
-			if len(signatures) > 0 {
-				count++
-			}
-		case string:
-			if signatures != "" {
-				count++
-			}
+		if verifyCampaignSignatures(manifest, "signatures", opts.CampaignPublicKeyHex) {
+			count++
 		}
 	}
-	return coverageCheck("ADV-08", count > 0, count, "requires a tool manifest with a non-empty signatures field")
+	return coverageCheck("ADV-08", count > 0, count, "requires a tool manifest signed by the external campaign trust root")
 }
 
 func panicBoundaryCoverage(evidenceDir string) CoverageCheck {
@@ -200,7 +197,7 @@ func panicBoundaryCoverage(evidenceDir string) CoverageCheck {
 	return coverageCheck("ADV-09", ok, boolCount(ok), "requires a readable panic boundary record")
 }
 
-func highFinalityApprovalCoverage(receipts []map[string]interface{}) CoverageCheck {
+func highFinalityApprovalCoverage(receipts []map[string]interface{}, opts VerificationOptions) CoverageCheck {
 	count := 0
 	for _, receipt := range receipts {
 		action, _ := receipt["action_type"].(string)
@@ -209,25 +206,37 @@ func highFinalityApprovalCoverage(receipts []map[string]interface{}) CoverageChe
 			continue
 		}
 		decisionID, _ := receipt["decision_id"].(string)
-		if decisionID != "" && hasApprovalReceipt(receipts, decisionID) {
+		if decisionID != "" && hasBoundAuthorization(receipts, receipt, "approval_action", opts) {
 			count++
 		}
 	}
-	return coverageCheck("ADV-10", count > 0, count, "requires a high-finality action with a matching approval_action")
+	return coverageCheck("ADV-10", count > 0, count, "requires a high-finality action with a preceding, ancestor-linked, envelope-bound, trusted approval_action")
 }
 
 func hasPolicyReceipt(receipts []map[string]interface{}, decisionID string) bool {
+	return hasReceipt(receipts, "policy_decision", decisionID)
+}
+
+func hasApprovalReceipt(receipts []map[string]interface{}, decisionID string) bool {
+	return hasReceipt(receipts, "approval_action", decisionID)
+}
+
+func hasReceipt(receipts []map[string]interface{}, actionType, decisionID string) bool {
 	for _, receipt := range receipts {
-		if receipt["action_type"] == "policy_decision" && receipt["decision_id"] == decisionID {
+		if receipt["action_type"] == actionType && receipt["decision_id"] == decisionID {
 			return true
 		}
 	}
 	return false
 }
 
-func hasApprovalReceipt(receipts []map[string]interface{}, decisionID string) bool {
+func hasPrecedingReceipt(receipts []map[string]interface{}, actionType, decisionID string, beforeSeq float64) bool {
 	for _, receipt := range receipts {
-		if receipt["action_type"] == "approval_action" && receipt["decision_id"] == decisionID {
+		if receipt["action_type"] != actionType || receipt["decision_id"] != decisionID {
+			continue
+		}
+		seq, ok := receiptSequence(receipt)
+		if ok && seq < beforeSeq {
 			return true
 		}
 	}

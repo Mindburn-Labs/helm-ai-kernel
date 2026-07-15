@@ -1,0 +1,23 @@
+{
+  "action_type": "policy_decision",
+  "campaign_signatures": [
+    {
+      "algorithm": "ed25519",
+      "key_id": "sha256:71f0d29c284018b2fcc8084155cf78ece22ffd3ba34e9130e229169502de4424",
+      "signature": "3afc672b4250bb6027a746fab69da252d3edd808d0635794a36a407a02af53ea66869bf2fbfb43236be2c82db835949069e5acad4f257365c6ea4f7f4d144702"
+    }
+  ],
+  "decision_hash": "sha256:decision-1",
+  "decision_id": "decision-1",
+  "envelope_hash": "sha256:envelope",
+  "envelope_id": "envelope-1",
+  "lamport_clock": 1,
+  "parent_receipt_hashes": [
+    "genesis"
+  ],
+  "receipt_hash": "receipt-1",
+  "receipt_id": "receipt-1",
+  "seq": 1,
+  "status": "APPLIED",
+  "tenant_id": "tenant-1"
+}

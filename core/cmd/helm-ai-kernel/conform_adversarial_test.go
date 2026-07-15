@@ -1,8 +1,12 @@
 package main
 
+// quantum_posture: fixtures exercise classical Ed25519 campaign and report
+// attestations only; they do not claim post-quantum coverage.
+
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
@@ -27,6 +32,7 @@ func TestConformAdversarialRequiresExplicitTrustProfile(t *testing.T) {
 }
 
 func TestConformAdversarialRejectsReportInsideSealedPack(t *testing.T) {
+	configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)
 	reportPath := filepath.Join(packDir, "12_REPORTS", "adversarial_campaign_report.json")
 	var stdout, stderr bytes.Buffer
@@ -47,6 +53,36 @@ func TestConformAdversarialRejectsReportInsideSealedPack(t *testing.T) {
 	}
 }
 
+func TestConformAdversarialRejectsReportOverArchive(t *testing.T) {
+	configureAdversarialCommandTest(t)
+	packDir := createMinimalVerifiableBundle(t)
+	archivePath := filepath.Join(t.TempDir(), "evidence-pack.tar")
+	if err := deterministicTarArchive(packDir, archivePath); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := runConform([]string{
+		"adversarial",
+		"--bundle", archivePath,
+		"--profile", "dev-local",
+		"--report", archivePath,
+	}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "outside the sealed EvidencePack") {
+		t.Fatalf("exit=%d stdout=%s stderr=%s, want archive overwrite rejection", code, stdout.String(), stderr.String())
+	}
+	after, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("rejected archive report path changed the input archive")
+	}
+}
+
 func TestConformAdversarialRejectsUnknownTrustProfile(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runConform([]string{
@@ -60,7 +96,57 @@ func TestConformAdversarialRejectsUnknownTrustProfile(t *testing.T) {
 	}
 }
 
+func TestConformAdversarialRejectsSymlinkedDirectoryInput(t *testing.T) {
+	configureAdversarialCommandTest(t)
+	packDir := createMinimalVerifiableBundle(t)
+	if err := os.Symlink(filepath.Join(packDir, "00_INDEX.json"), filepath.Join(packDir, "linked-index.json")); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := runConform([]string{
+		"adversarial",
+		"--bundle", packDir,
+		"--profile", "dev-local",
+		"--report", filepath.Join(t.TempDir(), "campaign.json"),
+	}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "rejects symlink") {
+		t.Fatalf("exit=%d stdout=%s stderr=%s, want symlink rejection", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestConformAdversarialRedactsImplicitTrustConfigPath(t *testing.T) {
+	configureAdversarialCommandTest(t)
+	packDir := createMinimalVerifiableBundle(t)
+	configPath := filepath.Join(t.TempDir(), "private-machine-path", "evidence-pack.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HELM_EVIDENCE_TRUST_CONFIG", configPath)
+	reportPath := filepath.Join(t.TempDir(), "campaign.json")
+	var stdout, stderr bytes.Buffer
+	code := runConform([]string{
+		"adversarial",
+		"--bundle", packDir,
+		"--profile", "dev-local",
+		"--report", reportPath,
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit=%d stdout=%s stderr=%s, want trust verification failure", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(configPath)) {
+		t.Fatalf("campaign report leaked implicit trust config path: %s", data)
+	}
+}
+
 func TestConformAdversarialRejectsEmptyEvidencePack(t *testing.T) {
+	configureAdversarialCommandTest(t)
 	reportPath := filepath.Join(t.TempDir(), "campaign.json")
 	var stdout, stderr bytes.Buffer
 	code := runConform([]string{
@@ -90,6 +176,7 @@ func TestConformAdversarialRejectsEmptyEvidencePack(t *testing.T) {
 }
 
 func TestConformAdversarialRejectsVerifiedPackWithIncompleteCoverage(t *testing.T) {
+	configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)
 	reportPath := filepath.Join(t.TempDir(), "campaign.json")
 	var stdout, stderr bytes.Buffer
@@ -114,6 +201,7 @@ func TestConformAdversarialRejectsVerifiedPackWithIncompleteCoverage(t *testing.
 }
 
 func TestConformAdversarialPassesVerifiedPackDeterministically(t *testing.T) {
+	attestationPublicKeyHex := configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)
 	populatePassingCampaignPack(t, packDir)
 	reportDir := t.TempDir()
@@ -162,12 +250,19 @@ func TestConformAdversarialPassesVerifiedPackDeterministically(t *testing.T) {
 	if report.EvidenceRoot == "" || report.MerkleRoot == "" {
 		t.Fatalf("campaign report missing deterministic evidence roots: %+v", report)
 	}
+	if report.RunnerProvenance.KernelCommit == "" || report.RunnerProvenance.ExecutableSHA256 == "" || report.RunnerProvenance.DetectorDefinitionSHA256 == "" {
+		t.Fatalf("campaign report missing runner provenance: %+v", report.RunnerProvenance)
+	}
+	if err := verifyAdversarialCampaignReportAttestation(report, attestationPublicKeyHex); err != nil {
+		t.Fatalf("campaign report attestation did not verify: %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(packDir, "12_REPORTS", "adversarial_campaign_report.json")); !os.IsNotExist(err) {
 		t.Fatalf("strict verifier mutated sealed EvidencePack: err=%v", err)
 	}
 }
 
 func TestConformAdversarialFailsVerifiedMaliciousPack(t *testing.T) {
+	configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)
 	populatePassingCampaignPack(t, packDir)
 	resealAdversarialPack(t, packDir)
@@ -194,6 +289,55 @@ func TestConformAdversarialFailsVerifiedMaliciousPack(t *testing.T) {
 	}
 }
 
+func TestConformAdversarialVerifyReportRejectsTamper(t *testing.T) {
+	attestationPublicKeyHex := configureAdversarialCommandTest(t)
+	packDir := createMinimalVerifiableBundle(t)
+	populatePassingCampaignPack(t, packDir)
+	reportPath := filepath.Join(t.TempDir(), "campaign.json")
+	var stdout, stderr bytes.Buffer
+	code := runConform([]string{
+		"adversarial",
+		"--bundle", packDir,
+		"--profile", "dev-local",
+		"--report", reportPath,
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("campaign exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runConform([]string{
+		"adversarial", "verify-report",
+		"--report", reportPath,
+		"--trusted-public-key", attestationPublicKeyHex,
+		"--expected-kernel-commit", strings.Repeat("a", 40),
+	}, &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "attestation: verified") {
+		t.Fatalf("verify exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	report := readAdversarialCampaignReport(t, reportPath)
+	report.Pass = false
+	tampered, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(reportPath, append(tampered, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = runConform([]string{
+		"adversarial", "verify-report",
+		"--report", reportPath,
+		"--trusted-public-key", attestationPublicKeyHex,
+	}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "signature verification failed") {
+		t.Fatalf("tampered verify exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
 func readAdversarialCampaignReport(t *testing.T, path string) adversarialCampaignReport {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -209,24 +353,17 @@ func readAdversarialCampaignReport(t *testing.T, path string) adversarialCampaig
 
 func resealAdversarialPack(t *testing.T, packDir string) {
 	t.Helper()
-	receiptPath := filepath.Join(packDir, "02_PROOFGRAPH", "receipts", "005_effect.json")
-	data, err := os.ReadFile(receiptPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var receipt map[string]any
-	if err := json.Unmarshal(data, &receipt); err != nil {
-		t.Fatal(err)
-	}
-	// Reuse receipt-3 as the parent of both the approval and effect. Coverage
-	// remains complete, while ADV-03 must detect the fork.
-	receipt["parent_receipt_hashes"] = []string{"receipt-3"}
-	writeCampaignJSON(t, receiptPath, receipt)
+	// Add a second child of receipt-2 after the exhaustion boundary. Coverage
+	// remains complete while ADV-03, ADV-04, and ADV-09 all receive a real
+	// negative control.
+	receipt := campaignReceipt("receipt-6", "budget-1", 6, "budget_decrement", []string{"receipt-2"})
+	writeCampaignJSON(t, filepath.Join(packDir, "02_PROOFGRAPH", "receipts", "006_fork_overdraft.json"), receipt)
 	reindexAndResealCampaignPack(t, packDir, "ep_adversarial_test")
 }
 
 func populatePassingCampaignPack(t *testing.T, packDir string) {
 	t.Helper()
+	campaignPrivateKey, _ := adversarialCampaignTestKey()
 	receiptsDir := filepath.Join(packDir, "02_PROOFGRAPH", "receipts")
 	if err := os.Remove(filepath.Join(receiptsDir, "r1.json")); err != nil {
 		t.Fatal(err)
@@ -247,19 +384,20 @@ func populatePassingCampaignPack(t *testing.T, packDir string) {
 		{"005_effect.json", campaignReceipt("receipt-5", "decision-1", 5, "effect_attempt", []string{"receipt-4"})},
 	}
 	receipts[4].value["effect_class"] = "E4"
-	receipts[4].value["envelope_id"] = "envelope-1"
-	receipts[4].value["envelope_hash"] = "sha256:envelope"
+	receipts[0].value = signAdversarialCampaignDocument(t, receipts[0].value, "campaign_signatures", campaignPrivateKey)
+	receipts[3].value = signAdversarialCampaignDocument(t, receipts[3].value, "campaign_signatures", campaignPrivateKey)
 	for _, receipt := range receipts {
 		writeCampaignJSON(t, filepath.Join(receiptsDir, receipt.name), receipt.value)
 	}
+	value := []byte("campaign-tape-value")
+	valueHash := sha256.Sum256(value)
 	writeCampaignJSON(t, filepath.Join(packDir, "08_TAPES", "entry_001.json"), map[string]any{
-		"value_hash": "sha256:value",
+		"value":      value,
+		"value_hash": hex.EncodeToString(valueHash[:]),
 		"data_class": "internal",
 	})
-	writeCampaignJSON(t, filepath.Join(packDir, "99_EXT", "adversarial", "tools", "tool.json"), map[string]any{
-		"name":       "campaign-tool",
-		"signatures": []string{"sha256:signature"},
-	})
+	toolManifest := signAdversarialCampaignDocument(t, map[string]any{"name": "campaign-tool"}, "signatures", campaignPrivateKey)
+	writeCampaignJSON(t, filepath.Join(packDir, "99_EXT", "adversarial", "tools", "tool.json"), toolManifest)
 	writeCampaignJSON(t, filepath.Join(packDir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 5})
 	reindexAndResealCampaignPack(t, packDir, "ep_campaign_pass")
 }
@@ -267,6 +405,7 @@ func populatePassingCampaignPack(t *testing.T, packDir string) {
 func campaignReceipt(receiptID, decisionID string, seq int, actionType string, parents []string) map[string]any {
 	return map[string]any{
 		"receipt_id":            receiptID,
+		"receipt_hash":          receiptID,
 		"decision_id":           decisionID,
 		"decision_hash":         "sha256:" + decisionID,
 		"status":                "APPLIED",
@@ -274,8 +413,54 @@ func campaignReceipt(receiptID, decisionID string, seq int, actionType string, p
 		"seq":                   seq,
 		"action_type":           actionType,
 		"tenant_id":             "tenant-1",
+		"envelope_id":           "envelope-1",
+		"envelope_hash":         "sha256:envelope",
 		"parent_receipt_hashes": parents,
 	}
+}
+
+func configureAdversarialCommandTest(t *testing.T) string {
+	t.Helper()
+	_, campaignPublicKeyHex := adversarialCampaignTestKey()
+	attestationSeed := sha256.Sum256([]byte("helm-adversarial-report-attestation-test-key-v1"))
+	attestationPrivateKey := ed25519.NewKeyFromSeed(attestationSeed[:])
+	attestationPublicKey := attestationPrivateKey.Public().(ed25519.PublicKey)
+	t.Setenv("HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX", campaignPublicKeyHex)
+	t.Setenv("HELM_BOUNTY_EVALUATION_TIME_RFC3339", "2026-07-15T12:00:00Z")
+	t.Setenv("HELM_KERNEL_COMMIT", strings.Repeat("a", 40))
+	t.Setenv("HELM_SIGNING_KEY_HEX", hex.EncodeToString(attestationSeed[:]))
+	previousCommit := commit
+	commit = strings.Repeat("a", 40)
+	t.Cleanup(func() { commit = previousCommit })
+	return hex.EncodeToString(attestationPublicKey)
+}
+
+func adversarialCampaignTestKey() (ed25519.PrivateKey, string) {
+	seed := sha256.Sum256([]byte("helm-adversarial-campaign-test-key-v1"))
+	privateKey := ed25519.NewKeyFromSeed(seed[:])
+	return privateKey, hex.EncodeToString(privateKey.Public().(ed25519.PublicKey))
+}
+
+func signAdversarialCampaignDocument(t *testing.T, document map[string]any, field string, privateKey ed25519.PrivateKey) map[string]any {
+	t.Helper()
+	payload := make(map[string]any, len(document))
+	for key, value := range document {
+		if key != field {
+			payload[key] = value
+		}
+	}
+	canonical, err := canonicalize.JCS(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey := privateKey.Public().(ed25519.PublicKey)
+	keyHash := sha256.Sum256(publicKey)
+	payload[field] = []any{map[string]any{
+		"algorithm": "ed25519",
+		"key_id":    "sha256:" + hex.EncodeToString(keyHash[:]),
+		"signature": hex.EncodeToString(ed25519.Sign(privateKey, canonical)),
+	}}
+	return payload
 }
 
 func writeCampaignJSON(t *testing.T, path string, value any) {

@@ -4,12 +4,13 @@
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
 PREPARE_VERSION := $(if $(filter command line,$(origin VERSION)),$(VERSION),$(RELEASE_VERSION))
-GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+GIT_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
 QUALITY := python3 scripts/ci/quality.py
 PYTHON ?= python3
 HELM_BOUNTY_REPORT ?= artifacts/bounty/kernel-adversarial-campaign.json
+HELM_BOUNTY_KERNEL_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 
 build:
 	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
@@ -98,11 +99,17 @@ crucible: build
 bounty-kernel: build
 	@test -n "$(HELM_BOUNTY_EVIDENCEPACK)" || (echo "HELM_BOUNTY_EVIDENCEPACK is required" >&2; exit 2)
 	@test -n "$(HELM_BOUNTY_PROFILE)" || (echo "HELM_BOUNTY_PROFILE is required (dev-local, team, customer, or high-assurance)" >&2; exit 2)
+	@test -n "$(HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY)" || (echo "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY is required" >&2; exit 2)
+	@test -n "$(HELM_BOUNTY_EVALUATION_TIME)" || (echo "HELM_BOUNTY_EVALUATION_TIME is required (RFC3339)" >&2; exit 2)
+	@test -n "$(HELM_SIGNING_KEY_HEX)" || (echo "HELM_SIGNING_KEY_HEX is required for report attestation" >&2; exit 2)
 	./bin/helm-ai-kernel conform adversarial \
 		--bundle "$(HELM_BOUNTY_EVIDENCEPACK)" \
 		--profile "$(HELM_BOUNTY_PROFILE)" \
 		--config "$(HELM_BOUNTY_CONFIG)" \
 		--storage-receipt "$(HELM_BOUNTY_STORAGE_RECEIPT)" \
+		--campaign-public-key "$(HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY)" \
+		--evaluation-time "$(HELM_BOUNTY_EVALUATION_TIME)" \
+		--kernel-commit "$(HELM_BOUNTY_KERNEL_COMMIT)" \
 		--report "$(HELM_BOUNTY_REPORT)"
 
 proxy: build

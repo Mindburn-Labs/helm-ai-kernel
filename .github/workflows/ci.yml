@@ -129,6 +129,19 @@ jobs:
         run: go test ./core/cmd/helm-ai-kernel -count=1
       - name: Kernel bounty fail-closed campaign contract
         run: go test ./core/cmd/helm-ai-kernel -run '^TestConformAdversarial' -count=1
+      - name: Kernel bounty built-binary reference campaign
+        run: |
+          HELM_SIGNING_KEY_HEX="$(printf '%s' 'helm-adversarial-report-attestation-test-key-v1' | sha256sum | cut -d' ' -f1)" \
+            make bounty-kernel \
+              HELM_BOUNTY_EVIDENCEPACK=reference_packs/adversarial/kernel-v1 \
+              HELM_BOUNTY_PROFILE=dev-local \
+              HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY=70f119275e0cd9d66cd72e8d74810eb4654dd58c1800fc3fcceb1881550b3e8d \
+              HELM_BOUNTY_EVALUATION_TIME=2026-07-15T12:00:00Z \
+              HELM_BOUNTY_REPORT="$RUNNER_TEMP/kernel-adversarial-campaign.json"
+          ./bin/helm-ai-kernel conform adversarial verify-report \
+            --report "$RUNNER_TEMP/kernel-adversarial-campaign.json" \
+            --trusted-public-key 7eb7fdf4406b5ad029773e75416862fdd98da5f5d3b1c52fd0666eaf2ad7cdb1 \
+            --expected-kernel-commit "$GITHUB_SHA"
       - name: Launchpad promotion drift
         run: make launchpad-promotion-check
       - name: Fetch main ref for proto compatibility checks

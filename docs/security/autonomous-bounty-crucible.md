@@ -5,6 +5,9 @@ production-complete autonomous bug-bounty service.
 
 Tracking: HELM-205 (program) and HELM-206 (Kernel v0 gate).
 
+quantum_posture: Kernel v0 campaign authorization and report attestations use
+classical Ed25519. This surface makes no post-quantum assurance claim.
+
 ## Trust boundary
 
 The adversarial suites in `core/pkg/conform/adversarial` are deterministic
@@ -15,21 +18,26 @@ of correct behavior.
 `helm-ai-kernel conform adversarial` is the authoritative campaign entrypoint.
 It fails closed in this order:
 
-1. require a sealed EvidencePack and an explicit trust profile;
-2. run the canonical offline EvidencePack verifier, including canonical-layout
+1. require a sealed EvidencePack, explicit trust profile, campaign trust root,
+   evaluation time, exact Kernel commit, and report-attestation key;
+2. snapshot directory inputs into an owned, symlink-free temporary tree;
+3. run the canonical offline EvidencePack verifier, including canonical-layout
    and configured signature checks;
-3. prove positive-control coverage for all ten detectors from indexed pack
+4. prove positive-control coverage for all ten detectors from indexed pack
    artifacts;
-4. skip all adversarial suites if bundle verification or coverage fails;
-5. run all ten mandatory suites only over a verified, fully covered pack;
-6. write a deterministic report outside the sealed pack;
-7. exit nonzero if verification, coverage, suite completeness, or any suite
+5. skip all adversarial suites if bundle verification or coverage fails;
+6. run all ten mandatory suites only over the same verified snapshot;
+7. write a deterministic, provenance-bound Ed25519-attested report outside the
+   sealed pack;
+8. exit nonzero if verification, coverage, suite completeness, or any suite
    fails.
 
-The report deliberately omits timestamps and machine-local paths. It binds the
-result to the EvidencePack index root, Merkle root, trust profile, verifier
-version, ordered checks, and ordered suite results. Repeating the command over
-the same pack with the same Kernel version produces the same report bytes.
+The report omits implicit wall-clock generation timestamps and known
+machine-local input paths, while recording the caller-supplied evaluation time.
+It binds the result to the EvidencePack index root, Merkle root, trust profile,
+verifier version, ordered checks, and ordered suite results. Repeated offline
+runs produce the same report bytes when the sealed pack, verifier version, and
+explicit trust/provenance inputs are unchanged.
 
 Campaign-only tool fixtures live under the declared
 `99_EXT/adversarial/tools/` extension. Receipt-emission panic evidence uses the
@@ -37,12 +45,22 @@ canonical `06_LOGS/receipt_emission_panic.json` sink. Legacy detector fixtures
 under `10_TOOLS/` or top-level `panic.json` remain readable by unit tests but
 cannot pass the strict canonical EvidencePack structure gate.
 
+ADV-02 and ADV-10 require authorization receipts to precede the effect, share
+its decision and envelope binding, sit on its receipt ancestry, and verify under
+an externally supplied Ed25519 campaign key. ADV-08 verifies RFC 8785 canonical
+tool-manifest bytes under the same external trust root. ADV-06 recomputes the
+SHA-256 digest of the decoded tape value instead of trusting a claimed hash.
+
 ## Usage
 
 ```bash
 make bounty-kernel \
   HELM_BOUNTY_EVIDENCEPACK=/absolute/path/to/evidence-pack \
   HELM_BOUNTY_PROFILE=team \
+  HELM_BOUNTY_CONFIG=/absolute/path/to/evidence-pack-trust.json \
+  HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY=<ed25519-public-key-hex> \
+  HELM_BOUNTY_EVALUATION_TIME=2026-07-15T12:00:00Z \
+  HELM_SIGNING_KEY_HEX=<attestation-private-key-hex> \
   HELM_BOUNTY_REPORT=/absolute/path/to/kernel-adversarial-campaign.json
 ```
 
@@ -52,6 +70,10 @@ Direct CLI equivalent:
 helm-ai-kernel conform adversarial \
   --bundle /absolute/path/to/evidence-pack \
   --profile team \
+  --config /absolute/path/to/evidence-pack-trust.json \
+  --campaign-public-key <ed25519-public-key-hex> \
+  --evaluation-time 2026-07-15T12:00:00Z \
+  --kernel-commit <exact-40-character-commit> \
   --report /absolute/path/to/kernel-adversarial-campaign.json \
   --json
 ```
@@ -60,10 +82,29 @@ Valid profiles are `dev-local`, `team`, `customer`, and `high-assurance`.
 Strict campaigns never silently default to `dev-local`. Customer and
 high-assurance campaigns require the external trust, anchor, and immutable
 storage evidence enforced by the EvidencePack verifier.
+Non-dev profiles also require an applicable trust config or trusted-key
+environment; the examples make that prerequisite explicit with `--config`.
+`HELM_SIGNING_KEY_HEX` supplies the current Ed25519 report-attestation signer
+and must be injected through the campaign runner's protected secret boundary,
+never stored inside the candidate EvidencePack.
 
 The report path must be outside the EvidencePack. Writing a new file into a
 sealed pack would invalidate its index and seal, so the command rejects that
-configuration.
+configuration, including attempts to overwrite an archive input.
+
+Verify a report independently before any downstream use:
+
+```bash
+helm-ai-kernel conform adversarial verify-report \
+  --report /absolute/path/to/kernel-adversarial-campaign.json \
+  --trusted-public-key <attestation-public-key-hex> \
+  --expected-kernel-commit <exact-40-character-commit>
+```
+
+The signature binds the evaluation time, input roots, ordered checks and suite
+results, campaign trust-key ID, exact Kernel commit, runner executable SHA-256,
+detector revision, and detector-definition digest. Downstream release policy
+must also match the executable digest to source-owned build provenance.
 
 ## Result semantics
 
@@ -93,9 +134,14 @@ The production loop must continue outside this command:
 1. import a finder/scanner/model result only as a candidate SecurityFinding;
 2. reproduce it in a pinned clean-room sandbox;
 3. verify it with a separate agent/run identity and VerificationScope;
-4. constrain any patch through GeneratedSpec and the existing draft-PR runner;
+4. constrain any patch through GeneratedSpec; use the existing draft-PR runner
+   only for eligible repositories, while Kernel changes stay on the governed
+   specialist/manual Kernel review path until a separately authorized runner
+   exists;
 5. prove failed-before/passed-after regression and variant scan;
-6. seal the SecurityEvidencePack through the control-plane event chain;
+6. seal and verify the SecurityEvidencePack with Kernel EvidencePack tooling,
+   then bind the verified seal hash and closure refs into the control-plane
+   event chain;
 7. pass exact-head release, deployment, runtime smoke, and soak authority.
 
 No scanner, model, bounty producer, RLM handoff, fixture pack, or this offline

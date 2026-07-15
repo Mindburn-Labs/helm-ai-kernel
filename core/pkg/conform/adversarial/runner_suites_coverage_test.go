@@ -174,6 +174,85 @@ func TestIndividualSuitePassingBranches(t *testing.T) {
 	}
 }
 
+func TestCryptographicSuitesRejectTamperAndPostHocAuthorization(t *testing.T) {
+	t.Run("passing rooted campaign", func(t *testing.T) {
+		dir := t.TempDir()
+		publicKeyHex := writePassingCoverageArtifacts(t, dir)
+		result := RunAllWithOptions(dir, VerificationOptions{CampaignPublicKeyHex: publicKeyHex})
+		if !result.Pass || result.PassedSuites != 10 {
+			t.Fatalf("rooted campaign result=%+v, want all suites passing", result)
+		}
+	})
+
+	t.Run("tool manifest tamper", func(t *testing.T) {
+		dir := t.TempDir()
+		publicKeyHex := writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json")
+		var manifest map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &manifest) != nil {
+			t.Fatalf("read tool manifest: %v", err)
+		}
+		manifest["name"] = "forged-tool"
+		writeJSON(t, path, manifest)
+		result := adv08ToolManifestForge(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir)
+		if result.Pass {
+			t.Fatalf("tampered tool manifest passed: %+v", result)
+		}
+	})
+
+	t.Run("unsigned approval", func(t *testing.T) {
+		dir := t.TempDir()
+		publicKeyHex := writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "02_PROOFGRAPH", "receipts", "004.json")
+		var approval map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &approval) != nil {
+			t.Fatalf("read approval: %v", err)
+		}
+		delete(approval, "campaign_signatures")
+		writeJSON(t, path, approval)
+		result := adv10HighFinalityUnsigned(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir)
+		if result.Pass {
+			t.Fatalf("unsigned approval passed: %+v", result)
+		}
+	})
+
+	t.Run("post-hoc policy", func(t *testing.T) {
+		dir := t.TempDir()
+		privateKey, publicKeyHex := campaignTestKey()
+		receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+		if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		effect := map[string]any{"receipt_id": "effect", "receipt_hash": "effect", "seq": 1, "action_type": "effect_attempt", "decision_id": "decision-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
+		policy := map[string]any{"receipt_id": "policy", "receipt_hash": "policy", "seq": 2, "action_type": "policy_decision", "decision_id": "decision-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"effect"}}
+		writeJSON(t, filepath.Join(receiptsDir, "001.json"), effect)
+		writeJSON(t, filepath.Join(receiptsDir, "002.json"), signCampaignDocument(t, policy, "campaign_signatures", privateKey))
+		result := adv02PolicyBypass(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir)
+		if result.Pass {
+			t.Fatalf("post-hoc policy passed: %+v", result)
+		}
+	})
+
+	t.Run("tape hash tamper", func(t *testing.T) {
+		dir := t.TempDir()
+		_ = writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "08_TAPES", "entry_001.json")
+		var entry map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &entry) != nil {
+			t.Fatalf("read tape: %v", err)
+		}
+		entry["value"] = "Zm9yZ2Vk"
+		writeJSON(t, path, entry)
+		result := adv06TapeReplayTamper().Run(dir)
+		if result.Pass {
+			t.Fatalf("tampered tape passed: %+v", result)
+		}
+	})
+}
+
 func writeJSON(t *testing.T, path string, value any) {
 	t.Helper()
 	data, err := json.Marshal(value)

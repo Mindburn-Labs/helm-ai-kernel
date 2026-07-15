@@ -23,9 +23,9 @@ var _ effects.Connector = (*Connector)(nil)
 // It composes:
 //   - Client:     HTTP bridge to Linear GraphQL API
 //   - ZeroTrust:  connector trust gate (rate limits, data classes)
-//   - ProofGraph: cryptographic receipt chain
+//   - ProofGraph: in-memory hash chain for permitted dispatch attempts
 //
-// Every tool call produces an INTENT -> EFFECT chain in the ProofGraph.
+// Every permitted dispatch attempt produces an INTENT -> EFFECT chain.
 type Connector struct {
 	client       *Client
 	gate         *connector.ZeroTrustGate
@@ -55,7 +55,6 @@ var toolEffectTypeMap = map[string]effects.EffectType{
 	"linear.add_comment":  effects.EffectTypeWrite,
 }
 
-// Config configures a new Linear connector.
 // Config configures a new Linear connector.
 //
 // Token is optional. When empty, the underlying GraphQL client returns
@@ -247,7 +246,7 @@ func (c *Connector) validatePermit(permit *effects.EffectPermit, toolName string
 	if err := validateParamScope(permit, toolName, effectType, params); err != nil {
 		return err
 	}
-	return validateResourceScope(permit, effectType, params)
+	return validateResourceScope(permit, toolName, params)
 }
 
 func validateParamScope(permit *effects.EffectPermit, toolName string, effectType effects.EffectType, params map[string]any) error {
@@ -287,32 +286,42 @@ func validateParamScope(permit *effects.EffectPermit, toolName string, effectTyp
 			return fmt.Errorf("linear: param %q value %q does not match permit scope", key, got)
 		}
 	}
+	for key, value := range params {
+		actual := scopeParamValue(value)
+		for _, pattern := range permit.Scope.DenyPatterns {
+			if matchesDenyPattern(pattern, key, actual) {
+				return fmt.Errorf("linear: param %q matches deny pattern %q", key, pattern)
+			}
+		}
+	}
 	return nil
 }
 
-func validateResourceScope(permit *effects.EffectPermit, effectType effects.EffectType, params map[string]any) error {
+func validateResourceScope(permit *effects.EffectPermit, toolName string, params map[string]any) error {
 	teamID := strings.TrimSpace(stringParam(params, "team_id"))
 	issueID := strings.TrimSpace(stringParam(params, "issue_id"))
 	resourceRef := strings.TrimSpace(permit.ResourceRef)
 	if resourceRef == "" {
-		if effectType == effects.EffectTypeWrite && (teamID != "" || issueID != "") {
-			return fmt.Errorf("linear: write action requires permit resource_ref")
-		}
-		return nil
+		return fmt.Errorf("linear: action %q requires permit resource_ref", toolName)
 	}
-	switch linearResourceRefKind(resourceRef) {
+	requiredKind := "issue"
+	if toolName == "linear.create_issue" || toolName == "linear.list_issues" {
+		requiredKind = "team"
+	}
+	if kind := linearResourceRefKind(resourceRef); kind != "" && kind != requiredKind {
+		return fmt.Errorf("linear: permit resource_ref %q has kind %q; action %q requires %q", resourceRef, kind, toolName, requiredKind)
+	}
+	switch requiredKind {
 	case "team":
 		if teamID == "" {
 			return fmt.Errorf("linear: permit resource_ref %q requires team_id", resourceRef)
 		}
+		issueID = ""
 	case "issue":
 		if issueID == "" {
 			return fmt.Errorf("linear: permit resource_ref %q requires issue_id", resourceRef)
 		}
-	default:
-		if teamID == "" && issueID == "" {
-			return fmt.Errorf("linear: permit resource_ref %q requires team_id or issue_id", resourceRef)
-		}
+		teamID = ""
 	}
 	if resourceRefMatchesLinear(resourceRef, teamID, issueID) {
 		return nil
@@ -362,6 +371,14 @@ func scopeParamValue(v any) string {
 		}
 		return string(b)
 	}
+}
+
+func matchesDenyPattern(pattern, key, value string) bool {
+	if strings.HasPrefix(pattern, "*") {
+		suffix := pattern[1:]
+		return strings.HasSuffix(key, suffix) || strings.HasSuffix(value, suffix)
+	}
+	return key == pattern || value == pattern
 }
 
 // ponytail: this bounded, process-local tracker protects one connector process.

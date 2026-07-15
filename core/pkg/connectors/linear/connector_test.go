@@ -205,11 +205,13 @@ func TestExecute_GateEnforcesRateLimit(t *testing.T) {
 	})
 
 	ctx := context.Background()
+	params := map[string]any{"team_id": "team-1"}
 
 	// First two calls pass the gate (fail at client fake)
 	for i := 0; i < 2; i++ {
 		permit := permitFor("linear.list_issues", fmt.Sprintf("nonce-rate-%d", i), allowedParamsForTool("linear.list_issues")...)
-		_, err := c.Execute(ctx, permit, "linear.list_issues", map[string]any{})
+		bindPermitResource(permit, params)
+		_, err := c.Execute(ctx, permit, "linear.list_issues", params)
 		if err == nil {
 			t.Fatal("expected fake error")
 		}
@@ -220,7 +222,8 @@ func TestExecute_GateEnforcesRateLimit(t *testing.T) {
 
 	// Third call should hit rate limit
 	permit := permitFor("linear.list_issues", "nonce-rate-2", allowedParamsForTool("linear.list_issues")...)
-	_, err := c.Execute(ctx, permit, "linear.list_issues", map[string]any{})
+	bindPermitResource(permit, params)
+	_, err := c.Execute(ctx, permit, "linear.list_issues", params)
 	if err == nil {
 		t.Fatal("expected rate limit error")
 	}
@@ -233,9 +236,11 @@ func TestExecute_ProofGraphNodes(t *testing.T) {
 	c := NewConnector(Config{BaseURL: "https://api.linear.app"})
 	ctx := context.Background()
 	permit := permitFor("linear.list_issues", "nonce-proof", allowedParamsForTool("linear.list_issues")...)
+	params := map[string]any{"team_id": "team-1"}
+	bindPermitResource(permit, params)
 
 	// Execute will fail at client level but should still produce ProofGraph nodes
-	_, _ = c.Execute(ctx, permit, "linear.list_issues", map[string]any{})
+	_, _ = c.Execute(ctx, permit, "linear.list_issues", params)
 
 	// Should have 2 nodes: INTENT + EFFECT
 	if c.Graph().Len() != 2 {
@@ -257,9 +262,11 @@ func TestExecute_ProofGraphMultipleCalls(t *testing.T) {
 	ctx := context.Background()
 
 	// Execute three tool calls
+	params := map[string]any{"team_id": "team-1"}
 	for i := 0; i < 3; i++ {
 		permit := permitFor("linear.list_issues", fmt.Sprintf("nonce-proof-%d", i), allowedParamsForTool("linear.list_issues")...)
-		_, _ = c.Execute(ctx, permit, "linear.list_issues", map[string]any{})
+		bindPermitResource(permit, params)
+		_, _ = c.Execute(ctx, permit, "linear.list_issues", params)
 	}
 
 	// Should have 6 nodes: 3 INTENT + 3 EFFECT
@@ -286,11 +293,11 @@ func TestDispatch_MissingRequiredParams(t *testing.T) {
 		params        map[string]any
 		expectContain string
 	}{
-		{"linear.create_issue", map[string]any{}, "missing required param team_id"},
+		{"linear.create_issue", map[string]any{}, "requires permit resource_ref"},
 		{"linear.create_issue", map[string]any{"team_id": "t"}, "missing required param title"},
-		{"linear.update_issue", map[string]any{}, "missing required param issue_id"},
-		{"linear.get_issue", map[string]any{}, "missing required param issue_id"},
-		{"linear.add_comment", map[string]any{}, "missing required param issue_id"},
+		{"linear.update_issue", map[string]any{}, "requires permit resource_ref"},
+		{"linear.get_issue", map[string]any{}, "requires permit resource_ref"},
+		{"linear.add_comment", map[string]any{}, "requires permit resource_ref"},
 		{"linear.add_comment", map[string]any{"issue_id": "i"}, "missing required param body"},
 	}
 
@@ -389,11 +396,48 @@ func TestExecute_DeniesPermitScopeBeforeLinearRequest(t *testing.T) {
 		wantErr string
 	}{
 		{
+			name:    "missing permit",
+			tool:    "linear.list_issues",
+			params:  map[string]any{"team_id": "team-1"},
+			permit:  nil,
+			wantErr: "missing effect permit",
+		},
+		{
 			name:    "action mismatch",
 			tool:    "linear.create_issue",
 			params:  map[string]any{"team_id": "team-1", "title": "Bug"},
 			permit:  permitFor("linear.list_issues", "nonce-scope-action", allowedParamsForTool("linear.list_issues")...),
 			wantErr: "does not authorize",
+		},
+		{
+			name:    "read missing resource scope",
+			tool:    "linear.list_issues",
+			params:  map[string]any{"team_id": "team-1"},
+			permit:  permitFor("linear.list_issues", "nonce-scope-read-resource", allowedParamsForTool("linear.list_issues")...),
+			wantErr: "requires permit resource_ref",
+		},
+		{
+			name:   "wrong resource kind",
+			tool:   "linear.list_issues",
+			params: map[string]any{"team_id": "team-1"},
+			permit: func() *effects.EffectPermit {
+				permit := permitFor("linear.list_issues", "nonce-scope-kind", allowedParamsForTool("linear.list_issues")...)
+				permit.ResourceRef = "issue:team-1"
+				return permit
+			}(),
+			wantErr: "requires \"team\"",
+		},
+		{
+			name:   "deny pattern",
+			tool:   "linear.add_comment",
+			params: map[string]any{"issue_id": "issue-1", "body": "do not post"},
+			permit: func() *effects.EffectPermit {
+				permit := permitFor("linear.add_comment", "nonce-scope-deny", allowedParamsForTool("linear.add_comment")...)
+				permit.ResourceRef = "issue:issue-1"
+				permit.Scope.DenyPatterns = []string{"body"}
+				return permit
+			}(),
+			wantErr: "matches deny pattern",
 		},
 		{
 			name:    "read permit cannot write",
@@ -503,6 +547,7 @@ func TestExecute_RejectsPermitNonceReplayBeforeLinearRequest(t *testing.T) {
 	})
 	permit := permitFor("linear.list_issues", "nonce-replay", allowedParamsForTool("linear.list_issues")...)
 	params := map[string]any{"team_id": "team-1"}
+	bindPermitResource(permit, params)
 
 	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", params); err != nil {
 		t.Fatalf("first execute should pass permit validation: %v", err)
@@ -520,6 +565,7 @@ func TestExecute_RejectsPermitNonceReplayBeforeLinearRequest(t *testing.T) {
 	// The replay must not consume the second rate-limit slot. A fresh permit
 	// therefore still reaches Linear.
 	freshPermit := permitFor("linear.list_issues", "nonce-replay-fresh", allowedParamsForTool("linear.list_issues")...)
+	bindPermitResource(freshPermit, params)
 	if _, err := c.Execute(context.Background(), freshPermit, "linear.list_issues", params); err != nil {
 		t.Fatalf("fresh permit should pass the gate after replay denial: %v", err)
 	}
@@ -531,12 +577,14 @@ func TestExecute_RejectsPermitNonceReplayBeforeLinearRequest(t *testing.T) {
 func TestExecute_GateDenialDoesNotConsumePermitNonce(t *testing.T) {
 	c := NewConnector(Config{BaseURL: "https://api.linear.app"})
 	permit := permitFor("linear.list_issues", "nonce-gate-denied", allowedParamsForTool("linear.list_issues")...)
+	params := map[string]any{"team_id": "team-1"}
+	bindPermitResource(permit, params)
 
 	c.gate.SetPolicy(&connector.TrustPolicy{
 		ConnectorID: ConnectorID,
 		TrustLevel:  connector.TrustLevelUntrusted,
 	})
-	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", nil); err == nil || !strings.Contains(err.Error(), "gate denied") {
+	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", params); err == nil || !strings.Contains(err.Error(), "gate denied") {
 		t.Fatalf("expected gate denial, got %v", err)
 	}
 
@@ -547,7 +595,7 @@ func TestExecute_GateDenialDoesNotConsumePermitNonce(t *testing.T) {
 		AllowedDataClasses: AllowedDataClasses(),
 		RateLimitPerMinute: 60,
 	})
-	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", nil); err == nil || strings.Contains(err.Error(), "already used") {
+	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", params); err == nil || strings.Contains(err.Error(), "already used") {
 		t.Fatalf("gate denial must not consume the permit nonce, got %v", err)
 	}
 }

@@ -6,7 +6,7 @@
 //   - NewClient(baseURL)                   — no API key, all calls return
 //     "not connected" sentinels (backward-compat for unit tests).
 //   - NewClientWithToken(baseURL, apiKey)  — authenticated GraphQL mutations
-//     and queries with retry-on-5xx/429, rate-limit awareness, and
+//     and queries with safe read retries, rate-limit awareness, and
 //     structured error mapping from Linear's `errors` array.
 //
 // Supported tools (HELM tool → GraphQL op):
@@ -26,6 +26,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -384,9 +385,10 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("linear api: %d: %s", e.StatusCode, e.Messages[0])
 }
 
-// doGraphQL posts a GraphQL query or mutation to Linear with auth, retry on
-// transient failures, and structured error parsing.
+// doGraphQL posts a GraphQL query or mutation to Linear with auth and structured
+// error parsing. Only queries are retried; mutation failures are ambiguous.
 func (c *Client) doGraphQL(ctx context.Context, query string, variables map[string]any, out any) error {
+	retryable := strings.HasPrefix(strings.TrimSpace(query), "query")
 	payload := map[string]any{
 		"query":     query,
 		"variables": variables,
@@ -417,7 +419,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("transport error: %w", err)
-			if !shouldRetry(attempt) {
+			if !retryable || !shouldRetry(attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))
@@ -427,7 +429,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 		resp.Body.Close()
 		if readErr != nil {
 			lastErr = fmt.Errorf("read response body: %w", readErr)
-			if !shouldRetry(attempt) {
+			if !retryable || !shouldRetry(attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))
@@ -443,7 +445,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 				RetryAfter: wait,
 				RawBody:    string(respBody),
 			}
-			if !shouldRetry(attempt) {
+			if !retryable || !shouldRetry(attempt) {
 				return lastErr
 			}
 			if wait > 60*time.Second {
@@ -464,7 +466,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 				Messages:   []string{"server error"},
 				RawBody:    string(respBody),
 			}
-			if !shouldRetry(attempt) {
+			if !retryable || !shouldRetry(attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))

@@ -468,10 +468,31 @@ func TestConnectorExecuteSuccessWithLocalGraphQL(t *testing.T) {
 
 func TestExecuteCanonicalHashError(t *testing.T) {
 	conn := NewConnector(Config{Token: "lin_api_test"})
-	permit := permitFor("linear.list_issues", "nonce-hash-error", "bad")
-	_, err := conn.Execute(context.Background(), permit, "linear.list_issues", map[string]any{"bad": func() {}})
+	permit := permitFor("linear.list_issues", "nonce-hash-error", "team_id", "bad")
+	params := map[string]any{"team_id": "team-1", "bad": func() {}}
+	bindPermitResource(permit, params)
+	_, err := conn.Execute(context.Background(), permit, "linear.list_issues", params)
 	if err == nil || !strings.Contains(err.Error(), "canonical hash of params") {
 		t.Fatalf("expected canonical hash error, got %v", err)
+	}
+}
+
+func TestClientDoesNotRetryMutations(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		http.Error(w, "ambiguous failure", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	client := NewClientWithToken(server.URL, "lin_api_test")
+	client.httpClient = server.Client()
+	err := client.doGraphQL(context.Background(), "mutation CommentCreate { commentCreate { success } }", nil, nil)
+	if err == nil {
+		t.Fatal("expected mutation failure")
+	}
+	if requests != 1 {
+		t.Fatalf("mutation was retried %d times; ambiguous writes must be attempted once", requests)
 	}
 }
 

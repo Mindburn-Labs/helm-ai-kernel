@@ -63,6 +63,9 @@ Do not present any local base URL as a hosted HELM endpoint.
 | Selected HTTP MCP runtime | `http://localhost:9100/mcp` |
 
 The command, port, policy, and client must refer to the same runtime mode.
+These loopback URLs are the only base URLs in this packet. A public docs URL,
+health endpoint, or QA hostname is not a partner credential or a production API
+endpoint.
 
 ## 5. Apply Route Authentication
 
@@ -81,7 +84,35 @@ If the selected SDK cannot send a required identity header, stop and use direct
 HTTP or a client generated from `/openapi.yaml`. Never remove a required scope
 merely to make an example run.
 
-## 6. Prove Dispatch And No-Dispatch
+## 6. Run One Protected HTTP Evaluation
+
+Use the server-owned values supplied by the environment owner. The tenant and
+principal headers are mandatory for the current evaluate contract; the
+workspace header is mandatory only when the scoped emergency fence is enabled.
+
+```bash
+export HELM_BASE_URL=http://127.0.0.1:8080
+export HELM_ADMIN_API_KEY='<environment-owned-admin-key>'
+export HELM_TENANT_ID='<server-owned-tenant-id>'
+export HELM_PRINCIPAL_ID='<server-owned-principal-id>'
+
+curl --fail-with-body --silent --show-error \
+  -X POST "$HELM_BASE_URL/api/v1/evaluate" \
+  -H "Authorization: Bearer $HELM_ADMIN_API_KEY" \
+  -H "X-Helm-Tenant-ID: $HELM_TENANT_ID" \
+  -H "X-Helm-Principal-ID: $HELM_PRINCIPAL_ID" \
+  -H "Idempotency-Key: navigotech-local-read-001" \
+  -H 'Content-Type: application/json' \
+  --data-binary "{\"principal\":\"$HELM_PRINCIPAL_ID\",\"action\":\"ticket.read\",\"resource\":\"ticket:demo-001\",\"context\":{\"effect_class\":\"read\",\"integration\":\"navigotech-local-proof\"}}"
+```
+
+Do not expect `ALLOW` merely because the request is well formed. `DENY` or
+`ESCALATE` is a valid fail-closed proof when the policy, scope, approval, or
+route is incomplete. Record the returned decision and receipt references before
+connecting an executor. If the environment requires `X-Helm-Workspace-ID`, add
+the exact server-owned value; never source it from request JSON.
+
+## 7. Prove Dispatch And No-Dispatch
 
 For the exact client action, record:
 
@@ -98,7 +129,7 @@ For the exact client action, record:
 Setup output or generated configuration is not proof that a native client loaded
 HELM. Observe the configured event or call crossing the boundary.
 
-## 7. Revoke And Hand Off
+## 8. Revoke And Hand Off
 
 Revoke temporary MCP approval when the proof ends:
 
@@ -112,7 +143,7 @@ Give the client the version pin, configuration diff, policy, credential scope,
 approval path, source read-back, evidence bundle, verifier command, revocation
 procedure, rollback procedure, limitations, and support owner.
 
-## 8. Repeat Without Founder Assistance
+## 9. Repeat Without Founder Assistance
 
 The implementation channel is repeatable only after the partner completes the
 same bounded proof for a second unrelated client without Mindburn founder or

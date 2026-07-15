@@ -455,7 +455,11 @@ func canonicalizeEmbeddedKernelReceipt(document map[string]any) ([]byte, error) 
 		lamport = *v
 	}
 
-	switch version := firstString(document, "signature_version"); version {
+	version, err := embeddedReceiptSignatureVersion(document)
+	if err != nil {
+		return nil, err
+	}
+	switch version {
 	case "":
 		if hasEmbeddedSafeDepReceiptEvidence(document) {
 			return nil, fmt.Errorf("legacy receipt signature cannot authenticate SafeDep evidence")
@@ -492,12 +496,31 @@ func canonicalizeEmbeddedKernelReceipt(document map[string]any) ([]byte, error) 
 	}
 }
 
+func embeddedReceiptSignatureVersion(document map[string]any) (string, error) {
+	raw, present := document["signature_version"]
+	if !present {
+		return "", nil
+	}
+	version, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("receipt signature version must be a string")
+	}
+	return version, nil
+}
+
 func hasEmbeddedSafeDepReceiptEvidence(document map[string]any) bool {
-	return firstString(document, "emergency_activation_id") != "" ||
-		firstString(document, "emergency_delegation_session_id") != "" ||
-		firstString(document, "emergency_scope_hash") != "" ||
-		firstString(document, "safe_dep_state") != "" ||
-		firstString(document, "safe_dep_reason_code") != ""
+	for _, field := range []string{
+		"emergency_activation_id",
+		"emergency_delegation_session_id",
+		"emergency_scope_hash",
+		"safe_dep_state",
+		"safe_dep_reason_code",
+	} {
+		if _, present := document[field]; present {
+			return true
+		}
+	}
+	return false
 }
 
 func canonicalMarshalEmbeddedReceipt(payload map[string]any) ([]byte, error) {

@@ -82,10 +82,15 @@ helm:
   # Production mode refuses to auto-generate a root signing key at startup.
   production: false
 
-  # Proxy mode: forward to upstream LLM provider
+  # Outbound provider forwarding is opt-in. The server-owned provider key is
+  # supplied only from an existing Secret; it is never the runtime admin key.
   proxy:
-    enabled: true
-    upstream: "https://your-upstream.example/v1"
+    enabled: false
+    # Base provider URL, with or without a trailing /v1.
+    upstream: ""
+    # Must differ from helm.auth.existingSecret.
+    existingSecret: ""
+    upstreamAPIKeySecretKey: "HELM_UPSTREAM_API_KEY"
 
   # Region identifier
   region: "us"

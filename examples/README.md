@@ -9,10 +9,11 @@ directory contains the script or source file needed to run it.
 
 ```mermaid
 flowchart LR
-  server["HELM boundary on :7714"] --> sdk["SDK client examples"]
-  server --> proxy["OpenAI base-url examples"]
+  server["Governed serve runtime on :7714"] --> sdk["SDK client examples"]
+  server --> chat["Governed OpenAI-compatible examples"]
   server --> mcp["MCP client example"]
   server --> receipts["receipt and golden fixtures"]
+  sidecar["Standalone proxy sidecar on :9090"] --> upstream["OpenAI-compatible upstream"]
   policies["CEL / Rego / Cedar fixtures"] --> server
   packs["example policy packs"] --> server
   starters["provider starter layouts"] --> server
@@ -20,7 +21,8 @@ flowchart LR
 
 ## Before Running Networked Examples
 
-Most client examples expect a HELM boundary at `http://127.0.0.1:7714`.
+Most client examples expect the governed `serve` runtime at
+`http://127.0.0.1:7714`.
 
 ```bash
 make build
@@ -33,6 +35,14 @@ Or run the binary directly with an explicit port:
 ./bin/helm-ai-kernel serve --policy ./release.high_risk.v3.toml --addr 127.0.0.1 --port 7714
 ```
 
+Examples that invoke governed chat also require an admin bearer key and
+matching tenant, principal, and session bindings. They need
+`HELM_UPSTREAM_URL` and the separate server-owned
+`HELM_UPSTREAM_API_KEY` to reach a model provider; the latter must never reuse
+the runtime admin bearer. See each example README for the complete setup. The
+standalone `helm-ai-kernel proxy` sidecar on `:9090` is a different integration surface and is documented in
+[`docs/INTEGRATIONS/openai_baseurl.md`](../docs/INTEGRATIONS/openai_baseurl.md).
+
 ## SDK Examples
 
 | Path | Purpose | Validation status |
@@ -43,13 +53,13 @@ Or run the binary directly with an explicit port:
 | `java_client/` | Java SDK source example using `sdk/java` | Requires `cd sdk/java && mvn -q test package` before compiling `Main.java`. |
 | `rust_client/` | Rust SDK source example using `sdk/rust` | Source example; the SDK itself is validated by `make test-sdk-rust`. |
 
-## Proxy Examples
+## Governed OpenAI-compatible Examples
 
 | Path | Purpose | Run |
 | --- | --- |
-| `js_openai_baseurl/` | JavaScript `fetch` client pointed at the HELM boundary | `cd examples/js_openai_baseurl && node main.js` |
-| `python_openai_baseurl/` | Python SDK client pointed at the HELM boundary | `cd examples/python_openai_baseurl && python main.py` |
-| `ts_openai_baseurl/` | TypeScript client pointed at the HELM boundary | `cd examples/ts_openai_baseurl && npx tsx main.ts` |
+| `js_openai_baseurl/` | JavaScript `fetch` client for the governed chat route | `cd examples/js_openai_baseurl && node main.js` |
+| `python_openai_baseurl/` | Python SDK client for the governed chat route | `cd examples/python_openai_baseurl && python main.py` |
+| `ts_openai_baseurl/` | TypeScript SDK client for the governed chat route | `cd examples/ts_openai_baseurl && npx tsx main.ts` |
 
 ## Verification Examples
 

@@ -23,7 +23,6 @@ services:
       - /var/lib/helm-ai-kernel
     environment:
       HELM_REGION: "us"
-      HELM_ENABLE_OPENAI_PROXY: "1"
       HELM_ADMIN_API_KEY: "${HELM_ADMIN_API_KEY:-helm-admin-dev}"
       HELM_SERVICE_API_KEY: "${HELM_SERVICE_API_KEY:-helm-service-dev}"
       HELM_RUNTIME_TENANT_ID: "${HELM_RUNTIME_TENANT_ID:-default}"

@@ -29,7 +29,12 @@ var initProfiles = map[string]initProfile{
 	"openai": {
 		Name:         "openai",
 		ProviderHint: "openai",
-		EnvTemplate:  "OPENAI_API_KEY=\nHELM_UPSTREAM_URL=http://127.0.0.1:19090/v1\n",
+		EnvTemplate: "# The standalone proxy uses OPENAI_API_KEY.\n" +
+			"OPENAI_API_KEY=\n\n" +
+			"# The governed serve route uses these server-owned values instead.\n" +
+			"# HELM_UPSTREAM_API_KEY must never reuse HELM_ADMIN_API_KEY.\n" +
+			"HELM_UPSTREAM_URL=http://127.0.0.1:19090/v1\n" +
+			"HELM_UPSTREAM_API_KEY=\n",
 		NextSteps: []string{
 			"python3 scripts/launch/mock-openai-upstream.py --port 19090",
 			"helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1",

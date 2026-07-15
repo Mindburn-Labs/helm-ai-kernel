@@ -92,6 +92,8 @@ assert_contains "$default_rendered" "value: \"system-admin\""
 assert_contains "$default_rendered" "value: \"0\""
 assert_not_contains "$default_rendered" "HELM_EMERGENCY_STOP_COMMAND_AUDIENCE"
 assert_not_contains "$default_rendered" "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS"
+assert_not_contains "$default_rendered" "HELM_UPSTREAM_URL"
+assert_not_contains "$default_rendered" "HELM_UPSTREAM_API_KEY"
 assert_contains "$default_rendered" "automountServiceAccountToken: false"
 assert_not_contains "$default_rendered" "HELM_POLICY_TRUST_PUBLIC_KEY"
 assert_not_contains "$default_rendered" "checksum/config"
@@ -99,6 +101,49 @@ assert_not_contains "$default_rendered" "configmap-reload"
 assert_not_contains "$default_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
+
+proxy_missing_upstream_log="$RENDER_DIR/proxy-missing-upstream.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.proxy.enabled=true >"$RENDER_DIR/proxy-missing-upstream.yaml" 2>"$proxy_missing_upstream_log"; then
+    echo "::error::proxy render without upstream unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$proxy_missing_upstream_log" "helm.proxy.upstream"
+
+proxy_missing_secret_log="$RENDER_DIR/proxy-missing-secret.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.proxy.enabled=true \
+    --set helm.proxy.upstream=https://provider.example/v1 >"$RENDER_DIR/proxy-missing-secret.yaml" 2>"$proxy_missing_secret_log"; then
+    echo "::error::proxy render without upstream credential secret unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$proxy_missing_secret_log" "helm.proxy.existingSecret"
+
+proxy_shared_secret_log="$RENDER_DIR/proxy-shared-secret.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.proxy.enabled=true \
+    --set helm.proxy.upstream=https://provider.example/v1 \
+    --set helm.proxy.existingSecret=helm-shared \
+    --set helm.auth.existingSecret=helm-shared >"$RENDER_DIR/proxy-shared-secret.yaml" 2>"$proxy_shared_secret_log"; then
+    echo "::error::proxy render sharing the runtime auth secret unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$proxy_shared_secret_log" "must differ from the runtime auth Secret"
+
+proxy_rendered="$RENDER_DIR/rendered-proxy.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.proxy.enabled=true \
+    --set helm.proxy.upstream=https://provider.example/v1 \
+    --set helm.proxy.existingSecret=helm-upstream >"$proxy_rendered"
+assert_contains "$proxy_rendered" "HELM_UPSTREAM_URL"
+assert_contains "$proxy_rendered" "https://provider.example/v1"
+assert_contains "$proxy_rendered" "HELM_UPSTREAM_API_KEY"
+assert_contains "$proxy_rendered" "name: helm-upstream"
+assert_contains "$proxy_rendered" "key: HELM_UPSTREAM_API_KEY"
 
 emergency_stop_rendered="$RENDER_DIR/rendered-emergency-stop.yaml"
 helm_runner template "$RELEASE" "$CHART" \

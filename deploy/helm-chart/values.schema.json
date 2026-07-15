@@ -269,17 +269,28 @@
         "proxy": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Outbound proxy that forwards LLM traffic to an upstream provider. Disable when running fully air-gapped against an on-cluster model.",
+          "description": "Opt-in outbound provider forwarding for governed LLM traffic. The provider credential must come from its own existing Kubernetes Secret and is never reused from runtime API authentication.",
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable the egress proxy that forwards governed LLM calls to the configured upstream."
+              "default": false,
+              "description": "Configure governed LLM forwarding to the configured upstream. Requires upstream and existingSecret."
             },
             "upstream": {
+              "anyOf": [
+                { "type": "string", "maxLength": 0 },
+                { "type": "string", "format": "uri" }
+              ],
+              "description": "Upstream LLM provider base endpoint, with or without a trailing /v1 (for example https://api.openai.com or https://api.openai.com/v1)."
+            },
+            "existingSecret": {
               "type": "string",
-              "format": "uri",
-              "description": "Upstream LLM provider endpoint, including scheme and version path (e.g. https://api.openai.com/v1)."
+              "description": "Name of an existing Secret containing the server-owned upstream provider API key. Required when enabled and must differ from the runtime auth Secret."
+            },
+            "upstreamAPIKeySecretKey": {
+              "type": "string",
+              "default": "HELM_UPSTREAM_API_KEY",
+              "description": "Key inside existingSecret that contains the upstream provider API key."
             }
           }
         },

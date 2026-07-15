@@ -48,6 +48,15 @@
 {{- if and .Values.helm.emergencyStop.enabled (not (or .Values.helm.emergencyStop.commandPublicKeys .Values.helm.emergencyStop.existingSecret)) -}}
 {{- fail "helm.emergencyStop.enabled=true requires helm.emergencyStop.commandPublicKeys or helm.emergencyStop.existingSecret" -}}
 {{- end -}}
+{{- if and .Values.helm.proxy.enabled (not .Values.helm.proxy.upstream) -}}
+{{- fail "helm.proxy.enabled=true requires helm.proxy.upstream" -}}
+{{- end -}}
+{{- if and .Values.helm.proxy.enabled (not .Values.helm.proxy.existingSecret) -}}
+{{- fail "helm.proxy.enabled=true requires helm.proxy.existingSecret containing a distinct upstream provider key" -}}
+{{- end -}}
+{{- if and .Values.helm.proxy.enabled (eq .Values.helm.proxy.existingSecret (include "helm-ai-kernel.authSecretName" .)) -}}
+{{- fail "helm.proxy.existingSecret must differ from the runtime auth Secret" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -202,10 +211,13 @@ spec:
             - name: HELM_REGION
               value: {{ .Values.helm.region | quote }}
             {{- if .Values.helm.proxy.enabled }}
-            - name: HELM_ENABLE_OPENAI_PROXY
-              value: "1"
             - name: HELM_UPSTREAM_URL
               value: {{ .Values.helm.proxy.upstream | quote }}
+            - name: HELM_UPSTREAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.helm.proxy.existingSecret }}
+                  key: {{ .Values.helm.proxy.upstreamAPIKeySecretKey }}
             {{- end }}
             {{- if .Values.helm.demoMode }}
             - name: HELM_DEMO_MODE

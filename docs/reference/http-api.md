@@ -16,8 +16,15 @@ Use the CLI first. Use HTTP when you need a local client or generated types.
 | Surface | Base URL |
 | --- | --- |
 | Local boundary | `http://127.0.0.1:7714` |
-| Local API server | `http://127.0.0.1:8080` |
-| OpenAI-compatible proxy | `http://127.0.0.1:9090/v1` |
+| `serve` runtime | `http://127.0.0.1:7714` |
+| `server` runtime | `http://127.0.0.1:8080` |
+| Standalone `proxy` sidecar | `http://127.0.0.1:9090/v1` |
+
+The public route contract below applies to the `serve` or `server` runtime.
+Their governed chat route is `<runtime-base-url>/v1/chat/completions`. The
+standalone `helm-ai-kernel proxy` command is a separate local sidecar and does
+not expose the tenant-scoped runtime API; see
+[`OpenAI Proxy`](../INTEGRATIONS/openai_baseurl.md) for that surface.
 
 ## Public Route Families
 
@@ -31,7 +38,7 @@ Use the CLI first. Use HTTP when you need a local client or generated types.
 | Boundary | `GET /api/v1/boundary/status` |
 | Conformance | `GET /api/v1/conformance/negative` |
 | MCP approvals | `GET /api/v1/mcp/registry`, `POST /api/v1/mcp/scan`, `POST /api/v1/mcp/authorize-call` |
-| OpenAI proxy | `POST /v1/chat/completions` |
+| Governed OpenAI-compatible chat | `POST /v1/chat/completions` |
 
 Protected runtime, identity, trust-key mutation, billing, console diagnostics,
 direct MCP execution, onboarding, and unpublished operations are not part of the
@@ -46,16 +53,24 @@ public docs surface.
 | `admin` / `authenticated` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` |
 | `service_internal` | Requires `Authorization: Bearer $HELM_SERVICE_API_KEY` |
 
-When `HELM_EMERGENCY_STOP_FENCE_ENABLED=1`, `POST /api/v1/evaluate`
-additionally requires an authenticated tenant matching the server-owned
-`HELM_RUNTIME_TENANT_ID` and `X-Helm-Workspace-ID` matching the server-owned
+`POST /v1/chat/completions` served by `helm-ai-kernel serve` is a governed,
+tenant-scoped OpenAI-compatible proxy; it is not unauthenticated. It requires
+the admin bearer credential plus `X-Helm-Tenant-ID`,
+`X-Helm-Principal-ID`, and `X-Helm-Session-ID`. Its workspace header is
+optional unless the emergency-stop fence is enabled.
+
+Forwarding additionally requires server-owned `HELM_UPSTREAM_URL` and
+`HELM_UPSTREAM_API_KEY`. The runtime uses the latter only for the upstream
+request and never forwards the caller's runtime/admin `Authorization` header
+to the provider. An upstream base URL may include `/v1` or omit it.
+
+When `HELM_EMERGENCY_STOP_FENCE_ENABLED=1`, both
+`POST /api/v1/evaluate` and `POST /v1/chat/completions` additionally require
+an authenticated tenant matching the server-owned `HELM_RUNTIME_TENANT_ID` and
+`X-Helm-Workspace-ID` matching the server-owned
 `HELM_RUNTIME_WORKSPACE_ID`. A request body cannot choose either scope
 binding. This is a dispatch fence only; it does not cancel already running
 work.
-
-The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
-unavailable while this fence is enabled because request JSON is not an
-authoritative tenant/workspace binding.
 
 ## Scoped decision evaluation
 
@@ -67,8 +82,9 @@ authoritative tenant/workspace binding.
 - Optional `Idempotency-Key`, scoped to the authenticated tenant, principal,
   workspace, session, method, and path
 
-Its JSON body is strictly limited to the following shape; `principal`, tenant,
-workspace, and session values in JSON are rejected rather than trusted:
+Its JSON body is strictly limited to the following shape. Top-level
+`principal`, tenant, workspace, and session values in JSON are rejected rather
+than trusted; `context` remains an arbitrary explanatory object:
 
 ```json
 {

@@ -47,7 +47,8 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 
 	// --- OpenAI-Compatible Proxy (governed inference) ---
 	// Wraps api.HandleOpenAIProxy with Guardian governance enforcement and receipt headers.
-	// Requires HELM_UPSTREAM_URL to be set for real upstream forwarding.
+	// Requires HELM_UPSTREAM_URL and server-owned HELM_UPSTREAM_API_KEY for real
+	// upstream forwarding.
 	mux.HandleFunc("/v1/chat/completions", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		handleGovernedOpenAIProxy(w, r, svc)
 	}))
@@ -397,6 +398,10 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 			api.WriteInternal(w, err)
 			return
 		}
+		// A chat response is evidence-bearing only after the same decision receipt
+		// persisted by the canonical evaluator is durable. Expose that deterministic
+		// receipt ID on both ALLOW and DENY responses so clients can verify it.
+		w.Header().Set("X-Helm-Receipt-ID", decisionReceiptID(decision.ID))
 
 		if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
 			api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)

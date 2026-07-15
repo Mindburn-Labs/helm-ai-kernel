@@ -64,9 +64,9 @@ flowchart TD
 | --- | --- | --- | --- | --- |
 | Python SDK | `helm-ai-kernel serve --policy examples/launch/policies/agent_tool_call_boundary.toml` | ALLOW, DENY, MCP fail-closed denial, receipt verification, sandbox preflight, and evidence verification | [`examples/python_sdk`](../examples/python_sdk) | `make sdk-examples-smoke` |
 | TypeScript SDK | `helm-ai-kernel serve --policy examples/launch/policies/agent_tool_call_boundary.toml` | ALLOW, DENY, MCP fail-closed denial, receipt verification, sandbox preflight, and evidence verification | [`examples/ts_sdk`](../examples/ts_sdk) | `make sdk-examples-smoke` |
-| Python OpenAI base URL | `helm-ai-kernel proxy --port 9090` | OpenAI-compatible base URL, receipt headers, deny path | [`examples/python_openai_baseurl`](../examples/python_openai_baseurl) | `make test-sdk-py` |
-| TypeScript OpenAI base URL | `helm-ai-kernel proxy --port 9090` | JavaScript/TypeScript client base URL and receipt extraction | [`examples/ts_openai_baseurl`](../examples/ts_openai_baseurl) | `make test-sdk-ts` |
-| JavaScript raw fetch | `helm-ai-kernel proxy --port 9090` | Raw HTTP client compatibility | [`examples/js_openai_baseurl`](../examples/js_openai_baseurl) | `make docs-truth` |
+| Python governed chat | `helm-ai-kernel serve --policy <LLM_INFERENCE policy>` plus `HELM_UPSTREAM_URL` and server-owned `HELM_UPSTREAM_API_KEY` | Authenticated OpenAI-compatible chat, receipt headers, evidence, and conformance | [`examples/python_openai_baseurl`](../examples/python_openai_baseurl) | `make test-sdk-py` |
+| TypeScript governed chat | `helm-ai-kernel serve --policy <LLM_INFERENCE policy>` plus `HELM_UPSTREAM_URL` and server-owned `HELM_UPSTREAM_API_KEY` | Authenticated OpenAI-compatible chat, receipt headers, evidence, and conformance | [`examples/ts_openai_baseurl`](../examples/ts_openai_baseurl) | `make test-sdk-ts` |
+| JavaScript governed fetch | `helm-ai-kernel serve --policy <LLM_INFERENCE policy>` plus `HELM_UPSTREAM_URL` and server-owned `HELM_UPSTREAM_API_KEY` | Authenticated raw OpenAI-compatible chat and receipt extraction | [`examples/js_openai_baseurl`](../examples/js_openai_baseurl) | `make docs-truth` |
 | Go client | `helm-ai-kernel serve --policy <file>` | typed client request, decision, receipt handling | [`examples/go_client`](../examples/go_client) | `go test ./examples/go_client/... -run '^$'` |
 | Rust client | `helm-ai-kernel serve --policy <file>` | Rust client and verifier-facing types | [`examples/rust_client`](../examples/rust_client) | `make test-sdk-rust` |
 | Java client | `helm-ai-kernel serve --policy <file>` | JVM client request and error handling | [`examples/java_client`](../examples/java_client) | `make test-sdk-java` |
@@ -83,11 +83,18 @@ flowchart TD
 
 ```bash
 export HELM_URL=http://127.0.0.1:7714
-export HELM_PROXY_BASE_URL=http://127.0.0.1:9090/v1
-export OPENAI_API_KEY="${OPENAI_API_KEY:?set upstream key when proxying}"
+export HELM_ADMIN_API_KEY="${HELM_ADMIN_API_KEY:?set runtime admin key}"
+export HELM_TENANT_ID=default
+export HELM_PRINCIPAL_ID=example-agent
+export HELM_SESSION_ID=example-session
 ```
 
-Examples may also use framework-native `baseURL` or `base_url` options. Prefer the variable names used inside the example README or code; do not invent a new variable in public docs without adding it to the example.
+The runtime's tenant and principal configuration must match the client values.
+Examples may also use framework-native `baseURL` or `base_url` options. Prefer
+the variable names used inside the example README or code; do not invent a new
+variable in public docs without adding it to the example. The separate proxy
+sidecar uses `OPENAI_BASE_URL=http://127.0.0.1:9090/v1`; it is not the
+tenant-scoped runtime API.
 
 ## Expected Output
 
@@ -102,8 +109,8 @@ Every runnable example should produce at least one of these observable outputs:
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| example reaches the upstream provider directly | base URL bypassed HELM | set the framework base URL to `http://127.0.0.1:9090/v1` or use `HELM_PROXY_BASE_URL` where the example supports it |
-| receipt is missing | wrong server mode | use `helm-ai-kernel proxy` for OpenAI-compatible examples and `helm-ai-kernel serve` for runtime API examples |
+| example reaches the upstream provider directly | base URL bypassed HELM | follow the example's declared surface: governed examples use `HELM_URL=http://127.0.0.1:7714`; only an explicitly standalone sidecar integration uses `http://127.0.0.1:9090/v1` |
+| receipt is missing | wrong server mode, missing governed scope, or receipt persistence failure | use `helm-ai-kernel serve` with matching admin, tenant, principal, and session bindings plus a configured server-owned upstream key; the standalone proxy is a different surface |
 | Java package cannot be fetched from Maven Central | registry freshness or local Maven cache issue | verify `io.github.mindburnlabs:helm-sdk:0.7.2` against repo1 or `version-status.json`; build from `sdk/java` only when testing local source changes |
 
 ## Not Covered

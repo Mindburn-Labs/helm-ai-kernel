@@ -131,7 +131,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Helm-Receipt-ID", "rcpt-decision-"+decision.ID)
+		w.Header().Set("X-Helm-Receipt-ID", decisionReceiptID(decision.ID))
 		_ = json.NewEncoder(w).Encode(decision)
 	})
 	if svc != nil && svc.IdempotencyStore != nil {
@@ -337,7 +337,7 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 		agentID = "anonymous"
 	}
 	argsHash := sha256HexBytes(body)
-	receiptID := "rcpt-decision-" + decision.ID
+	receiptID := decisionReceiptID(decision.ID)
 	effectID := decision.Action
 	if effectID == "" {
 		if action, ok := metadata["action"].(string); ok {
@@ -391,6 +391,10 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 		return fmt.Errorf("store receipt %s: %w", receiptID, err)
 	}
 	return nil
+}
+
+func decisionReceiptID(decisionID string) string {
+	return "rcpt-decision-" + decisionID
 }
 
 // persistLocalActivityReceipt persists a signed, causal record for a local

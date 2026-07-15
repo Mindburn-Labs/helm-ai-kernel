@@ -1,15 +1,18 @@
-// Package api provides the OpenAI-compatible proxy endpoint for HELM.
-// Enabled via HELM_ENABLE_OPENAI_PROXY=1, this intercepts tool calls
-// through the PEP boundary, enforcing governance on every operation.
+// Package api provides the OpenAI-compatible proxy endpoint for HELM. The
+// served route applies its PEP boundary before this handler forwards requests
+// with a server-owned upstream provider credential.
 package api
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -61,16 +64,24 @@ type OpenAIChatResponse struct {
 // HandleOpenAIProxy is the handler for /v1/chat/completions in server mode.
 //
 // Governance behavior:
-//   - If HELM_UPSTREAM_URL is set: proxies to the upstream LLM with full governance
-//     (validates requests, enforces policy, generates receipts)
-//   - If HELM_UPSTREAM_URL is NOT set: returns an error directing users to configure it
+//   - If HELM_UPSTREAM_URL and HELM_UPSTREAM_API_KEY are set: proxies to the
+//     upstream LLM with full governance (validates requests, enforces policy,
+//     generates receipts). The upstream key is server-owned and is never
+//     derived from the caller's runtime authorization header.
+//   - If either setting is absent: returns a configuration error without
+//     forwarding the request.
 //
 // For CLI-based governance with interactive upstream forwarding, use:
 //
 //	helm-ai-kernel proxy --upstream <url>
 //
 // maxOpenAIRequestSize is the maximum allowed request body size (10 MiB).
-const maxOpenAIRequestSize = 10 << 20
+const (
+	maxOpenAIRequestSize  = 10 << 20
+	upstreamURLEnv        = "HELM_UPSTREAM_URL"
+	upstreamAPIKeyEnv     = "HELM_UPSTREAM_API_KEY"
+	runtimeAdminAPIKeyEnv = "HELM_ADMIN_API_KEY"
+)
 
 func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -89,7 +100,7 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		req.Model = "gpt-4"
 	}
 
-	upstreamURL := os.Getenv("HELM_UPSTREAM_URL")
+	upstreamURL := strings.TrimSpace(os.Getenv(upstreamURLEnv))
 	if upstreamURL == "" {
 		// No upstream configured — return error with instructions
 		w.Header().Set("Content-Type", "application/json")
@@ -105,6 +116,32 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	upstreamAPIKey := strings.TrimSpace(os.Getenv(upstreamAPIKeyEnv))
+	if upstreamAPIKey == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "HELM server mode requires HELM_UPSTREAM_API_KEY to be set for its configured upstream. " +
+					"This server-owned provider credential is distinct from HELM_ADMIN_API_KEY.",
+				"type": "helm_configuration_error",
+				"code": "upstream_credentials_not_configured",
+			},
+		})
+		return
+	}
+	if credentialsEqual(upstreamAPIKey, strings.TrimSpace(os.Getenv(runtimeAdminAPIKeyEnv))) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "HELM_UPSTREAM_API_KEY must be distinct from HELM_ADMIN_API_KEY.",
+				"type":    "helm_configuration_error",
+				"code":    "upstream_credentials_not_distinct",
+			},
+		})
+		return
+	}
 
 	// Forward to upstream with governance
 	upstreamReq, err := json.Marshal(req)
@@ -113,9 +150,11 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create upstream request
+	// Create an upstream request using only server-owned provider credentials.
+	// The caller's Authorization header is consumed by the runtime boundary and
+	// must never be sent to a third-party model provider.
 	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
-		upstreamURL+"/v1/chat/completions", bytes.NewReader(upstreamReq))
+		openAICompletionsURL(upstreamURL), bytes.NewReader(upstreamReq))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -127,10 +166,7 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Forward authorization header to upstream
-	if auth := r.Header.Get("Authorization"); auth != "" {
-		proxyReq.Header.Set("Authorization", auth)
-	}
+	proxyReq.Header.Set("Authorization", "Bearer "+upstreamAPIKey)
 	proxyReq.Header.Set("Content-Type", "application/json")
 
 	// Execute upstream request
@@ -163,4 +199,27 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	// Forward upstream status code and body
 	w.WriteHeader(upstreamResp.StatusCode)
 	_, _ = w.Write(respBody)
+}
+
+// openAICompletionsURL accepts an upstream base URL with or without the OpenAI
+// /v1 path. This keeps chart and local configuration unambiguous while
+// ensuring the handler sends exactly one version segment upstream.
+func openAICompletionsURL(upstreamURL string) string {
+	base := strings.TrimRight(strings.TrimSpace(upstreamURL), "/")
+	if strings.HasSuffix(base, "/v1") {
+		return base + "/chat/completions"
+	}
+	return base + "/v1/chat/completions"
+}
+
+// credentialsEqual avoids turning a configuration error into a credential
+// comparison side channel. Empty credentials are handled by the caller's
+// required-value check and never compare as equal here.
+func credentialsEqual(left, right string) bool {
+	if left == "" || right == "" {
+		return false
+	}
+	leftDigest := sha256.Sum256([]byte(left))
+	rightDigest := sha256.Sum256([]byte(right))
+	return subtle.ConstantTimeCompare(leftDigest[:], rightDigest[:]) == 1
 }

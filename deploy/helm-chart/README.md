@@ -28,6 +28,20 @@ helm install helm-ai-kernel deploy/helm-chart \
   --set helm.auth.principalID=<runtime-principal-id>
 ```
 
+Governed provider forwarding is opt-in. Create a distinct upstream provider
+credential Secret, then configure its URL and Secret reference; do not reuse
+the admin/service API-key Secret.
+
+```bash
+kubectl create secret generic helm-upstream \
+  --from-literal=HELM_UPSTREAM_API_KEY='<provider-api-key>'
+
+helm upgrade --install helm-ai-kernel deploy/helm-chart \
+  --set helm.proxy.enabled=true \
+  --set helm.proxy.upstream=https://api.openai.com/v1 \
+  --set helm.proxy.existingSecret=helm-upstream
+```
+
 Review `values.yaml` before use in a real environment.
 
 ## Runtime Contract
@@ -41,6 +55,7 @@ flowchart TD
   snapshot --> pod["helm-ai-kernel serve pod"]
   signing["signing-key Secret"] --> pod
   auth["admin/service API-key Secret"] --> pod
+  upstream["upstream provider-key Secret"] --> pod
   pvc["data volume"] --> pod
   pod --> service["ClusterIP Service"]
   service --> ingress["optional Ingress"]
@@ -69,6 +84,10 @@ flowchart TD
 | `helm.auth.existingSecret` | empty | Existing secret containing auth key entries. |
 | `helm.auth.tenantID` | `default` | Server-bound tenant for tenant-scoped runtime routes; request tenant headers must match. |
 | `helm.auth.principalID` | `system-admin` | Server-bound principal for tenant-scoped runtime routes; request principal headers must match. |
+| `helm.proxy.enabled` | `false` | Opt into governed outbound provider forwarding; requires an upstream URL and distinct existing Secret. |
+| `helm.proxy.upstream` | empty | Provider base URL, with or without `/v1`. |
+| `helm.proxy.existingSecret` | empty | Existing Secret containing the server-owned upstream provider API key. |
+| `helm.proxy.upstreamAPIKeySecretKey` | `HELM_UPSTREAM_API_KEY` | Key inside the upstream Secret. |
 | `helm.storage.type` | `sqlite` | `sqlite` or `postgres`. |
 | `helm.storage.postgres.existingSecret` | empty | Existing secret containing `DATABASE_URL`; required for production Postgres. |
 | `helm.storage.postgres.sslMode` | `require` | PostgreSQL TLS mode. Production requires `require`, `verify-ca`, or `verify-full`. |
@@ -100,6 +119,9 @@ flowchart TD
 - Provide `helm.auth.adminAPIKey` and `helm.auth.serviceAPIKey`, or
   `helm.auth.existingSecret`; production rendering fails closed without auth
   material.
+- If enabling `helm.proxy`, provide a separate
+  `helm.proxy.existingSecret` containing `HELM_UPSTREAM_API_KEY`. The runtime
+  never forwards the HELM admin bearer to the model provider.
 - Set `helm.auth.tenantID` and `helm.auth.principalID` to the runtime identity
   expected by tenant-scoped API clients. Caller-supplied tenant and principal
   headers are accepted only when they match these server-bound values.

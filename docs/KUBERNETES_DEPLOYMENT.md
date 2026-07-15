@@ -58,10 +58,20 @@ kubectl create secret generic helm-auth \
   --from-literal=HELM_ADMIN_API_KEY='<local-test-admin-key>' \
   --from-literal=HELM_SERVICE_API_KEY='<local-test-service-key>'
 
+kubectl create secret generic helm-upstream \
+  --from-literal=HELM_UPSTREAM_API_KEY='<local-test-provider-key>'
+
 helm upgrade --install helm-ai-kernel deploy/helm-chart \
   --set helm.auth.existingSecret=helm-auth \
+  --set helm.proxy.enabled=true \
+  --set helm.proxy.upstream=https://api.openai.com/v1 \
+  --set helm.proxy.existingSecret=helm-upstream \
   --set persistence.enabled=true
 ```
+
+The upstream Secret is intentionally distinct from `helm-auth`: the runtime
+uses it only for the provider request and never forwards its admin bearer
+upstream.
 
 ## Values That Control Runtime Behavior
 
@@ -73,7 +83,8 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
 | `service.port` | `8080` | Runtime HTTP port passed to `helm-ai-kernel serve --port`. |
 | `service.healthPort` | `8081` | Health probe port via `HELM_HEALTH_PORT`. |
 | `helm.dataDir` | `/data` | Mounted from the chart PVC or `emptyDir`. |
-| `helm.proxy.enabled` | `true` | Sets `HELM_ENABLE_OPENAI_PROXY=1` and `HELM_UPSTREAM_URL`. |
+| `helm.proxy.enabled` | `false` | Opts into provider forwarding and requires `helm.proxy.upstream` plus a distinct `helm.proxy.existingSecret`. |
+| `helm.proxy.existingSecret` | empty | Existing Secret containing the server-owned `HELM_UPSTREAM_API_KEY`. |
 | `helm.storage.type` | `sqlite` | Uses local SQLite unless another supported store is configured. |
 | `persistence.enabled` | `true` | Creates or reuses a PVC for receipts, state, and artifacts. |
 | `ingress.enabled` | `false` | Optional ingress; provide TLS and ingress class explicitly. |
@@ -86,9 +97,9 @@ kubectl port-forward svc/helm-ai-kernel 8080:8080
 curl -fsS http://127.0.0.1:8080/health
 ```
 
-Then run a governed request through the public API or OpenAI-compatible proxy
-and verify that receipts persist after pod restart when `persistence.enabled`
-is true.
+Then run a governed request through the public API or, when explicitly
+configured with an upstream Secret, the OpenAI-compatible route. Verify that
+receipts persist after pod restart when `persistence.enabled` is true.
 
 ## Not Covered
 

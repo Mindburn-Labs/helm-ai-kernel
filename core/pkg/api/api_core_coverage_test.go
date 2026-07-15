@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -657,42 +658,116 @@ func TestCoverageOpenAIProxyBranches(t *testing.T) {
 		t.Fatalf("invalid body status = %d, want 400", rec.Code)
 	}
 
-	t.Setenv("HELM_UPSTREAM_URL", "")
+	t.Setenv(upstreamURLEnv, "")
+	t.Setenv(upstreamAPIKeyEnv, "")
+	t.Setenv(runtimeAdminAPIKeyEnv, "helm-admin-secret")
 	rec = httptest.NewRecorder()
 	HandleOpenAIProxy(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[]}`)))
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("missing upstream status = %d, want 503", rec.Code)
 	}
 
+	var upstreamCalls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls.Add(1)
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Fatalf("unexpected upstream path: %s", r.URL.Path)
 		}
-		if r.Header.Get("Authorization") != "Bearer token" {
-			t.Fatalf("authorization not forwarded: %q", r.Header.Get("Authorization"))
+		if r.Header.Get("Authorization") != "Bearer provider-secret" {
+			t.Fatalf("upstream authorization = %q, want server-owned provider credential", r.Header.Get("Authorization"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTeapot)
 		_, _ = w.Write([]byte(`{"id":"chatcmpl-test"}`))
 	}))
 	defer upstream.Close()
-	t.Setenv("HELM_UPSTREAM_URL", upstream.URL)
+	t.Setenv(upstreamURLEnv, upstream.URL)
+	t.Setenv(upstreamAPIKeyEnv, "")
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[{"role":"user","content":"hi"}]}`))
-	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("Authorization", "Bearer helm-admin-secret")
+	HandleOpenAIProxy(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing upstream credential status = %d, want 503", rec.Code)
+	}
+	if got := upstreamCalls.Load(); got != 0 {
+		t.Fatalf("upstream calls = %d, want 0 when the provider credential is absent", got)
+	}
+
+	t.Setenv(upstreamAPIKeyEnv, "helm-admin-secret")
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Authorization", "Bearer helm-admin-secret")
+	HandleOpenAIProxy(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("shared runtime and provider credential status = %d, want 503", rec.Code)
+	}
+	if got := upstreamCalls.Load(); got != 0 {
+		t.Fatalf("upstream calls = %d, want 0 when credentials are shared", got)
+	}
+
+	t.Setenv(upstreamAPIKeyEnv, "provider-secret")
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Authorization", "Bearer helm-admin-secret")
 	HandleOpenAIProxy(rec, req)
 	if rec.Code != http.StatusTeapot || rec.Header().Get("X-HELM-Governed") != "true" || rec.Header().Get("X-HELM-Model") != "gpt-4" {
 		t.Fatalf("upstream proxy status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	if got := upstreamCalls.Load(); got != 1 {
+		t.Fatalf("upstream calls = %d, want 1 after a configured request", got)
 	}
 
 	failed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	failedURL := failed.URL
 	failed.Close()
-	t.Setenv("HELM_UPSTREAM_URL", failedURL)
+	t.Setenv(upstreamURLEnv, failedURL)
 	rec = httptest.NewRecorder()
 	HandleOpenAIProxy(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-test","messages":[]}`)))
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("failed upstream status = %d, want 502", rec.Code)
+	}
+}
+
+func TestOpenAICompletionsURL(t *testing.T) {
+	for name, tc := range map[string]struct {
+		upstream string
+		want     string
+	}{
+		"base URL": {
+			upstream: "https://api.example.test",
+			want:     "https://api.example.test/v1/chat/completions",
+		},
+		"base URL trailing slash": {
+			upstream: "https://api.example.test/",
+			want:     "https://api.example.test/v1/chat/completions",
+		},
+		"versioned URL": {
+			upstream: "https://api.example.test/v1",
+			want:     "https://api.example.test/v1/chat/completions",
+		},
+		"versioned URL trailing slash": {
+			upstream: "https://api.example.test/v1/",
+			want:     "https://api.example.test/v1/chat/completions",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := openAICompletionsURL(tc.upstream); got != tc.want {
+				t.Fatalf("openAICompletionsURL(%q) = %q, want %q", tc.upstream, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCredentialsEqual(t *testing.T) {
+	if credentialsEqual("", "") {
+		t.Fatal("empty credentials must not compare as configured credentials")
+	}
+	if credentialsEqual("provider-secret", "helm-admin-secret") {
+		t.Fatal("different credentials compared equal")
+	}
+	if !credentialsEqual("shared-secret", "shared-secret") {
+		t.Fatal("identical credentials did not compare equal")
 	}
 }
 

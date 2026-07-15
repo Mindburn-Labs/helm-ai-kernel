@@ -14,6 +14,7 @@ import type {
   HelmError,
   ReasonCode,
   DecisionRequest,
+  DecisionRecord,
 } from './types.gen.js';
 
 export type { ReasonCode, HelmError };
@@ -158,6 +159,21 @@ export interface ChatCompletionWithReceipt {
   governance: GovernanceMetadata;
 }
 
+/** Authenticated scope bound to a decision evaluation. */
+export interface EvaluationScope {
+  tenantId: string;
+  principalId: string;
+  sessionId: string;
+  workspaceId?: string;
+}
+
+/** A signed decision plus its receipt transport metadata. */
+export interface EvaluationResult {
+  decision: DecisionRecord;
+  receiptId: string;
+  replayed: boolean;
+}
+
 /** Thrown when the HELM API returns a non-2xx response. */
 export class HelmApiError extends Error {
   readonly status: number;
@@ -191,6 +207,8 @@ export interface HelmClientConfig {
   baseUrl: string;
   apiKey?: string;
   tenantId?: string;
+  principalId?: string;
+  workspaceId?: string;
   timeout?: number; // ms, default 30000
 }
 
@@ -198,16 +216,24 @@ export class HelmClient {
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
   private readonly timeout: number;
+  private readonly apiKey?: string;
 
   constructor(config: HelmClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.timeout = config.timeout ?? 30_000;
+    this.apiKey = config.apiKey;
     this.headers = { 'Content-Type': 'application/json' };
     if (config.apiKey) {
       this.headers['Authorization'] = `Bearer ${config.apiKey}`;
     }
     if (config.tenantId) {
       this.headers['X-Helm-Tenant-ID'] = config.tenantId;
+    }
+    if (config.principalId) {
+      this.headers['X-Helm-Principal-ID'] = config.principalId;
+    }
+    if (config.workspaceId) {
+      this.headers['X-Helm-Workspace-ID'] = config.workspaceId;
     }
   }
 
@@ -275,8 +301,93 @@ export class HelmClient {
   }
 
   // ── Decision Evaluation ──────────────────────────
-  async evaluateDecision(req: DecisionRequest | SurfaceRecord): Promise<SurfaceRecord> {
-    return this.request<SurfaceRecord>('POST', '/api/v1/evaluate', req);
+  /**
+   * @deprecated This source-compatibility shim always rejects locally. Use
+   * evaluateDecisionWithScope() so arbitrary payloads cannot reach the public evaluator.
+   */
+  async evaluateDecision(_req: DecisionRequest | SurfaceRecord): Promise<SurfaceRecord> {
+    throw new Error('evaluateDecision is retired; use evaluateDecisionWithScope with EvaluationScope');
+  }
+
+  async evaluateDecisionWithScope(req: DecisionRequest, scope: EvaluationScope, idempotencyKey?: string): Promise<EvaluationResult> {
+    this.validateEvaluationScope(scope);
+
+    const body: {
+      action: string;
+      resource: string;
+      context?: DecisionRequest['context'];
+      session_history?: DecisionRequest['session_history'];
+    } = {
+      action: req.action,
+      resource: req.resource,
+    };
+    if (req.context !== undefined) body.context = req.context;
+    if (req.session_history !== undefined) {
+      body.session_history = req.session_history.map((entry) => ({
+        action: entry.action,
+        resource: entry.resource,
+        verdict: entry.verdict,
+        timestamp: entry.timestamp,
+      }));
+    }
+
+    const headers: Record<string, string> = {
+      ...this.headers,
+      Authorization: `Bearer ${this.apiKey!.trim()}`,
+      'X-Helm-Tenant-ID': scope.tenantId.trim(),
+      'X-Helm-Principal-ID': scope.principalId.trim(),
+      'X-Helm-Session-ID': scope.sessionId.trim(),
+    };
+    // EvaluationScope is authoritative for workspace binding; do not inherit a
+    // client default when this scoped request intentionally omits it.
+    delete headers['X-Helm-Workspace-ID'];
+    if (scope.workspaceId) headers['X-Helm-Workspace-ID'] = scope.workspaceId.trim();
+    if (idempotencyKey?.trim()) headers['Idempotency-Key'] = idempotencyKey.trim();
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+    try {
+      const res = await fetch(`${this.baseUrl}/api/v1/evaluate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as HelmError;
+        throw new HelmApiError(res.status, err);
+      }
+      const receiptId = res.headers.get('X-Helm-Receipt-ID')?.trim() ?? '';
+      if (!receiptId) {
+        throw new Error('evaluator response missing required X-Helm-Receipt-ID');
+      }
+      return {
+        decision: (await res.json()) as DecisionRecord,
+        receiptId,
+        replayed: res.headers.get('X-Helm-Idempotency-Replayed')?.toLowerCase() === 'true',
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private validateEvaluationScope(scope: EvaluationScope): void {
+    if (!this.apiKey?.trim()) throw new Error('apiKey is required for scoped decision evaluation');
+    if (!scope || typeof scope !== 'object') {
+      throw new Error('scope is required for scoped decision evaluation');
+    }
+    for (const [name, value] of Object.entries({
+      tenantId: scope.tenantId,
+      principalId: scope.principalId,
+      sessionId: scope.sessionId,
+    })) {
+      if (typeof value !== 'string' || !value.trim()) {
+        throw new Error(`${name} is required for scoped decision evaluation`);
+      }
+    }
+    if (scope.workspaceId !== undefined && !scope.workspaceId.trim()) {
+      throw new Error('workspaceId must be non-empty when provided');
+    }
   }
 
   async runPublicDemo(actionId: string, args: SurfaceRecord = {}): Promise<DemoRunResult> {

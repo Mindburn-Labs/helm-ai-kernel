@@ -26,6 +26,8 @@ describe("HelmClient coverage matrix", () => {
       baseUrl: "http://helm.test/",
       apiKey: "token",
       tenantId: "tenant-a",
+      principalId: "principal-a",
+      workspaceId: "workspace-a",
       timeout: 5_000,
     });
   });
@@ -43,7 +45,6 @@ describe("HelmClient coverage matrix", () => {
 
   it("exercises every JSON endpoint wrapper", async () => {
     const calls: Array<[string, unknown[]]> = [
-      ["evaluateDecision", [{ effect: "read" }]],
       ["runPublicDemo", ["read_ticket", { id: 1 }]],
       ["verifyPublicDemoReceipt", [{ receipt_id: "r1" }, "hash"]],
       ["approveIntent", [{ intent_hash: "h", signature_b64: "sig", public_key_b64: "pk" }]],
@@ -119,6 +120,8 @@ describe("HelmClient coverage matrix", () => {
     expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("runtime=runtime&profile=profile&policy_epoch=epoch"))).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers.Authorization === "Bearer token")).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Tenant-ID"] === "tenant-a")).toBe(true);
+    expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Principal-ID"] === "principal-a")).toBe(true);
+    expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Workspace-ID"] === "workspace-a")).toBe(true);
   });
 
   it("extracts governance headers and default values", async () => {

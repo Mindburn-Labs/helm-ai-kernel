@@ -40,7 +40,12 @@ import java.util.List;
 
 class Example {
   public static void main(String[] args) {
-    HelmClient client = new HelmClient("http://127.0.0.1:7714");
+    HelmClient client = new HelmClient(
+        "http://127.0.0.1:7714",
+        System.getenv("HELM_ADMIN_API_KEY"),
+        "tenant-a",
+        "example-agent"
+    );
     ChatCompletionRequest req = new ChatCompletionRequest()
         .model("gpt-4")
         .messages(List.of(new ChatCompletionRequestMessagesInner()
@@ -50,6 +55,30 @@ class Example {
   }
 }
 ```
+
+## Scoped decision evaluation
+
+`POST /api/v1/evaluate` accepts only `action`, `resource`, optional `context`,
+and optional `session_history` in JSON. Bind identity through
+`EvaluationScope`, never the JSON body:
+
+```java
+import labs.mindburn.helm.TypesGen.DecisionRequest;
+
+DecisionRequest request = new DecisionRequest()
+    .action("read-ticket")
+    .resource("ticket:123");
+HelmClient.EvaluationResult result = client.evaluateDecisionWithScope(
+    request,
+    new HelmClient.EvaluationScope("tenant-a", "example-agent", "session-a"),
+    "evaluate-ticket-123"
+);
+System.out.println(result.decision.getVerdict());
+```
+
+Construct `HelmClient` with its API key, tenant, principal, and optional
+workspace. `evaluateDecision(Object)` remains only as a deprecated
+source-compatibility shim and fails locally with a migration error.
 
 ## Execution Boundary Methods
 

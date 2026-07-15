@@ -6,7 +6,7 @@ const { HelmClient, HelmApiError } = await import(`${process.cwd()}/sdk/ts/dist/
 
 const CANONICAL_VERDICTS = new Set(['ALLOW', 'DENY', 'ESCALATE']);
 
-function requireVerdict(record: SurfaceRecord, expected: string, label: string): string {
+function requireVerdict(record: { verdict?: unknown }, expected: string, label: string): string {
   const verdict = String(record.verdict ?? '');
   if (!CANONICAL_VERDICTS.has(verdict)) {
     throw new Error(`${label}: non-canonical verdict ${verdict}`);
@@ -51,26 +51,35 @@ async function requireMcpDenial(client: InstanceType<typeof HelmClient>): Promis
 }
 
 const helmUrl = process.env.HELM_URL ?? 'http://127.0.0.1:7715';
+const tenantId = process.env.HELM_TENANT_ID ?? 'default';
+const principalId = process.env.HELM_PRINCIPAL_ID ?? 'sdk-ts-agent';
+const sessionId = process.env.HELM_SESSION_ID ?? 'sdk-ts-session';
 const helm = new HelmClient({
   baseUrl: helmUrl,
   apiKey: process.env.HELM_ADMIN_API_KEY,
-  tenantId: process.env.HELM_TENANT_ID ?? 'sdk-ts-example',
+  tenantId,
+  principalId,
+  workspaceId: process.env.HELM_WORKSPACE_ID,
 });
 
-const allowed = await helm.evaluateDecision({
-  principal: 'sdk-ts-agent',
+const evaluationScope = {
+  tenantId,
+  principalId,
+  sessionId,
+  workspaceId: process.env.HELM_WORKSPACE_ID,
+};
+const allowed = await helm.evaluateDecisionWithScope({
   action: 'read-ticket',
   resource: 'ticket:SDK-200',
   context: { example: 'ts-sdk' },
-});
-const denied = await helm.evaluateDecision({
-  principal: 'sdk-ts-agent',
+}, evaluationScope, 'sdk-ts-allowed');
+const denied = await helm.evaluateDecisionWithScope({
   action: 'dangerous-shell',
   resource: 'system:shell',
   context: { example: 'ts-sdk' },
-});
-requireVerdict(allowed, 'ALLOW', 'allowed tool call');
-requireVerdict(denied, 'DENY', 'denied dangerous action');
+}, evaluationScope, 'sdk-ts-denied');
+requireVerdict(allowed.decision, 'ALLOW', 'allowed tool call');
+requireVerdict(denied.decision, 'DENY', 'denied dangerous action');
 
 const demo = await helm.runPublicDemo('read_ticket');
 const receipt = requireReceipt(demo, 'signed receipt');
@@ -89,7 +98,7 @@ const preflight = await helm.preflightSandboxGrant({
 });
 requireVerdict(preflight, 'ALLOW', 'sandbox preflight');
 
-const evidence = await helm.exportEvidence('sdk-ts-agent');
+const evidence = await helm.exportEvidence(sessionId);
 const evidenceResult = await helm.verifyEvidence(evidence);
 if (evidenceResult.verdict !== 'PASS') {
   throw new Error(`evidence verification failed: ${JSON.stringify(evidenceResult)}`);
@@ -97,8 +106,8 @@ if (evidenceResult.verdict !== 'PASS') {
 
 console.log(JSON.stringify({
   sdk: 'typescript',
-  allowed: allowed.verdict,
-  denied: denied.verdict,
+  allowed: allowed.decision.verdict,
+  denied: denied.decision.verdict,
   mcp_unknown_server: mcpVerdict,
   receipt_verified: true,
   sandbox_preflight: preflight.verdict,

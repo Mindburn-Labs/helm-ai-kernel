@@ -18,6 +18,7 @@ from .types_gen import (
     ChatCompletionResponse,
     ConformanceRequest,
     ConformanceResult,
+    DecisionRecord,
     DecisionRequest,
     Receipt,
     Session,
@@ -129,6 +130,21 @@ class SandboxGrant:
     grant_hash: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class EvaluationScope:
+    tenant_id: str
+    principal_id: str
+    session_id: str
+    workspace_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    decision: DecisionRecord
+    receipt_id: str
+    replayed: bool
+
+
 def _json_body(model: Any) -> Any:
     """Serialize a generated SDK model into an HTTP JSON payload."""
     if hasattr(model, "__dataclass_fields__"):
@@ -167,14 +183,21 @@ class HelmClient:
         base_url: str = "http://localhost:8080",
         api_key: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        principal_id: Optional[str] = None,
+        workspace_id: Optional[str] = None,
         timeout: float = 30.0,
     ):
         self.base_url = base_url.rstrip("/")
+        self._api_key = api_key
         headers: dict[str, str] = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         if tenant_id:
             headers["X-Helm-Tenant-ID"] = tenant_id
+        if principal_id:
+            headers["X-Helm-Principal-ID"] = principal_id
+        if workspace_id:
+            headers["X-Helm-Workspace-ID"] = workspace_id
         self._client = httpx.Client(
             base_url=self.base_url,
             headers=headers,
@@ -219,10 +242,78 @@ class HelmClient:
         return result
 
     # ── Decision Evaluation ─────────────────────────
-    def evaluate_decision(self, req: Union[DecisionRequest, dict[str, Any]]) -> dict[str, Any]:
-        resp = self._client.post("/api/v1/evaluate", json=_json_body(req))
+    def evaluate_decision(self, _req: Union[DecisionRequest, dict[str, Any]]) -> dict[str, Any]:
+        """Deprecated: fail locally; use evaluate_decision_with_scope instead."""
+        raise ValueError(
+            "evaluate_decision is retired; use evaluate_decision_with_scope with EvaluationScope"
+        )
+
+    def evaluate_decision_with_scope(
+        self,
+        req: DecisionRequest,
+        scope: EvaluationScope,
+        idempotency_key: Optional[str] = None,
+    ) -> EvaluationResult:
+        self._validate_evaluation_scope(scope)
+        body: dict[str, Any] = {"action": req.action, "resource": req.resource}
+        if req.context is not None:
+            body["context"] = req.context
+        if req.session_history is not None:
+            body["session_history"] = [
+                {
+                    "action": item.action,
+                    "resource": item.resource,
+                    "verdict": item.verdict,
+                    "timestamp": item.timestamp,
+                }
+                for item in req.session_history
+            ]
+
+        headers = {
+            "Authorization": f"Bearer {self._api_key.strip()}",
+            "X-Helm-Tenant-ID": scope.tenant_id.strip(),
+            "X-Helm-Principal-ID": scope.principal_id.strip(),
+            "X-Helm-Session-ID": scope.session_id.strip(),
+        }
+        if idempotency_key and idempotency_key.strip():
+            headers["Idempotency-Key"] = idempotency_key.strip()
+
+        request = self._client.build_request("POST", "/api/v1/evaluate", json=body, headers=headers)
+        # EvaluationScope is authoritative for workspace binding. Remove a
+        # configured client default before applying the explicit scope value.
+        request.headers.pop("X-Helm-Workspace-ID", None)
+        if scope.workspace_id:
+            request.headers["X-Helm-Workspace-ID"] = scope.workspace_id.strip()
+        resp = self._client.send(request)
         self._check(resp)
-        return resp.json()
+        decision = DecisionRecord.from_dict(resp.json())
+        assert decision is not None
+        replayed = resp.headers.get("X-Helm-Idempotency-Replayed", "").lower() == "true"
+        receipt_id = resp.headers.get("X-Helm-Receipt-ID", "").strip()
+        if not receipt_id:
+            raise ValueError("evaluator response missing required X-Helm-Receipt-ID")
+        return EvaluationResult(
+            decision=decision,
+            receipt_id=receipt_id,
+            replayed=replayed,
+        )
+
+    def _validate_evaluation_scope(self, scope: EvaluationScope) -> None:
+        if not isinstance(self._api_key, str) or not self._api_key.strip():
+            raise ValueError("api_key is required for scoped decision evaluation")
+        if not isinstance(scope, EvaluationScope):
+            raise ValueError("scope is required for scoped decision evaluation")
+        for name, value in {
+            "tenant_id": scope.tenant_id,
+            "principal_id": scope.principal_id,
+            "session_id": scope.session_id,
+        }.items():
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} is required for scoped decision evaluation")
+        if scope.workspace_id is not None and (
+            not isinstance(scope.workspace_id, str) or not scope.workspace_id.strip()
+        ):
+            raise ValueError("workspace_id must be non-empty when provided")
 
     def run_public_demo(self, action_id: str, args: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         resp = self._client.post(

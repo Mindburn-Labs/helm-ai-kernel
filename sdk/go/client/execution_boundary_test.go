@@ -121,6 +121,9 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		if r.Header.Get("X-Helm-Principal-ID") != "operator-a" {
 			t.Fatalf("missing principal header for %s %s", r.Method, r.URL.RequestURI())
 		}
+		if r.Header.Get("X-Helm-Workspace-ID") != "workspace-a" {
+			t.Fatalf("missing workspace header for %s %s", r.Method, r.URL.RequestURI())
+		}
 		if r.URL.Path == "/v1/chat/completions" {
 			w.Header().Set("X-Helm-Receipt-ID", "receipt-1")
 			w.Header().Set("X-Helm-Status", "ALLOW")
@@ -139,7 +142,7 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		writeJSON(t, w, responseForClientMatrix(r.Method, r.URL))
 	}))
 	defer server.Close()
-	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"))
+	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"), WithWorkspaceID("workspace-a"))
 
 	cases := []struct {
 		name string
@@ -157,7 +160,6 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			}
 			return err
 		}},
-		{"evaluate decision", "POST /api/v1/evaluate", func() error { _, err := client.EvaluateDecision(SurfaceRecord{"effect": "read"}); return err }},
 		{"run public demo", "POST /api/demo/run", func() error { _, err := client.RunPublicDemo("read_ticket", SurfaceRecord{"id": 1}); return err }},
 		{"verify public demo receipt", "POST /api/demo/verify", func() error {
 			_, err := client.VerifyPublicDemoReceipt(SurfaceRecord{"receipt_id": "r1"}, "hash")

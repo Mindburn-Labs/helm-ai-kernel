@@ -35,14 +35,28 @@ npm run build
 ```ts
 import { HelmClient } from "@mindburn/helm-ai-kernel";
 
-const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
-const decision = await client.evaluateDecision({
-  principal: "example-agent",
+const client = new HelmClient({
+  baseUrl: "http://127.0.0.1:7714",
+  apiKey: process.env.HELM_ADMIN_API_KEY,
+  tenantId: "tenant-a",
+  principalId: "example-agent",
+});
+const result = await client.evaluateDecisionWithScope({
   action: "read-ticket",
   resource: "ticket:123",
-});
-console.log(decision.verdict); // ALLOW, DENY, or ESCALATE
+}, {
+  tenantId: "tenant-a",
+  principalId: "example-agent",
+  sessionId: "session-a",
+}, "evaluate-ticket-123");
+console.log(result.decision.verdict, result.receiptId, result.replayed);
 ```
+
+The evaluator JSON body is limited to `action`, `resource`, optional
+`context`, and optional `session_history`; identity belongs in the typed scope
+headers. `evaluateDecision()` remains only as a deprecated source-compatibility
+shim and fails locally with a migration error. `tenantId`, `principalId`, and optional `workspaceId` also bind other
+protected runtime calls made through this client.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.

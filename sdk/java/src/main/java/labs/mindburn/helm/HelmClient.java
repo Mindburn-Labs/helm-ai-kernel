@@ -3,6 +3,9 @@ package labs.mindburn.helm;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.reflect.TypeToken;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import labs.mindburn.helm.TypesGen.*;
 
 import java.io.IOException;
@@ -14,26 +17,46 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Typed Java client for the HELM kernel API.
- * Uses java.net.http (JDK 11+) and Gson. Zero framework deps.
+ * Uses java.net.http (JDK 11+), Gson, and Jackson. Zero framework deps.
  */
 public class HelmClient {
     private final String baseUrl;
     private final HttpClient httpClient;
     private final Gson gson;
+    private final ObjectMapper objectMapper;
     private final String apiKey;
+    private final String tenantId;
+    private final String principalId;
+    private final String workspaceId;
 
     public HelmClient(String baseUrl) {
-        this(baseUrl, null);
+        this(baseUrl, null, null, null, null);
     }
 
     public HelmClient(String baseUrl, String apiKey) {
+        this(baseUrl, apiKey, null, null, null);
+    }
+
+    public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId) {
+        this(baseUrl, apiKey, tenantId, principalId, null);
+    }
+
+    public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId, String workspaceId) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.apiKey = apiKey;
+        this.tenantId = tenantId;
+        this.principalId = principalId;
+        this.workspaceId = workspaceId;
         this.gson = new Gson();
+        this.objectMapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
@@ -57,6 +80,38 @@ public class HelmClient {
         public String native_evidence_hash;
         public String subject;
         public boolean experimental;
+    }
+
+    /** Authenticated scope bound to a governed decision evaluation. */
+    public static final class EvaluationScope {
+        public final String tenantId;
+        public final String principalId;
+        public final String sessionId;
+        public final String workspaceId;
+
+        public EvaluationScope(String tenantId, String principalId, String sessionId) {
+            this(tenantId, principalId, sessionId, null);
+        }
+
+        public EvaluationScope(String tenantId, String principalId, String sessionId, String workspaceId) {
+            this.tenantId = tenantId;
+            this.principalId = principalId;
+            this.sessionId = sessionId;
+            this.workspaceId = workspaceId;
+        }
+    }
+
+    /** A signed decision and the receipt metadata returned by the evaluator. */
+    public static final class EvaluationResult {
+        public final DecisionRecord decision;
+        public final String receiptId;
+        public final boolean replayed;
+
+        public EvaluationResult(DecisionRecord decision, String receiptId, boolean replayed) {
+            this.decision = decision;
+            this.receiptId = receiptId;
+            this.replayed = replayed;
+        }
     }
 
     public static class EvidenceEnvelopeManifest {
@@ -174,12 +229,25 @@ public class HelmClient {
     }
 
     private HttpRequest.Builder req(String method, String path) {
+        return req(method, path, true);
+    }
+
+    private HttpRequest.Builder req(String method, String path, boolean includeWorkspace) {
         HttpRequest.Builder b = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
                 .timeout(Duration.ofSeconds(30))
                 .header("Content-Type", "application/json");
         if (apiKey != null && !apiKey.isEmpty()) {
             b.header("Authorization", "Bearer " + apiKey);
+        }
+        if (tenantId != null && !tenantId.isBlank()) {
+            b.header("X-Helm-Tenant-ID", tenantId);
+        }
+        if (principalId != null && !principalId.isBlank()) {
+            b.header("X-Helm-Principal-ID", principalId);
+        }
+        if (includeWorkspace && workspaceId != null && !workspaceId.isBlank()) {
+            b.header("X-Helm-Workspace-ID", workspaceId);
         }
         return b;
     }
@@ -240,12 +308,117 @@ public class HelmClient {
         return send(r, ChatCompletionResponse.class);
     }
 
-    /** POST /api/v1/evaluate */
+    /**
+     * POST /api/v1/evaluate.
+     *
+     * @deprecated This source-compatibility shim intentionally fails locally.
+     *             Use {@link #evaluateDecisionWithScope(DecisionRequest, EvaluationScope)}.
+     */
+    @Deprecated
     public JsonElement evaluateDecision(Object req) {
-        HttpRequest r = this.req("POST", "/api/v1/evaluate")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
-                .build();
-        return sendJson(r);
+        throw new UnsupportedOperationException(
+                "evaluateDecision is retired; use evaluateDecisionWithScope with EvaluationScope"
+        );
+    }
+
+    /** POST /api/v1/evaluate using the public authenticated evaluator contract. */
+    public EvaluationResult evaluateDecisionWithScope(DecisionRequest request, EvaluationScope scope) {
+        return evaluateDecisionWithScope(request, scope, null);
+    }
+
+    /** POST /api/v1/evaluate using the public authenticated evaluator contract. */
+    public EvaluationResult evaluateDecisionWithScope(
+            DecisionRequest request,
+            EvaluationScope scope,
+            String idempotencyKey
+    ) {
+        validateEvaluationScope(request, scope);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("action", request.getAction());
+        body.put("resource", request.getResource());
+        if (request.getContext() != null) {
+            body.put("context", request.getContext());
+        }
+        if (request.getSessionHistory() != null) {
+            List<Map<String, Object>> sessionHistory = new ArrayList<>();
+            for (SessionAction action : request.getSessionHistory()) {
+                Map<String, Object> canonicalAction = new LinkedHashMap<>();
+                canonicalAction.put("action", action.getAction());
+                canonicalAction.put("resource", action.getResource());
+                canonicalAction.put("verdict", action.getVerdict());
+                canonicalAction.put("timestamp", action.getTimestamp());
+                sessionHistory.add(canonicalAction);
+            }
+            body.put("session_history", sessionHistory);
+        }
+
+        try {
+            HttpRequest.Builder builder = this.req("POST", "/api/v1/evaluate", false)
+                    .setHeader("Authorization", "Bearer " + apiKey.trim())
+                    .setHeader("X-Helm-Tenant-ID", scope.tenantId.trim())
+                    .setHeader("X-Helm-Principal-ID", scope.principalId.trim())
+                    .setHeader("X-Helm-Session-ID", scope.sessionId.trim());
+            if (scope.workspaceId != null && !scope.workspaceId.isBlank()) {
+                builder.setHeader("X-Helm-Workspace-ID", scope.workspaceId.trim());
+            }
+            if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+                builder.header("Idempotency-Key", idempotencyKey.trim());
+            }
+            HttpResponse<String> response = httpClient.send(
+                    builder.POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body))).build(),
+                    HttpResponse.BodyHandlers.ofString()
+            );
+            if (response.statusCode() >= 400) {
+                HelmError err = gson.fromJson(response.body(), HelmError.class);
+                throw new HelmApiException(
+                        response.statusCode(),
+                        err != null && err.getError() != null ? err.getError().getMessage() : response.body(),
+                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL"
+                );
+            }
+            String receiptId = response.headers().firstValue("X-Helm-Receipt-ID")
+                    .map(String::trim)
+                    .filter(value -> !value.isEmpty())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "evaluator response missing required X-Helm-Receipt-ID"
+                    ));
+            return new EvaluationResult(
+                    objectMapper.readValue(response.body(), DecisionRecord.class),
+                    receiptId,
+                    response.headers().firstValue("X-Helm-Idempotency-Replayed")
+                            .map(value -> value.equalsIgnoreCase("true"))
+                            .orElse(false)
+            );
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw new RuntimeException("HELM API request failed", e);
+        }
+    }
+
+    private void validateEvaluationScope(DecisionRequest request, EvaluationScope scope) {
+        if (request == null) {
+            throw new IllegalArgumentException("request is required for scoped decision evaluation");
+        }
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalArgumentException("apiKey is required for scoped decision evaluation");
+        }
+        if (scope == null) {
+            throw new IllegalArgumentException("scope is required for scoped decision evaluation");
+        }
+        if (scope.tenantId == null || scope.tenantId.isBlank()) {
+            throw new IllegalArgumentException("tenantId is required for scoped decision evaluation");
+        }
+        if (scope.principalId == null || scope.principalId.isBlank()) {
+            throw new IllegalArgumentException("principalId is required for scoped decision evaluation");
+        }
+        if (scope.sessionId == null || scope.sessionId.isBlank()) {
+            throw new IllegalArgumentException("sessionId is required for scoped decision evaluation");
+        }
+        if (scope.workspaceId != null && scope.workspaceId.isBlank()) {
+            throw new IllegalArgumentException("workspaceId must be non-empty when provided");
+        }
     }
 
     /** POST /api/v1/kernel/approve */

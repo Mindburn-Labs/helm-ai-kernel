@@ -57,6 +57,33 @@ The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
 unavailable while this fence is enabled because request JSON is not an
 authoritative tenant/workspace binding.
 
+## Scoped decision evaluation
+
+`POST /api/v1/evaluate` is the sole public evaluator contract. It requires:
+
+- `Authorization: Bearer $HELM_ADMIN_API_KEY`
+- `X-Helm-Tenant-ID`, `X-Helm-Principal-ID`, and `X-Helm-Session-ID`
+- Optional `X-Helm-Workspace-ID` when the caller is within a workspace scope
+- Optional `Idempotency-Key`, scoped to the authenticated tenant, principal,
+  workspace, session, method, and path
+
+Its JSON body is strictly limited to the following shape; `principal`, tenant,
+workspace, and session values in JSON are rejected rather than trusted:
+
+```json
+{
+  "action": "read-ticket",
+  "resource": "ticket:123",
+  "context": {"source": "example"},
+  "session_history": []
+}
+```
+
+The response is a signed `DecisionRecord`. `X-Helm-Receipt-ID` identifies the
+durable receipt. When an idempotency record is replayed,
+`X-Helm-Idempotency-Replayed: true` is returned. A reused key with a different
+request fingerprint in the same authenticated scope is rejected with `409`.
+
 ## Decision signature schemas
 
 `DecisionRecord.signature_schema` identifies the canonical payload used for

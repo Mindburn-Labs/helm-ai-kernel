@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -30,6 +31,7 @@ type HelmClient struct {
 	APIKey      string
 	TenantID    string
 	PrincipalID string
+	WorkspaceID string
 	HTTPClient  *http.Client
 }
 
@@ -50,6 +52,24 @@ type GovernanceMetadata struct {
 type ChatCompletionWithReceipt struct {
 	Response   ChatCompletionResponse `json:"response"`
 	Governance GovernanceMetadata     `json:"governance"`
+}
+
+// EvaluationScope is the authenticated identity binding for a governed
+// evaluation. It is transported in headers and is never copied into the JSON
+// DecisionRequest body.
+type EvaluationScope struct {
+	TenantID    string
+	PrincipalID string
+	SessionID   string
+	WorkspaceID string
+}
+
+// EvaluationResult combines the signed decision with its durable receipt
+// reference and the server's idempotency replay signal.
+type EvaluationResult struct {
+	Decision  DecisionRecord `json:"decision"`
+	ReceiptID string         `json:"receipt_id"`
+	Replayed  bool           `json:"replayed"`
 }
 
 type DemoRunResult = map[string]any
@@ -85,6 +105,11 @@ func WithTenantID(tenantID string) Option {
 // WithPrincipalID sets the X-Helm-Principal-ID header.
 func WithPrincipalID(principalID string) Option {
 	return func(c *HelmClient) { c.PrincipalID = principalID }
+}
+
+// WithWorkspaceID sets the X-Helm-Workspace-ID header.
+func WithWorkspaceID(workspaceID string) Option {
+	return func(c *HelmClient) { c.WorkspaceID = workspaceID }
 }
 
 // WithTimeout sets the HTTP timeout.
@@ -170,11 +195,96 @@ func (c *HelmClient) ChatCompletionsWithReceipt(req ChatCompletionRequest) (*Cha
 	}, nil
 }
 
-// EvaluateDecision calls POST /api/v1/evaluate.
-func (c *HelmClient) EvaluateDecision(req any) (map[string]any, error) {
-	var out map[string]any
-	err := c.do("POST", "/api/v1/evaluate", req, &out)
-	return out, err
+// EvaluateDecision is retained for source compatibility only.
+//
+// Deprecated: it intentionally fails locally so an arbitrary legacy payload
+// cannot reach the public evaluator route. Use EvaluateDecisionWithScope.
+func (c *HelmClient) EvaluateDecision(_ any) (map[string]any, error) {
+	return nil, fmt.Errorf("EvaluateDecision is retired; use EvaluateDecisionWithScope with EvaluationScope")
+}
+
+// EvaluateDecisionWithScope calls the public, Guardian-backed
+// POST /api/v1/evaluate contract. It sends only the canonical DecisionRequest
+// fields, binds identity from EvaluationScope headers, and returns the signed
+// decision plus the durable receipt reference issued by the server.
+func (c *HelmClient) EvaluateDecisionWithScope(req DecisionRequest, scope EvaluationScope, idempotencyKey string) (*EvaluationResult, error) {
+	if err := validateEvaluationScope(c, scope); err != nil {
+		return nil, err
+	}
+
+	type sessionActionPayload struct {
+		Action    string `json:"action"`
+		Resource  string `json:"resource"`
+		Verdict   string `json:"verdict"`
+		Timestamp int64  `json:"timestamp"`
+	}
+	payload := struct {
+		Action         string                 `json:"action"`
+		Resource       string                 `json:"resource"`
+		Context        map[string]interface{} `json:"context,omitempty"`
+		SessionHistory []sessionActionPayload `json:"session_history,omitempty"`
+	}{
+		Action:   req.Action,
+		Resource: req.Resource,
+		Context:  req.Context,
+	}
+	if req.SessionHistory != nil {
+		payload.SessionHistory = make([]sessionActionPayload, len(req.SessionHistory))
+		for i, action := range req.SessionHistory {
+			payload.SessionHistory[i] = sessionActionPayload{
+				Action:    action.Action,
+				Resource:  action.Resource,
+				Verdict:   action.Verdict,
+				Timestamp: action.Timestamp,
+			}
+		}
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/evaluate", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	c.applyHeaders(httpReq)
+	httpReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.APIKey))
+	httpReq.Header.Set("X-Helm-Tenant-ID", strings.TrimSpace(scope.TenantID))
+	httpReq.Header.Set("X-Helm-Principal-ID", strings.TrimSpace(scope.PrincipalID))
+	httpReq.Header.Set("X-Helm-Session-ID", strings.TrimSpace(scope.SessionID))
+	// EvaluationScope is authoritative for workspace binding; do not inherit a
+	// client default when the scoped request intentionally omits it.
+	httpReq.Header.Del("X-Helm-Workspace-ID")
+	if workspaceID := strings.TrimSpace(scope.WorkspaceID); workspaceID != "" {
+		httpReq.Header.Set("X-Helm-Workspace-ID", workspaceID)
+	}
+	if idempotencyKey = strings.TrimSpace(idempotencyKey); idempotencyKey != "" {
+		httpReq.Header.Set("Idempotency-Key", idempotencyKey)
+	}
+
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, helmAPIErrorFromResponse(resp)
+	}
+
+	var decision DecisionRecord
+	if err := json.NewDecoder(resp.Body).Decode(&decision); err != nil {
+		return nil, err
+	}
+	receiptID := strings.TrimSpace(resp.Header.Get("X-Helm-Receipt-ID"))
+	if receiptID == "" {
+		return nil, fmt.Errorf("evaluator response missing required X-Helm-Receipt-ID")
+	}
+	return &EvaluationResult{
+		Decision:  decision,
+		ReceiptID: receiptID,
+		Replayed:  strings.EqualFold(resp.Header.Get("X-Helm-Idempotency-Replayed"), "true"),
+	}, nil
 }
 
 // RunPublicDemo calls POST /api/demo/run.
@@ -323,4 +433,23 @@ func (c *HelmClient) applyHeaders(req *http.Request) {
 	if c.PrincipalID != "" {
 		req.Header.Set("X-Helm-Principal-ID", c.PrincipalID)
 	}
+	if c.WorkspaceID != "" {
+		req.Header.Set("X-Helm-Workspace-ID", c.WorkspaceID)
+	}
+}
+
+func validateEvaluationScope(c *HelmClient, scope EvaluationScope) error {
+	if c == nil || strings.TrimSpace(c.APIKey) == "" {
+		return fmt.Errorf("governed evaluation requires an API key")
+	}
+	for name, value := range map[string]string{
+		"tenant_id":    scope.TenantID,
+		"principal_id": scope.PrincipalID,
+		"session_id":   scope.SessionID,
+	} {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("governed evaluation requires %s", name)
+		}
+	}
+	return nil
 }

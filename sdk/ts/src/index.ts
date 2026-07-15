@@ -14,6 +14,8 @@ export type {
   BoundaryRecordVerification,
   GovernanceMetadata,
   ChatCompletionWithReceipt,
+  EvaluationScope,
+  EvaluationResult,
   McpQuarantineRecord,
   McpRegistryApprovalRequest,
   McpRegistryDiscoverRequest,
@@ -71,6 +73,8 @@ export type {
   VerificationResult,
   ConformanceRequest,
   ConformanceResult,
+  DecisionRequest,
+  DecisionRecord,
   VersionInfo,
   ExportRequest,
 } from "./types.gen.js";

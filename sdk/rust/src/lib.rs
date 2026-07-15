@@ -1,7 +1,10 @@
 //! HELM SDK — Rust client for the HELM kernel API.
 //! Minimal deps: reqwest + serde.
 
-use reqwest::blocking::Client;
+use reqwest::{
+    blocking::Client,
+    header::{HeaderMap, HeaderValue, AUTHORIZATION},
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -36,6 +39,43 @@ pub struct HelmApiError {
     pub status: u16,
     pub message: String,
     pub reason_code: ReasonCode,
+}
+
+/// Authenticated scope bound to a governed decision evaluation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EvaluationScope {
+    pub tenant_id: String,
+    pub principal_id: String,
+    pub session_id: String,
+    pub workspace_id: Option<String>,
+}
+
+impl EvaluationScope {
+    pub fn new(
+        tenant_id: impl Into<String>,
+        principal_id: impl Into<String>,
+        session_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            tenant_id: tenant_id.into(),
+            principal_id: principal_id.into(),
+            session_id: session_id.into(),
+            workspace_id: None,
+        }
+    }
+
+    pub fn with_workspace_id(mut self, workspace_id: impl Into<String>) -> Self {
+        self.workspace_id = Some(workspace_id.into());
+        self
+    }
+}
+
+/// A signed decision and the receipt metadata returned by the evaluator.
+#[derive(Clone, Debug)]
+pub struct EvaluationResult {
+    pub decision: DecisionRecord,
+    pub receipt_id: String,
+    pub replayed: bool,
 }
 
 impl std::fmt::Display for HelmApiError {
@@ -208,6 +248,11 @@ pub enum SandboxGrantInspection {
 pub struct HelmClient {
     base_url: String,
     client: Client,
+    evaluation_client: Client,
+    api_key: Option<String>,
+    tenant_id: Option<String>,
+    principal_id: Option<String>,
+    workspace_id: Option<String>,
 }
 
 impl HelmClient {
@@ -215,11 +260,80 @@ impl HelmClient {
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
-            client: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .expect("failed to build HTTP client"),
+            client: Self::configured_client(None, None, None, None),
+            // Deliberately has no default identity or workspace headers. The
+            // typed evaluator binds its complete scope explicitly per call.
+            evaluation_client: Self::configured_client(None, None, None, None),
+            api_key: None,
+            tenant_id: None,
+            principal_id: None,
+            workspace_id: None,
         }
+    }
+
+    /// Attach a bearer key for protected runtime routes.
+    pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
+        self.api_key = Some(api_key.into());
+        self.rebuild_client();
+        self
+    }
+
+    /// Attach tenant and principal headers for protected runtime routes.
+    pub fn with_identity(
+        mut self,
+        tenant_id: impl Into<String>,
+        principal_id: impl Into<String>,
+    ) -> Self {
+        self.tenant_id = Some(tenant_id.into());
+        self.principal_id = Some(principal_id.into());
+        self.rebuild_client();
+        self
+    }
+
+    /// Attach an optional workspace header for workspace-scoped routes.
+    pub fn with_workspace_id(mut self, workspace_id: impl Into<String>) -> Self {
+        self.workspace_id = Some(workspace_id.into());
+        self.rebuild_client();
+        self
+    }
+
+    fn configured_client(
+        api_key: Option<&str>,
+        tenant_id: Option<&str>,
+        principal_id: Option<&str>,
+        workspace_id: Option<&str>,
+    ) -> Client {
+        let mut headers = HeaderMap::new();
+        if let Some(api_key) = api_key.filter(|value| !value.trim().is_empty()) {
+            if let Ok(value) = HeaderValue::from_str(&format!("Bearer {api_key}")) {
+                headers.insert(AUTHORIZATION, value);
+            }
+        }
+        for (name, value) in [
+            ("X-Helm-Tenant-ID", tenant_id),
+            ("X-Helm-Principal-ID", principal_id),
+            ("X-Helm-Workspace-ID", workspace_id),
+        ] {
+            if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+                if let Ok(value) = HeaderValue::from_str(value) {
+                    headers.insert(name, value);
+                }
+            }
+        }
+        Client::builder()
+            .timeout(Duration::from_secs(30))
+            .default_headers(headers)
+            .build()
+            .expect("failed to build HTTP client")
+    }
+
+    fn rebuild_client(&mut self) {
+        self.client = Self::configured_client(
+            self.api_key.as_deref(),
+            self.tenant_id.as_deref(),
+            self.principal_id.as_deref(),
+            self.workspace_id.as_deref(),
+        );
     }
 
     fn url(&self, path: &str) -> String {
@@ -388,12 +502,151 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/evaluate
+    /// Source-compatibility shim for the retired generic evaluator.
+    ///
+    /// Deprecated: use `evaluate_decision_with_scope` for the public evaluator contract.
+    #[deprecated(note = "use evaluate_decision_with_scope for the public evaluator contract")]
     pub fn evaluate_decision<T: Serialize>(
         &self,
-        req: &T,
+        _req: &T,
     ) -> Result<serde_json::Value, HelmApiError> {
-        self.post_value("/api/v1/evaluate", req)
+        Err(HelmApiError {
+            status: 0,
+            message: "evaluate_decision is retired; use evaluate_decision_with_scope with EvaluationScope".to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    /// POST /api/v1/evaluate using the public authenticated evaluator contract.
+    pub fn evaluate_decision_with_scope(
+        &self,
+        req: &DecisionRequest,
+        scope: &EvaluationScope,
+        idempotency_key: Option<&str>,
+    ) -> Result<EvaluationResult, HelmApiError> {
+        self.validate_evaluation_scope(scope)?;
+        let mut body = serde_json::Map::new();
+        body.insert(
+            "action".to_string(),
+            serde_json::Value::String(req.action.clone()),
+        );
+        body.insert(
+            "resource".to_string(),
+            serde_json::Value::String(req.resource.clone()),
+        );
+        if let Some(context) = &req.context {
+            body.insert(
+                "context".to_string(),
+                serde_json::to_value(context).map_err(|e| HelmApiError {
+                    status: 0,
+                    message: e.to_string(),
+                    reason_code: ReasonCode::ErrorInternal,
+                })?,
+            );
+        }
+        if let Some(session_history) = &req.session_history {
+            body.insert(
+                "session_history".to_string(),
+                serde_json::to_value(session_history).map_err(|e| HelmApiError {
+                    status: 0,
+                    message: e.to_string(),
+                    reason_code: ReasonCode::ErrorInternal,
+                })?,
+            );
+        }
+
+        let api_key = self.api_key.as_deref().expect("validated API key").trim();
+        let mut request = self
+            .evaluation_client
+            .post(self.url("/api/v1/evaluate"))
+            .bearer_auth(api_key)
+            .header("X-Helm-Tenant-ID", scope.tenant_id.trim())
+            .header("X-Helm-Principal-ID", scope.principal_id.trim())
+            .header("X-Helm-Session-ID", scope.session_id.trim())
+            .json(&body);
+        if let Some(workspace_id) = scope
+            .workspace_id
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            request = request.header("X-Helm-Workspace-ID", workspace_id.trim());
+        }
+        if let Some(key) = idempotency_key.filter(|value| !value.trim().is_empty()) {
+            request = request.header("Idempotency-Key", key.trim());
+        }
+        let response = request.send().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })?;
+        let response = self.check(response)?;
+        let receipt_id = response
+            .headers()
+            .get("X-Helm-Receipt-ID")
+            .and_then(|value| value.to_str().ok())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| HelmApiError {
+                status: 0,
+                message: "evaluator response missing required X-Helm-Receipt-ID".to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?
+            .to_string();
+        let replayed = response
+            .headers()
+            .get("X-Helm-Idempotency-Replayed")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.eq_ignore_ascii_case("true"));
+        let decision = response.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })?;
+        Ok(EvaluationResult {
+            decision,
+            receipt_id,
+            replayed,
+        })
+    }
+
+    fn validate_evaluation_scope(&self, scope: &EvaluationScope) -> Result<(), HelmApiError> {
+        let invalid = |message: &str| HelmApiError {
+            status: 0,
+            message: message.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        };
+        if self
+            .api_key
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(invalid(
+                "api_key is required for scoped decision evaluation",
+            ));
+        }
+        if scope.tenant_id.trim().is_empty() {
+            return Err(invalid(
+                "tenant_id is required for scoped decision evaluation",
+            ));
+        }
+        if scope.principal_id.trim().is_empty() {
+            return Err(invalid(
+                "principal_id is required for scoped decision evaluation",
+            ));
+        }
+        if scope.session_id.trim().is_empty() {
+            return Err(invalid(
+                "session_id is required for scoped decision evaluation",
+            ));
+        }
+        if scope
+            .workspace_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err(invalid("workspace_id must be non-empty when provided"));
+        }
+        Ok(())
     }
 
     /// POST /api/v1/kernel/approve
@@ -1090,10 +1343,52 @@ fn encode_query(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
 
     #[test]
     fn test_client_creation() {
         let _client = HelmClient::new("http://localhost:8080");
+    }
+
+    #[test]
+    fn identity_configuration_binds_protected_route_headers() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut bytes = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            while !bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                let read = stream.read(&mut chunk).unwrap();
+                assert_ne!(read, 0, "client closed before sending headers");
+                bytes.extend_from_slice(&chunk[..read]);
+            }
+            let response = r#"{"status":"ready"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),
+                response
+            )
+            .unwrap();
+            String::from_utf8(bytes).unwrap()
+        });
+
+        HelmClient::new(&format!("http://{address}"))
+            .with_api_key("token")
+            .with_identity("tenant-a", "principal-a")
+            .with_workspace_id("workspace-a")
+            .get_boundary_status()
+            .unwrap();
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("get /api/v1/boundary/status "));
+        assert!(request.contains("authorization: bearer token"));
+        assert!(request.contains("x-helm-tenant-id: tenant-a"));
+        assert!(request.contains("x-helm-principal-id: principal-a"));
+        assert!(request.contains("x-helm-workspace-id: workspace-a"));
     }
 
     #[test]
@@ -1151,5 +1446,161 @@ mod tests {
         assert_eq!(json["status"], "degraded");
         assert_eq!(json["receipt_signer"], "unavailable");
         assert_eq!(json["receipt_store"], "unavailable");
+    }
+
+    #[test]
+    fn scoped_evaluation_binds_headers_and_canonical_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut bytes = Vec::new();
+                let mut chunk = [0_u8; 1024];
+                loop {
+                    let read = stream.read(&mut chunk).unwrap();
+                    assert_ne!(read, 0, "client closed before sending a complete request");
+                    bytes.extend_from_slice(&chunk[..read]);
+                    let Some(header_end) = bytes.windows(4).position(|window| window == b"\r\n\r\n")
+                    else {
+                        continue;
+                    };
+                    let headers = std::str::from_utf8(&bytes[..header_end]).unwrap();
+                    let content_length = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("content-length: ")
+                                .or_else(|| line.strip_prefix("Content-Length: "))
+                        })
+                        .and_then(|value| value.parse::<usize>().ok())
+                        .unwrap_or_default();
+                    if bytes.len() >= header_end + 4 + content_length {
+                        break;
+                    }
+                }
+                let response = r#"{"id":"decision-1","tenant_id":"tenant-a","session_id":"session-a"}"#;
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nX-Helm-Receipt-ID: rcpt-decision-1\r\nX-Helm-Idempotency-Replayed: true\r\nConnection: close\r\n\r\n{}",
+                    response.len(),
+                    response
+                )
+                .unwrap();
+                requests.push(String::from_utf8(bytes).unwrap());
+            }
+            requests
+        });
+
+        let mut request = DecisionRequest::new("read_ticket".to_string(), "ticket:1".to_string());
+        request.context = Some(HashMap::from([(
+            "priority".to_string(),
+            serde_json::Value::String("low".to_string()),
+        )]));
+        let client = HelmClient::new(&format!("http://{address}"))
+            .with_api_key("token")
+            .with_identity("tenant-default", "principal-default")
+            .with_workspace_id("workspace-default");
+        let scope = EvaluationScope::new("tenant-a", "principal-a", "session-a")
+            .with_workspace_id("workspace-a");
+
+        let result = client
+            .evaluate_decision_with_scope(&request, &scope, Some("request-1"))
+            .unwrap();
+        client
+            .evaluate_decision_with_scope(
+                &DecisionRequest::new("read_ticket".to_string(), "ticket:2".to_string()),
+                &EvaluationScope::new("tenant-a", "principal-a", "session-a"),
+                None,
+            )
+            .unwrap();
+        let raw_requests = server.join().unwrap();
+        let raw_request = &raw_requests[0];
+        let headers = raw_request.to_ascii_lowercase();
+        let body = raw_request.split("\r\n\r\n").nth(1).unwrap();
+        assert!(headers.starts_with("post /api/v1/evaluate "));
+        assert!(headers.contains("authorization: bearer token"));
+        assert!(headers.contains("x-helm-tenant-id: tenant-a"));
+        assert!(headers.contains("x-helm-principal-id: principal-a"));
+        assert!(headers.contains("x-helm-session-id: session-a"));
+        assert!(headers.contains("x-helm-workspace-id: workspace-a"));
+        assert!(headers.contains("idempotency-key: request-1"));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(body).unwrap(),
+            serde_json::json!({"action":"read_ticket","resource":"ticket:1","context":{"priority":"low"}})
+        );
+        assert_eq!(result.decision.id.as_deref(), Some("decision-1"));
+        assert_eq!(result.receipt_id, "rcpt-decision-1");
+        assert!(result.replayed);
+        assert!(
+            !raw_requests[1]
+                .to_ascii_lowercase()
+                .contains("x-helm-workspace-id:"),
+            "scoped evaluation inherited a client workspace: {}",
+            raw_requests[1]
+        );
+    }
+
+    #[test]
+    fn scoped_evaluation_rejects_missing_bindings_locally() {
+        let request = DecisionRequest::new("read_ticket".to_string(), "ticket:1".to_string());
+        let missing_key = HelmClient::new("http://127.0.0.1:1")
+            .evaluate_decision_with_scope(
+                &request,
+                &EvaluationScope::new("tenant-a", "principal-a", "session-a"),
+                None,
+            )
+            .unwrap_err();
+        assert_eq!(missing_key.status, 0);
+        assert!(missing_key.message.contains("api_key is required"));
+
+        let missing_session = HelmClient::new("http://127.0.0.1:1")
+            .with_api_key("token")
+            .evaluate_decision_with_scope(
+                &request,
+                &EvaluationScope::new("tenant-a", "principal-a", ""),
+                None,
+            )
+            .unwrap_err();
+        assert_eq!(missing_session.status, 0);
+        assert!(missing_session.message.contains("session_id is required"));
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn generic_evaluation_is_retired_locally() {
+        let error = HelmClient::new("http://127.0.0.1:1")
+            .evaluate_decision(&serde_json::json!({"principal": "spoofed"}))
+            .unwrap_err();
+        assert!(error.message.contains("evaluate_decision is retired"));
+    }
+
+    #[test]
+    fn scoped_evaluation_rejects_missing_receipt_id() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut chunk = [0_u8; 1024];
+            let _ = stream.read(&mut chunk).unwrap();
+            let response = r#"{"id":"decision-3"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),
+                response
+            )
+            .unwrap();
+        });
+        let error = HelmClient::new(&format!("http://{address}"))
+            .with_api_key("token")
+            .evaluate_decision_with_scope(
+                &DecisionRequest::new("read_ticket".to_string(), "ticket:3".to_string()),
+                &EvaluationScope::new("tenant-a", "principal-a", "session-a"),
+                None,
+            )
+            .unwrap_err();
+        server.join().unwrap();
+        assert!(error.message.contains("missing required X-Helm-Receipt-ID"));
     }
 }

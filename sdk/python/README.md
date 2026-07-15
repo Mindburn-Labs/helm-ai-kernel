@@ -28,16 +28,27 @@ been run.
 ## Usage
 
 ```python
-from helm_sdk import HelmClient
+from helm_sdk import DecisionRequest, EvaluationScope, HelmClient
 
-client = HelmClient(base_url="http://127.0.0.1:7714")
-decision = client.evaluate_decision({
-    "principal": "example-agent",
-    "action": "read-ticket",
-    "resource": "ticket:123",
-})
-print(decision["verdict"])  # ALLOW, DENY, or ESCALATE
+client = HelmClient(
+    base_url="http://127.0.0.1:7714",
+    api_key="...",
+    tenant_id="tenant-a",
+    principal_id="example-agent",
+)
+result = client.evaluate_decision_with_scope(
+    DecisionRequest(action="read-ticket", resource="ticket:123"),
+    EvaluationScope("tenant-a", "example-agent", "session-a"),
+    "evaluate-ticket-123",
+)
+print(result.decision.verdict, result.receipt_id, result.replayed)
 ```
+
+The evaluator JSON body is limited to `action`, `resource`, optional
+`context`, and optional `session_history`; identity belongs in
+`EvaluationScope`. `evaluate_decision()` remains only as a deprecated
+source-compatibility shim and fails locally with a migration error. `tenant_id`, `principal_id`, and optional `workspace_id`
+also bind other protected runtime calls made through this client.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/python_sdk/`.

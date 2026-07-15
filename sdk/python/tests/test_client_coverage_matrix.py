@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from helm_sdk import DecisionRequest, EvaluationScope, SessionAction
 from helm_sdk.client import (
     EvidenceEnvelopeExportRequest,
     HelmApiError,
@@ -18,10 +19,17 @@ from tests.test_generated_models_coverage import CLASSES, _build_model
 
 
 class FakeResponse:
-    def __init__(self, body: Any = None, status_code: int = 200, content: bytes = b"payload") -> None:
+    def __init__(
+        self,
+        body: Any = None,
+        status_code: int = 200,
+        content: bytes = b"payload",
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         self._body = {} if body is None else body
         self.status_code = status_code
         self.content = content
+        self.headers = headers or {}
         if isinstance(self._body, str):
             self.text = self._body
         else:
@@ -40,10 +48,18 @@ class FakeHTTPClient:
     def __init__(self) -> None:
         self.responses: list[FakeResponse] = []
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
+        self.headers: dict[str, str] = {}
         self.closed = False
 
-    def queue(self, body: Any = None, *, content: bytes = b"payload", status_code: int = 200) -> None:
-        self.responses.append(FakeResponse(body, status_code=status_code, content=content))
+    def queue(
+        self,
+        body: Any = None,
+        *,
+        content: bytes = b"payload",
+        status_code: int = 200,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
+        self.responses.append(FakeResponse(body, status_code=status_code, content=content, headers=headers))
 
     def _next(self, method: str, path: str, **kwargs: Any) -> FakeResponse:
         self.calls.append((method, path, kwargs))
@@ -57,6 +73,18 @@ class FakeHTTPClient:
 
     def put(self, path: str, **kwargs: Any) -> FakeResponse:
         return self._next("PUT", path, **kwargs)
+
+    def build_request(self, method: str, path: str, **kwargs: Any) -> Any:
+        headers = dict(self.headers)
+        headers.update(kwargs.pop("headers", {}))
+        return type(
+            "FakeRequest",
+            (),
+            {"method": method, "path": path, "headers": headers, "kwargs": kwargs},
+        )()
+
+    def send(self, request: Any) -> FakeResponse:
+        return self._next(request.method, request.path, headers=dict(request.headers), **request.kwargs)
 
     def close(self) -> None:
         self.closed = True
@@ -126,7 +154,14 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
     fake = FakeHTTPClient()
     client_cls = MagicMock(return_value=fake)
     with patch("helm_sdk.client.httpx.Client", client_cls):
-        client = HelmClient(base_url="http://h/", api_key="key", tenant_id="tenant", timeout=2.5)
+        client = HelmClient(
+            base_url="http://h/",
+            api_key="key",
+            tenant_id="tenant",
+            principal_id="principal",
+            workspace_id="workspace",
+            timeout=2.5,
+        )
         assert client.base_url == "http://h"
         client.close()
 
@@ -134,7 +169,128 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
     kwargs = client_cls.call_args.kwargs
     assert kwargs["base_url"] == "http://h"
     assert kwargs["timeout"] == 2.5
-    assert kwargs["headers"] == {"Authorization": "Bearer key", "X-Helm-Tenant-ID": "tenant"}
+    assert kwargs["headers"] == {
+        "Authorization": "Bearer key",
+        "X-Helm-Tenant-ID": "tenant",
+        "X-Helm-Principal-ID": "principal",
+        "X-Helm-Workspace-ID": "workspace",
+    }
+
+
+def test_evaluate_decision_with_scope_binds_headers_and_canonical_body() -> None:
+    fake = FakeHTTPClient()
+    fake.queue(
+        {"id": "decision-1", "tenant_id": "tenant-a", "session_id": "session-a"},
+        headers={
+            "X-Helm-Receipt-ID": "rcpt-decision-1",
+            "X-Helm-Idempotency-Replayed": "true",
+        },
+    )
+    history = SessionAction(
+        action="read_history",
+        resource="ticket:0",
+        verdict="ALLOW",
+        timestamp=1,
+    )
+    history.additional_properties["principal"] = "spoofed-history-principal"
+    request = DecisionRequest(
+        action="read_ticket",
+        resource="ticket:1",
+        context={"priority": "low"},
+        session_history=[history],
+    )
+    request.additional_properties["principal"] = "spoofed-principal"
+
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(
+            base_url="http://h",
+            api_key="key",
+            tenant_id="wrong-tenant",
+            principal_id="wrong-principal",
+            workspace_id="wrong-workspace",
+        )
+        result = client.evaluate_decision_with_scope(
+            request,
+            EvaluationScope("tenant-a", "principal-a", "session-a", "workspace-a"),
+            "request-1",
+        )
+
+    method, path, kwargs = fake.calls[0]
+    assert (method, path) == ("POST", "/api/v1/evaluate")
+    assert kwargs["headers"] == {
+        "Authorization": "Bearer key",
+        "X-Helm-Tenant-ID": "tenant-a",
+        "X-Helm-Principal-ID": "principal-a",
+        "X-Helm-Session-ID": "session-a",
+        "X-Helm-Workspace-ID": "workspace-a",
+        "Idempotency-Key": "request-1",
+    }
+    assert kwargs["json"] == {
+        "action": "read_ticket",
+        "resource": "ticket:1",
+        "context": {"priority": "low"},
+        "session_history": [{
+            "action": "read_history",
+            "resource": "ticket:0",
+            "verdict": "ALLOW",
+            "timestamp": 1,
+        }],
+    }
+    assert result.decision.id == "decision-1"
+    assert result.receipt_id == "rcpt-decision-1"
+    assert result.replayed is True
+
+
+def test_evaluate_decision_with_scope_rejects_missing_bindings_locally() -> None:
+    fake = FakeHTTPClient()
+    request = DecisionRequest(action="read_ticket", resource="ticket:1")
+
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        with pytest.raises(ValueError, match="api_key is required"):
+            HelmClient(base_url="http://h").evaluate_decision_with_scope(
+                request,
+                EvaluationScope("tenant-a", "principal-a", "session-a"),
+            )
+        with pytest.raises(ValueError, match="session_id is required"):
+            HelmClient(base_url="http://h", api_key="key").evaluate_decision_with_scope(
+                request,
+                EvaluationScope("tenant-a", "principal-a", ""),
+            )
+
+    assert fake.calls == []
+
+
+def test_evaluate_decision_is_retired_locally() -> None:
+    fake = FakeHTTPClient()
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        with pytest.raises(ValueError, match="evaluate_decision is retired"):
+            HelmClient(base_url="http://h").evaluate_decision({"principal": "spoofed"})
+    assert fake.calls == []
+
+
+def test_evaluate_decision_with_scope_does_not_inherit_client_workspace() -> None:
+    fake = FakeHTTPClient()
+    fake.headers["X-Helm-Workspace-ID"] = "workspace-default"
+    fake.queue({"id": "decision-2"}, headers={"X-Helm-Receipt-ID": "rcpt-decision-2"})
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h", api_key="key", workspace_id="workspace-default")
+        client.evaluate_decision_with_scope(
+            DecisionRequest(action="read_ticket", resource="ticket:2"),
+            EvaluationScope("tenant-a", "principal-a", "session-a"),
+        )
+    assert fake.calls[0][2]["headers"].get("X-Helm-Workspace-ID") is None
+
+
+def test_evaluate_decision_with_scope_rejects_missing_receipt_id() -> None:
+    fake = FakeHTTPClient()
+    fake.queue({"id": "decision-3"})
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h", api_key="key")
+        with pytest.raises(ValueError, match="missing required X-Helm-Receipt-ID"):
+            client.evaluate_decision_with_scope(
+                DecisionRequest(action="read_ticket", resource="ticket:3"),
+                EvaluationScope("tenant-a", "principal-a", "session-a"),
+            )
 
 
 def test_json_body_handles_dataclass_generated_model_model_dump_and_plain_dict() -> None:
@@ -160,7 +316,6 @@ def test_check_handles_non_object_error_body() -> None:
 @pytest.mark.parametrize(
     ("method_name", "invoke", "response", "expected_method", "expected_path"),
     [
-        ("evaluate_decision", lambda c: c.evaluate_decision({"input": True}), {"verdict": "ALLOW"}, "POST", "/api/v1/evaluate"),
         ("run_public_demo_empty_args", lambda c: c.run_public_demo("read_ticket"), {"ok": True}, "POST", "/api/demo/run"),
         ("run_public_demo_with_args", lambda c: c.run_public_demo("read_ticket", {"id": 1}), {"ok": True}, "POST", "/api/demo/run"),
         ("verify_public_demo_receipt", lambda c: c.verify_public_demo_receipt({"r": 1}, "hash"), {"ok": True}, "POST", "/api/demo/verify"),

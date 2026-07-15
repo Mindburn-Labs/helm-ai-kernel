@@ -43,6 +43,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Scoped decision evaluation
+
+`POST /api/v1/evaluate` accepts only `action`, `resource`, optional `context`,
+and optional `session_history` in JSON. Bind identity through `EvaluationScope`:
+
+```rust
+use helm_sdk::{DecisionRequest, EvaluationScope, HelmClient};
+
+let client = HelmClient::new("http://127.0.0.1:7714")
+    .with_api_key("...")
+    .with_identity("tenant-a", "example-agent");
+let result = client.evaluate_decision_with_scope(
+    &DecisionRequest::new("read-ticket".into(), "ticket:123".into()),
+    &EvaluationScope::new("tenant-a", "example-agent", "session-a"),
+    Some("evaluate-ticket-123"),
+)?;
+println!("{:?}", result.decision.verdict);
+```
+
+`with_identity()` and optional `with_workspace_id()` bind other protected
+runtime calls. `evaluate_decision()` remains only as a deprecated
+source-compatibility shim and fails locally with a migration error.
+
 ## Execution Boundary Methods
 
 `HelmClient` includes calls for evidence envelope manifests, boundary records

@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any
 
-from helm_sdk import HelmApiError, HelmClient
+from helm_sdk import DecisionRequest, EvaluationScope, HelmApiError, HelmClient
 
 
 CANONICAL_VERDICTS = {"ALLOW", "DENY", "ESCALATE"}
@@ -57,26 +57,44 @@ def require_mcp_denial(client: HelmClient) -> str:
 def main() -> None:
     helm_url = os.environ.get("HELM_URL", "http://127.0.0.1:7715")
     admin_key = os.environ.get("HELM_ADMIN_API_KEY")
-    tenant_id = os.environ.get("HELM_TENANT_ID", "sdk-python-example")
-    with HelmClient(base_url=helm_url, api_key=admin_key, tenant_id=tenant_id) as helm:
-        allowed = helm.evaluate_decision(
-            {
-                "principal": "sdk-python-agent",
-                "action": "read-ticket",
-                "resource": "ticket:SDK-100",
-                "context": {"example": "python-sdk"},
-            }
+    tenant_id = os.environ.get("HELM_TENANT_ID", "default")
+    principal_id = os.environ.get("HELM_PRINCIPAL_ID", "sdk-python-agent")
+    session_id = os.environ.get("HELM_SESSION_ID", "sdk-python-session")
+    with HelmClient(
+        base_url=helm_url,
+        api_key=admin_key,
+        tenant_id=tenant_id,
+        principal_id=principal_id,
+        workspace_id=os.environ.get("HELM_WORKSPACE_ID"),
+    ) as helm:
+        evaluation_scope = EvaluationScope(
+            tenant_id=tenant_id,
+            principal_id=principal_id,
+            session_id=session_id,
+            workspace_id=os.environ.get("HELM_WORKSPACE_ID"),
         )
-        denied = helm.evaluate_decision(
-            {
-                "principal": "sdk-python-agent",
-                "action": "dangerous-shell",
-                "resource": "system:shell",
-                "context": {"example": "python-sdk"},
-            }
+        allowed = helm.evaluate_decision_with_scope(
+            DecisionRequest(
+                action="read-ticket",
+                resource="ticket:SDK-100",
+                context={"example": "python-sdk"},
+            ),
+            evaluation_scope,
+            "sdk-python-allowed",
         )
-        require_verdict(allowed, "ALLOW", "allowed tool call")
-        require_verdict(denied, "DENY", "denied dangerous action")
+        denied = helm.evaluate_decision_with_scope(
+            DecisionRequest(
+                action="dangerous-shell",
+                resource="system:shell",
+                context={"example": "python-sdk"},
+            ),
+            evaluation_scope,
+            "sdk-python-denied",
+        )
+        allowed_record = allowed.decision.to_dict()
+        denied_record = denied.decision.to_dict()
+        require_verdict(allowed_record, "ALLOW", "allowed tool call")
+        require_verdict(denied_record, "DENY", "denied dangerous action")
 
         demo = helm.run_public_demo("read_ticket")
         receipt = require_receipt(demo, "signed receipt")
@@ -98,7 +116,7 @@ def main() -> None:
         )
         require_verdict(preflight, "ALLOW", "sandbox preflight")
 
-        evidence = helm.export_evidence("sdk-python-agent")
+        evidence = helm.export_evidence(session_id)
         evidence_result = helm.verify_evidence(evidence)
         if evidence_result.verdict != "PASS":
             raise AssertionError(f"evidence verification failed: {evidence_result.to_dict()}")
@@ -107,8 +125,8 @@ def main() -> None:
         json.dumps(
             {
                 "sdk": "python",
-                "allowed": allowed["verdict"],
-                "denied": denied["verdict"],
+                "allowed": allowed_record["verdict"],
+                "denied": denied_record["verdict"],
                 "mcp_unknown_server": mcp_verdict,
                 "receipt_verified": True,
                 "sandbox_preflight": preflight["verdict"],

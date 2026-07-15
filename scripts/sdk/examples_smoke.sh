@@ -9,7 +9,11 @@ HELM_URL="http://127.0.0.1:${PORT}"
 SERVER_LOG="$TMP/helm-server.log"
 PYTHON_BIN="$TMP/python-venv/bin/python"
 ADMIN_KEY="${HELM_ADMIN_API_KEY:-sdk-examples-local-admin-key}"
-TENANT_ID="${HELM_TENANT_ID:-sdk-examples}"
+# The bundled policy fixture is loaded into the local default tenant.
+TENANT_ID="${HELM_TENANT_ID:-default}"
+PRINCIPAL_ID="${HELM_PRINCIPAL_ID:-sdk-examples-agent}"
+SESSION_ID="${HELM_SESSION_ID:-sdk-examples-session}"
+WORKSPACE_ID="${HELM_WORKSPACE_ID:-}"
 
 cleanup() {
   if [ -n "${HELM_PID:-}" ]; then
@@ -33,7 +37,7 @@ npm ci
 npm run build
 
 cd "$ROOT"
-HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_RUNTIME_TENANT_ID="$TENANT_ID" HELM_HEALTH_PORT="$HEALTH_PORT" ./bin/helm-ai-kernel serve \
+HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_RUNTIME_TENANT_ID="$TENANT_ID" HELM_RUNTIME_PRINCIPAL_ID="$PRINCIPAL_ID" HELM_HEALTH_PORT="$HEALTH_PORT" ./bin/helm-ai-kernel serve \
   --policy examples/launch/policies/agent_tool_call_boundary.toml \
   --addr 127.0.0.1 \
   --port "$PORT" \
@@ -54,10 +58,22 @@ if ! curl -fsS "$HELM_URL/api/health" >/dev/null 2>&1; then
   exit 1
 fi
 
-PYTHONPATH="$ROOT/sdk/python" HELM_URL="$HELM_URL" HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_TENANT_ID="$TENANT_ID" "$PYTHON_BIN" "$ROOT/examples/python_sdk/main.py" | tee "$TMP/python_sdk.json"
+SDK_ENV=(
+  "PYTHONPATH=$ROOT/sdk/python"
+  "HELM_URL=$HELM_URL"
+  "HELM_ADMIN_API_KEY=$ADMIN_KEY"
+  "HELM_TENANT_ID=$TENANT_ID"
+  "HELM_PRINCIPAL_ID=$PRINCIPAL_ID"
+  "HELM_SESSION_ID=$SESSION_ID"
+)
+if [ -n "$WORKSPACE_ID" ]; then
+  SDK_ENV+=("HELM_WORKSPACE_ID=$WORKSPACE_ID")
+fi
+
+env "${SDK_ENV[@]}" "$PYTHON_BIN" "$ROOT/examples/python_sdk/main.py" | tee "$TMP/python_sdk.json"
 
 "$ROOT/sdk/ts/node_modules/.bin/tsc" -p "$ROOT/examples/ts_sdk/tsconfig.json"
-HELM_URL="$HELM_URL" HELM_ADMIN_API_KEY="$ADMIN_KEY" HELM_TENANT_ID="$TENANT_ID" node "$ROOT/examples/ts_sdk/dist/main.js" | tee "$TMP/ts_sdk.json"
+env "${SDK_ENV[@]}" node "$ROOT/examples/ts_sdk/dist/main.js" | tee "$TMP/ts_sdk.json"
 
 if grep -R -E '"(DEFER|REQUIRE_APPROVAL)"' "$TMP/python_sdk.json" "$TMP/ts_sdk.json"; then
   echo "SDK examples emitted a non-canonical public verdict"

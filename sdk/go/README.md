@@ -49,8 +49,10 @@ import (
 func main() {
     c := helm.New(
         "http://127.0.0.1:7714",
+        helm.WithAPIKey("..."),
         helm.WithTenantID("tenant-a"),
         helm.WithPrincipalID("operator-a"),
+        helm.WithWorkspaceID("workspace-a"),
     )
 
     // Chat completions via the HELM boundary.
@@ -75,11 +77,32 @@ func main() {
 
 ## API
 
+### Scoped decision evaluation
+
+`POST /api/v1/evaluate` accepts only `action`, `resource`, optional `context`,
+and optional `session_history` in JSON. Bind the authenticated tenant,
+principal, and session in `EvaluationScope`; do not put identity in the body.
+
+```go
+result, err := c.EvaluateDecisionWithScope(
+    helm.DecisionRequest{Action: "read-ticket", Resource: "ticket:123"},
+    helm.EvaluationScope{TenantID: "tenant-a", PrincipalID: "operator-a", SessionID: "session-a"},
+    "evaluate-ticket-123",
+)
+if err != nil { log.Fatal(err) }
+fmt.Println(result.Decision.GetVerdict(), result.ReceiptID, result.Replayed)
+```
+
+`EvaluateDecision(any)` remains only as a deprecated source-compatibility shim
+and fails locally with a migration error.
+Use `WithAPIKey`, `WithTenantID`, `WithPrincipalID`, and optionally
+`WithWorkspaceID` for other protected runtime routes.
+
 | Method | Endpoint |
 | --- | --- |
 | `ChatCompletions(req)` | `POST /v1/chat/completions` |
 | `ChatCompletionsWithReceipt(req)` | `POST /v1/chat/completions` plus `X-Helm-*` governance headers |
-| `EvaluateDecision(req)` | `POST /api/v1/evaluate` |
+| `EvaluateDecisionWithScope(req, scope, idempotencyKey)` | `POST /api/v1/evaluate` |
 | `RunPublicDemo(actionID, args)` | `POST /api/demo/run` |
 | `VerifyPublicDemoReceipt(receipt, expectedHash)` | `POST /api/demo/verify` |
 | `ApproveIntent(req)` | `POST /api/v1/kernel/approve` |

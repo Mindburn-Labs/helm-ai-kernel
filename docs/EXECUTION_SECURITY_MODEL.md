@@ -3,6 +3,10 @@ title: EXECUTION_SECURITY_MODEL
 last_reviewed: 2026-07-15
 ---
 
+<!-- quantum_posture: this execution model describes the current Ed25519
+receipt-signing boundary. It does not claim a deployed hybrid or post-quantum
+cryptographic control. -->
+
 # Execution Security Model
 
 ## Audience

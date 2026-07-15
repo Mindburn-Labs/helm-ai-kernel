@@ -1,4 +1,5 @@
 {
+  "$comment": "quantum_posture: this coverage inventory records source-backed documentation only; it does not change signature algorithms or claim deployed hybrid or post-quantum cryptography.",
   "schema_version": 1,
   "product": "HELM AI Kernel",
   "repo": "helm-ai-kernel",

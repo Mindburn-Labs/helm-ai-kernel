@@ -10,6 +10,10 @@ references:
   - "arXiv:2604.04604 — Deterministic Audit Trails for Autonomous Agents"
 ---
 
+<!-- quantum_posture: this normative format specifies Ed25519 support and an
+optional ML-DSA-65 hybrid profile. Specification support is not a claim that
+every deployed producer or verifier has a post-quantum control enabled. -->
+
 # EvidencePack Format Specification v1.0
 
 ## Abstract

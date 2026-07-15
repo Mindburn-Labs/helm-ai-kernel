@@ -1,5 +1,9 @@
 # HELM Chart
 
+<!-- quantum_posture: this chart documents the current Ed25519 authority and
+policy-signature inputs. It does not add, configure, or claim hybrid or
+post-quantum signing. -->
+
 This chart deploys the retained OSS kernel from source in this repository.
 The chart name is `helm-ai-kernel`. Values remain under the `.Values.helm`
 root for one compatibility window.

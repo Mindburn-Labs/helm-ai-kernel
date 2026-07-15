@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-13T00:51:31Z
-# Commit: 44cdd39006657485fcf3ac7dc86ab176c01e5873
+# Generated: 2026-07-15T14:48:17Z
+# Commit: d334c9442a83fdfa20bfbdec910340d36a4978f6
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -150,7 +150,7 @@ f7828f30856587a6e72d8058b0a08396e0746c5104b5eff6de28c0ef2d421d12  core/pkg/contr
 a4d12be0b1401a4ea024f4eacb1f2e2c6f6809356f1060890828812aa8cbb1cd  core/pkg/contracts/contracts_stress_coverage_test.go
 3670d455717968e63e8dbcf0c38f79812d0bf72cb7eb234a51b305a27aede0c4  core/pkg/contracts/counterfactual_receipt.go
 ed4994cdbba2b72e5626b91ade9226920896458d6ef4b3c62e127c1fce18e139  core/pkg/contracts/counterfactual_receipt_test.go
-178e475735fbd5de71177f69a4f6a613252a407aba580debb9b8efdb797ed29f  core/pkg/contracts/decision.go
+90ede3ecbfc93cb17e9de0d7c31970db2ec0cebc90bf29bb708b7e951fb5a30a  core/pkg/contracts/decision.go
 d443d4bd34f27e417b061a0346fa93b41de07822da7c1b8703f18e457b54de8e  core/pkg/contracts/decision.proto
 3e47d320d74867aacd97603f6007a47ba4e7927df8b0a185769566791e74c4b3  core/pkg/contracts/decision_request.go
 e23388a6c24921b11239be71d1b34dd6c3925756a6900ac02c09c8101b9b0cc1  core/pkg/contracts/decision_request_test.go
@@ -499,8 +499,8 @@ cec65ac5bec7c304d23e751029ea821f2cfb81f7923f6738b3474e6c12d36fb0  core/pkg/confo
 1e66730da7f3b36c1f31ecdbe28eaf9a4df1baf35a725a9a09b0ee949f7d15cf  core/pkg/conformance/ton_acton.go
 30969a90123e4c64a65529e86b0e071282c29b15a8d8aebbca25f09dad28a073  core/pkg/conformance/ton_acton_coverage_test.go
 39022e7935e3228077e94f0906cc87dd720949bd3806a61a47fee4baa667f78c  core/pkg/conformance/ton_acton_golden_test.go
-034e0674558a1104f73129b0079bfa1c6a63d493cab8727983cb5148ad2593bc  core/pkg/safedep/controller.go
-104622240aaa0c5405ac375e09c1e420a83dadaf7461c47ed1a71b7867c3ccbc  core/pkg/safedep/controller_test.go
+1d98c725ce532c6f777328ad3ad8873ff4a83d074edff5dd7fe624b2207d9868  core/pkg/safedep/controller.go
+d8c36751be188004ddf2e40cb1252c95ae3e68ad21aadea30152bad0bf0a92cd  core/pkg/safedep/controller_test.go
 3c29718f55f7b2046fe892aa882811723f52742aec83574dd7fff2142b47c871  core/pkg/safedep/coverage_test.go
 6e30b7499c3ad8cadaa06437e3eb2bbe010aa8d313be02db37227df57f213e8a  core/pkg/safedep/safedep.go
 c03e9e13148436da767d4f21deb9d5efaa663df71eb783bd986a297b46d40bb8  core/pkg/safedep/safedep_test.go

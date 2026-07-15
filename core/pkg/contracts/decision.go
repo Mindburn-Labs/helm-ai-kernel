@@ -1,5 +1,8 @@
 package contracts
 
+// quantum_posture: these data contracts carry signature metadata and signed
+// intent constraints but do not implement or strengthen cryptographic controls.
+
 import (
 	"time"
 )

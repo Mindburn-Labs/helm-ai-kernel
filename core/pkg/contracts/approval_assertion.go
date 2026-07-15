@@ -1,3 +1,5 @@
+// quantum_posture: approval assertions use classical Ed25519 signatures;
+// this contract does not claim hybrid or post-quantum approval authority.
 package contracts
 
 import (

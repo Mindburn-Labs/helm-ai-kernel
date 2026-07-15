@@ -1,3 +1,5 @@
+// quantum_posture: these vectors cover classical Ed25519 approval assertions;
+// they do not establish hybrid or post-quantum approval support.
 package contracts
 
 import (

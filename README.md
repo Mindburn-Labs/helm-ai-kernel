@@ -63,6 +63,7 @@ You get:  a signed receipt you can verify offline
 | CLI commands | [CLI reference](docs/reference/cli.md) |
 | Security model | [Execution security model](docs/EXECUTION_SECURITY_MODEL.md) |
 | MCP tool quarantine | [MCP integration](docs/INTEGRATIONS/mcp.md) |
+| Client implementation handoff | [Implementation partner handoff](docs/guides/implementation-partner.md) |
 | Evidence verification | [Verification](docs/VERIFICATION.md) |
 | AI security category map | [AI Security Categories](docs/AI_SECURITY_CATEGORIES.md) |
 

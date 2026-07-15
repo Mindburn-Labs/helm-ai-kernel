@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-11T23:30:34Z
-# Commit: a2c330a74d2c933074d2f6e002d05d5b06591437
+# Generated: 2026-07-15T12:22:00Z
+# Commit: 8284651448ccf2a69384550a29b8c265de08f415
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -906,13 +906,13 @@ a3b4957fbf92a0950e4dccbe6d48037b8b88b56c0ba5d36ac3cbab1695b92b58  protocols/prot
 f294ad5b8fcc429072bd16a1dcef407e4884e843c6099c5de8d1ce8ec3cc0f2c  protocols/proto/helm/truth/v1/truth.proto
 6e2ee245f428faa27dbb15747f17cace76a0edabc72d1023b99120aa2a29f925  protocols/spec/PROTOCOL.md
 ec9221b14f36813ced2f351d69a54b927cd234e4d929d8f0feba3d8ba7b6cb5d  protocols/spec/agent-provenance-pack-v1.md
-231da2405cb5750a50e493703c0ac960b60da1fb35069311e4a3fa0031883373  protocols/spec/evidence-pack-v1.md
+982a575aa831bb052280b1f92aac7669d81b569ba102387a53370821eb50f1ca  protocols/spec/evidence-pack-v1.md
 6709408084e33158dfe9baf079e5a66b99c33c04362aa2dd76c832e3c5af7d21  protocols/spec/external-evidence-receipt-profile-v0.1.md
 b5b0ad4ea4a936f16ab4bd82e6cfed5e8b52c3c1a9eb2ce30d5043f0c1939aa3  protocols/specs/README.md
 59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03  protocols/specs/SPEC_VERSION
 20943cad8f69019c5f885031f65bcce2160e0c39bf0ea7d5359747766fbe50fd  protocols/specs/authority-court/authorization_decision.v1.schema.json
 1d525c1b187decb05eb1ab6d8962ed9b815a254cb96db50e07b1ea7f9546b6a2  protocols/specs/authority-court/authorization_request.v1.schema.json
-994c140919024c7398429a542e6c5fcdc503709c3d5e88d4c358bfb220692c07  protocols/specs/authority-court/protocol.md
+98e00ecf3a80e7c77e6037155938484dadc2457e747d13a0bf65b155b352b621  protocols/specs/authority-court/protocol.md
 7495bc08d4567893585e139996edd9b6f7dbc9bb43dab7a4a5637ba1b1a5bb22  protocols/specs/commit/commit_token.v1.schema.json
 bb7362eb5130500f5751ea9dc761ce762cc8ad4bdcdcb1d9aa11e847dc44e88e  protocols/specs/context-capsule/context_capsule.v1.schema.json
 c64f6ab6e62d47460908d412efaf38c0a628065a6417c4e0f38e03778ed25c8f  protocols/specs/decision-record/decision_record.v1.schema.json

@@ -499,13 +499,31 @@ func validGitRef(ref string, allowTag bool) bool {
 		strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") {
 		return false
 	}
-	for _, component := range strings.Split(strings.TrimPrefix(ref, prefix), "/") {
+	shortName := strings.TrimPrefix(ref, prefix)
+	if strings.HasPrefix(shortName, "refs/") || looksLikeGitObjectID(shortName) {
+		return false
+	}
+	for _, component := range strings.Split(shortName, "/") {
 		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
 			return false
 		}
 	}
 	for _, character := range ref {
 		if character < 0x20 || character == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+func looksLikeGitObjectID(value string) bool {
+	if len(value) != 40 {
+		return false
+	}
+	for _, character := range value {
+		if !((character >= '0' && character <= '9') ||
+			(character >= 'a' && character <= 'f') ||
+			(character >= 'A' && character <= 'F')) {
 			return false
 		}
 	}

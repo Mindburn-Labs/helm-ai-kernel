@@ -170,6 +170,18 @@ func TestEvaluateRejectsInvalidAuthorityPathsAndRefs(t *testing.T) {
 				context.WorkflowRef = "refs/heads/main..candidate"
 			},
 		},
+		{
+			name: "nested refs namespace",
+			mutate: func(context *Context) {
+				context.WorkflowRef = "refs/heads/refs/tags/v1"
+			},
+		},
+		{
+			name: "object ID shaped branch",
+			mutate: func(context *Context) {
+				context.BaseRef = "refs/heads/" + strings.Repeat("a", 40)
+			},
+		},
 	}
 
 	for _, test := range tests {

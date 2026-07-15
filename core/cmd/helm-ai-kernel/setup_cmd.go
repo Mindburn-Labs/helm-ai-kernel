@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -865,10 +866,49 @@ func equalSetupStrings(left, right []string) bool {
 }
 
 func writePrivateFileAtomic(path string, data []byte, allowedRoot string) error {
+	return writePrivateFileAtomicWithMutationHook(path, data, allowedRoot, nil)
+}
+
+func writePrivateFileAtomicWithMutationHook(path string, data []byte, allowedRoot string, beforeMutation func()) error {
+	if allowedRoot != "" {
+		root, err := os.OpenRoot(allowedRoot)
+		if err != nil {
+			return fmt.Errorf("open project workspace root %q: %w", allowedRoot, err)
+		}
+		defer func() { _ = root.Close() }()
+
+		canonicalRoot, err := canonicalPrivateFileRoot(allowedRoot)
+		if err != nil {
+			return err
+		}
+		writePath, err := privateFileWritePath(path, canonicalRoot)
+		if err != nil {
+			return err
+		}
+		if !privateFilePathWithinRoot(canonicalRoot, writePath) || !privateFilePathWithinRoot(canonicalRoot, filepath.Dir(writePath)) {
+			return fmt.Errorf("private config path %q resolves outside opened project workspace %q", path, canonicalRoot)
+		}
+		relPath, err := filepath.Rel(canonicalRoot, writePath)
+		if err != nil {
+			return fmt.Errorf("make private config path relative to project workspace: %w", err)
+		}
+		if beforeMutation != nil {
+			beforeMutation()
+		}
+		return writePrivateFileAtomicInRoot(root, relPath, data)
+	}
+
 	writePath, err := privateFileWritePath(path, allowedRoot)
 	if err != nil {
 		return err
 	}
+	if beforeMutation != nil {
+		beforeMutation()
+	}
+	return writePrivateFileAtomicAtPath(writePath, data)
+}
+
+func writePrivateFileAtomicAtPath(writePath string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(writePath), 0o750); err != nil {
 		return err
 	}
@@ -890,6 +930,48 @@ func writePrivateFileAtomic(path string, data []byte, allowedRoot string) error 
 		return err
 	}
 	return os.Rename(tmpPath, writePath)
+}
+
+func writePrivateFileAtomicInRoot(root *os.Root, writePath string, data []byte) error {
+	parent := filepath.Dir(writePath)
+	if err := root.MkdirAll(parent, 0o750); err != nil {
+		return err
+	}
+	tmp, tmpPath, err := createPrivateRootTemp(root, parent)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return root.Rename(tmpPath, writePath)
+}
+
+func createPrivateRootTemp(root *os.Root, parent string) (*os.File, string, error) {
+	for range 100 {
+		var random [12]byte
+		if _, err := rand.Read(random[:]); err != nil {
+			return nil, "", fmt.Errorf("generate private config temp name: %w", err)
+		}
+		path := filepath.Join(parent, fmt.Sprintf(".helm-tmp-%x", random[:]))
+		file, err := root.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			return file, path, nil
+		}
+		if !os.IsExist(err) {
+			return nil, "", err
+		}
+	}
+	return nil, "", fmt.Errorf("create private config temp file: exhausted unique names")
 }
 
 func privateFileWritePath(path, allowedRoot string) (string, error) {

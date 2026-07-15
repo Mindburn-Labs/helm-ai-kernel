@@ -822,6 +822,60 @@ func TestWritePrivateFileAtomicRejectsUnsafeSymlinkTargets(t *testing.T) {
 	}
 }
 
+func TestWritePrivateFileAtomicProjectRejectsParentSwap(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	configDir := filepath.Join(workspace, ".codex")
+	outside := filepath.Join(tmp, "outside")
+	for _, dir := range []string{configDir, outside} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	configPath := filepath.Join(configDir, "config.toml")
+	original := []byte("model = \"inside\"\n")
+	if err := os.WriteFile(configPath, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outsidePath := filepath.Join(outside, "config.toml")
+	outsideOriginal := []byte("model = \"outside\"\n")
+	if err := os.WriteFile(outsidePath, outsideOriginal, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	movedConfigDir := filepath.Join(workspace, ".codex-before-swap")
+	var mutationErr error
+	err := writePrivateFileAtomicWithMutationHook(configPath, []byte("model = \"attacker-controlled\"\n"), workspace, func() {
+		mutationErr = os.Rename(configDir, movedConfigDir)
+		if mutationErr == nil {
+			mutationErr = os.Symlink(outside, configDir)
+		}
+	})
+	if mutationErr != nil {
+		t.Skipf("parent-swap symlink unavailable: %v", mutationErr)
+	}
+	if err == nil {
+		t.Fatal("project write succeeded after its validated parent was swapped outside the workspace")
+	}
+	if info, lstatErr := os.Lstat(configDir); lstatErr != nil {
+		t.Fatalf("swapped parent missing: %v", lstatErr)
+	} else if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("swapped parent mode = %v, want symlink", info.Mode())
+	}
+	for path, want := range map[string][]byte{
+		filepath.Join(movedConfigDir, "config.toml"): original,
+		outsidePath: outsideOriginal,
+	} {
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", path, readErr)
+		}
+		if !bytes.Equal(raw, want) {
+			t.Fatalf("%s changed after parent swap:\n%s", path, raw)
+		}
+	}
+	assertNoSetupTempFiles(t, workspace, movedConfigDir, outside)
+}
+
 func TestSetupCodexProjectRejectsMalformedConfigWithoutOverwriting(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "workspace")

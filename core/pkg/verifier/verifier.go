@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -450,62 +451,121 @@ func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string
 // verifier trust boundary. Legacy receipts retain their compact preimage;
 // v2 receipts bind the full SafeDep emergency authority evidence set.
 func canonicalizeEmbeddedKernelReceipt(document map[string]any) ([]byte, error) {
-	var lamport uint64
-	if v := firstUint(document, "lamport_clock"); v != nil {
-		lamport = *v
-	}
-
-	version, err := embeddedReceiptSignatureVersion(document)
+	fields, err := parseEmbeddedReceiptSignedFields(document)
 	if err != nil {
 		return nil, err
 	}
-	switch version {
+	switch fields.version {
 	case "":
 		if hasEmbeddedSafeDepReceiptEvidence(document) {
 			return nil, fmt.Errorf("legacy receipt signature cannot authenticate SafeDep evidence")
 		}
 		return []byte(fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
-			firstString(document, "receipt_id"),
-			firstString(document, "decision_id"),
-			firstString(document, "effect_id"),
-			firstString(document, "status"),
-			firstString(document, "output_hash"),
-			firstString(document, "prev_hash"),
-			lamport,
-			firstString(document, "args_hash"),
+			fields.receiptID,
+			fields.decisionID,
+			fields.effectID,
+			fields.status,
+			fields.outputHash,
+			fields.prevHash,
+			fields.lamportClock,
+			fields.argsHash,
 		)), nil
 	case contracts.ReceiptSignatureVersionV2:
 		return canonicalMarshalEmbeddedReceipt(map[string]any{
-			"args_hash":                       firstString(document, "args_hash"),
-			"decision_id":                     firstString(document, "decision_id"),
-			"effect_id":                       firstString(document, "effect_id"),
-			"emergency_activation_id":         firstString(document, "emergency_activation_id"),
-			"emergency_delegation_session_id": firstString(document, "emergency_delegation_session_id"),
-			"emergency_scope_hash":            firstString(document, "emergency_scope_hash"),
-			"lamport_clock":                   lamport,
-			"output_hash":                     firstString(document, "output_hash"),
-			"prev_hash":                       firstString(document, "prev_hash"),
-			"receipt_id":                      firstString(document, "receipt_id"),
-			"safe_dep_reason_code":            firstString(document, "safe_dep_reason_code"),
-			"safe_dep_state":                  firstString(document, "safe_dep_state"),
-			"status":                          firstString(document, "status"),
-			"version":                         version,
+			"args_hash":                       fields.argsHash,
+			"decision_id":                     fields.decisionID,
+			"effect_id":                       fields.effectID,
+			"emergency_activation_id":         fields.emergencyActivationID,
+			"emergency_delegation_session_id": fields.emergencyDelegationSessionID,
+			"emergency_scope_hash":            fields.emergencyScopeHash,
+			"lamport_clock":                   fields.lamportClock,
+			"output_hash":                     fields.outputHash,
+			"prev_hash":                       fields.prevHash,
+			"receipt_id":                      fields.receiptID,
+			"safe_dep_reason_code":            fields.safeDepReasonCode,
+			"safe_dep_state":                  fields.safeDepState,
+			"status":                          fields.status,
+			"version":                         fields.version,
 		})
 	default:
-		return nil, fmt.Errorf("unsupported receipt signature version %q", version)
+		return nil, fmt.Errorf("unsupported receipt signature version %q", fields.version)
 	}
 }
 
-func embeddedReceiptSignatureVersion(document map[string]any) (string, error) {
-	raw, present := document["signature_version"]
+type embeddedReceiptSignedFields struct {
+	receiptID                    string
+	decisionID                   string
+	effectID                     string
+	status                       string
+	outputHash                   string
+	prevHash                     string
+	argsHash                     string
+	emergencyActivationID        string
+	emergencyDelegationSessionID string
+	emergencyScopeHash           string
+	safeDepState                 string
+	safeDepReasonCode            string
+	version                      string
+	lamportClock                 uint64
+}
+
+func parseEmbeddedReceiptSignedFields(document map[string]any) (embeddedReceiptSignedFields, error) {
+	fields := embeddedReceiptSignedFields{}
+	stringFields := []struct {
+		name string
+		dest *string
+	}{
+		{name: "receipt_id", dest: &fields.receiptID},
+		{name: "decision_id", dest: &fields.decisionID},
+		{name: "effect_id", dest: &fields.effectID},
+		{name: "status", dest: &fields.status},
+		{name: "output_hash", dest: &fields.outputHash},
+		{name: "prev_hash", dest: &fields.prevHash},
+		{name: "args_hash", dest: &fields.argsHash},
+		{name: "emergency_activation_id", dest: &fields.emergencyActivationID},
+		{name: "emergency_delegation_session_id", dest: &fields.emergencyDelegationSessionID},
+		{name: "emergency_scope_hash", dest: &fields.emergencyScopeHash},
+		{name: "safe_dep_state", dest: &fields.safeDepState},
+		{name: "safe_dep_reason_code", dest: &fields.safeDepReasonCode},
+		{name: "signature_version", dest: &fields.version},
+	}
+	for _, field := range stringFields {
+		value, err := embeddedReceiptString(document, field.name)
+		if err != nil {
+			return embeddedReceiptSignedFields{}, err
+		}
+		*field.dest = value
+	}
+	lamport, err := embeddedReceiptUint64(document, "lamport_clock")
+	if err != nil {
+		return embeddedReceiptSignedFields{}, err
+	}
+	fields.lamportClock = lamport
+	return fields, nil
+}
+
+func embeddedReceiptString(document map[string]any, field string) (string, error) {
+	raw, present := document[field]
 	if !present {
 		return "", nil
 	}
-	version, ok := raw.(string)
+	value, ok := raw.(string)
 	if !ok {
-		return "", fmt.Errorf("receipt signature version must be a string")
+		return "", fmt.Errorf("receipt signed field %q must be a string", field)
 	}
-	return version, nil
+	return value, nil
+}
+
+func embeddedReceiptUint64(document map[string]any, field string) (uint64, error) {
+	raw, present := document[field]
+	if !present {
+		return 0, nil
+	}
+	value, ok := raw.(float64)
+	if !ok || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || math.Trunc(value) != value || value >= math.Exp2(64) {
+		return 0, fmt.Errorf("receipt signed field %q must be an unsigned integer", field)
+	}
+	return uint64(value), nil
 }
 
 func hasEmbeddedSafeDepReceiptEvidence(document map[string]any) bool {

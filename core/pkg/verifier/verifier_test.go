@@ -446,32 +446,34 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 }
 
 func TestVerifyBundleMCPPolicyDecisionReceiptV2Trust(t *testing.T) {
-	buildReceipt := func(t *testing.T) map[string]any {
+	buildReceipt := func(t *testing.T, withSafeDepEvidence bool) map[string]any {
 		t.Helper()
 		signer, err := helmcrypto.NewEd25519Signer("mcp-proof-v2")
 		if err != nil {
 			t.Fatal(err)
 		}
 		receipt := &contracts.Receipt{
-			ReceiptID:                    "rcpt-v2-001",
-			DecisionID:                   "dec-v2-001",
-			EffectID:                     "mcp.tools.call/proof.read",
-			Status:                       "DENY",
-			OutputHash:                   "sha256:out-v2",
-			PrevHash:                     "sha256:prev-v2",
-			LamportClock:                 2,
-			ArgsHash:                     "sha256:args-v2",
-			Type:                         "mcp_policy_decision",
-			EmergencyActivationID:        "activation-v2",
-			EmergencyDelegationSessionID: "delegation-v2",
-			EmergencyScopeHash:           "sha256:scope-v2",
-			SafeDepState:                 "degraded_narrowing",
-			SafeDepReasonCode:            "SAFE_DEP_DEGRADED_NARROWING",
+			ReceiptID:    "rcpt-v2-001",
+			DecisionID:   "dec-v2-001",
+			EffectID:     "mcp.tools.call/proof.read",
+			Status:       "DENY",
+			OutputHash:   "sha256:out-v2",
+			PrevHash:     "sha256:prev-v2",
+			LamportClock: 2,
+			ArgsHash:     "sha256:args-v2",
+			Type:         "mcp_policy_decision",
 			Metadata: map[string]any{
 				"signature_key_type":     "ed25519",
 				"signature_key_ref":      "ed25519:" + signer.PublicKey()[:16],
 				"signing_public_key_hex": signer.PublicKey(),
 			},
+		}
+		if withSafeDepEvidence {
+			receipt.EmergencyActivationID = "activation-v2"
+			receipt.EmergencyDelegationSessionID = "delegation-v2"
+			receipt.EmergencyScopeHash = "sha256:scope-v2"
+			receipt.SafeDepState = "degraded_narrowing"
+			receipt.SafeDepReasonCode = "SAFE_DEP_DEGRADED_NARROWING"
 		}
 		if err := signer.SignReceipt(receipt); err != nil {
 			t.Fatal(err)
@@ -489,7 +491,7 @@ func TestVerifyBundleMCPPolicyDecisionReceiptV2Trust(t *testing.T) {
 
 	t.Run("valid v2 receipt verifies", func(t *testing.T) {
 		dir := createValidBundleFixture(t)
-		writeJSON(t, filepath.Join(dir, "receipts", "receipt-v2.json"), buildReceipt(t))
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-v2.json"), buildReceipt(t, true))
 		sealVerifierFixture(t, dir, "test-session-v2")
 		report, err := VerifyBundle(dir)
 		if err != nil {
@@ -516,7 +518,35 @@ func TestVerifyBundleMCPPolicyDecisionReceiptV2Trust(t *testing.T) {
 	for _, tc := range tamperCases {
 		t.Run(tc.name+" tamper fails closed", func(t *testing.T) {
 			dir := createValidBundleFixture(t)
-			receipt := buildReceipt(t)
+			receipt := buildReceipt(t, true)
+			receipt[tc.field] = tc.value
+			writeJSON(t, filepath.Join(dir, "receipts", "receipt-v2.json"), receipt)
+			sealVerifierFixture(t, dir, "test-session-v2")
+			report, err := VerifyBundle(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertEmbeddedSignatureTrustFails(t, report)
+		})
+	}
+
+	wrongTypeCases := []struct {
+		name  string
+		field string
+		value any
+	}{
+		{name: "activation number", field: "emergency_activation_id", value: 1},
+		{name: "delegation null", field: "emergency_delegation_session_id", value: nil},
+		{name: "scope boolean", field: "emergency_scope_hash", value: false},
+		{name: "state array", field: "safe_dep_state", value: []any{}},
+		{name: "reason object", field: "safe_dep_reason_code", value: map[string]any{}},
+		{name: "lamport string", field: "lamport_clock", value: "2"},
+		{name: "lamport fraction", field: "lamport_clock", value: 2.5},
+	}
+	for _, tc := range wrongTypeCases {
+		t.Run(tc.name+" tamper fails closed", func(t *testing.T) {
+			dir := createValidBundleFixture(t)
+			receipt := buildReceipt(t, false)
 			receipt[tc.field] = tc.value
 			writeJSON(t, filepath.Join(dir, "receipts", "receipt-v2.json"), receipt)
 			sealVerifierFixture(t, dir, "test-session-v2")

@@ -813,10 +813,14 @@ func equalSetupStrings(left, right []string) bool {
 }
 
 func writePrivateFileAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	writePath, err := privateFileWritePath(path)
+	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".helm-tmp-*")
+	if err := os.MkdirAll(filepath.Dir(writePath), 0o750); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(writePath), ".helm-tmp-*")
 	if err != nil {
 		return err
 	}
@@ -833,7 +837,36 @@ func writePrivateFileAtomic(path string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, path)
+	return os.Rename(tmpPath, writePath)
+}
+
+func privateFileWritePath(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return path, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("private config path %q is not a regular file", path)
+		}
+		return path, nil
+	}
+
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve private config symlink %q: %w", path, err)
+	}
+	targetInfo, err := os.Stat(resolved)
+	if err != nil {
+		return "", fmt.Errorf("stat private config symlink target %q: %w", path, err)
+	}
+	if !targetInfo.Mode().IsRegular() {
+		return "", fmt.Errorf("private config symlink %q targets a non-regular file", path)
+	}
+	return resolved, nil
 }
 
 func removeTOMLTable(input, table string) string {

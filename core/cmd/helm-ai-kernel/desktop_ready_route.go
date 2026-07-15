@@ -21,8 +21,13 @@ const (
 	desktopReadyMaxNonceSize = 256
 )
 
-func registerDesktopReadyRoute(mux *http.ServeMux) {
+func takeDesktopReadyToken() string {
 	token := strings.TrimSpace(os.Getenv(desktopReadyTokenEnv))
+	_ = os.Unsetenv(desktopReadyTokenEnv)
+	return token
+}
+
+func registerDesktopReadyRoute(mux *http.ServeMux, token string) {
 	if token == "" {
 		return
 	}

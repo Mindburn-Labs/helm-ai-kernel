@@ -146,6 +146,9 @@ func runServer() {
 
 //nolint:gocognit,gocyclo
 func runServerWithOptions(opts serverOptions) {
+	// Consume the Desktop launch secret before any optional runtime setup can
+	// spawn a subprocess. The route retains only the in-memory copy below.
+	desktopReadyToken := takeDesktopReadyToken()
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
 	}
@@ -404,7 +407,7 @@ func runServerWithOptions(opts serverOptions) {
 		}
 	}
 	mux := http.NewServeMux()
-	registerDesktopReadyRoute(mux)
+	registerDesktopReadyRoute(mux, desktopReadyToken)
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}

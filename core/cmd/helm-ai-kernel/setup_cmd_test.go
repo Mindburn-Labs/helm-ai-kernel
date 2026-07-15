@@ -423,6 +423,141 @@ func TestSetupClaudeProjectMCPCommandsUseSelectedWorkspace(t *testing.T) {
 	}
 }
 
+func TestSetupClaudeProjectPreservesSymlinkedHookConfig(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	targetDir := filepath.Join(tmp, "managed-dotfiles", "claude")
+	for _, dir := range []string{filepath.Join(workspace, ".claude"), targetDir} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := filepath.Join(targetDir, "settings.json")
+	if err := os.WriteFile(target, []byte("{\"hooks\":{\"PreToolUse\":[]}}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(workspace, ".claude", "settings.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	opts := setupOptions{Target: "claude-code", Scope: "project", Workspace: workspace, DataDir: filepath.Join(tmp, "helm")}
+	bin := filepath.Join(tmp, "helm-ai-kernel")
+
+	if err := installSetupHook(opts, bin); err != nil {
+		t.Fatalf("install symlinked Claude hook: %v", err)
+	}
+	assertSetupSymlinkTarget(t, link, target, 0o600, "hook pre-tool --client claude-code")
+	assertNoSetupTempFiles(t, filepath.Dir(link), targetDir)
+
+	if err := removeSetupHook(opts, bin); err != nil {
+		t.Fatalf("remove symlinked Claude hook: %v", err)
+	}
+	assertSetupSymlinkTarget(t, link, target, 0o600, "")
+	if raw, err := os.ReadFile(target); err != nil {
+		t.Fatal(err)
+	} else if strings.Contains(string(raw), "hook pre-tool --client claude-code") {
+		t.Fatalf("Claude hook target still contains HELM command:\n%s", raw)
+	}
+	assertNoSetupTempFiles(t, filepath.Dir(link), targetDir)
+}
+
+func TestSetupCodexProjectPreservesSymlinkedConfigFiles(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	targetDir := filepath.Join(tmp, "managed-dotfiles", "codex")
+	for _, dir := range []string{filepath.Join(workspace, ".codex"), targetDir} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	configTarget := filepath.Join(targetDir, "config.toml")
+	hookTarget := filepath.Join(targetDir, "hooks.json")
+	if err := os.WriteFile(configTarget, []byte("model = \"gpt-5\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hookTarget, []byte("{\"hooks\":{\"PreToolUse\":[]}}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	configLink := filepath.Join(workspace, ".codex", "config.toml")
+	hookLink := filepath.Join(workspace, ".codex", "hooks.json")
+	if err := os.Symlink(configTarget, configLink); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := os.Symlink(hookTarget, hookLink); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	opts := setupOptions{Target: "codex", Scope: "project", Workspace: workspace, DataDir: filepath.Join(tmp, "helm")}
+	bin := filepath.Join(tmp, "helm-ai-kernel")
+
+	if err := installSetupMCP(opts, bin); err != nil {
+		t.Fatalf("install symlinked Codex MCP config: %v", err)
+	}
+	if err := installSetupHook(opts, bin); err != nil {
+		t.Fatalf("install symlinked Codex hook config: %v", err)
+	}
+	assertSetupSymlinkTarget(t, configLink, configTarget, 0o600, "[mcp_servers."+setupMCPServerName+"]")
+	assertSetupSymlinkTarget(t, hookLink, hookTarget, 0o600, "hook pre-tool --client codex")
+	assertNoSetupTempFiles(t, filepath.Dir(configLink), targetDir)
+
+	if err := removeSetupHook(opts, bin); err != nil {
+		t.Fatalf("remove symlinked Codex hook config: %v", err)
+	}
+	if err := removeSetupMCP(opts); err != nil {
+		t.Fatalf("remove symlinked Codex MCP config: %v", err)
+	}
+	assertSetupSymlinkTarget(t, configLink, configTarget, 0o600, "model = \"gpt-5\"")
+	assertSetupSymlinkTarget(t, hookLink, hookTarget, 0o600, "")
+	for path, forbidden := range map[string]string{
+		configTarget: setupMCPServerName,
+		hookTarget:   "hook pre-tool --client codex",
+	} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("%s still contains %q:\n%s", path, forbidden, raw)
+		}
+	}
+	assertNoSetupTempFiles(t, filepath.Dir(configLink), targetDir)
+}
+
+func TestWritePrivateFileAtomicRejectsUnsafeSymlinkTargets(t *testing.T) {
+	tmp := t.TempDir()
+	for _, test := range []struct {
+		name   string
+		target string
+	}{
+		{name: "dangling", target: filepath.Join(tmp, "missing.json")},
+		{name: "directory", target: filepath.Join(tmp, "directory-target")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if test.name == "directory" {
+				if err := os.MkdirAll(test.target, 0o750); err != nil {
+					t.Fatal(err)
+				}
+			}
+			linkDir := filepath.Join(tmp, test.name)
+			if err := os.MkdirAll(linkDir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(linkDir, "settings.json")
+			if err := os.Symlink(test.target, link); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			if err := writePrivateFileAtomic(link, []byte("{}\n")); err == nil {
+				t.Fatal("unsafe symlink target unexpectedly accepted")
+			}
+			if info, err := os.Lstat(link); err != nil {
+				t.Fatalf("symlink was removed: %v", err)
+			} else if info.Mode()&os.ModeSymlink == 0 {
+				t.Fatalf("path mode = %v, want symlink", info.Mode())
+			}
+			assertNoSetupTempFiles(t, linkDir, filepath.Dir(test.target))
+		})
+	}
+}
+
 func TestSetupCodexProjectRejectsMalformedConfigWithoutOverwriting(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "workspace")
@@ -507,4 +642,42 @@ func containsSetupString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func assertSetupSymlinkTarget(t *testing.T, link, target string, mode os.FileMode, contains string) {
+	t.Helper()
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatalf("lstat %s: %v", link, err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("%s mode = %v, want preserved symlink", link, info.Mode())
+	}
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target %s: %v", target, err)
+	}
+	if contains != "" && !strings.Contains(string(raw), contains) {
+		t.Fatalf("target %s missing %q:\n%s", target, contains, raw)
+	}
+	targetInfo, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("stat target %s: %v", target, err)
+	}
+	if got := targetInfo.Mode().Perm(); got != mode {
+		t.Fatalf("target %s mode = %o, want %o", target, got, mode)
+	}
+}
+
+func assertNoSetupTempFiles(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, dir := range dirs {
+		matches, err := filepath.Glob(filepath.Join(dir, ".helm-tmp-*"))
+		if err != nil {
+			t.Fatalf("glob setup temp files in %s: %v", dir, err)
+		}
+		if len(matches) != 0 {
+			t.Fatalf("setup temp files were not cleaned from %s: %#v", dir, matches)
+		}
+	}
 }

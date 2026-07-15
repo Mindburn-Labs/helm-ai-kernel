@@ -118,7 +118,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	default:
 		if args[1][0] == '-' {
-			startServer() // Default backward compat behavior for flags passed without 'server'
+			if err := startServer(); err != nil { // Default backward compat behavior for flags passed without 'server'.
+				_, _ = fmt.Fprintf(stderr, "Error: start server: %v\n", err)
+				return 1
+			}
 			return 0
 		}
 		_, _ = fmt.Fprintf(stderr, "Unknown command: %s\n", args[1])

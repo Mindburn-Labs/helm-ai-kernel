@@ -123,6 +123,18 @@ func TestRunServerCommandReportsStartupFailure(t *testing.T) {
 	assert.Contains(t, stderr.String(), "bind failed")
 }
 
+func TestRunLegacyServerFlagsReportStartupFailure(t *testing.T) {
+	originalRunServer := startServer
+	defer func() { startServer = originalRunServer }()
+	startServer = func() error { return errors.New("legacy bind failed") }
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Run([]string{"helm", "--legacy-server-flag"}, &stdout, &stderr)
+
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, stderr.String(), "legacy bind failed")
+}
+
 // TestRun_Health_Fail verifies availability of the health subcommand logic.
 func TestRun_Health_Fail(t *testing.T) {
 	t.Setenv("HELM_HEALTH_PORT", "9999")

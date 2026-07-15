@@ -1,19 +1,25 @@
 ---
 title: MCP
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-15
 ---
 
 # MCP
 
-Use HELM as a pre-dispatch firewall for MCP tool calls.
+Use HELM to produce local MCP profile, configuration, approval, and
+authorization artifacts. A runtime adapter must deliberately route a tool call
+through that boundary before it can govern an upstream call.
 
 ```text
-tools/list -> visible tools are filtered
-tools/call -> HELM evaluates before dispatch
-ALLOW -> call upstream
-DENY -> block
-ESCALATE -> block, write receipt, show scoped approval command
+mcp wrap -> emits an execution-firewall profile for an upstream command or URL
+mcp print-config / mcp install -> emits or creates client configuration artifacts
+mcp authorize-call -> evaluates one local request and records its verdict
+ALLOW -> authorization result; a separately verified adapter may decide whether to dispatch
+DENY / ESCALATE -> this CLI does not dispatch
 ```
+
+**Evidence boundary:** `mcp wrap` and `mcp authorize-call` do not launch,
+proxy, or invoke an upstream MCP server. An `ALLOW` is an authorization result,
+not an upstream-dispatch receipt.
 
 ## Wrap A Server
 
@@ -40,8 +46,10 @@ helm-ai-kernel mcp authorize-call \
   --tool-name pwd
 ```
 
-An unknown or unapproved server returns `ESCALATE`. The action is not
-dispatched. Use the approval loop in [Quickstart](/quickstart#see-an-escalation).
+An unknown or unapproved server returns `ESCALATE`, writes the local decision
+receipt, and does not dispatch the action. `ALLOW` still does not invoke the
+upstream server; the caller must use a separately verified adapter to do that.
+Use the approval loop in [Quickstart](/quickstart#see-an-escalation).
 
 ## Scan Before Approval
 

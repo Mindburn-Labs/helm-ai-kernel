@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-15
 ---
 
 # Quickstart
@@ -125,7 +125,7 @@ helm-ai-kernel mcp revoke \
   --reason "inspection finished"
 ```
 
-## Connect A Local Agent
+## Prepare Local Agent Configuration
 
 See the supported matrix:
 
@@ -152,8 +152,11 @@ helm-ai-kernel setup codex --dry-run --json
 helm-ai-kernel setup --client cursor --print-config
 ```
 
-Setup writes local config and draft policy artifacts. It does not approve
-detected tools.
+Setup writes or registers local config and draft policy artifacts. It does not
+approve detected tools. **Evidence boundary:** setup artifact proof is not
+client-runtime proof. It does not prove a particular installed Codex or Claude
+Code client loaded the configuration, emitted a hook event, or routed a live
+action through HELM.
 
 ## Inspect
 

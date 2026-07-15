@@ -1,12 +1,12 @@
 ---
 title: Claude Code Integration
-last_reviewed: 2026-06-29
+last_reviewed: 2026-07-15
 ---
 
 # Claude Code Integration
 
-Use HELM with Claude Code when you want local PreToolUse decisions and signed
-receipts for selected high-risk tool effects.
+Use HELM to register local Claude Code MCP configuration, write a local
+PreToolUse hook configuration, and create draft policy artifacts.
 
 ## Quick Setup
 
@@ -35,6 +35,11 @@ helm-ai-kernel setup claude-code --dry-run --json
 The JSON summary includes the binary path, client config path, hook config path,
 data dir, Kernel URL, draft policy path, and uninstall command.
 
+**Evidence boundary:** setup artifact proof is not client-runtime proof. The
+source tests cover target CLI/config and hook artifacts; they do not prove a
+particular installed Claude Code version loaded them, emitted a hook event, or
+routed a live tool call through HELM.
+
 ## Verify A Denial
 
 Denied hook decisions write signed receipts under:
@@ -49,6 +54,9 @@ Verify one:
 helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
+
+This verifies an existing receipt; it is not evidence that Claude Code emitted
+it.
 
 ## MCP Configuration
 

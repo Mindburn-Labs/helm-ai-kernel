@@ -1,6 +1,6 @@
 ---
 title: CLI
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-15
 ---
 
 # CLI
@@ -12,8 +12,12 @@ inspect receipts.
 
 ```bash
 helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
-helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/<run-id> --profile dev-local --json
+helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --json
 ```
+
+`mcp proof` writes its run material under `--out/<run-id>` and the sealed
+EvidencePack under `--out/<run-id>/evidencepacks/<run-id>`. The proof is
+deliberately no-dispatch.
 
 ## Local Agent Setup
 
@@ -27,8 +31,11 @@ helm-ai-kernel setup codex --dry-run --json
 helm-ai-kernel setup --client cursor --print-config
 ```
 
-Setup writes local client configuration and draft policy artifacts. It does not
-approve tools.
+Setup writes or registers local client configuration, writes local hook
+configuration, and creates draft policy artifacts. It does not approve tools.
+**Evidence boundary:** setup artifact proof is not client-runtime proof. It does
+not prove a particular installed client loaded the configuration, emitted a hook
+event, or routed a live action through HELM.
 
 ## MCP Approval Commands
 
@@ -37,7 +44,7 @@ you need the reference form:
 
 | Command | Purpose |
 | --- | --- |
-| `helm-ai-kernel mcp authorize-call --server-id <id> --tool-name <tool>` | Evaluate one MCP tool call before dispatch. |
+| `helm-ai-kernel mcp authorize-call --server-id <id> --tool-name <tool>` | Evaluate and record one local MCP authorization decision; it does not invoke an upstream server. |
 | `helm-ai-kernel mcp approve --server-id <id> --tools <csv> --ttl 15m --reason <text>` | Approve an exact local server/tool scope. |
 | `helm-ai-kernel mcp approve --server-id <id> --tools <csv> --effects side_effect --ttl 15m --reason <text>` | Approve a side-effect tool scope. |
 | `helm-ai-kernel mcp revoke --server-id <id> --reason <text>` | Revoke a local approval. |

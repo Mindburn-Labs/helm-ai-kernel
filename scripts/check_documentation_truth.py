@@ -275,6 +275,37 @@ def validate_sdk_freshness_docs(failures: list[str]) -> None:
         failures.append(f'docs/EXAMPLES.md is missing current Java coordinate {java_coordinate}')
 
 
+def validate_mcp_and_client_setup_docs(failures: list[str]) -> None:
+    mcp_doc = ROOT / 'docs' / 'INTEGRATIONS' / 'mcp.md'
+    if mcp_doc.exists():
+        text = read_text(mcp_doc)
+        if 'ALLOW -> call upstream' in text:
+            failures.append('docs/INTEGRATIONS/mcp.md claims an ALLOW calls upstream')
+        if 'do not launch,\nproxy, or invoke an upstream MCP server' not in text:
+            failures.append('docs/INTEGRATIONS/mcp.md must state that its CLI does not invoke upstream MCP servers')
+
+    cli_doc = ROOT / 'docs' / 'reference' / 'cli.md'
+    if cli_doc.exists():
+        text = read_text(cli_doc)
+        expected_bundle_path = '~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id>'
+        if expected_bundle_path not in text:
+            failures.append(f'docs/reference/cli.md is missing MCP proof bundle path {expected_bundle_path}')
+        if '~/.helm-ai-kernel/proofs/<run-id>/<run-id>' in text:
+            failures.append('docs/reference/cli.md contains the obsolete MCP proof bundle path')
+
+    setup_docs = (
+        ROOT / 'README.md',
+        ROOT / 'docs' / 'QUICKSTART.md',
+        ROOT / 'docs' / 'INTEGRATIONS' / 'codex.md',
+        ROOT / 'docs' / 'INTEGRATIONS' / 'claude-code.md',
+        ROOT / 'docs' / 'INTEGRATIONS' / 'agent-clients.md',
+        ROOT / 'docs' / 'quickstart' / 'workstation-governance.md',
+    )
+    for path in setup_docs:
+        if path.exists() and 'client-runtime proof' not in read_text(path):
+            failures.append(f'{path.relative_to(ROOT)} must distinguish setup artifacts from client-runtime proof')
+
+
 def main() -> int:
     coverage = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'check_documentation_coverage.py')], cwd=ROOT)
     if coverage.returncode != 0:
@@ -312,6 +343,7 @@ def main() -> int:
                 failures.append(f'sdk/go/go.mod is missing standalone generated SDK dependency {module}')
 
     validate_sdk_freshness_docs(failures)
+    validate_mcp_and_client_setup_docs(failures)
 
     for row in rows:
         source = ROOT if row['source_path'] == '.' else ROOT / row['source_path']

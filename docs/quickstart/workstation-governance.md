@@ -1,16 +1,17 @@
 # Protect Local Coding Agents
 
-HELM can sit around Codex, Claude Code, and similar local agent workflows. The
-goal is narrow: selected effects cross a HELM boundary before dispatch, and
-each decision leaves a local receipt.
+HELM can prepare local configuration for Codex, Claude Code, and similar local
+agent workflows. The goal is narrow: a separately verified adapter can submit
+selected effects to a HELM boundary and preserve its decision receipt.
 
 HELM is not a competing coding agent. It evaluates the actions your agent wants
 to take.
 
 ## Agent Adapters
 
-Codex and Claude Code use local setup hooks. OpenClaw and Hermes use adapter
-helpers from `helm-agent-integrations`:
+The Codex and Claude Code setup commands register MCP configuration and write
+local hook configuration. OpenClaw and Hermes use adapter helpers from
+`helm-agent-integrations`:
 
 - [OpenClaw](/integrations/openclaw) normalizes skill calls before dispatch.
 - [Hermes](/integrations/hermes) normalizes tool proposals before dispatch.
@@ -32,7 +33,10 @@ helm-ai-kernel setup claude-code --yes
 ```
 
 Setup writes draft policy and quarantine artifacts. It does not approve tools
-or grant broad operating permissions.
+or grant broad operating permissions. **Evidence boundary:** setup artifact
+proof is not client-runtime proof. It does not prove a particular installed
+client loaded the configuration, emitted a hook event, or routed a live action
+through HELM.
 
 ## Scan The Agent Surface
 
@@ -52,8 +56,10 @@ runtime dispatch, approve tools, or upload anything.
 
 ## Prove A Denial
 
-Ask the local agent to attempt an action the starter policy denies, such as a
-risky shell cleanup. HELM should block before dispatch and write a receipt.
+The setup artifact test does not prove that a local client executed its hook.
+For a client-specific denial claim, run a disposable, versioned client test and
+retain both the observed hook event and boundary receipt. The command below
+verifies a receipt only after an adapter or hook has produced one.
 
 Verify the receipt:
 

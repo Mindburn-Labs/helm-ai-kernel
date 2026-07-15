@@ -1,12 +1,12 @@
 ---
 title: Codex Integration
-last_reviewed: 2026-06-29
+last_reviewed: 2026-07-15
 ---
 
 # Codex Integration
 
-Use HELM with Codex when you want a local MCP and hook setup that records signed
-policy decision receipts for selected high-risk effects.
+Use HELM to register local Codex MCP configuration, write a local pre-tool hook
+configuration, and create draft policy artifacts.
 
 ## Quick Setup
 
@@ -41,6 +41,11 @@ helm-ai-kernel setup codex --dry-run --json
 The dry run writes nothing and returns the target config paths, data dir, Kernel
 URL, draft policy path, and uninstall command.
 
+**Evidence boundary:** setup artifact proof is not client-runtime proof. The
+source tests cover target CLI/config and hook artifacts; they do not prove a
+particular installed Codex version loaded them, emitted a hook event, or routed
+a live tool call through HELM.
+
 ## Manual MCP Setup
 
 Print Codex MCP configuration:
@@ -60,6 +65,7 @@ helm-ai-kernel workstation verify-decision \
 ```
 
 Tampered receipts return a non-zero exit and fail signature verification.
+This verifies an existing receipt; it is not evidence that Codex emitted it.
 
 ## Source Truth
 

@@ -2,9 +2,9 @@
 
 **A local firewall for AI-agent actions.**
 
-HELM sits between Claude Code, Codex, MCP tools, shell commands, and other agent
-actions. It decides `ALLOW`, `DENY`, or `ESCALATE`, then writes a signed receipt
-you can verify later.
+HELM evaluates actions that a client, hook, wrapper, MCP adapter, or proxy
+deliberately sends to its boundary. It returns `ALLOW`, `DENY`, or `ESCALATE`,
+then writes a signed receipt you can verify later.
 
 ![HELM AI Kernel: one boundary, one decision, one receipt](docs/assets/readme-boundary-preview.png)
 
@@ -18,8 +18,11 @@ helm-ai-kernel setup claude-code --yes
 # Codex: helm-ai-kernel setup codex --yes
 ```
 
-Ask your agent to do something risky. HELM blocks or escalates the action before
-it runs, then records the decision.
+The setup commands create local client configuration and hook artifacts.
+**Evidence boundary:** setup artifact proof is not client-runtime proof. It
+does not prove that a particular installed client loaded the configuration or
+routed a live action through HELM. Use a disposable, versioned client run plus
+its boundary receipt for that evidence.
 
 ```bash
 helm-ai-kernel workstation verify-decision \

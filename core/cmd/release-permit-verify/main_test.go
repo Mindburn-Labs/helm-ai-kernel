@@ -33,6 +33,18 @@ func TestDecodeStrictFileRejectsOversizedInputBeforeDecode(t *testing.T) {
 	}
 }
 
+func TestDecodeStrictFileRejectsSymlinkInput(t *testing.T) {
+	target := writeJSONFixture(t, validReviewJSON())
+	link := filepath.Join(t.TempDir(), "review.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("create symlink: %v", err)
+	}
+	var review releasepermit.Review
+	if _, err := decodeStrictFile(link, &review); err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("decodeStrictFile() error = %v, want regular-file rejection", err)
+	}
+}
+
 func TestDecodeStrictPermitAcceptsExactShape(t *testing.T) {
 	var permit releasepermit.Permit
 	if _, err := decodeStrictFile(writeJSONFixture(t, validPermitJSON()), &permit); err != nil {
@@ -40,6 +52,15 @@ func TestDecodeStrictPermitAcceptsExactShape(t *testing.T) {
 	}
 	if permit.Reviews == nil || permit.Reasons == nil {
 		t.Fatal("Reviews and Reasons must be explicit arrays")
+	}
+}
+
+func TestDecodeStrictPermitRejectsNullReviewCounts(t *testing.T) {
+	content := strings.Replace(validPermitJSON(), `"blocking_findings":0`, `"blocking_findings":null`, 1)
+	var permit releasepermit.Permit
+	if _, err := decodeStrictFile(writeJSONFixture(t, content), &permit); err == nil ||
+		!strings.Contains(err.Error(), "reviews[0].blocking_findings must not be null") {
+		t.Fatalf("decodeStrictFile() error = %v, want null count rejection", err)
 	}
 }
 
@@ -129,6 +150,15 @@ func TestDecodeStrictContextRequiresExactAuthorityShape(t *testing.T) {
 	}
 }
 
+func TestDecodeStrictContextAllowsBootstrapNullParent(t *testing.T) {
+	content := strings.Replace(validContextJSON(), `"generation":2`, `"generation":1`, 1)
+	content = strings.Replace(content, `{"generation":1,"workflow_sha":"7777777777777777777777777777777777777777"}`, `null`, 1)
+	var context releasepermit.Context
+	if _, err := decodeStrictFile(writeJSONFixture(t, content), &context); err != nil {
+		t.Fatalf("decodeStrictFile() error = %v", err)
+	}
+}
+
 func TestDecodeStrictReviewRejectsAmbiguousShapes(t *testing.T) {
 	valid := validReviewJSON()
 	tests := []struct {
@@ -149,7 +179,7 @@ func TestDecodeStrictReviewRejectsAmbiguousShapes(t *testing.T) {
 		{
 			name:    "null findings",
 			content: strings.Replace(valid, `"findings":[]`, `"findings":null`, 1),
-			want:    "findings must be an explicit array",
+			want:    "findings must not be null",
 		},
 		{
 			name:    "missing findings",

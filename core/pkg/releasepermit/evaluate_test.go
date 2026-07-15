@@ -147,6 +147,42 @@ func TestEvaluateRejectsMismatchedGitHubWorkflowRefIdentity(t *testing.T) {
 	}
 }
 
+func TestEvaluateRejectsInvalidAuthorityPathsAndRefs(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Context)
+	}{
+		{
+			name: "workflow path traversal",
+			mutate: func(context *Context) {
+				context.WorkflowPath = ".github/workflows/../ci.yml"
+			},
+		},
+		{
+			name: "empty base branch",
+			mutate: func(context *Context) {
+				context.BaseRef = "refs/heads/"
+			},
+		},
+		{
+			name: "ambiguous workflow ref",
+			mutate: func(context *Context) {
+				context.WorkflowRef = "refs/heads/main..candidate"
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			context := validContext()
+			test.mutate(&context)
+			if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+				t.Fatal("Evaluate() error = nil, want invalid authority identity error")
+			}
+		})
+	}
+}
+
 func TestEvaluateRejectsSelfReviewingAuthorityContext(t *testing.T) {
 	for _, repository := range []string{"Mindburn-Labs/.github", "MINDBURN-LABS/.GITHUB"} {
 		for _, authoritySHA := range []string{testHeadSHA, testMergeSHA} {
@@ -367,6 +403,22 @@ func TestValidateAllowPermitRejectsRecomputedReviewerSubstitution(t *testing.T) 
 	}
 }
 
+func TestValidateAllowPermitRejectsImpossibleAdvisoryCount(t *testing.T) {
+	context := validContext()
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	permit.Reviews[0].AdvisoryFindings = maxFindings + 1
+	permit.PermitID, err = calculatePermitID(permit)
+	if err != nil {
+		t.Fatalf("calculatePermitID() error = %v", err)
+	}
+	if err := ValidateAllowPermit(permit, context, testContextSHA); err == nil {
+		t.Fatal("ValidateAllowPermit() error = nil, want impossible advisory count rejection")
+	}
+}
+
 func TestEvaluateDeniesContextSubstitution(t *testing.T) {
 	context := validContext()
 	reviews := validReviews(context)
@@ -436,6 +488,13 @@ func TestEvaluateDeniesInvalidReviewFields(t *testing.T) {
 			name: "too many findings",
 			mutate: func(review *Review) {
 				review.Findings = make([]Finding, 201)
+			},
+			code: "REVIEW_FINDINGS_INVALID",
+		},
+		{
+			name: "oversized finding path",
+			mutate: func(review *Review) {
+				review.Findings = []Finding{{Severity: "P3", Code: "PATH", Summary: "path is too long", Path: strings.Repeat("a", 1001)}}
 			},
 			code: "REVIEW_FINDINGS_INVALID",
 		},

@@ -12,3 +12,7 @@ HELM_BIN=go\ run\ ./core/cmd/helm-ai-kernel \
 ```
 
 The wrapper does not read secrets, browser sessions, or raw chat history.
+It does not create or validate the project-scoped Codex setup lifecycle, launch
+Codex, or prove a native client session. Use
+[`docs/INTEGRATIONS/native-client-lifecycle.md`](../../../docs/INTEGRATIONS/native-client-lifecycle.md)
+for that separate boundary.

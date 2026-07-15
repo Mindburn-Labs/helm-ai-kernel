@@ -1,6 +1,6 @@
 ---
 title: Receipts
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-14
 ---
 
 # Receipts
@@ -24,6 +24,12 @@ For MCP and boundary decisions, HELM records:
 Approvals and revocations also write receipts. A later evaluation must fail
 closed when an approval is expired, revoked, or outside its server, tool, or
 effect scope.
+
+Codex project setup and removal also record signed lifecycle receipts. Their
+durable rows retain the canonical receipt envelope; recovery reopens that store
+read-only and refuses a missing, malformed, non-canonical, or legacy
+index-only envelope. These receipts prove the local lifecycle transaction, not
+that a native client opened the generated configuration.
 
 ## Inspect Local Receipts
 
@@ -85,6 +91,16 @@ helm-ai-kernel verify evidence-pack.tar
 ```
 
 EvidencePacks are portable proof bundles for local review and offline replay.
+
+## Native Client Evidence
+
+Local Codex setup can prove exact HELM-owned configuration, a signed lifecycle
+record, and a Kernel-only synthetic denial. It intentionally reports
+`client_load_observed=false` until a separate real client session is observed.
+Do not use that local result as proof of every Codex action or direct upstream
+MCP call. See the [Native Client Integration
+Boundary](INTEGRATIONS/native-client-boundary.md) before describing a real
+client-session result.
 
 ## Release Evidence
 

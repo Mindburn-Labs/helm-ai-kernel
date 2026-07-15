@@ -35,6 +35,7 @@ Then choose one path.
 - [Scan agent risk](reference/agent-risk-scan.md)
 - [OpenAI proxy](INTEGRATIONS/openai_baseurl.md)
 - [Verify receipts](VERIFICATION.md)
+- [Native client integration boundary](INTEGRATIONS/native-client-boundary.md)
 
 ## Local Client Setup Boundary
 

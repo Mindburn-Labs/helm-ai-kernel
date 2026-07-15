@@ -2,9 +2,18 @@
 
 <!-- quantum_posture: release process docs mention existing Cosign verification only; this page adds no post-quantum cryptographic control. -->
 
-The retained release process is PR-first and tag-driven. `main` is protected;
-prepare releases on a branch, merge only after gates pass, and tag the merged
-commit.
+The retained release process is PR-first and tag-driven. Prepare releases on a
+branch and collect the required validation evidence before any candidate action.
+
+## Execution Authority Boundary
+
+Green CI, human review, release-note signoff, pull-request state, and
+`/review` or `/ultrareview` equivalents are necessary evidence only. They do
+not authorize a merge, deploy, tag, or release. No source-proven
+distinct-provider 2-of-2, exact-head, approval-only App interlock is live in
+this repository, so private and internal releases remain held until that state
+is live-proven. This file does not assert that workspace-canonical
+documentation has already been updated.
 
 ## Current Baseline
 
@@ -40,9 +49,10 @@ make release-assets
 5. Confirm `./bin/helm-ai-kernel verify dist/release-assets/evidence-pack.tar` passes
    offline.
 
-## Publish
+## Publish (only after source-proven authority)
 
-1. Merge the release-prep PR to `main`.
+1. After the authority boundary above is satisfied, merge the release-prep PR
+   to `main`.
 2. Create the annotated `v0.6.0` tag only after the release commit is on
    `main`.
 3. Push the tag and monitor the Release workflow until GitHub Release, GHCR

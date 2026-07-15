@@ -202,7 +202,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup status: %v\n", err)
 		return 2
 	}
-	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath)
+	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
 	if grade := readSetupScanGrade(filepath.Join(opts.DataDir, "autoconfigure", "inventory.json")); grade != "" {
 		summary.ScanGrade = grade
@@ -557,11 +557,26 @@ func removeSetupHook(opts setupOptions, bin string) error {
 	return removeHookConfig(setupHookConfigPath(opts), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
 }
 
-func setupMCPInstalled(opts setupOptions, path string) bool {
-	if opts.Target == "codex" && opts.Scope == "project" {
-		return codexProjectMCPInstalled(path, opts.DataDir)
+func setupMCPInstalled(opts setupOptions, path, bin string) bool {
+	if filepath.Clean(path) != filepath.Clean(setupClientConfigPath(opts)) {
+		return false
 	}
-	return fileContains(path, setupMCPServerName)
+	readPath := path
+	if root := setupPrivateFileRoot(opts); root != "" {
+		resolved, err := privateFileWritePath(path, root)
+		if err != nil {
+			return false
+		}
+		readPath = resolved
+	}
+	switch opts.Target {
+	case "claude-code":
+		return claudeMCPInstalled(readPath, bin, opts.DataDir)
+	case "codex":
+		return codexMCPInstalled(readPath, bin, opts.DataDir)
+	default:
+		return false
+	}
 }
 
 func setupHookInstalled(opts setupOptions, path, bin string) bool {
@@ -827,6 +842,15 @@ type codexMCPServer struct {
 	Args    []string `toml:"args"`
 }
 
+type claudeMCPConfig struct {
+	MCPServers map[string]claudeMCPServer `json:"mcpServers"`
+}
+
+type claudeMCPServer struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+}
+
 func validateCodexProjectTOML(raw string) error {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -836,7 +860,20 @@ func validateCodexProjectTOML(raw string) error {
 	return err
 }
 
-func codexProjectMCPInstalled(path, dataDir string) bool {
+func claudeMCPInstalled(path, bin, dataDir string) bool {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var config claudeMCPConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return false
+	}
+	server, ok := config.MCPServers[setupMCPServerName]
+	return ok && server.Command == bin && equalSetupStrings(server.Args, setupMCPArgs(dataDir))
+}
+
+func codexMCPInstalled(path, bin, dataDir string) bool {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return false
@@ -846,11 +883,14 @@ func codexProjectMCPInstalled(path, dataDir string) bool {
 		return false
 	}
 	server, ok := config.MCPServers[setupMCPServerName]
-	if !ok || strings.TrimSpace(server.Command) == "" {
+	if !ok || server.Command != bin {
 		return false
 	}
-	wantArgs := []string{"mcp", "serve", "--transport", "stdio", "--data-dir", dataDir}
-	return len(server.Args) == len(wantArgs) && equalSetupStrings(server.Args, wantArgs)
+	return equalSetupStrings(server.Args, setupMCPArgs(dataDir))
+}
+
+func setupMCPArgs(dataDir string) []string {
+	return []string{"mcp", "serve", "--transport", "stdio", "--data-dir", dataDir}
 }
 
 func equalSetupStrings(left, right []string) bool {
@@ -1107,14 +1147,6 @@ func readSetupScanGrade(path string) string {
 		return ""
 	}
 	return inv.Grade.Letter
-}
-
-func fileContains(path, needle string) bool {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	return strings.Contains(string(raw), needle)
 }
 
 func defaultSetupDataDir() string {

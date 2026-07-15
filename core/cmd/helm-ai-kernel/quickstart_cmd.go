@@ -61,7 +61,7 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 
 	installQuickstartRuntimeEnv(prepared.Runtime)
 
-	runServerWithOptions(serverOptions{
+	if err := runServerWithOptions(serverOptions{
 		Mode:       "quickstart",
 		BindAddr:   opts.Addr,
 		Port:       opts.Port,
@@ -80,7 +80,10 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		},
 		Stdout: stdout,
 		Stderr: stderr,
-	})
+	}); err != nil {
+		fmt.Fprintf(stderr, "quickstart: start Kernel: %v\n", err)
+		return 1
+	}
 	return 0
 }
 

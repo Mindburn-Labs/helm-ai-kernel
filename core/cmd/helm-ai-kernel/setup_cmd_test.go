@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"io"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -281,17 +283,26 @@ func TestSetupInstallJSONKeepsQuickstartOutputOffStdout(t *testing.T) {
 	}
 }
 
-func TestSetupInstallJSONReportsQuickstartFailureTruthfully(t *testing.T) {
+func TestSetupInstallJSONReportsOccupiedQuickstartPortTruthfully(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "workspace")
 	if err := os.MkdirAll(workspace, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	state := stubSetupSideEffects(t)
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve occupied Quickstart port: %v", err)
+	}
+	defer func() { _ = occupied.Close() }()
+	port := occupied.Addr().(*net.TCPAddr).Port
+	for _, key := range []string{"HELM_ADMIN_API_KEY", runtimeTenantIDEnv, runtimePrincipalIDEnv, quickstartExpiresAtEnv} {
+		t.Setenv(key, "")
+	}
 	setupRunQuickstart = func(args []string, stdout, stderr io.Writer, onReady func()) int {
 		state.quickstartArgs = append([]string{}, args...)
-		_, _ = io.WriteString(stderr, "quickstart failed before ready\n")
-		return 1
+		runArgs := append(append([]string{}, args...), "--port", strconv.Itoa(port))
+		return runQuickstartCmdWithReady(runArgs, stdout, stderr, onReady)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -307,8 +318,8 @@ func TestSetupInstallJSONReportsQuickstartFailureTruthfully(t *testing.T) {
 	if !summary.MCPInstalled || !summary.HookInstalled || len(summary.PlannedActions) != 0 {
 		t.Fatalf("failed Quickstart install state = %#v", summary)
 	}
-	if len(state.quickstartArgs) == 0 || !strings.Contains(stderr.String(), "failed before ready") {
-		t.Fatalf("Quickstart failure was not exercised: args=%#v stderr=%s", state.quickstartArgs, stderr.String())
+	if len(state.quickstartArgs) == 0 || !strings.Contains(stderr.String(), "bind API server") {
+		t.Fatalf("occupied Quickstart port was not exercised: args=%#v stderr=%s", state.quickstartArgs, stderr.String())
 	}
 }
 
@@ -365,7 +376,7 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	if inventory.ScanRoot != canonicalWorkspace {
 		t.Fatalf("scan root = %q, want selected workspace %q", inventory.ScanRoot, canonicalWorkspace)
 	}
-	if !setupMCPInstalled(setupOptions{Target: "codex", Scope: "project", Workspace: workspace, WorkspaceSet: true, DataDir: dataDir}, configPath) {
+	if !setupMCPInstalled(setupOptions{Target: "codex", Scope: "project", Workspace: workspace, WorkspaceSet: true, DataDir: dataDir}, configPath, installed.BinaryPath) {
 		t.Fatal("semantic status did not recognize the installed Codex MCP server")
 	}
 
@@ -473,7 +484,7 @@ func TestSetupProjectScopeDefaultsToCurrentDirectory(t *testing.T) {
 	if len(restore.execCalls) != 0 {
 		t.Fatalf("Codex project install should write config directly, exec calls = %#v", restore.execCalls)
 	}
-	if !setupMCPInstalled(setupOptions{Target: "codex", Scope: "project", Workspace: canonicalWorkspace, DataDir: filepath.Join(tmp, "helm")}, summary.ClientConfigPath) {
+	if !setupMCPInstalled(setupOptions{Target: "codex", Scope: "project", Workspace: canonicalWorkspace, DataDir: filepath.Join(tmp, "helm")}, summary.ClientConfigPath, summary.BinaryPath) {
 		t.Fatal("Codex project install did not write MCP config under the current directory")
 	}
 	if _, err := os.Stat(filepath.Join(canonicalWorkspace, ".codex", "hooks.json")); err != nil {
@@ -485,6 +496,153 @@ func TestSetupProjectScopeDefaultsToCurrentDirectory(t *testing.T) {
 	code = Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "user", "--workspace", workspace, "--dry-run", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "only valid with --scope project") {
 		t.Fatalf("user setup with workspace code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestSetupMCPInstalledRequiresExactScopedBinding(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+	bin := filepath.Join(tmp, "bin", "helm-ai-kernel")
+	dataDir := filepath.Join(tmp, "helm-data")
+
+	for _, test := range []struct {
+		target string
+		scope  string
+	}{
+		{target: "claude-code", scope: "user"},
+		{target: "claude-code", scope: "project"},
+		{target: "codex", scope: "user"},
+		{target: "codex", scope: "project"},
+	} {
+		t.Run(test.target+"_"+test.scope, func(t *testing.T) {
+			workspace := filepath.Join(tmp, test.target+"-"+test.scope+"-workspace")
+			if err := os.MkdirAll(workspace, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			opts := setupOptions{Target: test.target, Scope: test.scope, Workspace: workspace, DataDir: dataDir}
+			path := setupClientConfigPath(opts)
+
+			writeSetupMCPTestConfig(t, test.target, path, bin, dataDir)
+			if !setupMCPInstalled(opts, path, bin) {
+				t.Fatal("exact MCP binding was not recognized")
+			}
+
+			writeSetupMCPTestConfig(t, test.target, path, bin, filepath.Join(tmp, "stale-data"))
+			if setupMCPInstalled(opts, path, bin) {
+				t.Fatal("MCP binding with stale data directory was reported healthy")
+			}
+
+			writeSetupMCPTestConfig(t, test.target, path, filepath.Join(tmp, "stale-bin"), dataDir)
+			if setupMCPInstalled(opts, path, bin) {
+				t.Fatal("MCP binding with stale Kernel binary was reported healthy")
+			}
+
+			otherPath := filepath.Join(tmp, test.target+"-"+test.scope+"-other-config")
+			writeSetupMCPTestConfig(t, test.target, otherPath, bin, dataDir)
+			if setupMCPInstalled(opts, otherPath, bin) {
+				t.Fatal("MCP binding from the wrong scope path was reported healthy")
+			}
+
+			outsidePath := filepath.Join(tmp, test.target+"-"+test.scope+"-external-config")
+			writeSetupMCPTestConfig(t, test.target, outsidePath, bin, dataDir)
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outsidePath, path); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			got := setupMCPInstalled(opts, path, bin)
+			if test.scope == "project" && got {
+				t.Fatal("project MCP binding through an external symlink was reported healthy")
+			}
+			if test.scope == "user" && !got {
+				t.Fatal("user MCP binding through an external dotfile symlink was not recognized")
+			}
+		})
+	}
+}
+
+func TestSetupStatusRejectsStaleMCPDataDir(t *testing.T) {
+	for _, test := range []struct {
+		target string
+		scope  string
+	}{
+		{target: "claude-code", scope: "user"},
+		{target: "claude-code", scope: "project"},
+		{target: "codex", scope: "user"},
+		{target: "codex", scope: "project"},
+	} {
+		t.Run(test.target+"_"+test.scope, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("HOME", filepath.Join(tmp, "home"))
+			workspace := filepath.Join(tmp, "workspace")
+			if err := os.MkdirAll(workspace, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			dataDir := filepath.Join(tmp, "helm-data")
+			opts := setupOptions{Operation: "status", Target: test.target, Scope: test.scope, Workspace: workspace, DataDir: dataDir}
+			summary, err := buildSetupSummary(opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := upsertHookConfig(summary.HookConfigPath, setupHookMatcher(test.target), setupHookCommand(opts, summary.BinaryPath), setupPrivateFileRoot(opts)); err != nil {
+				t.Fatalf("write exact hook config: %v", err)
+			}
+			writeSetupMCPTestConfig(t, test.target, summary.ClientConfigPath, summary.BinaryPath, filepath.Join(tmp, "stale-data"))
+
+			args := []string{"helm-ai-kernel", "setup", "status", test.target, "--scope", test.scope, "--json", "--data-dir", dataDir}
+			if test.scope == "project" {
+				args = append(args, "--workspace", workspace)
+			}
+			var stdout, stderr bytes.Buffer
+			code := Run(args, &stdout, &stderr)
+			if code != 1 {
+				t.Fatalf("stale status exit = %d, want 1; stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+			}
+			stale := decodeSingleSetupSummary(t, &stdout)
+			if stale.MCPInstalled || !stale.HookInstalled {
+				t.Fatalf("stale status = %#v, want MCP false and hook true", stale)
+			}
+
+			writeSetupMCPTestConfig(t, test.target, summary.ClientConfigPath, summary.BinaryPath, dataDir)
+			stdout.Reset()
+			stderr.Reset()
+			code = Run(args, &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("exact status exit = %d, want 0; stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+			}
+			exact := decodeSingleSetupSummary(t, &stdout)
+			if !exact.MCPInstalled || !exact.HookInstalled {
+				t.Fatalf("exact status = %#v, want MCP and hook true", exact)
+			}
+		})
+	}
+}
+
+func writeSetupMCPTestConfig(t *testing.T, target, path, bin, dataDir string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	var raw []byte
+	switch target {
+	case "claude-code":
+		config := claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
+			setupMCPServerName: {Command: bin, Args: setupMCPArgs(dataDir)},
+		}}
+		var err error
+		raw, err = json.Marshal(config)
+		if err != nil {
+			t.Fatal(err)
+		}
+	case "codex":
+		raw = []byte("[mcp_servers." + setupMCPServerName + "]\ncommand = " + strconv.Quote(bin) + "\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", " + strconv.Quote(dataDir) + "]\n")
+	default:
+		t.Fatalf("unsupported test target %q", target)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

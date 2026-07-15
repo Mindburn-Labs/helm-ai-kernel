@@ -530,6 +530,37 @@ func TestGovernedBridgeMintsLinearScopedPermits(t *testing.T) {
 	}
 }
 
+func TestLinearPermitBindingBindsExactParamValues(t *testing.T) {
+	req := &runtimeadapters.AdaptedRequest{
+		ToolName: "linear.create_issue",
+		Arguments: map[string]any{
+			"team_id":  "team-1",
+			"title":    "Ship = safely",
+			"priority": 2,
+			"labels":   []string{"security", "connector"},
+		},
+	}
+	effectType, allowedParams, resourceRef, ok := linearPermitBinding(req)
+	if !ok {
+		t.Fatal("expected Linear permit binding")
+	}
+	if effectType != effects.EffectTypeWrite {
+		t.Fatalf("effect type = %q, want %q", effectType, effects.EffectTypeWrite)
+	}
+	wantParams := []string{
+		`labels=["security","connector"]`,
+		"priority=2",
+		"team_id=team-1",
+		"title=Ship = safely",
+	}
+	if strings.Join(allowedParams, "\n") != strings.Join(wantParams, "\n") {
+		t.Fatalf("allowed params = %#v, want %#v", allowedParams, wantParams)
+	}
+	if resourceRef != "team:team-1" {
+		t.Fatalf("resource ref = %q, want team:team-1", resourceRef)
+	}
+}
+
 // Dispatch failure: the connector error is recorded; the call is not reported as
 // a clean allow-with-output (Result stays nil, truth lives in the effect node).
 func TestGovernedBridgeRecordsDispatchFailure(t *testing.T) {

@@ -155,6 +155,9 @@ func canonicalizeReceiptForVerification(receipt *contracts.Receipt) ([]byte, err
 	}
 	switch receipt.SignatureVersion {
 	case "":
+		if hasSafeDepReceiptEvidence(receipt) {
+			return nil, fmt.Errorf("legacy receipt signature cannot authenticate SafeDep evidence")
+		}
 		return []byte(CanonicalizeReceipt(
 			receipt.ReceiptID,
 			receipt.DecisionID,
@@ -170,6 +173,14 @@ func canonicalizeReceiptForVerification(receipt *contracts.Receipt) ([]byte, err
 	default:
 		return nil, fmt.Errorf("unsupported receipt signature version %q", receipt.SignatureVersion)
 	}
+}
+
+func hasSafeDepReceiptEvidence(receipt *contracts.Receipt) bool {
+	return receipt.EmergencyActivationID != "" ||
+		receipt.EmergencyDelegationSessionID != "" ||
+		receipt.EmergencyScopeHash != "" ||
+		receipt.SafeDepState != "" ||
+		receipt.SafeDepReasonCode != ""
 }
 
 // canonicalizeReceiptV2 binds the execution identity, causal chain, PEP

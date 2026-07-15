@@ -457,6 +457,9 @@ func canonicalizeEmbeddedKernelReceipt(document map[string]any) ([]byte, error) 
 
 	switch version := firstString(document, "signature_version"); version {
 	case "":
+		if hasEmbeddedSafeDepReceiptEvidence(document) {
+			return nil, fmt.Errorf("legacy receipt signature cannot authenticate SafeDep evidence")
+		}
 		return []byte(fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
 			firstString(document, "receipt_id"),
 			firstString(document, "decision_id"),
@@ -487,6 +490,14 @@ func canonicalizeEmbeddedKernelReceipt(document map[string]any) ([]byte, error) 
 	default:
 		return nil, fmt.Errorf("unsupported receipt signature version %q", version)
 	}
+}
+
+func hasEmbeddedSafeDepReceiptEvidence(document map[string]any) bool {
+	return firstString(document, "emergency_activation_id") != "" ||
+		firstString(document, "emergency_delegation_session_id") != "" ||
+		firstString(document, "emergency_scope_hash") != "" ||
+		firstString(document, "safe_dep_state") != "" ||
+		firstString(document, "safe_dep_reason_code") != ""
 }
 
 func canonicalMarshalEmbeddedReceipt(payload map[string]any) ([]byte, error) {

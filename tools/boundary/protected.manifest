@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-15T15:34:50Z
-# Commit: 36397a63e2795ecfbd51f2174279f6c2c4a4b37c
+# Generated: 2026-07-15T15:45:04Z
+# Commit: c7f9cd4d8c0a8411c8ca1df47626989711076ce6
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -251,7 +251,7 @@ cec8685ee1984a7d2354c6772225a93f0b2410933199464e7a982e90cf8c17de  core/pkg/contr
 ec5e678d2ee82478613d555157bee76e6219e89e33bff48ba73912064889c879  core/pkg/crypto/audit.go
 7bb309852eb6f56e94608764d95590d12d0363799464cefd13890a6be6337561  core/pkg/crypto/audit_test.go
 4c93d6bca52d1d607b7a6a17431e621dae6a282517502fcdb02c339583d784cc  core/pkg/crypto/cache.go
-9388833a48fadc0a1b525488089474d787a5e1a7414b9df41df393a7445e6d40  core/pkg/crypto/canonical.go
+38232d988982a8807ca2a49330fb743dc5995ec46d2a98d644b67203caa9a57b  core/pkg/crypto/canonical.go
 21e64571c1be21d57c3c7fada229e4283b0c06bff51b53fc91d45050c1725579  core/pkg/crypto/canonical_hardening_test.go
 79c5800555e866ef43ef7cc0f0578676770ab6292ea2860e2e331d0ee25c764b  core/pkg/crypto/chaos_test.go
 0319cee4ab2b72af8110ef535a2d1686d748d7ebd8befe932c65e515883d9dd2  core/pkg/crypto/counterfactual_signer_test.go
@@ -290,7 +290,7 @@ bb9cccd00a8f5107ccad949e14c50e13b4e6e714fa952e8b7c866798d0e9c9c8  core/pkg/crypt
 328536be43592bcc25b4bf18a0bbe864c73ff43954dc1923033a537123af679f  core/pkg/crypto/mtls/rotator.go
 a8c4c2ef34613e99ecf4b3a72861c0b34dafa8c10ad3084ff903f72b72ec02b9  core/pkg/crypto/mtls/rotator_core_coverage_test.go
 5d0ce46c64f009020be09e85c9c5f8d55e9f781b9ef96aae9828d872bf49ba98  core/pkg/crypto/receipt_pq_hybrid_vectors_test.go
-6b881c16cbfcd2fb89f559e7b6ef53d1104022aabee28e62d3b59dd4854247c4  core/pkg/crypto/receipt_signature_test.go
+39e3ffe2efec9ffb7c2322993f97c819d854d5760b9e58df8cf7025b2b50ab0a  core/pkg/crypto/receipt_signature_test.go
 f83617b68486e9380a2271b72b51066e188c82f415560bffdc1d8d62452aad69  core/pkg/crypto/sdjwt/sdjwt.go
 d3366d27f1a5e3b4b0b36d66aa78b895f1a6220bfd40172fc789ed7f946bcb06  core/pkg/crypto/sdjwt/sdjwt_test.go
 c05fd979d2cba7ac6decd9766f929b8df7b095e26b07f711354fe32e466cacb7  core/pkg/crypto/shredding/shredding.go
@@ -420,9 +420,9 @@ f2229d08f1b6ad50f51e976305814161e9269884bf563c18fb57bb7416285d10  core/pkg/verif
 bfbe8e2d25ff38dc49eb34028cfede4e449bdc63e3b810f1b19913a11b72442b  core/pkg/verifier/externalreceipt/externalreceipt.go
 fdb3835dc6315a0730a961d458a0c1e4f9f5d79059f33b8908718f075718e12f  core/pkg/verifier/externalreceipt/externalreceipt_test.go
 e70d160b80a81e70a4d1019d9903135d25f813bbe5803b1da8582e727e8c819c  core/pkg/verifier/host_evidence_test.go
-288ea6fb7bd6f1432a7814a9eda2a206dc372d51ade889a56612907c8e4c93d1  core/pkg/verifier/verifier.go
+0ddc5fd6f7bff59a2ffe0ab500562ab6980c48e9910a937a283251c757e20fba  core/pkg/verifier/verifier.go
 6826dbc4685bd55768db73e1d39e7195ac05571d2452337aa10c87704027f153  core/pkg/verifier/verifier_behavior_coverage_test.go
-0c8862a8115f8699d47ed238976fd6fa3235b7c2a48bb75e5598cbc325b9ed01  core/pkg/verifier/verifier_test.go
+f0fb3647596f9c125f56bcb8f4029d1ad2ac948b3d90bf2cf2676c2a5dfa0587  core/pkg/verifier/verifier_test.go
 f5332ef5eaa72e342066a9d3dad0f822415efeece0312fd97c9cb23674b2c647  core/pkg/connectors/sandbox/README.md
 54d138f657e16bc1df4cf260a562f3e0ad239f6c145129565799700401c6f78d  core/pkg/connectors/sandbox/branchfs.go
 3a43db565ecb1e9d80be41747dfcf8d591f131ef7ef2979b9066f77309ed7656  core/pkg/connectors/sandbox/bridge.go

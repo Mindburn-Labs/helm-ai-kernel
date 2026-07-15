@@ -397,6 +397,19 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
 
+	t.Run("legacy receipt refuses unsigned SafeDep evidence", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		unsignedEvidence := receipt(signature, keyHex)
+		unsignedEvidence["safe_dep_state"] = "degraded_narrowing"
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), unsignedEvidence)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
 	t.Run("missing key disclosure fails closed", func(t *testing.T) {
 		dir := createValidBundleFixture(t)
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signature, ""))

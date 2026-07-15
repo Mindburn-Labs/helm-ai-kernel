@@ -90,6 +90,11 @@ func TestReceiptSignatureV2SupportsLegacyReadWithoutDowngrade(t *testing.T) {
 	if valid, err := signer.VerifyReceipt(legacy); err != nil || !valid {
 		t.Fatalf("queued legacy receipt did not verify: valid=%v err=%v", valid, err)
 	}
+	legacyWithUnsignedEvidence := *legacy
+	legacyWithUnsignedEvidence.SafeDepState = string(contracts.SafeDepDegradedNarrowing)
+	if valid, err := signer.VerifyReceipt(&legacyWithUnsignedEvidence); err == nil || valid {
+		t.Fatalf("legacy receipt with unsigned SafeDep evidence was not rejected: valid=%v err=%v", valid, err)
+	}
 
 	v2 := safeDepReceiptForSignatureTest()
 	if err := signer.SignReceipt(v2); err != nil {

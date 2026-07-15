@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: campaign trust delegates to the EvidencePack verifier's
+// classical Ed25519 trust profiles; no post-quantum assurance is claimed.
+
 import (
 	"encoding/json"
 	"flag"

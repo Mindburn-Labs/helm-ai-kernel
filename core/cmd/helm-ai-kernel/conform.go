@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: signed conformance report artifacts use classical Ed25519
+// in this release; this command does not claim post-quantum assurance.
+
 import (
 	"bytes"
 	"crypto/ed25519"

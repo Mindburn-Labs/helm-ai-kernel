@@ -20,6 +20,8 @@ var (
 	reviewerPattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,127}$`)
 )
 
+const maxFindings = 200
+
 // Evaluate validates a two-provider review quorum and returns a deterministic
 // permit. A structurally invalid context is an error because no trustworthy
 // decision can be bound to it. Invalid, stale, missing, or denying reviews
@@ -170,7 +172,7 @@ func ValidateAllowPermit(permit Permit, trustedContext Context, contextSHA256 st
 	if permit.PullRequest <= 0 {
 		problems = append(problems, "pull_request must be positive")
 	}
-	if !strings.HasPrefix(permit.BaseRef, "refs/heads/") {
+	if !validGitRef(permit.BaseRef, false) {
 		problems = append(problems, "base_ref must be a branch ref")
 	}
 	for label, value := range map[string]string{
@@ -187,16 +189,11 @@ func ValidateAllowPermit(permit Permit, trustedContext Context, contextSHA256 st
 	if !repositoryPattern.MatchString(permit.WorkflowRepository) {
 		problems = append(problems, "invalid workflow_repository")
 	}
-	if !strings.HasPrefix(permit.WorkflowPath, ".github/workflows/") ||
-		(!strings.HasSuffix(permit.WorkflowPath, ".yml") && !strings.HasSuffix(permit.WorkflowPath, ".yaml")) {
+	if !validWorkflowPath(permit.WorkflowPath) {
 		problems = append(problems, "workflow_path must name a GitHub Actions workflow")
 	}
-	workflowRef := permit.WorkflowRef
-	workflowIdentityPrefix := permit.WorkflowRepository + "/" + permit.WorkflowPath + "@"
-	if strings.HasPrefix(workflowRef, workflowIdentityPrefix) {
-		workflowRef = strings.TrimPrefix(workflowRef, workflowIdentityPrefix)
-	}
-	if !strings.HasPrefix(workflowRef, "refs/heads/") && !strings.HasPrefix(workflowRef, "refs/tags/") {
+	workflowRef := normalizeWorkflowRef(permit.WorkflowRepository, permit.WorkflowPath, permit.WorkflowRef)
+	if !validGitRef(workflowRef, true) {
 		problems = append(problems, "workflow_ref must be a branch or tag ref")
 	}
 	if strings.EqualFold(permit.Repository, permit.WorkflowRepository) &&
@@ -241,8 +238,8 @@ func ValidateAllowPermit(permit Permit, trustedContext Context, contextSHA256 st
 			if review.Verdict != DecisionAllow || review.BlockingFindings != 0 {
 				problems = append(problems, "every ALLOW permit review must be non-blocking ALLOW")
 			}
-			if review.AdvisoryFindings < 0 {
-				problems = append(problems, "review advisory_findings cannot be negative")
+			if review.AdvisoryFindings < 0 || review.AdvisoryFindings > maxFindings {
+				problems = append(problems, "review advisory_findings must be between 0 and 200")
 			}
 			if !hexSHA256Pattern.MatchString(review.ResponseSHA256) {
 				problems = append(problems, "review response_sha256 must be lowercase hexadecimal")
@@ -289,7 +286,7 @@ func validateContext(context Context) error {
 	if context.PullRequest <= 0 {
 		problems = append(problems, "pull_request must be positive")
 	}
-	if !strings.HasPrefix(context.BaseRef, "refs/heads/") {
+	if !validGitRef(context.BaseRef, false) {
 		problems = append(problems, "base_ref must be a branch ref")
 	}
 	if !hexSHA40Pattern.MatchString(context.BaseSHA) {
@@ -307,16 +304,11 @@ func validateContext(context Context) error {
 	if !repositoryPattern.MatchString(context.WorkflowRepository) {
 		problems = append(problems, "invalid workflow_repository")
 	}
-	if !strings.HasPrefix(context.WorkflowPath, ".github/workflows/") ||
-		(!strings.HasSuffix(context.WorkflowPath, ".yml") && !strings.HasSuffix(context.WorkflowPath, ".yaml")) {
+	if !validWorkflowPath(context.WorkflowPath) {
 		problems = append(problems, "workflow_path must name a GitHub Actions workflow")
 	}
-	workflowRef := context.WorkflowRef
-	workflowIdentityPrefix := context.WorkflowRepository + "/" + context.WorkflowPath + "@"
-	if strings.HasPrefix(workflowRef, workflowIdentityPrefix) {
-		workflowRef = strings.TrimPrefix(workflowRef, workflowIdentityPrefix)
-	}
-	if !strings.HasPrefix(workflowRef, "refs/heads/") && !strings.HasPrefix(workflowRef, "refs/tags/") {
+	workflowRef := normalizeWorkflowRef(context.WorkflowRepository, context.WorkflowPath, context.WorkflowRef)
+	if !validGitRef(workflowRef, true) {
 		problems = append(problems, "workflow_ref must be a branch or tag ref")
 	}
 	if !hexSHA40Pattern.MatchString(context.WorkflowSHA) {
@@ -440,7 +432,7 @@ func validateReview(context Context, contextSHA256 string, review Review) (Revie
 	} else if review.Verdict == DecisionDeny {
 		add("REVIEW_DENIED", "reviewer denied the proposed change")
 	}
-	if review.Findings == nil || len(review.Findings) > 200 {
+	if review.Findings == nil || len(review.Findings) > maxFindings {
 		add("REVIEW_FINDINGS_INVALID", "review findings must be an explicit array of at most 200 items")
 	}
 	for _, finding := range review.Findings {
@@ -450,6 +442,10 @@ func validateReview(context Context, contextSHA256 string, review Review) (Revie
 		}
 		if finding.Line < 0 {
 			add("REVIEW_FINDINGS_INVALID", "finding line cannot be negative")
+			continue
+		}
+		if len(finding.Path) > 1000 || strings.ContainsRune(finding.Path, '\x00') {
+			add("REVIEW_FINDINGS_INVALID", "finding path must be bounded and contain no NUL")
 			continue
 		}
 		switch finding.Severity {
@@ -478,4 +474,40 @@ func (permit *Permit) addReason(code, reviewer, detail string) {
 
 func reviewerKey(reviewer Reviewer) string {
 	return strings.ToLower(reviewer.Provider) + "/" + strings.ToLower(reviewer.Model)
+}
+
+func validWorkflowPath(path string) bool {
+	const prefix = ".github/workflows/"
+	name := strings.TrimPrefix(path, prefix)
+	return name != path && name != "" && len(name) <= 255 &&
+		!strings.ContainsAny(name, "/\\\x00\r\n") &&
+		(strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml"))
+}
+
+func normalizeWorkflowRef(repository, path, ref string) string {
+	return strings.TrimPrefix(ref, repository+"/"+path+"@")
+}
+
+func validGitRef(ref string, allowTag bool) bool {
+	prefix := "refs/heads/"
+	if allowTag && strings.HasPrefix(ref, "refs/tags/") {
+		prefix = "refs/tags/"
+	}
+	if !strings.HasPrefix(ref, prefix) || len(ref) == len(prefix) ||
+		strings.ContainsAny(ref, " ~^:?*[\\") || strings.Contains(ref, "..") ||
+		strings.Contains(ref, "@{") || strings.Contains(ref, "//") ||
+		strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") {
+		return false
+	}
+	for _, component := range strings.Split(strings.TrimPrefix(ref, prefix), "/") {
+		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
+			return false
+		}
+	}
+	for _, character := range ref {
+		if character < 0x20 || character == 0x7f {
+			return false
+		}
+	}
+	return true
 }

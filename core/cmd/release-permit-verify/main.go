@@ -124,15 +124,30 @@ func flagWasSet(name string) bool {
 }
 
 func decodeStrictFile(path string, destination any) ([]byte, error) {
-	info, err := os.Stat(path)
+	pathInfo, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
 	}
-	if info.Size() > maxInputBytes {
+	if !pathInfo.Mode().IsRegular() {
+		return nil, errors.New("input must be a regular file")
+	}
+	if pathInfo.Size() > maxInputBytes {
 		return nil, fmt.Errorf("input exceeds %d bytes", maxInputBytes)
 	}
 	// #nosec G304 -- paths are explicit command inputs in a protected workflow.
-	content, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	openInfo, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !openInfo.Mode().IsRegular() || !os.SameFile(pathInfo, openInfo) {
+		return nil, errors.New("input changed while opening")
+	}
+	content, err := io.ReadAll(io.LimitReader(file, maxInputBytes+1))
 	if err != nil {
 		return nil, err
 	}
@@ -238,6 +253,16 @@ func validateExactShape(content []byte, destination any) error {
 	if err != nil {
 		return err
 	}
+	rootKeys := make([]string, 0, len(root))
+	for key := range root {
+		rootKeys = append(rootKeys, key)
+	}
+	sort.Strings(rootKeys)
+	for _, key := range rootKeys {
+		if err := rejectUnexpectedNulls(root[key], key); err != nil {
+			return err
+		}
+	}
 	switch destination.(type) {
 	case *releasepermit.Context:
 		if err := requireKeys(root, []string{
@@ -335,6 +360,47 @@ func validateExactShape(content []byte, destination any) error {
 		}
 	default:
 		return fmt.Errorf("unsupported strict JSON destination %T", destination)
+	}
+	return nil
+}
+
+func rejectUnexpectedNulls(raw json.RawMessage, path string) error {
+	trimmed := bytes.TrimSpace(raw)
+	if bytes.Equal(trimmed, []byte("null")) {
+		if path == "authority.parent" {
+			return nil
+		}
+		return fmt.Errorf("%s must not be null", path)
+	}
+	if len(trimmed) == 0 {
+		return fmt.Errorf("%s is empty", path)
+	}
+	switch trimmed[0] {
+	case '{':
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &object); err != nil {
+			return err
+		}
+		keys := make([]string, 0, len(object))
+		for key := range object {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if err := rejectUnexpectedNulls(object[key], path+"."+key); err != nil {
+				return err
+			}
+		}
+	case '[':
+		var values []json.RawMessage
+		if err := json.Unmarshal(trimmed, &values); err != nil {
+			return err
+		}
+		for index, value := range values {
+			if err := rejectUnexpectedNulls(value, fmt.Sprintf("%s[%d]", path, index)); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

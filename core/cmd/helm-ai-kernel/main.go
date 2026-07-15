@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -49,17 +50,18 @@ func main() {
 var startServer = runServer
 
 type serverOptions struct {
-	Mode       string
-	BindAddr   string
-	Port       int
-	DataDir    string
-	SQLitePath string
-	PolicyPath string
-	Quickstart *quickstartRuntime
-	OnReady    func(bindAddr string, port int)
-	JSON       bool
-	Stdout     io.Writer
-	Stderr     io.Writer
+	Mode             string
+	BindAddr         string
+	Port             int
+	DataDir          string
+	SQLitePath       string
+	PolicyPath       string
+	Quickstart       *quickstartRuntime
+	OnReady          func(bindAddr string, port int)
+	JSON             bool
+	Stdout           io.Writer
+	Stderr           io.Writer
+	DesktopTransport *desktopTransportConfig
 }
 
 // Run is the entrypoint for testing
@@ -145,12 +147,18 @@ func runServer() {
 }
 
 //nolint:gocognit,gocyclo
-func runServerWithOptions(opts serverOptions) {
+func runServerWithOptions(opts serverOptions) error {
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
 	}
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
+	}
+	protocolStdout := opts.Stdout
+	if opts.DesktopTransport != nil {
+		// Transport-v1 reserves direct-child stdout for its single authenticated
+		// record; regular startup chatter remains on stderr via the log package.
+		opts.Stdout = io.Discard
 	}
 	fmt.Fprintf(opts.Stdout, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
 	ctx, runtimeCancel := context.WithCancel(context.Background())
@@ -387,21 +395,12 @@ func runServerWithOptions(opts serverOptions) {
 	// Start API Server
 	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).
 	// Set HELM_BIND_ADDR=0.0.0.0 to listen on all interfaces when intentionally exposing.
-	bindAddr := opts.BindAddr
-	if bindAddr == "" {
-		bindAddr = "127.0.0.1"
-	}
-	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" && opts.BindAddr == "" {
-		bindAddr = envBind
-	}
-	port := opts.Port
-	if port == 0 {
-		port = 8080
-	}
-	if envPort := os.Getenv("HELM_PORT"); envPort != "" && opts.Port == 0 {
-		if p, err := strconv.Atoi(envPort); err == nil {
-			port = p
-		}
+	bindAddr, port := resolveServerAddress(opts)
+	if opts.DesktopTransport != nil {
+		// Transport-v1 ignores ambient address/port configuration. The listener
+		// is bound atomically below to the only allowed address, 127.0.0.1:0.
+		bindAddr = desktopTransportHost
+		port = 0
 	}
 	mux := http.NewServeMux()
 	if extraRoutes != nil {
@@ -422,70 +421,91 @@ func runServerWithOptions(opts serverOptions) {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
-	if bindAddr == "0.0.0.0" {
+	if opts.DesktopTransport == nil && bindAddr == "0.0.0.0" {
 		log.Printf("[helm] WARNING: API server binding to all interfaces (0.0.0.0:%d) — ensure firewall rules are in place", port)
+	}
+	var apiListener net.Listener
+	if opts.DesktopTransport != nil {
+		var err error
+		apiListener, port, err = startDesktopTransport(opts.DesktopTransport, protocolStdout)
+		if err != nil {
+			return err
+		}
 	}
 	go func() {
 		log.Printf("[helm] API server: %s:%d", bindAddr, port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if apiListener != nil {
+			err = server.Serve(apiListener)
+		} else {
+			err = server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			logger.Error("API server failed", "error", err)
 		}
 	}()
 
-	// Health Server
-	healthPort := 8081
-	if envHP := os.Getenv("HELM_HEALTH_PORT"); envHP != "" {
-		if p, err := strconv.Atoi(envHP); err == nil {
-			healthPort = p
-		}
-	}
-	healthMux := http.NewServeMux()
-	healthHandler := func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	}
-	healthMux.HandleFunc("/health", healthHandler)
-	healthMux.HandleFunc("/healthz", healthHandler)
-	metricsPort := envInt("HELM_METRICS_PORT", healthPort)
-	metricsEnabled := envBool("HELM_METRICS_ENABLED")
-	if metricsEnabled && metricsPort == healthPort {
-		healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
-	}
-	healthServer := &http.Server{
-		Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
-		Handler:           healthMux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      5 * time.Second,
-		IdleTimeout:       30 * time.Second,
-	}
-	go func() {
-		log.Printf("[helm] health server: %s:%d", bindAddr, healthPort)
-		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("[helm] health server error: %v", err)
-		}
-	}()
+	var healthServer *http.Server
 	var metricsServer *http.Server
-	if metricsEnabled && metricsPort != healthPort {
-		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
-		metricsServer = &http.Server{
-			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
-			Handler:           metricsMux,
+	if opts.DesktopTransport == nil {
+		// Desktop transport uses only its authenticated dynamic listener. Starting
+		// the ordinary fixed health or metrics listeners would reintroduce a port
+		// collision outside the authenticated handoff.
+		healthPort := 8081
+		if envHP := os.Getenv("HELM_HEALTH_PORT"); envHP != "" {
+			if p, err := strconv.Atoi(envHP); err == nil {
+				healthPort = p
+			}
+		}
+		healthMux := http.NewServeMux()
+		healthHandler := func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		}
+		healthMux.HandleFunc("/health", healthHandler)
+		healthMux.HandleFunc("/healthz", healthHandler)
+		metricsPort := envInt("HELM_METRICS_PORT", healthPort)
+		metricsEnabled := envBool("HELM_METRICS_ENABLED")
+		if metricsEnabled && metricsPort == healthPort {
+			healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+		}
+		healthServer = &http.Server{
+			Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
+			Handler:           healthMux,
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       5 * time.Second,
 			WriteTimeout:      5 * time.Second,
 			IdleTimeout:       30 * time.Second,
 		}
 		go func() {
-			log.Printf("[helm] metrics server: %s:%d", bindAddr, metricsPort)
-			if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Printf("[helm] metrics server error: %v", err)
+			log.Printf("[helm] health server: %s:%d", bindAddr, healthPort)
+			if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("[helm] health server error: %v", err)
 			}
 		}()
+		if metricsEnabled && metricsPort != healthPort {
+			metricsMux := http.NewServeMux()
+			metricsMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+			metricsServer = &http.Server{
+				Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
+				Handler:           metricsMux,
+				ReadHeaderTimeout: 5 * time.Second,
+				ReadTimeout:       5 * time.Second,
+				WriteTimeout:      5 * time.Second,
+				IdleTimeout:       30 * time.Second,
+			}
+			go func() {
+				log.Printf("[helm] metrics server: %s:%d", bindAddr, metricsPort)
+				if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					log.Printf("[helm] metrics server error: %v", err)
+				}
+			}()
+		}
 	}
 
-	if opts.JSON {
+	if opts.DesktopTransport != nil {
+		log.Printf("[helm] desktop transport ready: http://%s:%d", bindAddr, port)
+	} else if opts.JSON {
 		_ = json.NewEncoder(opts.Stdout).Encode(map[string]any{
 			"name":   "helm-edge-local",
 			"addr":   bindAddr,
@@ -498,7 +518,7 @@ func runServerWithOptions(opts serverOptions) {
 	} else {
 		log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
 	}
-	if opts.OnReady != nil {
+	if opts.DesktopTransport == nil && opts.OnReady != nil {
 		opts.OnReady(bindAddr, port)
 	}
 	log.Println("[helm] press ctrl+c to stop")
@@ -515,8 +535,10 @@ func runServerWithOptions(opts serverOptions) {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("[helm] API server shutdown error: %v", err)
 	}
-	if err := healthServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[helm] health server shutdown error: %v", err)
+	if healthServer != nil {
+		if err := healthServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[helm] health server shutdown error: %v", err)
+		}
 	}
 	if metricsServer != nil {
 		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
@@ -524,6 +546,27 @@ func runServerWithOptions(opts serverOptions) {
 		}
 	}
 	log.Println("[helm] shutdown complete")
+	return nil
+}
+
+func resolveServerAddress(opts serverOptions) (string, int) {
+	bindAddr := opts.BindAddr
+	if bindAddr == "" {
+		bindAddr = "127.0.0.1"
+	}
+	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" && opts.BindAddr == "" {
+		bindAddr = envBind
+	}
+	port := opts.Port
+	if port == 0 {
+		port = 8080
+	}
+	if envPort := os.Getenv("HELM_PORT"); envPort != "" && opts.Port == 0 {
+		if p, err := strconv.Atoi(envPort); err == nil {
+			port = p
+		}
+	}
+	return bindAddr, port
 }
 
 func servicesInitFailureIsFatal() bool {

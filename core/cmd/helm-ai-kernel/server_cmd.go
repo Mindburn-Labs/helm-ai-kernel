@@ -27,6 +27,8 @@ func runServerCommand(name string, args []string, stdout, stderr io.Writer) int 
 	cmd.IntVar(&opts.Port, "port", 0, "Listen port")
 	cmd.StringVar(&opts.DataDir, "data-dir", "", "Data directory for local SQLite state and keys")
 	cmd.BoolVar(&opts.JSON, "json", false, "Print startup status as JSON")
+	var desktopTransport bool
+	cmd.BoolVar(&desktopTransport, desktopTransportFlag, false, "Use authenticated Desktop-owned loopback transport")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -38,6 +40,22 @@ func runServerCommand(name string, args []string, stdout, stderr io.Writer) int 
 	if name == "serve" && opts.PolicyPath == "" {
 		_, _ = fmt.Fprintln(stderr, "Error: helm-ai-kernel serve requires --policy <path>")
 		return 2
+	}
+	if desktopTransport {
+		if name != "server" {
+			_, _ = fmt.Fprintf(stderr, "Error: --%s is only supported by helm-ai-kernel server\n", desktopTransportFlag)
+			return 2
+		}
+		if serverFlagWasProvided(cmd, "addr") || serverFlagWasProvided(cmd, "port") {
+			_, _ = fmt.Fprintf(stderr, "Error: --%s chooses its own loopback listener; do not pass --addr or --port\n", desktopTransportFlag)
+			return 2
+		}
+		config, err := loadDesktopTransportConfig()
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: invalid desktop transport configuration: %v\n", err)
+			return 2
+		}
+		opts.DesktopTransport = config
 	}
 
 	if opts.PolicyPath != "" {
@@ -79,6 +97,19 @@ func runServerCommand(name string, args []string, stdout, stderr io.Writer) int 
 		}
 	}
 
-	runServerWithOptions(opts)
+	if err := runServerWithOptions(opts); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: server startup failed: %v\n", err)
+		return 1
+	}
 	return 0
+}
+
+func serverFlagWasProvided(cmd *flag.FlagSet, name string) bool {
+	provided := false
+	cmd.Visit(func(candidate *flag.Flag) {
+		if candidate.Name == name {
+			provided = true
+		}
+	})
+	return provided
 }

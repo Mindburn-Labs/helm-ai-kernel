@@ -138,6 +138,9 @@ func (g ApprovalGrant) Validate() error {
 	if g.IssuedAt.IsZero() || g.ExpiresAt.IsZero() {
 		return approvalGrantInvalid("issued_at and expires_at are required")
 	}
+	if !isApprovalGrantUTC(g.IssuedAt) || !isApprovalGrantUTC(g.ExpiresAt) {
+		return approvalGrantInvalid("issued_at and expires_at must use UTC")
+	}
 	if !g.ExpiresAt.After(g.IssuedAt) {
 		return approvalGrantInvalid("expires_at must be after issued_at")
 	}
@@ -218,4 +221,9 @@ func isApprovalGrantNonce(value string) bool {
 	}
 	decoded, err := hex.DecodeString(value)
 	return err == nil && len(decoded) == 32
+}
+
+func isApprovalGrantUTC(value time.Time) bool {
+	_, offset := value.Zone()
+	return offset == 0
 }

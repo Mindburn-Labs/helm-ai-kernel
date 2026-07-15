@@ -21,7 +21,7 @@ func TestApprovalGrantAndAssertionGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApprovalChallenge.Seal() error = %v", err)
 	}
-	if want := "sha256:aba636bf5caa97e81b2fe77f2fef4a54e6426ee6b1307f958de9f281561b36c4"; challenge.ChallengeHash != want {
+	if want := "sha256:8771698d9efa5b3d76dd168ec2f0aab84944e619bdee44fa6dd5ffe45e7b1bce"; challenge.ChallengeHash != want {
 		t.Fatalf("ApprovalChallenge.ChallengeHash = %q, want %q", challenge.ChallengeHash, want)
 	}
 
@@ -30,7 +30,7 @@ func TestApprovalGrantAndAssertionGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApprovalAssertion.SigningDigest() error = %v", err)
 	}
-	if got, want := hex.EncodeToString(digest), "2ce9f9c03ec4628fd9095f031aa1793a16b35d1bbbba2c50d8bdd29bb147cbbd"; got != want {
+	if got, want := hex.EncodeToString(digest), "7499e8cf1eba48e127f70c7e74987f350d79426f3766a4716816953fe9e2b25e"; got != want {
 		t.Fatalf("ApprovalAssertion signing digest = %q, want %q", got, want)
 	}
 }
@@ -54,6 +54,7 @@ func TestApprovalChallengeSealIsDeterministicAndBindsFields(t *testing.T) {
 		"pack":         func(c *ApprovalChallenge) { c.PackID = "pack-b" },
 		"effect":       func(c *ApprovalChallenge) { c.EffectHash = sha256Ref("9") },
 		"policy":       func(c *ApprovalChallenge) { c.PolicyHash = sha256Ref("8") },
+		"authority":    func(c *ApprovalChallenge) { c.AuthoritySnapshotHash = sha256Ref("7") },
 		"role":         func(c *ApprovalChallenge) { c.RequiredRole = "security-admin" },
 		"quorum":       func(c *ApprovalChallenge) { c.Quorum = 3 },
 		"issued at":    func(c *ApprovalChallenge) { c.IssuedAt = c.IssuedAt.Add(time.Second) },
@@ -111,12 +112,15 @@ func TestApprovalChallengeValidateAtChecksIssuanceIntegrityAndWindow(t *testing.
 
 func TestApprovalChallengeRejectsUnsafeTemporalShape(t *testing.T) {
 	tests := map[string]func(*ApprovalChallenge){
-		"zero hold":              func(c *ApprovalChallenge) { c.EligibleAt = c.HoldStartedAt },
-		"issued during hold":     func(c *ApprovalChallenge) { c.IssuedAt = c.EligibleAt.Add(-time.Nanosecond) },
-		"expiry equals issuance": func(c *ApprovalChallenge) { c.ExpiresAt = c.IssuedAt },
-		"missing nonce":          func(c *ApprovalChallenge) { c.Nonce = "" },
-		"non allow decision":     func(c *ApprovalChallenge) { c.Decision = "DENY" },
-		"zero quorum":            func(c *ApprovalChallenge) { c.Quorum = 0 },
+		"zero hold":                 func(c *ApprovalChallenge) { c.EligibleAt = c.HoldStartedAt },
+		"issued during hold":        func(c *ApprovalChallenge) { c.IssuedAt = c.EligibleAt.Add(-time.Nanosecond) },
+		"expiry equals issuance":    func(c *ApprovalChallenge) { c.ExpiresAt = c.IssuedAt },
+		"missing nonce":             func(c *ApprovalChallenge) { c.Nonce = "" },
+		"missing authority source":  func(c *ApprovalChallenge) { c.AuthoritySource = "" },
+		"missing authority version": func(c *ApprovalChallenge) { c.AuthorityVersion = "" },
+		"malformed authority hash":  func(c *ApprovalChallenge) { c.AuthoritySnapshotHash = "sha256:abc" },
+		"non allow decision":        func(c *ApprovalChallenge) { c.Decision = "DENY" },
+		"zero quorum":               func(c *ApprovalChallenge) { c.Quorum = 0 },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -126,6 +130,22 @@ func TestApprovalChallengeRejectsUnsafeTemporalShape(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want ErrApprovalChallengeInvalid", err)
 			}
 		})
+	}
+}
+
+func TestApprovalContractsRejectNonUTCTimestamps(t *testing.T) {
+	nonUTC := time.FixedZone("UTC+2", 2*60*60)
+
+	challenge := validApprovalChallenge()
+	challenge.IssuedAt = challenge.IssuedAt.In(nonUTC)
+	if err := challenge.Validate(); !errors.Is(err, ErrApprovalChallengeInvalid) {
+		t.Fatalf("ApprovalChallenge.Validate() error = %v, want ErrApprovalChallengeInvalid", err)
+	}
+
+	grant := validApprovalGrant()
+	grant.IssuedAt = grant.IssuedAt.In(nonUTC)
+	if err := grant.Validate(); !errors.Is(err, ErrApprovalGrantInvalid) {
+		t.Fatalf("ApprovalGrant.Validate() error = %v, want ErrApprovalGrantInvalid", err)
 	}
 }
 
@@ -199,33 +219,36 @@ func validApprovalChallenge() ApprovalChallenge {
 	holdStarted := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
 	eligible := holdStarted.Add(5 * time.Minute)
 	return ApprovalChallenge{
-		Domain:           ApprovalChallengeDomainV1,
-		SchemaVersion:    ApprovalChallengeSchemaV1,
-		ContractVersion:  ApprovalChallengeContractV1,
-		ChallengeID:      "challenge-a",
-		ApprovalID:       "approval-a",
-		TenantID:         "tenant-a",
-		WorkspaceID:      "workspace-a",
-		Audience:         "packs.lifecycle",
-		PackID:           "pack-a",
-		PackVersion:      "1.0.0",
-		PackManifestHash: sha256Ref("a"),
-		Action:           ApprovalGrantActionInstall,
-		IntentHash:       sha256Ref("0"),
-		EffectHash:       sha256Ref("1"),
-		PlanHash:         sha256Ref("2"),
-		Decision:         ApprovalGrantDecisionAllow,
-		PolicyVersion:    "policy-v1",
-		PolicyEpoch:      "epoch-1",
-		PolicyHash:       sha256Ref("3"),
-		RequiredRole:     "pack-admin",
-		Quorum:           2,
-		ServerIdentity:   "spiffe://helm/server-a",
-		HoldStartedAt:    holdStarted,
-		EligibleAt:       eligible,
-		IssuedAt:         eligible.Add(time.Minute),
-		ExpiresAt:        eligible.Add(10 * time.Minute),
-		Nonce:            repeatHex("6"),
+		Domain:                ApprovalChallengeDomainV1,
+		SchemaVersion:         ApprovalChallengeSchemaV1,
+		ContractVersion:       ApprovalChallengeContractV1,
+		ChallengeID:           "challenge-a",
+		ApprovalID:            "approval-a",
+		TenantID:              "tenant-a",
+		WorkspaceID:           "workspace-a",
+		Audience:              "packs.lifecycle",
+		PackID:                "pack-a",
+		PackVersion:           "1.0.0",
+		PackManifestHash:      sha256Ref("a"),
+		Action:                ApprovalGrantActionInstall,
+		IntentHash:            sha256Ref("0"),
+		EffectHash:            sha256Ref("1"),
+		PlanHash:              sha256Ref("2"),
+		Decision:              ApprovalGrantDecisionAllow,
+		PolicyVersion:         "policy-v1",
+		PolicyEpoch:           "epoch-1",
+		PolicyHash:            sha256Ref("3"),
+		AuthoritySource:       "spiffe://helm/authority/approvers",
+		AuthorityVersion:      "authority-v1",
+		AuthoritySnapshotHash: sha256Ref("4"),
+		RequiredRole:          "pack-admin",
+		Quorum:                2,
+		ServerIdentity:        "spiffe://helm/server-a",
+		HoldStartedAt:         holdStarted,
+		EligibleAt:            eligible,
+		IssuedAt:              eligible.Add(time.Minute),
+		ExpiresAt:             eligible.Add(10 * time.Minute),
+		Nonce:                 repeatHex("6"),
 	}
 }
 

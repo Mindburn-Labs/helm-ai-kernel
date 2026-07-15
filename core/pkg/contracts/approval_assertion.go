@@ -55,8 +55,13 @@ type ApprovalChallenge struct {
 	PolicyVersion string `json:"policy_version"`
 	PolicyEpoch   string `json:"policy_epoch"`
 	PolicyHash    string `json:"policy_hash"`
-	RequiredRole  string `json:"required_role"`
-	Quorum        int    `json:"quorum"`
+
+	AuthoritySource       string `json:"authority_source"`
+	AuthorityVersion      string `json:"authority_version"`
+	AuthoritySnapshotHash string `json:"authority_snapshot_hash"`
+
+	RequiredRole string `json:"required_role"`
+	Quorum       int    `json:"quorum"`
 
 	ServerIdentity string    `json:"server_identity"`
 	HoldStartedAt  time.Time `json:"hold_started_at"`
@@ -92,6 +97,8 @@ func (c ApprovalChallenge) Validate() error {
 		{field: "pack_version", value: c.PackVersion},
 		{field: "policy_version", value: c.PolicyVersion},
 		{field: "policy_epoch", value: c.PolicyEpoch},
+		{field: "authority_source", value: c.AuthoritySource},
+		{field: "authority_version", value: c.AuthorityVersion},
 		{field: "required_role", value: c.RequiredRole},
 		{field: "server_identity", value: c.ServerIdentity},
 	}
@@ -110,6 +117,7 @@ func (c ApprovalChallenge) Validate() error {
 		{field: "effect_hash", value: c.EffectHash},
 		{field: "plan_hash", value: c.PlanHash},
 		{field: "policy_hash", value: c.PolicyHash},
+		{field: "authority_snapshot_hash", value: c.AuthoritySnapshotHash},
 	}
 	for _, item := range hashes {
 		if !isApprovalGrantSHA256(item.value) {
@@ -133,6 +141,9 @@ func (c ApprovalChallenge) Validate() error {
 	}
 	if c.HoldStartedAt.IsZero() || c.EligibleAt.IsZero() || c.IssuedAt.IsZero() || c.ExpiresAt.IsZero() {
 		return approvalChallengeInvalid("hold_started_at, eligible_at, issued_at, and expires_at are required")
+	}
+	if !isApprovalGrantUTC(c.HoldStartedAt) || !isApprovalGrantUTC(c.EligibleAt) || !isApprovalGrantUTC(c.IssuedAt) || !isApprovalGrantUTC(c.ExpiresAt) {
+		return approvalChallengeInvalid("hold_started_at, eligible_at, issued_at, and expires_at must use UTC")
 	}
 	if !c.EligibleAt.After(c.HoldStartedAt) {
 		return approvalChallengeInvalid("eligible_at must be after hold_started_at")

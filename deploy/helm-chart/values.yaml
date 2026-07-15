@@ -30,6 +30,9 @@ podSecurityContext:
   runAsNonRoot: true
   runAsUser: 65534
   runAsGroup: 65534
+  # This remains a volume-compatibility setting. It is not used to establish
+  # local signing authority: runtimeInit resets helm.dataDir to 0700 and the
+  # configured runtime UID/GID before the kernel starts.
   fsGroup: 65534
 
 securityContext:
@@ -38,6 +41,14 @@ securityContext:
   capabilities:
     drop:
       - ALL
+
+# Root-only, one-shot authority materializer. The immutable image copies the
+# signing Secret into the data volume with the exact owner/mode that the
+# non-root kernel validates at startup. A changed durable root key fails closed
+# rather than being silently overwritten by a Secret update.
+runtimeInit:
+  image: "docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2"
+  pullPolicy: IfNotPresent
 
 service:
   type: ClusterIP

@@ -48,6 +48,9 @@
 {{- if and .Values.helm.emergencyStop.enabled (not (or .Values.helm.emergencyStop.commandPublicKeys .Values.helm.emergencyStop.existingSecret)) -}}
 {{- fail "helm.emergencyStop.enabled=true requires helm.emergencyStop.commandPublicKeys or helm.emergencyStop.existingSecret" -}}
 {{- end -}}
+{{- if not (regexMatch "^.+@sha256:[0-9a-f]{64}$" .Values.runtimeInit.image) -}}
+{{- fail "runtimeInit.image must be pinned by immutable sha256 digest" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -78,6 +81,78 @@ spec:
       serviceAccountName: {{ include "helm-ai-kernel.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: prepare-authority-state
+          image: {{ .Values.runtimeInit.image | quote }}
+          imagePullPolicy: {{ .Values.runtimeInit.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              set -eu
+              umask 077
+              data_dir="$HELM_AUTHORITY_DATA_DIR"
+              root_key="$data_dir/root.key"
+              source_key="/var/run/helm-signing-key/root.key"
+              runtime_uid="$HELM_AUTHORITY_RUNTIME_UID"
+              runtime_gid="$HELM_AUTHORITY_RUNTIME_GID"
+
+              if [ ! -r "$source_key" ]; then
+                echo "authority signing Secret is not readable" >&2
+                exit 1
+              fi
+
+              mkdir -p "$data_dir"
+              chown "$runtime_uid:$runtime_gid" "$data_dir"
+              chmod 0700 "$data_dir"
+
+              if [ -L "$root_key" ]; then
+                echo "refusing symlinked durable authority root key" >&2
+                exit 1
+              fi
+              if [ -e "$root_key" ] && [ ! -f "$root_key" ]; then
+                echo "durable authority root key is not a regular file" >&2
+                exit 1
+              fi
+
+              if [ -f "$root_key" ]; then
+                if ! cmp -s "$source_key" "$root_key"; then
+                  echo "durable authority root key differs from signing Secret; refusing silent rotation" >&2
+                  exit 1
+                fi
+                chown "$runtime_uid:$runtime_gid" "$root_key"
+                chmod 0600 "$root_key"
+              else
+                tmp_key="$data_dir/.root.key.init.$$"
+                rm -f "$tmp_key"
+                cp "$source_key" "$tmp_key"
+                chown "$runtime_uid:$runtime_gid" "$tmp_key"
+                chmod 0600 "$tmp_key"
+                mv -f "$tmp_key" "$root_key"
+              fi
+          env:
+            - name: HELM_AUTHORITY_DATA_DIR
+              value: {{ .Values.helm.dataDir | quote }}
+            - name: HELM_AUTHORITY_RUNTIME_UID
+              value: {{ required "podSecurityContext.runAsUser is required for authority-state initialization" .Values.podSecurityContext.runAsUser | quote }}
+            - name: HELM_AUTHORITY_RUNTIME_GID
+              value: {{ required "podSecurityContext.runAsGroup is required for authority-state initialization" .Values.podSecurityContext.runAsGroup | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.helm.dataDir | quote }}
+            - name: signing-key
+              mountPath: /var/run/helm-signing-key
+              readOnly: true
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -292,10 +367,6 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ .Values.helm.dataDir }}
-            - name: signing-key
-              mountPath: {{ printf "%s/root.key" (.Values.helm.dataDir | trimSuffix "/") }}
-              subPath: root.key
-              readOnly: true
             - name: policy
               mountPath: {{ include "helm-ai-kernel.policyMountPath" . }}
               readOnly: true
@@ -326,6 +397,7 @@ spec:
         - name: signing-key
           secret:
             secretName: {{ include "helm-ai-kernel.signingSecretName" . }}
+            defaultMode: 256
             items:
               - key: signing-key
                 path: root.key

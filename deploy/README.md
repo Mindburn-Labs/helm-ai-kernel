@@ -15,7 +15,11 @@ flowchart LR
   chart --> source["policy.source config"]
   source --> delivery["ConfigMap/Secret delivery or CRD watch"]
   chart --> pvc["PVC or emptyDir"]
+  secret --> init["root-only authority-state init"]
+  pvc --> init
+  init --> authority["0700 data dir + 0600 runtime-owned root key"]
   delivery --> pod["runtime reconciler"]
+  authority --> pod
   deploy --> pod["helm-ai-kernel serve"]
 ```
 
@@ -38,6 +42,8 @@ Included:
 - `Service` for HTTP, health, and optional metrics ports
 - optional `Ingress`
 - generated or existing signing-key `Secret`
+- root-only authority-state init that materializes the signing key as a private,
+  runtime-owned file in the data volume
 - generated or existing runtime-auth `Secret`
 - policy source configuration with default mounted-file delivery
 - optional mounted-file policy `ConfigMap` or `Secret`

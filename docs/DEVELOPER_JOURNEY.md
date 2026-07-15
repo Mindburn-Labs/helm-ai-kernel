@@ -1,6 +1,6 @@
 ---
 title: Developer Journey
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-15
 ---
 
 # Developer Journey
@@ -48,6 +48,13 @@ Docker:
 docker build -t ghcr.io/mindburn-labs/helm-ai-kernel:local .
 docker compose up -d
 ```
+
+Compose starts its one-shot `authority-state` initializer before the kernel. It
+prepares the mounted authority directory with the runtime image's exact owner
+and `0700` permissions, so root signing material stays private. When using a
+manual `docker run` bind mount, prepare an equivalently private, runtime-owned
+data directory; the kernel intentionally refuses group/world-writable or
+foreign-owned authority state.
 
 After the tag-driven release and published registry verification complete,
 Java SDK consumers can use the source-target Maven coordinate

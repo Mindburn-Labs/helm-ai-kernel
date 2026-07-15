@@ -8,11 +8,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
@@ -230,6 +232,270 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 	}
 	if len(allSince) != 2 || allSince[0].ReceiptID != "r-agent-2" || allSince[1].ReceiptID != "r-other" {
 		t.Fatalf("unexpected cursor result: %+v", allSince)
+	}
+}
+
+func TestSQLiteReceiptEnvelopeMigrationKeepsLegacyRowsReadable(t *testing.T) {
+	ctx := context.Background()
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "legacy-receipts.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.Exec(`
+		CREATE TABLE receipts (
+			receipt_id TEXT PRIMARY KEY,
+			decision_id TEXT,
+			effect_id TEXT,
+			external_reference_id TEXT,
+			status TEXT,
+			blob_hash TEXT,
+			output_hash TEXT,
+			timestamp DATETIME,
+			executor_id TEXT,
+			metadata JSON,
+			signature TEXT,
+			merkle_root TEXT,
+			prev_hash TEXT NOT NULL DEFAULT '',
+			lamport_clock INTEGER NOT NULL DEFAULT 0,
+			args_hash TEXT NOT NULL DEFAULT '',
+			log_id TEXT NOT NULL DEFAULT '',
+			leaf_index INTEGER NOT NULL DEFAULT 0,
+			transparency TEXT
+		);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO receipts (receipt_id, decision_id, effect_id, status, blob_hash, output_hash, timestamp, executor_id, lamport_clock)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-receipt", "legacy-decision", "legacy-effect", "ALLOW", "", "", time.Unix(1700000000, 0).UTC().Format(time.RFC3339Nano), "legacy-agent", 1); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := NewSQLiteReceiptStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var columnCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(1) FROM pragma_table_info('receipts') WHERE name = 'receipt_envelope'`).Scan(&columnCount); err != nil {
+		t.Fatal(err)
+	}
+	if columnCount != 1 {
+		t.Fatalf("receipt_envelope migration count = %d, want 1", columnCount)
+	}
+	got, err := store.GetByReceiptID(ctx, "legacy-receipt")
+	if err != nil {
+		t.Fatalf("read legacy receipt after migration: %v", err)
+	}
+	if got.ReceiptID != "legacy-receipt" || got.DecisionID != "legacy-decision" {
+		t.Fatalf("legacy receipt changed during migration: %+v", got)
+	}
+	if err := store.AppendCausal(ctx, "legacy-agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
+		return nil, nil
+	}); err == nil || !strings.Contains(err.Error(), "canonical envelope") {
+		t.Fatalf("legacy receipt should block causal append, err=%v", err)
+	}
+}
+
+func TestSQLiteReceiptEnvelopeRoundTripsLifecycleChainHash(t *testing.T) {
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "receipts.db")
+	db, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewSQLiteReceiptStore(db)
+	if err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	signer, err := helmcrypto.NewEd25519Signer("native-lifecycle-key")
+	if err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	receipt := &contracts.Receipt{
+		ReceiptID:           "rcpt-native-install",
+		DecisionID:          "decision/native-client/install/rcpt-native-install",
+		EffectID:            "mcp.tools.call/file_write",
+		ExternalReferenceID: "codex-project:workspace-hash",
+		Status:              "DENY",
+		OutputHash:          "observation-hash",
+		Timestamp:           time.Unix(1700000000, 123456789).UTC(),
+		ExecutorID:          "codex-project:workspace-hash",
+		PrevHash:            "previous-hash",
+		LamportClock:        7,
+		ArgsHash:            "descriptor-hash",
+		Type:                "native_client_setup_lifecycle",
+		Action:              "install",
+		Verdict:             "DENY",
+		ToolName:            "file_write",
+		ReasonCode:          "ERR_SYNTHETIC_FILE_WRITE_DENIED",
+		Metadata: map[string]any{
+			"evidence_schema":     "helm.native-client.setup/v1",
+			"lifecycle_operation": "install",
+			"ordinal":             int64(9007199254740993),
+		},
+		Subject:  map[string]any{"ordinal": int64(9007199254740993)},
+		Evidence: map[string]string{"evidence": "sha256:fixture"},
+	}
+	if err := signer.SignReceipt(receipt); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	wantHash, err := contracts.ReceiptChainHash(receipt)
+	if err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := store.Store(ctx, receipt); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	var envelope string
+	if err := db.QueryRowContext(ctx, `SELECT receipt_envelope FROM receipts WHERE receipt_id = ?`, receipt.ReceiptID).Scan(&envelope); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if envelope == "" {
+		_ = db.Close()
+		t.Fatal("stored receipt envelope is empty")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reopened.Close() }()
+	reopenedStore, err := NewSQLiteReceiptStore(reopened)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := reopenedStore.GetByReceiptID(ctx, receipt.ReceiptID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotHash, err := contracts.ReceiptChainHash(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("persisted lifecycle receipt chain hash = %s, want issued %s", gotHash, wantHash)
+	}
+	if got.Type != receipt.Type || got.Action != receipt.Action || got.Verdict != receipt.Verdict || got.ToolName != receipt.ToolName || got.ReasonCode != receipt.ReasonCode {
+		t.Fatalf("lifecycle fields did not round-trip: %+v", got)
+	}
+	if got.SignatureProfile != receipt.SignatureProfile || got.SignatureAlgorithm != receipt.SignatureAlgorithm || got.KeyID != receipt.KeyID || got.PublicKeySet[helmcrypto.SigPrefixEd25519] != receipt.PublicKeySet[helmcrypto.SigPrefixEd25519] {
+		t.Fatalf("signer metadata did not round-trip: %+v", got)
+	}
+	if _, err := reopened.ExecContext(ctx, `UPDATE receipts SET status = 'ALLOW' WHERE receipt_id = ?`, receipt.ReceiptID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reopenedStore.GetByReceiptID(ctx, receipt.ReceiptID); err == nil || !strings.Contains(err.Error(), "does not match indexed columns") {
+		t.Fatalf("envelope/index mismatch should fail closed, err=%v", err)
+	}
+}
+
+func TestSQLiteReceiptEnvelopeKeepsCausalHashAfterReopen(t *testing.T) {
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "causal-receipts.db")
+	signer, err := helmcrypto.NewEd25519Signer("native-lifecycle-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewSQLiteReceiptStore(db)
+	if err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	var issued *contracts.Receipt
+	if err := store.AppendCausal(ctx, "codex-project:workspace-hash", func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		issued = &contracts.Receipt{
+			ReceiptID:           "rcpt-native-install",
+			DecisionID:          "decision/native-client/install/rcpt-native-install",
+			EffectID:            "mcp.tools.call/file_write",
+			ExternalReferenceID: "codex-project:workspace-hash",
+			Status:              "DENY",
+			OutputHash:          "install-observation",
+			Timestamp:           time.Unix(1700000000, 0).UTC(),
+			ExecutorID:          "codex-project:workspace-hash",
+			PrevHash:            prevHash,
+			LamportClock:        lamport,
+			ArgsHash:            "install-descriptor",
+			Type:                "native_client_setup_lifecycle",
+			Action:              "install",
+			Verdict:             "DENY",
+			ToolName:            "file_write",
+			ReasonCode:          "ERR_SYNTHETIC_FILE_WRITE_DENIED",
+			Metadata:            map[string]any{"lifecycle_operation": "install"},
+		}
+		return issued, signer.SignReceipt(issued)
+	}); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	issuedHash, err := contracts.ReceiptChainHash(issued)
+	if err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reopened.Close() }()
+	reopenedStore, err := NewSQLiteReceiptStore(reopened)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopenedStore.AppendCausal(ctx, "codex-project:workspace-hash", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		if previous == nil {
+			t.Fatal("reopened store lost the issued receipt")
+		}
+		if got, err := contracts.ReceiptChainHash(previous); err != nil || got != issuedHash {
+			t.Fatalf("reopened previous chain hash = %q err=%v, want %q", got, err, issuedHash)
+		}
+		next := &contracts.Receipt{
+			ReceiptID:           "rcpt-native-remove",
+			DecisionID:          "decision/native-client/remove/rcpt-native-remove",
+			EffectID:            "native_client.setup/codex-project/remove",
+			ExternalReferenceID: "codex-project:workspace-hash",
+			Status:              "REVOKED",
+			OutputHash:          "remove-observation",
+			Timestamp:           time.Unix(1700000001, 0).UTC(),
+			ExecutorID:          "codex-project:workspace-hash",
+			PrevHash:            prevHash,
+			LamportClock:        lamport,
+			ArgsHash:            "remove-descriptor",
+			Type:                "native_client_setup_lifecycle",
+			Action:              "remove",
+			Verdict:             "REVOKED",
+			ReasonCode:          "CONFIG_REMOVED",
+			Metadata:            map[string]any{"lifecycle_operation": "remove"},
+		}
+		return next, signer.SignReceipt(next)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	remove, err := reopenedStore.GetByReceiptID(ctx, "rcpt-native-remove")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remove.PrevHash != issuedHash || remove.LamportClock != 2 {
+		t.Fatalf("reopened causal receipt = prev %q lamport %d, want %q/2", remove.PrevHash, remove.LamportClock, issuedHash)
 	}
 }
 

@@ -42,16 +42,56 @@ type mcpRPCError struct {
 }
 
 func newLocalMCPRuntime() (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
-	signer, err := loadOrGenerateSigner()
+	return newLocalMCPRuntimeWithDataDir("")
+}
+
+// newLocalMCPRuntimeWithDataDir binds a client-spawned MCP process to the
+// caller-selected local signer/state directory. An empty data directory keeps
+// the historical default for standalone invocations.
+func newLocalMCPRuntimeWithDataDir(dataDir string) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	if dataDir != "" {
+		signer, configured, err := admitCodexProjectRuntime(dataDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		if configured {
+			return newLocalMCPRuntimeWithSigner(signer)
+		}
+	}
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
 		return nil, nil, err
 	}
 	return newLocalMCPRuntimeWithSigner(signer)
 }
 
+func newLocalMCPRuntimeWithDataDirAndHandler(dataDir string, handler mcppkg.ToolHandler) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	if dataDir != "" {
+		signer, configured, err := admitCodexProjectRuntime(dataDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		if configured {
+			return newLocalMCPRuntimeWithSignerAndHandler(signer, handler)
+		}
+	}
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	return newLocalMCPRuntimeWithSignerAndHandler(signer, handler)
+}
+
 func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	return newLocalMCPRuntimeWithSignerAndHandler(signer, runLocalMCPTool)
+}
+
+func newLocalMCPRuntimeWithSignerAndHandler(signer helmcrypto.Signer, handler mcppkg.ToolHandler) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
 	if signer == nil {
 		return nil, nil, fmt.Errorf("mcp signer is required")
+	}
+	if handler == nil {
+		return nil, nil, fmt.Errorf("mcp tool handler is required")
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
@@ -62,7 +102,7 @@ func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog
 	guard := guardian.NewGuardian(signer, prg.NewGraph(), nil)
 	firewall := mcppkg.NewGovernanceFirewall(guard, catalog)
 
-	return catalog, mcppkg.ToolExecutor(firewall.WrapToolHandler(runLocalMCPTool)), nil
+	return catalog, mcppkg.ToolExecutor(firewall.WrapToolHandler(handler)), nil
 }
 
 func newLocalMCPGateway() (*mcppkg.Gateway, error) {
@@ -199,7 +239,38 @@ func resolveLocalMCPPath(rawPath string) (string, error) {
 }
 
 func serveLocalMCPStdio(stdin io.Reader, stdout io.Writer) error {
-	catalog, executor, err := newLocalMCPRuntime()
+	return serveLocalMCPStdioWithDataDir(stdin, stdout, "")
+}
+
+func serveLocalMCPStdioWithDataDir(stdin io.Reader, stdout io.Writer, dataDir string) error {
+	var admittedSigner helmcrypto.Signer
+	if dataDir != "" {
+		normalizedDataDir, err := normalizeSetupDataDir(dataDir)
+		if err != nil {
+			return fmt.Errorf("normalize MCP state data-dir: %w", err)
+		}
+		dataDir = normalizedDataDir
+		if err := requireMCPSetupRecoveryClear(dataDir); err != nil {
+			return err
+		}
+		signer, configured, err := admitCodexProjectRuntime(dataDir)
+		if err != nil {
+			return err
+		}
+		if configured {
+			admittedSigner = signer
+		}
+	}
+	var (
+		catalog  *mcppkg.ToolCatalog
+		executor mcppkg.ToolExecutor
+		err      error
+	)
+	if admittedSigner != nil {
+		catalog, executor, err = newLocalMCPRuntimeWithSigner(admittedSigner)
+	} else {
+		catalog, executor, err = newLocalMCPRuntimeWithDataDir(dataDir)
+	}
 	if err != nil {
 		return err
 	}
@@ -213,6 +284,14 @@ func serveLocalMCPStdio(stdin io.Reader, stdout io.Writer) error {
 			}
 			return err
 		}
+		if dataDir != "" {
+			if err := requireMCPSetupRecoveryClear(dataDir); err != nil {
+				return err
+			}
+			if err := requireCodexProjectRuntimeAdmission(dataDir); err != nil {
+				return err
+			}
+		}
 
 		resp, err := handleMCPRPCRequest(req, catalog, executor)
 		if err != nil {
@@ -225,6 +304,17 @@ func serveLocalMCPStdio(stdin io.Reader, stdout io.Writer) error {
 			return err
 		}
 	}
+}
+
+func requireMCPSetupRecoveryClear(dataDir string) error {
+	recoveryRequired, err := setupRecoveryRequired(dataDir)
+	if err != nil {
+		return fmt.Errorf("inspect setup recovery state: %w", err)
+	}
+	if recoveryRequired {
+		return fmt.Errorf("refusing MCP execution while a Codex project setup recovery is pending")
+	}
+	return nil
 }
 
 func readMCPRequest(reader *bufio.Reader) (*mcpRPCRequest, error) {

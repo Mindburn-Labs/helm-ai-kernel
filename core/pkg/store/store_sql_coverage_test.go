@@ -398,6 +398,7 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 		sql.NullString{String: "logid", Valid: true},
 		11,
 		sql.NullString{String: `{"backend":"translog","deferred":true}`, Valid: true},
+		sql.NullString{},
 	)
 	if err != nil {
 		t.Fatalf("receiptFromSQLiteFields: %v", err)
@@ -408,12 +409,13 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 	if receipt.LogID != "logid" || receipt.LeafIndex != 11 || receipt.Transparency == nil || !receipt.Transparency.Deferred {
 		t.Fatalf("transparency fields not decoded: %+v", receipt)
 	}
-	if _, err := receiptFromSQLiteFields("r", "d", "e", sql.NullString{}, "OK", "", "", "", sql.NullString{}, sql.NullString{String: `{`, Valid: true}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}); err == nil {
+	if _, err := receiptFromSQLiteFields("r", "d", "e", sql.NullString{}, "OK", "", "", "", sql.NullString{}, sql.NullString{String: `{`, Valid: true}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}); err == nil {
 		t.Fatal("expected SQLite metadata decode error")
 	}
 
 	db, mock, cleanup := newStoreCoverageSQLMock(t)
 	defer cleanup()
+	mock.ExpectExec("PRAGMA busy_timeout").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("PRAGMA journal_mode").WillReturnError(errors.New("wal failed"))
 	if _, err := NewSQLiteReceiptStore(db); err == nil {
 		t.Fatal("expected WAL setup error")
@@ -421,8 +423,6 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 
 	dbBusy, mockBusy, cleanupBusy := newStoreCoverageSQLMock(t)
 	defer cleanupBusy()
-	mockBusy.ExpectExec("PRAGMA journal_mode").WillReturnResult(sqlmock.NewResult(0, 0))
-	mockBusy.ExpectExec("PRAGMA synchronous").WillReturnResult(sqlmock.NewResult(0, 0))
 	mockBusy.ExpectExec("PRAGMA busy_timeout").WillReturnError(errors.New("busy failed"))
 	if _, err := NewSQLiteReceiptStore(dbBusy); err == nil {
 		t.Fatal("expected busy timeout setup error")
@@ -457,6 +457,31 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 	mockEnsure.ExpectExec("ALTER TABLE receipts ADD COLUMN missing TEXT").WillReturnError(errors.New("alter failed"))
 	if err := sqliteStore.ensureColumn("missing", "TEXT"); err == nil {
 		t.Fatal("expected ensure alter error")
+	}
+}
+
+func TestSQLiteReceiptInitRetriesOnlyBusyContention(t *testing.T) {
+	attempts := 0
+	if err := retrySQLiteReceiptInit(func() error {
+		attempts++
+		if attempts < 3 {
+			return errors.New("database is locked (SQLITE_BUSY)")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("retry busy initialization: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("busy retry attempts = %d, want 3", attempts)
+	}
+
+	attempts = 0
+	nonBusy := errors.New("schema malformed")
+	if err := retrySQLiteReceiptInit(func() error {
+		attempts++
+		return nonBusy
+	}); !errors.Is(err, nonBusy) || attempts != 1 {
+		t.Fatalf("non-busy initialization should fail once, attempts=%d err=%v", attempts, err)
 	}
 }
 

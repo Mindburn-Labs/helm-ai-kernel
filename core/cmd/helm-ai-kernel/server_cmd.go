@@ -26,6 +26,7 @@ func runServerCommand(name string, args []string, stdout, stderr io.Writer) int 
 	cmd.StringVar(&opts.BindAddr, "addr", "", "Bind address")
 	cmd.IntVar(&opts.Port, "port", 0, "Listen port")
 	cmd.StringVar(&opts.DataDir, "data-dir", "", "Data directory for local SQLite state and keys")
+	cmd.BoolVar(&opts.DesktopTransportV1, "desktop-transport-v1", false, "Enable the packaged Desktop transport (requires HELM_DESKTOP_TRANSPORT_V1=1 and transport env)")
 	cmd.BoolVar(&opts.JSON, "json", false, "Print startup status as JSON")
 
 	if err := cmd.Parse(args); err != nil {
@@ -79,6 +80,9 @@ func runServerCommand(name string, args []string, stdout, stderr io.Writer) int 
 		}
 	}
 
-	runServerWithOptions(opts)
+	if err := runServerWithOptions(opts); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
 	return 0
 }

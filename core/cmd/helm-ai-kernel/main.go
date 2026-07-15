@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -49,17 +50,18 @@ func main() {
 var startServer = runServer
 
 type serverOptions struct {
-	Mode       string
-	BindAddr   string
-	Port       int
-	DataDir    string
-	SQLitePath string
-	PolicyPath string
-	Quickstart *quickstartRuntime
-	OnReady    func(bindAddr string, port int)
-	JSON       bool
-	Stdout     io.Writer
-	Stderr     io.Writer
+	Mode               string
+	BindAddr           string
+	Port               int
+	DataDir            string
+	SQLitePath         string
+	PolicyPath         string
+	Quickstart         *quickstartRuntime
+	OnReady            func(bindAddr string, port int)
+	DesktopTransportV1 bool
+	JSON               bool
+	Stdout             io.Writer
+	Stderr             io.Writer
 }
 
 // Run is the entrypoint for testing
@@ -141,16 +143,25 @@ const (
 
 //nolint:gocognit,gocyclo
 func runServer() {
-	runServerWithOptions(serverOptions{Mode: "server", Stdout: os.Stdout, Stderr: os.Stderr})
+	if err := runServerWithOptions(serverOptions{Mode: "server", Stdout: os.Stdout, Stderr: os.Stderr}); err != nil {
+		log.Fatal(err)
+	}
 }
 
 //nolint:gocognit,gocyclo
-func runServerWithOptions(opts serverOptions) {
+func runServerWithOptions(opts serverOptions) error {
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
 	}
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
+	}
+	desktopTransport, transportErr := desktopTransportV1FromEnv()
+	if transportErr != nil {
+		return fmt.Errorf("desktop transport v1 configuration: %w", transportErr)
+	}
+	if opts.DesktopTransportV1 && desktopTransport == nil {
+		return fmt.Errorf("desktop transport v1 configuration: %s=1 is required", desktopTransportV1EnabledEnv)
 	}
 	fmt.Fprintf(opts.Stdout, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
 	ctx, runtimeCancel := context.WithCancel(context.Background())
@@ -403,6 +414,22 @@ func runServerWithOptions(opts serverOptions) {
 			port = p
 		}
 	}
+	var (
+		apiListener net.Listener
+		apiOrigin   string
+	)
+	if desktopTransport != nil {
+		listener, origin, err := desktopTransport.bind()
+		if err != nil {
+			return err
+		}
+		bindAddr = "127.0.0.1"
+		port = listener.Addr().(*net.TCPAddr).Port
+		opts.BindAddr = bindAddr
+		opts.Port = port
+		apiOrigin = origin
+		apiListener = listener
+	}
 	mux := http.NewServeMux()
 	if extraRoutes != nil {
 		extraRoutes(mux)
@@ -422,15 +449,25 @@ func runServerWithOptions(opts serverOptions) {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	serveAPI := server.ListenAndServe
+	if apiListener != nil {
+		serveAPI = func() error { return server.Serve(apiListener) }
+	}
 	if bindAddr == "0.0.0.0" {
 		log.Printf("[helm] WARNING: API server binding to all interfaces (0.0.0.0:%d) — ensure firewall rules are in place", port)
 	}
 	go func() {
 		log.Printf("[helm] API server: %s:%d", bindAddr, port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := serveAPI(); err != nil && err != http.ErrServerClosed {
 			logger.Error("API server failed", "error", err)
 		}
 	}()
+	if desktopTransport != nil {
+		if err := desktopTransport.writeReadinessRecord(opts.Stdout, apiOrigin); err != nil {
+			_ = apiListener.Close()
+			return err
+		}
+	}
 
 	// Health Server
 	healthPort := 8081
@@ -524,6 +561,7 @@ func runServerWithOptions(opts serverOptions) {
 		}
 	}
 	log.Println("[helm] shutdown complete")
+	return nil
 }
 
 func servicesInitFailureIsFatal() bool {

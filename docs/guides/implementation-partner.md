@@ -8,10 +8,10 @@ last_reviewed: 2026-07-15
 This guide packages the local, self-hosted HELM AI Kernel v0.7.2 surface for an
 implementation partner. It does not describe a hosted HELM API.
 
-NavigoTech Innovation is an official HELM implementation partner as of
-2026-07-15. Partner status does not widen runtime authority: every client action
-still needs an exact routed boundary, identity scope, policy, approval path,
-source read-back, and evidence contract.
+NavigoTech Innovation is an official HELM implementation partner.
+Partner status does not widen runtime authority: every client action still
+needs an exact routed boundary, identity scope, policy, approval path, source
+read-back, and evidence contract.
 
 ## 1. Install The Pinned CLI
 

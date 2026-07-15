@@ -35,6 +35,10 @@ func init() {
 }
 
 func runQuickstartCmd(args []string, stdout, stderr io.Writer) int {
+	return runQuickstartCmdWithReady(args, stdout, stderr, nil)
+}
+
+func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady func()) int {
 	opts, code := parseQuickstartArgs(args, stderr)
 	if code != 0 {
 		return code
@@ -65,6 +69,9 @@ func runQuickstartCmd(args []string, stdout, stderr io.Writer) int {
 		PolicyPath: prepared.PolicyPath,
 		Quickstart: prepared.Runtime,
 		OnReady: func(bindAddr string, port int) {
+			if onReady != nil {
+				onReady()
+			}
 			if !opts.JSON {
 				fmt.Fprintf(stdout, "HELM quickstart ready\n\n")
 				fmt.Fprintf(stdout, "Kernel:  http://%s:%d\n", bindAddr, port)

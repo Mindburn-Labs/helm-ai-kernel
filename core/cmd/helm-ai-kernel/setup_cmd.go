@@ -17,7 +17,7 @@ import (
 const setupMCPServerName = "helm-ai-kernel-governance"
 
 var (
-	setupRunQuickstart = runQuickstartCmd
+	setupRunQuickstart = runQuickstartCmdWithReady
 	setupExecCommand   = func(dir, name string, args ...string) error {
 		cmd := exec.Command(name, args...)
 		if dir != "" {
@@ -161,8 +161,8 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	summary.MCPInstalled = true
 	summary.HookInstalled = true
-	printSetupSummary(stdout, summary, opts.JSON)
 	if opts.NoQuickstart {
+		printSetupSummary(stdout, summary, opts.JSON)
 		return 0
 	}
 	if !opts.JSON {
@@ -174,7 +174,20 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	if opts.JSON {
 		quickstartStdout = stderr
 	}
-	return setupRunQuickstart(quickstartArgs, quickstartStdout, stderr)
+	summaryPrinted := false
+	code = setupRunQuickstart(quickstartArgs, quickstartStdout, stderr, func() {
+		if summaryPrinted {
+			return
+		}
+		summary.QuickstartStarted = true
+		printSetupSummary(stdout, summary, opts.JSON)
+		summaryPrinted = true
+	})
+	if !summaryPrinted {
+		summary.KernelURL = ""
+		printSetupSummary(stdout, summary, opts.JSON)
+	}
+	return code
 }
 
 func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
@@ -389,25 +402,35 @@ func buildSetupSummary(opts setupOptions) (setupSummary, error) {
 		DraftPolicyPath:   filepath.Join(opts.DataDir, "autoconfigure", "policy.draft.json"),
 		UninstallCommand:  setupUninstallCommand(opts),
 		Scope:             opts.Scope,
-		QuickstartStarted: opts.Operation == "install" && !opts.NoQuickstart,
+		QuickstartStarted: false,
 		PlannedActions:    setupPlannedActions(opts),
 	}, nil
 }
 
 func setupPlannedActions(opts setupOptions) []string {
-	actions := []string{
-		"scan selected workspace and write draft-only inventory artifacts",
-		"configure the HELM MCP server with the selected local data directory",
-		"configure the HELM PreToolUse hook for supported Codex tools",
-	}
-	if opts.NoQuickstart {
+	switch opts.Operation {
+	case "preview":
+		actions := []string{
+			"scan selected workspace and write draft-only inventory artifacts",
+			"configure the HELM MCP server with the selected local data directory",
+			"configure the HELM PreToolUse hook for the selected client",
+		}
+		if !opts.NoQuickstart {
+			actions = append(actions, "start the local Quickstart proof path")
+		}
 		return actions
+	case "preview_remove":
+		return []string{
+			"remove the HELM PreToolUse hook from the selected scope",
+			"remove the HELM MCP server from the selected scope",
+		}
+	default:
+		return []string{}
 	}
-	return append(actions, "start the local Quickstart proof path")
 }
 
 func setupKernelURL(opts setupOptions) string {
-	if opts.NoQuickstart {
+	if opts.NoQuickstart || (opts.Operation != "preview" && opts.Operation != "install") {
 		return ""
 	}
 	return "http://127.0.0.1:7714"

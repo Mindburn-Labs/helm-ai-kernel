@@ -137,6 +137,85 @@ func TestSetupDryRunJSONSummary(t *testing.T) {
 	}
 }
 
+func TestSetupJSONSummaryMatchesOperation(t *testing.T) {
+	tests := []struct {
+		name        string
+		wantCode    int
+		wantOp      string
+		wantActions []string
+		wantURL     bool
+	}{
+		{
+			name:     "preview",
+			wantCode: 0,
+			wantOp:   "preview",
+			wantActions: []string{
+				"scan selected workspace and write draft-only inventory artifacts",
+				"configure the HELM MCP server with the selected local data directory",
+				"configure the HELM PreToolUse hook for the selected client",
+				"start the local Quickstart proof path",
+			},
+			wantURL: true,
+		},
+		{name: "install", wantCode: 0, wantOp: "install", wantActions: []string{}},
+		{name: "status", wantCode: 1, wantOp: "status", wantActions: []string{}},
+		{
+			name:     "preview_remove",
+			wantCode: 0,
+			wantOp:   "preview_remove",
+			wantActions: []string{
+				"remove the HELM PreToolUse hook from the selected scope",
+				"remove the HELM MCP server from the selected scope",
+			},
+		},
+		{name: "remove", wantCode: 0, wantOp: "remove", wantActions: []string{}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			workspace := filepath.Join(tmp, "workspace")
+			if err := os.MkdirAll(workspace, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			stubSetupSideEffects(t)
+			dataDir := filepath.Join(tmp, "helm")
+			base := []string{"--scope", "project", "--workspace", workspace, "--json", "--data-dir", dataDir}
+			var args []string
+			switch test.name {
+			case "preview":
+				args = append([]string{"helm-ai-kernel", "setup", "codex"}, append(base, "--dry-run")...)
+			case "install":
+				args = append([]string{"helm-ai-kernel", "setup", "codex"}, append(base, "--yes", "--no-quickstart")...)
+			case "status":
+				args = append([]string{"helm-ai-kernel", "setup", "status", "codex"}, base...)
+			case "preview_remove":
+				args = append([]string{"helm-ai-kernel", "setup", "remove", "codex"}, append(base, "--dry-run")...)
+			case "remove":
+				args = append([]string{"helm-ai-kernel", "setup", "remove", "codex"}, append(base, "--yes")...)
+			}
+
+			var stdout, stderr bytes.Buffer
+			if code := Run(args, &stdout, &stderr); code != test.wantCode {
+				t.Fatalf("%s exit = %d, want %d; stderr=%s stdout=%s", test.name, code, test.wantCode, stderr.String(), stdout.String())
+			}
+			summary := decodeSingleSetupSummary(t, &stdout)
+			if summary.Operation != test.wantOp {
+				t.Fatalf("operation = %q, want %q", summary.Operation, test.wantOp)
+			}
+			if !equalSetupStrings(summary.PlannedActions, test.wantActions) {
+				t.Fatalf("planned actions = %#v, want %#v", summary.PlannedActions, test.wantActions)
+			}
+			if summary.QuickstartStarted {
+				t.Fatal("pre-launch summary reported Quickstart as started")
+			}
+			if (summary.KernelURL != "") != test.wantURL {
+				t.Fatalf("kernel URL = %q, want present=%v", summary.KernelURL, test.wantURL)
+			}
+		})
+	}
+}
+
 func TestSetupInstallClaudeWritesHookAndRunsQuickstart(t *testing.T) {
 	tmp := t.TempDir()
 	home := filepath.Join(tmp, "home")
@@ -193,6 +272,43 @@ func TestSetupInstallJSONKeepsQuickstartOutputOffStdout(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "quickstart ready") {
 		t.Fatalf("quickstart output should move to stderr in JSON mode, stderr=%s", stderr.String())
+	}
+	if !summary.QuickstartStarted || summary.KernelURL == "" {
+		t.Fatalf("successful Quickstart summary = %#v", summary)
+	}
+	if len(summary.PlannedActions) != 0 {
+		t.Fatalf("completed install reported planned actions: %#v", summary.PlannedActions)
+	}
+}
+
+func TestSetupInstallJSONReportsQuickstartFailureTruthfully(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	state := stubSetupSideEffects(t)
+	setupRunQuickstart = func(args []string, stdout, stderr io.Writer, onReady func()) int {
+		state.quickstartArgs = append([]string{}, args...)
+		_, _ = io.WriteString(stderr, "quickstart failed before ready\n")
+		return 1
+	}
+
+	var stdout, stderr bytes.Buffer
+	dataDir := filepath.Join(tmp, "helm")
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--json", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("failed Quickstart exit = %d, want 1; stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	summary := decodeSingleSetupSummary(t, &stdout)
+	if summary.Operation != "install" || summary.QuickstartStarted || summary.KernelURL != "" {
+		t.Fatalf("failed Quickstart summary = %#v", summary)
+	}
+	if !summary.MCPInstalled || !summary.HookInstalled || len(summary.PlannedActions) != 0 {
+		t.Fatalf("failed Quickstart install state = %#v", summary)
+	}
+	if len(state.quickstartArgs) == 0 || !strings.Contains(stderr.String(), "failed before ready") {
+		t.Fatalf("Quickstart failure was not exercised: args=%#v stderr=%s", state.quickstartArgs, stderr.String())
 	}
 }
 
@@ -771,8 +887,11 @@ func stubSetupSideEffects(t *testing.T) *setupStubState {
 		state.execDirs = append(state.execDirs, dir)
 		return nil
 	}
-	setupRunQuickstart = func(args []string, stdout, stderr io.Writer) int {
+	setupRunQuickstart = func(args []string, stdout, stderr io.Writer, onReady func()) int {
 		state.quickstartArgs = append([]string{}, args...)
+		if onReady != nil {
+			onReady()
+		}
 		_, _ = io.WriteString(stdout, "quickstart ready\n")
 		return 0
 	}
@@ -781,6 +900,20 @@ func stubSetupSideEffects(t *testing.T) *setupStubState {
 		setupRunQuickstart = oldQuickstart
 	})
 	return state
+}
+
+func decodeSingleSetupSummary(t *testing.T, stdout *bytes.Buffer) setupSummary {
+	t.Helper()
+	dec := json.NewDecoder(stdout)
+	var summary setupSummary
+	if err := dec.Decode(&summary); err != nil {
+		t.Fatalf("summary JSON: %v\n%s", err, stdout.String())
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		t.Fatalf("stdout should contain only one JSON value, extra=%#v err=%v stdout=%s", extra, err, stdout.String())
+	}
+	return summary
 }
 
 func containsSetupString(values []string, want string) bool {

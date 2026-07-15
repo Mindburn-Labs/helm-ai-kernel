@@ -350,7 +350,16 @@ func cloneAuthorizedExecutionIntent(intent *contracts.AuthorizedExecutionIntent)
 }
 
 func validateSafeDepIntentBinding(intent *contracts.AuthorizedExecutionIntent, result safedep.GateResult) error {
-	if intent == nil || result.ActivationReceipt == nil {
+	if intent == nil {
+		return nil
+	}
+	hasSignedEmergencyBinding := intent.EmergencyActivationID != "" ||
+		intent.EmergencyDelegationSessionID != "" ||
+		intent.EmergencyScopeHash != ""
+	if result.ActivationReceipt == nil {
+		if hasSignedEmergencyBinding {
+			return fmt.Errorf("signed safe dep emergency binding requires runtime activation evidence")
+		}
 		return nil
 	}
 	activation := result.ActivationReceipt

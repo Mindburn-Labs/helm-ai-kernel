@@ -107,6 +107,13 @@ func TestValidateSafeDepIntentBindingRejectsMismatchedSignedAuthority(t *testing
 	}
 }
 
+func TestValidateSafeDepIntentBindingRequiresRuntimeActivation(t *testing.T) {
+	intent := &contracts.AuthorizedExecutionIntent{EmergencyActivationID: "signed-activation"}
+	if err := validateSafeDepIntentBinding(intent, safedep.GateResult{}); err == nil {
+		t.Fatal("expected missing runtime activation evidence to fail closed")
+	}
+}
+
 func testEffectDigest(t *testing.T, effect *contracts.Effect) string {
 	t.Helper()
 	effectBytes, err := canonicalize.JCS(testEffectDigestEnvelopeFrom(effect))

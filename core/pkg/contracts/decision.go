@@ -125,6 +125,9 @@ type PolicyRef struct {
 // VerdictPending is a transient verdict state with no canonical constant equivalent.
 const VerdictPending = "PENDING"
 
+// IntentSignatureVersionV2 identifies the full-field canonical signature preimage.
+const IntentSignatureVersionV2 = "helm.intent.v2"
+
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)
 type AuthorizedExecutionIntent struct {
@@ -137,7 +140,8 @@ type AuthorizedExecutionIntent struct {
 	Signer           string    `json:"signer"`         // Kernel Identity
 	Signature        string    `json:"signature"`      // Sig of the Intent
 	SignatureType    string    `json:"signature_type"` // Algorithm binding (e.g. "ed25519:key-id")
-	AllowedTool      string    `json:"allowed_tool"`   // Constraint
+	SignatureVersion string    `json:"signature_version,omitempty"`
+	AllowedTool      string    `json:"allowed_tool"` // Constraint
 	Taint            []string  `json:"taint,omitempty"`
 
 	// Safe Deprecation Mode emergency authority bindings. When present, these

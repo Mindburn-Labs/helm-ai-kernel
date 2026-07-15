@@ -117,7 +117,7 @@ func (h *HybridSigner) SignIntent(i *contracts.AuthorizedExecutionIntent) error 
 		return fmt.Errorf("intent is required")
 	}
 	i.SignatureType = SigPrefixHybrid + SigSeparator + h.keyID
-	payload, err := canonicalizeIntentForSignature(i)
+	payload, err := canonicalizeIntentForSigning(i)
 	if err != nil {
 		return err
 	}

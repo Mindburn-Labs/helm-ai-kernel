@@ -95,7 +95,7 @@ func (s *MLDSASigner) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
 		return fmt.Errorf("intent is required")
 	}
 	i.SignatureType = SigPrefixMLDSA65 + SigSeparator + s.keyID
-	payload, err := canonicalizeIntentForSignature(i)
+	payload, err := canonicalizeIntentForSigning(i)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (s *MLDSASigner) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload, err := canonicalizeIntentForSignature(i)
+	payload, err := canonicalizeIntentForVerification(i)
 	if err != nil {
 		return false, err
 	}

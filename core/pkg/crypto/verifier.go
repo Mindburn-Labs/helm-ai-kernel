@@ -71,7 +71,7 @@ func (v *Ed25519Verifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload, err := canonicalizeIntentForSignature(i)
+	payload, err := canonicalizeIntentForVerification(i)
 	if err != nil {
 		return false, err
 	}

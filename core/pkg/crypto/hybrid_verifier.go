@@ -68,7 +68,7 @@ func (v *HybridVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, erro
 
 // VerifyIntent verifies a hybrid-signed AuthorizedExecutionIntent.
 func (v *HybridVerifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, error) {
-	payload, err := canonicalizeIntentForSignature(i)
+	payload, err := canonicalizeIntentForVerification(i)
 	if err != nil {
 		return false, err
 	}

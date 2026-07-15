@@ -52,7 +52,7 @@ func (v *MLDSAVerifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bo
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload, err := canonicalizeIntentForSignature(i)
+	payload, err := canonicalizeIntentForVerification(i)
 	if err != nil {
 		return false, err
 	}

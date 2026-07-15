@@ -75,45 +75,58 @@ func CanonicalizeIntent(id, decisionID, allowedTool string, effectDigestHash ...
 	return fmt.Sprintf("%s%s%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool, SigSeparator, effectDigestHash[0])
 }
 
-const intentSignatureVersion = "helm.intent.v2"
-
-// canonicalizeIntentForSignature binds every authority-relevant intent field.
-// It intentionally excludes only Signature itself.
-func canonicalizeIntentForSignature(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
+func canonicalizeIntentForSigning(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
 	if intent == nil {
 		return nil, fmt.Errorf("intent is required for canonicalization")
 	}
+	intent.SignatureVersion = contracts.IntentSignatureVersionV2
+	return canonicalizeIntentV2(intent)
+}
 
-	payload := struct {
-		Version                      string   `json:"version"`
-		ID                           string   `json:"id"`
-		DecisionID                   string   `json:"decision_id"`
-		EffectDigestHash             string   `json:"effect_digest_hash"`
-		IdempotencyKey               string   `json:"idempotency_key"`
-		IssuedAt                     string   `json:"issued_at"`
-		ExpiresAt                    string   `json:"expires_at"`
-		Signer                       string   `json:"signer"`
-		SignatureType                string   `json:"signature_type"`
-		AllowedTool                  string   `json:"allowed_tool"`
-		Taint                        []string `json:"taint"`
-		EmergencyActivationID        string   `json:"emergency_activation_id"`
-		EmergencyDelegationSessionID string   `json:"emergency_delegation_session_id"`
-		EmergencyScopeHash           string   `json:"emergency_scope_hash"`
-	}{
-		Version:                      intentSignatureVersion,
-		ID:                           intent.ID,
-		DecisionID:                   intent.DecisionID,
-		EffectDigestHash:             intent.EffectDigestHash,
-		IdempotencyKey:               intent.IdempotencyKey,
-		IssuedAt:                     intent.IssuedAt.UTC().Format(time.RFC3339Nano),
-		ExpiresAt:                    intent.ExpiresAt.UTC().Format(time.RFC3339Nano),
-		Signer:                       intent.Signer,
-		SignatureType:                intent.SignatureType,
-		AllowedTool:                  intent.AllowedTool,
-		Taint:                        contracts.NormalizeTaintLabels(intent.Taint),
-		EmergencyActivationID:        intent.EmergencyActivationID,
-		EmergencyDelegationSessionID: intent.EmergencyDelegationSessionID,
-		EmergencyScopeHash:           intent.EmergencyScopeHash,
+// canonicalizeIntentForVerification keeps the legacy read path explicit for
+// short-lived intents queued before the v2 rollout. A versioned intent never
+// falls back: clearing or changing the signature-bound version changes the
+// selected preimage and fails verification.
+func canonicalizeIntentForVerification(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
+	if intent == nil {
+		return nil, fmt.Errorf("intent is required for canonicalization")
+	}
+	switch intent.SignatureVersion {
+	case "":
+		return []byte(CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)), nil
+	case contracts.IntentSignatureVersionV2:
+		return canonicalizeIntentV2(intent)
+	default:
+		return nil, fmt.Errorf("unsupported intent signature version %q", intent.SignatureVersion)
+	}
+}
+
+// canonicalizeIntentV2 binds every authority-relevant intent field. It
+// intentionally excludes only Signature itself. A map is used so
+// encoding/json emits keys lexicographically, as required by CanonicalMarshal.
+func canonicalizeIntentV2(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
+	if intent == nil {
+		return nil, fmt.Errorf("intent is required for canonicalization")
+	}
+	if intent.SignatureVersion != contracts.IntentSignatureVersionV2 {
+		return nil, fmt.Errorf("intent signature version %q is not %q", intent.SignatureVersion, contracts.IntentSignatureVersionV2)
+	}
+
+	payload := map[string]any{
+		"allowed_tool":                    intent.AllowedTool,
+		"decision_id":                     intent.DecisionID,
+		"effect_digest_hash":              intent.EffectDigestHash,
+		"emergency_activation_id":         intent.EmergencyActivationID,
+		"emergency_delegation_session_id": intent.EmergencyDelegationSessionID,
+		"emergency_scope_hash":            intent.EmergencyScopeHash,
+		"expires_at":                      intent.ExpiresAt.UTC().Format(time.RFC3339Nano),
+		"id":                              intent.ID,
+		"idempotency_key":                 intent.IdempotencyKey,
+		"issued_at":                       intent.IssuedAt.UTC().Format(time.RFC3339Nano),
+		"signature_type":                  intent.SignatureType,
+		"signer":                          intent.Signer,
+		"taint":                           contracts.NormalizeTaintLabels(intent.Taint),
+		"version":                         intent.SignatureVersion,
 	}
 	return CanonicalMarshal(payload)
 }

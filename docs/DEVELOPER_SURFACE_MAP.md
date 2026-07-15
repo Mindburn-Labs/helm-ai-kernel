@@ -70,6 +70,7 @@ flowchart TD
 | Configure coding-agent hooks and routed MCP paths | `/developer-journey`, `/integrations/mcp` | `docs/DEVELOPER_JOURNEY.md`, `core/cmd/helm-ai-kernel/setup_cmd.go`, `core/cmd/helm-ai-kernel/hook_cmd.go`, `core/cmd/helm-ai-kernel/mcp_cmd.go` |
 | Point OpenAI-compatible clients at HELM | `/integrations/openai-compatible-proxy` | `docs/INTEGRATIONS/openai_baseurl.md`, `examples/python_openai_baseurl/`, `examples/ts_openai_baseurl/` |
 | Use MCP | `/integrations/mcp` | `docs/INTEGRATIONS/mcp.md`, `examples/mcp_client/`, `mcp-bundle.json` |
+| Review Codex project setup, recovery, and its proof limit | `/integrations/native-client-boundary` | `docs/INTEGRATIONS/native-client-boundary.md`, `docs/INTEGRATIONS/native-client-lifecycle.md`, `core/cmd/helm-ai-kernel/setup_codex_lifecycle.go`, `core/cmd/helm-ai-kernel/setup_recovery_*.go` |
 | Use Python, TypeScript, JavaScript, Go, Rust, or Java | `/sdks` | `sdk/`, `examples/*_client/`, `examples/*openai_baseurl/` |
 | Understand policy languages and bundles | `/reference/protocols-and-schemas`, `/compatibility` | `docs/architecture/policy-languages.md`, `protocols/bundles/`, `examples/policies/` |
 | Validate conformance | `/conformance` | `docs/CONFORMANCE.md`, `protocols/conformance/v1/`, `tests/conformance/` |
@@ -84,11 +85,13 @@ loads public pages from `docs/public-docs.manifest.json`, then validates that
 coverage-backed claims appear in public docs, search, Markdown exports,
 `llms.txt`, `llms-full.txt`, and MCP responses.
 
-A setup result or printed client configuration proves only local configuration.
-It intentionally leaves `client_load_observed=false` until a sterile native
-client session loads the configured server. Client claims are limited to the
-configured hook classes and routed MCP calls; direct upstream calls and other
-client actions remain outside that evidence.
+Codex project setup is a local lifecycle surface, not a native-client runtime
+claim. Its exact configuration checks, signed lifecycle receipt, and
+Kernel-only synthetic denial leave `client_load_observed=false`. A claim that
+Codex loaded the configuration requires a separate sterile-client observation
+of the configured hook classes and routed MCP call. Printed configuration alone
+proves only local setup; direct upstream calls and other unconfigured client
+actions remain outside that evidence.
 
 ## Troubleshooting
 

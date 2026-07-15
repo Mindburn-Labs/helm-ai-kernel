@@ -42,7 +42,12 @@ Codex command or asking a client CLI to install a server does not prove that a
 native client loaded the configuration, and it does not cover direct upstream
 calls or unconfigured client actions. Local setup evidence remains
 `client_load_observed=false` until a sterile client session visibly loads the
-configured server.
+configured server. For Codex project setup, inspect local lifecycle changes
+before writing them:
+
+```bash
+helm-ai-kernel setup codex --scope project --dry-run --json
+```
 
 ## 4. Verify The Local MCP Boundary
 
@@ -50,11 +55,12 @@ configured server.
 ./scripts/launch/demo-mcp.sh
 ```
 
-This demo starts a local HELM boundary and fixture server. It verifies local MCP
-authorization paths only; it does not start Codex or Claude Code or demonstrate
-that either client loaded its configuration. A native-client claim requires a
-sterile session that exercises the configured routed MCP call (and any
-configured hook class).
+This demo starts a local HELM boundary and fixture server; it verifies that
+local MCP authorization paths fail closed. It does not start a native client or
+show that Codex or Claude Code loaded client configuration. That claim requires
+a sterile client session which observes the configured server and exercises the
+specific routed MCP call (and any configured hook class) under review. See the
+[native client integration boundary](../INTEGRATIONS/native-client-boundary.md).
 
 ## 5. Inspect Receipts
 

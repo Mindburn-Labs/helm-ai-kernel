@@ -18,12 +18,20 @@ helm-ai-kernel mcp serve --transport http
 ## Native Client Boundary
 
 `helm-ai-kernel init codex` creates a starter layout; the governed-call script
-is a local HTTP fixture, not a Codex client run. `helm-ai-kernel setup codex`
-or printed MCP configuration can prove local setup only and deliberately leave
+is a local HTTP fixture, not a Codex client run. To inspect Codex project-local
+configuration separately, use:
+
+```bash
+helm-ai-kernel setup codex --scope project --dry-run --json
+```
+
+After an explicit `--yes` setup, its exact configuration checks, signed
+lifecycle receipt, and Kernel-only synthetic denial still report
 `client_load_observed=false`. A real native-client claim requires a sterile
-client home and disposable workspace that loads the configured server and
-exercises the configured hook classes or routed MCP call. Direct upstream calls
-and unconfigured client actions remain outside that proof.
+client home and disposable workspace that load the configured server and
+exercise the configured hook classes or routed MCP call; direct upstream calls
+and unconfigured client actions remain outside that proof. See the [native
+client integration boundary](../../../docs/INTEGRATIONS/native-client-boundary.md).
 
 ## What's Included
 

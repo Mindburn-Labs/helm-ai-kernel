@@ -13,6 +13,7 @@ how your agent runs.
 | If you want to... | Read |
 | --- | --- |
 | Configure Codex hooks and routed MCP paths | [Codex integration](INTEGRATIONS/codex.md) |
+| Review Codex project setup or recovery | [Native client integration boundary](INTEGRATIONS/native-client-boundary.md) |
 | Configure Claude Code hooks and routed MCP paths | [Claude Code integration](INTEGRATIONS/claude-code.md) |
 | Scan an agent before enforcement | [Agent Risk Scan](reference/agent-risk-scan.md) |
 | Govern MCP tools | [Govern MCP tools](guides/govern-mcp-tools.md) |
@@ -94,20 +95,31 @@ The local policy boundary defaults to `127.0.0.1:7714`.
 
 ## Local Client Setup Is Not Client Proof
 
-Inspect a Codex project setup before writing it:
+For a Codex project, inspect the local changes before applying them:
 
 ```bash
 helm-ai-kernel setup codex --scope project --dry-run --json
 helm-ai-kernel mcp print-config --client codex
 ```
 
-Those commands create or describe local configuration only. They intentionally
-leave `client_load_observed=false`; they do not show that Codex or Claude Code
+After an explicit `--yes` setup, the exact configuration checks, signed
+lifecycle receipt, and Kernel-only synthetic denial deliberately keep
+`client_load_observed=false`; they do not prove that Codex or Claude Code
 loaded the configuration, started the server, or blocked a real client action.
-A client claim requires a sterile client home and disposable workspace that
-loads the configured server and exercises only the configured hook classes and
-routed MCP calls. Direct upstream calls and unconfigured client actions remain
-outside that proof.
+If setup is interrupted, inspect the recorded transaction before trying another
+install or removal:
+
+```bash
+helm-ai-kernel setup status codex --scope project --json
+helm-ai-kernel setup recover codex --scope project --yes
+```
+
+A native-client claim needs a sterile client home and disposable workspace that
+actually load the generated configuration, then exercise only the configured
+hook classes and a routed MCP call. Direct upstream calls and unconfigured
+client actions remain outside that observation. See the [native client
+integration boundary](INTEGRATIONS/native-client-boundary.md) for the exact
+review limit.
 
 ## Verify A Decision
 

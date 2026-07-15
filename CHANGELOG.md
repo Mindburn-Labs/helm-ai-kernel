@@ -93,7 +93,7 @@ that exact capability.
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2>.
 
-<!-- quantum_posture: v0.7.2 release notes cover a Go standard-library toolchain rebuild and an OpenAPI contract alignment only; this release adds no post-quantum cryptographic control. -->
+<!-- quantum_posture: v0.7.2 release notes cover a Go toolchain rebuild, an OpenAPI contract alignment, enforcement and containment hardening, and dependency updates; none add a post-quantum cryptographic control. -->
 
 - The tag-triggered release workflow will rebuild both container images on Go
   1.25.12 (up from 1.25.10), which includes the cumulative upstream
@@ -107,6 +107,21 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
   `receipt_store_ready`, `signer_ready`, `last_checkpoint_id`, and `checked_at`
   with the existing runtime properties, and documented the consumer migration
   mapping. This correction does not change Kernel runtime JSON behavior.
+- Replaced the deny-only MCP runtime adapter with an optional governed
+  execution bridge that returns real `ALLOW`/`DENY`/`ESCALATE` verdicts: the
+  `mcp.ExecutionFirewall` boundary gate (allowlist, server identity, permission
+  scope, pinned schema, JCS argument hash) runs before policy; `workstation.Decide`
+  issues a signed decision receipt; writes go through an approval-gated
+  `ESCALATE` tier bound to the canonical request hash and a single-use,
+  replay-protected `EffectPermit`; and each effect is linked to its intent in
+  the ProofGraph. Fail-closed by default — with no bridge configured the adapter
+  stays deny-only.
+- Added a scoped emergency-stop fence with a recorded cryptography posture, and
+  preserved JCS Unicode separators in its reference pack.
+- Made the replay-determinism verifier gate fail closed.
+- Made the sandbox fail closed on an ambiguous network posture.
+- Updated the `golang.org/x/crypto`, Jackson Databind, and Python `cryptography`
+  build dependencies to current patched releases.
 
 No RiskEnvelope, scan, upload, cloud, checkout, website, connector
 certification, or Company AI OS GA scope is included.

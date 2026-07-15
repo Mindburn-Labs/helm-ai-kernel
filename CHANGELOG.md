@@ -39,7 +39,7 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
-        A00["[0.7.2] - 2026-07-13"]
+        A00["[0.7.2] - 2026-07-14"]
         A0["[0.7.1] - 2026-07-07"]
         A1["[0.7.0] - 2026-07-05"]
         A2["[0.6.0] - 2026-07-02"]
@@ -89,13 +89,20 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-## [0.7.2] - 2026-07-13
+## [0.7.2] - 2026-07-14
 
-Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2>.
+GitHub Release: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2>.
+
+The tag and 34-asset GitHub Release were published from
+`586a5d62239fee43d5e0b251674644ac8a90fc8a`. Release run `29338793179`
+remains red because its Homebrew merge step failed, and post-release version
+drift was skipped. The formula later landed through Homebrew PR 17, whose
+exact-head autonomous permit failed; that later repository state does not
+retroactively make the release run or authority proof green.
 
 <!-- quantum_posture: v0.7.2 release notes cover a Go toolchain rebuild, an OpenAPI contract alignment, enforcement and containment hardening, and dependency updates; none add a post-quantum cryptographic control. -->
 
-- The tag-triggered release workflow will rebuild both container images on Go
+- The tag-triggered release workflow rebuilt both container images on Go
   1.25.12 (up from 1.25.10), which includes the cumulative upstream
   standard-library security fixes for `crypto/x509`, `mime`, `net/textproto`,
   `crypto/tls`, and `os`. Post-release Trivy and Artifact Hub evidence is

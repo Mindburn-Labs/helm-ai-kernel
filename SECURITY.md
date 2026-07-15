@@ -1,5 +1,7 @@
 # Security Policy
 
+<!-- quantum_posture: this policy documents existing Sigstore and Cosign release verification; it does not add a post-quantum cryptographic control. -->
+
 ## Reporting a Vulnerability
 
 Do not open public issues for security-sensitive reports.
@@ -57,10 +59,13 @@ The signing identity is the GitHub Actions workflow itself
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-The current public GitHub release and tag is `v0.7.1`. `main` declares
-`0.7.2`, but `v0.7.2` is not tagged or published. Verify only the assets
-attached to the `v0.7.1` GitHub Release. After a future `v0.7.2` publication,
-update this paragraph with its actual assets and GitHub publish timestamp.
+The current public GitHub release and tag is `v0.7.2`, published at
+`2026-07-14T14:40:01Z` from
+`586a5d62239fee43d5e0b251674644ac8a90fc8a`. Its Release page attaches
+checksums, SBOM, OpenVEX, release attestation, EvidencePack, binaries, and
+matching Cosign bundles. Verify those assets directly; the Release workflow's
+Homebrew job failed and post-release version drift was skipped, so the Release
+object alone is not proof that every lockstep channel completed.
 
 ## Continuous Fuzzing
 

@@ -3,10 +3,10 @@
 <!-- quantum_posture: this planning doc mentions release signature and provenance assets but does not implement cryptographic controls. -->
 
 Status: internal release planning source, not release notes.
-Current audit date: 2026-07-12.
-Current source base: `origin/main@1f599d18`.
-Current source version: `VERSION=0.7.2` (untagged).
-Current public release and tag: `v0.7.1`.
+Current audit date: 2026-07-15.
+Current source base: `origin/main@586a5d62`.
+Current source version: `VERSION=0.7.2`.
+Current GitHub release and tag: `v0.7.2` (lockstep acceptance incomplete).
 
 Do not add this file to the public docs manifest. Future release scope becomes
 public only through tagged release notes, changelog entries, release assets, and
@@ -16,9 +16,9 @@ published drift evidence for that exact version.
 
 | Surface | Current state | Evidence | Plan impact |
 | --- | --- | --- | --- |
-| Release baseline | `v0.7.1` is the latest published GitHub release and tag. `main` declares `0.7.2`, but `v0.7.2` has neither a tag nor a GitHub Release. | `VERSION`, `gh release view v0.7.1`, `git ls-remote --tags origin v0.7.2` | Keep public release claims on `v0.7.1` until `v0.7.2` is tagged, published, and verified. |
-| Open PR dependencies | Five kernel PRs are open as of this audit; branch presence does not declare release scope. | `gh pr list --state open` on 2026-07-12 | Re-evaluate approved, green prerequisites at the release cut. |
-| Unreleased main delta | `main` source version `0.7.2` remains untagged and unpublished. | `VERSION`, `git ls-remote --tags origin v0.7.2`, `gh release view v0.7.2` | Establish release scope and pass the release gates before tagging. |
+| Release baseline | `v0.7.2` is the latest GitHub tag and Release, published from exact current `main`; the release run is red because Homebrew failed and post-release drift skipped. | `VERSION`, `gh release view v0.7.2`, release run `29338793179` | Keep tag/assets/channel/runtime evidence separate; do not call the lockstep release complete from the Release object alone. |
+| Open PR dependencies | Eighteen kernel PRs are open as of this audit; branch presence does not declare release scope. | `gh pr list --state open` on 2026-07-15 | Re-evaluate approved, green prerequisites at the next release cut. |
+| Unreleased main delta | Tag `v0.7.2` and current `origin/main` both resolve to `586a5d62`; this candidate docs PR is not part of that release. | `git rev-parse v0.7.2 origin/main` | Establish the next release scope only through a new, authorized release train. |
 | EvidencePack structure | Mandatory pack structure, optional host evidence, and declared `99_EXT/` extensions exist. | `core/pkg/conform/evidencepack.go:13` | Historical `v0.7.0` scope; future release planning must start from the current release state above. |
 | EvidencePack seal and verifier | Native seal and verification paths exist. | `core/pkg/evidence/seal.go:191`, `core/pkg/evidence/seal.go:349` | Historical `v0.7.0` exit criteria; do not treat this row as a current release-gap claim. |
 | ProofGraph | ProofGraph refs are used by runtime adapters, exports, and evidence packs. | `core/pkg/evidence/arc/pack_builder.go:39`, `core/pkg/workstation/evidence.go:63` | Historical `v0.7.0` scope; verify current behavior through source and release evidence. |
@@ -33,6 +33,7 @@ published drift evidence for that exact version.
 | --- | --- | --- | --- |
 | `v0.7.0` | EvidencePack and ProofGraph beta | Freeze EvidencePack authority, ProofGraph refs, transparency proofs, offline verifier, conformance oracle, and tamper-failure coverage. | Downloaded release pack verifies offline; tampered pack fails. |
 | `v0.7.1` | Evidence hardening | Verifier UX, pack compatibility, docs/examples, and conformance regressions only. | Focused verifier/proofgraph tests plus release gates pass. |
+| `v0.7.2` | Enforcement and dependency hardening | Governed MCP execution, boundary-contract alignment, emergency-stop and replay hardening, and dependency/toolchain refreshes. | GitHub assets exist; lockstep acceptance remains blocked on the red release run and skipped post-release drift. |
 | `v0.8.0` | RiskEnvelope and agent risk scan beta | Stabilize `helm-ai-kernel scan`, RiskEnvelope schema, local preview, EvidencePack export, optional anonymized upload, observe/shadow/enforce mapping, and SDK parity. | Redaction tests prove no raw secret, prompt, command body, source snippet, or sensitive path leakage. |
 | `v0.8.1` | Risk scan hardening | Redaction, schema parity, SDK examples, upload/privacy docs only. | Scan CLI/API, SDK, docs-truth, and RiskEnvelope tests pass. |
 | `v0.9.0` | Release candidate freeze | No net-new features. Refresh OpenAPI, proto, schemas, SDKs, chart, Homebrew, VEX, changelog, release docs, repo manifest, and fanout readiness. | `make quality-release`, `make release-readiness`, and `make release-assets` pass from clean `origin/main`. |
@@ -153,7 +154,7 @@ Release note boundary:
 
 ## Historical `v0.7.1` Planning Record
 
-`v0.7.1` is the current published release. The following original scope is
+`v0.7.1` is the published historical predecessor to `v0.7.2`. The following original scope is
 retained for release-history context and does not define an unimplemented
 backlog for current `main`.
 

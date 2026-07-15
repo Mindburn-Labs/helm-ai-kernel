@@ -1,6 +1,6 @@
 ---
 title: Release and Security Evidence
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-15
 ---
 
 # HELM AI Kernel Release and Security Evidence
@@ -53,18 +53,23 @@ flowchart TD
 ```
 
 
-The current published GitHub release and tag is `v0.7.1`.
+Current GitHub release and tag: `v0.7.2`.
 
-Current source release target: `v0.7.2`. It is not yet a tag or published
-release: the deterministic target URL
-`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2` currently
-has no release behind it and must not be used as release evidence. After a
-successful `v0.7.2` publication, verify the actual attached assets before
-claiming them here. The expected versioned names include
-`v0.7.2.openvex.json` and `v0.7.2.json`, alongside the applicable binaries,
-`SHA256SUMS.txt`, SBOM, attestation, EvidencePack, `version-status.json`, and
-matching `*.cosign.bundle` files where produced. Browser UI bundles are not
-Kernel release assets.
+The GitHub Release object is
+[`v0.7.2`](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2),
+published at `2026-07-14T14:40:01Z` from
+`586a5d62239fee43d5e0b251674644ac8a90fc8a`. The Release page exposes 34
+assets, including platform binaries, `SHA256SUMS.txt`, `sbom.json`,
+`v0.7.2.openvex.json`, `v0.7.2.json`, `release-attestation.json`,
+`evidence-pack.tar`, `version-status.json`, SLSA provenance, and matching
+Cosign bundles for the primary assets. Browser UI bundles are not Kernel
+release assets.
+
+This is provider evidence, not a blanket release-complete claim. Release run
+`29338793179` failed in the Homebrew job, post-release version drift was
+skipped, and the later Homebrew formula PR merged despite a failed exact-head
+autonomous permit. Verify the exact assets and each required channel before
+claiming lockstep completion.
 
 ## Public Release Material
 
@@ -107,7 +112,7 @@ customer or high-assurance profile, release verification must pass with
 equivalent high-assurance profile, proving the trusted external signer,
 Rekor/RFC3161 anchor receipt, and active S3 Object Lock storage receipt.
 
-For `v0.5.10`, use checksum verification, SBOM inspection, OpenVEX inspection,
+For `v0.7.2`, use checksum verification, SBOM inspection, OpenVEX inspection,
 release metadata inspection, offline EvidencePack verification,
 reproducible-build validation, and Cosign verification against the attached
 bundles.

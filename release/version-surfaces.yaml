@@ -253,28 +253,36 @@
       "path": "docs/RELEASE_SECURITY.md",
       "kind": "regex",
       "pattern": "Current GitHub release and tag: `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
-      "replacement": "Current GitHub release and tag: `v{version}`"
+      "replacement": "Current GitHub release and tag: `v{version}`",
+      "expected": "0.7.2",
+      "prepare": false
     },
     {
       "id": "release-security-doc-release-url",
       "path": "docs/RELEASE_SECURITY.md",
       "kind": "regex",
       "pattern": "releases/tag/v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
-      "replacement": "releases/tag/v{version}"
+      "replacement": "releases/tag/v{version}",
+      "expected": "0.7.2",
+      "prepare": false
     },
     {
       "id": "release-security-doc-openvex-asset",
       "path": "docs/RELEASE_SECURITY.md",
       "kind": "regex",
       "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.openvex\\.json",
-      "replacement": "v{version}.openvex.json"
+      "replacement": "v{version}.openvex.json",
+      "expected": "0.7.2",
+      "prepare": false
     },
     {
       "id": "release-security-doc-json-asset",
       "path": "docs/RELEASE_SECURITY.md",
       "kind": "regex",
       "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)\\.json",
-      "replacement": "v{version}.json"
+      "replacement": "v{version}.json",
+      "expected": "0.7.2",
+      "prepare": false
     },
     {
       "id": "readme-current-tag",

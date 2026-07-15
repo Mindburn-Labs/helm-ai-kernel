@@ -11,6 +11,31 @@ import check_version_drift as drift
 
 
 class VersionDriftMonitorTests(unittest.TestCase):
+    def test_published_release_facts_are_not_auto_prepared(self) -> None:
+        contract = drift.load_contract(drift.DEFAULT_CONTRACT)
+        surfaces = [
+            surface
+            for surface in contract["local_surfaces"]
+            if surface.get("path") == "docs/RELEASE_SECURITY.md"
+        ]
+
+        self.assertEqual(len(surfaces), 4)
+        self.assertTrue(all(surface.get("prepare") is False for surface in surfaces))
+        expected_versions = {surface.get("expected") for surface in surfaces}
+        self.assertEqual(len(expected_versions), 1)
+        published_version = expected_versions.pop()
+        self.assertIsInstance(published_version, str)
+        self.assertRegex(published_version, drift.SEMVER_RE)
+
+        # A future source-version preparation must continue to validate the
+        # last published facts without relabelling them as the future release.
+        results = drift.check_local({"local_surfaces": surfaces}, "9.9.9", None)
+        self.assertTrue(results)
+        self.assertTrue(all(result.status == "pass" for result in results), results)
+        self.assertTrue(
+            all(result.expected == published_version for result in results)
+        )
+
     def test_published_contract_covers_release_channels(self) -> None:
         contract = drift.load_contract(drift.DEFAULT_CONTRACT)
         ids = {surface["id"] for surface in contract["published_surfaces"]}

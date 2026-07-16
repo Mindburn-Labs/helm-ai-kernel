@@ -12,11 +12,21 @@ maintainer-addition or maintainer-removal rule documented there.
 
 ## Reviewers
 
-Reviewers may approve PRs in their listed area but cannot merge.
+Reviewers may review PRs in their listed area but cannot merge.
 
 | Name | GitHub | Affiliation | Areas |
 | --- | --- | --- | --- |
 | Mindburn Labs core team | @Mindburn-Labs | Mindburn-Labs | docs, release |
+
+## Merge Authority
+
+This roster, a reviewer approval, and DCO or other commit trailers are
+stewardship, license, or provenance evidence; none is standalone merge
+authority. The current human GitHub approval rule remains the enforced
+transition state and must not be removed or bypassed before a source-owned
+machine permit bound to the exact PR head, an exact-head GitHub App interlock,
+and configuration plus runtime readbacks are live-proven. That machine
+authority is not live today.
 
 ## Known Gaps
 

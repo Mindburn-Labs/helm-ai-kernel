@@ -63,9 +63,13 @@ git commit --amend -s
 
 CI rejects pull requests containing commits without a sign-off.
 
+DCO sign-offs and other commit trailers are license and provenance evidence.
+They do not authorize a merge or replace the active GitHub merge policy.
+
 ## Pull Requests
 
-- **Mandatory Peer Review**: Branch protection rules are enforced on all stable branches (`main`). Direct merges are blocked. Every pull request must receive at least one formal approval from an authorized, unaffiliated maintainer (e.g. `@mindburn-labs/helm-platform` codeowners) before merging.
+- **Current transition rule**: The human GitHub approval rule on `main` remains enforced, including its approval, Codeowner, and last-push protections. Direct merges are blocked. Do not remove or bypass this rule during implementation or evaluation.
+- **Future machine authority**: The human rule can be replaced only after a source-owned machine permit bound to the exact PR head and an exact-head GitHub App interlock are live-proven by configuration and runtime readbacks. This authority is not live today.
 - **DCO**: every commit is signed off (`git commit -s`); see above.
 - Keep PRs narrow and reviewable.
 - Include the commands you ran.

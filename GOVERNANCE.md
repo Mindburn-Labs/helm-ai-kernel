@@ -23,9 +23,10 @@ seats once the maintainer set reaches three or more members.
 
 There are three roles:
 
-- **Maintainer** — full commit access, may merge after a single review,
-  approves releases, votes on governance changes.
-- **Reviewer** — may approve PRs in a defined area; cannot merge; named
+- **Maintainer** — full commit access, may participate in review and release
+  decisions, and votes on governance changes; the role grants no standalone
+  merge authorization.
+- **Reviewer** — may review PRs in a defined area; cannot merge; named
   in `MAINTAINERS.md` under the relevant area.
 - **Contributor** — anyone who opens a PR or issue. No formal status; the
   project welcomes contributions per `CONTRIBUTING.md`.
@@ -63,12 +64,25 @@ treated as approval.
 | Maintainer addition | Lazy consensus | 7 days |
 | Maintainer removal | Super-majority (2/3) | 14 days |
 
+These are project decision and review norms, not merge authority. GitHub's
+enforced policy controls whether a pull request can merge.
+
 ### Branch Protection & Review Policies
 
-To satisfy OpenSSF and CNCF compliance, branch protection rules are strictly enforced on the default branch (`main`) in the GitHub repository:
-1. **Mandatory Peer Review**: All merges to the default branch must occur via Pull Requests. Each Pull Request requires at least one formal approval from an authorized, unaffiliated maintainer or codeowner prior to merge. Direct pushes are structurally blocked.
-2. **Mandatory Status Checks**: The continuous integration suite (`ci.yml`) and vulnerability scanner must pass successfully before a merge is permitted.
-3. **Cryptographic Signing**: All commit contributions must be cryptographically signed by the committer.
+The human GitHub approval rule on the default branch (`main`) is the current
+enforced transition state: its approval, Codeowner, and last-push protections
+remain in place, and direct pushes are structurally blocked. It must not be
+removed or bypassed during implementation or evaluation.
+
+The rule can be replaced only after a source-owned machine permit bound to the
+exact PR head, an exact-head GitHub App merge interlock, and configuration plus
+runtime readbacks are live-proven. That machine authority is not live today.
+
+Required CI and vulnerability checks remain separate repository controls.
+DCO sign-offs, cryptographic signatures, and other commit trailers are
+license, provenance, or integrity evidence only; they are not merge authority
+and cannot substitute for the enforced GitHub policy or future machine
+interlock.
 
 A breaking API change is any change to `protocols/`, `api/openapi/`, the
 public CLI flag set, or the `core/pkg/contracts/` types. Such changes

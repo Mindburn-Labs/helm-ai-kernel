@@ -89,11 +89,18 @@ It does **not** verify the following:
    here. Obligation-handling soundness (e.g. the kernel must apply
    every obligation a permitted decision carries) is a separate axis
    not yet modeled.
+7. **GitHub merge authority.** This theorem does not establish GitHub merge
+   or deployment authority. A Lean proof, CI result, reviewer or maintainer
+   identity, DCO sign-off, or other attribution trailer is technical or
+   provenance evidence only; none authorizes a merge. The current human GitHub
+   approval rule remains enforced and must not be removed or bypassed until a
+   source-owned machine permit bound to the exact PR head, an exact-head GitHub
+   App interlock, and configuration plus runtime readbacks are live-proven.
 
-These omissions are deliberate. Each one corresponds to either an
-existing test surface (1, 3, 4) or a future workstream (5, 6). The
-ceiling-precedence theorem, in this minimal form, is the **single**
-property the kernel must preserve to be sound — anything else is
+These omissions are deliberate. Each one corresponds to an existing test
+surface (1, 3, 4), a future workstream (5, 6), or the separate GitHub authority
+transition (7). The ceiling-precedence theorem, in this minimal form, is the
+**single** property the kernel must preserve to be sound — anything else is
 defense in depth.
 
 ## Adding theorems
@@ -110,9 +117,9 @@ defense in depth.
 
 ## External review
 
-Workstream F flags formal review as a hard merge gate
-(`docs/ai/operating-model.md`). Before publishing the v1.1 profile axis
-"formal soundness", an independent reviewer with Lean 4 experience
-should re-derive the proof from the model definitions on a clean
-checkout. The proof's brevity (under 50 lines of tactic prose) is
+Workstream F flags formal review as a technical evidence requirement, not an
+independent source of merge authority (`docs/ai/operating-model.md`). Before
+publishing the v1.1 profile axis "formal soundness", an independent reviewer
+with Lean 4 experience should re-derive the proof from the model definitions on
+a clean checkout. The proof's brevity (under 50 lines of tactic prose) is
 deliberate — it is meant to be re-read end-to-end in one sitting.

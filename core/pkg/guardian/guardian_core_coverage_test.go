@@ -468,6 +468,9 @@ func TestCoverageTemporalAndSandboxInterceptors(t *testing.T) {
 	if decision.EnvFingerprint != "sha256:unconfigured" || decision.PolicyVersion != "policy-v1" {
 		t.Fatalf("temporal decision did not bind env/policy: %+v", decision)
 	}
+	if decision.SubjectID != "agent" || decision.Action != "EXECUTE_TOOL" || decision.Resource != "shell.run" {
+		t.Fatalf("temporal decision did not bind the governed request: %+v", decision)
+	}
 
 	throttleGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock))
 	throttleTemporal := NewTemporalGuardian(DefaultEscalationPolicy(), clock)

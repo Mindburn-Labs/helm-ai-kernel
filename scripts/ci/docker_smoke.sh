@@ -17,8 +17,9 @@ fi
 IMAGE="${HELM_SMOKE_IMAGE:-ghcr.io/mindburn-labs/helm-ai-kernel:local}"
 API_PORT="${HELM_SMOKE_API_PORT:-18080}"
 HEALTH_PORT="${HELM_SMOKE_HEALTH_PORT:-18081}"
-TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
+TENANT_ID="${HELM_SMOKE_TENANT_ID:-default}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
+WORKSPACE_ID="${HELM_SMOKE_WORKSPACE_ID:-default}"
 CONTAINER_NAME="${HELM_SMOKE_CONTAINER_NAME:-helm-ai-kernel-smoke}"
 DATA_DIR="${HELM_SMOKE_DATA_DIR:-}"
 COMPOSE_PROJECT="${HELM_SMOKE_COMPOSE_PROJECT:-helmoss_smoke}"
@@ -111,6 +112,7 @@ auth_headers=(
     -H "Authorization: Bearer ${ADMIN_KEY}"
     -H "X-Helm-Tenant-ID: ${TENANT_ID}"
     -H "X-Helm-Principal-ID: ${AGENT_ID}"
+    -H "X-Helm-Workspace-ID: ${WORKSPACE_ID}"
 )
 
 start_docker() {
@@ -122,6 +124,7 @@ start_docker() {
         -e HELM_SERVICE_API_KEY="$SERVICE_KEY" \
         -e HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
         -e HELM_RUNTIME_PRINCIPAL_ID="$AGENT_ID" \
+        -e HELM_RUNTIME_WORKSPACE_ID="$WORKSPACE_ID" \
         -e EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY" \
         -e HELM_HEALTH_PORT=8081 \
         -v "${DATA_DIR}:/var/lib/helm-ai-kernel" \
@@ -134,6 +137,7 @@ start_compose() {
     HELM_SERVICE_API_KEY="$SERVICE_KEY" \
     HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
     HELM_RUNTIME_PRINCIPAL_ID="$AGENT_ID" \
+    HELM_RUNTIME_WORKSPACE_ID="$WORKSPACE_ID" \
     EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY" \
     HELM_SMOKE_DATA_DIR="$DATA_DIR" \
     HELM_SMOKE_API_PORT="$API_PORT" \
@@ -198,7 +202,7 @@ evaluate_unknown_tool() {
         -H 'Content-Type: application/json' \
         "${auth_headers[@]}" \
         --data-binary @- >"$DATA_DIR/decision.json" <<JSON
-{"principal":"${AGENT_ID}","action":"EXECUTE_TOOL","resource":"unknown.tool.smoke","context":{"session_id":"${AGENT_ID}","destination":"blocked.smoke.local","payload_size":1}}
+{"action":"EXECUTE_TOOL","resource":"unknown.tool.smoke","context":{"payload_size":1}}
 JSON
     python3 - "$DATA_DIR/decision.json" <<'PY'
 import json, sys

@@ -11,6 +11,7 @@ FIXTURE_CMD="python3 scripts/launch/mcp-fixture-server.py"
 ADMIN_KEY="${HELM_ADMIN_API_KEY:-launch-mcp-local-admin-key}"
 # serve --policy installs the launch snapshot for the OSS default/default scope.
 TENANT_ID="${HELM_TENANT_ID:-default}"
+WORKSPACE_ID="${HELM_WORKSPACE_ID:-default}"
 
 cleanup() {
   if [ -n "${HELM_PID:-}" ]; then
@@ -46,6 +47,7 @@ env HELM_ADMIN_API_KEY="$ADMIN_KEY" \
   HELM_HEALTH_PORT="$HEALTH_PORT" \
   HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
   HELM_RUNTIME_PRINCIPAL_ID="mcp-demo-agent" \
+  HELM_RUNTIME_WORKSPACE_ID="$WORKSPACE_ID" \
   ./bin/helm-ai-kernel serve \
   --policy examples/launch/policies/agent_tool_call_boundary.toml \
   --addr 127.0.0.1 \
@@ -67,13 +69,13 @@ if ! curl -fsS "$HELM_URL/api/health" >/dev/null 2>&1; then
 fi
 
 echo "==> Exercising API quarantine, approval, and schema-pin authorization"
-python3 - "$HELM_URL" "$FIXTURE_JSON" "$TOOL_SCHEMA_JSON" "$TOOL_SCHEMA_HASH" "$ADMIN_KEY" "$TENANT_ID" <<'PY'
+python3 - "$HELM_URL" "$FIXTURE_JSON" "$TOOL_SCHEMA_JSON" "$TOOL_SCHEMA_HASH" "$ADMIN_KEY" "$TENANT_ID" "$WORKSPACE_ID" <<'PY'
 import json
 import sys
 import urllib.error
 import urllib.request
 
-base_url, fixture_json, schema_json, schema_hash, admin_key, tenant_id = sys.argv[1:7]
+base_url, fixture_json, schema_json, schema_hash, admin_key, tenant_id, workspace_id = sys.argv[1:8]
 fixture = json.loads(fixture_json)
 tool_names = [tool["name"] for tool in fixture["tools"]]
 tool_schema = json.loads(schema_json)
@@ -90,6 +92,7 @@ def request(method, path, payload=None, expected=None):
             "Authorization": f"Bearer {admin_key}",
             "X-Helm-Tenant-ID": tenant_id,
             "X-Helm-Principal-ID": "mcp-demo-agent",
+            "X-Helm-Workspace-ID": workspace_id,
         },
     )
     try:
@@ -162,7 +165,6 @@ _, decision = request(
     "POST",
     "/api/v1/evaluate",
     {
-        "principal": "mcp-demo-agent",
         "action": "read-ticket",
         "resource": "ticket:MCP-100",
         "context": {"demo": "mcp-quarantine"},
@@ -212,6 +214,8 @@ _, registry_approval = request(
         "approver_id": "user:local-admin",
         "approval_receipt_id": approval_receipt_id,
         "reason": "schema pin bound to approval ceremony",
+        "tool_names": ["local.echo"],
+        "effects": ["read"],
     },
     {200},
 )

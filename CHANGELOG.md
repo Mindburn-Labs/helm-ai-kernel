@@ -89,6 +89,15 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+- Source-owned the served `/api/v1/evaluate` contract: its body is now the
+  strict `DecisionRequest { action, resource, context? }`, while bearer,
+  tenant, principal, and optional workspace identity are bound in transport
+  headers. Generic body identity, `session_history`, and the legacy evaluator
+  payload are retired rather than supported as a dual compatibility path.
+- Regenerated SDK types and added evaluator conformance coverage for Go,
+  Python, TypeScript, Rust, and Java. This is an unreleased source migration;
+  it is not a published SDK or Kernel release claim.
+
 ## [0.7.2] - 2026-07-13
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2>.

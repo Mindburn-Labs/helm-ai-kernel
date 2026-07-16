@@ -318,6 +318,12 @@ func (g *Guardian) SetPolicySnapshots(store policyreconcile.PolicySnapshotStore,
 	g.snapshotScope = scope.Normalize()
 }
 
+// HasPolicySnapshots reports whether the Guardian resolves policy authority
+// from an installed runtime snapshot store.
+func (g *Guardian) HasPolicySnapshots() bool {
+	return g != nil && g.snapshotStore != nil
+}
+
 // SetComplianceChecker sets a compliance verifier.
 // Deprecated: Use WithComplianceChecker GuardianOption in NewGuardian instead.
 func (g *Guardian) SetComplianceChecker(c ComplianceChecker) {
@@ -747,6 +753,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				InputContext:  req.Context,
 				PolicyVersion: "unavailable",
 			}
+			g.bindDecisionToRequest(decision, req)
 			if signErr := g.signer.SignDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
 			}
@@ -763,6 +770,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				PolicyVersion: snapshot.PolicyHash,
 			}
 			bindRuntimePolicyDecision(decision, snapshot, snapshot.PolicyHash)
+			g.bindDecisionToRequest(decision, req)
 			if signErr := g.signer.SignDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
 			}
@@ -802,6 +810,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					PolicyVersion: policyVersion,
 				}
 				bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
+				g.bindDecisionToRequest(decision, req)
 				if signErr := g.signer.SignDecision(decision); signErr != nil {
 					return nil, fmt.Errorf("failed to sign safe-deprecation decision: %w", signErr)
 				}
@@ -854,6 +863,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				RiskAccumulationWindow: snapshot.RiskAccumulationWindow,
 			}
 			bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
+			g.bindDecisionToRequest(decision, req)
 			if signErr := g.signer.SignDecision(decision); signErr != nil {
 				return nil, fmt.Errorf("failed to sign session-risk decision: %w", signErr)
 			}
@@ -966,6 +976,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		decision := &contracts.DecisionRecord{
 			ID:             newDecisionID(),
 			Timestamp:      g.clock.Now(),
+			SubjectID:      req.Principal,
+			Action:         req.Action,
+			Resource:       req.Resource,
 			Verdict:        string(contracts.VerdictDeny), // Default deny
 			EffectDigest:   effectDigest,
 			InputContext:   req.Context,
@@ -1045,6 +1058,35 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 	chain := NewInterceptorChain(g.boundaryChain, finalHandler)
 
 	return chain.Execute(ctx, evalCtx)
+}
+
+// bindDecisionToRequest ensures that every decision produced for an evaluation
+// cryptographically binds the requested subject and governed effect before the
+// signer sees it. Interceptors may short-circuit before the final handler, so
+// this must happen at every signing path rather than only when the effect is
+// constructed.
+func (g *Guardian) bindDecisionToRequest(decision *contracts.DecisionRecord, req DecisionRequest) {
+	if decision == nil {
+		return
+	}
+	if decision.SubjectID == "" {
+		decision.SubjectID = req.Principal
+	}
+	if decision.Action == "" {
+		decision.Action = req.Action
+	}
+	if decision.Resource == "" {
+		decision.Resource = req.Resource
+	}
+	if decision.InputContext == nil {
+		decision.InputContext = req.Context
+	}
+	if decision.EnvFingerprint == "" {
+		decision.EnvFingerprint = g.envFprint
+		if decision.EnvFingerprint == "" {
+			decision.EnvFingerprint = "sha256:unconfigured"
+		}
+	}
 }
 
 // responseToIntervention maps TemporalGuardian ResponseLevel to InterventionType.

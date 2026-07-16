@@ -1,6 +1,6 @@
 ---
 title: SDKs
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-13
 ---
 
 # SDKs
@@ -82,6 +82,18 @@ let client = HelmClient::new("http://127.0.0.1:7714");
 ```java
 HelmClient client = new HelmClient("http://127.0.0.1:7714");
 ```
+
+## Evaluate Contract
+
+For `POST /api/v1/evaluate`, configure a client with the admin key, tenant ID,
+and principal ID. Set the workspace ID whenever scoped emergency-stop fencing
+or runtime policy snapshot authority is enabled. It sends
+`X-Helm-Workspace-ID`, which must match server-owned
+`HELM_RUNTIME_WORKSPACE_ID`; otherwise the endpoint fails closed with `403`.
+Pass a typed body containing only
+`action`, `resource`, and optional `context`; body identity, `session_history`,
+and legacy evaluator payloads are rejected. See the [HTTP API reference](../reference/http-api.md#canonical-evaluate-contract)
+for the full migration boundary.
 
 ## Client Behavior
 

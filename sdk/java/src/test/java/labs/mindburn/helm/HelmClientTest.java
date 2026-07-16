@@ -1,9 +1,18 @@
 package labs.mindburn.helm;
 
+// quantum_posture: evaluator transport conformance only; no cryptographic
+// algorithm, signer, or post-quantum behavior is added or changed here.
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.sun.net.httpserver.HttpServer;
+
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Functional tests for the HELM Java SDK.
@@ -26,6 +35,145 @@ public class HelmClientTest {
     void testClientConstructionWithApiKey() {
         HelmClient client = new HelmClient("http://localhost:8080", "test-api-key");
         assertNotNull(client);
+    }
+
+    @Test
+    @DisplayName("Evaluate serializes the canonical body and binds transport identity")
+    void testEvaluateDecisionContract() throws Exception {
+        AtomicReference<String> authorization = new AtomicReference<>();
+        AtomicReference<String> tenant = new AtomicReference<>();
+        AtomicReference<String> principal = new AtomicReference<>();
+        AtomicReference<String> workspace = new AtomicReference<>();
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        String response = """
+            {"id":"decision-1","proposal_id":"proposal-1","step_id":"step-1","phenotype_hash":"sha256:phenotype","policy_version":"policy-v1","subject_id":"principal-a","action":"EXECUTE_TOOL","resource":"local.echo","effect_digest":"sha256:effect","state_cursor":"cursor-1","env_fingerprint":"sha256:env","verdict":"DENY","reason":"policy denied","trajectory_risk_score":0.75,"risk_accumulation_window":3,"signature":"sig","signature_type":"ed25519","timestamp":"2026-07-13T00:00:00Z","intervention":{"type":"THROTTLE","reason_code":"TEST_THROTTLE","wait_duration":5,"tokens_saved":7}}
+            """;
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/evaluate", exchange -> {
+            authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            tenant.set(exchange.getRequestHeaders().getFirst("X-Helm-Tenant-ID"));
+            principal.set(exchange.getRequestHeaders().getFirst("X-Helm-Principal-ID"));
+            workspace.set(exchange.getRequestHeaders().getFirst("X-Helm-Workspace-ID"));
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            int port = server.getAddress().getPort();
+            HelmClient client = new HelmClient("http://127.0.0.1:" + port, "token", "tenant-a", "principal-a", "workspace-a");
+            TypesGen.DecisionRequest request = new TypesGen.DecisionRequest();
+            request.setAction("EXECUTE_TOOL");
+            request.setResource("local.echo");
+            request.setContext(Map.of("request_id", "req-1"));
+
+            TypesGen.DecisionRecord decision = client.evaluateDecision(request);
+
+            assertEquals("decision-1", decision.getId());
+            assertEquals("principal-a", decision.getSubjectId());
+            assertEquals("EXECUTE_TOOL", decision.getAction());
+            assertEquals("local.echo", decision.getResource());
+            assertEquals("sha256:effect", decision.getEffectDigest());
+            assertEquals(0.75, decision.getTrajectoryRiskScore());
+            assertEquals(3, decision.getRiskAccumulationWindow());
+            assertEquals("2026-07-13T00:00Z", decision.getTimestamp().toString());
+            assertNotNull(decision.getIntervention());
+            assertEquals("THROTTLE", decision.getIntervention().getType());
+            assertEquals(5L, decision.getIntervention().getWaitDuration());
+            assertEquals("Bearer token", authorization.get());
+            assertEquals("tenant-a", tenant.get());
+            assertEquals("principal-a", principal.get());
+            assertEquals("workspace-a", workspace.get());
+            assertNotNull(requestBody.get());
+            var payload = mapper.readTree(requestBody.get());
+            assertEquals(3, payload.size());
+            assertEquals("EXECUTE_TOOL", payload.get("action").asText());
+            assertEquals("local.echo", payload.get("resource").asText());
+            assertEquals("req-1", payload.get("context").get("request_id").asText());
+            assertFalse(payload.has("principal"));
+            assertFalse(payload.has("tenant"));
+            assertFalse(payload.has("workspace"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("Evaluate preserves an explicitly null context")
+    void testEvaluateDecisionPreservesExplicitNullContext() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        String response = """
+            {"id":"decision-1","proposal_id":"proposal-1","step_id":"step-1","phenotype_hash":"sha256:phenotype","policy_version":"policy-v1","subject_id":"principal-a","action":"EXECUTE_TOOL","resource":"local.echo","effect_digest":"sha256:effect","state_cursor":"cursor-1","env_fingerprint":"sha256:env","verdict":"DENY","reason":"policy denied","signature":"sig","signature_type":"ed25519","timestamp":"2026-07-13T00:00:00Z"}
+            """;
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/evaluate", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            int port = server.getAddress().getPort();
+            HelmClient client = new HelmClient("http://127.0.0.1:" + port, "token", "tenant-a", "principal-a", "workspace-a");
+            TypesGen.DecisionRequest request = new TypesGen.DecisionRequest();
+            request.setAction("EXECUTE_TOOL");
+            request.setResource("local.echo");
+            request.setContext(null);
+
+            client.evaluateDecision(request);
+
+            var payload = mapper.readTree(requestBody.get());
+            assertEquals(3, payload.size());
+            assertTrue(payload.has("context"));
+            assertTrue(payload.get("context").isNull());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("DecisionRequest distinguishes absent and explicit-null context")
+    void testDecisionRequestPreservesContextPresence() {
+        TypesGen.DecisionRequest request = new TypesGen.DecisionRequest();
+        request.setAction("EXECUTE_TOOL");
+        request.setResource("local.echo");
+        assertFalse(request.getContext_JsonNullable().isPresent());
+
+        request.setContext(null);
+        assertTrue(request.getContext_JsonNullable().isPresent());
+        assertNull(request.getContext());
+    }
+
+    @Test
+    @DisplayName("DecisionRequest rejects undeclared properties")
+    void testDecisionRequestRejectsUndeclaredProperties() {
+        assertFalse(Map.class.isAssignableFrom(TypesGen.DecisionRequest.class));
+        assertThrows(NoSuchMethodException.class,
+            () -> TypesGen.DecisionRequest.class.getMethod("putAdditionalProperty", String.class, Object.class));
+
+        Exception error = assertThrows(Exception.class, () -> mapper.readValue(
+            "{\"action\":\"EXECUTE_TOOL\",\"resource\":\"local.echo\",\"principal\":\"attacker\"}",
+            TypesGen.DecisionRequest.class
+        ));
+        assertTrue(error.getMessage().contains("DecisionRequest does not allow additional property: principal"));
+    }
+
+    @Test
+    @DisplayName("Evaluate refuses missing authenticated bindings before making a request")
+    void testEvaluateDecisionRequiresBindings() {
+        TypesGen.DecisionRequest request = new TypesGen.DecisionRequest();
+        request.setAction("EXECUTE_TOOL");
+        request.setResource("local.echo");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> new HelmClient("http://127.0.0.1:1").evaluateDecision(request));
+        assertTrue(error.getMessage().contains("apiKey, tenantId, and principalId"));
     }
 
     @Test

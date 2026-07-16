@@ -121,6 +121,20 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		if r.Header.Get("X-Helm-Principal-ID") != "operator-a" {
 			t.Fatalf("missing principal header for %s %s", r.Method, r.URL.RequestURI())
 		}
+		if r.Header.Get("X-Helm-Workspace-ID") != "workspace-a" {
+			t.Fatalf("missing workspace header for %s %s", r.Method, r.URL.RequestURI())
+		}
+		if r.URL.Path == "/api/v1/evaluate" {
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode evaluate body: %v", err)
+			}
+			if len(body) != 2 || body["action"] != "EXECUTE_TOOL" || body["resource"] != "local.echo" {
+				t.Fatalf("evaluate body must contain only the canonical request fields: %#v", body)
+			}
+			writeJSON(t, w, DecisionRecord{})
+			return
+		}
 		if r.URL.Path == "/v1/chat/completions" {
 			w.Header().Set("X-Helm-Receipt-ID", "receipt-1")
 			w.Header().Set("X-Helm-Status", "ALLOW")
@@ -139,7 +153,7 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		writeJSON(t, w, responseForClientMatrix(r.Method, r.URL))
 	}))
 	defer server.Close()
-	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"))
+	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"), WithWorkspaceID("workspace-a"))
 
 	cases := []struct {
 		name string
@@ -157,7 +171,13 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			}
 			return err
 		}},
-		{"evaluate decision", "POST /api/v1/evaluate", func() error { _, err := client.EvaluateDecision(SurfaceRecord{"effect": "read"}); return err }},
+		{"evaluate decision", "POST /api/v1/evaluate", func() error {
+			_, err := client.EvaluateDecision(DecisionRequest{
+				Action:   "EXECUTE_TOOL",
+				Resource: "local.echo",
+			})
+			return err
+		}},
 		{"run public demo", "POST /api/demo/run", func() error { _, err := client.RunPublicDemo("read_ticket", SurfaceRecord{"id": 1}); return err }},
 		{"verify public demo receipt", "POST /api/demo/verify", func() error {
 			_, err := client.VerifyPublicDemoReceipt(SurfaceRecord{"receipt_id": "r1"}, "hash")
@@ -283,6 +303,75 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		if got := seen[i]; got != tc.want {
 			t.Fatalf("%s request = %s, want %s", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestEvaluateDecisionPreservesExplicitNullContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/evaluate" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode evaluate body: %v", err)
+		}
+		if len(body) != 3 || body["action"] != "EXECUTE_TOOL" || body["resource"] != "local.echo" {
+			t.Fatalf("evaluate body = %#v", body)
+		}
+		context, exists := body["context"]
+		if !exists || context != nil {
+			t.Fatalf("explicit null context was not preserved: %#v", body)
+		}
+		writeJSON(t, w, DecisionRecord{})
+	}))
+	defer server.Close()
+
+	request := NewDecisionRequest("EXECUTE_TOOL", "local.echo")
+	request.SetContext(nil)
+	client := New(server.URL, WithAPIKey("token"), WithTenantID("tenant-a"), WithPrincipalID("operator-a"))
+	if _, err := client.EvaluateDecision(*request); err != nil {
+		t.Fatalf("EvaluateDecision returned error: %v", err)
+	}
+}
+
+func TestDecisionRequestRejectsUnknownFieldsAndPreservesContextPresence(t *testing.T) {
+	absent := NewDecisionRequest("EXECUTE_TOOL", "local.echo")
+	absentJSON, err := json.Marshal(absent)
+	if err != nil {
+		t.Fatalf("marshal absent context: %v", err)
+	}
+	var absentBody map[string]any
+	if err := json.Unmarshal(absentJSON, &absentBody); err != nil {
+		t.Fatalf("decode absent context: %v", err)
+	}
+	if _, exists := absentBody["context"]; exists {
+		t.Fatalf("absent context was serialized: %#v", absentBody)
+	}
+
+	explicitNull := NewDecisionRequest("EXECUTE_TOOL", "local.echo")
+	explicitNull.SetContext(nil)
+	explicitNullJSON, err := json.Marshal(explicitNull)
+	if err != nil {
+		t.Fatalf("marshal explicit null context: %v", err)
+	}
+	var explicitNullBody map[string]any
+	if err := json.Unmarshal(explicitNullJSON, &explicitNullBody); err != nil {
+		t.Fatalf("decode explicit null context: %v", err)
+	}
+	if context, exists := explicitNullBody["context"]; !exists || context != nil {
+		t.Fatalf("explicit null context was not preserved: %#v", explicitNullBody)
+	}
+
+	var request DecisionRequest
+	if err := json.Unmarshal([]byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","principal":"attacker"}`), &request); err == nil {
+		t.Fatal("DecisionRequest accepted an undeclared property")
+	}
+}
+
+func TestEvaluateDecisionRequiresIdentityBindings(t *testing.T) {
+	client := New("http://helm.test")
+	if _, err := client.EvaluateDecision(DecisionRequest{Action: "EXECUTE_TOOL", Resource: "local.echo"}); err == nil {
+		t.Fatal("EvaluateDecision accepted missing API key, tenant, and principal bindings")
 	}
 }
 

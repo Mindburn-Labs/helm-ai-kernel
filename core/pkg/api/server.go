@@ -1,14 +1,18 @@
-// Package api implements the HELM Governance REST API.
+// Package api implements the legacy HELM Governance compatibility server.
 //
-// Endpoints:
+// The served kernel runtime is cmd/helm-ai-kernel serve. Its canonical
+// POST /api/v1/evaluate contract is defined by api/openapi/helm.openapi.yaml
+// and is not implemented by this in-memory compatibility server.
+// quantum_posture: compatibility-route retirement only; this package does not
+// add, remove, or alter any cryptographic control or post-quantum claim.
 //
-//	POST /api/v1/evaluate       — Evaluate a tool call through governance
+// Compatibility endpoints:
+//
+//	POST /api/v1/legacy/evaluate — Evaluate a legacy tool call through governance
 //	GET  /api/v1/receipts/:id   — Retrieve a receipt
 //	POST /api/v1/receipts/:id/complete — Record execution outcome
 //	GET  /api/v1/verify/:session — Verify receipt chain for a session
 //	GET  /api/v1/health         — Health check
-//
-// This server backs Python, TypeScript, and Rust SDKs.
 package api
 
 import (
@@ -38,6 +42,8 @@ type Server struct {
 	allowedOrigins []string // CORS allowed origins (nil = no CORS headers)
 	authenticator  Authenticator
 }
+
+const legacyEvaluatePath = "/api/v1/legacy/evaluate"
 
 // AuthenticatedPrincipal is the identity the legacy API trusts for protected
 // routes. It is intentionally local to package api to avoid an auth->api import
@@ -140,12 +146,28 @@ func NewServer(cfg ServerConfig) *Server {
 }
 
 func (s *Server) registerRoutes() {
-	s.mux.HandleFunc("/api/v1/evaluate", s.handleEvaluate)
-	s.mux.HandleFunc("/api/v1/guardian/evaluate", s.handleEvaluate)
+	// The unversioned path is owned by the served Guardian runtime. Retire it
+	// here rather than accepting an incompatible body on a second server.
+	s.mux.HandleFunc("/api/v1/evaluate", s.handleRetiredEvaluate)
+	s.mux.HandleFunc("/api/v1/guardian/evaluate", s.handleRetiredEvaluate)
+	s.mux.HandleFunc(legacyEvaluatePath, s.handleEvaluate)
+	s.mux.HandleFunc("/api/v1/legacy/guardian/evaluate", s.handleEvaluate)
 	s.mux.HandleFunc("/api/v1/receipts/", s.handleReceipts)
 	s.mux.HandleFunc("/api/v1/verify/", s.handleVerify)
 	s.mux.HandleFunc("/api/v1/launchpad/", s.handleLaunchpad)
 	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
+}
+
+func (s *Server) handleRetiredEvaluate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusGone, map[string]any{
+		"error":       "legacy evaluate contract retired",
+		"reason_code": "LEGACY_EVALUATE_RETIRED",
+		"migration":   "use the served Guardian /api/v1/evaluate contract, or the explicitly versioned /api/v1/legacy/evaluate compatibility endpoint",
+	})
 }
 
 // ServeHTTP implements http.Handler.

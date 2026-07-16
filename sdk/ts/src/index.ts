@@ -1,4 +1,5 @@
 export { HelmClient, HelmApiError } from "./client.js";
+export type { DecisionRecord, DecisionRequest } from "./types.gen.js";
 export type {
   HelmClientConfig,
   ReasonCode,

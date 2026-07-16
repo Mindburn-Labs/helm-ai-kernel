@@ -107,6 +107,30 @@ function expectNoThrow(fn: () => unknown): void {
 }
 
 describe("generated OpenAPI TypeScript helpers", () => {
+  it("closes DecisionRequest fields and preserves context presence", () => {
+    const request: openapiTypes.DecisionRequest = {
+      action: "EXECUTE_TOOL",
+      resource: "local.echo",
+      context: null,
+    };
+
+    const parsed = openapiTypes.DecisionRequestFromJSON({ ...request, principal: "attacker" });
+    expect(parsed).toEqual(request);
+    expect(openapiTypes.DecisionRequestToJSON(parsed)).toEqual(request);
+    expect(openapiTypes.DecisionRequestToJSON({ action: "EXECUTE_TOOL", resource: "local.echo" })).toEqual({
+      action: "EXECUTE_TOOL",
+      resource: "local.echo",
+    });
+
+    const forbiddenProperty: openapiTypes.DecisionRequest = {
+      action: "EXECUTE_TOOL",
+      resource: "local.echo",
+      // @ts-expect-error DecisionRequest must not accept transport identity fields.
+      principal: "attacker",
+    };
+    expect(forbiddenProperty.action).toBe("EXECUTE_TOOL");
+  });
+
   it("exercises every generated JSON converter and interface guard", () => {
     const exercised: string[] = [];
 

@@ -324,7 +324,7 @@
               "type": "string",
               "minLength": 1,
               "default": "default",
-              "description": "Server-bound tenant ID for tenant-scoped runtime routes. Request tenant headers or tenant_id query values must match this value and cannot select another tenant."
+              "description": "Server-bound tenant ID for tenant-scoped runtime routes. The X-Helm-Tenant-ID request header must match this value and cannot select another tenant."
             },
             "principalID": {
               "type": "string",
@@ -336,7 +336,7 @@
               "type": "string",
               "minLength": 1,
               "default": "default",
-              "description": "Server-bound workspace ID used by governed evaluation when the scoped emergency-stop fence is enabled. The request body never selects this value."
+              "description": "Server-bound workspace ID used by governed evaluation when a scoped emergency-stop fence or runtime policy snapshot authority is configured. The X-Helm-Workspace-ID request header must match this value; the request body never selects it."
             }
           }
         },

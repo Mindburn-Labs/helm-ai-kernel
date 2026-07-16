@@ -1,12 +1,14 @@
 //! HELM SDK — Rust client for the HELM kernel API.
 //! Minimal deps: reqwest + serde.
+//! quantum_posture: SDK transport-contract alignment only; this module does
+//! not add, remove, or alter cryptographic controls or post-quantum claims.
 
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-pub mod client;
 pub mod canonical;
+pub mod client;
 pub mod types_gen;
 pub use types_gen::*;
 
@@ -208,6 +210,10 @@ pub enum SandboxGrantInspection {
 pub struct HelmClient {
     base_url: String,
     client: Client,
+    api_key: Option<String>,
+    tenant_id: Option<String>,
+    principal_id: Option<String>,
+    workspace_id: Option<String>,
 }
 
 impl HelmClient {
@@ -219,7 +225,38 @@ impl HelmClient {
                 .timeout(Duration::from_secs(30))
                 .build()
                 .expect("failed to build HTTP client"),
+            api_key: None,
+            tenant_id: None,
+            principal_id: None,
+            workspace_id: None,
         }
+    }
+
+    /// Set the bearer token used by the authenticated evaluator.
+    pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
+        self.api_key = Some(api_key.into());
+        self
+    }
+
+    /// Set the tenant binding used by the authenticated evaluator.
+    pub fn with_tenant_id(mut self, tenant_id: impl Into<String>) -> Self {
+        self.tenant_id = Some(tenant_id.into());
+        self
+    }
+
+    /// Set the principal binding used by the authenticated evaluator.
+    pub fn with_principal_id(mut self, principal_id: impl Into<String>) -> Self {
+        self.principal_id = Some(principal_id.into());
+        self
+    }
+
+    /// Set the optional workspace binding. For POST /api/v1/evaluate, use it
+    /// whenever scoped emergency-stop fencing or runtime policy snapshot
+    /// authority is enabled. It must match the server-owned
+    /// HELM_RUNTIME_WORKSPACE_ID or evaluation fails closed with HTTP 403.
+    pub fn with_workspace_id(mut self, workspace_id: impl Into<String>) -> Self {
+        self.workspace_id = Some(workspace_id.into());
+        self
     }
 
     fn url(&self, path: &str) -> String {
@@ -388,12 +425,61 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/evaluate
-    pub fn evaluate_decision<T: Serialize>(
-        &self,
-        req: &T,
-    ) -> Result<serde_json::Value, HelmApiError> {
-        self.post_value("/api/v1/evaluate", req)
+    /// POST /api/v1/evaluate using the canonical request body and verified
+    /// transport identity bindings.
+    pub fn evaluate_decision(&self, req: &DecisionRequest) -> Result<DecisionRecord, HelmApiError> {
+        let (api_key, tenant_id, principal_id, workspace_id) = self.require_evaluate_bindings()?;
+        let mut request = self
+            .client
+            .post(self.url("/api/v1/evaluate"))
+            .bearer_auth(api_key)
+            .header("X-Helm-Tenant-ID", tenant_id)
+            .header("X-Helm-Principal-ID", principal_id)
+            .json(req);
+        if let Some(workspace_id) = workspace_id {
+            request = request.header("X-Helm-Workspace-ID", workspace_id);
+        }
+        let resp = request.send().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
+    }
+
+    fn require_evaluate_bindings(&self) -> Result<(&str, &str, &str, Option<&str>), HelmApiError> {
+        let api_key = self
+            .api_key
+            .as_deref()
+            .filter(|value| !value.trim().is_empty());
+        let tenant_id = self
+            .tenant_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty());
+        let principal_id = self
+            .principal_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty());
+        match (api_key, tenant_id, principal_id) {
+            (Some(api_key), Some(tenant_id), Some(principal_id)) => Ok((
+                api_key,
+                tenant_id,
+                principal_id,
+                self.workspace_id
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty()),
+            )),
+            _ => Err(HelmApiError {
+                status: 0,
+                message: "evaluate_decision requires api_key, tenant_id, and principal_id".into(),
+                reason_code: ReasonCode::ErrorInternal,
+            }),
+        }
     }
 
     /// POST /api/v1/kernel/approve
@@ -1090,10 +1176,184 @@ fn encode_query(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::thread;
 
     #[test]
     fn test_client_creation() {
         let _client = HelmClient::new("http://localhost:8080");
+    }
+
+    #[test]
+    fn evaluate_decision_uses_canonical_body_and_authenticated_bindings() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_http_request(&mut stream);
+            let body = r#"{"id":"decision-1","proposal_id":"proposal-1","step_id":"step-1","phenotype_hash":"sha256:phenotype","policy_version":"policy-v1","subject_id":"principal-a","action":"EXECUTE_TOOL","resource":"local.echo","state_cursor":"cursor-1","env_fingerprint":"sha256:env","verdict":"DENY","reason":"policy denied","signature":"sig","signature_type":"ed25519","timestamp":"2026-07-13T00:00:00Z"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+            request
+        });
+
+        let request = DecisionRequest {
+            action: "EXECUTE_TOOL".to_string(),
+            resource: "local.echo".to_string(),
+            context: Some(Some(serde_json::json!({"request_id": "req-1"}))),
+        };
+        let decision = HelmClient::new(&format!("http://{address}"))
+            .with_api_key("token")
+            .with_tenant_id("tenant-a")
+            .with_principal_id("principal-a")
+            .with_workspace_id("workspace-a")
+            .evaluate_decision(&request)
+            .unwrap();
+
+        let raw_request = server.join().unwrap();
+        let lowercase = raw_request.to_ascii_lowercase();
+        assert!(lowercase.contains("authorization: bearer token"));
+        assert!(lowercase.contains("x-helm-tenant-id: tenant-a"));
+        assert!(lowercase.contains("x-helm-principal-id: principal-a"));
+        assert!(lowercase.contains("x-helm-workspace-id: workspace-a"));
+        let body = raw_request.split("\r\n\r\n").nth(1).unwrap();
+        let body: serde_json::Value = serde_json::from_str(body).unwrap();
+        assert_eq!(body.as_object().unwrap().len(), 3);
+        assert_eq!(body["action"], "EXECUTE_TOOL");
+        assert_eq!(body["resource"], "local.echo");
+        assert_eq!(body["context"]["request_id"], "req-1");
+        assert!(body.get("principal").is_none());
+        assert!(body.get("tenant").is_none());
+        assert!(body.get("workspace").is_none());
+        assert_eq!(decision.id, "decision-1");
+        assert_eq!(decision.subject_id, "principal-a");
+        assert_eq!(decision.action, "EXECUTE_TOOL");
+        assert_eq!(decision.resource, "local.echo");
+    }
+
+    #[test]
+    fn evaluate_decision_preserves_explicit_null_context() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_http_request(&mut stream);
+            let body = r#"{"id":"decision-1","proposal_id":"proposal-1","step_id":"step-1","phenotype_hash":"sha256:phenotype","policy_version":"policy-v1","subject_id":"principal-a","action":"EXECUTE_TOOL","resource":"local.echo","state_cursor":"cursor-1","env_fingerprint":"sha256:env","verdict":"DENY","reason":"policy denied","signature":"sig","signature_type":"ed25519","timestamp":"2026-07-13T00:00:00Z"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+            request
+        });
+
+        let request = DecisionRequest {
+            action: "EXECUTE_TOOL".to_string(),
+            resource: "local.echo".to_string(),
+            context: Some(None),
+        };
+        HelmClient::new(&format!("http://{address}"))
+            .with_api_key("token")
+            .with_tenant_id("tenant-a")
+            .with_principal_id("principal-a")
+            .evaluate_decision(&request)
+            .unwrap();
+
+        let raw_request = server.join().unwrap();
+        let body = raw_request.split("\r\n\r\n").nth(1).unwrap();
+        let body: serde_json::Value = serde_json::from_str(body).unwrap();
+        assert_eq!(body.as_object().unwrap().len(), 3);
+        assert!(body["context"].is_null());
+    }
+
+    #[test]
+    fn decision_request_rejects_unknown_fields_and_preserves_context_presence() {
+        let absent = DecisionRequest {
+            action: "EXECUTE_TOOL".to_string(),
+            resource: "local.echo".to_string(),
+            context: None,
+        };
+        let absent = serde_json::to_value(&absent).unwrap();
+        assert!(absent.get("context").is_none());
+
+        let explicit_null = DecisionRequest {
+            action: "EXECUTE_TOOL".to_string(),
+            resource: "local.echo".to_string(),
+            context: Some(None),
+        };
+        let explicit_null = serde_json::to_value(&explicit_null).unwrap();
+        assert!(explicit_null["context"].is_null());
+
+        let absent = serde_json::from_str::<DecisionRequest>(
+            r#"{"action":"EXECUTE_TOOL","resource":"local.echo"}"#,
+        )
+        .unwrap();
+        assert_eq!(absent.context, None);
+        let explicit_null = serde_json::from_str::<DecisionRequest>(
+            r#"{"action":"EXECUTE_TOOL","resource":"local.echo","context":null}"#,
+        )
+        .unwrap();
+        assert_eq!(explicit_null.context, Some(None));
+
+        let error = serde_json::from_str::<DecisionRequest>(
+            r#"{"action":"EXECUTE_TOOL","resource":"local.echo","principal":"attacker"}"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("unknown field `principal`"));
+    }
+
+    #[test]
+    fn evaluate_decision_rejects_missing_authenticated_bindings() {
+        let request = DecisionRequest {
+            action: "EXECUTE_TOOL".to_string(),
+            resource: "local.echo".to_string(),
+            context: None,
+        };
+        let err = HelmClient::new("http://127.0.0.1:1")
+            .evaluate_decision(&request)
+            .unwrap_err();
+        assert_eq!(err.status, 0);
+        assert!(err.message.contains("api_key, tenant_id, and principal_id"));
+    }
+
+    fn read_http_request(stream: &mut TcpStream) -> String {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut bytes = Vec::new();
+        let mut chunk = [0_u8; 1024];
+        loop {
+            let count = stream.read(&mut chunk).unwrap();
+            assert_ne!(count, 0, "connection closed before a complete HTTP request");
+            bytes.extend_from_slice(&chunk[..count]);
+            let Some(header_end) = bytes
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .map(|index| index + 4)
+            else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&bytes[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("Content-Length: ")
+                        .or_else(|| line.strip_prefix("content-length: "))
+                })
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            if bytes.len() >= header_end + content_length {
+                return String::from_utf8(bytes).unwrap();
+            }
+        }
     }
 
     #[test]

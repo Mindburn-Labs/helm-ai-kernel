@@ -35,6 +35,7 @@ bindings under `src/main/java/helm/**` are generated from `protocols/proto/`.
 import labs.mindburn.helm.HelmClient;
 import labs.mindburn.helm.TypesGen.ChatCompletionRequest;
 import labs.mindburn.helm.TypesGen.ChatCompletionRequestMessagesInner;
+import labs.mindburn.helm.TypesGen.DecisionRequest;
 
 import java.util.List;
 
@@ -47,9 +48,32 @@ class Example {
             .role(ChatCompletionRequestMessagesInner.RoleEnum.USER)
             .content("hello")));
     System.out.println(client.chatCompletions(req));
+
+    HelmClient evaluator = new HelmClient(
+        "http://127.0.0.1:7714",
+        System.getenv("HELM_ADMIN_API_KEY"),
+        "tenant-a",
+        "operator-a"
+    );
+    DecisionRequest decisionRequest = new DecisionRequest()
+        .action("EXECUTE_TOOL")
+        .resource("local.echo");
+    System.out.println(evaluator.evaluateDecision(decisionRequest).getVerdict());
   }
 }
 ```
+
+`evaluateDecision` requires API key, tenant ID, and principal ID; use the
+five-argument constructor to set a workspace ID whenever scoped emergency-stop
+fencing or runtime policy snapshot authority is enabled. It sends
+`X-Helm-Workspace-ID`, which must match server-owned
+`HELM_RUNTIME_WORKSPACE_ID`; otherwise `POST /api/v1/evaluate` fails closed
+with `403`. It serializes only `action`, `resource`, and optional `context`;
+body identity and legacy evaluator payloads are not accepted.
+
+The evaluator path has dedicated request/response conformance coverage. It is
+not evidence that every generated Java model is runtime-certified: the broader
+generated-model mapping repair is tracked in [HELM-173](https://linear.app/mindburn/issue/HELM-173).
 
 ## Execution Boundary Methods
 

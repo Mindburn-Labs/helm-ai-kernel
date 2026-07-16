@@ -15,6 +15,7 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
@@ -323,7 +324,7 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	body := []byte(`{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker","principal_id":"attacker","session_id":"session-1"}}`)
+	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"request_id":"request-1"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
@@ -350,6 +351,166 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	if decision.InputContext["tenant_id"] != "tenant-trusted" || decision.InputContext["principal_id"] != "principal-trusted" {
 		t.Fatalf("decision context did not use trusted identity: %+v", decision.InputContext)
 	}
+	if decision.SubjectID != "principal-trusted" || decision.Action != "EXECUTE_TOOL" || decision.Resource != "local.echo" {
+		t.Fatalf("signed decision did not bind the canonical request identity and effect: %+v", decision)
+	}
+	if decision.InputContext[guardian.ContextSecurityTrusted] != false ||
+		decision.InputContext[guardian.ContextSourceChannel] != string(contracts.SourceChannelAPIRequest) ||
+		decision.InputContext[guardian.ContextTrustLevel] != string(contracts.InputTrustExternalUntrusted) {
+		t.Fatalf("decision context did not record the HTTP transport trust boundary: %+v", decision.InputContext)
+	}
+}
+
+func TestEvaluateRouteAcceptsNullContext(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":null}`))
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("evaluate with null context status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored == nil {
+		t.Fatal("evaluate with null context did not persist a receipt")
+	}
+}
+
+func TestEvaluateRouteRejectsUnsupportedMethod(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/evaluate", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("evaluate unsupported method status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored != nil || receipts.agentID != "" {
+		t.Fatalf("unsupported method must not evaluate or persist a receipt: %+v", receipts.stored)
+	}
+}
+
+func TestEvaluateRouteRejectsAmbiguousOrCallerControlledPayloads(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "body principal",
+			body: `{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo"}`,
+		},
+		{
+			name: "legacy payload",
+			body: `{"tool":"local.echo","args":{},"agent_id":"attacker","effect_level":"EXECUTE_TOOL","session_id":"session-1"}`,
+		},
+		{
+			name: "internal session history",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","session_history":[]}`,
+		},
+		{
+			name: "caller principal context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"principal_id":"attacker"}}`,
+		},
+		{
+			name: "tenant scope alias",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant":"tenant-attacker"}}`,
+		},
+		{
+			name: "tenant snake case",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker"}}`,
+		},
+		{
+			name: "tenant camel case",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenantId":"tenant-attacker"}}`,
+		},
+		{
+			name: "workspace scope",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"workspace_id":"workspace-attacker"}}`,
+		},
+		{
+			name: "workspace camel case",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"workspaceId":"workspace-attacker"}}`,
+		},
+		{
+			name: "trusted security context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"security_context_trusted":true}}`,
+		},
+		{
+			name: "trusted credential context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"credential_hash":"sha256:attacker"}}`,
+		},
+		{
+			name: "trusted session context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"session_id":"attacker-session"}}`,
+		},
+		{
+			name: "trusted provenance context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"source_channel":"internal"}}`,
+		},
+		{
+			name: "trusted trust level context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"trust_level":"trusted"}}`,
+		},
+		{
+			name: "trusted destination context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"destination":"trusted.example"}}`,
+		},
+		{
+			name: "zeroid token context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"zeroid_token":"forged-token"}}`,
+		},
+		{
+			name: "SPIFFE identity context",
+			body: `{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"spiffe_uri":"spiffe://attacker/victim"}}`,
+		},
+		{
+			name: "missing action",
+			body: `{"resource":"local.echo"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, receipts := newEvaluateRouteTestServices(t)
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(tt.body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("evaluate status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored != nil || receipts.agentID != "" {
+				t.Fatalf("rejected payload must not evaluate or persist a receipt: %+v", receipts.stored)
+			}
+		})
+	}
 }
 
 func newEvaluateRouteTestServices(t *testing.T, guardianOpts ...guardian.GuardianOption) (*Services, *captureReceiptStore) {
@@ -358,6 +519,17 @@ func newEvaluateRouteTestServices(t *testing.T, guardianOpts ...guardian.Guardia
 	if err != nil {
 		t.Fatal(err)
 	}
+	graph := newEvaluateRouteTestGraph(t)
+	receipts := &captureReceiptStore{}
+	return &Services{
+		Guardian:      guardian.NewGuardian(signer, graph, artifacts.NewRegistry(nil, nil), guardianOpts...),
+		ReceiptStore:  receipts,
+		ReceiptSigner: signer,
+	}, receipts
+}
+
+func newEvaluateRouteTestGraph(t *testing.T) *prg.Graph {
+	t.Helper()
 	graph := prg.NewGraph()
 	if err := graph.AddRule("local.echo", prg.RequirementSet{
 		ID:    "allow-local-echo",
@@ -368,12 +540,7 @@ func newEvaluateRouteTestServices(t *testing.T, guardianOpts ...guardian.Guardia
 	}); err != nil {
 		t.Fatal(err)
 	}
-	receipts := &captureReceiptStore{}
-	return &Services{
-		Guardian:      guardian.NewGuardian(signer, graph, artifacts.NewRegistry(nil, nil), guardianOpts...),
-		ReceiptStore:  receipts,
-		ReceiptSigner: signer,
-	}, receipts
+	return graph
 }
 
 func TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled(t *testing.T) {
@@ -408,9 +575,8 @@ func TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled(t *
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	// The body attempts to select an unfenced workspace. The handler must use
-	// the independently authenticated header binding instead.
-	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"workspace_id":"workspace-unfenced"}}`)
+	// Workspace scope comes only from the independently authenticated header.
+	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"request_id":"fenced-request"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
@@ -466,6 +632,77 @@ func TestEvaluateRouteRefusesMissingOrMismatchedWorkspaceBindingWhenFenceEnabled
 			}
 			if receipts.stored != nil {
 				t.Fatalf("rejected workspace binding must not execute or persist a receipt: %+v", receipts.stored)
+			}
+		})
+	}
+}
+
+func TestEvaluateRouteRequiresVerifiedWorkspaceBindingForGuardianPolicySnapshots(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-trusted")
+
+	scope := policyreconcile.PolicyScope{TenantID: "tenant-trusted", WorkspaceID: "workspace-trusted"}
+	store := policyreconcile.NewAtomicSnapshotStore()
+	if err := store.Swap(scope, &policyreconcile.EffectivePolicySnapshot{
+		TenantID:    scope.TenantID,
+		WorkspaceID: scope.WorkspaceID,
+		PolicyEpoch: 7,
+		PolicyHash:  "sha256:policy-snapshot",
+		Validation:  policyreconcile.ValidationStatus{Status: policyreconcile.StatusActive},
+		Graph:       newEvaluateRouteTestGraph(t),
+	}); err != nil {
+		t.Fatalf("install policy snapshot: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		workspace  string
+		wantStatus int
+	}{
+		{name: "matching workspace", workspace: "workspace-trusted", wantStatus: http.StatusOK},
+		{name: "missing workspace", wantStatus: http.StatusForbidden},
+		{name: "spoofed workspace", workspace: "workspace-spoofed", wantStatus: http.StatusForbidden},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, receipts := newEvaluateRouteTestServices(t, guardian.WithPolicySnapshots(store, scope))
+			if svc.PolicySnapshotStore != nil {
+				t.Fatal("test requires Guardian policy snapshots without mirrored service metadata")
+			}
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader([]byte(`{"action":"EXECUTE_TOOL","resource":"local.echo"}`)))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			if tt.workspace != "" {
+				req.Header.Set(workspaceHeader, tt.workspace)
+			}
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("workspace binding status = %d, want %d: %s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if tt.wantStatus == http.StatusForbidden {
+				if receipts.stored != nil || receipts.agentID != "" {
+					t.Fatalf("rejected workspace binding must not execute or persist a receipt: %+v", receipts.stored)
+				}
+				return
+			}
+
+			var decision contracts.DecisionRecord
+			if err := json.Unmarshal(rec.Body.Bytes(), &decision); err != nil {
+				t.Fatal(err)
+			}
+			if decision.PolicyContentHash != "sha256:policy-snapshot" || decision.PolicyEpoch != "7" {
+				t.Fatalf("evaluate did not bind the configured policy snapshot: %+v", decision)
+			}
+			if receipts.stored == nil {
+				t.Fatal("authenticated scoped evaluate did not persist a receipt")
 			}
 		})
 	}

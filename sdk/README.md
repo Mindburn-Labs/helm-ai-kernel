@@ -23,7 +23,7 @@ flowchart LR
 | Python | `sdk/python/helm_sdk/` | `helm-sdk` | First-class local example under `examples/python_sdk/` | `make test-sdk-py` |
 | TypeScript / JavaScript | `sdk/ts/src/` | `@mindburn/helm-ai-kernel` | First-class local example under `examples/ts_sdk/` | `make test-sdk-ts` |
 | Rust | `sdk/rust/src/` | `helm-sdk` | Source-backed SDK package | `make test-sdk-rust` |
-| Java | `sdk/java/src/main/java/` | `io.github.mindburnlabs:helm-sdk` | Published Maven Central package; source-backed SDK | `make test-sdk-java` |
+| Java | `sdk/java/src/main/java/` | `io.github.mindburnlabs:helm-sdk` | Evaluator contract source-backed; broader generated-model mapping is tracked separately | `make test-sdk-java` |
 
 ## What Is Covered
 
@@ -32,8 +32,9 @@ flowchart LR
   verification, replay verification, and conformance routes.
 - Execution-boundary helper methods where the language client has source for
   the corresponding OpenAPI route.
-- `evaluateDecision` / `evaluate_decision` helpers for the retained
-  `/api/v1/evaluate` route.
+- Typed `evaluateDecision` / `evaluate_decision` helpers for the canonical
+  `/api/v1/evaluate` route, with bearer, tenant, principal, and optional
+  workspace bindings.
 - TypeScript-only framework adapter helpers for LangGraph, CrewAI, OpenAI
   Agents SDK, PydanticAI, and LlamaIndex tool-call events.
 
@@ -43,9 +44,18 @@ flowchart LR
   metadata exists. Registry publication must be verified against the retained
   publish workflow or the registry itself.
 - Framework adapter helpers are compatibility helpers, not vendor
-  certification and not full framework runtimes.
+  certification and not full framework runtimes. They submit governed chat
+  completions; they are not direct `/api/v1/evaluate` conformance evidence.
 - External evidence envelopes are compatibility wrappers over HELM-native
   EvidencePack roots, not independent authority.
+
+## Evaluate Migration
+
+The evaluator accepts only `DecisionRequest { action, resource, context? }`.
+Identity is configured on the client and sent in verified transport headers;
+it is never placed in the body. The earlier generic/legacy evaluator payload
+is intentionally unsupported, so applications must not keep a dual-payload
+fallback.
 
 ## Regeneration
 

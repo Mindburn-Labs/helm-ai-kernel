@@ -143,6 +143,69 @@ s = replace_one(
     "}",
 )
 
+def replace_exactly_once(s: str, old: str, new: str, description: str) -> str:
+    count = s.count(old)
+    if count != 1:
+        raise RuntimeError(f"expected exactly one {description} replacement, found {count}")
+    return s.replace(old, new, 1)
+
+decision_request_start = s.find("export interface DecisionRequest {")
+decision_request_end = s.find("\n}\n", decision_request_start)
+if decision_request_start == -1 or decision_request_end == -1:
+    raise RuntimeError("unable to locate DecisionRequest interface")
+decision_request = s[decision_request_start:decision_request_end + 3]
+decision_request = replace_exactly_once(
+    decision_request,
+    "    [key: string]: any | any;\n",
+    "",
+    "DecisionRequest index signature",
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    "context?: object;",
+    "context?: object | null;",
+    "DecisionRequest context type",
+)
+s = s[:decision_request_start] + decision_request + s[decision_request_end + 3:]
+decision_request_parser_start = s.find("export function DecisionRequestFromJSONTyped")
+decision_request_parser_end = s.find("\n}\n", decision_request_parser_start)
+if decision_request_parser_start == -1 or decision_request_parser_end == -1:
+    raise RuntimeError("unable to locate DecisionRequest parser")
+decision_request_parser = s[decision_request_parser_start:decision_request_parser_end + 3]
+decision_request_parser = replace_exactly_once(
+    decision_request_parser,
+    "\n            ...json,",
+    "",
+    "DecisionRequest parser spread",
+)
+decision_request_parser = replace_exactly_once(
+    decision_request_parser,
+    "'context': json['context'] == null ? undefined : json['context'],",
+    "'context': json['context'] === undefined ? undefined : json['context'],",
+    "DecisionRequest context parser",
+)
+s = s[:decision_request_parser_start] + decision_request_parser + s[decision_request_parser_end + 3:]
+
+if s.count("export function DecisionRequestToJSON") != 1:
+    raise RuntimeError("unable to locate DecisionRequest serializer")
+s = replace_one(
+    s,
+    "export function DecisionRequestToJSON(value?: DecisionRequest | null): any",
+    "export function DecisionRequestToJSON(value?: DecisionRequest | null): any {\n"
+    "    if (value == null) {\n"
+    "        return value;\n"
+    "    }\n"
+    "    const body: any = {\n"
+    "        'action': value['action'],\n"
+    "        'resource': value['resource'],\n"
+    "    };\n"
+    "    if (value['context'] !== undefined) {\n"
+    "        body['context'] = value['context'];\n"
+    "    }\n"
+    "    return body;\n"
+    "}",
+)
+
 if "export type ReasonCode = HelmErrorErrorReasonCodeEnum;" not in s:
     s += "\nexport type ReasonCode = HelmErrorErrorReasonCodeEnum;\n"
 
@@ -182,6 +245,12 @@ import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
+
+def replace_exactly_once(s: str, old: str, new: str, description: str) -> str:
+    count = s.count(old)
+    if count != 1:
+        raise SystemExit(f"expected exactly one {description} replacement, found {count}")
+    return s.replace(old, new, 1)
 
 classmethod_validators = {
     "AccountEntitlements": {"plan_validate_enum"},
@@ -243,6 +312,100 @@ s = s.replace(
     '            "components": obj.get("components"),',
     1,
 )
+
+decision_request_from_dict = (
+    '        _obj = cls.model_validate({\n'
+    '            "action": obj.get("action"),\n'
+    '            "resource": obj.get("resource"),\n'
+    '            "context": obj.get("context")\n'
+    '        })'
+)
+s = replace_exactly_once(
+    s,
+    decision_request_from_dict,
+    '        _payload = {\n'
+    '            "action": obj.get("action"),\n'
+    '            "resource": obj.get("resource"),\n'
+    '        }\n'
+    '        if "context" in obj:\n'
+    '            _payload["context"] = obj["context"]\n'
+    '        _obj = cls.model_validate(_payload)',
+    "DecisionRequest from_dict context",
+)
+
+decision_request_start = s.find("class DecisionRequest(BaseModel):")
+decision_request_end = s.find("\nclass ", decision_request_start + 1)
+if decision_request_start == -1 or decision_request_end == -1:
+    raise SystemExit("unable to locate DecisionRequest class")
+decision_request = s[decision_request_start:decision_request_end]
+decision_request = replace_exactly_once(
+    decision_request,
+    "    additional_properties: Dict[str, Any] = {}\n",
+    "",
+    "DecisionRequest additional_properties field",
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    "        validate_assignment=True,\n        protected_namespaces=(),",
+    "        validate_assignment=True,\n        protected_namespaces=(),\n        extra=\"forbid\",",
+    "DecisionRequest extra policy",
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    '        excluded_fields: Set[str] = set([\n            "additional_properties",\n        ])',
+    "        excluded_fields: Set[str] = set()",
+    "DecisionRequest excluded fields",
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    "\n        * Fields in `self.additional_properties` are added to the output dict.",
+    "",
+    "DecisionRequest additional_properties docs",
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    '''        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
+''',
+    "",
+    "DecisionRequest additional_properties serialization",
+)
+decision_request_from_dict = '''    @classmethod
+    def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
+        """Create an instance of DecisionRequest from a dict"""
+        if obj is None:
+            return None
+
+        if not isinstance(obj, dict):
+            return cls.model_validate(obj)
+
+        _payload = {
+            "action": obj.get("action"),
+            "resource": obj.get("resource"),
+        }
+        if "context" in obj:
+            _payload["context"] = obj["context"]
+        _obj = cls.model_validate(_payload)
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
+        return _obj'''
+decision_request = replace_exactly_once(
+    decision_request,
+    decision_request_from_dict,
+    '''    @classmethod
+    def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
+        """Create an instance of DecisionRequest from a dict"""
+        if obj is None:
+            return None
+        return cls.model_validate(obj)''',
+    "DecisionRequest strict from_dict",
+)
+s = s[:decision_request_start] + decision_request + s[decision_request_end:]
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
@@ -320,12 +483,95 @@ HEADER
             sed '/^package /d;/^import/,/^)/d' "$f" >> "$PROJECT_ROOT/sdk/go/client/types_gen.go" 2>/dev/null || true
         fi
     done
+    gofmt -w "$PROJECT_ROOT/sdk/go/client/types_gen.go"
     python3 - "$PROJECT_ROOT/sdk/go/client/types_gen.go" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
+
+def replace_exactly_once(s: str, old: str, new: str, description: str) -> str:
+    count = s.count(old)
+    if count != 1:
+        raise SystemExit(f"expected exactly one {description} replacement, found {count}")
+    return s.replace(old, new, 1)
+
+s = replace_exactly_once(
+    s,
+    '\tContext              map[string]interface{} `json:"context,omitempty"`\n\tAdditionalProperties map[string]interface{}',
+    '\tContext    map[string]interface{} `json:"context,omitempty"`\n\tcontextSet bool',
+    "DecisionRequest context presence field",
+)
+s = replace_exactly_once(
+    s,
+    'func (o *DecisionRequest) GetContextOk() (map[string]interface{}, bool) {\n\tif o == nil || IsNil(o.Context) {\n\t\treturn map[string]interface{}{}, false\n\t}\n\treturn o.Context, true\n}',
+    'func (o *DecisionRequest) GetContextOk() (map[string]interface{}, bool) {\n\tif o == nil || (!o.contextSet && o.Context == nil) {\n\t\treturn map[string]interface{}{}, false\n\t}\n\treturn o.Context, true\n}',
+    "DecisionRequest GetContextOk",
+)
+s = replace_exactly_once(
+    s,
+    'func (o *DecisionRequest) HasContext() bool {\n\tif o != nil && !IsNil(o.Context) {\n\t\treturn true\n\t}\n\n\treturn false\n}',
+    'func (o *DecisionRequest) HasContext() bool {\n\treturn o != nil && (o.contextSet || o.Context != nil)\n}',
+    "DecisionRequest HasContext",
+)
+s = replace_exactly_once(
+    s,
+    'func (o *DecisionRequest) SetContext(v map[string]interface{}) {\n\to.Context = v\n}',
+    'func (o *DecisionRequest) SetContext(v map[string]interface{}) {\n\to.Context = v\n\to.contextSet = true\n}',
+    "DecisionRequest SetContext",
+)
+s = replace_exactly_once(
+    s,
+    '\tif o.Context != nil {\n\t\ttoSerialize["context"] = o.Context\n\t}',
+    '\tif o.contextSet || o.Context != nil {\n\t\ttoSerialize["context"] = o.Context\n\t}',
+    "DecisionRequest ToMap context",
+)
+s = replace_exactly_once(
+    s,
+    '''\t*o = DecisionRequest(varDecisionRequest)
+
+\tadditionalProperties := make(map[string]interface{})
+
+\tif err = json.Unmarshal(data, &additionalProperties); err == nil {
+\t\tdelete(additionalProperties, "action")
+\t\tdelete(additionalProperties, "resource")
+\t\tdelete(additionalProperties, "context")
+\t\to.AdditionalProperties = additionalProperties
+\t}
+
+\treturn err''',
+    '''\t*o = DecisionRequest(varDecisionRequest)
+\t_, o.contextSet = allProperties["context"]
+
+\tfor property := range allProperties {
+\t\tswitch property {
+\t\tcase "action", "resource", "context":
+\t\tdefault:
+\t\t\treturn fmt.Errorf("unknown property %v", property)
+\t\t}
+\t}
+
+\treturn nil''',
+    "DecisionRequest strict unmarshal",
+)
+decision_request_start = s.find("type DecisionRequest struct {")
+decision_request_end = s.find("type NullableDecisionRequest", decision_request_start)
+if decision_request_start == -1 or decision_request_end == -1:
+    raise SystemExit("unable to locate DecisionRequest model")
+decision_request = s[decision_request_start:decision_request_end]
+decision_request = replace_exactly_once(
+    decision_request,
+    '''
+\tfor key, value := range o.AdditionalProperties {
+\t\ttoSerialize[key] = value
+\t}
+''',
+    "",
+    "DecisionRequest additional_properties serialization",
+)
+s = s[:decision_request_start] + decision_request + s[decision_request_end:]
+
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
     gofmt -w "$PROJECT_ROOT/sdk/go/client/types_gen.go"
@@ -457,6 +703,49 @@ if pos != -1:
 if "pub type ReasonCode = HelmErrorErrorReasonCode;" not in s and "pub enum HelmErrorErrorReasonCode" in s:
     s += "\npub type ReasonCode = HelmErrorErrorReasonCode;\n"
 
+decision_request_marker = "#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]\npub struct DecisionRequest {"
+if s.count(decision_request_marker) != 1:
+    raise SystemExit("expected exactly one DecisionRequest struct")
+decision_request_start = s.find(decision_request_marker)
+decision_request_doc_start = s.rfind("/// DecisionRequest :", 0, decision_request_start)
+decision_request_end = s.find("\n}\n\nimpl DecisionRequest", decision_request_start)
+if decision_request_start == -1 or decision_request_doc_start == -1 or decision_request_end == -1:
+    raise SystemExit("unable to locate DecisionRequest model")
+decision_request = s[decision_request_doc_start:decision_request_end + 2]
+decision_request = decision_request.replace(
+    decision_request_marker,
+    "#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct DecisionRequest {",
+    1,
+)
+decision_request_context = '''    #[serde(rename = "context", default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<Option<serde_json::Value>>,
+'''
+if decision_request.count(decision_request_context) != 1:
+    raise SystemExit("expected exactly one DecisionRequest context field")
+decision_request = decision_request.replace(
+    decision_request_context,
+    '''    #[serde(
+        rename = "context",
+        default,
+        deserialize_with = "deserialize_decision_request_context",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub context: Option<Option<serde_json::Value>>,
+''',
+    1,
+)
+decision_request_context_helper = '''fn deserialize_decision_request_context<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<serde_json::Value>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Some(Option::<serde_json::Value>::deserialize(deserializer)?))
+}
+
+'''
+s = s[:decision_request_doc_start] + decision_request_context_helper + decision_request + s[decision_request_end + 2:]
+
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
 fi
@@ -571,6 +860,72 @@ s = s.replace(
     "// TODO: there is no validation against JSON schema constraints",
     "// Union matching here does not enforce full JSON schema constraints.",
 )
+
+def replace_exactly_once(text: str, old: str, new: str, description: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"expected exactly one {description} replacement, found {count}")
+    return text.replace(old, new, 1)
+
+decision_request_start = s.find("public static class DecisionRequest extends HashMap<String, Object> {")
+decision_request_end_marker = "\n}\n\n/*\n * HELM Kernel API"
+decision_request_end = s.find(decision_request_end_marker, decision_request_start)
+if decision_request_start == -1 or decision_request_end == -1:
+    raise SystemExit("unable to locate DecisionRequest class")
+decision_request = s[decision_request_start:decision_request_end + 2]
+decision_request = replace_exactly_once(
+    decision_request,
+    "public static class DecisionRequest extends HashMap<String, Object> {",
+    "public static class DecisionRequest {",
+    "DecisionRequest HashMap base class",
+)
+additional_properties_start = decision_request.find("  /**\n   * A container for additional, undeclared properties.")
+additional_properties_end = decision_request.find("  /**\n   * Return true if this DecisionRequest object is equal to o.", additional_properties_start)
+if additional_properties_start == -1 or additional_properties_end == -1:
+    raise SystemExit("unable to locate DecisionRequest additional-properties block")
+decision_request = (
+    decision_request[:additional_properties_start]
+    + '''  @JsonAnySetter
+  public void rejectUnknownProperty(String key, Object value) {
+    throw new IllegalArgumentException("DecisionRequest does not allow additional property: " + key);
+  }
+
+'''
+    + decision_request[additional_properties_end:]
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    '''    return Objects.equals(this.action, decisionRequest.action) &&
+        Objects.equals(this.resource, decisionRequest.resource) &&
+        equalsNullable(this.context, decisionRequest.context)&&
+        Objects.equals(this.additionalProperties, decisionRequest.additionalProperties) &&
+        super.equals(o);''',
+    '''    return Objects.equals(this.action, decisionRequest.action) &&
+        Objects.equals(this.resource, decisionRequest.resource) &&
+        equalsNullable(this.context, decisionRequest.context);''',
+    "DecisionRequest equals",
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    "    return Objects.hash(action, resource, hashCodeNullable(context), super.hashCode(), additionalProperties);",
+    "    return Objects.hash(action, resource, hashCodeNullable(context));",
+    "DecisionRequest hashCode",
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    '    sb.append("    ").append(toIndentedString(super.toString())).append("\\n");\n',
+    "",
+    "DecisionRequest toString base class",
+)
+decision_request = replace_exactly_once(
+    decision_request,
+    '    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\\n");\n',
+    "",
+    "DecisionRequest toString additional properties",
+)
+if "additionalProperties" in decision_request or "super." in decision_request:
+    raise SystemExit("DecisionRequest retained an additional-properties or HashMap reference")
+s = s[:decision_request_start] + decision_request + s[decision_request_end + 2:]
 s = s + "\n}\n"
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY

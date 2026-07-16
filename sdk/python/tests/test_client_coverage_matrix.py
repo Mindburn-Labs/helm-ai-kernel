@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from helm_sdk.client import (
     EvidenceEnvelopeExportRequest,
@@ -14,6 +15,7 @@ from helm_sdk.client import (
     MCPRegistryDiscoverRequest,
     _json_body,
 )
+from helm_sdk.types_gen import DecisionRequest
 from tests.test_generated_models_coverage import CLASSES, _build_model
 
 
@@ -126,7 +128,14 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
     fake = FakeHTTPClient()
     client_cls = MagicMock(return_value=fake)
     with patch("helm_sdk.client.httpx.Client", client_cls):
-        client = HelmClient(base_url="http://h/", api_key="key", tenant_id="tenant", timeout=2.5)
+        client = HelmClient(
+            base_url="http://h/",
+            api_key="key",
+            tenant_id="tenant",
+            timeout=2.5,
+            principal_id="principal",
+            workspace_id="workspace",
+        )
         assert client.base_url == "http://h"
         client.close()
 
@@ -134,7 +143,57 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
     kwargs = client_cls.call_args.kwargs
     assert kwargs["base_url"] == "http://h"
     assert kwargs["timeout"] == 2.5
-    assert kwargs["headers"] == {"Authorization": "Bearer key", "X-Helm-Tenant-ID": "tenant"}
+    assert kwargs["headers"] == {
+        "Authorization": "Bearer key",
+        "X-Helm-Tenant-ID": "tenant",
+        "X-Helm-Principal-ID": "principal",
+        "X-Helm-Workspace-ID": "workspace",
+    }
+
+
+def test_evaluate_uses_only_the_canonical_generated_request_fields() -> None:
+    fake = FakeHTTPClient()
+    fake.queue(model_payload("DecisionRecord"))
+    request = DecisionRequest(action="EXECUTE_TOOL", resource="local.echo", context={"request_id": "req-1"})
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h", api_key="key", tenant_id="tenant", principal_id="principal")
+        client.evaluate_decision(request)
+
+    assert fake.calls == [
+        (
+            "POST",
+            "/api/v1/evaluate",
+            {"json": {"action": request.action, "resource": request.resource, "context": request.context}},
+        )
+    ]
+
+
+def test_decision_request_rejects_unknown_fields() -> None:
+    payload = {"action": "EXECUTE_TOOL", "resource": "local.echo", "principal": "attacker"}
+
+    with pytest.raises(ValidationError):
+        DecisionRequest(**payload)
+    with pytest.raises(ValidationError):
+        DecisionRequest.from_dict(payload)
+
+
+def test_evaluate_preserves_explicit_null_context() -> None:
+    fake = FakeHTTPClient()
+    fake.queue(model_payload("DecisionRecord"))
+    request = DecisionRequest(action="EXECUTE_TOOL", resource="local.echo", context=None)
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h", api_key="key", tenant_id="tenant", principal_id="principal")
+        client.evaluate_decision(request)
+
+    assert fake.calls == [
+        (
+            "POST",
+            "/api/v1/evaluate",
+            {"json": {"action": "EXECUTE_TOOL", "resource": "local.echo", "context": None}},
+        )
+    ]
+    assert "context" not in DecisionRequest.from_dict({"action": "EXECUTE_TOOL", "resource": "local.echo"}).model_fields_set
+    assert DecisionRequest.from_dict({"action": "EXECUTE_TOOL", "resource": "local.echo", "context": None}).to_dict()["context"] is None
 
 
 def test_json_body_handles_dataclass_generated_model_model_dump_and_plain_dict() -> None:
@@ -160,7 +219,7 @@ def test_check_handles_non_object_error_body() -> None:
 @pytest.mark.parametrize(
     ("method_name", "invoke", "response", "expected_method", "expected_path"),
     [
-        ("evaluate_decision", lambda c: c.evaluate_decision({"input": True}), {"verdict": "ALLOW"}, "POST", "/api/v1/evaluate"),
+        ("evaluate_decision", lambda c: c.evaluate_decision(model_request("DecisionRequest")), model_payload("DecisionRecord"), "POST", "/api/v1/evaluate"),
         ("run_public_demo_empty_args", lambda c: c.run_public_demo("read_ticket"), {"ok": True}, "POST", "/api/demo/run"),
         ("run_public_demo_with_args", lambda c: c.run_public_demo("read_ticket", {"id": 1}), {"ok": True}, "POST", "/api/demo/run"),
         ("verify_public_demo_receipt", lambda c: c.verify_public_demo_receipt({"r": 1}, "hash"), {"ok": True}, "POST", "/api/demo/verify"),
@@ -246,7 +305,7 @@ def test_client_endpoint_matrix(method_name: str, invoke: Any, response: Any, ex
     content = b"bundle" if method_name == "export_evidence" else b"payload"
     fake.queue(response, content=content)
     with patch("helm_sdk.client.httpx.Client", return_value=fake):
-        client = HelmClient(base_url="http://h")
+        client = HelmClient(base_url="http://h", api_key="key", tenant_id="tenant", principal_id="principal")
         result = invoke(client)
 
     assert fake.calls[0][0] == expected_method

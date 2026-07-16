@@ -28,16 +28,27 @@ been run.
 ## Usage
 
 ```python
-from helm_sdk import HelmClient
+from helm_sdk import DecisionRequest, HelmClient
 
-client = HelmClient(base_url="http://127.0.0.1:7714")
-decision = client.evaluate_decision({
-    "principal": "example-agent",
-    "action": "read-ticket",
-    "resource": "ticket:123",
-})
-print(decision["verdict"])  # ALLOW, DENY, or ESCALATE
+client = HelmClient(
+    base_url="http://127.0.0.1:7714",
+    api_key="local-admin-key",
+    tenant_id="tenant-a",
+    principal_id="operator-a",
+)
+decision = client.evaluate_decision(DecisionRequest(
+    action="read-ticket",
+    resource="ticket:123",
+))
+print(decision.verdict)  # ALLOW, DENY, or ESCALATE
 ```
+
+`evaluate_decision` requires API key, tenant ID, and principal ID. Set
+`workspace_id` whenever scoped emergency-stop fencing or runtime policy
+snapshot authority is enabled. It sends `X-Helm-Workspace-ID`, which must match
+server-owned `HELM_RUNTIME_WORKSPACE_ID`; otherwise `POST /api/v1/evaluate`
+fails closed with `403`. It accepts a typed `DecisionRequest`, not a legacy
+dictionary payload or body identity.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/python_sdk/`.

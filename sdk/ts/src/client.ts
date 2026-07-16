@@ -14,6 +14,7 @@ import type {
   HelmError,
   ReasonCode,
   DecisionRequest,
+  DecisionRecord,
 } from './types.gen.js';
 
 export type { ReasonCode, HelmError };
@@ -191,6 +192,8 @@ export interface HelmClientConfig {
   baseUrl: string;
   apiKey?: string;
   tenantId?: string;
+  principalId?: string;
+  workspaceId?: string;
   timeout?: number; // ms, default 30000
 }
 
@@ -208,6 +211,12 @@ export class HelmClient {
     }
     if (config.tenantId) {
       this.headers['X-Helm-Tenant-ID'] = config.tenantId;
+    }
+    if (config.principalId) {
+      this.headers['X-Helm-Principal-ID'] = config.principalId;
+    }
+    if (config.workspaceId) {
+      this.headers['X-Helm-Workspace-ID'] = config.workspaceId;
     }
   }
 
@@ -275,8 +284,26 @@ export class HelmClient {
   }
 
   // ── Decision Evaluation ──────────────────────────
-  async evaluateDecision(req: DecisionRequest | SurfaceRecord): Promise<SurfaceRecord> {
-    return this.request<SurfaceRecord>('POST', '/api/v1/evaluate', req);
+  async evaluateDecision(req: DecisionRequest): Promise<DecisionRecord> {
+    this.assertEvaluateBindings();
+    const body: { action: string; resource: string; context?: object | null } = {
+      action: req.action,
+      resource: req.resource,
+    };
+    if (req.context !== undefined) {
+      body.context = req.context;
+    }
+    return this.request<DecisionRecord>('POST', '/api/v1/evaluate', body);
+  }
+
+  private assertEvaluateBindings(): void {
+    const missing: string[] = [];
+    if (!this.headers.Authorization) missing.push('apiKey');
+    if (!this.headers['X-Helm-Tenant-ID']) missing.push('tenantId');
+    if (!this.headers['X-Helm-Principal-ID']) missing.push('principalId');
+    if (missing.length > 0) {
+      throw new Error(`evaluateDecision requires ${missing.join(', ')}`);
+    }
   }
 
   async runPublicDemo(actionId: string, args: SurfaceRecord = {}): Promise<DemoRunResult> {

@@ -30,6 +30,7 @@ type HelmClient struct {
 	APIKey      string
 	TenantID    string
 	PrincipalID string
+	WorkspaceID string
 	HTTPClient  *http.Client
 }
 
@@ -85,6 +86,14 @@ func WithTenantID(tenantID string) Option {
 // WithPrincipalID sets the X-Helm-Principal-ID header.
 func WithPrincipalID(principalID string) Option {
 	return func(c *HelmClient) { c.PrincipalID = principalID }
+}
+
+// WithWorkspaceID sets the optional X-Helm-Workspace-ID header. For
+// POST /api/v1/evaluate, use it whenever scoped emergency-stop fencing or
+// runtime policy snapshot authority is enabled. It must match the server-owned
+// HELM_RUNTIME_WORKSPACE_ID or evaluation fails closed with HTTP 403.
+func WithWorkspaceID(workspaceID string) Option {
+	return func(c *HelmClient) { c.WorkspaceID = workspaceID }
 }
 
 // WithTimeout sets the HTTP timeout.
@@ -171,10 +180,22 @@ func (c *HelmClient) ChatCompletionsWithReceipt(req ChatCompletionRequest) (*Cha
 }
 
 // EvaluateDecision calls POST /api/v1/evaluate.
-func (c *HelmClient) EvaluateDecision(req any) (map[string]any, error) {
-	var out map[string]any
-	err := c.do("POST", "/api/v1/evaluate", req, &out)
-	return out, err
+func (c *HelmClient) EvaluateDecision(req DecisionRequest) (*DecisionRecord, error) {
+	if c.APIKey == "" || c.TenantID == "" || c.PrincipalID == "" {
+		return nil, fmt.Errorf("EvaluateDecision requires API key, tenant ID, and principal ID")
+	}
+	// Build the closed evaluator payload explicitly so trusted transport fields
+	// cannot leak into the body while preserving an explicitly-null context.
+	body := map[string]any{
+		"action":   req.Action,
+		"resource": req.Resource,
+	}
+	if context, ok := req.GetContextOk(); ok {
+		body["context"] = context
+	}
+	var out DecisionRecord
+	err := c.do("POST", "/api/v1/evaluate", body, &out)
+	return &out, err
 }
 
 // RunPublicDemo calls POST /api/demo/run.
@@ -322,5 +343,8 @@ func (c *HelmClient) applyHeaders(req *http.Request) {
 	}
 	if c.PrincipalID != "" {
 		req.Header.Set("X-Helm-Principal-ID", c.PrincipalID)
+	}
+	if c.WorkspaceID != "" {
+		req.Header.Set("X-Helm-Workspace-ID", c.WorkspaceID)
 	}
 }

@@ -28,6 +28,7 @@ services:
       HELM_SERVICE_API_KEY: "${HELM_SERVICE_API_KEY:-helm-service-dev}"
       HELM_RUNTIME_TENANT_ID: "${HELM_RUNTIME_TENANT_ID:-default}"
       HELM_RUNTIME_PRINCIPAL_ID: "${HELM_RUNTIME_PRINCIPAL_ID:-system-admin}"
+      HELM_RUNTIME_WORKSPACE_ID: "${HELM_RUNTIME_WORKSPACE_ID:-default}"
       HELM_HEALTH_PORT: "8081"
       EVIDENCE_SIGNING_KEY: "${EVIDENCE_SIGNING_KEY:-helm-evidence-dev}"
     ports:

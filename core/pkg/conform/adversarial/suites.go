@@ -302,15 +302,18 @@ func adv06TapeReplayTamper() *Suite {
 			files, _ := filepath.Glob(filepath.Join(tapesDir, "entry_*.json"))
 			missing := 0
 			for _, f := range files {
-				data, _ := os.ReadFile(f)
+				data, err := os.ReadFile(f)
 				var entry map[string]interface{}
-				if json.Unmarshal(data, &entry) == nil {
-					if entry["value_hash"] == nil || entry["value_hash"] == "" {
-						missing++
-					}
-					if entry["data_class"] == nil || entry["data_class"] == "" {
-						missing++
-					}
+				if err != nil || json.Unmarshal(data, &entry) != nil {
+					missing++
+					t.Evidence += fmt.Sprintf("invalid: %s; ", filepath.Base(f))
+					continue
+				}
+				if entry["value_hash"] == nil || entry["value_hash"] == "" {
+					missing++
+				}
+				if entry["data_class"] == nil || entry["data_class"] == "" {
+					missing++
 				}
 			}
 			if missing > 0 {
@@ -341,14 +344,20 @@ func adv07TenantCrossleak() *Suite {
 
 			t := TestResult{TestID: "ADV-07-T1", Name: "Single tenant_id across all receipts in run"}
 			tenants := make(map[string]int)
+			missingTenant := 0
 			for _, f := range files {
 				receipt := loadReceipt(f)
 				tid, _ := receipt["tenant_id"].(string)
-				if tid != "" {
-					tenants[tid]++
+				if strings.TrimSpace(tid) == "" {
+					missingTenant++
+					continue
 				}
+				tenants[tid]++
 			}
-			if len(tenants) > 1 {
+			if missingTenant > 0 {
+				t.Pass = false
+				t.Reason = fmt.Sprintf("%d receipts missing tenant_id", missingTenant)
+			} else if len(tenants) > 1 {
 				t.Pass = false
 				t.Reason = fmt.Sprintf("multiple tenants in single run: %v", tenants)
 			} else {
@@ -594,11 +603,11 @@ func hasBoundAuthorizationReceipt(files []string, effect map[string]interface{},
 
 func hasBoundAuthorization(receipts []map[string]interface{}, effect map[string]interface{}, actionType string, opts VerificationOptions) bool {
 	effectSeq, ok := receiptSequence(effect)
-	if !ok || !hasNonEmptyString(effect, "decision_id") || !hasNonEmptyString(effect, "envelope_id") || !hasNonEmptyString(effect, "envelope_hash") {
+	if !ok || !hasNonEmptyString(effect, "decision_id") || !hasNonEmptyString(effect, "tenant_id") || !hasNonEmptyString(effect, "envelope_id") || !hasNonEmptyString(effect, "envelope_hash") {
 		return false
 	}
 	for _, receipt := range receipts {
-		if receipt["action_type"] != actionType || receipt["decision_id"] != effect["decision_id"] || receipt["envelope_id"] != effect["envelope_id"] || receipt["envelope_hash"] != effect["envelope_hash"] {
+		if receipt["action_type"] != actionType || receipt["decision_id"] != effect["decision_id"] || receipt["tenant_id"] != effect["tenant_id"] || receipt["envelope_id"] != effect["envelope_id"] || receipt["envelope_hash"] != effect["envelope_hash"] {
 			continue
 		}
 		if !authorizationReceiptAccepted(receipt, actionType) {

@@ -27,6 +27,7 @@ const (
 	adversarialCampaignSchemaVersion = "helm.adversarial_campaign_report.v1"
 	maxAdversarialSnapshotEntries    = 4096
 	maxAdversarialReportBytes        = 8 << 20
+	maxAdversarialJSONDepth          = 128
 )
 
 type adversarialCampaignStatus string
@@ -385,8 +386,8 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 			return 1
 		}
 	}
-	if report.Pass != (report.Status == adversarialCampaignStatusPassed) {
-		_, _ = fmt.Fprintln(stderr, "Error: campaign report pass/status fields are inconsistent")
+	if err := validateAdversarialCampaignReportSemantics(report); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: campaign report semantics are invalid: %v\n", err)
 		return 1
 	}
 	if jsonOutput {
@@ -442,13 +443,13 @@ func decodeAdversarialCampaignReport(data []byte) (adversarialCampaignReport, er
 func rejectDuplicateJSONKeys(data []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
-	if err := consumeUniqueJSONValue(decoder); err != nil {
+	if err := consumeUniqueJSONValue(decoder, 0); err != nil {
 		return err
 	}
 	return requireJSONEOF(decoder)
 }
 
-func consumeUniqueJSONValue(decoder *json.Decoder) error {
+func consumeUniqueJSONValue(decoder *json.Decoder, depth int) error {
 	token, err := decoder.Token()
 	if err != nil {
 		return err
@@ -456,6 +457,9 @@ func consumeUniqueJSONValue(decoder *json.Decoder) error {
 	delim, ok := token.(json.Delim)
 	if !ok {
 		return nil
+	}
+	if depth >= maxAdversarialJSONDepth {
+		return fmt.Errorf("JSON nesting exceeds %d-container limit", maxAdversarialJSONDepth)
 	}
 
 	switch delim {
@@ -474,14 +478,14 @@ func consumeUniqueJSONValue(decoder *json.Decoder) error {
 				return fmt.Errorf("duplicate JSON object key %q", key)
 			}
 			seen[key] = struct{}{}
-			if err := consumeUniqueJSONValue(decoder); err != nil {
+			if err := consumeUniqueJSONValue(decoder, depth+1); err != nil {
 				return err
 			}
 		}
 		return consumeJSONClosingDelimiter(decoder, '}')
 	case '[':
 		for decoder.More() {
-			if err := consumeUniqueJSONValue(decoder); err != nil {
+			if err := consumeUniqueJSONValue(decoder, depth+1); err != nil {
 				return err
 			}
 		}
@@ -489,6 +493,126 @@ func consumeUniqueJSONValue(decoder *json.Decoder) error {
 	default:
 		return fmt.Errorf("unexpected JSON delimiter %q", delim)
 	}
+}
+
+func validateAdversarialCampaignReportSemantics(report adversarialCampaignReport) error {
+	mandatory := adversarial.AllSuites()
+	mandatoryByID := make(map[string]string, len(mandatory))
+	for _, suite := range mandatory {
+		mandatoryByID[suite.ID] = suite.Name
+	}
+	if report.MandatorySuites != len(mandatory) {
+		return fmt.Errorf("mandatory_suites=%d; want %d", report.MandatorySuites, len(mandatory))
+	}
+	if report.IndexEntryCount < 0 {
+		return fmt.Errorf("index_entry_count must not be negative")
+	}
+
+	failedVerificationChecks := 0
+	for _, check := range report.VerificationChecks {
+		if !check.Pass {
+			failedVerificationChecks++
+		}
+	}
+	if report.VerificationIssueCount != failedVerificationChecks {
+		return fmt.Errorf("verification_issue_count=%d; derived %d", report.VerificationIssueCount, failedVerificationChecks)
+	}
+	if report.BundleVerified != (failedVerificationChecks == 0) {
+		return fmt.Errorf("bundle_verified is inconsistent with verification checks")
+	}
+
+	coveredSuites := 0
+	seenCoverage := make(map[string]struct{}, len(report.CoverageChecks))
+	for _, check := range report.CoverageChecks {
+		if _, ok := mandatoryByID[check.SuiteID]; !ok {
+			return fmt.Errorf("coverage check names unknown suite %q", check.SuiteID)
+		}
+		if _, duplicate := seenCoverage[check.SuiteID]; duplicate {
+			return fmt.Errorf("coverage check duplicates suite %q", check.SuiteID)
+		}
+		seenCoverage[check.SuiteID] = struct{}{}
+		if check.EvidenceCount < 0 {
+			return fmt.Errorf("coverage check %q has negative evidence_count", check.SuiteID)
+		}
+		if check.Covered {
+			coveredSuites++
+		}
+	}
+	if report.CoveredSuites != coveredSuites || report.MissingSuites != len(report.CoverageChecks)-coveredSuites {
+		return fmt.Errorf("coverage counters do not match coverage_checks")
+	}
+	coverageComplete := len(report.CoverageChecks) == len(mandatory) && coveredSuites == len(mandatory)
+	if report.CoverageVerified != coverageComplete {
+		return fmt.Errorf("coverage_verified is inconsistent with mandatory coverage checks")
+	}
+
+	passedSuites := 0
+	seenSuites := make(map[string]struct{}, len(report.Suites))
+	for _, suite := range report.Suites {
+		if suite == nil {
+			return fmt.Errorf("suites contains a null result")
+		}
+		name, ok := mandatoryByID[suite.SuiteID]
+		if !ok {
+			return fmt.Errorf("suite result names unknown suite %q", suite.SuiteID)
+		}
+		if _, duplicate := seenSuites[suite.SuiteID]; duplicate {
+			return fmt.Errorf("suite result duplicates suite %q", suite.SuiteID)
+		}
+		seenSuites[suite.SuiteID] = struct{}{}
+		if suite.Name != name {
+			return fmt.Errorf("suite %q name mismatch", suite.SuiteID)
+		}
+		if len(suite.TestResults) == 0 {
+			return fmt.Errorf("suite %q has no test results", suite.SuiteID)
+		}
+		testsPass := true
+		seenTests := make(map[string]struct{}, len(suite.TestResults))
+		for _, test := range suite.TestResults {
+			if strings.TrimSpace(test.TestID) == "" {
+				return fmt.Errorf("suite %q has an empty test id", suite.SuiteID)
+			}
+			if _, duplicate := seenTests[test.TestID]; duplicate {
+				return fmt.Errorf("suite %q duplicates test %q", suite.SuiteID, test.TestID)
+			}
+			seenTests[test.TestID] = struct{}{}
+			testsPass = testsPass && test.Pass
+		}
+		if suite.Pass != testsPass {
+			return fmt.Errorf("suite %q pass does not match its test results", suite.SuiteID)
+		}
+		if suite.Pass {
+			passedSuites++
+		}
+	}
+	if report.ExecutedSuites != len(report.Suites) || report.PassedSuites != passedSuites || report.FailedSuites != len(report.Suites)-passedSuites {
+		return fmt.Errorf("suite counters do not match suite results")
+	}
+
+	if report.Pass != (report.Status == adversarialCampaignStatusPassed) {
+		return fmt.Errorf("pass/status fields are inconsistent")
+	}
+	switch report.Status {
+	case adversarialCampaignStatusBundleVerificationFailed:
+		if report.BundleVerified || report.CoverageVerified || len(report.CoverageChecks) != 0 || len(report.Suites) != 0 {
+			return fmt.Errorf("bundle_verification_failed contains downstream coverage or suite success")
+		}
+	case adversarialCampaignStatusCoverageIncomplete:
+		if !report.BundleVerified || report.CoverageVerified || len(report.CoverageChecks) != len(mandatory) || report.MissingSuites == 0 || len(report.Suites) != 0 {
+			return fmt.Errorf("coverage_incomplete fields are inconsistent")
+		}
+	case adversarialCampaignStatusAdversarialFailed:
+		if !report.BundleVerified || !report.CoverageVerified || len(report.Suites) != len(mandatory) || report.FailedSuites == 0 {
+			return fmt.Errorf("adversarial_failed fields are inconsistent")
+		}
+	case adversarialCampaignStatusPassed:
+		if !report.BundleVerified || !report.CoverageVerified || len(report.Suites) != len(mandatory) || report.PassedSuites != len(mandatory) || report.FailedSuites != 0 {
+			return fmt.Errorf("passed fields are inconsistent")
+		}
+	default:
+		return fmt.Errorf("unsupported status %q", report.Status)
+	}
+	return nil
 }
 
 func consumeJSONClosingDelimiter(decoder *json.Decoder, want json.Delim) error {

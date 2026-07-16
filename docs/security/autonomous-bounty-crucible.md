@@ -120,9 +120,12 @@ helm-ai-kernel conform adversarial verify-report \
   --expected-detector-definition-sha256 <sha256:detector-definition>
 ```
 
-Verification rejects reports larger than 8 MiB, unknown fields, duplicate
-object keys, and trailing JSON values before signature validation. With
-`--json`, it emits a freshly encoded typed report only after validation.
+Verification rejects reports larger than 8 MiB, JSON deeper than 128
+containers, unknown fields, duplicate object keys, and trailing JSON values
+before signature validation. After signature validation, it independently
+recomputes verification, coverage, suite, pass, and status invariants rather
+than trusting signed summary counters. With `--json`, it emits a freshly
+encoded typed report only after validation.
 
 The signature binds the evaluation time, input roots, ordered checks and suite
 results, campaign trust-key ID, exact Kernel commit, runner executable SHA-256,

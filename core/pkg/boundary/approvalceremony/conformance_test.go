@@ -1,7 +1,12 @@
 package approvalceremony
 
 import (
+	"bytes"
+	"crypto/ed25519"
 	"testing"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 func TestApprovalCeremonyGoldenVectors(t *testing.T) {
@@ -32,5 +37,29 @@ func TestApprovalCeremonyGoldenVectors(t *testing.T) {
 	const wantSigningPayload = `{"algorithm":"ed25519","contract_version":"2026-07-15","domain":"HELM/ApprovalGrantSignature/v1","grant_hash":"sha256:5e6079365534888f7fba5dc22579ed51177ad9bf7594943a95784040ea968930","kernel_trust_root_id":"kernel-root-a","signing_key_ref":"kms://helm/approval-a"}`
 	if got := string(signingPayload); got != wantSigningPayload {
 		t.Fatalf("approval grant signing payload drifted:\n got: %q\nwant: %q", got, wantSigningPayload)
+	}
+
+	consumption := consumptionForGrant(t, grant, "spiffe://helm/data-plane-a", grant.IssuedAt.Add(time.Minute))
+	consumptionPayload, err := ApprovalGrantConsumptionSigningPayload(consumption, GrantSignatureEd25519)
+	if err != nil {
+		t.Fatalf("ApprovalGrantConsumptionSigningPayload(): %v", err)
+	}
+	const wantConsumptionHash = "sha256:7c6ed2d2dad86951c4e0c857a72aa6f4a84e8c3e1b7ac3e1f86d0eb3ab30d416"
+	if consumption.ConsumptionHash != wantConsumptionHash {
+		t.Fatalf("approval grant consumption hash drifted: got %q, want %q", consumption.ConsumptionHash, wantConsumptionHash)
+	}
+	const wantConsumptionPayload = `{"algorithm":"ed25519","consumption_hash":"sha256:7c6ed2d2dad86951c4e0c857a72aa6f4a84e8c3e1b7ac3e1f86d0eb3ab30d416","contract_version":"2026-07-16","domain":"HELM/ApprovalGrantConsumptionSignature/v1","kernel_trust_root_id":"kernel-root-a","signing_key_ref":"kms://helm/approval-a"}`
+	if got := string(consumptionPayload); got != wantConsumptionPayload {
+		t.Fatalf("approval grant consumption signing payload drifted:\n got: %q\nwant: %q", got, wantConsumptionPayload)
+	}
+	signer := crypto.NewEd25519SignerFromKey(ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, ed25519.SeedSize)), "approval-consumption-vector")
+	signature, err := SignApprovalGrantConsumption(consumption, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const wantConsumptionPublicKey = "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+	const wantConsumptionSignature = "924ce5cda6e0804fbf166b1c09df5df9258bc4fa4ea9ced3e054677c0ad6fe2687ca84dad6eb04b31d0c8cafd96d8e98250f3287b528e548fc8e0984694fa601"
+	if signer.PublicKey() != wantConsumptionPublicKey || signature != wantConsumptionSignature {
+		t.Fatalf("approval grant consumption signature drifted: key=%q signature=%q", signer.PublicKey(), signature)
 	}
 }

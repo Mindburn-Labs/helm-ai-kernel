@@ -175,6 +175,52 @@ func TestServiceRejectsUnverifiedConsumerBeforePersistence(t *testing.T) {
 	}
 }
 
+func TestServiceConsumesAndRecoversOnlyForExactWorkloadIdentity(t *testing.T) {
+	hold, challenge, verified, grant := ceremonyFixtures(t)
+	granted := withGrant(withVerified(withChallenge(hold, challenge), verified), grant)
+	store := &serviceTestStore{record: granted}
+	consumer := &serviceTestConsumer{identity: consumerForSpec(hold.Spec)}
+	now := grant.IssuedAt.Add(time.Minute)
+	signer := crypto.NewEd25519SignerFromKey(
+		ed25519.NewKeyFromSeed(bytes.Repeat([]byte{9}, ed25519.SeedSize)),
+		"approval-test",
+	)
+	service, err := newService(
+		store, &serviceTestBinding{spec: hold.Spec},
+		&serviceTestAuthority{store: authorityMetadata(hold.Spec)},
+		&serviceTestControl{identity: controlForSpec(hold.Spec)}, consumer, signer,
+		func() time.Time { return now }, bytes.NewReader(make([]byte, 64)), serviceTestConfig(hold.Spec, grant),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumed, err := service.ConsumeGrant(context.Background(), granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce)
+	if err != nil {
+		t.Fatalf("ConsumeGrant() error = %v", err)
+	}
+	if store.consumeCalls != 1 || store.consumption.ConsumptionHash == "" ||
+		store.consumption.ConsumedBy != consumer.identity.Subject || consumed.GrantConsumption == nil {
+		t.Fatalf("persisted consumption = %+v, record = %+v", store.consumption, consumed)
+	}
+	wantVersion := consumed.Version
+	recovered, err := service.RecoverGrantConsumption(context.Background(), granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce)
+	if err != nil {
+		t.Fatalf("RecoverGrantConsumption() error = %v", err)
+	}
+	if recovered.Version != wantVersion || store.consumeCalls != 1 {
+		t.Fatalf("recovery mutated lifecycle: version=%d want=%d consumeCalls=%d", recovered.Version, wantVersion, store.consumeCalls)
+	}
+	consumer.identity.Subject = "spiffe://helm/data-plane-b"
+	if _, err := service.RecoverGrantConsumption(context.Background(), granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrConsumerUnavailable) {
+		t.Fatalf("cross-consumer recovery error = %v, want ErrConsumerUnavailable", err)
+	}
+	consumer.identity.Subject = "spiffe://helm/data-plane-a"
+	now = grant.ExpiresAt
+	if _, err := service.RecoverGrantConsumption(context.Background(), granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrTransitionConflict) {
+		t.Fatalf("expired recovery error = %v, want ErrTransitionConflict", err)
+	}
+}
+
 func TestServiceClockMatchesPostgresMicrosecondPrecision(t *testing.T) {
 	hold, _, _, grant := ceremonyFixtures(t)
 	clockValue := time.Date(2026, 7, 16, 12, 0, 0, 123456789, time.FixedZone("offset", 2*60*60))
@@ -268,6 +314,7 @@ type serviceTestStore struct {
 	createCalls         int
 	issueChallengeCalls int
 	consumeCalls        int
+	consumption         contracts.ApprovalGrantConsumption
 }
 
 func (s *serviceTestStore) createHold(_ context.Context, record Record) (Record, error) {
@@ -296,9 +343,19 @@ func (*serviceTestStore) issueGrant(context.Context, string, string, string, con
 	return Record{}, errors.New("unexpected issueGrant call")
 }
 
-func (s *serviceTestStore) consumeGrant(context.Context, string, string, string, string, string, string, string, string, time.Time) (Record, error) {
+func (s *serviceTestStore) consumeGrant(_ context.Context, _, _, _, _, _, _ string, consumption contracts.ApprovalGrantConsumption, algorithm, signature string, now time.Time) (Record, error) {
 	s.consumeCalls++
-	return Record{}, errors.New("unexpected consumeGrant call")
+	s.consumption = consumption
+	s.record.State = StateConsumed
+	s.record.UpdatedAt = now
+	consumedAt := now
+	s.record.ConsumedAt = &consumedAt
+	s.record.ConsumedBy = consumption.ConsumedBy
+	s.record.GrantConsumption = &consumption
+	s.record.ConsumptionSignatureAlgorithm = algorithm
+	s.record.ConsumptionSignature = signature
+	s.record.Version++
+	return s.record, nil
 }
 
 func (*serviceTestStore) deny(context.Context, string, string, string, time.Time) (Record, error) {

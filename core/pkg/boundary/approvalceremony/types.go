@@ -43,14 +43,17 @@ type Record struct {
 	WorkspaceID string `json:"workspace_id"`
 	State       State  `json:"state"`
 
-	HoldStartedAt time.Time                           `json:"hold_started_at"`
-	Spec          ChallengeSpec                       `json:"challenge_spec"`
-	Challenge     *contracts.ApprovalChallenge        `json:"challenge,omitempty"`
-	VerifiedRef   *approvalverify.VerifiedApprovalRef `json:"verified_ref,omitempty"`
-	Grant         *contracts.ApprovalGrant            `json:"grant,omitempty"`
+	HoldStartedAt    time.Time                           `json:"hold_started_at"`
+	Spec             ChallengeSpec                       `json:"challenge_spec"`
+	Challenge        *contracts.ApprovalChallenge        `json:"challenge,omitempty"`
+	VerifiedRef      *approvalverify.VerifiedApprovalRef `json:"verified_ref,omitempty"`
+	Grant            *contracts.ApprovalGrant            `json:"grant,omitempty"`
+	GrantConsumption *contracts.ApprovalGrantConsumption `json:"grant_consumption,omitempty"`
 
-	GrantSignatureAlgorithm string `json:"grant_signature_algorithm,omitempty"`
-	GrantSignature          string `json:"grant_signature,omitempty"`
+	GrantSignatureAlgorithm       string `json:"grant_signature_algorithm,omitempty"`
+	GrantSignature                string `json:"grant_signature,omitempty"`
+	ConsumptionSignatureAlgorithm string `json:"consumption_signature_algorithm,omitempty"`
+	ConsumptionSignature          string `json:"consumption_signature,omitempty"`
 
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
@@ -202,6 +205,22 @@ func (r Record) Validate() error {
 	} else if r.GrantSignatureAlgorithm != "" || r.GrantSignature != "" {
 		return invalidRecord("grant signature requires grant")
 	}
+	if r.GrantConsumption != nil {
+		if r.Grant == nil {
+			return invalidRecord("grant_consumption requires grant")
+		}
+		if err := r.GrantConsumption.ValidateGrant(*r.Grant); err != nil {
+			return invalidRecord("grant_consumption: " + err.Error())
+		}
+		if r.ConsumptionSignatureAlgorithm != GrantSignatureEd25519 {
+			return invalidRecord("consumption signature algorithm must be ed25519")
+		}
+		if !validEd25519Signature(r.ConsumptionSignature) {
+			return invalidRecord("consumption signature must be 64 lowercase hexadecimal bytes")
+		}
+	} else if r.ConsumptionSignatureAlgorithm != "" || r.ConsumptionSignature != "" {
+		return invalidRecord("consumption signature requires grant_consumption")
+	}
 
 	switch r.State {
 	case StateHoldPending:
@@ -245,8 +264,8 @@ func (r Record) Validate() error {
 			return invalidRecord("grant expires_at shadow mismatch")
 		}
 	case StateConsumed:
-		if r.Grant == nil || r.ConsumedAt == nil || !validToken(r.ConsumedBy) {
-			return invalidRecord("consumed requires grant, consumed_at, and consumed_by")
+		if r.Grant == nil || r.GrantConsumption == nil || r.ConsumedAt == nil || !validToken(r.ConsumedBy) {
+			return invalidRecord("consumed requires grant, grant_consumption, consumed_at, and consumed_by")
 		}
 		if !isUTC(*r.ConsumedAt) || !r.ConsumedAt.Equal(r.UpdatedAt) {
 			return invalidRecord("consumed_at is invalid")
@@ -257,8 +276,11 @@ func (r Record) Validate() error {
 		if r.ExpiresAt == nil || !r.ExpiresAt.Equal(r.Grant.ExpiresAt) {
 			return invalidRecord("consumed expires_at shadow mismatch")
 		}
+		if r.GrantConsumption.ConsumedBy != r.ConsumedBy || !r.GrantConsumption.ConsumedAt.Equal(*r.ConsumedAt) {
+			return invalidRecord("consumption record shadow mismatch")
+		}
 	case StateExpired, StateDenied:
-		if r.ConsumedAt != nil || r.ConsumedBy != "" {
+		if r.GrantConsumption != nil || r.ConsumedAt != nil || r.ConsumedBy != "" {
 			return invalidRecord("terminal non-consumed state cannot contain consumption")
 		}
 		if r.Grant != nil && (r.ExpiresAt == nil || !r.ExpiresAt.Equal(r.Grant.ExpiresAt)) {
@@ -271,7 +293,8 @@ func (r Record) Validate() error {
 			return invalidRecord("expired transition precedes committed expiry")
 		}
 	}
-	if r.State != StateConsumed && (r.ConsumedAt != nil || r.ConsumedBy != "") {
+	if r.State != StateConsumed && (r.GrantConsumption != nil || r.ConsumptionSignatureAlgorithm != "" ||
+		r.ConsumptionSignature != "" || r.ConsumedAt != nil || r.ConsumedBy != "") {
 		return invalidRecord("consumption fields require consumed state")
 	}
 	return nil

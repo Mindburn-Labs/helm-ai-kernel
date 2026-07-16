@@ -189,9 +189,23 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 		t.Fatalf("concurrent consumption results = %d success, %v errors", len(consumedRecords), consumptionErrors)
 	}
 	final := consumedRecords[0]
-	if final.State != StateConsumed || final.Version != 5 || final.ConsumedAt == nil {
+	if final.State != StateConsumed || final.Version != 5 || final.ConsumedAt == nil ||
+		final.GrantConsumption == nil || final.GrantConsumption.ConsumptionHash == "" || final.ConsumptionSignature == "" {
 		t.Fatalf("final record = %+v", final)
 	}
+	recovered, err := service.RecoverGrantConsumption(
+		ctx, hold.ApprovalID, winner.Grant.GrantID, winner.Grant.GrantHash, winner.Grant.Nonce,
+	)
+	if err != nil || recovered.Version != final.Version || !recovered.ConsumedAt.Equal(*final.ConsumedAt) {
+		t.Fatalf("RecoverGrantConsumption() record = %+v, error = %v", recovered, err)
+	}
+	consumer.identity.Subject = "spiffe://helm/data-plane-b"
+	if _, err := service.RecoverGrantConsumption(
+		ctx, hold.ApprovalID, winner.Grant.GrantID, winner.Grant.GrantHash, winner.Grant.Nonce,
+	); !errors.Is(err, ErrConsumerUnavailable) {
+		t.Fatalf("cross-consumer recovery error = %v, want ErrConsumerUnavailable", err)
+	}
+	consumer.identity = consumerForSpec(fixtureHold.Spec)
 	if _, err := store.get(ctx, "tenant-b", hold.WorkspaceID, hold.ApprovalID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-tenant get() error = %v, want ErrNotFound", err)
 	}
@@ -283,6 +297,34 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 		t.Fatalf("ConsumeGrant() extended expiry error = %v, want ErrInvalidRecord", err)
 	}
 	assertApprovalPersistedState(t, ctx, db, expiryBound, StateGrantIssued, false)
+
+	consumptionTampered := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
+	consumptionTampered, err = service.ConsumeGrant(
+		ctx, consumptionTampered.ApprovalID, consumptionTampered.Grant.GrantID,
+		consumptionTampered.Grant.GrantHash, consumptionTampered.Grant.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("ConsumeGrant() for consumption tamper: %v", err)
+	}
+	result, err = db.ExecContext(ctx, `UPDATE approval_ceremonies
+		SET consumption_signature = $1
+		WHERE tenant_id = $2 AND workspace_id = $3 AND approval_id = $4`,
+		strings.Repeat("0", 128), consumptionTampered.TenantID,
+		consumptionTampered.WorkspaceID, consumptionTampered.ApprovalID,
+	)
+	if err != nil {
+		t.Fatalf("tamper persisted consumption signature: %v", err)
+	}
+	rows, err = result.RowsAffected()
+	if err != nil || rows != 1 {
+		t.Fatalf("tamper persisted consumption signature affected %d rows, error = %v", rows, err)
+	}
+	if _, err := service.RecoverGrantConsumption(
+		ctx, consumptionTampered.ApprovalID, consumptionTampered.Grant.GrantID,
+		consumptionTampered.Grant.GrantHash, consumptionTampered.Grant.Nonce,
+	); !errors.Is(err, ErrGrantSignatureRejected) {
+		t.Fatalf("tampered consumption recovery error = %v, want ErrGrantSignatureRejected", err)
+	}
 
 	expiringHold, err := service.BeginHold(ctx, fixtureHold.Spec.BindingRef)
 	if err != nil {

@@ -32,6 +32,8 @@ test-approval-ceremony-postgres:
 
 verify-approval-ceremony-vectors:
 	cd core && go test ./pkg/boundary/approvalceremony -run TestApprovalCeremonyGoldenVectors -count=1
+	cd core && go test ./pkg/boundary/approvalceremony -run TestApprovalConsumptionReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/approval-consumption-v1/verify_vectors.py
 
 test-sdk-go-standalone:
 	cd sdk/go && GOWORK=off go test ./...

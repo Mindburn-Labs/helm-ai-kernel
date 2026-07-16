@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS approval_ceremonies (
     grant_nonce TEXT,
     grant_signature_algorithm TEXT,
     grant_signature TEXT,
+    grant_consumption_json JSONB,
+    consumption_signature_algorithm TEXT,
+    consumption_signature TEXT,
     expires_at TIMESTAMPTZ,
     consumed_at TIMESTAMPTZ,
     consumed_by TEXT,
@@ -42,6 +45,34 @@ CREATE TABLE IF NOT EXISTS approval_ceremonies (
     PRIMARY KEY (tenant_id, approval_id),
     CHECK (version > 0)
 );
+
+ALTER TABLE approval_ceremonies
+    ADD COLUMN IF NOT EXISTS grant_consumption_json JSONB,
+    ADD COLUMN IF NOT EXISTS consumption_signature_algorithm TEXT,
+    ADD COLUMN IF NOT EXISTS consumption_signature TEXT;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'approval_ceremonies'::regclass
+          AND conname = 'approval_ceremonies_consumption_shape_ck'
+    ) THEN
+        ALTER TABLE approval_ceremonies
+            ADD CONSTRAINT approval_ceremonies_consumption_shape_ck CHECK (
+                (state = 'CONSUMED' AND consumed_at IS NOT NULL AND consumed_by IS NOT NULL
+                    AND grant_consumption_json IS NOT NULL
+                    AND consumption_signature_algorithm IS NOT NULL
+                    AND consumption_signature IS NOT NULL)
+                OR
+                (state <> 'CONSUMED' AND consumed_at IS NULL AND consumed_by IS NULL
+                    AND grant_consumption_json IS NULL
+                    AND consumption_signature_algorithm IS NULL
+                    AND consumption_signature IS NULL)
+            );
+    END IF;
+END
+$$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS approval_ceremonies_challenge_hash_uq
     ON approval_ceremonies (tenant_id, challenge_hash)
@@ -98,6 +129,7 @@ const recordColumns = `
 approval_id, tenant_id, workspace_id, state, hold_started_at,
 challenge_spec_json, challenge_json, verified_ref_json, grant_json,
 grant_signature_algorithm, grant_signature,
+grant_consumption_json, consumption_signature_algorithm, consumption_signature,
 created_at, updated_at, expires_at, consumed_at, consumed_by, version
 `
 
@@ -185,6 +217,16 @@ func (s *PostgresStore) get(ctx context.Context, tenantID, workspaceID, approval
 		}
 		if err := s.grantVerifier.VerifyGrantSignature(
 			*record.Grant, record.GrantSignatureAlgorithm, record.GrantSignature,
+		); err != nil {
+			return Record{}, err
+		}
+	}
+	if record.GrantConsumption != nil {
+		if s.grantVerifier == nil {
+			return Record{}, fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
+		}
+		if err := s.grantVerifier.VerifyGrantConsumptionSignature(
+			*record.GrantConsumption, record.ConsumptionSignatureAlgorithm, record.ConsumptionSignature,
 		); err != nil {
 			return Record{}, err
 		}
@@ -289,8 +331,8 @@ func (s *PostgresStore) issueGrant(ctx context.Context, tenantID, workspaceID, a
 	})
 }
 
-func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID, approvalID, grantID, grantHash, nonce, consumedBy, audience string, now time.Time) (Record, error) {
-	if !validToken(workspaceID) || !validToken(consumedBy) || !validToken(audience) || !validToken(grantID) || !validSHA256(grantHash) || !validNonce(nonce) {
+func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID, approvalID, grantID, grantHash, nonce string, consumption contracts.ApprovalGrantConsumption, algorithm, signature string, now time.Time) (Record, error) {
+	if !validToken(workspaceID) || !validToken(consumption.ConsumedBy) || !validToken(consumption.Audience) || !validToken(grantID) || !validSHA256(grantHash) || !validNonce(nonce) {
 		return Record{}, invalidRecord("exact workspace, grant id, hash, nonce, consumer, and audience are required")
 	}
 	if s == nil || s.db == nil {
@@ -326,7 +368,7 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 	if issued.Grant == nil {
 		return Record{}, invalidRecord("grant issued record is missing grant")
 	}
-	if issued.Grant.TenantID != tenantID || issued.Grant.WorkspaceID != workspaceID || issued.Grant.Audience != audience {
+	if issued.Grant.TenantID != tenantID || issued.Grant.WorkspaceID != workspaceID || issued.Grant.Audience != consumption.Audience {
 		return Record{}, fmt.Errorf("%w: signed grant workload scope mismatch", ErrConsumerUnavailable)
 	}
 	if err := issued.Grant.ValidateAt(consumedAt); err != nil {
@@ -337,18 +379,34 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 	); err != nil {
 		return Record{}, err
 	}
+	if !consumption.ConsumedAt.Equal(consumedAt) {
+		return Record{}, invalidRecord("consumption consumed_at must be the server transition time")
+	}
+	if err := consumption.ValidateGrant(*issued.Grant); err != nil {
+		return Record{}, err
+	}
+	if err := s.grantVerifier.VerifyGrantConsumptionSignature(consumption, algorithm, signature); err != nil {
+		return Record{}, err
+	}
+	consumptionJSON, err := json.Marshal(consumption)
+	if err != nil {
+		return Record{}, fmt.Errorf("marshal approval grant consumption: %w", err)
+	}
 
 	consumed, err := scanRecord(tx.QueryRowContext(ctx, `
 		UPDATE approval_ceremonies
 		SET state = $3, consumed_at = $4, consumed_by = $5,
+			grant_consumption_json = $6, consumption_signature_algorithm = $7,
+			consumption_signature = $8,
 			updated_at = $4, version = version + 1
 		WHERE tenant_id = $1 AND approval_id = $2
-		  AND state = 'GRANT_ISSUED' AND version = $6
-		  AND workspace_id = $7
-		  AND grant_id = $8 AND grant_hash = $9 AND grant_nonce = $10
+		  AND state = 'GRANT_ISSUED' AND version = $9
+		  AND workspace_id = $10
+		  AND grant_id = $11 AND grant_hash = $12 AND grant_nonce = $13
 		  AND consumed_at IS NULL AND expires_at > $4 AND updated_at <= $4
 		RETURNING `+recordColumns,
-		tenantID, approvalID, StateConsumed, consumedAt, consumedBy, issued.Version,
+		tenantID, approvalID, StateConsumed, consumedAt, consumption.ConsumedBy,
+		consumptionJSON, algorithm, signature, issued.Version,
 		workspaceID, grantID, grantHash, nonce,
 	))
 	if err != nil {
@@ -452,13 +510,14 @@ func scanRecord(row rowScanner) (Record, error) {
 	var record Record
 	var state string
 	var specJSON string
-	var challengeJSON, verifiedJSON, grantJSON sql.NullString
-	var signatureAlgorithm, signature, consumedBy sql.NullString
+	var challengeJSON, verifiedJSON, grantJSON, consumptionJSON sql.NullString
+	var signatureAlgorithm, signature, consumptionAlgorithm, consumptionSignature, consumedBy sql.NullString
 	var expiresAt, consumedAt sql.NullTime
 	if err := row.Scan(
 		&record.ApprovalID, &record.TenantID, &record.WorkspaceID, &state,
 		&record.HoldStartedAt, &specJSON, &challengeJSON, &verifiedJSON, &grantJSON,
-		&signatureAlgorithm, &signature, &record.CreatedAt, &record.UpdatedAt,
+		&signatureAlgorithm, &signature, &consumptionJSON, &consumptionAlgorithm, &consumptionSignature,
+		&record.CreatedAt, &record.UpdatedAt,
 		&expiresAt, &consumedAt, &consumedBy, &record.Version,
 	); err != nil {
 		return Record{}, err
@@ -466,6 +525,8 @@ func scanRecord(row rowScanner) (Record, error) {
 	record.State = State(state)
 	record.GrantSignatureAlgorithm = signatureAlgorithm.String
 	record.GrantSignature = signature.String
+	record.ConsumptionSignatureAlgorithm = consumptionAlgorithm.String
+	record.ConsumptionSignature = consumptionSignature.String
 	record.ConsumedBy = consumedBy.String
 	if expiresAt.Valid {
 		value := expiresAt.Time.UTC()
@@ -498,6 +559,13 @@ func scanRecord(row rowScanner) (Record, error) {
 			return Record{}, fmt.Errorf("decode persisted approval grant: %w", err)
 		}
 		record.Grant = &grant
+	}
+	if consumptionJSON.Valid {
+		var consumption contracts.ApprovalGrantConsumption
+		if err := json.Unmarshal([]byte(consumptionJSON.String), &consumption); err != nil {
+			return Record{}, fmt.Errorf("decode persisted approval grant consumption: %w", err)
+		}
+		record.GrantConsumption = &consumption
 	}
 	return record, nil
 }

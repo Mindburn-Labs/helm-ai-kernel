@@ -24,6 +24,10 @@ func TestRecordValidatesCompleteLifecycle(t *testing.T) {
 	consumedAt := consumed.UpdatedAt
 	consumed.ConsumedAt = &consumedAt
 	consumed.ConsumedBy = "spiffe://helm/data-plane-a"
+	consumption := consumptionForGrant(t, grant, consumed.ConsumedBy, consumedAt)
+	consumed.GrantConsumption = &consumption
+	consumed.ConsumptionSignatureAlgorithm = GrantSignatureEd25519
+	consumed.ConsumptionSignature = strings.Repeat("c", 128)
 	consumed.Version++
 	cases = append(cases, consumed)
 
@@ -110,6 +114,11 @@ func TestRecordRejectsMutableExpiryAndLateConsumption(t *testing.T) {
 	consumedAt := grant.ExpiresAt
 	lateConsumption.ConsumedAt = &consumedAt
 	lateConsumption.ConsumedBy = "spiffe://helm/data-plane-a"
+	consumption := consumptionForGrant(t, grant, lateConsumption.ConsumedBy, grant.ExpiresAt.Add(-time.Second))
+	consumption.ConsumedAt = consumedAt
+	lateConsumption.GrantConsumption = &consumption
+	lateConsumption.ConsumptionSignatureAlgorithm = GrantSignatureEd25519
+	lateConsumption.ConsumptionSignature = strings.Repeat("c", 128)
 	lateConsumption.Version++
 	if err := lateConsumption.Validate(); !errors.Is(err, ErrInvalidRecord) {
 		t.Fatalf("late consumption error = %v, want ErrInvalidRecord", err)
@@ -235,6 +244,24 @@ func withGrant(record Record, grant contracts.ApprovalGrant) Record {
 	record.UpdatedAt = grant.IssuedAt
 	record.Version++
 	return record
+}
+
+func consumptionForGrant(t *testing.T, grant contracts.ApprovalGrant, consumedBy string, consumedAt time.Time) contracts.ApprovalGrantConsumption {
+	t.Helper()
+	consumption, err := (contracts.ApprovalGrantConsumption{
+		SchemaVersion: contracts.ApprovalGrantConsumptionSchemaV1, ContractVersion: contracts.ApprovalGrantConsumptionContractV1,
+		ApprovalID: grant.ApprovalID, GrantID: grant.GrantID, GrantHash: grant.GrantHash,
+		TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, Audience: grant.Audience, ConsumedBy: consumedBy,
+		PackID: grant.PackID, PackVersion: grant.PackVersion, PackManifestHash: grant.PackManifestHash, Action: grant.Action,
+		IntentHash: grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
+		PolicyVersion: grant.PolicyVersion, PolicyEpoch: grant.PolicyEpoch, PolicyHash: grant.PolicyHash,
+		ServerIdentity: grant.ServerIdentity, KernelTrustRootID: grant.KernelTrustRootID, SigningKeyRef: grant.SigningKeyRef,
+		GrantIssuedAt: grant.IssuedAt, GrantExpiresAt: grant.ExpiresAt, ConsumedAt: consumedAt,
+	}).Seal()
+	if err != nil {
+		t.Fatalf("seal consumption: %v", err)
+	}
+	return consumption
 }
 
 func shaRef(char string) string {

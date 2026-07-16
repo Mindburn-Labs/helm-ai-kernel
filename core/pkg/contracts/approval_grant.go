@@ -32,9 +32,10 @@ var (
 // its own: callers MUST verify the server signature and atomically consume the
 // grant in a durable store before performing a mutation.
 //
-// GrantHash seals every authority-bearing field below. Signature material and
-// durable consumption state are introduced by later boundary slices; legacy
-// approval metadata MUST NOT be promoted into this contract.
+// GrantHash seals every authority-bearing field below. The approvalceremony
+// boundary owns its signature, durable single-use transition, and the separate
+// signed ApprovalGrantConsumption record; legacy approval metadata MUST NOT be
+// promoted into this contract.
 type ApprovalGrant struct {
 	SchemaVersion   string `json:"schema_version"`
 	ContractVersion string `json:"contract_version"`

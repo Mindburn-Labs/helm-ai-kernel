@@ -10,8 +10,14 @@ import (
 // RunAll executes all 10 mandatory adversarial suites against an EvidencePack.
 // Returns an aggregate result. Any single suite failure means overall failure.
 func RunAll(evidenceDir string) *AggregateResult {
-	suites := AllSuites()
-	coverage := EvaluateCoverage(evidenceDir)
+	return RunAllWithOptions(evidenceDir, VerificationOptions{})
+}
+
+// RunAllWithOptions executes every suite against an external campaign trust
+// root. Evidence stored inside the candidate pack never establishes trust.
+func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateResult {
+	suites := AllSuitesWithOptions(opts)
+	coverage := EvaluateCoverageWithOptions(evidenceDir, opts)
 	coverageBySuite := make(map[string]CoverageCheck, len(coverage.Checks))
 	for _, check := range coverage.Checks {
 		coverageBySuite[check.SuiteID] = check

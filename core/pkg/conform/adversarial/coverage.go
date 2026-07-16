@@ -1,7 +1,7 @@
 package adversarial
 
-// quantum_posture: this slice validates classical Ed25519 signature shape
-// only; cryptographic verification and post-quantum assurance are not claimed.
+// quantum_posture: campaign authorization uses classical Ed25519 verification;
+// no post-quantum assurance is claimed.
 
 import (
 	"encoding/json"
@@ -32,6 +32,12 @@ type CoverageCheck struct {
 // detectors run. The canonical EvidencePack verifier is responsible for
 // proving that these files are indexed, hashed, and sealed.
 func EvaluateCoverage(evidenceDir string) CoverageResult {
+	return EvaluateCoverageWithOptions(evidenceDir, VerificationOptions{})
+}
+
+// EvaluateCoverageWithOptions proves positive controls using externally rooted
+// cryptographic evidence where a suite contract requires authorization.
+func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) CoverageResult {
 	receiptFiles, _ := filepath.Glob(filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts", "*.json"))
 	receipts := make([]map[string]interface{}, 0, len(receiptFiles))
 	for _, path := range receiptFiles {
@@ -40,15 +46,15 @@ func EvaluateCoverage(evidenceDir string) CoverageResult {
 
 	checks := []CoverageCheck{
 		receiptSequenceCoverage(receipts),
-		policyDecisionCoverage(receipts),
+		policyDecisionCoverage(receipts, opts),
 		proofGraphParentCoverage(receipts),
 		budgetBoundaryCoverage(receipts),
 		envelopeBindingCoverage(receipts),
 		tapeCoverage(evidenceDir),
 		tenantCoverage(receipts),
-		toolManifestCoverage(evidenceDir),
+		toolManifestCoverage(evidenceDir, opts),
 		panicBoundaryCoverage(evidenceDir),
-		highFinalityApprovalCoverage(receipts),
+		highFinalityApprovalCoverage(receipts, opts),
 	}
 	result := CoverageResult{Pass: true, Checks: checks}
 	for _, check := range checks {
@@ -65,25 +71,26 @@ func EvaluateCoverage(evidenceDir string) CoverageResult {
 func receiptSequenceCoverage(receipts []map[string]interface{}) CoverageCheck {
 	count := 0
 	for _, receipt := range receipts {
-		if _, ok := receipt["seq"].(float64); ok {
+		if _, ok := receiptSequence(receipt); ok {
 			count++
 		}
 	}
 	return coverageCheck("ADV-01", count >= 2, count, "requires at least two sequenced receipts")
 }
 
-func policyDecisionCoverage(receipts []map[string]interface{}) CoverageCheck {
+func policyDecisionCoverage(receipts []map[string]interface{}, opts VerificationOptions) CoverageCheck {
 	count := 0
 	for _, receipt := range receipts {
-		if receipt["action_type"] != "effect_attempt" {
+		action, _ := receipt["action_type"].(string)
+		if !isEffectAction(action) {
 			continue
 		}
 		decisionID, _ := receipt["decision_id"].(string)
-		if decisionID != "" && hasPolicyReceipt(receipts, decisionID) {
+		if decisionID != "" && hasBoundAuthorization(receipts, receipt, "policy_decision", opts) {
 			count++
 		}
 	}
-	return coverageCheck("ADV-02", count > 0, count, "requires an effect_attempt with a matching policy_decision")
+	return coverageCheck("ADV-02", count > 0, count, "requires an effect action with a preceding, ancestor-linked, envelope-bound, trusted policy_decision")
 }
 
 func proofGraphParentCoverage(receipts []map[string]interface{}) CoverageCheck {
@@ -169,7 +176,7 @@ func tenantCoverage(receipts []map[string]interface{}) CoverageCheck {
 	return coverageCheck("ADV-07", count > 0, count, "requires tenant-bound receipts")
 }
 
-func toolManifestCoverage(evidenceDir string) CoverageCheck {
+func toolManifestCoverage(evidenceDir string, opts VerificationOptions) CoverageCheck {
 	files := toolManifestFiles(evidenceDir)
 	count := 0
 	for _, path := range files {
@@ -178,11 +185,11 @@ func toolManifestCoverage(evidenceDir string) CoverageCheck {
 		if err != nil || json.Unmarshal(data, &manifest) != nil {
 			continue
 		}
-		if hasStructuredSignatures(manifest) {
+		if verifyCampaignSignatures(manifest, "signatures", opts.CampaignPublicKeyHex) {
 			count++
 		}
 	}
-	return coverageCheck("ADV-08", count > 0, count, "requires a canonical tool manifest with a structurally valid Ed25519 signature")
+	return coverageCheck("ADV-08", count > 0, count, "requires a canonical tool manifest signed by the external campaign trust root")
 }
 
 func panicBoundaryCoverage(evidenceDir string) CoverageCheck {
@@ -208,7 +215,7 @@ func panicBoundaryCoverage(evidenceDir string) CoverageCheck {
 	return coverageCheck("ADV-09", true, count, "requires every present panic boundary record to be readable")
 }
 
-func highFinalityApprovalCoverage(receipts []map[string]interface{}) CoverageCheck {
+func highFinalityApprovalCoverage(receipts []map[string]interface{}, opts VerificationOptions) CoverageCheck {
 	count := 0
 	for _, receipt := range receipts {
 		action, _ := receipt["action_type"].(string)
@@ -217,11 +224,11 @@ func highFinalityApprovalCoverage(receipts []map[string]interface{}) CoverageChe
 			continue
 		}
 		decisionID, _ := receipt["decision_id"].(string)
-		if decisionID != "" && hasApprovalReceipt(receipts, decisionID) {
+		if decisionID != "" && hasBoundAuthorization(receipts, receipt, "approval_action", opts) {
 			count++
 		}
 	}
-	return coverageCheck("ADV-10", count > 0, count, "requires a high-finality action with a matching approval_action")
+	return coverageCheck("ADV-10", count > 0, count, "requires a high-finality action with a preceding, ancestor-linked, envelope-bound, trusted approval_action")
 }
 
 func hasPolicyReceipt(receipts []map[string]interface{}, decisionID string) bool {
@@ -248,11 +255,4 @@ func coverageCheck(suiteID string, covered bool, count int, requirement string) 
 		reason = "missing: " + requirement
 	}
 	return CoverageCheck{SuiteID: suiteID, Covered: covered, EvidenceCount: count, Reason: reason}
-}
-
-func boolCount(value bool) int {
-	if value {
-		return 1
-	}
-	return 0
 }

@@ -133,7 +133,9 @@ def needs_annotation(path: pathlib.Path) -> bool:
         return False
     # Canonical reference payloads are hash-pinned by their pack index. Keep
     # those bytes immutable; require a local manifest to carry the posture note.
-    if path.name == "vectors.json" or path.name.endswith(".c14n.json"):
+    if "reference_packs" in path.parts and (
+        path.name == "vectors.json" or path.name.endswith(".c14n.json")
+    ):
         manifest = path.with_name("SOURCE-MANIFEST.json")
         if manifest.is_file():
             try:

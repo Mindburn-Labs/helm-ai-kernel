@@ -15,7 +15,7 @@ import (
 )
 
 func TestEvaluateCoverageRejectsMissingPositiveControls(t *testing.T) {
-	result := EvaluateCoverage(t.TempDir())
+	result := EvaluateCoverage(t.TempDir(), VerificationOptions{})
 	if result.Pass || result.CoveredSuites != 0 || result.MissingSuites != 10 || len(result.Checks) != 10 {
 		t.Fatalf("empty coverage result=%+v, want 10 missing suites", result)
 	}

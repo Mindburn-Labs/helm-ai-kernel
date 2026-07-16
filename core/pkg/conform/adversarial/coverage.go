@@ -31,8 +31,8 @@ type CoverageCheck struct {
 // EvaluateCoverage checks for positive controls before the adversarial
 // detectors run. The canonical EvidencePack verifier is responsible for
 // proving that these files are indexed, hashed, and sealed.
-func EvaluateCoverage(evidenceDir string) CoverageResult {
-	return EvaluateCoverageWithOptions(evidenceDir, VerificationOptions{})
+func EvaluateCoverage(evidenceDir string, opts VerificationOptions) CoverageResult {
+	return EvaluateCoverageWithOptions(evidenceDir, opts)
 }
 
 // EvaluateCoverageWithOptions proves positive controls using externally rooted
@@ -229,24 +229,6 @@ func highFinalityApprovalCoverage(receipts []map[string]interface{}, opts Verifi
 		}
 	}
 	return coverageCheck("ADV-10", count > 0, count, "requires a high-finality action with a preceding, ancestor-linked, envelope-bound, trusted approval_action")
-}
-
-func hasPolicyReceipt(receipts []map[string]interface{}, decisionID string) bool {
-	for _, receipt := range receipts {
-		if receipt["action_type"] == "policy_decision" && receipt["decision_id"] == decisionID {
-			return true
-		}
-	}
-	return false
-}
-
-func hasApprovalReceipt(receipts []map[string]interface{}, decisionID string) bool {
-	for _, receipt := range receipts {
-		if receipt["action_type"] == "approval_action" && receipt["decision_id"] == decisionID {
-			return true
-		}
-	}
-	return false
 }
 
 func coverageCheck(suiteID string, covered bool, count int, requirement string) CoverageCheck {

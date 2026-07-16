@@ -12,7 +12,7 @@ import (
 func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 	dir := t.TempDir()
 
-	result := RunAll(dir)
+	result := RunAll(dir, VerificationOptions{})
 	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 || len(result.Suites) != 10 {
 		t.Fatalf("empty evidence result = %+v, want all suites rejected for missing positive controls", result)
 	}
@@ -100,7 +100,7 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 		"last_good_seq": 4,
 	})
 
-	result := RunAll(dir)
+	result := RunAll(dir, VerificationOptions{})
 	if result.Pass || result.FailedSuites != 10 || result.PassedSuites != 0 {
 		t.Fatalf("bad evidence result = %+v, want all suites failing", result)
 	}
@@ -255,12 +255,59 @@ func TestCryptographicSuitesRejectForgeryAndPostHocAuthorization(t *testing.T) {
 		if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
 			t.Fatal(err)
 		}
-		effect := map[string]any{"receipt_id": "effect", "receipt_hash": "effect", "seq": 1, "action_type": "effect_attempt", "decision_id": "decision-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
-		policy := map[string]any{"receipt_id": "policy", "receipt_hash": "policy", "seq": 2, "action_type": "policy_decision", "status": "APPLIED", "decision_id": "decision-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"effect"}}
+		effect := map[string]any{"receipt_id": "effect", "receipt_hash": "effect", "seq": 1, "action_type": "effect_attempt", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
+		policy := map[string]any{"receipt_id": "policy", "receipt_hash": "policy", "seq": 2, "action_type": "policy_decision", "status": "APPLIED", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"effect"}}
 		writeJSON(t, filepath.Join(receiptsDir, "001.json"), effect)
 		writeJSON(t, filepath.Join(receiptsDir, "002.json"), signCampaignDocument(t, policy, "campaign_signatures", privateKey))
 		if result := adv02PolicyBypass(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {
 			t.Fatalf("post-hoc policy passed: %+v", result)
+		}
+	})
+
+	t.Run("cross-tenant authorization", func(t *testing.T) {
+		dir := t.TempDir()
+		privateKey, publicKeyHex := campaignTestKey()
+		_ = writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "02_PROOFGRAPH", "receipts", "001.json")
+		var policy map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &policy) != nil {
+			t.Fatalf("read policy receipt: %v", err)
+		}
+		policy["tenant_id"] = "tenant-b"
+		policy = signCampaignDocument(t, policy, "campaign_signatures", privateKey)
+		writeJSON(t, path, policy)
+		if result := adv02PolicyBypass(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {
+			t.Fatalf("cross-tenant policy passed: %+v", result)
+		}
+	})
+}
+
+func TestMalformedTapeAndMissingTenantFailClosed(t *testing.T) {
+	t.Run("malformed tape beside valid tape", func(t *testing.T) {
+		dir := t.TempDir()
+		tapesDir := filepath.Join(dir, "08_TAPES")
+		if err := os.MkdirAll(tapesDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		writeJSON(t, filepath.Join(tapesDir, "entry_001.json"), map[string]any{"value_hash": "sha256:value", "data_class": "internal"})
+		if err := os.WriteFile(filepath.Join(tapesDir, "entry_002.json"), []byte("{"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if result := adv06TapeReplayTamper().Run(dir); result.Pass {
+			t.Fatalf("malformed tape passed beside valid tape: %+v", result)
+		}
+	})
+
+	t.Run("missing tenant", func(t *testing.T) {
+		dir := t.TempDir()
+		receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+		if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{"seq": 1, "action_type": "noop"})
+		if result := adv07TenantCrossleak().Run(dir); result.Pass {
+			t.Fatalf("receipt without tenant passed: %+v", result)
 		}
 	})
 }

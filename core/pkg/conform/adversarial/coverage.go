@@ -104,7 +104,7 @@ func proofGraphParentCoverage(receipts []map[string]interface{}) CoverageCheck {
 			parent, valid := rawParent.(string)
 			parent = strings.TrimSpace(parent)
 			parentTarget, exists := referenceIndex[parent]
-			if valid && parent != "" && parent != "genesis" && child != "" && exists && parentTarget != child {
+			if valid && parent != "" && parent != "genesis" && child != "" && exists && parentTarget != "" && parentTarget != child {
 				count++
 			}
 		}
@@ -195,7 +195,7 @@ func toolManifestCoverage(evidenceDir string, opts VerificationOptions) Coverage
 		if err != nil || json.Unmarshal(data, &manifest) != nil {
 			continue
 		}
-		if verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, opts.CampaignPublicKeyHex) {
+		if campaignBindingMatches(manifest, opts) && verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, opts.CampaignPublicKeyHex) {
 			count++
 		}
 	}

@@ -25,7 +25,7 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	dir := t.TempDir()
 	publicKeyHex := writePassingCoverageArtifacts(t, dir)
 
-	result := EvaluateCoverageWithOptions(dir, VerificationOptions{CampaignPublicKeyHex: publicKeyHex})
+	result := EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
 	if !result.Pass || result.CoveredSuites != 10 || result.MissingSuites != 0 || len(result.Checks) != 10 {
 		t.Fatalf("complete coverage result=%+v, want all suites covered", result)
 	}
@@ -38,7 +38,7 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "08_TAPES", "entry_001.json")); err != nil {
 		t.Fatal(err)
 	}
-	result = EvaluateCoverageWithOptions(dir, VerificationOptions{CampaignPublicKeyHex: publicKeyHex})
+	result = EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
 	if result.Pass || result.MissingSuites != 1 || result.Checks[5].SuiteID != "ADV-06" || result.Checks[5].Covered {
 		t.Fatalf("missing tape coverage result=%+v, want only ADV-06 missing", result)
 	}
@@ -59,9 +59,9 @@ func TestCoverageRejectsLegacyToolDirectoryAndPlaceholderSignature(t *testing.T)
 		t.Fatalf("legacy tool directory unexpectedly covered ADV-08: %+v", check)
 	}
 	privateKey, publicKeyHex := campaignTestKey()
-	validManifest := signCampaignDocument(t, map[string]any{"name": "canonical"}, "signatures", campaignToolManifestSignatureDomain, privateKey)
+	validManifest := signCampaignDocument(t, map[string]any{"name": "canonical", "campaign_id": testCampaignID, "run_id": testCampaignRunID}, "signatures", campaignToolManifestSignatureDomain, privateKey)
 	writeJSON(t, filepath.Join(canonicalDir, "canonical.json"), validManifest)
-	if result := adv08ToolManifestForge(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {
+	if result := adv08ToolManifestForge(campaignVerificationOptions(publicKeyHex)).Run(dir); result.Pass {
 		t.Fatalf("legacy manifest was ignored beside a valid canonical manifest: %+v", result)
 	}
 	writeJSON(t, filepath.Join(canonicalDir, "canonical.json"), map[string]any{"signatures": []string{"placeholder"}})
@@ -106,6 +106,10 @@ func writePassingCoverageArtifacts(t *testing.T, dir string) string {
 		{"receipt_id": "receipt-4", "receipt_hash": "receipt-4", "seq": 4, "action_type": "approval_action", "status": "APPROVED", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"receipt-3"}},
 		{"receipt_id": "receipt-5", "receipt_hash": "receipt-5", "seq": 5, "action_type": "effect_attempt", "decision_id": "decision-1", "effect_class": "E4", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"receipt-4"}},
 	}
+	for _, receipt := range receipts {
+		receipt["campaign_id"] = testCampaignID
+		receipt["run_id"] = testCampaignRunID
+	}
 	receipts[0] = signCampaignDocument(t, receipts[0], "campaign_signatures", campaignReceiptSignatureDomain, privateKey)
 	receipts[3] = signCampaignDocument(t, receipts[3], "campaign_signatures", campaignReceiptSignatureDomain, privateKey)
 	for i, receipt := range receipts {
@@ -114,7 +118,7 @@ func writePassingCoverageArtifacts(t *testing.T, dir string) string {
 	value := []byte("campaign-tape-value")
 	valueHash := sha256.Sum256(value)
 	writeJSON(t, filepath.Join(dir, "08_TAPES", "entry_001.json"), map[string]any{"value": value, "value_hash": hex.EncodeToString(valueHash[:]), "data_class": "internal"})
-	toolManifest := signCampaignDocument(t, map[string]any{"name": "covered-tool"}, "signatures", campaignToolManifestSignatureDomain, privateKey)
+	toolManifest := signCampaignDocument(t, map[string]any{"name": "covered-tool", "campaign_id": testCampaignID, "run_id": testCampaignRunID}, "signatures", campaignToolManifestSignatureDomain, privateKey)
 	writeJSON(t, filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json"), toolManifest)
 	writeJSON(t, filepath.Join(dir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 5})
 	return publicKeyHex
@@ -124,6 +128,19 @@ func campaignTestKey() (ed25519.PrivateKey, string) {
 	seed := sha256.Sum256([]byte("helm-adversarial-campaign-test-key-v1"))
 	privateKey := ed25519.NewKeyFromSeed(seed[:])
 	return privateKey, hex.EncodeToString(privateKey.Public().(ed25519.PublicKey))
+}
+
+const (
+	testCampaignID    = "campaign:test-clean-room"
+	testCampaignRunID = "run:test-001"
+)
+
+func campaignVerificationOptions(publicKeyHex string) VerificationOptions {
+	return VerificationOptions{
+		CampaignPublicKeyHex: publicKeyHex,
+		CampaignID:           testCampaignID,
+		RunID:                testCampaignRunID,
+	}
 }
 
 func signCampaignDocument(t *testing.T, document map[string]any, field, domain string, privateKey ed25519.PrivateKey) map[string]any {

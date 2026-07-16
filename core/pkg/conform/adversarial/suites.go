@@ -53,6 +53,8 @@ type Suite struct {
 // EvidencePack. A signature embedded in the pack can never establish trust.
 type VerificationOptions struct {
 	CampaignPublicKeyHex string
+	CampaignID           string
+	RunID                string
 }
 
 const (
@@ -209,7 +211,7 @@ func adv03DAGFork() *Suite {
 							continue
 						}
 						parentTarget, exists := referenceIndex[ps]
-						if !exists || child == "" || parentTarget == child {
+						if !exists || parentTarget == "" || child == "" || parentTarget == child {
 							invalidParents++
 							t.Evidence += fmt.Sprintf("dangling or self parent %s in %s; ", ps, filepath.Base(files[index]))
 							continue
@@ -463,7 +465,7 @@ func adv08ToolManifestForge(opts VerificationOptions) *Suite {
 			for _, f := range files {
 				data, err := os.ReadFile(f)
 				var manifest map[string]interface{}
-				if err != nil || json.Unmarshal(data, &manifest) != nil || !verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, opts.CampaignPublicKeyHex) {
+				if err != nil || json.Unmarshal(data, &manifest) != nil || !campaignBindingMatches(manifest, opts) || !verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, opts.CampaignPublicKeyHex) {
 					unsigned++
 					t.Evidence += fmt.Sprintf("invalid or unsigned: %s; ", filepath.Base(f))
 				}
@@ -532,14 +534,22 @@ func adv09ReceiptEmissionPanicHijack() *Suite {
 			receiptsDir := filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts")
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
 			postPanic := 0
+			invalidSequence := 0
 			for _, f := range files {
 				receipt := loadReceipt(f)
-				seq, _ := receipt["seq"].(float64)
+				seq, ok := receiptSequence(receipt)
+				if !ok {
+					invalidSequence++
+					continue
+				}
 				if seq > lastGoodSeq {
 					postPanic++
 				}
 			}
-			if postPanic > 0 {
+			if invalidSequence > 0 {
+				t.Pass = false
+				t.Reason = fmt.Sprintf("%d receipts have invalid sequence after panic boundary", invalidSequence)
+			} else if postPanic > 0 {
 				t.Pass = false
 				t.Reason = fmt.Sprintf("%d receipts emitted after panic", postPanic)
 			} else {
@@ -691,14 +701,14 @@ func hasBoundAuthorizationReceipt(files []string, effect map[string]interface{},
 
 func hasBoundAuthorization(receipts []map[string]interface{}, effect map[string]interface{}, actionType string, opts VerificationOptions) bool {
 	effectSeq, ok := receiptSequence(effect)
-	if !ok || !hasNonEmptyString(effect, "decision_id") || !hasNonEmptyString(effect, "tenant_id") || !hasNonEmptyString(effect, "envelope_id") || !hasNonEmptyString(effect, "envelope_hash") {
+	if !ok || !campaignBindingMatches(effect, opts) || !hasNonEmptyString(effect, "decision_id") || !hasNonEmptyString(effect, "tenant_id") || !hasNonEmptyString(effect, "envelope_id") || !hasNonEmptyString(effect, "envelope_hash") {
 		return false
 	}
 	for _, receipt := range receipts {
 		if receipt["action_type"] != actionType || receipt["decision_id"] != effect["decision_id"] || receipt["tenant_id"] != effect["tenant_id"] || receipt["envelope_id"] != effect["envelope_id"] || receipt["envelope_hash"] != effect["envelope_hash"] {
 			continue
 		}
-		if !authorizationReceiptAccepted(receipt, actionType) {
+		if !campaignBindingMatches(receipt, opts) || !authorizationReceiptAccepted(receipt, actionType) {
 			continue
 		}
 		seq, sequenced := receiptSequence(receipt)
@@ -710,6 +720,15 @@ func hasBoundAuthorization(receipts []map[string]interface{}, effect map[string]
 		}
 	}
 	return false
+}
+
+func campaignBindingMatches(document map[string]interface{}, opts VerificationOptions) bool {
+	campaignID := strings.TrimSpace(opts.CampaignID)
+	runID := strings.TrimSpace(opts.RunID)
+	if campaignID == "" || runID == "" {
+		return false
+	}
+	return document["campaign_id"] == campaignID && document["run_id"] == runID
 }
 
 func authorizationReceiptAccepted(receipt map[string]interface{}, actionType string) bool {
@@ -755,20 +774,22 @@ func receiptIsAncestor(receipts []map[string]interface{}, descendant, ancestor m
 	if ancestorID == "" {
 		return false
 	}
-	index := make(map[string]map[string]interface{}, len(receipts)*2)
+	referenceIndex := receiptReferenceIndex(receipts)
+	receiptsByIdentity := make(map[string]map[string]interface{}, len(receipts))
 	for _, receipt := range receipts {
-		if id, _ := receipt["receipt_id"].(string); id != "" {
-			index[id] = receipt
-		}
-		if hash, _ := receipt["receipt_hash"].(string); hash != "" {
-			index[hash] = receipt
+		if identity := receiptIdentity(receipt); identity != "" {
+			receiptsByIdentity[identity] = receipt
 		}
 	}
 	queue := receiptParentRefs(descendant)
 	seen := map[string]bool{}
 	for len(queue) > 0 {
-		parent := queue[0]
+		parentReference := queue[0]
 		queue = queue[1:]
+		parent, exists := referenceIndex[parentReference]
+		if !exists || parent == "" {
+			continue
+		}
 		if parent == ancestorID {
 			return true
 		}
@@ -776,7 +797,7 @@ func receiptIsAncestor(receipts []map[string]interface{}, descendant, ancestor m
 			continue
 		}
 		seen[parent] = true
-		if receipt := index[parent]; receipt != nil {
+		if receipt := receiptsByIdentity[parent]; receipt != nil {
 			queue = append(queue, receiptParentRefs(receipt)...)
 		}
 	}
@@ -793,14 +814,38 @@ func receiptIdentity(receipt map[string]interface{}) string {
 
 func receiptReferenceIndex(receipts []map[string]interface{}) map[string]string {
 	index := make(map[string]string, len(receipts)*2)
-	for _, receipt := range receipts {
+	owners := make(map[string]int, len(receipts)*2)
+	targetOwners := make(map[string]int, len(receipts))
+	collidedTargets := make(map[string]bool)
+	for receiptIndex, receipt := range receipts {
+		target := receiptIdentity(receipt)
+		if target == "" {
+			continue
+		}
+		if owner, exists := targetOwners[target]; exists && owner != receiptIndex {
+			collidedTargets[target] = true
+		} else {
+			targetOwners[target] = receiptIndex
+		}
+	}
+	for receiptIndex, receipt := range receipts {
 		target := receiptIdentity(receipt)
 		if target == "" {
 			continue
 		}
 		for _, key := range []string{"receipt_id", "receipt_hash"} {
 			if value, _ := receipt[key].(string); strings.TrimSpace(value) != "" {
-				index[strings.TrimSpace(value)] = target
+				reference := strings.TrimSpace(value)
+				if collidedTargets[target] {
+					index[reference] = ""
+					continue
+				}
+				if owner, exists := owners[reference]; exists && owner != receiptIndex {
+					index[reference] = ""
+					continue
+				}
+				owners[reference] = receiptIndex
+				index[reference] = target
 			}
 		}
 	}

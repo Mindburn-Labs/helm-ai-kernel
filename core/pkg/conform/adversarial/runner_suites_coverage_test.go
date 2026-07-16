@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-func TestRunAllEmptyEvidencePassesAndWritesReport(t *testing.T) {
+func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 	dir := t.TempDir()
 
 	result := RunAll(dir)
-	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
-		t.Fatalf("empty evidence result = %+v, want all suites passing", result)
+	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 || len(result.Suites) != 10 {
+		t.Fatalf("empty evidence result = %+v, want all suites rejected for missing positive controls", result)
 	}
 	if result.EvidenceDir != dir {
 		t.Fatalf("evidence dir = %q, want %q", result.EvidenceDir, dir)
@@ -30,8 +30,8 @@ func TestRunAllEmptyEvidencePassesAndWritesReport(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("decode report: %v", err)
 	}
-	if !decoded.Pass || decoded.PassedSuites != 10 {
-		t.Fatalf("decoded report = %+v, want passing aggregate", decoded)
+	if decoded.Pass || decoded.FailedSuites != 10 {
+		t.Fatalf("decoded report = %+v, want fail-closed aggregate", decoded)
 	}
 
 	filePath := filepath.Join(t.TempDir(), "not-a-directory")
@@ -43,11 +43,21 @@ func TestRunAllEmptyEvidencePassesAndWritesReport(t *testing.T) {
 	}
 }
 
+func TestRunAllAcceptsCompletePositiveControls(t *testing.T) {
+	dir := t.TempDir()
+	writePassingCoverageArtifacts(t, dir)
+
+	result := RunAll(dir)
+	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
+		t.Fatalf("complete evidence result = %+v, want all suites passing", result)
+	}
+}
+
 func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	dir := t.TempDir()
 	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
 	tapesDir := filepath.Join(dir, "08_TAPES")
-	toolsDir := filepath.Join(dir, "10_TOOLS")
+	toolsDir := filepath.Join(dir, "99_EXT", "adversarial", "tools")
 	for _, path := range []string{receiptsDir, tapesDir, toolsDir} {
 		if err := os.MkdirAll(path, 0o750); err != nil {
 			t.Fatalf("mkdir %s: %v", path, err)
@@ -171,6 +181,25 @@ func TestIndividualSuitePassingBranches(t *testing.T) {
 	}
 	if result := adv09ReceiptEmissionPanicHijack().Run(dir); result.Pass || result.TestResults[0].Reason != "panic record unreadable" {
 		t.Fatalf("ADV-09 unreadable panic result = %+v, want fail", result)
+	}
+}
+
+func TestPanicEvidenceCannotBeShadowedByCanonicalRecord(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(filepath.Join(dir, "06_LOGS"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(dir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 99})
+	writeJSON(t, filepath.Join(dir, "panic.json"), map[string]any{"last_good_seq": 1})
+	writeJSON(t, filepath.Join(receiptsDir, "002.json"), map[string]any{"seq": 2})
+
+	result := adv09ReceiptEmissionPanicHijack().Run(dir)
+	if result.Pass || !strings.Contains(result.TestResults[0].Reason, "receipts emitted after panic") {
+		t.Fatalf("shadowed panic result = %+v, want restrictive boundary failure", result)
 	}
 }
 

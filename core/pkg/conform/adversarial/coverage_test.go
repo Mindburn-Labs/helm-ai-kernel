@@ -1,5 +1,8 @@
 package adversarial
 
+// quantum_posture: fixtures exercise classical Ed25519 signature shape and do
+// not represent cryptographic verification or post-quantum assurance.
+
 import (
 	"os"
 	"path/filepath"
@@ -36,6 +39,26 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	}
 }
 
+func TestCoverageRejectsLegacyToolDirectoryAndPlaceholderSignature(t *testing.T) {
+	dir := t.TempDir()
+	legacyDir := filepath.Join(dir, "10_TOOLS")
+	canonicalDir := filepath.Join(dir, "99_EXT", "adversarial", "tools")
+	if err := os.MkdirAll(legacyDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(canonicalDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(legacyDir, "legacy.json"), map[string]any{"signatures": []string{"placeholder"}})
+	if check := toolManifestCoverage(dir); check.Covered {
+		t.Fatalf("legacy tool directory unexpectedly covered ADV-08: %+v", check)
+	}
+	writeJSON(t, filepath.Join(canonicalDir, "canonical.json"), map[string]any{"signatures": []string{"placeholder"}})
+	if check := toolManifestCoverage(dir); check.Covered {
+		t.Fatalf("placeholder signature unexpectedly covered ADV-08: %+v", check)
+	}
+}
+
 func writePassingCoverageArtifacts(t *testing.T, dir string) {
 	t.Helper()
 	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
@@ -55,6 +78,14 @@ func writePassingCoverageArtifacts(t *testing.T, dir string) {
 		writeJSON(t, filepath.Join(receiptsDir, []string{"001.json", "002.json", "003.json", "004.json", "005.json"}[i]), receipt)
 	}
 	writeJSON(t, filepath.Join(dir, "08_TAPES", "entry_001.json"), map[string]any{"value_hash": "sha256:value", "data_class": "internal"})
-	writeJSON(t, filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json"), map[string]any{"name": "covered-tool", "signatures": []string{"sha256:signature"}})
+	writeJSON(t, filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json"), map[string]any{
+		"name": "covered-tool",
+		"signatures": []map[string]any{{
+			"algorithm": "ed25519",
+			"key_id":    "sha256:campaign-key",
+			"signature": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" +
+				"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		}},
+	})
 	writeJSON(t, filepath.Join(dir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 5})
 }

@@ -1,5 +1,7 @@
 // Package adversarial implements the 10 mandatory adversarial test suites
 // per §8.1 of the HELM Conformance Standard.
+// quantum_posture: this slice validates classical Ed25519 signature shape
+// only; cryptographic verification and post-quantum assurance are not claimed.
 //
 // Each suite verifies that the system correctly handles a specific
 // adversarial scenario by checking EvidencePack artifacts for expected
@@ -349,13 +351,11 @@ func adv08ToolManifestForge() *Suite {
 			t := TestResult{TestID: "ADV-08-T1", Name: "Tool manifests have signatures field"}
 			unsigned := 0
 			for _, f := range files {
-				data, _ := os.ReadFile(f)
+				data, err := os.ReadFile(f)
 				var manifest map[string]interface{}
-				if json.Unmarshal(data, &manifest) == nil {
-					if manifest["signatures"] == nil {
-						unsigned++
-						t.Evidence += fmt.Sprintf("unsigned: %s; ", filepath.Base(f))
-					}
+				if err != nil || json.Unmarshal(data, &manifest) != nil || !hasStructuredSignatures(manifest) {
+					unsigned++
+					t.Evidence += fmt.Sprintf("invalid or unsigned: %s; ", filepath.Base(f))
 				}
 			}
 			if unsigned > 0 {
@@ -383,8 +383,8 @@ func adv09ReceiptEmissionPanicHijack() *Suite {
 
 			t := TestResult{TestID: "ADV-09-T1", Name: "No receipts after panic record"}
 
-			panicFile := panicEvidencePath(evidenceDir)
-			if _, err := os.Stat(panicFile); err != nil {
+			panicFiles := panicEvidenceFiles(evidenceDir)
+			if len(panicFiles) == 0 {
 				t.Pass = true
 				t.Reason = "no panic record (normal operation)"
 				result.TestResults = append(result.TestResults, t)
@@ -393,17 +393,31 @@ func adv09ReceiptEmissionPanicHijack() *Suite {
 			}
 
 			// If panic exists, check that no receipts were emitted after it
-			panicData, _ := os.ReadFile(panicFile)
-			var panicRec map[string]interface{}
-			if json.Unmarshal(panicData, &panicRec) != nil {
-				t.Pass = false
-				t.Reason = "panic record unreadable"
-				result.TestResults = append(result.TestResults, t)
-				result.Pass = false
-				return result
+			var lastGoodSeq float64
+			haveBoundary := false
+			for _, panicFile := range panicFiles {
+				panicData, err := os.ReadFile(panicFile)
+				var panicRec map[string]interface{}
+				if err != nil || json.Unmarshal(panicData, &panicRec) != nil {
+					t.Pass = false
+					t.Reason = "panic record unreadable"
+					result.TestResults = append(result.TestResults, t)
+					result.Pass = false
+					return result
+				}
+				boundary, ok := panicRec["last_good_seq"].(float64)
+				if !ok {
+					t.Pass = false
+					t.Reason = "panic record missing last_good_seq"
+					result.TestResults = append(result.TestResults, t)
+					result.Pass = false
+					return result
+				}
+				if !haveBoundary || boundary < lastGoodSeq {
+					lastGoodSeq = boundary
+					haveBoundary = true
+				}
 			}
-
-			lastGoodSeq, _ := panicRec["last_good_seq"].(float64)
 
 			receiptsDir := filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts")
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
@@ -475,20 +489,47 @@ func adv10HighFinalityUnsigned() *Suite {
 // --- Helpers ---
 
 func toolManifestFiles(evidenceDir string) []string {
-	// Canonical packs carry adversarial-only tool fixtures as a declared
-	// extension. The legacy 10_TOOLS location remains readable for historical
-	// detector fixtures but is rejected by strict EvidencePack verification.
+	// Strict EvidencePack verification recognizes adversarial-only tool
+	// fixtures exclusively through this declared extension.
 	canonical, _ := filepath.Glob(filepath.Join(evidenceDir, "99_EXT", "adversarial", "tools", "*.json"))
-	legacy, _ := filepath.Glob(filepath.Join(evidenceDir, "10_TOOLS", "*.json"))
-	return append(canonical, legacy...)
+	return canonical
 }
 
-func panicEvidencePath(evidenceDir string) string {
+func panicEvidenceFiles(evidenceDir string) []string {
 	canonical := filepath.Join(evidenceDir, "06_LOGS", "receipt_emission_panic.json")
+	legacy := filepath.Join(evidenceDir, "panic.json")
+	files := make([]string, 0, 2)
 	if _, err := os.Stat(canonical); err == nil {
-		return canonical
+		files = append(files, canonical)
 	}
-	return filepath.Join(evidenceDir, "panic.json")
+	if _, err := os.Stat(legacy); err == nil {
+		files = append(files, legacy)
+	}
+	return files
+}
+
+func hasStructuredSignatures(manifest map[string]interface{}) bool {
+	signatures, ok := manifest["signatures"].([]interface{})
+	if !ok || len(signatures) == 0 {
+		return false
+	}
+	for _, raw := range signatures {
+		signature, ok := raw.(map[string]interface{})
+		if !ok || signature["algorithm"] != "ed25519" {
+			return false
+		}
+		keyID, _ := signature["key_id"].(string)
+		value, _ := signature["signature"].(string)
+		if strings.TrimSpace(keyID) == "" || len(value) != 128 {
+			return false
+		}
+		for _, char := range value {
+			if !strings.ContainsRune("0123456789abcdefABCDEF", char) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func loadReceipt(path string) map[string]interface{} {

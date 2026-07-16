@@ -177,9 +177,10 @@ func TestIndividualSuitePassingBranches(t *testing.T) {
 
 func TestReceiptSequenceRejectsDuplicateDecreasingAndMissingValues(t *testing.T) {
 	for name, seqs := range map[string][]any{
-		"duplicate":  {1, 1},
-		"decreasing": {2, 1},
-		"missing":    {1, nil},
+		"duplicate":       {1, 1},
+		"decreasing":      {2, 1},
+		"missing":         {1, nil},
+		"missing genesis": {2, 3},
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -263,6 +264,37 @@ func TestCryptographicSuitesRejectTamperAndPostHocAuthorization(t *testing.T) {
 			t.Fatalf("unsigned approval passed: %+v", result)
 		}
 	})
+
+	for _, mutation := range []struct {
+		name string
+		file string
+		run  func(string, VerificationOptions) *SuiteResult
+	}{
+		{name: "denied policy", file: "001.json", run: func(dir string, opts VerificationOptions) *SuiteResult {
+			return adv02PolicyBypass(opts).Run(dir)
+		}},
+		{name: "denied approval", file: "004.json", run: func(dir string, opts VerificationOptions) *SuiteResult {
+			return adv10HighFinalityUnsigned(opts).Run(dir)
+		}},
+	} {
+		t.Run(mutation.name, func(t *testing.T) {
+			dir := t.TempDir()
+			privateKey, publicKeyHex := campaignTestKey()
+			_ = writePassingCoverageArtifacts(t, dir)
+			path := filepath.Join(dir, "02_PROOFGRAPH", "receipts", mutation.file)
+			var receipt map[string]any
+			data, err := os.ReadFile(path)
+			if err != nil || json.Unmarshal(data, &receipt) != nil {
+				t.Fatalf("read authorization receipt: %v", err)
+			}
+			receipt["status"] = "DENIED"
+			receipt = signCampaignDocument(t, receipt, "campaign_signatures", privateKey)
+			writeJSON(t, path, receipt)
+			if result := mutation.run(dir, VerificationOptions{CampaignPublicKeyHex: publicKeyHex}); result.Pass {
+				t.Fatalf("signed denied authorization passed: %+v", result)
+			}
+		})
+	}
 
 	t.Run("post-hoc policy", func(t *testing.T) {
 		dir := t.TempDir()

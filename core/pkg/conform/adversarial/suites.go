@@ -106,6 +106,9 @@ func adv01ReceiptGapInjection() *Suite {
 			t.Pass = len(seqs) == len(files)
 			if !t.Pass {
 				t.Evidence = "one or more receipts have a missing or invalid seq"
+			} else if len(seqs) > 0 && seqs[0] != 1 {
+				t.Pass = false
+				t.Evidence = fmt.Sprintf("receipt sequence starts at %d instead of genesis sequence 1", seqs[0])
 			}
 			for i := 1; t.Pass && i < len(seqs); i++ {
 				if seqs[i] <= seqs[i-1] || seqs[i]-seqs[i-1] != 1 {
@@ -646,6 +649,9 @@ func hasBoundAuthorization(receipts []map[string]interface{}, effect map[string]
 		if receipt["action_type"] != actionType || receipt["decision_id"] != decisionID || receipt["envelope_id"] != effect["envelope_id"] || receipt["envelope_hash"] != effect["envelope_hash"] {
 			continue
 		}
+		if !authorizationReceiptAccepted(receipt, actionType) {
+			continue
+		}
 		seq, sequenced := receiptSequence(receipt)
 		if !sequenced || seq >= effectSeq || !receiptIsAncestor(receipts, effect, receipt) {
 			continue
@@ -655,6 +661,35 @@ func hasBoundAuthorization(receipts []map[string]interface{}, effect map[string]
 		}
 	}
 	return false
+}
+
+func authorizationReceiptAccepted(receipt map[string]interface{}, actionType string) bool {
+	status, ok := receipt["status"].(string)
+	if !ok {
+		return false
+	}
+	status = strings.ToUpper(strings.TrimSpace(status))
+	accepted := false
+	switch actionType {
+	case "policy_decision":
+		accepted = status == "APPLIED" || status == "ALLOW" || status == "ALLOWED"
+	case "approval_action":
+		accepted = status == "APPLIED" || status == "APPROVED" || status == "ALLOW" || status == "ALLOWED"
+	}
+	if !accepted {
+		return false
+	}
+	if verdict, exists := receipt["verdict"]; exists {
+		value, valid := verdict.(string)
+		if !valid {
+			return false
+		}
+		value = strings.ToUpper(strings.TrimSpace(value))
+		if value != "ALLOW" && value != "ALLOWED" && value != "APPROVE" && value != "APPROVED" {
+			return false
+		}
+	}
+	return true
 }
 
 func receiptIsAncestor(receipts []map[string]interface{}, descendant, ancestor map[string]interface{}) bool {

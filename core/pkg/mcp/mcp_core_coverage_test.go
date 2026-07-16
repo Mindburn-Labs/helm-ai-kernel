@@ -54,9 +54,11 @@ func TestCoverageJWKSValidator(t *testing.T) {
 	}
 	validator := NewJWKSValidator(config)
 	token := signMCPTestJWT(t, privateKey, "kid-1", jwksClaims{
-		Scope:     "mcp:tools helm:verify extra",
-		Resource:  "https://resource.example/mcp",
-		Resources: []string{"https://other.example/mcp"},
+		Scope:       "mcp:tools helm:verify extra",
+		Resource:    "https://resource.example/mcp",
+		Resources:   []string{"https://other.example/mcp"},
+		TenantID:    "tenant-a",
+		WorkspaceID: "workspace-a",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "issuer",
 			Audience:  jwt.ClaimStrings{"audience"},
@@ -71,7 +73,8 @@ func TestCoverageJWKSValidator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateAuthorization: %v", err)
 	}
-	if claims.RegisteredClaims.Subject != "agent-1" || !containsString(claims.Resources, "https://resource.example/mcp") || !containsString(claims.Scopes, "helm:verify") {
+	if claims.RegisteredClaims.Subject != "agent-1" || claims.TenantID != "tenant-a" || claims.WorkspaceID != "workspace-a" ||
+		!containsString(claims.Resources, "https://resource.example/mcp") || !containsString(claims.Scopes, "helm:verify") {
 		t.Fatalf("unexpected claims: %+v", claims)
 	}
 	registered, err := validator.Validate(token)

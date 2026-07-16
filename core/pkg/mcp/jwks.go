@@ -58,12 +58,16 @@ type OAuthTokenClaims struct {
 	RegisteredClaims jwt.RegisteredClaims
 	Scopes           []string
 	Resources        []string
+	TenantID         string
+	WorkspaceID      string
 }
 
 type jwksClaims struct {
-	Scope     string   `json:"scope"`
-	Resource  string   `json:"resource"`
-	Resources []string `json:"resources"`
+	Scope       string   `json:"scope"`
+	Resource    string   `json:"resource"`
+	Resources   []string `json:"resources"`
+	TenantID    string   `json:"tenant_id"`
+	WorkspaceID string   `json:"workspace_id"`
 	jwt.RegisteredClaims
 }
 
@@ -182,6 +186,8 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		RegisteredClaims: claims.RegisteredClaims,
 		Scopes:           strings.Fields(claims.Scope),
 		Resources:        resources,
+		TenantID:         strings.TrimSpace(claims.TenantID),
+		WorkspaceID:      strings.TrimSpace(claims.WorkspaceID),
 	}, nil
 }
 

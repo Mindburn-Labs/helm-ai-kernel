@@ -309,47 +309,7 @@ func (s *Service) IssueGrant(ctx context.Context, approvalID string) (Record, er
 }
 
 func (s *Service) ConsumeGrant(ctx context.Context, approvalID, grantID, grantHash, nonce string) (Record, error) {
-	identity, err := s.consumerIdentity(ctx)
-	if err != nil {
-		return Record{}, err
-	}
-	record, err := s.store.get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
-	if err != nil {
-		return Record{}, err
-	}
-	if record.State != StateGrantIssued || record.Grant == nil ||
-		record.Grant.GrantID != grantID || record.Grant.GrantHash != grantHash || record.Grant.Nonce != nonce {
-		return Record{}, ErrTransitionConflict
-	}
-	if record.Grant.Audience != identity.Audience {
-		return Record{}, fmt.Errorf("%w: signed grant workload scope mismatch", ErrConsumerUnavailable)
-	}
-	now := s.now()
-	if err := record.Grant.ValidateAt(now); err != nil {
-		return Record{}, fmt.Errorf("%w: signed grant is inactive: %v", ErrTransitionConflict, err)
-	}
-	grant := record.Grant
-	consumption, err := (contracts.ApprovalGrantConsumption{
-		SchemaVersion: contracts.ApprovalGrantConsumptionSchemaV1, ContractVersion: contracts.ApprovalGrantConsumptionContractV1,
-		ApprovalID: grant.ApprovalID, GrantID: grant.GrantID, GrantHash: grant.GrantHash,
-		TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, Audience: grant.Audience, ConsumedBy: identity.Subject,
-		PackID: grant.PackID, PackVersion: grant.PackVersion, PackManifestHash: grant.PackManifestHash, Action: grant.Action,
-		IntentHash: grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
-		PolicyVersion: grant.PolicyVersion, PolicyEpoch: grant.PolicyEpoch, PolicyHash: grant.PolicyHash,
-		ServerIdentity: grant.ServerIdentity, KernelTrustRootID: grant.KernelTrustRootID, SigningKeyRef: grant.SigningKeyRef,
-		GrantIssuedAt: grant.IssuedAt, GrantExpiresAt: grant.ExpiresAt, ConsumedAt: now,
-	}).Seal()
-	if err != nil {
-		return Record{}, fmt.Errorf("seal approval grant consumption: %w", err)
-	}
-	signature, err := SignApprovalGrantConsumption(consumption, s.signer)
-	if err != nil {
-		return Record{}, err
-	}
-	return s.store.consumeGrant(
-		ctx, identity.TenantID, identity.WorkspaceID, approvalID,
-		grantID, grantHash, nonce, consumption, GrantSignatureEd25519, signature, now,
-	)
+	return consumeGrant(ctx, s.store, s.consumer, s.signer, s.now(), approvalID, grantID, grantHash, nonce)
 }
 
 // RecoverGrantConsumption returns the exact persisted consumption record to
@@ -357,26 +317,7 @@ func (s *Service) ConsumeGrant(ctx context.Context, approvalID, grantID, grantHa
 // second consumption: the record version and consumed_at remain unchanged.
 // Recovery fails after grant expiry so it cannot revive stale dispatch authority.
 func (s *Service) RecoverGrantConsumption(ctx context.Context, approvalID, grantID, grantHash, nonce string) (Record, error) {
-	identity, err := s.consumerIdentity(ctx)
-	if err != nil {
-		return Record{}, err
-	}
-	record, err := s.store.get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
-	if err != nil {
-		return Record{}, err
-	}
-	if record.State != StateConsumed || record.Grant == nil || record.GrantConsumption == nil ||
-		record.Grant.GrantID != grantID || record.Grant.GrantHash != grantHash || record.Grant.Nonce != nonce {
-		return Record{}, ErrTransitionConflict
-	}
-	if record.ConsumedBy != identity.Subject || record.Grant.Audience != identity.Audience ||
-		record.GrantConsumption.ConsumedBy != identity.Subject || record.GrantConsumption.Audience != identity.Audience {
-		return Record{}, fmt.Errorf("%w: persisted consumption workload scope mismatch", ErrConsumerUnavailable)
-	}
-	if err := record.Grant.ValidateAt(s.now()); err != nil {
-		return Record{}, fmt.Errorf("%w: signed grant is inactive: %v", ErrTransitionConflict, err)
-	}
-	return record, nil
+	return recoverGrantConsumption(ctx, s.store, s.consumer, s.now(), approvalID, grantID, grantHash, nonce)
 }
 
 func (s *Service) Deny(ctx context.Context, approvalID string) (Record, error) {
@@ -407,15 +348,6 @@ func (s *Service) controlIdentity(ctx context.Context) (ControlIdentity, error) 
 	identity, err := s.control.LoadControlIdentity(ctx)
 	if err != nil || !validToken(identity.Subject) || !validToken(identity.TenantID) || !validToken(identity.WorkspaceID) {
 		return ControlIdentity{}, fmt.Errorf("%w: verified control subject, tenant, and workspace are required", ErrControlUnavailable)
-	}
-	return identity, nil
-}
-
-func (s *Service) consumerIdentity(ctx context.Context) (ConsumerIdentity, error) {
-	identity, err := s.consumer.LoadConsumerIdentity(ctx)
-	if err != nil || !validToken(identity.Subject) || !validToken(identity.TenantID) ||
-		!validToken(identity.WorkspaceID) || !validToken(identity.Audience) {
-		return ConsumerIdentity{}, fmt.Errorf("%w: verified workload subject, tenant, workspace, and audience are required", ErrConsumerUnavailable)
 	}
 	return identity, nil
 }

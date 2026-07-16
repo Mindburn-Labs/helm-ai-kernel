@@ -22,8 +22,9 @@ surface for the `helm-ai-kernel` project.
 - `make openapi-breaking` / `make proto-breaking` run the contract
   breaking-change gate (HELM-151 GATE 1) against the PR base branch —
   `oasdiff` for the OpenAPI surfaces, `buf breaking` for the policy-schema
-  protos. Both now run in the `pr` profile; a major-version bump or the
-  `contract:breaking-approved` PR label is the explicit override.
+  protos. Both run in the `pr` profile and fail closed when the remote base or
+  differ is unavailable. A source-controlled major-version bump is the only
+  compatibility escape; a PR label cannot override the gate.
 
 ## Active Quality Workflows
 

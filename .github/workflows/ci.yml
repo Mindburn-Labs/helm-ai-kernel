@@ -60,17 +60,16 @@ jobs:
           # GOTOOLCHAIN=local on Go 1.25, so `go install` cannot build it.
           ver=1.23.0
           tmp="$(mktemp -d)"
-          curl -fsSL "https://github.com/oasdiff/oasdiff/releases/download/v${ver}/oasdiff_${ver}_linux_amd64.tar.gz" \
-            | tar -xz -C "$tmp"
+          archive="$tmp/oasdiff_${ver}_linux_amd64.tar.gz"
+          sha256='972b10535c3db4366b9dc3ebc11ca021279af3095267c3cffdca854a3a3c4f89'
+          curl -fsSL -o "$archive" "https://github.com/oasdiff/oasdiff/releases/download/v${ver}/oasdiff_${ver}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$sha256" "$archive" | sha256sum --check --strict -
+          tar -xzf "$archive" -C "$tmp"
           mkdir -p "$HOME/.local/bin"
           install -m 0755 "$tmp/oasdiff" "$HOME/.local/bin/oasdiff"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/oasdiff" --version
       - name: Run Make-first PR quality profile
-        env:
-          # `contract:breaking-approved` label downgrades a contract break to a
-          # visible warning (HELM-151 GATE 1 override).
-          CONTRACT_BREAKING_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'contract:breaking-approved') && '1' || '0' }}
         run: make quality-pr
 
   hygiene:

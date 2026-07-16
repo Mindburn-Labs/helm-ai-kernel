@@ -55,7 +55,7 @@ Expected shape:
 
 ```json
 {
-  "schema_version": "helm.mcp.proof/v3",
+  "schema_version": "helm.mcp.proof/v4",
   "proof_scope": "complete",
   "offline_verified": true,
   "tamper_rejected": true,
@@ -64,6 +64,7 @@ Expected shape:
   "negative_cases_no_dispatch": true,
   "dispatch_count": 1,
   "replay_no_redispatch": true,
+  "pre_dispatch_bypass_blocked": true,
   "duration_gate_pass": true,
   "scenarios": [
     {
@@ -87,6 +88,11 @@ invalid approvals, schema drift, confused-deputy scope, and the other negative
 cases remain at zero dispatch. The command fails unless the complete default
 run—including pack seal, offline verification, and a required tamper-negative
 check—finishes in under 60 seconds.
+
+The complete run also sends forged, decision-mismatched, and unsigned intents
+directly to `SafeExecutor`; all three must fail before the local driver. Those
+pre-dispatch outcomes are sealed as evidence, but do not add new policy reason
+codes.
 
 Use `--scenario <id>` only to inspect an individual vector: its summary says
 `proof_scope: "vector_only"` and `proof_complete: false`. The replay result is

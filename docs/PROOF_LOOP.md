@@ -40,9 +40,13 @@ helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<
 3. Missing and invalid approval paths, along with the remaining threat cases,
    produce `DENY` or `ESCALATE` receipts and never call the driver. Each policy
    receipt binds exported authorization inputs and its actual evaluation.
-4. The command seals an EvidencePack, verifies it offline, mutates a copied
+4. Direct `SafeExecutor` probes pass forged, decision-mismatched, and unsigned
+   intents to the pre-dispatch boundary. Each must fail before the local driver;
+   the sealed pack records the raw executor error without introducing a new
+   policy reason code.
+5. The command seals an EvidencePack, verifies it offline, mutates a copied
    pack, and requires that tampered copy to fail verification.
-5. The command exits non-zero unless the complete proof finishes in under
+6. The command exits non-zero unless the complete proof finishes in under
    60 seconds. `12_REPORTS/60_second_gate.json` records the governed-scenario
    timing inside the sealed pack; `summary.json` records the complete command
    timing.

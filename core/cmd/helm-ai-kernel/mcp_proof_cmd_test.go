@@ -36,10 +36,10 @@ func TestRunMCPProofProducesGovernedEffectEvidencePack(t *testing.T) {
 	if summary.RunID != "mcp_proof_test" {
 		t.Fatalf("run id = %q", summary.RunID)
 	}
-	if summary.SchemaVersion != "helm.mcp.proof/v3" {
+	if summary.SchemaVersion != "helm.mcp.proof/v4" {
 		t.Fatalf("schema version = %q", summary.SchemaVersion)
 	}
-	if summary.ProofScope != "complete" || !summary.CompletePositiveAndNegative || !summary.ProofComplete {
+	if summary.ProofScope != "complete" || !summary.CompletePositiveAndNegative || !summary.PreDispatchBypassBlocked || !summary.ProofComplete {
 		t.Fatalf("complete proof was not marked complete: %#v", summary)
 	}
 	if !summary.OfflineVerified {
@@ -56,6 +56,34 @@ func TestRunMCPProofProducesGovernedEffectEvidencePack(t *testing.T) {
 	}
 	if len(summary.Scenarios) != 8 {
 		t.Fatalf("scenario count = %d, want 8", len(summary.Scenarios))
+	}
+	if len(summary.PreDispatchBypassProbes) != 3 {
+		t.Fatalf("pre-dispatch bypass probe count = %d, want 3", len(summary.PreDispatchBypassProbes))
+	}
+	expectedBypassProbes := map[string]bool{
+		"forged_intent_signature":    true,
+		"mismatched_intent_decision": true,
+		"unsigned_intent":            true,
+	}
+	for _, probe := range summary.PreDispatchBypassProbes {
+		if !expectedBypassProbes[probe.ID] || probe.Kind != probe.ID || !probe.BlockedBeforeDispatch || probe.DispatchCount != 0 || probe.Error == "" || probe.ArtifactRef == "" {
+			t.Fatalf("unexpected pre-dispatch bypass probe: %#v", probe)
+		}
+		delete(expectedBypassProbes, probe.ID)
+		probeData, err := os.ReadFile(filepath.Join(summary.EvidencePackRef, filepath.FromSlash(probe.ArtifactRef)))
+		if err != nil {
+			t.Fatalf("read pre-dispatch bypass artifact %s: %v", probe.ID, err)
+		}
+		var rawProbe map[string]any
+		if err := json.Unmarshal(probeData, &rawProbe); err != nil {
+			t.Fatalf("decode pre-dispatch bypass artifact %s: %v", probe.ID, err)
+		}
+		if _, exists := rawProbe["reason_code"]; exists {
+			t.Fatalf("pre-dispatch bypass artifact %s invents a reason code: %s", probe.ID, probeData)
+		}
+	}
+	if len(expectedBypassProbes) != 0 {
+		t.Fatalf("missing pre-dispatch bypass probes: %#v", expectedBypassProbes)
 	}
 	if _, err := os.Stat(filepath.Join(summary.EvidencePackRef, "07_ATTESTATIONS", "evidence_pack.sig")); err != nil {
 		t.Fatalf("sealed EvidencePack missing: %v", err)

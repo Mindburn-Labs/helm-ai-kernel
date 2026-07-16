@@ -1,6 +1,8 @@
 package adversarial
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -68,6 +70,7 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	writeJSON(t, filepath.Join(receiptsDir, "001_budget_exhausted.json"), map[string]any{
 		"seq":         1,
 		"action_type": "budget_exhausted",
+		"budget_id":   "budget-1",
 		"tenant_id":   "tenant-a",
 	})
 	writeJSON(t, filepath.Join(receiptsDir, "003_effect_without_policy.json"), map[string]any{
@@ -81,6 +84,7 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	writeJSON(t, filepath.Join(receiptsDir, "004_budget_decrement.json"), map[string]any{
 		"seq":                   4,
 		"action_type":           "budget_decrement",
+		"budget_id":             "budget-1",
 		"tenant_id":             "tenant-a",
 		"parent_receipt_hashes": []string{"parent-fork"},
 	})
@@ -281,6 +285,22 @@ func TestCryptographicSuitesRejectForgeryAndPostHocAuthorization(t *testing.T) {
 			t.Fatalf("cross-tenant policy passed: %+v", result)
 		}
 	})
+
+	t.Run("tape value tamper", func(t *testing.T) {
+		dir := t.TempDir()
+		_ = writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "08_TAPES", "entry_001.json")
+		var entry map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &entry) != nil {
+			t.Fatalf("read tape entry: %v", err)
+		}
+		entry["value"] = "Zm9yZ2Vk"
+		writeJSON(t, path, entry)
+		if result := adv06TapeReplayTamper().Run(dir); result.Pass {
+			t.Fatalf("tampered tape passed: %+v", result)
+		}
+	})
 }
 
 func TestMalformedTapeAndMissingTenantFailClosed(t *testing.T) {
@@ -290,7 +310,9 @@ func TestMalformedTapeAndMissingTenantFailClosed(t *testing.T) {
 		if err := os.MkdirAll(tapesDir, 0o750); err != nil {
 			t.Fatal(err)
 		}
-		writeJSON(t, filepath.Join(tapesDir, "entry_001.json"), map[string]any{"value_hash": "sha256:value", "data_class": "internal"})
+		value := []byte("valid")
+		digest := sha256.Sum256(value)
+		writeJSON(t, filepath.Join(tapesDir, "entry_001.json"), map[string]any{"value": value, "value_hash": hex.EncodeToString(digest[:]), "data_class": "internal"})
 		if err := os.WriteFile(filepath.Join(tapesDir, "entry_002.json"), []byte("{"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -310,6 +332,31 @@ func TestMalformedTapeAndMissingTenantFailClosed(t *testing.T) {
 			t.Fatalf("receipt without tenant passed: %+v", result)
 		}
 	})
+}
+
+func TestBudgetBoundaryUsesExplicitScope(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	exhaustedPath := filepath.Join(receiptsDir, "001.json")
+	decrementPath := filepath.Join(receiptsDir, "002.json")
+	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_id": "budget-a"})
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_id": "budget-b"})
+
+	if result := adv04BudgetOverdraft().Run(dir); !result.Pass {
+		t.Fatalf("unrelated budget decrement was treated as overdraft: %+v", result)
+	}
+	coverage := budgetBoundaryCoverage([]map[string]interface{}{loadReceipt(exhaustedPath), loadReceipt(decrementPath)})
+	if coverage.Covered {
+		t.Fatalf("unrelated budgets satisfied ADV-04 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_id": "budget-a"})
+	if result := adv04BudgetOverdraft().Run(dir); result.Pass || result.TestResults[0].Reason != "BUDGET_OVERDRAFT" {
+		t.Fatalf("same-budget overdraft was accepted: %+v", result)
+	}
 }
 
 func writeJSON(t *testing.T, path string, value any) {

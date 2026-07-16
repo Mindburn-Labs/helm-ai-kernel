@@ -7,6 +7,7 @@ it does not implement or claim hybrid or post-quantum approval support.
 
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 
 
@@ -28,6 +29,10 @@ def sha256_ref(raw):
 
 def portable_signer_identifier(value):
     return isinstance(value, str) and bool(value) and all(char in PORTABLE_SIGNER_CHARS for char in value)
+
+
+def parse_time(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def prefixed_bytes(value, prefix, size):
@@ -142,6 +147,10 @@ def main():
     if sha256_ref(challenge_text.encode("utf-8")) != index["challenge"]["sha256"]:
         raise SystemExit("challenge hash mismatch")
 
+    verified_at = parse_time(index["verified_at"])
+    if not (parse_time(challenge["issued_at"]) <= verified_at < parse_time(challenge["expires_at"])):
+        raise SystemExit("verified_at is outside the issued challenge window")
+
     authority_keys = {key["key_id"]: key for key in authority["keys"]}
     if len(authority_keys) != len(authority["keys"]):
         raise SystemExit("authority snapshot repeats a key_id")
@@ -149,6 +158,18 @@ def main():
         for field in ("key_id", "principal_id", "credential_id", "device_id"):
             if not portable_signer_identifier(key[field]):
                 raise SystemExit(f"{key['key_id']}: authority {field} is not a portable ASCII signer identifier")
+        if key["tenant_id"] != challenge["tenant_id"]:
+            raise SystemExit(f"{key['key_id']}: authority tenant mismatch")
+        for field, required in (
+            ("workspace_ids", challenge["workspace_id"]),
+            ("roles", challenge["required_role"]),
+            ("actions", challenge["action"]),
+            ("audiences", challenge["audience"]),
+        ):
+            if required not in key[field]:
+                raise SystemExit(f"{key['key_id']}: authority {field} mismatch")
+        if not key["enabled"] or not (parse_time(key["not_before"]) <= verified_at < parse_time(key["not_after"])):
+            raise SystemExit(f"{key['key_id']}: authority key is inactive")
 
     verified_by_key = {}
     verification_material = {}
@@ -207,6 +228,11 @@ def main():
         verified_signers.sort(key=lambda signer: (
             signer["principal_id"], signer["credential_id"], signer["device_id"], signer["key_id"]
         ))
+        for field in ("principal_id", "credential_id", "device_id", "key_id"):
+            if len({signer[field] for signer in verified_signers}) != len(verified_signers):
+                raise SystemExit(f"{case_id}: repeated signer {field}")
+        if len({authority_keys[key_id]["public_key"] for key_id in key_ids}) != len(key_ids):
+            raise SystemExit(f"{case_id}: repeated signer public key")
         signer_set, _ = load_canonical(
             root, case["signer_set"]["canonical"], case["signer_set"]["sha256"]
         )
@@ -262,6 +288,14 @@ def main():
     )
     negative_results["set_authority_principal_id_to_principal-😀"] = (
         "unexpected_accept" if portable_signer_identifier("principal-😀") else "identifier_rejected"
+    )
+    _, digest_c, public_c, signature_c = verification_material["key-c"]
+    tampered_surplus_signature = bytearray(signature_c)
+    tampered_surplus_signature[-1] ^= 1
+    negative_results["flip_key-c_signature_in_over_quorum"] = (
+        "unexpected_accept"
+        if verify_ed25519(public_c, digest_c, bytes(tampered_surplus_signature))
+        else "signature_rejected"
     )
 
     seen_negative_ids = set()

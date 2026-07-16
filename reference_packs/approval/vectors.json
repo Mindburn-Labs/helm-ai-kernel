@@ -3,6 +3,7 @@
   "schema_version": "approval-vectors.v1",
   "contract_version": "2026-07-15",
   "quantum_posture": "classical_ed25519_only",
+  "verified_at": "2026-07-15T12:07:00Z",
   "authority_snapshot": {
     "canonical": "authority_snapshot.c14n.json",
     "sha256": "sha256:7430b9edbe8479a4c7a74114aedf1ef48cda94237d6d989efe76ba03282e7d1b"
@@ -70,7 +71,7 @@
   "cases": [
     {
       "id": "quorum_2_of_2",
-      "assertion_key_ids": ["key-a", "key-b"],
+      "assertion_key_ids": ["key-b", "key-a"],
       "signer_set": {
         "canonical": "signer_set.c14n.json",
         "sha256": "sha256:db1854f4f67ec89ee375dba2aa701b96cfecca8bffe48245a0a454228314807b"
@@ -83,7 +84,7 @@
     },
     {
       "id": "quorum_2_of_3",
-      "assertion_key_ids": ["key-a", "key-b", "key-c"],
+      "assertion_key_ids": ["key-c", "key-a", "key-b"],
       "signer_set": {
         "canonical": "over_quorum_signer_set.c14n.json",
         "sha256": "sha256:70c3aae1e74b77f07bae20752f7c3838981df39c5dc50d416fda1702ad4f49f8"
@@ -120,6 +121,11 @@
       "id": "non_ascii_signer_identifier",
       "mutation": "set_authority_principal_id_to_principal-😀",
       "expected_error": "identifier_rejected"
+    },
+    {
+      "id": "invalid_surplus_signature",
+      "mutation": "flip_key-c_signature_in_over_quorum",
+      "expected_error": "signature_rejected"
     }
   ]
 }

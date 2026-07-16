@@ -11,7 +11,10 @@ projection introduced by HELM-142.
 implementation and uses only the Python standard library. It verifies RFC 8785
 canonical bytes for this ASCII/integer fixture, SHA-256 bindings, strict
 Ed25519 signatures, signer ordering, exact authority/challenge linkage, and
-negative tamper cases.
+negative tamper cases. The positive inputs are intentionally unsorted; the
+independent verifier also checks tenant/workspace/role/action/audience scope,
+key activity windows, distinct signer dimensions, and an invalid surplus
+signature in the over-quorum case.
 
 Signer identity fields use `^[A-Za-z0-9._~:/@+-]+$` and are compared without
 normalization as ascending ASCII-byte tuples `(principal_id, credential_id,

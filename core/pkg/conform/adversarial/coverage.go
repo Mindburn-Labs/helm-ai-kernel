@@ -212,7 +212,7 @@ func panicBoundaryCoverage(evidenceDir string) CoverageCheck {
 		if json.Unmarshal(data, &panicRecord) != nil {
 			return coverageCheck("ADV-09", false, count, "requires every present panic boundary record to be readable")
 		}
-		if _, ok := panicRecord["last_good_seq"].(float64); !ok {
+		if _, ok := receiptSequence(map[string]interface{}{"seq": panicRecord["last_good_seq"]}); !ok {
 			return coverageCheck("ADV-09", false, count, "requires every present panic boundary record to contain last_good_seq")
 		}
 		count++

@@ -18,6 +18,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -188,7 +189,13 @@ func adv03DAGFork() *Suite {
 			}
 
 			forks := 0
-			for parent, count := range parentCount {
+			parents := make([]string, 0, len(parentCount))
+			for parent := range parentCount {
+				parents = append(parents, parent)
+			}
+			sort.Strings(parents)
+			for _, parent := range parents {
+				count := parentCount[parent]
 				if count > 1 {
 					forks++
 					t.Evidence += fmt.Sprintf("parent %s claimed by %d children; ", parent, count)
@@ -221,24 +228,49 @@ func adv04BudgetOverdraft() *Suite {
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
 
 			t := TestResult{TestID: "ADV-04-T1", Name: "No budget_decrement after budget_exhausted"}
-			exhausted := make(map[string]bool)
 			overdraft := false
+			invalidBoundary := false
+			exhaustedAt := make(map[string][]float64)
+			var decrements []struct {
+				scope string
+				seq   float64
+				file  string
+			}
 			for _, f := range files {
 				receipt := loadReceipt(f)
 				action, _ := receipt["action_type"].(string)
-				scope := budgetScope(receipt)
-				if scope == "" {
+				if action != "budget_exhausted" && action != "budget_decrement" {
 					continue
 				}
-				if exhausted[scope] && action == "budget_decrement" {
-					overdraft = true
-					t.Evidence = fmt.Sprintf("budget_decrement after exhaustion for %s: %s", scope, filepath.Base(f))
+				scope := budgetScope(receipt)
+				seq, ok := receiptSequence(receipt)
+				if scope == "" || !ok {
+					invalidBoundary = true
+					t.Evidence += fmt.Sprintf("unscoped or unsequenced budget receipt: %s; ", filepath.Base(f))
+					continue
 				}
 				if action == "budget_exhausted" {
-					exhausted[scope] = true
+					exhaustedAt[scope] = append(exhaustedAt[scope], seq)
+				} else {
+					decrements = append(decrements, struct {
+						scope string
+						seq   float64
+						file  string
+					}{scope: scope, seq: seq, file: filepath.Base(f)})
 				}
 			}
-			if overdraft {
+			for _, decrement := range decrements {
+				for _, boundary := range exhaustedAt[decrement.scope] {
+					if decrement.seq > boundary {
+						overdraft = true
+						t.Evidence += fmt.Sprintf("budget_decrement seq %.0f after exhaustion seq %.0f for %s: %s; ", decrement.seq, boundary, decrement.scope, decrement.file)
+					}
+				}
+			}
+			if invalidBoundary {
+				t.Pass = false
+				t.Reason = "budget boundary contains an unscoped or unsequenced receipt"
+			} else if overdraft {
 				t.Pass = false
 				t.Reason = "BUDGET_OVERDRAFT"
 			} else {
@@ -357,7 +389,12 @@ func adv07TenantCrossleak() *Suite {
 				t.Reason = fmt.Sprintf("%d receipts missing tenant_id", missingTenant)
 			} else if len(tenants) > 1 {
 				t.Pass = false
-				t.Reason = fmt.Sprintf("multiple tenants in single run: %v", tenants)
+				tenantIDs := make([]string, 0, len(tenants))
+				for tenantID := range tenants {
+					tenantIDs = append(tenantIDs, tenantID)
+				}
+				sort.Strings(tenantIDs)
+				t.Reason = fmt.Sprintf("multiple tenants in single run: %s", strings.Join(tenantIDs, ","))
 			} else {
 				t.Pass = true
 				t.Reason = "tenant isolation maintained"
@@ -437,7 +474,7 @@ func adv09ReceiptEmissionPanicHijack() *Suite {
 					result.Pass = false
 					return result
 				}
-				boundary, ok := panicRec["last_good_seq"].(float64)
+				boundary, ok := receiptSequence(map[string]interface{}{"seq": panicRec["last_good_seq"]})
 				if !ok {
 					t.Pass = false
 					t.Reason = "panic record missing last_good_seq"
@@ -714,7 +751,8 @@ func receiptParentRefs(receipt map[string]interface{}) []string {
 
 func receiptSequence(receipt map[string]interface{}) (float64, bool) {
 	seq, ok := receipt["seq"].(float64)
-	return seq, ok && seq >= 0 && seq <= math.MaxUint64 && math.Trunc(seq) == seq
+	const maxExactJSONInteger = 1<<53 - 1
+	return seq, ok && seq >= 0 && seq <= maxExactJSONInteger && math.Trunc(seq) == seq
 }
 
 func hasNonEmptyString(value map[string]interface{}, key string) bool {

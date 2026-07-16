@@ -38,6 +38,16 @@ type AdapterCertificationResult struct {
 	ObservedOnly bool                 `json:"observed_only"`
 }
 
+// mamaFixtureDecisionSigner is the public half of the offline-only signer for
+// the checked-in MAMA decision receipt fixture. It is limited to conformance
+// data and is never a runtime or production trust anchor.
+var mamaFixtureDecisionSigner = ed25519.PublicKey{
+	0xff, 0xc8, 0xd9, 0x4c, 0xa1, 0x62, 0xc1, 0x08,
+	0x5d, 0xf2, 0x0d, 0xfb, 0x05, 0xac, 0xd1, 0x2b,
+	0x15, 0x79, 0xb9, 0xfa, 0xaa, 0xd0, 0x51, 0xf4,
+	0x20, 0xd9, 0xc5, 0x00, 0xc4, 0x87, 0x08, 0x12,
+}
+
 func CertifyAdapterFixtures(adapterID, fixtureRoot, requested string) AdapterCertificationResult {
 	if adapterID == "" {
 		adapterID = "workstation-manifest-adapter"
@@ -240,7 +250,7 @@ func certifyHighRiskFixtures(root string, seed []byte) (bool, string) {
 	if mama.Receipt.AgentSurface != "mama" || len(mama.Receipt.ToolActions) == 0 || len(mama.Receipt.DeniedEffects) != 0 {
 		return false, "MAMA fixture must import as a receipt-bound allowed run with no denied effects"
 	}
-	decision, err := loadReferencedDecisionReceipt(filepath.Join(root, "mama-receipt-bound-execution"), mama.Receipt, "evt_mama_deploy_publish")
+	decision, err := loadReferencedDecisionReceipt(filepath.Join(root, "mama-receipt-bound-execution"), mama.Receipt, "evt_mama_deploy_publish", mamaFixtureDecisionSigner)
 	if err != nil {
 		return false, err.Error()
 	}
@@ -316,7 +326,7 @@ func receiptActionHasMetadata(receipt *contracts.AgentRunReceipt, actionID, key 
 	return false
 }
 
-func loadReferencedDecisionReceipt(dir string, receipt *contracts.AgentRunReceipt, actionID string) (*contracts.WorkstationPolicyDecisionReceipt, error) {
+func loadReferencedDecisionReceipt(dir string, receipt *contracts.AgentRunReceipt, actionID string, trusted ed25519.PublicKey) (*contracts.WorkstationPolicyDecisionReceipt, error) {
 	ref := receiptActionMetadata(receipt, actionID, "policy_decision_ref")
 	if ref == "" {
 		return nil, fmt.Errorf("%s missing policy_decision_ref metadata", actionID)
@@ -325,8 +335,10 @@ func loadReferencedDecisionReceipt(dir string, receipt *contracts.AgentRunReceip
 	if err != nil {
 		return nil, fmt.Errorf("load MAMA policy decision receipt: %w", err)
 	}
-	if ok, err := VerifyDecisionReceiptSignature(decision); err != nil || !ok {
-		return nil, fmt.Errorf("check MAMA policy decision receipt self-integrity: %v", err)
+	if ok, err := VerifyDecisionReceiptWithTrustedKey(decision, trusted); err != nil {
+		return nil, fmt.Errorf("verify MAMA policy decision receipt against fixture trust anchor: %w", err)
+	} else if !ok {
+		return nil, fmt.Errorf("MAMA policy decision receipt signer is not the fixture trust anchor")
 	}
 	if decision.DecisionID != ref || decision.Verdict != contracts.WorkstationVerdictAllow {
 		return nil, fmt.Errorf("MAMA policy decision receipt must be an ALLOW receipt for %s", ref)

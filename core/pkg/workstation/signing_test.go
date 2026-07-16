@@ -5,6 +5,8 @@ package workstation
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -96,5 +98,39 @@ func TestAgentRunReceiptTrustedKeyVerification(t *testing.T) {
 	}
 	if ok, err := VerifyReceiptWithTrustedKey(legacyResult.Receipt, legacyKey); err != nil || ok {
 		t.Fatalf("legacy agent receipt must remain untrusted = %v/%v, want false/nil", ok, err)
+	}
+}
+
+func TestMAMAFixtureDecisionReceiptRequiresFixtureTrustAnchor(t *testing.T) {
+	fixtureDir := filepath.Join(repoRoot(t), "fixtures", "workstation", "mama-receipt-bound-execution")
+	mama, err := ImportArtifactDir(fixtureDir, workstationTestImportOptions())
+	if err != nil {
+		t.Fatalf("import MAMA fixture: %v", err)
+	}
+	decision, err := loadReferencedDecisionReceipt(fixtureDir, mama.Receipt, "evt_mama_deploy_publish", mamaFixtureDecisionSigner)
+	if err != nil {
+		t.Fatalf("verify MAMA fixture trust anchor: %v", err)
+	}
+	if got := decision.SignerKeyID; got == retiredObserveOnlySignerKeyID {
+		t.Fatalf("MAMA fixture still uses retired signer %q", got)
+	}
+
+	forged := *decision
+	if err := signDecisionReceipt(&forged, []byte("fedcba9876543210fedcba9876543210")); err != nil {
+		t.Fatalf("sign forged MAMA receipt: %v", err)
+	}
+	forgedDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(forgedDir, "receipts"), 0o755); err != nil {
+		t.Fatalf("make forged receipt directory: %v", err)
+	}
+	data, err := json.Marshal(&forged)
+	if err != nil {
+		t.Fatalf("marshal forged MAMA receipt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(forgedDir, "receipts", forged.DecisionID+".json"), data, 0o600); err != nil {
+		t.Fatalf("write forged MAMA receipt: %v", err)
+	}
+	if _, err := loadReferencedDecisionReceipt(forgedDir, mama.Receipt, "evt_mama_deploy_publish", mamaFixtureDecisionSigner); err == nil {
+		t.Fatal("expected untrusted MAMA receipt signer to be rejected")
 	}
 }

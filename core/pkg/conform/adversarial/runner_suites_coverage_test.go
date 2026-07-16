@@ -56,6 +56,11 @@ func TestRunAllAcceptsCompletePositiveControls(t *testing.T) {
 	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
 		t.Fatalf("complete evidence result = %+v, want all suites passing", result)
 	}
+	t.Setenv(CampaignPublicKeyEnv, publicKeyHex)
+	result = RunAll(dir)
+	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 {
+		t.Fatalf("environment-bound RunAll result = %+v, want all suites passing", result)
+	}
 }
 
 func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
@@ -166,6 +171,29 @@ func TestAdversarialSuiteHelpers(t *testing.T) {
 	}
 }
 
+func TestAuthorizationOutcomeRequiresExplicitAllow(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		actionType string
+		receipt    map[string]any
+		want       bool
+	}{
+		{name: "policy applied without verdict", actionType: "policy_decision", receipt: map[string]any{"status": "APPLIED"}},
+		{name: "approval applied without verdict", actionType: "approval_action", receipt: map[string]any{"status": "APPLIED"}},
+		{name: "policy applied allow", actionType: "policy_decision", receipt: map[string]any{"status": "APPLIED", "verdict": "ALLOW"}, want: true},
+		{name: "approval applied approved", actionType: "approval_action", receipt: map[string]any{"status": "APPLIED", "verdict": "APPROVED"}, want: true},
+		{name: "policy applied approval verdict", actionType: "policy_decision", receipt: map[string]any{"status": "APPLIED", "verdict": "APPROVED"}},
+		{name: "direct allow contradicted", actionType: "policy_decision", receipt: map[string]any{"status": "ALLOW", "verdict": "DENY"}},
+		{name: "direct approved", actionType: "approval_action", receipt: map[string]any{"status": "APPROVED"}, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := authorizationReceiptAccepted(test.receipt, test.actionType); got != test.want {
+				t.Fatalf("authorizationReceiptAccepted() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestIndividualSuitePassingBranches(t *testing.T) {
 	dir := t.TempDir()
 	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
@@ -261,7 +289,7 @@ func TestCryptographicSuitesRejectForgeryAndPostHocAuthorization(t *testing.T) {
 			t.Fatal(err)
 		}
 		effect := map[string]any{"receipt_id": "effect", "receipt_hash": "effect", "seq": 1, "action_type": "effect_attempt", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
-		policy := map[string]any{"receipt_id": "policy", "receipt_hash": "policy", "seq": 2, "action_type": "policy_decision", "status": "APPLIED", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"effect"}}
+		policy := map[string]any{"receipt_id": "policy", "receipt_hash": "policy", "seq": 2, "action_type": "policy_decision", "status": "ALLOW", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"effect"}}
 		writeJSON(t, filepath.Join(receiptsDir, "001.json"), effect)
 		writeJSON(t, filepath.Join(receiptsDir, "002.json"), signCampaignDocument(t, policy, "campaign_signatures", campaignReceiptSignatureDomain, privateKey))
 		if result := adv02PolicyBypass(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {

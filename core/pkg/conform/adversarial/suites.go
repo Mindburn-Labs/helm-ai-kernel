@@ -687,27 +687,36 @@ func authorizationReceiptAccepted(receipt map[string]interface{}, actionType str
 		return false
 	}
 	status = strings.ToUpper(strings.TrimSpace(status))
-	accepted := false
+	directlyAccepted := false
+	requiresVerdict := false
 	switch actionType {
 	case "policy_decision":
-		accepted = status == "APPLIED" || status == "ALLOW" || status == "ALLOWED"
+		directlyAccepted = status == "ALLOW" || status == "ALLOWED"
+		requiresVerdict = status == "APPLIED"
 	case "approval_action":
-		accepted = status == "APPLIED" || status == "APPROVED" || status == "ALLOW" || status == "ALLOWED"
+		directlyAccepted = status == "APPROVED" || status == "ALLOW" || status == "ALLOWED"
+		requiresVerdict = status == "APPLIED"
 	}
-	if !accepted {
+	if !directlyAccepted && !requiresVerdict {
 		return false
 	}
-	if verdict, exists := receipt["verdict"]; exists {
-		value, valid := verdict.(string)
-		if !valid {
-			return false
-		}
-		value = strings.ToUpper(strings.TrimSpace(value))
-		if value != "ALLOW" && value != "ALLOWED" && value != "APPROVE" && value != "APPROVED" {
-			return false
-		}
+	verdict, exists := receipt["verdict"]
+	if !exists {
+		return directlyAccepted
 	}
-	return true
+	value, valid := verdict.(string)
+	if !valid {
+		return false
+	}
+	value = strings.ToUpper(strings.TrimSpace(value))
+	switch actionType {
+	case "policy_decision":
+		return value == "ALLOW" || value == "ALLOWED"
+	case "approval_action":
+		return value == "ALLOW" || value == "ALLOWED" || value == "APPROVE" || value == "APPROVED"
+	default:
+		return false
+	}
 }
 
 func receiptIsAncestor(receipts []map[string]interface{}, descendant, ancestor map[string]interface{}) bool {

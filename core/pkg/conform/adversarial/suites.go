@@ -11,6 +11,7 @@ package adversarial
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -220,17 +221,21 @@ func adv04BudgetOverdraft() *Suite {
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
 
 			t := TestResult{TestID: "ADV-04-T1", Name: "No budget_decrement after budget_exhausted"}
-			exhausted := false
+			exhausted := make(map[string]bool)
 			overdraft := false
 			for _, f := range files {
 				receipt := loadReceipt(f)
 				action, _ := receipt["action_type"].(string)
-				if action == "budget_exhausted" {
-					exhausted = true
+				scope := budgetScope(receipt)
+				if scope == "" {
+					continue
 				}
-				if exhausted && action == "budget_decrement" {
+				if exhausted[scope] && action == "budget_decrement" {
 					overdraft = true
-					t.Evidence = fmt.Sprintf("budget_decrement after exhaustion: %s", filepath.Base(f))
+					t.Evidence = fmt.Sprintf("budget_decrement after exhaustion for %s: %s", scope, filepath.Base(f))
+				}
+				if action == "budget_exhausted" {
+					exhausted[scope] = true
 				}
 			}
 			if overdraft {
@@ -304,16 +309,9 @@ func adv06TapeReplayTamper() *Suite {
 			for _, f := range files {
 				data, err := os.ReadFile(f)
 				var entry map[string]interface{}
-				if err != nil || json.Unmarshal(data, &entry) != nil {
+				if err != nil || json.Unmarshal(data, &entry) != nil || !validTapeEntry(entry) {
 					missing++
 					t.Evidence += fmt.Sprintf("invalid: %s; ", filepath.Base(f))
-					continue
-				}
-				if entry["value_hash"] == nil || entry["value_hash"] == "" {
-					missing++
-				}
-				if entry["data_class"] == nil || entry["data_class"] == "" {
-					missing++
 				}
 			}
 			if missing > 0 {
@@ -591,6 +589,15 @@ func isEffectAction(action string) bool {
 	return action == "effect_attempt" || action == "tool_call" || action == "connector_call"
 }
 
+func budgetScope(receipt map[string]interface{}) string {
+	for _, key := range []string{"budget_id", "budget_snapshot_ref", "decision_id"} {
+		if value, _ := receipt[key].(string); strings.TrimSpace(value) != "" {
+			return key + ":" + strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func hasBoundAuthorizationReceipt(files []string, effect map[string]interface{}, actionType string, opts VerificationOptions) bool {
 	receipts := make([]map[string]interface{}, 0, len(files))
 	for _, path := range files {
@@ -750,6 +757,23 @@ func verifyCampaignSignatures(document map[string]interface{}, field, trustedPub
 		}
 	}
 	return true
+}
+
+func validTapeEntry(entry map[string]interface{}) bool {
+	valueHash, ok := entry["value_hash"].(string)
+	if !ok || !hasNonEmptyString(entry, "data_class") {
+		return false
+	}
+	encodedValue, present := entry["value"].(string)
+	if !present {
+		return false
+	}
+	value, err := base64.StdEncoding.DecodeString(encodedValue)
+	if err != nil {
+		return false
+	}
+	digest := sha256.Sum256(value)
+	return strings.EqualFold(strings.TrimPrefix(valueHash, "sha256:"), hex.EncodeToString(digest[:]))
 }
 
 func isHighFinality(effectClass, actionType string) bool {

@@ -75,8 +75,8 @@ func writePassingCoverageArtifacts(t *testing.T, dir string) string {
 	}
 	receipts := []map[string]any{
 		{"receipt_id": "receipt-1", "receipt_hash": "receipt-1", "seq": 1, "action_type": "policy_decision", "status": "APPLIED", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}},
-		{"receipt_id": "receipt-2", "receipt_hash": "receipt-2", "seq": 2, "action_type": "budget_decrement", "tenant_id": "tenant-1", "parent_receipt_hashes": []string{"receipt-1"}},
-		{"receipt_id": "receipt-3", "receipt_hash": "receipt-3", "seq": 3, "action_type": "budget_exhausted", "tenant_id": "tenant-1", "parent_receipt_hashes": []string{"receipt-2"}},
+		{"receipt_id": "receipt-2", "receipt_hash": "receipt-2", "seq": 2, "action_type": "budget_decrement", "budget_id": "budget-1", "tenant_id": "tenant-1", "parent_receipt_hashes": []string{"receipt-1"}},
+		{"receipt_id": "receipt-3", "receipt_hash": "receipt-3", "seq": 3, "action_type": "budget_exhausted", "budget_id": "budget-1", "tenant_id": "tenant-1", "parent_receipt_hashes": []string{"receipt-2"}},
 		{"receipt_id": "receipt-4", "receipt_hash": "receipt-4", "seq": 4, "action_type": "approval_action", "status": "APPROVED", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"receipt-3"}},
 		{"receipt_id": "receipt-5", "receipt_hash": "receipt-5", "seq": 5, "action_type": "effect_attempt", "decision_id": "decision-1", "effect_class": "E4", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"receipt-4"}},
 	}
@@ -85,7 +85,9 @@ func writePassingCoverageArtifacts(t *testing.T, dir string) string {
 	for i, receipt := range receipts {
 		writeJSON(t, filepath.Join(receiptsDir, []string{"001.json", "002.json", "003.json", "004.json", "005.json"}[i]), receipt)
 	}
-	writeJSON(t, filepath.Join(dir, "08_TAPES", "entry_001.json"), map[string]any{"value_hash": "sha256:value", "data_class": "internal"})
+	value := []byte("campaign-tape-value")
+	valueHash := sha256.Sum256(value)
+	writeJSON(t, filepath.Join(dir, "08_TAPES", "entry_001.json"), map[string]any{"value": value, "value_hash": hex.EncodeToString(valueHash[:]), "data_class": "internal"})
 	toolManifest := signCampaignDocument(t, map[string]any{"name": "covered-tool"}, "signatures", privateKey)
 	writeJSON(t, filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json"), toolManifest)
 	writeJSON(t, filepath.Join(dir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 5})

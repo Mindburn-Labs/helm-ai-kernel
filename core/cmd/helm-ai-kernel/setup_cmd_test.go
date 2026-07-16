@@ -137,6 +137,63 @@ func TestSetupDryRunJSONSummary(t *testing.T) {
 	}
 }
 
+func TestSetupCodexProjectPreviewMatchesDesktopBridgeContract(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	canonicalWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatalf("resolve workspace: %v", err)
+	}
+	dataDir := filepath.Join(tmp, "kernel-store")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "setup", "codex",
+		"--scope", "project",
+		"--workspace", workspace,
+		"--data-dir", dataDir,
+		"--no-quickstart",
+		"--json",
+		"--dry-run",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("preview exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
+	}
+
+	decoder := json.NewDecoder(&stdout)
+	var summary setupSummary
+	if err := decoder.Decode(&summary); err != nil {
+		t.Fatalf("decode preview summary: %v\n%s", err, stdout.String())
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		t.Fatalf("preview stdout should contain exactly one JSON value, extra=%#v err=%v", extra, err)
+	}
+	if summary.Operation != "preview" || summary.Target != "codex" || summary.Workspace != canonicalWorkspace || summary.DataDir != dataDir {
+		t.Fatalf("unexpected Desktop preview identity: %#v", summary)
+	}
+	if summary.QuickstartStarted || summary.KernelURL != "" {
+		t.Fatalf("Desktop preview must not start or advertise a fixed-port Kernel: %#v", summary)
+	}
+	wantActions := []string{
+		"scan selected workspace and write draft-only inventory artifacts",
+		"configure the HELM MCP server with the selected local data directory",
+		"configure the HELM PreToolUse hook for supported Codex tools",
+	}
+	if !equalSetupStrings(summary.PlannedActions, wantActions) {
+		t.Fatalf("planned actions = %#v, want %#v", summary.PlannedActions, wantActions)
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("preview should not create data dir, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, ".codex", "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("preview should not create Codex config, stat err = %v", err)
+	}
+}
+
 func TestSetupInstallClaudeWritesHookAndRunsQuickstart(t *testing.T) {
 	tmp := t.TempDir()
 	home := filepath.Join(tmp, "home")
@@ -229,8 +286,11 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &installed); err != nil {
 		t.Fatalf("decode setup summary: %v\n%s", err, stdout.String())
 	}
-	if installed.Workspace != canonicalWorkspace || installed.KernelURL != "" || installed.QuickstartStarted {
+	if installed.Workspace != canonicalWorkspace || installed.DataDir != dataDir || installed.KernelURL != "" || installed.QuickstartStarted {
 		t.Fatalf("unexpected headless setup summary: %#v", installed)
+	}
+	if len(installed.PlannedActions) == 0 {
+		t.Fatalf("headless setup must report the native preview/apply plan: %#v", installed)
 	}
 	if len(restore.quickstartArgs) != 0 {
 		t.Fatalf("--no-quickstart invoked Quickstart: %#v", restore.quickstartArgs)

@@ -54,7 +54,7 @@ func TestBuildScopeAuditMixedReceiptsAllBoundaries(t *testing.T) {
 			"ledger_ref":       "ledger://entry/123",
 		}),
 		scopeAuditEvent("evt_tainted_mcp", "mcp_tool_call", contracts.EffectTypeWorkstationMCPToolCall, "unknown.mcp.tool", "mcp://unknown-server/tool", nil).WithTaint("prompt_injection"),
-	}, permissive, map[string]string{ManifestFile: strings.Repeat("a", 64)}, ImportOptions{})
+	}, permissive, map[string]string{ManifestFile: strings.Repeat("a", 64)}, workstationTestImportOptions())
 	if err != nil {
 		t.Fatalf("BuildReceipt() error = %v", err)
 	}
@@ -72,7 +72,7 @@ func TestBuildScopeAuditMixedReceiptsAllBoundaries(t *testing.T) {
 		Target:     "stripe://charge/2500",
 		Metadata:   map[string]string{"api_token": "raw-secret-token"},
 		OccurredAt: time.Date(2026, 5, 20, 16, 0, 0, 0, time.UTC),
-	}, DecisionOptions{})
+	}, workstationTestDecisionOptions())
 	if err != nil {
 		t.Fatalf("Decide(payment) error = %v", err)
 	}
@@ -133,7 +133,7 @@ func TestBuildScopeAuditMixedReceiptsAllBoundaries(t *testing.T) {
 
 func TestScopeAuditArtifactExport(t *testing.T) {
 	dir := t.TempDir()
-	decision, err := Decide(DefaultObserveDraftProfile(), decisionRequest("secret", "secret://prod/api"), DecisionOptions{})
+	decision, err := Decide(DefaultObserveDraftProfile(), decisionRequest("secret", "secret://prod/api"), workstationTestDecisionOptions())
 	if err != nil {
 		t.Fatalf("Decide(secret) error = %v", err)
 	}

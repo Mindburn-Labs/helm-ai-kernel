@@ -151,6 +151,10 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup: create data dir: %v\n", err)
 		return 1
 	}
+	if _, err := ensureLocalWorkstationSigningSeed(opts.DataDir); err != nil {
+		fmt.Fprintf(stderr, "setup: provision local receipt signing key: %v\n", err)
+		return 1
+	}
 	grade, policyPath, err := runSetupAutoconfigure(opts.DataDir, opts.Workspace)
 	if err != nil {
 		fmt.Fprintf(stderr, "setup: autoconfigure: %v\n", err)
@@ -355,6 +359,10 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 	}
 	if opts.DataDir == "" {
 		opts.DataDir = defaultSetupDataDir()
+	}
+	if opts.DataDir == "" {
+		fmt.Fprintln(stderr, "setup: --data-dir is required when the home directory is unavailable")
+		return opts, 2
 	}
 	if abs, err := filepath.Abs(opts.DataDir); err == nil {
 		opts.DataDir = abs
@@ -1200,7 +1208,11 @@ func readSetupScanGrade(path string) string {
 }
 
 func defaultSetupDataDir() string {
-	return filepath.Join(homeDirOrDot(), ".helm-ai-kernel")
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" || !filepath.IsAbs(home) {
+		return ""
+	}
+	return filepath.Join(home, ".helm-ai-kernel")
 }
 
 func homeDirOrDot() string {

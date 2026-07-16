@@ -40,6 +40,12 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
 ```
 
+This workstation command reports `integrity` and `trusted` independently.
+`integrity: true` alone only means the contents match the receipt's declared
+public key. A zero exit status requires `trusted: true` against the expected
+local key or an explicit `--trusted-public-key-file`; use the latter for a
+receipt copied between machines.
+
 For an EvidencePack:
 
 ```bash

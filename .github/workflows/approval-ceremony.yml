@@ -9,6 +9,11 @@ on:
       - "core/go.mod"
       - "core/go.sum"
       - "core/pkg/boundary/approvalceremony/**"
+      - "core/pkg/boundary/approvalverify/**"
+      - "core/pkg/canonicalize/**"
+      - "core/pkg/contracts/**"
+      - "core/pkg/crypto/**"
+      - "reference_packs/approval/**"
   push:
     branches: [main]
     paths:
@@ -17,6 +22,11 @@ on:
       - "core/go.mod"
       - "core/go.sum"
       - "core/pkg/boundary/approvalceremony/**"
+      - "core/pkg/boundary/approvalverify/**"
+      - "core/pkg/canonicalize/**"
+      - "core/pkg/contracts/**"
+      - "core/pkg/crypto/**"
+      - "reference_packs/approval/**"
 
 permissions:
   contents: read

@@ -165,7 +165,7 @@ func (s *PostgresStore) createHold(ctx context.Context, record Record) (Record, 
 	})
 }
 
-func (s *PostgresStore) Get(ctx context.Context, tenantID, workspaceID, approvalID string) (Record, error) {
+func (s *PostgresStore) get(ctx context.Context, tenantID, workspaceID, approvalID string) (Record, error) {
 	if !validToken(tenantID) || !validToken(workspaceID) || !validToken(approvalID) {
 		return Record{}, invalidRecord("tenant_id, workspace_id, and approval_id are required")
 	}

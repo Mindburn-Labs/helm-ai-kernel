@@ -192,8 +192,8 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if final.State != StateConsumed || final.Version != 5 || final.ConsumedAt == nil {
 		t.Fatalf("final record = %+v", final)
 	}
-	if _, err := store.Get(ctx, "tenant-b", hold.WorkspaceID, hold.ApprovalID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("cross-tenant Get() error = %v, want ErrNotFound", err)
+	if _, err := store.get(ctx, "tenant-b", hold.WorkspaceID, hold.ApprovalID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-tenant get() error = %v, want ErrNotFound", err)
 	}
 	assertApprovalRLSVisibility(t, ctx, runtimeDB, "tenant-b", hold.WorkspaceID, hold.ApprovalID, 0)
 	assertApprovalRLSVisibility(t, ctx, runtimeDB, hold.TenantID, "workspace-b", hold.ApprovalID, 0)

@@ -276,7 +276,7 @@ func (s *serviceTestStore) createHold(_ context.Context, record Record) (Record,
 	return record, nil
 }
 
-func (s *serviceTestStore) Get(context.Context, string, string, string) (Record, error) {
+func (s *serviceTestStore) get(context.Context, string, string, string) (Record, error) {
 	if s.record.ApprovalID == "" {
 		return Record{}, ErrNotFound
 	}

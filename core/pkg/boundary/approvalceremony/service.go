@@ -72,7 +72,7 @@ type ServiceConfig struct {
 
 type ceremonyStore interface {
 	createHold(context.Context, Record) (Record, error)
-	Get(context.Context, string, string, string) (Record, error)
+	get(context.Context, string, string, string) (Record, error)
 	issueChallenge(context.Context, string, string, string, contracts.ApprovalChallenge, time.Time) (Record, error)
 	recordQuorum(context.Context, string, string, string, approvalverify.VerifiedApprovalRef, time.Time) (Record, error)
 	issueGrant(context.Context, string, string, string, contracts.ApprovalGrant, string, string, time.Time) (Record, error)
@@ -164,7 +164,7 @@ func (s *Service) IssueChallenge(ctx context.Context, approvalID string) (Record
 	if err != nil {
 		return Record{}, err
 	}
-	record, err := s.store.Get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
+	record, err := s.store.get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -221,7 +221,7 @@ func (s *Service) VerifyQuorum(ctx context.Context, approvalID string, assertion
 	if err != nil {
 		return Record{}, err
 	}
-	record, err := s.store.Get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
+	record, err := s.store.get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -252,7 +252,7 @@ func (s *Service) IssueGrant(ctx context.Context, approvalID string) (Record, er
 	if err != nil {
 		return Record{}, err
 	}
-	record, err := s.store.Get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
+	record, err := s.store.get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -341,7 +341,7 @@ func (s *Service) Get(ctx context.Context, approvalID string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	return s.store.Get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
+	return s.store.get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
 }
 
 func (s *Service) controlIdentity(ctx context.Context) (ControlIdentity, error) {

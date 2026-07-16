@@ -403,6 +403,10 @@ func TestBudgetBoundaryUsesExplicitScope(t *testing.T) {
 	if result := adv04BudgetOverdraft().Run(dir); result.Pass || result.TestResults[0].Reason != "BUDGET_OVERDRAFT" {
 		t.Fatalf("same-budget overdraft was accepted: %+v", result)
 	}
+	writeJSON(t, decrementPath, map[string]any{"seq": 1, "action_type": "budget_decrement", "budget_snapshot_ref": "budget-a"})
+	if result := adv04BudgetOverdraft().Run(dir); result.Pass || result.TestResults[0].Reason != "BUDGET_OVERDRAFT" {
+		t.Fatalf("same-sequence budget boundary was accepted: %+v", result)
+	}
 
 	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_id": "budget-a"})
 	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "decision_id": "budget-a"})
@@ -425,6 +429,49 @@ func TestReceiptSequenceIgnoresFilenameOrder(t *testing.T) {
 	writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{"seq": 2})
 	if result := adv01ReceiptGapInjection().Run(dir); !result.Pass {
 		t.Fatalf("contiguous receipts were rejected because filenames were reordered: %+v", result)
+	}
+}
+
+func TestDAGRejectsDanglingAndSelfParents(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	parentPath := filepath.Join(receiptsDir, "001.json")
+	childPath := filepath.Join(receiptsDir, "002.json")
+	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 1, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"missing"}})
+	receipts := []map[string]interface{}{loadReceipt(parentPath), loadReceipt(childPath)}
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("dangling parent passed ADV-03: %+v", result)
+	}
+	if coverage := proofGraphParentCoverage(receipts); coverage.Covered {
+		t.Fatalf("dangling parent satisfied ADV-03 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"child"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("self parent passed ADV-03: %+v", result)
+	}
+
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"parent-id"}})
+	receipts[1] = loadReceipt(childPath)
+	if result := adv03DAGFork().Run(dir); !result.Pass {
+		t.Fatalf("resolved parent edge failed ADV-03: %+v", result)
+	}
+	if coverage := proofGraphParentCoverage(receipts); !coverage.Covered {
+		t.Fatalf("resolved parent edge did not satisfy ADV-03 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 1, "parent_receipt_hashes": []string{"child"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("cyclic parent graph passed ADV-03: %+v", result)
+	}
+	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 1, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, filepath.Join(receiptsDir, "003.json"), map[string]any{"receipt_id": "sibling", "receipt_hash": "sibling", "seq": 3, "parent_receipt_hashes": []string{"parent-hash"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("same parent referenced through id and hash aliases passed ADV-03: %+v", result)
 	}
 }
 

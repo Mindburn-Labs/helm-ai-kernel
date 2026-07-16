@@ -6,10 +6,15 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
@@ -98,46 +103,26 @@ func loadOrGenerateSignerWithDataDir(dataDir string) (crypto.Signer, error) {
 
 func loadOrGenerateEd25519Root(dataDir string) (*crypto.Ed25519Signer, error) {
 	keyPath := filepath.Join(dataDir, "root.key")
-	if _, err := os.Stat(keyPath); err == nil {
-		// Load existing key
-		keyHex, err := os.ReadFile(keyPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read root.key: %w", err)
-		}
-		seed, err := hex.DecodeString(string(keyHex))
-		if err != nil {
-			return nil, fmt.Errorf("invalid root.key format: %w", err)
-		}
-		priv := ed25519.NewKeyFromSeed(seed)
-		log.Printf("[helm] trust: loaded persistent root key")
-		return crypto.NewEd25519SignerFromKey(priv, "root"), nil
-	}
-
-	// Generate new persistent key if not in production
-	if envBool("HELM_PRODUCTION") {
-		return nil, fmt.Errorf("production mode requires root signing key to exist at %s", keyPath)
-	}
-
-	log.Printf("[helm] trust: generating new persistent root key at %s", keyPath)
-	fmt.Fprintf(os.Stderr, "\n%s⚠️  SECURITY WARNING: Using auto-generated root key.%s\n", ColorBold+ColorYellow, ColorReset)
-	fmt.Fprintf(os.Stderr, "   Key saved to: %s\n", keyPath)
-	fmt.Fprintf(os.Stderr, "   In production, use a hardware security module (HSM) or cloud KMS.\n\n")
-
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	seed, created, err := loadOrCreateHexSeed(keyPath, ed25519.SeedSize, !envBool("HELM_PRODUCTION"))
 	if err != nil {
-		return nil, err
+		if errors.Is(err, fs.ErrNotExist) && envBool("HELM_PRODUCTION") {
+			return nil, fmt.Errorf("production mode requires root signing key to exist at %s", keyPath)
+		}
+		return nil, fmt.Errorf("load root.key: %w", err)
 	}
-
-	seed := priv.Seed()
-	if err := os.WriteFile(keyPath, []byte(hex.EncodeToString(seed)), 0600); err != nil {
-		return nil, fmt.Errorf("failed to save root.key: %w", err)
+	priv := ed25519.NewKeyFromSeed(seed)
+	if created {
+		log.Printf("[helm] trust: generating new persistent root key at %s", keyPath)
+		fmt.Fprintf(os.Stderr, "\n%s⚠️  SECURITY WARNING: Using auto-generated root key.%s\n", ColorBold+ColorYellow, ColorReset)
+		fmt.Fprintf(os.Stderr, "   Key saved to: %s\n", keyPath)
+		fmt.Fprintf(os.Stderr, "   In production, use a hardware security module (HSM) or cloud KMS.\n\n")
+		pubPath := filepath.Join(dataDir, "root.pub")
+		if err := os.WriteFile(pubPath, []byte(hex.EncodeToString(priv.Public().(ed25519.PublicKey))), 0o644); err != nil {
+			log.Printf("⚠️  failed to save root.pub: %v", err)
+		}
+	} else {
+		log.Printf("[helm] trust: loaded persistent root key")
 	}
-
-	pubPath := filepath.Join(dataDir, "root.pub")
-	if err := os.WriteFile(pubPath, []byte(hex.EncodeToString(pub)), 0644); err != nil {
-		log.Printf("⚠️  failed to save root.pub: %v", err)
-	}
-
 	return crypto.NewEd25519SignerFromKey(priv, "root"), nil
 }
 
@@ -147,37 +132,98 @@ func loadOrGenerateEd25519Root(dataDir string) (*crypto.Ed25519Signer, error) {
 // alongside the Ed25519 root key.
 func loadOrGenerateMLDSARoot(dataDir string) (*crypto.MLDSASigner, error) {
 	keyPath := filepath.Join(dataDir, "root.mldsa65.key")
-	if _, err := os.Stat(keyPath); err == nil {
-		keyHex, err := os.ReadFile(keyPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read root.mldsa65.key: %w", err)
-		}
-		seedBytes, err := hex.DecodeString(string(keyHex))
-		if err != nil {
-			return nil, fmt.Errorf("invalid root.mldsa65.key format: %w", err)
-		}
-		if len(seedBytes) != mldsa65.SeedSize {
-			return nil, fmt.Errorf("invalid root.mldsa65.key seed size: %d, expected %d", len(seedBytes), mldsa65.SeedSize)
-		}
-		var seed [mldsa65.SeedSize]byte
-		copy(seed[:], seedBytes)
-		_, priv := mldsa65.NewKeyFromSeed(&seed)
-		log.Printf("[helm] trust: loaded persistent ml-dsa-65 root key")
-		return crypto.NewMLDSASignerFromKey(priv, "root"), nil
-	}
-
-	if envBool("HELM_PRODUCTION") {
-		return nil, fmt.Errorf("production mode with hybrid receipt profile requires ml-dsa-65 root key to exist at %s", keyPath)
-	}
-
-	log.Printf("[helm] trust: generating new persistent ml-dsa-65 root key at %s", keyPath)
-	_, priv, err := mldsa65.GenerateKey(rand.Reader)
+	seedBytes, created, err := loadOrCreateHexSeed(keyPath, mldsa65.SeedSize, !envBool("HELM_PRODUCTION"))
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate ml-dsa-65 key: %w", err)
+		if errors.Is(err, fs.ErrNotExist) && envBool("HELM_PRODUCTION") {
+			return nil, fmt.Errorf("production mode with hybrid receipt profile requires ml-dsa-65 root key to exist at %s", keyPath)
+		}
+		return nil, fmt.Errorf("load root.mldsa65.key: %w", err)
 	}
-	seed := priv.Seed()
-	if err := os.WriteFile(keyPath, []byte(hex.EncodeToString(seed)), 0600); err != nil {
-		return nil, fmt.Errorf("failed to save root.mldsa65.key: %w", err)
+	var seed [mldsa65.SeedSize]byte
+	copy(seed[:], seedBytes)
+	_, priv := mldsa65.NewKeyFromSeed(&seed)
+	if created {
+		log.Printf("[helm] trust: generating new persistent ml-dsa-65 root key at %s", keyPath)
+	} else {
+		log.Printf("[helm] trust: loaded persistent ml-dsa-65 root key")
 	}
 	return crypto.NewMLDSASignerFromKey(priv, "root"), nil
+}
+
+const (
+	rootSeedLoadAttempts   = 25
+	rootSeedLoadRetryDelay = 10 * time.Millisecond
+)
+
+// loadOrCreateHexSeed is safe for concurrent first startup by independent
+// kernel processes. Only the exclusive creator may write the seed; contenders
+// reload the winner's durable file and fail closed if it remains malformed.
+func loadOrCreateHexSeed(path string, seedSize int, allowCreate bool) ([]byte, bool, error) {
+	var lastErr error
+	for attempt := 0; attempt < rootSeedLoadAttempts; attempt++ {
+		seed, err := loadHexSeed(path, seedSize)
+		if err == nil {
+			return seed, false, nil
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			if !allowCreate {
+				return nil, false, err
+			}
+			candidate := make([]byte, seedSize)
+			if _, err := rand.Read(candidate); err != nil {
+				return nil, false, fmt.Errorf("generate root seed: %w", err)
+			}
+			file, createErr := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+			switch {
+			case createErr == nil:
+				if err := writeHexSeed(file, candidate); err != nil {
+					_ = file.Close()
+					return nil, false, fmt.Errorf("save root seed: %w", err)
+				}
+				if err := file.Close(); err != nil {
+					return nil, false, fmt.Errorf("close root seed: %w", err)
+				}
+				return candidate, true, nil
+			case !errors.Is(createErr, fs.ErrExist):
+				return nil, false, fmt.Errorf("create root seed: %w", createErr)
+			}
+		}
+		lastErr = err
+		if attempt+1 < rootSeedLoadAttempts {
+			time.Sleep(rootSeedLoadRetryDelay)
+		}
+	}
+	return nil, false, fmt.Errorf("load concurrently initialized root seed after %d attempts: %w", rootSeedLoadAttempts, lastErr)
+}
+
+func loadHexSeed(path string, seedSize int) ([]byte, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	seed, err := hex.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return nil, fmt.Errorf("invalid root seed format: %w", err)
+	}
+	if len(seed) != seedSize {
+		return nil, fmt.Errorf("invalid root seed size: %d, expected %d", len(seed), seedSize)
+	}
+	return seed, nil
+}
+
+func writeHexSeed(file *os.File, seed []byte) error {
+	data := []byte(hex.EncodeToString(seed))
+	for len(data) > 0 {
+		n, err := file.Write(data)
+		if n > 0 {
+			data = data[n:]
+		}
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+	}
+	return file.Sync()
 }

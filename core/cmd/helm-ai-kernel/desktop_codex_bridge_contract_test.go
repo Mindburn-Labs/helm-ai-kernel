@@ -93,7 +93,9 @@ func TestDesktopCodexBridgeContractV1(t *testing.T) {
 		"--data-dir", dataDir, "--no-quickstart", "--json", "--yes",
 	}
 	removed := runDesktopCodexSetupJSON(t, removeArgs)
-	assertDesktopCodexSetupSummary(t, removed, "remove", canonicalWorkspace, dataDir, false, false)
+	// Remove reports the safely observed pre-removal state so a Desktop client
+	// can tell which local integration it actually removed.
+	assertDesktopCodexSetupSummary(t, removed, "remove", canonicalWorkspace, dataDir, true, true)
 	raw, err = os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("read Codex config after remove: %v", err)

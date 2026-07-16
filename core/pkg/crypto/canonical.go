@@ -46,6 +46,17 @@ func CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash,
 	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s", id, SigSeparator, verdict, SigSeparator, reason, SigSeparator, phenotypeHash, SigSeparator, policyContentHash, SigSeparator, effectDigest)
 }
 
+// CanonicalizeDecisionWithPolicyDecisionHash binds a concrete policy evaluation
+// when one is present while preserving verification of legacy records that did
+// not carry a policy-decision hash.
+func CanonicalizeDecisionWithPolicyDecisionHash(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest, policyDecisionHash string) string {
+	payload := CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest)
+	if policyDecisionHash == "" {
+		return payload
+	}
+	return payload + SigSeparator + policyDecisionHash
+}
+
 // CanonicalizeDecisionStrict is like CanonicalizeDecision but returns an error if any
 // security-relevant hash field is empty. Use this for new code paths where all fields
 // are expected to be populated.

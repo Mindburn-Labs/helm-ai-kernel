@@ -36,7 +36,7 @@ func (v *MLDSAVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	payload := CanonicalizeDecisionWithPolicyDecisionHash(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, d.PolicyDecisionHash)
 	sig, err := hex.DecodeString(d.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)

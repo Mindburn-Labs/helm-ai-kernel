@@ -231,3 +231,24 @@ func TestEd25519_SignDecisionRoundTrip(t *testing.T) {
 		t.Errorf("signed decision should verify, ok=%v err=%v", ok, err)
 	}
 }
+
+func TestEd25519_DecisionSignatureBindsPolicyDecisionHash(t *testing.T) {
+	s, _ := NewEd25519Signer("k1")
+	d := &contracts.DecisionRecord{
+		ID:                 "d-policy-binding",
+		Verdict:            "ALLOW",
+		Reason:             "ok",
+		PolicyDecisionHash: "sha256:authorization-inputs-v1",
+	}
+	if err := s.SignDecision(d); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.VerifyDecision(d); err != nil || !ok {
+		t.Fatalf("signed decision should verify, ok=%v err=%v", ok, err)
+	}
+
+	d.PolicyDecisionHash = "sha256:authorization-inputs-v2"
+	if ok, err := s.VerifyDecision(d); err != nil || ok {
+		t.Fatalf("tampered policy decision hash must invalidate signature, ok=%v err=%v", ok, err)
+	}
+}

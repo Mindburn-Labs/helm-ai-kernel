@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -133,6 +134,47 @@ func TestSQLiteReceiptStoreAndGet(t *testing.T) {
 	got, err := store.Get(context.Background(), "d1")
 	if err != nil || got.ReceiptID != "r1" {
 		t.Fatalf("expected r1, got err=%v, receipt=%+v", err, got)
+	}
+}
+
+func TestSQLiteReceiptStorePreservesSignedReceiptEnvelope(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	want := &contracts.Receipt{
+		ReceiptID:          "r-envelope",
+		DecisionID:         "d-envelope",
+		EffectID:           "mcp_governed_effect_execution/example",
+		Status:             "SUCCESS",
+		OutputHash:         "sha256:output",
+		Timestamp:          now,
+		Metadata:           map[string]any{"scope": "proof"},
+		Signature:          "signature",
+		SignatureProfile:   "classical",
+		SignatureAlgorithm: "ed25519",
+		KeyID:              "root",
+		PublicKeySet:       map[string]string{"ed25519": "public"},
+		PrevHash:           "GENESIS",
+		LamportClock:       1,
+		ArgsHash:           "sha256:args",
+		Type:               "mcp_governed_effect_execution",
+		LaunchID:           "proof",
+		DecisionHash:       "sha256:decision",
+		Verdict:            "ALLOW",
+		ToolName:           "proof.local_write",
+		ReasonCode:         "MCP_CALL_AUTHORIZED",
+		PolicyHash:         "sha256:policy",
+	}
+	if err := store.Store(context.Background(), want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Get(context.Background(), want.DecisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("receipt envelope was not preserved\n got: %#v\nwant: %#v", got, want)
 	}
 }
 

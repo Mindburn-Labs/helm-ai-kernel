@@ -117,7 +117,7 @@ func (s *Ed25519Signer) Verify(message []byte, signature []byte) bool {
 // SignDecision signs a DecisionRecord
 func (s *Ed25519Signer) SignDecision(d *contracts.DecisionRecord) error {
 	// Canonicalize for signing
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	payload := CanonicalizeDecisionWithPolicyDecisionHash(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, d.PolicyDecisionHash)
 	sig, err := s.Sign([]byte(payload))
 	if err != nil {
 		return err
@@ -158,7 +158,7 @@ func (s *Ed25519Signer) VerifyDecision(d *contracts.DecisionRecord) (bool, error
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	payload := CanonicalizeDecisionWithPolicyDecisionHash(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, d.PolicyDecisionHash)
 	return Verify(s.PublicKey(), d.Signature, []byte(payload))
 }
 

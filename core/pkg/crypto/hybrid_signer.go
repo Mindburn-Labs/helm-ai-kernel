@@ -101,7 +101,7 @@ func (h *HybridSigner) PublicKeyBytes() []byte {
 // The composite signature is stored in d.Signature and the SignatureType is
 // set to "Hybrid-Ed25519-MLDSA65:<keyID>".
 func (h *HybridSigner) SignDecision(d *contracts.DecisionRecord) error {
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	payload := CanonicalizeDecisionWithPolicyDecisionHash(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, d.PolicyDecisionHash)
 	sig, err := h.Sign([]byte(payload))
 	if err != nil {
 		return err

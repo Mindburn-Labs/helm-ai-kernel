@@ -2,6 +2,7 @@ package adversarial
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,9 +46,9 @@ func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 
 func TestRunAllAcceptsCompletePositiveControls(t *testing.T) {
 	dir := t.TempDir()
-	writePassingCoverageArtifacts(t, dir)
+	publicKeyHex := writePassingCoverageArtifacts(t, dir)
 
-	result := RunAll(dir)
+	result := RunAllWithOptions(dir, VerificationOptions{CampaignPublicKeyHex: publicKeyHex})
 	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
 		t.Fatalf("complete evidence result = %+v, want all suites passing", result)
 	}
@@ -201,6 +202,67 @@ func TestPanicEvidenceCannotBeShadowedByCanonicalRecord(t *testing.T) {
 	if result.Pass || !strings.Contains(result.TestResults[0].Reason, "receipts emitted after panic") {
 		t.Fatalf("shadowed panic result = %+v, want restrictive boundary failure", result)
 	}
+}
+
+func TestReceiptSequenceRejectsDuplicateDecreasingAndMissingValues(t *testing.T) {
+	for name, seqs := range map[string][]any{
+		"duplicate":       {1, 1},
+		"decreasing":      {2, 1},
+		"missing":         {1, nil},
+		"missing genesis": {2, 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+			if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			for index, seq := range seqs {
+				receipt := map[string]any{"action_type": "noop"}
+				if seq != nil {
+					receipt["seq"] = seq
+				}
+				writeJSON(t, filepath.Join(receiptsDir, fmt.Sprintf("%03d.json", index)), receipt)
+			}
+			if result := adv01ReceiptGapInjection().Run(dir); result.Pass || result.TestResults[0].Reason != "RECEIPT_GAP_DETECTED" {
+				t.Fatalf("ADV-01 accepted %s sequence: %+v", name, result)
+			}
+		})
+	}
+}
+
+func TestCryptographicSuitesRejectForgeryAndPostHocAuthorization(t *testing.T) {
+	t.Run("tool manifest tamper", func(t *testing.T) {
+		dir := t.TempDir()
+		publicKeyHex := writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json")
+		var manifest map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &manifest) != nil {
+			t.Fatalf("read tool manifest: %v", err)
+		}
+		manifest["name"] = "forged-tool"
+		writeJSON(t, path, manifest)
+		if result := adv08ToolManifestForge(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {
+			t.Fatalf("tampered tool manifest passed: %+v", result)
+		}
+	})
+
+	t.Run("post-hoc policy", func(t *testing.T) {
+		dir := t.TempDir()
+		privateKey, publicKeyHex := campaignTestKey()
+		receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+		if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		effect := map[string]any{"receipt_id": "effect", "receipt_hash": "effect", "seq": 1, "action_type": "effect_attempt", "decision_id": "decision-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
+		policy := map[string]any{"receipt_id": "policy", "receipt_hash": "policy", "seq": 2, "action_type": "policy_decision", "status": "APPLIED", "decision_id": "decision-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"effect"}}
+		writeJSON(t, filepath.Join(receiptsDir, "001.json"), effect)
+		writeJSON(t, filepath.Join(receiptsDir, "002.json"), signCampaignDocument(t, policy, "campaign_signatures", privateKey))
+		if result := adv02PolicyBypass(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {
+			t.Fatalf("post-hoc policy passed: %+v", result)
+		}
+	})
 }
 
 func writeJSON(t *testing.T, path string, value any) {

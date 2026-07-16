@@ -188,11 +188,18 @@ func adv03DAGFork() *Suite {
 				receipts = append(receipts, loadReceipt(f))
 			}
 			referenceIndex := receiptReferenceIndex(receipts)
+			receiptsByIdentity := make(map[string]map[string]interface{}, len(receipts))
+			for _, receipt := range receipts {
+				if identity := receiptIdentity(receipt); identity != "" {
+					receiptsByIdentity[identity] = receipt
+				}
+			}
 			parentCount := make(map[string]int)
 			graph := make(map[string][]string, len(receipts))
 			invalidParents := 0
 			for index, receipt := range receipts {
 				child := receiptIdentity(receipt)
+				childSeq, childSequenced := receiptSequence(receipt)
 				if child == "" {
 					invalidParents++
 					t.Evidence += fmt.Sprintf("missing receipt identity in %s; ", filepath.Base(files[index]))
@@ -211,9 +218,11 @@ func adv03DAGFork() *Suite {
 							continue
 						}
 						parentTarget, exists := referenceIndex[ps]
-						if !exists || parentTarget == "" || child == "" || parentTarget == child {
+						parentReceipt := receiptsByIdentity[parentTarget]
+						parentSeq, parentSequenced := receiptSequence(parentReceipt)
+						if !exists || parentTarget == "" || child == "" || parentTarget == child || !childSequenced || !parentSequenced || parentSeq >= childSeq {
 							invalidParents++
-							t.Evidence += fmt.Sprintf("dangling or self parent %s in %s; ", ps, filepath.Base(files[index]))
+							t.Evidence += fmt.Sprintf("dangling, self, or non-causal parent %s in %s; ", ps, filepath.Base(files[index]))
 							continue
 						}
 						parentCount[parentTarget]++
@@ -853,30 +862,36 @@ func receiptReferenceIndex(receipts []map[string]interface{}) map[string]string 
 }
 
 func receiptGraphHasCycle(graph map[string][]string) bool {
-	state := make(map[string]uint8, len(graph))
-	var visit func(string) bool
-	visit = func(node string) bool {
-		switch state[node] {
-		case 1:
-			return true
-		case 2:
-			return false
+	indegree := make(map[string]int, len(graph))
+	for node, parents := range graph {
+		if _, exists := indegree[node]; !exists {
+			indegree[node] = 0
 		}
-		state[node] = 1
+		for _, parent := range parents {
+			if _, exists := indegree[parent]; !exists {
+				indegree[parent] = 0
+			}
+			indegree[parent]++
+		}
+	}
+	queue := make([]string, 0, len(indegree))
+	for node, degree := range indegree {
+		if degree == 0 {
+			queue = append(queue, node)
+		}
+	}
+	processed := 0
+	for cursor := 0; cursor < len(queue); cursor++ {
+		node := queue[cursor]
+		processed++
 		for _, parent := range graph[node] {
-			if visit(parent) {
-				return true
+			indegree[parent]--
+			if indegree[parent] == 0 {
+				queue = append(queue, parent)
 			}
 		}
-		state[node] = 2
-		return false
 	}
-	for node := range graph {
-		if visit(node) {
-			return true
-		}
-	}
-	return false
+	return processed != len(indegree)
 }
 
 func receiptParentRefs(receipt map[string]interface{}) []string {

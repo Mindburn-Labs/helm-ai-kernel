@@ -96,20 +96,28 @@ func policyDecisionCoverage(receipts []map[string]interface{}, opts Verification
 
 func proofGraphParentCoverage(receipts []map[string]interface{}) CoverageCheck {
 	referenceIndex := receiptReferenceIndex(receipts)
+	receiptsByIdentity := make(map[string]map[string]interface{}, len(receipts))
+	for _, receipt := range receipts {
+		if identity := receiptIdentity(receipt); identity != "" {
+			receiptsByIdentity[identity] = receipt
+		}
+	}
 	count := 0
 	for _, receipt := range receipts {
 		child := receiptIdentity(receipt)
+		childSeq, childSequenced := receiptSequence(receipt)
 		parents, _ := receipt["parent_receipt_hashes"].([]interface{})
 		for _, rawParent := range parents {
 			parent, valid := rawParent.(string)
 			parent = strings.TrimSpace(parent)
 			parentTarget, exists := referenceIndex[parent]
-			if valid && parent != "" && parent != "genesis" && child != "" && exists && parentTarget != "" && parentTarget != child {
+			parentSeq, parentSequenced := receiptSequence(receiptsByIdentity[parentTarget])
+			if valid && parent != "" && parent != "genesis" && child != "" && exists && parentTarget != "" && parentTarget != child && childSequenced && parentSequenced && parentSeq < childSeq {
 				count++
 			}
 		}
 	}
-	return coverageCheck("ADV-03", count > 0, count, "requires at least one non-genesis parent edge that resolves to another included receipt")
+	return coverageCheck("ADV-03", count > 0, count, "requires at least one causal non-genesis parent edge that resolves to an earlier included receipt")
 }
 
 func budgetBoundaryCoverage(receipts []map[string]interface{}) CoverageCheck {

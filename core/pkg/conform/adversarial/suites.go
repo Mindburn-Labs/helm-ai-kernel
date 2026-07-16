@@ -54,6 +54,11 @@ type VerificationOptions struct {
 	CampaignPublicKeyHex string
 }
 
+const (
+	campaignReceiptSignatureDomain      = "helm.bounty.receipt-signature/v1"
+	campaignToolManifestSignatureDomain = "helm.bounty.tool-manifest-signature/v1"
+)
+
 // CampaignKeyID validates an Ed25519 campaign root and returns its stable ID.
 func CampaignKeyID(publicKeyHex string) (string, error) {
 	publicKey, err := hex.DecodeString(strings.TrimSpace(publicKeyHex))
@@ -422,7 +427,7 @@ func adv08ToolManifestForge(opts VerificationOptions) *Suite {
 			for _, f := range files {
 				data, err := os.ReadFile(f)
 				var manifest map[string]interface{}
-				if err != nil || json.Unmarshal(data, &manifest) != nil || !verifyCampaignSignatures(manifest, "signatures", opts.CampaignPublicKeyHex) {
+				if err != nil || json.Unmarshal(data, &manifest) != nil || !verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, opts.CampaignPublicKeyHex) {
 					unsigned++
 					t.Evidence += fmt.Sprintf("invalid or unsigned: %s; ", filepath.Base(f))
 				}
@@ -595,6 +600,7 @@ func loadSequenceNumbers(files []string) []uint64 {
 			seqs = append(seqs, uint64(seq))
 		}
 	}
+	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
 	return seqs
 }
 
@@ -627,10 +633,12 @@ func isEffectAction(action string) bool {
 }
 
 func budgetScope(receipt map[string]interface{}) string {
-	for _, key := range []string{"budget_id", "budget_snapshot_ref", "decision_id"} {
-		if value, _ := receipt[key].(string); strings.TrimSpace(value) != "" {
-			return key + ":" + strings.TrimSpace(value)
-		}
+	// Proof receipts bind budget effects to the canonical budget snapshot.
+	// Alternate identifiers are deliberately not accepted: allowing different
+	// fallback fields on exhaustion and decrement receipts splits one logical
+	// budget into unrelated scopes and hides a post-exhaustion decrement.
+	if value, _ := receipt["budget_snapshot_ref"].(string); strings.TrimSpace(value) != "" {
+		return "budget_snapshot_ref:" + strings.TrimSpace(value)
 	}
 	return ""
 }
@@ -661,7 +669,7 @@ func hasBoundAuthorization(receipts []map[string]interface{}, effect map[string]
 		if !sequenced || seq >= effectSeq || !receiptIsAncestor(receipts, effect, receipt) {
 			continue
 		}
-		if verifyCampaignSignatures(receipt, "campaign_signatures", opts.CampaignPublicKeyHex) {
+		if verifyCampaignSignatures(receipt, "campaign_signatures", campaignReceiptSignatureDomain, opts.CampaignPublicKeyHex) {
 			return true
 		}
 	}
@@ -760,7 +768,10 @@ func hasNonEmptyString(value map[string]interface{}, key string) bool {
 	return ok && strings.TrimSpace(raw) != ""
 }
 
-func verifyCampaignSignatures(document map[string]interface{}, field, trustedPublicKeyHex string) bool {
+func verifyCampaignSignatures(document map[string]interface{}, field, domain, trustedPublicKeyHex string) bool {
+	if strings.TrimSpace(domain) == "" {
+		return false
+	}
 	publicKey, err := hex.DecodeString(strings.TrimSpace(trustedPublicKeyHex))
 	if err != nil || len(publicKey) != ed25519.PublicKeySize {
 		return false
@@ -779,6 +790,10 @@ func verifyCampaignSignatures(document map[string]interface{}, field, trustedPub
 	if err != nil {
 		return false
 	}
+	signedMessage := make([]byte, 0, len(domain)+1+len(canonical))
+	signedMessage = append(signedMessage, domain...)
+	signedMessage = append(signedMessage, 0)
+	signedMessage = append(signedMessage, canonical...)
 	wantKeyID, err := CampaignKeyID(trustedPublicKeyHex)
 	if err != nil {
 		return false
@@ -790,7 +805,7 @@ func verifyCampaignSignatures(document map[string]interface{}, field, trustedPub
 		}
 		signatureHex, _ := signature["signature"].(string)
 		signatureBytes, err := hex.DecodeString(strings.TrimPrefix(strings.TrimSpace(signatureHex), "hex:"))
-		if err != nil || len(signatureBytes) != ed25519.SignatureSize || !ed25519.Verify(ed25519.PublicKey(publicKey), canonical, signatureBytes) {
+		if err != nil || len(signatureBytes) != ed25519.SignatureSize || !ed25519.Verify(ed25519.PublicKey(publicKey), signedMessage, signatureBytes) {
 			return false
 		}
 	}

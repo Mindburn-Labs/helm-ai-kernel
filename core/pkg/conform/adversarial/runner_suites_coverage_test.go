@@ -14,7 +14,7 @@ import (
 func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 	dir := t.TempDir()
 
-	result := RunAll(dir, VerificationOptions{})
+	result := RunAll(dir)
 	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 || len(result.Suites) != 10 {
 		t.Fatalf("empty evidence result = %+v, want all suites rejected for missing positive controls", result)
 	}
@@ -68,10 +68,10 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	}
 
 	writeJSON(t, filepath.Join(receiptsDir, "001_budget_exhausted.json"), map[string]any{
-		"seq":         1,
-		"action_type": "budget_exhausted",
-		"budget_id":   "budget-1",
-		"tenant_id":   "tenant-a",
+		"seq":                 1,
+		"action_type":         "budget_exhausted",
+		"budget_snapshot_ref": "budget-1",
+		"tenant_id":           "tenant-a",
 	})
 	writeJSON(t, filepath.Join(receiptsDir, "003_effect_without_policy.json"), map[string]any{
 		"seq":                   3,
@@ -84,7 +84,7 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	writeJSON(t, filepath.Join(receiptsDir, "004_budget_decrement.json"), map[string]any{
 		"seq":                   4,
 		"action_type":           "budget_decrement",
-		"budget_id":             "budget-1",
+		"budget_snapshot_ref":   "budget-1",
 		"tenant_id":             "tenant-a",
 		"parent_receipt_hashes": []string{"parent-fork"},
 	})
@@ -208,10 +208,9 @@ func TestPanicEvidenceCannotBeShadowedByCanonicalRecord(t *testing.T) {
 	}
 }
 
-func TestReceiptSequenceRejectsDuplicateDecreasingAndMissingValues(t *testing.T) {
+func TestReceiptSequenceRejectsDuplicateAndMissingValues(t *testing.T) {
 	for name, seqs := range map[string][]any{
 		"duplicate":       {1, 1},
-		"decreasing":      {2, 1},
 		"missing":         {1, nil},
 		"missing genesis": {2, 3},
 	} {
@@ -262,7 +261,7 @@ func TestCryptographicSuitesRejectForgeryAndPostHocAuthorization(t *testing.T) {
 		effect := map[string]any{"receipt_id": "effect", "receipt_hash": "effect", "seq": 1, "action_type": "effect_attempt", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
 		policy := map[string]any{"receipt_id": "policy", "receipt_hash": "policy", "seq": 2, "action_type": "policy_decision", "status": "APPLIED", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"effect"}}
 		writeJSON(t, filepath.Join(receiptsDir, "001.json"), effect)
-		writeJSON(t, filepath.Join(receiptsDir, "002.json"), signCampaignDocument(t, policy, "campaign_signatures", privateKey))
+		writeJSON(t, filepath.Join(receiptsDir, "002.json"), signCampaignDocument(t, policy, "campaign_signatures", campaignReceiptSignatureDomain, privateKey))
 		if result := adv02PolicyBypass(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {
 			t.Fatalf("post-hoc policy passed: %+v", result)
 		}
@@ -279,7 +278,7 @@ func TestCryptographicSuitesRejectForgeryAndPostHocAuthorization(t *testing.T) {
 			t.Fatalf("read policy receipt: %v", err)
 		}
 		policy["tenant_id"] = "tenant-b"
-		policy = signCampaignDocument(t, policy, "campaign_signatures", privateKey)
+		policy = signCampaignDocument(t, policy, "campaign_signatures", campaignReceiptSignatureDomain, privateKey)
 		writeJSON(t, path, policy)
 		if result := adv02PolicyBypass(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {
 			t.Fatalf("cross-tenant policy passed: %+v", result)
@@ -342,8 +341,8 @@ func TestBudgetBoundaryUsesExplicitScope(t *testing.T) {
 	}
 	exhaustedPath := filepath.Join(receiptsDir, "999.json")
 	decrementPath := filepath.Join(receiptsDir, "001.json")
-	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_id": "budget-a"})
-	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_id": "budget-b"})
+	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_snapshot_ref": "budget-a"})
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_snapshot_ref": "budget-b"})
 
 	if result := adv04BudgetOverdraft().Run(dir); !result.Pass {
 		t.Fatalf("unrelated budget decrement was treated as overdraft: %+v", result)
@@ -353,9 +352,32 @@ func TestBudgetBoundaryUsesExplicitScope(t *testing.T) {
 		t.Fatalf("unrelated budgets satisfied ADV-04 coverage: %+v", coverage)
 	}
 
-	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_id": "budget-a"})
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_snapshot_ref": "budget-a"})
 	if result := adv04BudgetOverdraft().Run(dir); result.Pass || result.TestResults[0].Reason != "BUDGET_OVERDRAFT" {
 		t.Fatalf("same-budget overdraft was accepted: %+v", result)
+	}
+
+	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_id": "budget-a"})
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "decision_id": "budget-a"})
+	if result := adv04BudgetOverdraft().Run(dir); result.Pass || result.TestResults[0].Reason != "budget boundary contains an unscoped or unsequenced receipt" {
+		t.Fatalf("mixed fallback scope keys bypassed budget boundary: %+v", result)
+	}
+	coverage = budgetBoundaryCoverage([]map[string]interface{}{loadReceipt(exhaustedPath), loadReceipt(decrementPath)})
+	if coverage.Covered {
+		t.Fatalf("mixed fallback scope keys satisfied ADV-04 coverage: %+v", coverage)
+	}
+}
+
+func TestReceiptSequenceIgnoresFilenameOrder(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(receiptsDir, "999.json"), map[string]any{"seq": 1})
+	writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{"seq": 2})
+	if result := adv01ReceiptGapInjection().Run(dir); !result.Pass {
+		t.Fatalf("contiguous receipts were rejected because filenames were reordered: %+v", result)
 	}
 }
 

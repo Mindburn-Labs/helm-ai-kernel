@@ -64,6 +64,21 @@ func TestCoverageRejectsLegacyToolDirectoryAndPlaceholderSignature(t *testing.T)
 	}
 }
 
+func TestCampaignSignaturesAreDomainSeparated(t *testing.T) {
+	privateKey, publicKeyHex := campaignTestKey()
+	receipt := signCampaignDocument(t, map[string]any{"name": "repurposed-receipt"}, "campaign_signatures", campaignReceiptSignatureDomain, privateKey)
+	receipt["signatures"] = receipt["campaign_signatures"]
+	delete(receipt, "campaign_signatures")
+
+	if verifyCampaignSignatures(receipt, "signatures", campaignToolManifestSignatureDomain, publicKeyHex) {
+		t.Fatal("receipt signature was accepted in the tool-manifest domain")
+	}
+	manifest := signCampaignDocument(t, map[string]any{"name": "real-tool"}, "signatures", campaignToolManifestSignatureDomain, privateKey)
+	if !verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, publicKeyHex) {
+		t.Fatal("domain-bound tool-manifest signature was rejected")
+	}
+}
+
 func writePassingCoverageArtifacts(t *testing.T, dir string) string {
 	t.Helper()
 	privateKey, publicKeyHex := campaignTestKey()
@@ -75,20 +90,20 @@ func writePassingCoverageArtifacts(t *testing.T, dir string) string {
 	}
 	receipts := []map[string]any{
 		{"receipt_id": "receipt-1", "receipt_hash": "receipt-1", "seq": 1, "action_type": "policy_decision", "status": "APPLIED", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}},
-		{"receipt_id": "receipt-2", "receipt_hash": "receipt-2", "seq": 2, "action_type": "budget_decrement", "budget_id": "budget-1", "tenant_id": "tenant-1", "parent_receipt_hashes": []string{"receipt-1"}},
-		{"receipt_id": "receipt-3", "receipt_hash": "receipt-3", "seq": 3, "action_type": "budget_exhausted", "budget_id": "budget-1", "tenant_id": "tenant-1", "parent_receipt_hashes": []string{"receipt-2"}},
+		{"receipt_id": "receipt-2", "receipt_hash": "receipt-2", "seq": 2, "action_type": "budget_decrement", "budget_snapshot_ref": "budget-1", "tenant_id": "tenant-1", "parent_receipt_hashes": []string{"receipt-1"}},
+		{"receipt_id": "receipt-3", "receipt_hash": "receipt-3", "seq": 3, "action_type": "budget_exhausted", "budget_snapshot_ref": "budget-1", "tenant_id": "tenant-1", "parent_receipt_hashes": []string{"receipt-2"}},
 		{"receipt_id": "receipt-4", "receipt_hash": "receipt-4", "seq": 4, "action_type": "approval_action", "status": "APPROVED", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"receipt-3"}},
 		{"receipt_id": "receipt-5", "receipt_hash": "receipt-5", "seq": 5, "action_type": "effect_attempt", "decision_id": "decision-1", "effect_class": "E4", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"receipt-4"}},
 	}
-	receipts[0] = signCampaignDocument(t, receipts[0], "campaign_signatures", privateKey)
-	receipts[3] = signCampaignDocument(t, receipts[3], "campaign_signatures", privateKey)
+	receipts[0] = signCampaignDocument(t, receipts[0], "campaign_signatures", campaignReceiptSignatureDomain, privateKey)
+	receipts[3] = signCampaignDocument(t, receipts[3], "campaign_signatures", campaignReceiptSignatureDomain, privateKey)
 	for i, receipt := range receipts {
 		writeJSON(t, filepath.Join(receiptsDir, []string{"001.json", "002.json", "003.json", "004.json", "005.json"}[i]), receipt)
 	}
 	value := []byte("campaign-tape-value")
 	valueHash := sha256.Sum256(value)
 	writeJSON(t, filepath.Join(dir, "08_TAPES", "entry_001.json"), map[string]any{"value": value, "value_hash": hex.EncodeToString(valueHash[:]), "data_class": "internal"})
-	toolManifest := signCampaignDocument(t, map[string]any{"name": "covered-tool"}, "signatures", privateKey)
+	toolManifest := signCampaignDocument(t, map[string]any{"name": "covered-tool"}, "signatures", campaignToolManifestSignatureDomain, privateKey)
 	writeJSON(t, filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json"), toolManifest)
 	writeJSON(t, filepath.Join(dir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 5})
 	return publicKeyHex
@@ -100,7 +115,7 @@ func campaignTestKey() (ed25519.PrivateKey, string) {
 	return privateKey, hex.EncodeToString(privateKey.Public().(ed25519.PublicKey))
 }
 
-func signCampaignDocument(t *testing.T, document map[string]any, field string, privateKey ed25519.PrivateKey) map[string]any {
+func signCampaignDocument(t *testing.T, document map[string]any, field, domain string, privateKey ed25519.PrivateKey) map[string]any {
 	t.Helper()
 	payload := make(map[string]any, len(document))
 	for key, value := range document {
@@ -112,12 +127,16 @@ func signCampaignDocument(t *testing.T, document map[string]any, field string, p
 	if err != nil {
 		t.Fatal(err)
 	}
+	signedMessage := make([]byte, 0, len(domain)+1+len(canonical))
+	signedMessage = append(signedMessage, domain...)
+	signedMessage = append(signedMessage, 0)
+	signedMessage = append(signedMessage, canonical...)
 	publicKey := privateKey.Public().(ed25519.PublicKey)
 	keyHash := sha256.Sum256(publicKey)
 	payload[field] = []any{map[string]any{
 		"algorithm": "ed25519",
 		"key_id":    "sha256:" + hex.EncodeToString(keyHash[:]),
-		"signature": hex.EncodeToString(ed25519.Sign(privateKey, canonical)),
+		"signature": hex.EncodeToString(ed25519.Sign(privateKey, signedMessage)),
 	}}
 	return payload
 }

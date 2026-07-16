@@ -7,7 +7,11 @@ import (
 	"path/filepath"
 )
 
-const CampaignPublicKeyEnv = "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX"
+const (
+	CampaignPublicKeyEnv = "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX"
+	CampaignIDEnv        = "HELM_BOUNTY_CAMPAIGN_ID"
+	CampaignRunIDEnv     = "HELM_BOUNTY_RUN_ID"
+)
 
 // RunAll executes all 10 mandatory adversarial suites against an EvidencePack.
 // It preserves the original single-argument API and reads the campaign trust
@@ -15,7 +19,11 @@ const CampaignPublicKeyEnv = "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX"
 // suites fail closed when the variable is absent or invalid; explicit callers
 // should use RunAllWithOptions.
 func RunAll(evidenceDir string) *AggregateResult {
-	return RunAllWithOptions(evidenceDir, VerificationOptions{CampaignPublicKeyHex: os.Getenv(CampaignPublicKeyEnv)})
+	return RunAllWithOptions(evidenceDir, VerificationOptions{
+		CampaignPublicKeyHex: os.Getenv(CampaignPublicKeyEnv),
+		CampaignID:           os.Getenv(CampaignIDEnv),
+		RunID:                os.Getenv(CampaignRunIDEnv),
+	})
 }
 
 // RunAllWithOptions executes every suite against an external campaign trust

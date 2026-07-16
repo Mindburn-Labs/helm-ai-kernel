@@ -93,6 +93,16 @@ The report path must be outside the EvidencePack. Writing a new file into a
 sealed pack would invalidate its index and seal, so the command rejects that
 configuration, including attempts to overwrite an archive input.
 
+Release builders can export the source-owned detector identity without
+executing a campaign:
+
+```bash
+helm-ai-kernel conform adversarial definition
+```
+
+The JSON output contains the semantic revision, definition SHA-256, and
+mandatory-suite count for embedding in signed image provenance.
+
 Verify a report independently before any downstream use:
 
 ```bash

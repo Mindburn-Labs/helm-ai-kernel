@@ -96,6 +96,9 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "verify-report" {
 		return runVerifyAdversarialCampaignReport(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "definition" {
+		return runAdversarialDetectorDefinition(args[1:], stdout, stderr)
+	}
 	cmd := flag.NewFlagSet("conform adversarial", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 
@@ -275,6 +278,34 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 	}
 	if !campaign.Pass {
 		return 1
+	}
+	return 0
+}
+
+func runAdversarialDetectorDefinition(args []string, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
+		_, _ = fmt.Fprintf(stderr, "Error: unexpected argument: %s\n", args[0])
+		return 2
+	}
+	digest, err := adversarial.DefinitionDigest()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: cannot hash detector definition: %v\n", err)
+		return 2
+	}
+	definition := struct {
+		Revision         string `json:"revision"`
+		DefinitionSHA256 string `json:"definition_sha256"`
+		MandatorySuites  int    `json:"mandatory_suites"`
+	}{
+		Revision:         adversarial.DetectorRevision,
+		DefinitionSHA256: digest,
+		MandatorySuites:  len(adversarial.AllSuites()),
+	}
+	encoder := json.NewEncoder(stdout)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(definition); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: encode detector definition: %v\n", err)
+		return 2
 	}
 	return 0
 }

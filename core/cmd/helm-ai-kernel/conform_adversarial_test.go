@@ -17,8 +17,38 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform/adversarial"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
+
+func TestConformAdversarialDefinition(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runConform([]string{"adversarial", "definition"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("definition exit=%d stderr=%s", code, stderr.String())
+	}
+	var definition struct {
+		Revision         string `json:"revision"`
+		DefinitionSHA256 string `json:"definition_sha256"`
+		MandatorySuites  int    `json:"mandatory_suites"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &definition); err != nil {
+		t.Fatalf("decode definition: %v", err)
+	}
+	wantDigest, err := adversarial.DefinitionDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if definition.Revision != adversarial.DetectorRevision || definition.DefinitionSHA256 != wantDigest || definition.MandatorySuites != 10 {
+		t.Fatalf("definition = %+v", definition)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := runConform([]string{"adversarial", "definition", "unexpected"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "unexpected argument") {
+		t.Fatalf("unexpected definition argument exit=%d stderr=%s", code, stderr.String())
+	}
+}
 
 func TestConformAdversarialRequiresExplicitTrustProfile(t *testing.T) {
 	var stdout, stderr bytes.Buffer

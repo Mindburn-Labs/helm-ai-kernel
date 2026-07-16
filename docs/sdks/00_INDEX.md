@@ -66,9 +66,10 @@ pinned version claim.
 
 ## Authentication Coverage
 
-Protected routes require `Authorization: Bearer $HELM_ADMIN_API_KEY`. Tenant-
-scoped routes also bind tenant and principal headers. A scoped emergency fence
-can additionally require `X-Helm-Workspace-ID`.
+Protected routes require an HTTP `Authorization` header whose scheme is
+`Bearer` and whose credential is `$HELM_ADMIN_API_KEY`. Tenant-scoped routes
+also bind tenant and principal headers. A scoped emergency fence can
+additionally require `X-Helm-Workspace-ID`.
 
 | Client | API key | Tenant | Principal | Workspace |
 | --- | --- | --- | --- | --- |

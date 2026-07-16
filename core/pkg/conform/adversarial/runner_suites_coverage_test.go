@@ -549,6 +549,53 @@ func TestDAGRejectsReceiptIdentityCollisions(t *testing.T) {
 	}
 }
 
+func TestDAGRejectsDisconnectedAndMultipleRootProofGraphs(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	rootPath := filepath.Join(receiptsDir, "001.json")
+	childPath := filepath.Join(receiptsDir, "002.json")
+	strayPath := filepath.Join(receiptsDir, "003.json")
+	writeJSON(t, rootPath, map[string]any{"receipt_id": "root", "receipt_hash": "root", "seq": 1, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"root"}})
+	writeJSON(t, strayPath, map[string]any{"receipt_id": "stray", "receipt_hash": "stray", "seq": 3})
+
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("disconnected receipt without parents passed ADV-03: %+v", result)
+	}
+	receipts := []map[string]interface{}{loadReceipt(rootPath), loadReceipt(childPath), loadReceipt(strayPath)}
+	if coverage := proofGraphParentCoverage(receipts); coverage.Covered {
+		t.Fatalf("disconnected receipt satisfied ADV-03 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, strayPath, map[string]any{"receipt_id": "stray", "receipt_hash": "stray", "seq": 3, "parent_receipt_hashes": []string{"genesis"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("multiple-root proof graph passed ADV-03: %+v", result)
+	}
+	receipts[2] = loadReceipt(strayPath)
+	if coverage := proofGraphParentCoverage(receipts); coverage.Covered {
+		t.Fatalf("multiple-root proof graph satisfied ADV-03 coverage: %+v", coverage)
+	}
+}
+
+func TestDAGRejectsEmptyAndMalformedParentSets(t *testing.T) {
+	dir := t.TempDir()
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("empty proof graph passed ADV-03: %+v", result)
+	}
+
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{"receipt_id": "root", "receipt_hash": "root", "seq": 1, "parent_receipt_hashes": "genesis"})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("malformed parent set passed ADV-03: %+v", result)
+	}
+}
+
 func writeJSON(t *testing.T, path string, value any) {
 	t.Helper()
 	data, err := json.Marshal(value)

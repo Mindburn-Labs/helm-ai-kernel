@@ -201,6 +201,9 @@ func TestApprovalAssertionRejectsMalformedEnvelopeOrSignature(t *testing.T) {
 		"wrong domain":      func(a *ApprovalAssertion) { a.Domain = "HELM/ApprovalAssertion/v2" },
 		"unknown algorithm": func(a *ApprovalAssertion) { a.Algorithm = "rsa" },
 		"missing key":       func(a *ApprovalAssertion) { a.KeyID = "" },
+		"unicode key":       func(a *ApprovalAssertion) { a.KeyID = "ключ" },
+		"emoji key":         func(a *ApprovalAssertion) { a.KeyID = "key-😀" },
+		"reserved key byte": func(a *ApprovalAssertion) { a.KeyID = "key|a" },
 		"short signature":   func(a *ApprovalAssertion) { a.Signature = "ed25519:ab" },
 		"uppercase signature": func(a *ApprovalAssertion) {
 			a.Signature = "ed25519:" + strings.Repeat("A", 128)
@@ -214,6 +217,19 @@ func TestApprovalAssertionRejectsMalformedEnvelopeOrSignature(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want ErrApprovalAssertionInvalid", err)
 			}
 		})
+	}
+}
+
+func TestApprovalSignerIdentifierGrammar(t *testing.T) {
+	for _, value := range []string{"key-a", "spiffe://approver/a", "user@example.com", "A._~:+-9"} {
+		if !IsApprovalSignerIdentifier(value) {
+			t.Fatalf("IsApprovalSignerIdentifier(%q) = false, want true", value)
+		}
+	}
+	for _, value := range []string{"", "key a", "key|a", "ключ", "key-😀"} {
+		if IsApprovalSignerIdentifier(value) {
+			t.Fatalf("IsApprovalSignerIdentifier(%q) = true, want false", value)
+		}
 	}
 }
 

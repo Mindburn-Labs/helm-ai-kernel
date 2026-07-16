@@ -245,6 +245,21 @@ func TestVerifyQuorumRejectsUntrustedAuthority(t *testing.T) {
 			key.DeviceID = "device a"
 			store.Keys["key-a"] = key
 		},
+		"non-ascii principal": func(store *TrustStore, _ *[]contracts.ApprovalAssertion) {
+			key := store.Keys["key-a"]
+			key.PrincipalID = "principal-😀"
+			store.Keys["key-a"] = key
+		},
+		"non-ascii credential": func(store *TrustStore, _ *[]contracts.ApprovalAssertion) {
+			key := store.Keys["key-a"]
+			key.CredentialID = "учетные-данные"
+			store.Keys["key-a"] = key
+		},
+		"reserved device byte": func(store *TrustStore, _ *[]contracts.ApprovalAssertion) {
+			key := store.Keys["key-a"]
+			key.DeviceID = "device|a"
+			store.Keys["key-a"] = key
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {

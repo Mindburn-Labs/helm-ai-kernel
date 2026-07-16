@@ -286,9 +286,12 @@
       "command": "make verify-fixtures",
       "timeout_seconds": 300,
       "paths": [
+        "core/pkg/boundary/approvalverify/**",
+        "core/pkg/contracts/approval_*.go",
         "core/pkg/verifier/**",
         "artifacts/golden/**",
         "fixtures/**",
+        "reference_packs/approval/**",
         "Makefile"
       ]
     },
@@ -336,6 +339,7 @@
         "core/**",
         "deploy/**",
         "protocols/**",
+        "reference_packs/approval/**",
         "scripts/**",
         "sdk/**"
       ]

@@ -1,0 +1,5 @@
+{
+  "$comment": "quantum_posture: these hash-pinned canonical payloads exercise classical Ed25519 only; no hybrid or post-quantum claim.",
+  "index": "vectors.json",
+  "schema_version": "approval-source-manifest.v1"
+}

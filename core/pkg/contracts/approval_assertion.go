@@ -252,13 +252,34 @@ func (a ApprovalAssertion) validateSigningEnvelope() error {
 	if !isApprovalGrantSHA256(a.ChallengeHash) {
 		return approvalAssertionInvalid("challenge_hash must be a lowercase sha256 reference")
 	}
-	if !isApprovalGrantToken(a.KeyID) {
-		return approvalAssertionInvalid("key_id is required and must not contain whitespace")
+	if !IsApprovalSignerIdentifier(a.KeyID) {
+		return approvalAssertionInvalid("key_id must use the portable ASCII signer identifier grammar")
 	}
 	if a.Algorithm != ApprovalAssertionEd25519 {
 		return approvalAssertionInvalid("algorithm must be ed25519")
 	}
 	return nil
+}
+
+// IsApprovalSignerIdentifier reports whether value has the portable,
+// case-sensitive ASCII grammar used for deterministic signer-set ordering.
+func IsApprovalSignerIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			continue
+		}
+		switch c {
+		case '.', '_', '~', ':', '/', '@', '+', '-':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // SigningDigest returns the domain-separated JCS digest signed by the

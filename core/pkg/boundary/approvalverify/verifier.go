@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -422,7 +421,7 @@ func validateTrustedKey(key TrustedApproverKey, assertionKeyID string, challenge
 	if !key.Enabled {
 		return authorityRejected("key is disabled")
 	}
-	if key.KeyID == "" || key.KeyID != assertionKeyID {
+	if !contracts.IsApprovalSignerIdentifier(key.KeyID) || key.KeyID != assertionKeyID {
 		return authorityRejected("key identity mismatch")
 	}
 	if key.TenantID == "" || key.TenantID != challenge.TenantID {
@@ -431,8 +430,10 @@ func validateTrustedKey(key TrustedApproverKey, assertionKeyID string, challenge
 	if !containsExactAuthority(key.WorkspaceIDs, challenge.WorkspaceID) {
 		return authorityRejected("workspace is not authorized")
 	}
-	if !isAuthorityToken(key.PrincipalID) || !isAuthorityToken(key.CredentialID) || !isAuthorityToken(key.DeviceID) {
-		return authorityRejected("key authority identity is incomplete")
+	if !contracts.IsApprovalSignerIdentifier(key.PrincipalID) ||
+		!contracts.IsApprovalSignerIdentifier(key.CredentialID) ||
+		!contracts.IsApprovalSignerIdentifier(key.DeviceID) {
+		return authorityRejected("key authority identity must use the portable ASCII signer identifier grammar")
 	}
 	if len(key.PublicKey) != ed25519.PublicKeySize {
 		return authorityRejected("invalid ed25519 public key length")
@@ -462,10 +463,6 @@ func containsExactAuthority(values []string, expected string) bool {
 		}
 	}
 	return false
-}
-
-func isAuthorityToken(value string) bool {
-	return value != "" && strings.IndexFunc(value, unicode.IsSpace) == -1
 }
 
 func verificationFailed(message string) error {

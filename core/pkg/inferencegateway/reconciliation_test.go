@@ -1,6 +1,7 @@
 package inferencegateway
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -176,10 +177,9 @@ func TestFinanceExport_IncludesTaxBasisAndInvoiceAccrual(t *testing.T) {
 	}
 }
 
-// TestReconciliationResolution_RequiresApprovedCorrection proves an AMOUNT_MISMATCH
-// is resolved only through an approved, dual-control correction that posts an
-// append-only ADJUSTMENT entry — never by editing history.
-func TestReconciliationResolution_RequiresApprovedCorrection(t *testing.T) {
+// TestReconciliationResolution_RejectsLegacyCorrection proves an
+// AMOUNT_MISMATCH cannot be resolved by a caller-constructed legacy ceremony.
+func TestReconciliationResolution_RejectsLegacyCorrection(t *testing.T) {
 	h := newHarness(t)
 	settleOne(t, h, "idem-adj", "prov-req-adj", 100)
 
@@ -203,20 +203,12 @@ func TestReconciliationResolution_RequiresApprovedCorrection(t *testing.T) {
 		t.Fatalf("expected unapproved correction to be refused")
 	}
 
-	// Approved, dual-control correction posts an append-only ADJUSTMENT entry.
+	// A sealed dual-control legacy ceremony remains non-authoritative.
 	appr := approvedCeremony(t, "alice", "bob")
-	res, err := h.ledger.Adjust("adj-ok", economic.SettlementDebit, delta, "k-adj-ok", "reconciliation true-up for inv-adj", appr, "evidence://adj-ok")
-	if err != nil {
-		t.Fatalf("approved correction: %v", err)
+	if _, err := h.ledger.Adjust("adj-ok", economic.SettlementDebit, delta, "k-adj-ok", "reconciliation true-up for inv-adj", appr, "evidence://adj-ok"); !errors.Is(err, economic.ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("legacy correction error = %v, want %v", err, economic.ErrLegacyApprovalCeremonyUnsupported)
 	}
-	if res.Entry.Type != economic.UsageLedgerAdjustment {
-		t.Fatalf("correction entry type = %s, want ADJUSTMENT", res.Entry.Type)
-	}
-	if res.Entry.SourceContentHash != res.Receipt.ContentHash {
-		t.Fatalf("correction entry not bound to its receipt hash")
-	}
-	// History is append-only: the prior entries are untouched, exactly one added.
-	if got := len(h.ledger.Entries()); got != entriesBefore+1 {
-		t.Fatalf("entries after correction = %d, want %d (append-only)", got, entriesBefore+1)
+	if got := len(h.ledger.Entries()); got != entriesBefore {
+		t.Fatalf("legacy correction appended an entry: %d != %d", got, entriesBefore)
 	}
 }

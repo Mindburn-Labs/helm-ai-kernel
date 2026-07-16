@@ -9,8 +9,8 @@ import (
 
 // RunAll executes all 10 mandatory adversarial suites against an EvidencePack.
 // Returns an aggregate result. Any single suite failure means overall failure.
-func RunAll(evidenceDir string) *AggregateResult {
-	return RunAllWithOptions(evidenceDir, VerificationOptions{})
+func RunAll(evidenceDir string, opts VerificationOptions) *AggregateResult {
+	return RunAllWithOptions(evidenceDir, opts)
 }
 
 // RunAllWithOptions executes every suite against an external campaign trust

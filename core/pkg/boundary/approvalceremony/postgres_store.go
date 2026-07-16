@@ -71,23 +71,39 @@ BEGIN
           AND policyname = 'approval_ceremonies_tenant_isolation'
     ) THEN
         CREATE POLICY approval_ceremonies_tenant_isolation ON approval_ceremonies
-            USING (tenant_id = current_setting('app.current_tenant', true))
-            WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
+            USING (
+                tenant_id = current_setting('app.current_tenant', true)
+                AND workspace_id = current_setting('app.current_workspace', true)
+            )
+            WITH CHECK (
+                tenant_id = current_setting('app.current_tenant', true)
+                AND workspace_id = current_setting('app.current_workspace', true)
+            );
     END IF;
 END
 $$;
+
+ALTER POLICY approval_ceremonies_tenant_isolation ON approval_ceremonies
+    USING (
+        tenant_id = current_setting('app.current_tenant', true)
+        AND workspace_id = current_setting('app.current_workspace', true)
+    )
+    WITH CHECK (
+        tenant_id = current_setting('app.current_tenant', true)
+        AND workspace_id = current_setting('app.current_workspace', true)
+    );
 `
 
 const recordColumns = `
 approval_id, tenant_id, workspace_id, state, hold_started_at,
 challenge_spec_json, challenge_json, verified_ref_json, grant_json,
 grant_signature_algorithm, grant_signature,
-created_at, updated_at, consumed_at, consumed_by, version
+created_at, updated_at, expires_at, consumed_at, consumed_by, version
 `
 
 // PostgresStore is the production ceremony authority store. Every operation
-// sets tenant context inside its transaction and repeats tenant_id in the SQL
-// predicate, so RLS and application scoping fail closed together.
+// sets tenant and workspace context inside its transaction and repeats both in
+// SQL predicates, so RLS and application scoping fail closed together.
 type PostgresStore struct {
 	db            *sql.DB
 	grantVerifier GrantSignatureVerifier
@@ -136,7 +152,7 @@ func (s *PostgresStore) createHold(ctx context.Context, record Record) (Record, 
 	if err != nil {
 		return Record{}, fmt.Errorf("marshal approval challenge spec: %w", err)
 	}
-	return s.withTenantRecord(ctx, record.TenantID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
+	return s.withScopedRecord(ctx, record.TenantID, record.WorkspaceID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
 		return tx.QueryRowContext(ctx, `
             INSERT INTO approval_ceremonies (
                 tenant_id, approval_id, workspace_id, state, hold_started_at,
@@ -149,14 +165,16 @@ func (s *PostgresStore) createHold(ctx context.Context, record Record) (Record, 
 	})
 }
 
-func (s *PostgresStore) Get(ctx context.Context, tenantID, approvalID string) (Record, error) {
-	if !validToken(tenantID) || !validToken(approvalID) {
-		return Record{}, invalidRecord("tenant_id and approval_id are required")
+func (s *PostgresStore) Get(ctx context.Context, tenantID, workspaceID, approvalID string) (Record, error) {
+	if !validToken(tenantID) || !validToken(workspaceID) || !validToken(approvalID) {
+		return Record{}, invalidRecord("tenant_id, workspace_id, and approval_id are required")
 	}
-	record, err := s.withTenantRecord(ctx, tenantID, ErrNotFound, func(tx *sql.Tx) rowScanner {
+	record, err := s.withScopedRecord(ctx, tenantID, workspaceID, ErrNotFound, func(tx *sql.Tx) rowScanner {
 		return tx.QueryRowContext(ctx, `SELECT `+recordColumns+`
             FROM approval_ceremonies
-            WHERE tenant_id = $1 AND approval_id = $2`, tenantID, approvalID)
+			WHERE tenant_id = $1 AND workspace_id = $2 AND approval_id = $3`,
+			tenantID, workspaceID, approvalID,
+		)
 	})
 	if err != nil {
 		return Record{}, err
@@ -174,7 +192,7 @@ func (s *PostgresStore) Get(ctx context.Context, tenantID, approvalID string) (R
 	return record, nil
 }
 
-func (s *PostgresStore) issueChallenge(ctx context.Context, tenantID, approvalID string, challenge contracts.ApprovalChallenge, now time.Time) (Record, error) {
+func (s *PostgresStore) issueChallenge(ctx context.Context, tenantID, workspaceID, approvalID string, challenge contracts.ApprovalChallenge, now time.Time) (Record, error) {
 	if !challenge.IssuedAt.Equal(now.UTC()) {
 		return Record{}, invalidRecord("challenge issued_at must be the server transition time")
 	}
@@ -185,7 +203,7 @@ func (s *PostgresStore) issueChallenge(ctx context.Context, tenantID, approvalID
 	if err != nil {
 		return Record{}, fmt.Errorf("marshal approval challenge: %w", err)
 	}
-	return s.withTenantRecord(ctx, tenantID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
+	return s.withScopedRecord(ctx, tenantID, workspaceID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
 		return tx.QueryRowContext(ctx, `
             UPDATE approval_ceremonies
             SET state = $3, challenge_json = $4, challenge_hash = $5,
@@ -198,13 +216,13 @@ func (s *PostgresStore) issueChallenge(ctx context.Context, tenantID, approvalID
 			  AND updated_at <= $8
             RETURNING `+recordColumns,
 			tenantID, approvalID, StateChallengeIssued, payload, challenge.ChallengeHash,
-			challenge.Nonce, challenge.ExpiresAt, now.UTC(), challenge.WorkspaceID,
+			challenge.Nonce, challenge.ExpiresAt, now.UTC(), workspaceID,
 			challenge.HoldStartedAt,
 		)
 	})
 }
 
-func (s *PostgresStore) recordQuorum(ctx context.Context, tenantID, approvalID string, verified approvalverify.VerifiedApprovalRef, now time.Time) (Record, error) {
+func (s *PostgresStore) recordQuorum(ctx context.Context, tenantID, workspaceID, approvalID string, verified approvalverify.VerifiedApprovalRef, now time.Time) (Record, error) {
 	if !verified.VerifiedAt.Equal(now.UTC()) {
 		return Record{}, invalidRecord("verified_ref verified_at must be the server transition time")
 	}
@@ -212,7 +230,7 @@ func (s *PostgresStore) recordQuorum(ctx context.Context, tenantID, approvalID s
 	if err != nil {
 		return Record{}, fmt.Errorf("marshal verified approval ref: %w", err)
 	}
-	return s.withTenantRecord(ctx, tenantID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
+	return s.withScopedRecord(ctx, tenantID, workspaceID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
 		return tx.QueryRowContext(ctx, `
             UPDATE approval_ceremonies
             SET state = $3, verified_ref_json = $4, signer_set_hash = $5,
@@ -222,14 +240,15 @@ func (s *PostgresStore) recordQuorum(ctx context.Context, tenantID, approvalID s
 			  AND challenge_hash = $7
 			  AND expires_at > $6
 			  AND updated_at <= $6
+			  AND workspace_id = $8
             RETURNING `+recordColumns,
 			tenantID, approvalID, StateQuorumVerified, payload, verified.SignerSetHash,
-			now.UTC(), verified.ChallengeHash,
+			now.UTC(), verified.ChallengeHash, workspaceID,
 		)
 	})
 }
 
-func (s *PostgresStore) issueGrant(ctx context.Context, tenantID, approvalID string, grant contracts.ApprovalGrant, algorithm, signature string, now time.Time) (Record, error) {
+func (s *PostgresStore) issueGrant(ctx context.Context, tenantID, workspaceID, approvalID string, grant contracts.ApprovalGrant, algorithm, signature string, now time.Time) (Record, error) {
 	if !grant.IssuedAt.Equal(now.UTC()) {
 		return Record{}, invalidRecord("grant issued_at must be the server transition time")
 	}
@@ -249,7 +268,7 @@ func (s *PostgresStore) issueGrant(ctx context.Context, tenantID, approvalID str
 	if err != nil {
 		return Record{}, fmt.Errorf("marshal approval grant: %w", err)
 	}
-	return s.withTenantRecord(ctx, tenantID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
+	return s.withScopedRecord(ctx, tenantID, workspaceID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
 		return tx.QueryRowContext(ctx, `
             UPDATE approval_ceremonies
             SET state = $3, grant_json = $4, grant_id = $5, grant_hash = $6,
@@ -261,17 +280,18 @@ func (s *PostgresStore) issueGrant(ctx context.Context, tenantID, approvalID str
 			  AND signer_set_hash = $12
 			  AND expires_at > $11
 			  AND updated_at <= $11
+			  AND workspace_id = $13
             RETURNING `+recordColumns,
 			tenantID, approvalID, StateGrantIssued, payload, grant.GrantID,
 			grant.GrantHash, grant.Nonce, algorithm, signature, grant.ExpiresAt,
-			now.UTC(), grant.SignerSetHash,
+			now.UTC(), grant.SignerSetHash, workspaceID,
 		)
 	})
 }
 
-func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID, approvalID, grantID, grantHash, nonce, consumedBy string, now time.Time) (Record, error) {
-	if !validToken(workspaceID) || !validToken(consumedBy) || !validToken(grantID) || !validSHA256(grantHash) || !validNonce(nonce) {
-		return Record{}, invalidRecord("exact workspace, grant id, hash, nonce, and consumer are required")
+func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID, approvalID, grantID, grantHash, nonce, consumedBy, audience string, now time.Time) (Record, error) {
+	if !validToken(workspaceID) || !validToken(consumedBy) || !validToken(audience) || !validToken(grantID) || !validSHA256(grantHash) || !validNonce(nonce) {
+		return Record{}, invalidRecord("exact workspace, grant id, hash, nonce, consumer, and audience are required")
 	}
 	if s == nil || s.db == nil {
 		return Record{}, errors.New("approval ceremony postgres store requires database")
@@ -280,7 +300,7 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 		return Record{}, fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
 	}
 	consumedAt := now.UTC()
-	tx, err := s.beginTenantTx(ctx, tenantID)
+	tx, err := s.beginScopeTx(ctx, tenantID, workspaceID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -305,6 +325,12 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 	}
 	if issued.Grant == nil {
 		return Record{}, invalidRecord("grant issued record is missing grant")
+	}
+	if issued.Grant.TenantID != tenantID || issued.Grant.WorkspaceID != workspaceID || issued.Grant.Audience != audience {
+		return Record{}, fmt.Errorf("%w: signed grant workload scope mismatch", ErrConsumerUnavailable)
+	}
+	if err := issued.Grant.ValidateAt(consumedAt); err != nil {
+		return Record{}, fmt.Errorf("%w: signed grant is inactive: %v", ErrTransitionConflict, err)
 	}
 	if err := s.grantVerifier.VerifyGrantSignature(
 		*issued.Grant, issued.GrantSignatureAlgorithm, issued.GrantSignature,
@@ -340,22 +366,23 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 	return consumed, nil
 }
 
-func (s *PostgresStore) deny(ctx context.Context, tenantID, approvalID string, now time.Time) (Record, error) {
-	return s.withTenantRecord(ctx, tenantID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
+func (s *PostgresStore) deny(ctx context.Context, tenantID, workspaceID, approvalID string, now time.Time) (Record, error) {
+	return s.withScopedRecord(ctx, tenantID, workspaceID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
 		return tx.QueryRowContext(ctx, `
             UPDATE approval_ceremonies
             SET state = $3, updated_at = $4, version = version + 1
 			WHERE tenant_id = $1 AND approval_id = $2
 			  AND state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED')
 			  AND updated_at <= $4
+			  AND workspace_id = $5
             RETURNING `+recordColumns,
-			tenantID, approvalID, StateDenied, now.UTC(),
+			tenantID, approvalID, StateDenied, now.UTC(), workspaceID,
 		)
 	})
 }
 
-func (s *PostgresStore) expire(ctx context.Context, tenantID, approvalID string, now time.Time) (Record, error) {
-	return s.withTenantRecord(ctx, tenantID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
+func (s *PostgresStore) expire(ctx context.Context, tenantID, workspaceID, approvalID string, now time.Time) (Record, error) {
+	return s.withScopedRecord(ctx, tenantID, workspaceID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
 		return tx.QueryRowContext(ctx, `
             UPDATE approval_ceremonies
             SET state = $3, updated_at = $4, version = version + 1
@@ -363,8 +390,9 @@ func (s *PostgresStore) expire(ctx context.Context, tenantID, approvalID string,
 			  AND state IN ('CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED')
 			  AND expires_at <= $4
 			  AND updated_at <= $4
+			  AND workspace_id = $5
             RETURNING `+recordColumns,
-			tenantID, approvalID, StateExpired, now.UTC(),
+			tenantID, approvalID, StateExpired, now.UTC(), workspaceID,
 		)
 	})
 }
@@ -373,11 +401,11 @@ type rowScanner interface {
 	Scan(...any) error
 }
 
-func (s *PostgresStore) withTenantRecord(ctx context.Context, tenantID string, emptyError error, query func(*sql.Tx) rowScanner) (Record, error) {
+func (s *PostgresStore) withScopedRecord(ctx context.Context, tenantID, workspaceID string, emptyError error, query func(*sql.Tx) rowScanner) (Record, error) {
 	if s == nil || s.db == nil {
 		return Record{}, errors.New("approval ceremony postgres store requires database")
 	}
-	tx, err := s.beginTenantTx(ctx, tenantID)
+	tx, err := s.beginScopeTx(ctx, tenantID, workspaceID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -398,12 +426,12 @@ func (s *PostgresStore) withTenantRecord(ctx context.Context, tenantID string, e
 	return record, nil
 }
 
-func (s *PostgresStore) beginTenantTx(ctx context.Context, tenantID string) (*sql.Tx, error) {
+func (s *PostgresStore) beginScopeTx(ctx context.Context, tenantID, workspaceID string) (*sql.Tx, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("approval ceremony postgres store requires database")
 	}
-	if !validToken(tenantID) {
-		return nil, invalidRecord("tenant_id is required")
+	if !validToken(tenantID) || !validToken(workspaceID) {
+		return nil, invalidRecord("tenant_id and workspace_id are required")
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
@@ -412,6 +440,10 @@ func (s *PostgresStore) beginTenantTx(ctx context.Context, tenantID string) (*sq
 	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, tenantID); err != nil {
 		_ = tx.Rollback()
 		return nil, fmt.Errorf("set approval ceremony tenant: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_workspace', $1, true)`, workspaceID); err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("set approval ceremony workspace: %w", err)
 	}
 	return tx, nil
 }
@@ -422,12 +454,12 @@ func scanRecord(row rowScanner) (Record, error) {
 	var specJSON string
 	var challengeJSON, verifiedJSON, grantJSON sql.NullString
 	var signatureAlgorithm, signature, consumedBy sql.NullString
-	var consumedAt sql.NullTime
+	var expiresAt, consumedAt sql.NullTime
 	if err := row.Scan(
 		&record.ApprovalID, &record.TenantID, &record.WorkspaceID, &state,
 		&record.HoldStartedAt, &specJSON, &challengeJSON, &verifiedJSON, &grantJSON,
 		&signatureAlgorithm, &signature, &record.CreatedAt, &record.UpdatedAt,
-		&consumedAt, &consumedBy, &record.Version,
+		&expiresAt, &consumedAt, &consumedBy, &record.Version,
 	); err != nil {
 		return Record{}, err
 	}
@@ -435,6 +467,10 @@ func scanRecord(row rowScanner) (Record, error) {
 	record.GrantSignatureAlgorithm = signatureAlgorithm.String
 	record.GrantSignature = signature.String
 	record.ConsumedBy = consumedBy.String
+	if expiresAt.Valid {
+		value := expiresAt.Time.UTC()
+		record.ExpiresAt = &value
+	}
 	if err := json.Unmarshal([]byte(specJSON), &record.Spec); err != nil {
 		return Record{}, fmt.Errorf("decode persisted approval challenge spec: %w", err)
 	}

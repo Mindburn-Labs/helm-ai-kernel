@@ -19,12 +19,12 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 // TestPostgresLifecycleSingleIssueAndConsume is the source-owned real-Postgres
-// concurrency proof. It is opt-in locally and mandatory in the production
-// approval gate through HELM_TEST_POSTGRES_URL.
+// concurrency and isolation proof. The source-owned workflow provisions its
+// database URL; local runs skip when HELM_TEST_POSTGRES_URL is absent.
 func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	postgresURL := os.Getenv("HELM_TEST_POSTGRES_URL")
 	if postgresURL == "" {
@@ -53,10 +53,43 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEd25519GrantSignatureVerifier(): %v", err)
 	}
-	store := NewPostgresStore(db, grantVerifier)
-	if err := store.Init(ctx); err != nil {
+	schemaStore := NewPostgresStore(db, grantVerifier)
+	if err := schemaStore.Init(ctx); err != nil {
 		t.Fatalf("Init(): %v", err)
 	}
+	runtimeRole := fmt.Sprintf("helm_runtime_%d", time.Now().UnixNano())
+	runtimePassword := "helm-approval-test-password"
+	quotedRole := pq.QuoteIdentifier(runtimeRole)
+	if _, err := db.ExecContext(ctx, `CREATE ROLE `+quotedRole+` WITH
+		LOGIN PASSWORD '`+runtimePassword+`' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS`); err != nil {
+		t.Fatalf("create non-bypass runtime role: %v", err)
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = db.ExecContext(cleanupCtx, `DROP OWNED BY `+quotedRole)
+		_, _ = db.ExecContext(cleanupCtx, `DROP ROLE IF EXISTS `+quotedRole)
+	}()
+	if _, err := db.ExecContext(ctx, `GRANT USAGE ON SCHEMA `+pq.QuoteIdentifier(schema)+` TO `+quotedRole); err != nil {
+		t.Fatalf("grant runtime schema usage: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `GRANT SELECT, INSERT, UPDATE ON approval_ceremonies TO `+quotedRole); err != nil {
+		t.Fatalf("grant runtime table privileges: %v", err)
+	}
+	var runtimeSuperuser, runtimeBypassRLS bool
+	if err := db.QueryRowContext(ctx, `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`, runtimeRole).
+		Scan(&runtimeSuperuser, &runtimeBypassRLS); err != nil {
+		t.Fatalf("read runtime role attributes: %v", err)
+	}
+	if runtimeSuperuser || runtimeBypassRLS {
+		t.Fatalf("runtime role bypasses RLS: superuser=%t bypassrls=%t", runtimeSuperuser, runtimeBypassRLS)
+	}
+	runtimeDB := openApprovalTestPostgresAs(t, postgresURL, schema, runtimeRole, runtimePassword)
+	defer func() { _ = runtimeDB.Close() }()
+	if err := runtimeDB.PingContext(ctx); err != nil {
+		t.Fatalf("connect as non-bypass runtime role: %v", err)
+	}
+	store := NewPostgresStore(runtimeDB, grantVerifier)
 	clockNow := fixtureHold.HoldStartedAt
 	config := ServiceConfig{
 		MinHoldDuration: 5 * time.Minute, ChallengeTTL: 10 * time.Minute,
@@ -65,24 +98,26 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 		KernelTrustRootID: fixtureGrant.KernelTrustRootID, SigningKeyRef: fixtureGrant.SigningKeyRef,
 	}
 	authority, approverKeys := approvalTestAuthority(fixtureHold.Spec, fixtureHold.HoldStartedAt)
+	control := &staticControlProvider{identity: controlForSpec(fixtureHold.Spec)}
+	consumer := &staticConsumerProvider{identity: consumerForSpec(fixtureHold.Spec)}
 	service, err := newService(
 		store, staticBindingProvider{spec: fixtureHold.Spec},
 		staticAuthorityProvider{store: authority},
-		staticConsumerProvider{identity: consumerForSpec(fixtureHold.Spec)}, signer,
+		control, consumer, signer,
 		func() time.Time { return clockNow }, cryptorand.Reader, config,
 	)
 	if err != nil {
 		t.Fatalf("newService(): %v", err)
 	}
-	hold, err := service.BeginHold(ctx, requestForSpec(fixtureHold.Spec))
+	hold, err := service.BeginHold(ctx, fixtureHold.Spec.BindingRef)
 	if err != nil {
 		t.Fatalf("BeginHold(): %v", err)
 	}
-	if _, err := service.IssueChallenge(ctx, hold.TenantID, hold.ApprovalID); !errors.Is(err, ErrHoldPending) {
+	if _, err := service.IssueChallenge(ctx, hold.ApprovalID); !errors.Is(err, ErrHoldPending) {
 		t.Fatalf("early IssueChallenge() error = %v, want ErrHoldPending", err)
 	}
 	clockNow = hold.HoldStartedAt.Add(config.MinHoldDuration)
-	challenged, err := service.IssueChallenge(ctx, hold.TenantID, hold.ApprovalID)
+	challenged, err := service.IssueChallenge(ctx, hold.ApprovalID)
 	if err != nil {
 		t.Fatalf("IssueChallenge(): %v", err)
 	}
@@ -91,7 +126,7 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	}
 	assertions := approvalTestAssertions(t, *challenged.Challenge, approverKeys)
 	clockNow = clockNow.Add(time.Minute)
-	verified, err := service.VerifyQuorum(ctx, hold.TenantID, hold.ApprovalID, assertions)
+	verified, err := service.VerifyQuorum(ctx, hold.ApprovalID, assertions)
 	if err != nil {
 		t.Fatalf("VerifyQuorum(): %v", err)
 	}
@@ -107,7 +142,7 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			record, issueErr := service.IssueGrant(ctx, hold.TenantID, hold.ApprovalID)
+			record, issueErr := service.IssueGrant(ctx, hold.ApprovalID)
 			if issueErr != nil {
 				errorsCh <- issueErr
 				return
@@ -157,19 +192,27 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if final.State != StateConsumed || final.Version != 5 || final.ConsumedAt == nil {
 		t.Fatalf("final record = %+v", final)
 	}
-	if _, err := store.Get(ctx, "tenant-b", hold.ApprovalID); !errors.Is(err, ErrNotFound) {
+	if _, err := store.Get(ctx, "tenant-b", hold.WorkspaceID, hold.ApprovalID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-tenant Get() error = %v, want ErrNotFound", err)
 	}
+	assertApprovalRLSVisibility(t, ctx, runtimeDB, "tenant-b", hold.WorkspaceID, hold.ApprovalID, 0)
+	assertApprovalRLSVisibility(t, ctx, runtimeDB, hold.TenantID, "workspace-b", hold.ApprovalID, 0)
+	assertApprovalRLSVisibility(t, ctx, runtimeDB, hold.TenantID, hold.WorkspaceID, hold.ApprovalID, 1)
+	control.identity.WorkspaceID = "workspace-b"
+	if _, err := service.Get(ctx, hold.ApprovalID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("same-tenant cross-workspace Get() error = %v, want ErrNotFound", err)
+	}
+	control.identity = controlForSpec(fixtureHold.Spec)
 
-	deniedHold, err := service.BeginHold(ctx, requestForSpec(fixtureHold.Spec))
+	deniedHold, err := service.BeginHold(ctx, fixtureHold.Spec.BindingRef)
 	if err != nil {
 		t.Fatalf("BeginHold() for denial: %v", err)
 	}
-	denied, err := service.Deny(ctx, deniedHold.TenantID, deniedHold.ApprovalID)
+	denied, err := service.Deny(ctx, deniedHold.ApprovalID)
 	if err != nil || denied.State != StateDenied {
 		t.Fatalf("Deny() record = %+v, error = %v", denied, err)
 	}
-	if _, err := service.Deny(ctx, deniedHold.TenantID, deniedHold.ApprovalID); !errors.Is(err, ErrTransitionConflict) {
+	if _, err := service.Deny(ctx, deniedHold.ApprovalID); !errors.Is(err, ErrTransitionConflict) {
 		t.Fatalf("second Deny() error = %v, want ErrTransitionConflict", err)
 	}
 
@@ -192,7 +235,7 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	); !errors.Is(err, ErrGrantSignatureRejected) {
 		t.Fatalf("ConsumeGrant() tampered signature error = %v, want ErrGrantSignatureRejected", err)
 	}
-	if _, err := service.Get(ctx, tampered.TenantID, tampered.ApprovalID); !errors.Is(err, ErrGrantSignatureRejected) {
+	if _, err := service.Get(ctx, tampered.ApprovalID); !errors.Is(err, ErrGrantSignatureRejected) {
 		t.Fatalf("Get() tampered signature error = %v, want ErrGrantSignatureRejected", err)
 	}
 	var persistedState string
@@ -207,19 +250,91 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 		t.Fatalf("tampered grant changed state: state = %s, consumed = %v", persistedState, persistedConsumedAt)
 	}
 
-	expiringHold, err := service.BeginHold(ctx, requestForSpec(fixtureHold.Spec))
+	audienceBound := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
+	consumer.identity.Audience = "helm-data-plane-b"
+	if _, err := service.ConsumeGrant(
+		ctx, audienceBound.ApprovalID, audienceBound.Grant.GrantID,
+		audienceBound.Grant.GrantHash, audienceBound.Grant.Nonce,
+	); !errors.Is(err, ErrConsumerUnavailable) {
+		t.Fatalf("ConsumeGrant() audience substitution error = %v, want ErrConsumerUnavailable", err)
+	}
+	consumer.identity = consumerForSpec(fixtureHold.Spec)
+	assertApprovalPersistedState(t, ctx, db, audienceBound, StateGrantIssued, false)
+
+	expiryBound := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
+	extendedExpiry := expiryBound.Grant.ExpiresAt.Add(time.Hour)
+	result, err = db.ExecContext(ctx, `UPDATE approval_ceremonies
+		SET expires_at = $1
+		WHERE tenant_id = $2 AND workspace_id = $3 AND approval_id = $4`,
+		extendedExpiry, expiryBound.TenantID, expiryBound.WorkspaceID, expiryBound.ApprovalID,
+	)
+	if err != nil {
+		t.Fatalf("extend mutable expiry shadow: %v", err)
+	}
+	rows, err = result.RowsAffected()
+	if err != nil || rows != 1 {
+		t.Fatalf("extend mutable expiry shadow affected %d rows, error = %v", rows, err)
+	}
+	clockNow = expiryBound.Grant.ExpiresAt.Add(time.Second)
+	if _, err := service.ConsumeGrant(
+		ctx, expiryBound.ApprovalID, expiryBound.Grant.GrantID,
+		expiryBound.Grant.GrantHash, expiryBound.Grant.Nonce,
+	); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("ConsumeGrant() extended expiry error = %v, want ErrInvalidRecord", err)
+	}
+	assertApprovalPersistedState(t, ctx, db, expiryBound, StateGrantIssued, false)
+
+	expiringHold, err := service.BeginHold(ctx, fixtureHold.Spec.BindingRef)
 	if err != nil {
 		t.Fatalf("BeginHold() for expiration: %v", err)
 	}
 	clockNow = expiringHold.HoldStartedAt.Add(config.MinHoldDuration)
-	expiring, err := service.IssueChallenge(ctx, expiringHold.TenantID, expiringHold.ApprovalID)
+	expiring, err := service.IssueChallenge(ctx, expiringHold.ApprovalID)
 	if err != nil {
 		t.Fatalf("IssueChallenge() for expiration: %v", err)
 	}
 	clockNow = expiring.Challenge.ExpiresAt
-	expired, err := service.Expire(ctx, expiring.TenantID, expiring.ApprovalID)
+	expired, err := service.Expire(ctx, expiring.ApprovalID)
 	if err != nil || expired.State != StateExpired {
 		t.Fatalf("Expire() record = %+v, error = %v", expired, err)
+	}
+}
+
+func assertApprovalRLSVisibility(t *testing.T, ctx context.Context, db *sql.DB, tenantID, workspaceID, approvalID string, want int) {
+	t.Helper()
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatalf("begin RLS visibility transaction: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, tenantID); err != nil {
+		t.Fatalf("set RLS visibility tenant: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_workspace', $1, true)`, workspaceID); err != nil {
+		t.Fatalf("set RLS visibility workspace: %v", err)
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM approval_ceremonies WHERE approval_id = $1`, approvalID).Scan(&count); err != nil {
+		t.Fatalf("query RLS visibility: %v", err)
+	}
+	if count != want {
+		t.Fatalf("RLS visibility for tenant %q workspace %q = %d, want %d", tenantID, workspaceID, count, want)
+	}
+}
+
+func assertApprovalPersistedState(t *testing.T, ctx context.Context, db *sql.DB, record Record, want State, consumed bool) {
+	t.Helper()
+	var persistedState string
+	var persistedConsumedAt sql.NullTime
+	if err := db.QueryRowContext(ctx, `SELECT state, consumed_at FROM approval_ceremonies
+		WHERE tenant_id = $1 AND workspace_id = $2 AND approval_id = $3`,
+		record.TenantID, record.WorkspaceID, record.ApprovalID,
+	).Scan(&persistedState, &persistedConsumedAt); err != nil {
+		t.Fatalf("read persisted approval state: %v", err)
+	}
+	if persistedState != string(want) || persistedConsumedAt.Valid != consumed {
+		t.Fatalf("persisted approval state = %s consumed=%t, want %s consumed=%t",
+			persistedState, persistedConsumedAt.Valid, want, consumed)
 	}
 }
 
@@ -233,22 +348,22 @@ func issueApprovalTestGrant(
 	config ServiceConfig,
 ) Record {
 	t.Helper()
-	hold, err := service.BeginHold(ctx, requestForSpec(spec))
+	hold, err := service.BeginHold(ctx, spec.BindingRef)
 	if err != nil {
 		t.Fatalf("BeginHold(): %v", err)
 	}
 	*clockNow = hold.HoldStartedAt.Add(config.MinHoldDuration)
-	challenged, err := service.IssueChallenge(ctx, hold.TenantID, hold.ApprovalID)
+	challenged, err := service.IssueChallenge(ctx, hold.ApprovalID)
 	if err != nil {
 		t.Fatalf("IssueChallenge(): %v", err)
 	}
 	assertions := approvalTestAssertions(t, *challenged.Challenge, approverKeys)
 	*clockNow = clockNow.Add(time.Minute)
-	if _, err := service.VerifyQuorum(ctx, hold.TenantID, hold.ApprovalID, assertions); err != nil {
+	if _, err := service.VerifyQuorum(ctx, hold.ApprovalID, assertions); err != nil {
 		t.Fatalf("VerifyQuorum(): %v", err)
 	}
 	*clockNow = clockNow.Add(time.Minute)
-	granted, err := service.IssueGrant(ctx, hold.TenantID, hold.ApprovalID)
+	granted, err := service.IssueGrant(ctx, hold.ApprovalID)
 	if err != nil {
 		t.Fatalf("IssueGrant(): %v", err)
 	}
@@ -265,6 +380,14 @@ type staticBindingProvider struct {
 
 type staticConsumerProvider struct {
 	identity ConsumerIdentity
+}
+
+type staticControlProvider struct {
+	identity ControlIdentity
+}
+
+func (p staticControlProvider) LoadControlIdentity(context.Context) (ControlIdentity, error) {
+	return p.identity, nil
 }
 
 func (p staticConsumerProvider) LoadConsumerIdentity(context.Context) (ConsumerIdentity, error) {
@@ -323,6 +446,10 @@ func approvalTestAssertions(t *testing.T, challenge contracts.ApprovalChallenge,
 }
 
 func openApprovalTestPostgres(t *testing.T, rawURL, schema string) *sql.DB {
+	return openApprovalTestPostgresAs(t, rawURL, schema, "", "")
+}
+
+func openApprovalTestPostgresAs(t *testing.T, rawURL, schema, username, password string) *sql.DB {
 	t.Helper()
 	parsed, err := url.Parse(rawURL)
 	if err != nil || parsed.Scheme == "" {
@@ -331,6 +458,9 @@ func openApprovalTestPostgres(t *testing.T, rawURL, schema string) *sql.DB {
 	query := parsed.Query()
 	query.Set("search_path", schema)
 	parsed.RawQuery = query.Encode()
+	if username != "" {
+		parsed.User = url.UserPassword(username, password)
+	}
 	db, err := sql.Open("postgres", parsed.String())
 	if err != nil {
 		t.Fatalf("open Postgres: %v", err)

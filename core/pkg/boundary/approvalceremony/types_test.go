@@ -93,6 +93,37 @@ func TestRecordRejectsStateArtifactDrift(t *testing.T) {
 	}
 }
 
+func TestRecordRejectsMutableExpiryAndLateConsumption(t *testing.T) {
+	hold, challenge, verified, grant := ceremonyFixtures(t)
+	granted := withGrant(withVerified(withChallenge(hold, challenge), verified), grant)
+
+	shadowExtended := granted
+	extended := grant.ExpiresAt.Add(time.Hour)
+	shadowExtended.ExpiresAt = &extended
+	if err := shadowExtended.Validate(); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("extended expiry shadow error = %v, want ErrInvalidRecord", err)
+	}
+
+	lateConsumption := granted
+	lateConsumption.State = StateConsumed
+	lateConsumption.UpdatedAt = grant.ExpiresAt
+	consumedAt := grant.ExpiresAt
+	lateConsumption.ConsumedAt = &consumedAt
+	lateConsumption.ConsumedBy = "spiffe://helm/data-plane-a"
+	lateConsumption.Version++
+	if err := lateConsumption.Validate(); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("late consumption error = %v, want ErrInvalidRecord", err)
+	}
+
+	earlyExpiry := withChallenge(hold, challenge)
+	earlyExpiry.State = StateExpired
+	earlyExpiry.UpdatedAt = challenge.ExpiresAt.Add(-time.Second)
+	earlyExpiry.Version++
+	if err := earlyExpiry.Validate(); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("early expiry transition error = %v, want ErrInvalidRecord", err)
+	}
+}
+
 func ceremonyFixtures(t *testing.T) (Record, contracts.ApprovalChallenge, approvalverify.VerifiedApprovalRef, contracts.ApprovalGrant) {
 	t.Helper()
 	holdStarted := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
@@ -179,6 +210,8 @@ func specFromChallenge(challenge contracts.ApprovalChallenge) ChallengeSpec {
 func withChallenge(record Record, challenge contracts.ApprovalChallenge) Record {
 	record.State = StateChallengeIssued
 	record.Challenge = &challenge
+	expiresAt := challenge.ExpiresAt
+	record.ExpiresAt = &expiresAt
 	record.UpdatedAt = challenge.IssuedAt
 	record.Version++
 	return record
@@ -195,6 +228,8 @@ func withVerified(record Record, verified approvalverify.VerifiedApprovalRef) Re
 func withGrant(record Record, grant contracts.ApprovalGrant) Record {
 	record.State = StateGrantIssued
 	record.Grant = &grant
+	expiresAt := grant.ExpiresAt
+	record.ExpiresAt = &expiresAt
 	record.GrantSignatureAlgorithm = GrantSignatureEd25519
 	record.GrantSignature = strings.Repeat("b", 128)
 	record.UpdatedAt = grant.IssuedAt

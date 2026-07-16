@@ -61,7 +61,7 @@ func TestGrantSigningAndStoreFailClosedWithoutTrust(t *testing.T) {
 	}
 	store := NewPostgresStore(nil, nil)
 	if _, err := store.issueGrant(
-		context.Background(), grant.TenantID, grant.ApprovalID, grant,
+		context.Background(), grant.TenantID, grant.WorkspaceID, grant.ApprovalID, grant,
 		GrantSignatureEd25519, strings.Repeat("b", 128), grant.IssuedAt,
 	); !errors.Is(err, ErrGrantSignatureRejected) {
 		t.Fatalf("unconfigured verifier error = %v, want ErrGrantSignatureRejected", err)

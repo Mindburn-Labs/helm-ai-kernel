@@ -3,6 +3,7 @@ package approvalceremony
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ var (
 	ErrHoldPending          = errors.New("approval ceremony hold pending")
 	ErrBindingUnavailable   = errors.New("approval ceremony binding unavailable")
 	ErrAuthorityUnavailable = errors.New("approval ceremony authority unavailable")
+	ErrControlUnavailable   = errors.New("approval ceremony control identity unavailable")
 	ErrConsumerUnavailable  = errors.New("approval ceremony consumer identity unavailable")
 )
 
@@ -32,6 +34,18 @@ type AuthorityProvider interface {
 	LoadApprovalAuthority(context.Context, string, string, string, string, string) (approvalverify.TrustStore, error)
 }
 
+// ControlIdentityProvider extracts the authenticated control-plane subject and
+// scope. Control routes never accept tenant or workspace as authority input.
+type ControlIdentityProvider interface {
+	LoadControlIdentity(context.Context) (ControlIdentity, error)
+}
+
+type ControlIdentity struct {
+	Subject     string
+	TenantID    string
+	WorkspaceID string
+}
+
 // ConsumerIdentityProvider extracts a verified workload identity from the
 // authenticated server context. Clients never submit consumed_by.
 type ConsumerIdentityProvider interface {
@@ -42,6 +56,7 @@ type ConsumerIdentity struct {
 	Subject     string
 	TenantID    string
 	WorkspaceID string
+	Audience    string
 }
 
 type ServiceConfig struct {
@@ -57,13 +72,13 @@ type ServiceConfig struct {
 
 type ceremonyStore interface {
 	createHold(context.Context, Record) (Record, error)
-	Get(context.Context, string, string) (Record, error)
-	issueChallenge(context.Context, string, string, contracts.ApprovalChallenge, time.Time) (Record, error)
-	recordQuorum(context.Context, string, string, approvalverify.VerifiedApprovalRef, time.Time) (Record, error)
-	issueGrant(context.Context, string, string, contracts.ApprovalGrant, string, string, time.Time) (Record, error)
-	consumeGrant(context.Context, string, string, string, string, string, string, string, time.Time) (Record, error)
-	deny(context.Context, string, string, time.Time) (Record, error)
-	expire(context.Context, string, string, time.Time) (Record, error)
+	Get(context.Context, string, string, string) (Record, error)
+	issueChallenge(context.Context, string, string, string, contracts.ApprovalChallenge, time.Time) (Record, error)
+	recordQuorum(context.Context, string, string, string, approvalverify.VerifiedApprovalRef, time.Time) (Record, error)
+	issueGrant(context.Context, string, string, string, contracts.ApprovalGrant, string, string, time.Time) (Record, error)
+	consumeGrant(context.Context, string, string, string, string, string, string, string, string, time.Time) (Record, error)
+	deny(context.Context, string, string, string, time.Time) (Record, error)
+	expire(context.Context, string, string, string, time.Time) (Record, error)
 }
 
 // Service is the only authority-bearing API. It creates IDs/nonces and
@@ -73,6 +88,7 @@ type Service struct {
 	store     ceremonyStore
 	bindings  BindingProvider
 	authority AuthorityProvider
+	control   ControlIdentityProvider
 	consumer  ConsumerIdentityProvider
 	signer    crypto.Signer
 	clock     func() time.Time
@@ -80,12 +96,12 @@ type Service struct {
 	config    ServiceConfig
 }
 
-func NewService(store *PostgresStore, bindings BindingProvider, authority AuthorityProvider, consumer ConsumerIdentityProvider, signer crypto.Signer, config ServiceConfig) (*Service, error) {
-	return newService(store, bindings, authority, consumer, signer, time.Now, rand.Reader, config)
+func NewService(store *PostgresStore, bindings BindingProvider, authority AuthorityProvider, control ControlIdentityProvider, consumer ConsumerIdentityProvider, signer crypto.Signer, config ServiceConfig) (*Service, error) {
+	return newService(store, bindings, authority, control, consumer, signer, time.Now, rand.Reader, config)
 }
 
-func newService(store ceremonyStore, bindings BindingProvider, authority AuthorityProvider, consumer ConsumerIdentityProvider, signer crypto.Signer, clock func() time.Time, random io.Reader, config ServiceConfig) (*Service, error) {
-	if store == nil || bindings == nil || authority == nil || consumer == nil || signer == nil || clock == nil || random == nil {
+func newService(store ceremonyStore, bindings BindingProvider, authority AuthorityProvider, control ControlIdentityProvider, consumer ConsumerIdentityProvider, signer crypto.Signer, clock func() time.Time, random io.Reader, config ServiceConfig) (*Service, error) {
+	if store == nil || bindings == nil || authority == nil || control == nil || consumer == nil || signer == nil || clock == nil || random == nil {
 		return nil, errors.New("approval ceremony service dependencies are required")
 	}
 	if config.MinHoldDuration <= 0 || config.ChallengeTTL <= 0 || config.MaxChallengeLifetime <= 0 ||
@@ -100,23 +116,21 @@ func newService(store ceremonyStore, bindings BindingProvider, authority Authori
 		return nil, errors.New("approval ceremony server and signing identities are required")
 	}
 	return &Service{
-		store: store, bindings: bindings, authority: authority, consumer: consumer, signer: signer,
+		store: store, bindings: bindings, authority: authority, control: control, consumer: consumer, signer: signer,
 		clock: clock, random: random, config: config,
 	}, nil
 }
 
-type HoldRequest struct {
-	TenantID    string `json:"tenant_id"`
-	WorkspaceID string `json:"workspace_id"`
-	BindingRef  string `json:"binding_ref"`
-}
-
-func (s *Service) BeginHold(ctx context.Context, request HoldRequest) (Record, error) {
-	if !validToken(request.TenantID) || !validToken(request.WorkspaceID) || !validToken(request.BindingRef) {
-		return Record{}, invalidRecord("tenant_id, workspace_id, and binding_ref are required")
+func (s *Service) BeginHold(ctx context.Context, bindingRef string) (Record, error) {
+	if !validToken(bindingRef) {
+		return Record{}, invalidRecord("binding_ref is required")
+	}
+	identity, err := s.controlIdentity(ctx)
+	if err != nil {
+		return Record{}, err
 	}
 	spec, err := s.bindings.LoadApprovalBinding(
-		ctx, request.TenantID, request.WorkspaceID, request.BindingRef,
+		ctx, identity.TenantID, identity.WorkspaceID, bindingRef,
 	)
 	if err != nil {
 		return Record{}, fmt.Errorf("%w: %v", ErrBindingUnavailable, err)
@@ -124,7 +138,7 @@ func (s *Service) BeginHold(ctx context.Context, request HoldRequest) (Record, e
 	if err := spec.Validate(); err != nil {
 		return Record{}, fmt.Errorf("%w: %v", ErrBindingUnavailable, err)
 	}
-	if spec.TenantID != request.TenantID || spec.WorkspaceID != request.WorkspaceID || spec.BindingRef != request.BindingRef {
+	if spec.TenantID != identity.TenantID || spec.WorkspaceID != identity.WorkspaceID || spec.BindingRef != bindingRef {
 		return Record{}, fmt.Errorf("%w: binding scope or reference mismatch", ErrBindingUnavailable)
 	}
 	if spec.ServerIdentity != s.config.ServerIdentity || spec.Quorum > s.config.MaxAssertions {
@@ -145,8 +159,12 @@ func (s *Service) BeginHold(ctx context.Context, request HoldRequest) (Record, e
 	})
 }
 
-func (s *Service) IssueChallenge(ctx context.Context, tenantID, approvalID string) (Record, error) {
-	record, err := s.store.Get(ctx, tenantID, approvalID)
+func (s *Service) IssueChallenge(ctx context.Context, approvalID string) (Record, error) {
+	identity, err := s.controlIdentity(ctx)
+	if err != nil {
+		return Record{}, err
+	}
+	record, err := s.store.Get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -195,11 +213,15 @@ func (s *Service) IssueChallenge(ctx context.Context, tenantID, approvalID strin
 	if err != nil {
 		return Record{}, fmt.Errorf("seal approval challenge: %w", err)
 	}
-	return s.store.issueChallenge(ctx, tenantID, approvalID, challenge, now)
+	return s.store.issueChallenge(ctx, identity.TenantID, identity.WorkspaceID, approvalID, challenge, now)
 }
 
-func (s *Service) VerifyQuorum(ctx context.Context, tenantID, approvalID string, assertions []contracts.ApprovalAssertion) (Record, error) {
-	record, err := s.store.Get(ctx, tenantID, approvalID)
+func (s *Service) VerifyQuorum(ctx context.Context, approvalID string, assertions []contracts.ApprovalAssertion) (Record, error) {
+	identity, err := s.controlIdentity(ctx)
+	if err != nil {
+		return Record{}, err
+	}
+	record, err := s.store.Get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -222,11 +244,15 @@ func (s *Service) VerifyQuorum(ctx context.Context, tenantID, approvalID string,
 	if err != nil {
 		return Record{}, err
 	}
-	return s.store.recordQuorum(ctx, tenantID, approvalID, verified, now)
+	return s.store.recordQuorum(ctx, identity.TenantID, identity.WorkspaceID, approvalID, verified, now)
 }
 
-func (s *Service) IssueGrant(ctx context.Context, tenantID, approvalID string) (Record, error) {
-	record, err := s.store.Get(ctx, tenantID, approvalID)
+func (s *Service) IssueGrant(ctx context.Context, approvalID string) (Record, error) {
+	identity, err := s.controlIdentity(ctx)
+	if err != nil {
+		return Record{}, err
+	}
+	record, err := s.store.Get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
 	if err != nil {
 		return Record{}, err
 	}
@@ -276,30 +302,54 @@ func (s *Service) IssueGrant(ctx context.Context, tenantID, approvalID string) (
 	if err != nil {
 		return Record{}, err
 	}
-	return s.store.issueGrant(ctx, tenantID, approvalID, grant, GrantSignatureEd25519, signature, now)
+	return s.store.issueGrant(
+		ctx, identity.TenantID, identity.WorkspaceID, approvalID,
+		grant, GrantSignatureEd25519, signature, now,
+	)
 }
 
 func (s *Service) ConsumeGrant(ctx context.Context, approvalID, grantID, grantHash, nonce string) (Record, error) {
 	identity, err := s.consumer.LoadConsumerIdentity(ctx)
-	if err != nil || !validToken(identity.Subject) || !validToken(identity.TenantID) || !validToken(identity.WorkspaceID) {
-		return Record{}, fmt.Errorf("%w: verified workload subject, tenant, and workspace are required", ErrConsumerUnavailable)
+	if err != nil || !validToken(identity.Subject) || !validToken(identity.TenantID) ||
+		!validToken(identity.WorkspaceID) || !validToken(identity.Audience) {
+		return Record{}, fmt.Errorf("%w: verified workload subject, tenant, workspace, and audience are required", ErrConsumerUnavailable)
 	}
 	return s.store.consumeGrant(
 		ctx, identity.TenantID, identity.WorkspaceID, approvalID,
-		grantID, grantHash, nonce, identity.Subject, s.now(),
+		grantID, grantHash, nonce, identity.Subject, identity.Audience, s.now(),
 	)
 }
 
-func (s *Service) Deny(ctx context.Context, tenantID, approvalID string) (Record, error) {
-	return s.store.deny(ctx, tenantID, approvalID, s.now())
+func (s *Service) Deny(ctx context.Context, approvalID string) (Record, error) {
+	identity, err := s.controlIdentity(ctx)
+	if err != nil {
+		return Record{}, err
+	}
+	return s.store.deny(ctx, identity.TenantID, identity.WorkspaceID, approvalID, s.now())
 }
 
-func (s *Service) Expire(ctx context.Context, tenantID, approvalID string) (Record, error) {
-	return s.store.expire(ctx, tenantID, approvalID, s.now())
+func (s *Service) Expire(ctx context.Context, approvalID string) (Record, error) {
+	identity, err := s.controlIdentity(ctx)
+	if err != nil {
+		return Record{}, err
+	}
+	return s.store.expire(ctx, identity.TenantID, identity.WorkspaceID, approvalID, s.now())
 }
 
-func (s *Service) Get(ctx context.Context, tenantID, approvalID string) (Record, error) {
-	return s.store.Get(ctx, tenantID, approvalID)
+func (s *Service) Get(ctx context.Context, approvalID string) (Record, error) {
+	identity, err := s.controlIdentity(ctx)
+	if err != nil {
+		return Record{}, err
+	}
+	return s.store.Get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
+}
+
+func (s *Service) controlIdentity(ctx context.Context) (ControlIdentity, error) {
+	identity, err := s.control.LoadControlIdentity(ctx)
+	if err != nil || !validToken(identity.Subject) || !validToken(identity.TenantID) || !validToken(identity.WorkspaceID) {
+		return ControlIdentity{}, fmt.Errorf("%w: verified control subject, tenant, and workspace are required", ErrControlUnavailable)
+	}
+	return identity, nil
 }
 
 func (s *Service) loadAuthority(ctx context.Context, spec ChallengeSpec) (approvalverify.TrustStore, error) {
@@ -363,14 +413,23 @@ func expectedBinding(spec ChallengeSpec, challenge contracts.ApprovalChallenge) 
 }
 
 func CeremonyCommitment(record Record) (string, error) {
+	payload, err := ceremonyCommitmentPayload(record)
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(hash[:]), nil
+}
+
+func ceremonyCommitmentPayload(record Record) ([]byte, error) {
 	if record.Challenge == nil || record.VerifiedRef == nil {
-		return "", invalidRecord("ceremony commitment requires challenge and verified_ref")
+		return nil, invalidRecord("ceremony commitment requires challenge and verified_ref")
 	}
 	specHash, err := canonicalize.CanonicalHash(record.Spec)
 	if err != nil {
-		return "", fmt.Errorf("commit approval challenge spec: %w", err)
+		return nil, fmt.Errorf("commit approval challenge spec: %w", err)
 	}
-	hash, err := canonicalize.CanonicalHash(struct {
+	payload, err := canonicalize.JCS(struct {
 		Domain            string    `json:"domain"`
 		ApprovalID        string    `json:"approval_id"`
 		TenantID          string    `json:"tenant_id"`
@@ -387,7 +446,7 @@ func CeremonyCommitment(record Record) (string, error) {
 		VerifiedAt:    record.VerifiedRef.VerifiedAt,
 	})
 	if err != nil {
-		return "", fmt.Errorf("commit approval ceremony: %w", err)
+		return nil, fmt.Errorf("commit approval ceremony: %w", err)
 	}
-	return "sha256:" + hash, nil
+	return payload, nil
 }

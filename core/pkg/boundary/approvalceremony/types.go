@@ -54,6 +54,7 @@ type Record struct {
 
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	ConsumedAt *time.Time `json:"consumed_at,omitempty"`
 	ConsumedBy string     `json:"consumed_by,omitempty"`
 	Version    int64      `json:"version"`
@@ -158,6 +159,9 @@ func (r Record) Validate() error {
 	if !r.CreatedAt.Equal(r.HoldStartedAt) {
 		return invalidRecord("created_at must equal hold_started_at")
 	}
+	if r.ExpiresAt != nil && !isUTC(*r.ExpiresAt) {
+		return invalidRecord("expires_at must use UTC")
+	}
 	if err := r.Spec.Validate(); err != nil {
 		return err
 	}
@@ -207,12 +211,18 @@ func (r Record) Validate() error {
 		if !r.UpdatedAt.Equal(r.HoldStartedAt) {
 			return invalidRecord("hold pending updated_at must equal hold_started_at")
 		}
+		if r.ExpiresAt != nil {
+			return invalidRecord("hold pending cannot have expires_at")
+		}
 	case StateChallengeIssued:
 		if r.Challenge == nil || r.VerifiedRef != nil || r.Grant != nil {
 			return invalidRecord("challenge issued requires only challenge")
 		}
 		if !r.UpdatedAt.Equal(r.Challenge.IssuedAt) {
 			return invalidRecord("challenge issued updated_at mismatch")
+		}
+		if r.ExpiresAt == nil || !r.ExpiresAt.Equal(r.Challenge.ExpiresAt) {
+			return invalidRecord("challenge expires_at shadow mismatch")
 		}
 	case StateQuorumVerified:
 		if r.Challenge == nil || r.VerifiedRef == nil || r.Grant != nil {
@@ -221,12 +231,18 @@ func (r Record) Validate() error {
 		if !r.UpdatedAt.Equal(r.VerifiedRef.VerifiedAt) {
 			return invalidRecord("quorum verified updated_at mismatch")
 		}
+		if r.ExpiresAt == nil || !r.ExpiresAt.Equal(r.Challenge.ExpiresAt) {
+			return invalidRecord("verified expires_at shadow mismatch")
+		}
 	case StateGrantIssued:
 		if r.Challenge == nil || r.VerifiedRef == nil || r.Grant == nil {
 			return invalidRecord("grant issued requires complete authority chain")
 		}
 		if !r.UpdatedAt.Equal(r.Grant.IssuedAt) {
 			return invalidRecord("grant issued updated_at mismatch")
+		}
+		if r.ExpiresAt == nil || !r.ExpiresAt.Equal(r.Grant.ExpiresAt) {
+			return invalidRecord("grant expires_at shadow mismatch")
 		}
 	case StateConsumed:
 		if r.Grant == nil || r.ConsumedAt == nil || !validToken(r.ConsumedBy) {
@@ -235,9 +251,24 @@ func (r Record) Validate() error {
 		if !isUTC(*r.ConsumedAt) || !r.ConsumedAt.Equal(r.UpdatedAt) {
 			return invalidRecord("consumed_at is invalid")
 		}
+		if r.ConsumedAt.Before(r.Grant.IssuedAt) || !r.ConsumedAt.Before(r.Grant.ExpiresAt) {
+			return invalidRecord("consumed_at is outside the signed grant lifetime")
+		}
+		if r.ExpiresAt == nil || !r.ExpiresAt.Equal(r.Grant.ExpiresAt) {
+			return invalidRecord("consumed expires_at shadow mismatch")
+		}
 	case StateExpired, StateDenied:
 		if r.ConsumedAt != nil || r.ConsumedBy != "" {
 			return invalidRecord("terminal non-consumed state cannot contain consumption")
+		}
+		if r.Grant != nil && (r.ExpiresAt == nil || !r.ExpiresAt.Equal(r.Grant.ExpiresAt)) {
+			return invalidRecord("terminal grant expires_at shadow mismatch")
+		}
+		if r.Grant == nil && r.Challenge != nil && (r.ExpiresAt == nil || !r.ExpiresAt.Equal(r.Challenge.ExpiresAt)) {
+			return invalidRecord("terminal challenge expires_at shadow mismatch")
+		}
+		if r.State == StateExpired && (r.Challenge == nil || r.ExpiresAt == nil || r.UpdatedAt.Before(*r.ExpiresAt)) {
+			return invalidRecord("expired transition precedes committed expiry")
 		}
 	}
 	if r.State != StateConsumed && (r.ConsumedAt != nil || r.ConsumedBy != "") {

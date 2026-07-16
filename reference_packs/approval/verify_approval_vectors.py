@@ -249,6 +249,8 @@ def main():
             raise SystemExit(f"{case_id}: sorted signer-set projection mismatch")
         if projection["signers"] != verified_signers or projection["signer_set_hash"] != case["signer_set"]["sha256"]:
             raise SystemExit(f"{case_id}: verified projection signer evidence mismatch")
+        if projection["verified_at"] != index["verified_at"]:
+            raise SystemExit(f"{case_id}: verified projection time mismatch")
         for field in challenge_fields:
             if projection[field] != challenge[field]:
                 raise SystemExit(f"{case_id}: verified projection lost challenge field {field}")

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
 )
 
@@ -26,27 +27,35 @@ var (
 )
 
 type setupOptions struct {
-	Target  string
-	Scope   string
-	Yes     bool
-	DryRun  bool
-	JSON    bool
-	DataDir string
+	Target       string
+	Operation    string
+	Scope        string
+	Workspace    string
+	WorkspaceSet bool
+	Yes          bool
+	DryRun       bool
+	JSON         bool
+	NoQuickstart bool
+	DataDir      string
 }
 
 type setupSummary struct {
-	Target           string `json:"target"`
-	BinaryPath       string `json:"binary_path"`
-	ClientConfigPath string `json:"client_config_path"`
-	HookConfigPath   string `json:"hook_config_path"`
-	DataDir          string `json:"data_dir"`
-	KernelURL        string `json:"kernel_url"`
-	ScanGrade        string `json:"scan_grade"`
-	DraftPolicyPath  string `json:"draft_policy_path"`
-	UninstallCommand string `json:"uninstall_command"`
-	Scope            string `json:"scope,omitempty"`
-	MCPInstalled     bool   `json:"mcp_installed,omitempty"`
-	HookInstalled    bool   `json:"hook_installed,omitempty"`
+	Operation         string   `json:"operation"`
+	Target            string   `json:"target"`
+	Workspace         string   `json:"workspace"`
+	BinaryPath        string   `json:"binary_path"`
+	ClientConfigPath  string   `json:"client_config_path"`
+	HookConfigPath    string   `json:"hook_config_path"`
+	DataDir           string   `json:"data_dir"`
+	KernelURL         string   `json:"kernel_url"`
+	ScanGrade         string   `json:"scan_grade"`
+	DraftPolicyPath   string   `json:"draft_policy_path"`
+	UninstallCommand  string   `json:"uninstall_command"`
+	Scope             string   `json:"scope,omitempty"`
+	MCPInstalled      bool     `json:"mcp_installed,omitempty"`
+	HookInstalled     bool     `json:"hook_installed,omitempty"`
+	QuickstartStarted bool     `json:"quickstart_started"`
+	PlannedActions    []string `json:"planned_actions"`
 }
 
 func init() {
@@ -110,6 +119,11 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	if opts.DryRun {
+		opts.Operation = "preview"
+	} else {
+		opts.Operation = "install"
+	}
 	if !opts.Yes && !opts.DryRun {
 		fmt.Fprintln(stderr, "setup: pass --yes to install local config, or --dry-run to preview changes")
 		return 2
@@ -127,7 +141,7 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup: create data dir: %v\n", err)
 		return 1
 	}
-	grade, policyPath, err := runSetupAutoconfigure(opts.DataDir)
+	grade, policyPath, err := runSetupAutoconfigure(opts.DataDir, opts.Workspace)
 	if err != nil {
 		fmt.Fprintf(stderr, "setup: autoconfigure: %v\n", err)
 		return 1
@@ -145,6 +159,9 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	summary.MCPInstalled = true
 	summary.HookInstalled = true
 	printSetupSummary(stdout, summary, opts.JSON)
+	if opts.NoQuickstart {
+		return 0
+	}
 	if !opts.JSON {
 		fmt.Fprintln(stdout)
 		fmt.Fprintln(stdout, "Leave this terminal open. HELM is starting the local Kernel proof path now.")
@@ -162,6 +179,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	opts.Operation = "status"
 	summary, err := buildSetupSummary(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "setup status: %v\n", err)
@@ -183,6 +201,11 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 	opts, code := parseSetupInspectArgs("setup remove", args, stderr, true)
 	if code != 0 {
 		return code
+	}
+	if opts.DryRun {
+		opts.Operation = "preview_remove"
+	} else {
+		opts.Operation = "remove"
 	}
 	if !opts.Yes && !opts.DryRun {
 		fmt.Fprintln(stderr, "setup remove: pass --yes to remove local config, or --dry-run to preview changes")
@@ -218,8 +241,9 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "  helm-ai-kernel setup --json")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Manage:")
-	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex> [--scope user|project] [--json] [--data-dir DIR]")
-	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex> [--scope user|project] [--yes] [--dry-run] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup codex --scope project --workspace DIR --dry-run --json")
+	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex> [--scope user|project] [--workspace DIR] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "")
 	printSupportMatrix(w)
 	fmt.Fprintln(w, "")
@@ -231,13 +255,20 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Scope, "scope", opts.Scope, "Install scope: user or project")
+	fs.StringVar(&opts.Workspace, "workspace", "", "Workspace to scan and configure (required for project scope)")
 	fs.BoolVar(&opts.Yes, "yes", false, "Install without prompting")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
+	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Install without starting the blocking Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "workspace" {
+			opts.WorkspaceSet = true
+		}
+	})
 	opts.Target = args[0]
 	return normalizeSetupOptions(opts, stderr)
 }
@@ -251,8 +282,10 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Scope, "scope", opts.Scope, "Install scope: user or project")
+	fs.StringVar(&opts.Workspace, "workspace", "", "Workspace to inspect or remove from (required for project scope)")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
+	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Report a headless setup without a Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	if includeYes {
 		fs.BoolVar(&opts.Yes, "yes", false, "Remove without prompting")
@@ -260,6 +293,11 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "workspace" {
+			opts.WorkspaceSet = true
+		}
+	})
 	if fs.NArg() != 0 {
 		fmt.Fprintf(stderr, "%s: unexpected argument %q\n", name, fs.Arg(0))
 		return opts, 2
@@ -280,11 +318,42 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 		fmt.Fprintf(stderr, "setup: --scope must be user or project, got %q\n", opts.Scope)
 		return opts, 2
 	}
+	if opts.Scope == "project" && !opts.WorkspaceSet {
+		fmt.Fprintln(stderr, "setup: --scope project requires an explicit --workspace DIR")
+		return opts, 2
+	}
+	if opts.Scope == "user" && opts.WorkspaceSet {
+		fmt.Fprintln(stderr, "setup: --workspace is only valid with --scope project")
+		return opts, 2
+	}
 	if opts.DataDir == "" {
 		opts.DataDir = defaultSetupDataDir()
 	}
 	if abs, err := filepath.Abs(opts.DataDir); err == nil {
 		opts.DataDir = abs
+	}
+	if opts.Workspace == "" {
+		workspace, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "setup: determine workspace: %v\n", err)
+			return opts, 2
+		}
+		opts.Workspace = workspace
+	}
+	if abs, err := filepath.Abs(opts.Workspace); err == nil {
+		opts.Workspace = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(opts.Workspace); err == nil {
+		opts.Workspace = resolved
+	}
+	info, err := os.Stat(opts.Workspace)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup: workspace: %v\n", err)
+		return opts, 2
+	}
+	if !info.IsDir() {
+		fmt.Fprintf(stderr, "setup: workspace must be a directory, got %q\n", opts.Workspace)
+		return opts, 2
 	}
 	return opts, 0
 }
@@ -309,17 +378,54 @@ func buildSetupSummary(opts setupOptions) (setupSummary, error) {
 		bin = abs
 	}
 	return setupSummary{
-		Target:           opts.Target,
-		BinaryPath:       bin,
-		ClientConfigPath: setupClientConfigPath(opts),
-		HookConfigPath:   setupHookConfigPath(opts),
-		DataDir:          opts.DataDir,
-		KernelURL:        "http://127.0.0.1:7714",
-		ScanGrade:        "not_run",
-		DraftPolicyPath:  filepath.Join(opts.DataDir, "autoconfigure", "policy.draft.json"),
-		UninstallCommand: fmt.Sprintf("helm-ai-kernel setup remove %s --scope %s --yes --data-dir %s", opts.Target, opts.Scope, shellQuote(opts.DataDir)),
-		Scope:            opts.Scope,
+		Operation:         opts.Operation,
+		Target:            opts.Target,
+		Workspace:         opts.Workspace,
+		BinaryPath:        bin,
+		ClientConfigPath:  setupClientConfigPath(opts),
+		HookConfigPath:    setupHookConfigPath(opts),
+		DataDir:           opts.DataDir,
+		KernelURL:         setupKernelURL(opts),
+		ScanGrade:         "not_run",
+		DraftPolicyPath:   filepath.Join(opts.DataDir, "autoconfigure", "policy.draft.json"),
+		UninstallCommand:  setupUninstallCommand(opts),
+		Scope:             opts.Scope,
+		QuickstartStarted: opts.Operation == "install" && !opts.NoQuickstart,
+		PlannedActions:    setupPlannedActions(opts),
 	}, nil
+}
+
+func setupPlannedActions(opts setupOptions) []string {
+	actions := []string{
+		"scan selected workspace and write draft-only inventory artifacts",
+		"configure the HELM MCP server with the selected local data directory",
+		"configure the HELM PreToolUse hook for supported Codex tools",
+	}
+	if opts.NoQuickstart {
+		return actions
+	}
+	return append(actions, "start the local Quickstart proof path")
+}
+
+func setupKernelURL(opts setupOptions) string {
+	if opts.NoQuickstart {
+		return ""
+	}
+	return "http://127.0.0.1:7714"
+}
+
+func setupUninstallCommand(opts setupOptions) string {
+	workspace := ""
+	if opts.Scope == "project" {
+		workspace = " --workspace " + shellQuote(opts.Workspace)
+	}
+	return fmt.Sprintf(
+		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s",
+		opts.Target,
+		opts.Scope,
+		workspace,
+		shellQuote(opts.DataDir),
+	)
 }
 
 func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
@@ -328,6 +434,7 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 		return
 	}
 	fmt.Fprintf(stdout, "HELM setup for %s\n", summary.Target)
+	fmt.Fprintf(stdout, "  Workspace:     %s\n", summary.Workspace)
 	fmt.Fprintf(stdout, "  MCP config:    %s\n", summary.ClientConfigPath)
 	fmt.Fprintf(stdout, "  Hook config:   %s\n", summary.HookConfigPath)
 	fmt.Fprintf(stdout, "  Data dir:      %s\n", summary.DataDir)
@@ -335,14 +442,20 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	fmt.Fprintf(stdout, "  Scan grade:    %s\n", summary.ScanGrade)
 	fmt.Fprintf(stdout, "  Draft policy:  %s\n", summary.DraftPolicyPath)
 	fmt.Fprintf(stdout, "  Uninstall:     %s\n", summary.UninstallCommand)
+	if len(summary.PlannedActions) > 0 {
+		fmt.Fprintln(stdout, "  Planned:")
+		for _, action := range summary.PlannedActions {
+			fmt.Fprintf(stdout, "    - %s\n", action)
+		}
+	}
 	if summary.MCPInstalled || summary.HookInstalled {
 		fmt.Fprintf(stdout, "  Installed:     mcp=%v hook=%v\n", summary.MCPInstalled, summary.HookInstalled)
 	}
 }
 
-func runSetupAutoconfigure(dataDir string) (string, string, error) {
+func runSetupAutoconfigure(dataDir, workspace string) (string, string, error) {
 	outDir := filepath.Join(dataDir, "autoconfigure")
-	report, err := shadow.NewScanner().Scan(".")
+	report, err := shadow.NewScanner().Scan(workspace)
 	if err != nil {
 		return "", "", err
 	}
@@ -367,7 +480,7 @@ func installSetupMCP(opts setupOptions, bin string) error {
 		return setupExecCommand("claude", "mcp", "add", "--transport", "stdio", "--scope", opts.Scope, setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio")
 	case "codex":
 		if opts.Scope == "project" {
-			return upsertCodexProjectMCP(setupClientConfigPath(opts), bin)
+			return upsertCodexProjectMCP(setupClientConfigPath(opts), bin, opts.DataDir)
 		}
 		return setupExecCommand("codex", "mcp", "add", setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio")
 	default:
@@ -398,14 +511,22 @@ func removeSetupHook(opts setupOptions, bin string) error {
 }
 
 func setupMCPInstalled(opts setupOptions, path string) bool {
-	if opts.Target == "claude-code" && opts.Scope == "user" {
-		return fileContains(path, setupMCPServerName)
+	if opts.Target == "codex" && opts.Scope == "project" {
+		return codexProjectMCPInstalled(path, opts.DataDir)
 	}
 	return fileContains(path, setupMCPServerName)
 }
 
 func setupHookInstalled(opts setupOptions, path, bin string) bool {
-	return fileContains(path, setupHookCommand(opts, bin))
+	root, err := readJSONObject(path)
+	if err != nil {
+		return false
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return false
+	}
+	return hookCommandPresent(arrayValue(hooks, "PreToolUse"), setupHookCommand(opts, bin))
 }
 
 func setupQuickstartProfile(target string) string {
@@ -419,12 +540,12 @@ func setupClientConfigPath(opts setupOptions) string {
 	switch opts.Target {
 	case "claude-code":
 		if opts.Scope == "project" {
-			return filepath.Join(".", ".mcp.json")
+			return filepath.Join(opts.Workspace, ".mcp.json")
 		}
 		return filepath.Join(homeDirOrDot(), ".claude.json")
 	case "codex":
 		if opts.Scope == "project" {
-			return filepath.Join(".", ".codex", "config.toml")
+			return filepath.Join(opts.Workspace, ".codex", "config.toml")
 		}
 		return filepath.Join(homeDirOrDot(), ".codex", "config.toml")
 	default:
@@ -436,12 +557,12 @@ func setupHookConfigPath(opts setupOptions) string {
 	switch opts.Target {
 	case "claude-code":
 		if opts.Scope == "project" {
-			return filepath.Join(".", ".claude", "settings.json")
+			return filepath.Join(opts.Workspace, ".claude", "settings.json")
 		}
 		return filepath.Join(homeDirOrDot(), ".claude", "settings.json")
 	case "codex":
 		if opts.Scope == "project" {
-			return filepath.Join(".", ".codex", "hooks.json")
+			return filepath.Join(opts.Workspace, ".codex", "hooks.json")
 		}
 		return filepath.Join(homeDirOrDot(), ".codex", "hooks.json")
 	default:
@@ -600,24 +721,27 @@ func hookCommandFromAny(v any) string {
 	return command
 }
 
-func upsertCodexProjectMCP(path, bin string) error {
+func upsertCodexProjectMCP(path, bin, dataDir string) error {
 	current := ""
 	if raw, err := os.ReadFile(path); err == nil {
 		current = string(raw)
+		if err := validateCodexProjectTOML(current); err != nil {
+			return fmt.Errorf("parse existing Codex config: %w", err)
+		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}
 	current = removeTOMLTable(current, "[mcp_servers."+setupMCPServerName+"]")
-	block := fmt.Sprintf("[mcp_servers.%s]\ncommand = %q\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\"]\n", setupMCPServerName, bin)
+	block := fmt.Sprintf("[mcp_servers.%s]\ncommand = %q\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", %q]\n", setupMCPServerName, bin, dataDir)
 	next := strings.TrimRight(current, "\n")
 	if next != "" {
 		next += "\n\n"
 	}
 	next += block
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
+	if err := validateCodexProjectTOML(next); err != nil {
+		return fmt.Errorf("validate updated Codex config: %w", err)
 	}
-	return os.WriteFile(path, []byte(next), 0o600)
+	return writePrivateFileAtomic(path, []byte(next))
 }
 
 func removeCodexProjectMCP(path string) error {
@@ -628,8 +752,85 @@ func removeCodexProjectMCP(path string) error {
 	if err != nil {
 		return err
 	}
-	next := removeTOMLTable(string(raw), "[mcp_servers."+setupMCPServerName+"]")
-	return os.WriteFile(path, []byte(strings.TrimRight(next, "\n")+"\n"), 0o600)
+	if err := validateCodexProjectTOML(string(raw)); err != nil {
+		return fmt.Errorf("parse existing Codex config: %w", err)
+	}
+	next := strings.TrimRight(removeTOMLTable(string(raw), "[mcp_servers."+setupMCPServerName+"]"), "\n") + "\n"
+	if err := validateCodexProjectTOML(next); err != nil {
+		return fmt.Errorf("validate updated Codex config: %w", err)
+	}
+	return writePrivateFileAtomic(path, []byte(next))
+}
+
+type codexProjectConfig struct {
+	MCPServers map[string]codexMCPServer `toml:"mcp_servers"`
+}
+
+type codexMCPServer struct {
+	Command string   `toml:"command"`
+	Args    []string `toml:"args"`
+}
+
+func validateCodexProjectTOML(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var config map[string]any
+	_, err := toml.Decode(raw, &config)
+	return err
+}
+
+func codexProjectMCPInstalled(path, dataDir string) bool {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var config codexProjectConfig
+	if _, err := toml.Decode(string(raw), &config); err != nil {
+		return false
+	}
+	server, ok := config.MCPServers[setupMCPServerName]
+	if !ok || strings.TrimSpace(server.Command) == "" {
+		return false
+	}
+	wantArgs := []string{"mcp", "serve", "--transport", "stdio", "--data-dir", dataDir}
+	return equalSetupStrings(server.Args, wantArgs)
+}
+
+func equalSetupStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func writePrivateFileAtomic(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".helm-tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func removeTOMLTable(input, table string) string {

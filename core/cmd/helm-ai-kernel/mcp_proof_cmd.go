@@ -24,9 +24,11 @@ import (
 )
 
 const (
-	mcpProofDurationLimit = 60 * time.Second
-	mcpProofToolName      = "proof.local_write"
-	mcpProofApprovalRef   = "approval-proof-reversible-write"
+	mcpProofDurationLimit  = 60 * time.Second
+	mcpProofToolName       = "proof.local_write"
+	mcpProofApprovalRef    = "approval-proof-reversible-write"
+	mcpPolicyReceiptPrefix = "mcp_policy_decision/"
+	mcpEffectReceiptPrefix = "mcp_governed_effect_execution/"
 )
 
 type mcpProofScenario struct {
@@ -36,57 +38,92 @@ type mcpProofScenario struct {
 	Summary     string
 	Server      launchpadmcp.ServerRecord
 	Request     launchpadmcp.CallRequest
-	Decision    *launchpadmcp.Decision
 	Expected    launchpadmcp.Decision
 	Execute     bool
 }
 
+// mcpProofAuthorizationInputs is the exact input passed to AuthorizeAt. It is
+// exported and hashed before the evaluation result is recorded so an auditor
+// can independently inspect the server record, approval scope, and authority
+// time that produced a proof verdict.
+type mcpProofAuthorizationInputs struct {
+	SchemaVersion string                    `json:"schema_version"`
+	ScenarioID    string                    `json:"scenario_id"`
+	EvaluatedAt   string                    `json:"evaluated_at"`
+	Server        launchpadmcp.ServerRecord `json:"server"`
+	Request       launchpadmcp.CallRequest  `json:"request"`
+}
+
+type mcpProofAuthorizationEvaluation struct {
+	SchemaVersion           string                `json:"schema_version"`
+	AuthorizationInputsHash string                `json:"authorization_inputs_hash"`
+	AuthorizationInputsRef  string                `json:"authorization_inputs_ref"`
+	Decision                launchpadmcp.Decision `json:"decision"`
+}
+
 type mcpProofScenarioResult struct {
-	ScenarioID           string                 `json:"scenario_id"`
-	Name                 string                 `json:"name"`
-	ThreatClass          string                 `json:"threat_class"`
-	ServerID             string                 `json:"server_id"`
-	ToolName             string                 `json:"tool_name"`
-	Verdict              string                 `json:"verdict"`
-	Reason               string                 `json:"reason"`
-	Dispatched           bool                   `json:"dispatched"`
-	DispatchCount        int                    `json:"dispatch_count"`
-	ReplayNoRedispatch   bool                   `json:"replay_no_redispatch"`
-	ReceiptRef           string                 `json:"receipt_ref"`
-	ReceiptHash          string                 `json:"receipt_hash"`
-	ExecutionReceiptRef  string                 `json:"execution_receipt_ref,omitempty"`
-	ExecutionReceiptHash string                 `json:"execution_receipt_hash,omitempty"`
-	EffectArtifactRef    string                 `json:"effect_artifact_ref,omitempty"`
-	Details              map[string]interface{} `json:"details,omitempty"`
+	ScenarioID                  string                 `json:"scenario_id"`
+	Name                        string                 `json:"name"`
+	ThreatClass                 string                 `json:"threat_class"`
+	ServerID                    string                 `json:"server_id"`
+	ToolName                    string                 `json:"tool_name"`
+	Verdict                     string                 `json:"verdict"`
+	Reason                      string                 `json:"reason"`
+	Dispatched                  bool                   `json:"dispatched"`
+	DispatchCount               int                    `json:"dispatch_count"`
+	ReplayNoRedispatch          bool                   `json:"replay_no_redispatch"`
+	ReceiptRef                  string                 `json:"receipt_ref"`
+	ReceiptHash                 string                 `json:"receipt_hash"`
+	AuthorizationInputsRef      string                 `json:"authorization_inputs_ref"`
+	AuthorizationInputsHash     string                 `json:"authorization_inputs_hash"`
+	AuthorizationEvaluationRef  string                 `json:"authorization_evaluation_ref"`
+	AuthorizationEvaluationHash string                 `json:"authorization_evaluation_hash"`
+	ExecutionReceiptRef         string                 `json:"execution_receipt_ref,omitempty"`
+	ExecutionReceiptHash        string                 `json:"execution_receipt_hash,omitempty"`
+	ReplayReceiptRef            string                 `json:"replay_receipt_ref,omitempty"`
+	ReplayReceiptHash           string                 `json:"replay_receipt_hash,omitempty"`
+	ReplayEnvelopeEqual         bool                   `json:"replay_envelope_equal"`
+	EffectArtifactRef           string                 `json:"effect_artifact_ref,omitempty"`
+	Details                     map[string]interface{} `json:"details,omitempty"`
 }
 
 type mcpProofSummary struct {
-	SchemaVersion           string                   `json:"schema_version"`
-	RunID                   string                   `json:"run_id"`
-	Scenario                string                   `json:"scenario"`
-	GeneratedAt             string                   `json:"generated_at"`
-	EvidencePackRef         string                   `json:"evidence_pack_ref"`
-	EvidencePackArchive     string                   `json:"evidence_pack_archive,omitempty"`
-	VerificationCommand     string                   `json:"verification_command"`
-	OfflineVerified         bool                     `json:"offline_verified"`
-	VerifierSummary         string                   `json:"verifier_summary,omitempty"`
-	TamperRejected          bool                     `json:"tamper_rejected"`
-	NegativeCasesNoDispatch bool                     `json:"negative_cases_no_dispatch"`
-	DispatchCount           int                      `json:"dispatch_count"`
-	ReplayNoRedispatch      bool                     `json:"replay_no_redispatch"`
-	DurationMS              int64                    `json:"duration_ms"`
-	DurationLimitMS         int64                    `json:"duration_limit_ms"`
-	DurationGatePass        bool                     `json:"duration_gate_pass"`
-	Scenarios               []mcpProofScenarioResult `json:"scenarios"`
+	SchemaVersion               string                   `json:"schema_version"`
+	RunID                       string                   `json:"run_id"`
+	Scenario                    string                   `json:"scenario"`
+	ProofScope                  string                   `json:"proof_scope"`
+	GeneratedAt                 string                   `json:"generated_at"`
+	EvidencePackRef             string                   `json:"evidence_pack_ref"`
+	EvidencePackArchive         string                   `json:"evidence_pack_archive,omitempty"`
+	VerificationCommand         string                   `json:"verification_command"`
+	OfflineVerified             bool                     `json:"offline_verified"`
+	VerifierSummary             string                   `json:"verifier_summary,omitempty"`
+	TamperRejected              bool                     `json:"tamper_rejected"`
+	CompletePositiveAndNegative bool                     `json:"complete_positive_and_negative"`
+	ProofComplete               bool                     `json:"proof_complete"`
+	NegativeCasesNoDispatch     bool                     `json:"negative_cases_no_dispatch"`
+	DispatchCount               int                      `json:"dispatch_count"`
+	ReplayNoRedispatch          bool                     `json:"replay_no_redispatch"`
+	DurationMS                  int64                    `json:"duration_ms"`
+	DurationLimitMS             int64                    `json:"duration_limit_ms"`
+	DurationGatePass            bool                     `json:"duration_gate_pass"`
+	Scenarios                   []mcpProofScenarioResult `json:"scenarios"`
 }
 
 type mcpProofExecutionResult struct {
-	receipt            *contracts.Receipt
-	receiptData        []byte
-	receiptHash        string
-	effectArtifactData []byte
-	effectArtifactRef  string
-	replayData         []byte
+	receipt             *contracts.Receipt
+	receiptData         []byte
+	receiptHash         string
+	replayReceiptData   []byte
+	replayReceiptHash   string
+	decisionData        []byte
+	decisionHash        string
+	intentData          []byte
+	intentHash          string
+	effectArtifactData  []byte
+	effectArtifactRef   string
+	replayData          []byte
+	replayEnvelopeEqual bool
 }
 
 type mcpProofLocalDriver struct {
@@ -113,12 +150,10 @@ func (d *mcpProofLocalDriver) Execute(ctx context.Context, toolName string, para
 		return nil, fmt.Errorf("proof driver: write reversible effect: %w", err)
 	}
 	d.dispatches++
-	return map[string]any{
-		"artifact":       filepath.Base(d.outputPath),
-		"content_hash":   lpreceipts.HashBytes(data),
-		"dispatch_count": d.dispatches,
-		"reversible":     true,
-	}, nil
+	// Return the exact bytes written to disk. SafeExecutor hashes this string
+	// as the canonical text artifact, so the signed execution receipt's output
+	// hash is the hash of the exported reversible-effect file itself.
+	return string(data), nil
 }
 
 func (d *mcpProofLocalDriver) DispatchCount() int {
@@ -171,6 +206,10 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 	if outRoot == "" {
 		outRoot = filepath.Join("artifacts", "mcp-proof")
 	}
+	scenario = strings.TrimSpace(scenario)
+	if scenario == "" {
+		scenario = "all"
+	}
 
 	selected, err := selectMCPProofScenarios(scenario, generatedAt)
 	if err != nil {
@@ -193,6 +232,12 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 	results, artifacts, err := buildMCPProofArtifacts(runDir, runID, scenario, generatedAt, selected, receiptSigner)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: build proof artifacts: %v\n", err)
+		return 1
+	}
+	proofScope := mcpProofScope(scenario)
+	completePositiveAndNegative := mcpProofHasPositiveAndNegative(results)
+	if proofScope == "complete" && !completePositiveAndNegative {
+		fmt.Fprintln(stderr, "Error: complete MCP proof requires both positive and negative governed-effect scenarios")
 		return 1
 	}
 	governedEffectDuration := time.Since(proofStarted)
@@ -228,18 +273,20 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 	}
 
 	summary := mcpProofSummary{
-		SchemaVersion:           "helm.mcp.proof/v2",
-		RunID:                   runID,
-		Scenario:                scenario,
-		GeneratedAt:             generatedAt.Format(time.RFC3339),
-		EvidencePackRef:         packDir,
-		EvidencePackArchive:     archivePath,
-		VerificationCommand:     fmt.Sprintf("helm-ai-kernel verify --bundle %s --profile dev-local --json", packDir),
-		NegativeCasesNoDispatch: negativeMCPProofCasesNoDispatch(results),
-		DispatchCount:           totalMCPProofDispatches(results),
-		ReplayNoRedispatch:      mcpProofReplayNoRedispatch(results),
-		DurationLimitMS:         mcpProofDurationLimit.Milliseconds(),
-		Scenarios:               results,
+		SchemaVersion:               "helm.mcp.proof/v3",
+		RunID:                       runID,
+		Scenario:                    scenario,
+		ProofScope:                  proofScope,
+		GeneratedAt:                 generatedAt.Format(time.RFC3339),
+		EvidencePackRef:             packDir,
+		EvidencePackArchive:         archivePath,
+		VerificationCommand:         fmt.Sprintf("helm-ai-kernel verify --bundle %s --profile dev-local --json", packDir),
+		CompletePositiveAndNegative: completePositiveAndNegative,
+		NegativeCasesNoDispatch:     negativeMCPProofCasesNoDispatch(results),
+		DispatchCount:               totalMCPProofDispatches(results),
+		ReplayNoRedispatch:          mcpProofReplayNoRedispatch(results),
+		DurationLimitMS:             mcpProofDurationLimit.Milliseconds(),
+		Scenarios:                   results,
 	}
 	report, err := verifier.VerifyBundleWithOptions(packDir, verifier.VerifyOptions{
 		Profile: evidencepkg.EvidenceTrustProfileDevLocal,
@@ -271,6 +318,14 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 	proofDuration := time.Since(proofStarted)
 	summary.DurationMS = proofDuration.Milliseconds()
 	summary.DurationGatePass = proofDuration < mcpProofDurationLimit
+	summary.ProofComplete = proofScope == "complete" &&
+		summary.CompletePositiveAndNegative &&
+		summary.NegativeCasesNoDispatch &&
+		summary.DispatchCount == 1 &&
+		summary.ReplayNoRedispatch &&
+		summary.OfflineVerified &&
+		summary.TamperRejected &&
+		summary.DurationGatePass
 
 	data, _ := json.MarshalIndent(summary, "", "  ")
 	if err := os.WriteFile(filepath.Join(runDir, "summary.json"), append(data, '\n'), 0o600); err != nil {
@@ -280,6 +335,10 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 	writeMCPProofSummary(stdout, summary, jsonOutput)
 	if !summary.DurationGatePass {
 		fmt.Fprintf(stderr, "Error: proof duration %dms exceeded %dms gate\n", summary.DurationMS, summary.DurationLimitMS)
+		return 1
+	}
+	if proofScope == "complete" && !summary.ProofComplete {
+		fmt.Fprintln(stderr, "Error: complete MCP proof did not satisfy all required positive-and-negative gates")
 		return 1
 	}
 	return 0
@@ -293,6 +352,7 @@ func writeMCPProofSummary(stdout io.Writer, summary mcpProofSummary, jsonOutput 
 		return
 	}
 	fmt.Fprintf(stdout, "MCP quarantine proof: %s\n", summary.RunID)
+	fmt.Fprintf(stdout, "  Scope: %s (complete=%t)\n", summary.ProofScope, summary.ProofComplete)
 	fmt.Fprintf(stdout, "  EvidencePack: %s\n", summary.EvidencePackRef)
 	fmt.Fprintf(stdout, "  Offline verify: %t\n", summary.OfflineVerified)
 	fmt.Fprintf(stdout, "  Tamper rejected: %t\n", summary.TamperRejected)
@@ -356,15 +416,6 @@ func mcpProofScenarios(at time.Time) []mcpProofScenario {
 			SchemaHash: schemaHash,
 			Effect:     effect,
 		}
-	}
-	replayDecision := launchpadmcp.Decision{
-		Verdict:    "DENY",
-		Reason:     "ERR_MCP_REPLAY_REORDERING_ATTEMPT",
-		LaunchID:   "launch-proof",
-		AppID:      "proof-app",
-		Principal:  "operator@example.com",
-		PolicyHash: "sha256:policy-proof",
-		SchemaPin:  "sha256:write",
 	}
 	return []mcpProofScenario{
 		{
@@ -478,16 +529,6 @@ func mcpProofScenarios(at time.Time) []mcpProofScenario {
 			Request:     req("proof.read", "sha256:drift", launchpadmcp.EffectRead),
 			Expected:    launchpadmcp.Decision{Verdict: "DENY", Reason: "ERR_MCP_SCHEMA_DRIFT"},
 		},
-		{
-			ID:          "replay_reordering_attempt",
-			Name:        "Replay or reordering attempt is marked invalid",
-			ThreatClass: "replay_reordering",
-			Summary:     "A replay ledger attempts to present side effects out of causal order.",
-			Server:      approved,
-			Request:     req("proof.write", "sha256:write", launchpadmcp.EffectSideEffect),
-			Decision:    &replayDecision,
-			Expected:    replayDecision,
-		},
 	}
 }
 
@@ -530,9 +571,6 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 
 	for idx, scenario := range scenarios {
 		decision := launchpadmcp.AuthorizeAt(scenario.Server, scenario.Request, generatedAt)
-		if scenario.Decision != nil {
-			decision = *scenario.Decision
-		}
 		if decision.Verdict != scenario.Expected.Verdict || decision.Reason != scenario.Expected.Reason {
 			return nil, nil, fmt.Errorf(
 				"proof scenario %s returned %s/%s, want %s/%s",
@@ -543,11 +581,34 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 				scenario.Expected.Reason,
 			)
 		}
-		decisionHash := lpreceipts.Hash(map[string]any{
-			"scenario_id": scenario.ID,
-			"decision":    decision,
-			"request":     scenario.Request,
-		})
+		authorizationInputs := mcpProofAuthorizationInputs{
+			SchemaVersion: "helm.mcp.proof.authorization-inputs/v1",
+			ScenarioID:    scenario.ID,
+			EvaluatedAt:   generatedAt.Format(time.RFC3339),
+			Server:        scenario.Server,
+			Request:       scenario.Request,
+		}
+		authorizationInputsData, err := mcpProofJSON(authorizationInputs)
+		if err != nil {
+			return nil, nil, fmt.Errorf("marshal authorization inputs for %s: %w", scenario.ID, err)
+		}
+		authorizationInputsHash := lpreceipts.HashBytes(authorizationInputsData)
+		authorizationInputsRef := "02_PROOFGRAPH/authorization_inputs/" + scenario.ID + ".json"
+		artifacts[authorizationInputsRef] = authorizationInputsData
+
+		authorizationEvaluation := mcpProofAuthorizationEvaluation{
+			SchemaVersion:           "helm.mcp.proof.authorization-evaluation/v1",
+			AuthorizationInputsHash: authorizationInputsHash,
+			AuthorizationInputsRef:  authorizationInputsRef,
+			Decision:                decision,
+		}
+		authorizationEvaluationData, err := mcpProofJSON(authorizationEvaluation)
+		if err != nil {
+			return nil, nil, fmt.Errorf("marshal authorization evaluation for %s: %w", scenario.ID, err)
+		}
+		authorizationEvaluationHash := lpreceipts.HashBytes(authorizationEvaluationData)
+		authorizationEvaluationRef := "02_PROOFGRAPH/authorization_evaluations/" + scenario.ID + ".json"
+		artifacts[authorizationEvaluationRef] = authorizationEvaluationData
 		dispatchesBefore := driver.DispatchCount()
 		var executionResult *mcpProofExecutionResult
 		if scenario.Execute {
@@ -556,7 +617,8 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 				runID,
 				generatedAt,
 				scenario,
-				decisionHash,
+				authorizationEvaluationHash,
+				authorizationInputsHash,
 				signer,
 				safeExecutor,
 				driver,
@@ -565,6 +627,9 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 				return nil, nil, fmt.Errorf("execute scenario %s: %w", scenario.ID, err)
 			}
 			artifacts["receipts/"+scenario.ID+"-execution.json"] = executionResult.receiptData
+			artifacts["receipts/"+scenario.ID+"-execution-replay.json"] = executionResult.replayReceiptData
+			artifacts["02_PROOFGRAPH/decisions/"+scenario.ID+".json"] = executionResult.decisionData
+			artifacts["02_PROOFGRAPH/intents/"+scenario.ID+".json"] = executionResult.intentData
 			artifacts["04_EXPORTS/reversible_effect.txt"] = executionResult.effectArtifactData
 			artifacts["08_TAPES/"+scenario.ID+"-replay.json"] = executionResult.replayData
 		}
@@ -576,68 +641,49 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 			return nil, nil, fmt.Errorf("proof scenario %s dispatched %d times, want 0", scenario.ID, dispatchCount)
 		}
 		dispatched := dispatchCount > 0
-		argsHash := lpreceipts.Hash(scenario.Request)
 		receipt := &contracts.Receipt{
-			ReceiptID:    "rcpt_mcp_proof_" + scenario.ID,
-			DecisionID:   "decision_mcp_proof_" + scenario.ID,
-			EffectID:     "mcp.tools.call/" + scenario.Request.ToolName,
-			Status:       decision.Verdict,
-			OutputHash:   decisionHash,
+			ReceiptID:  "rcpt_mcp_proof_" + scenario.ID,
+			DecisionID: "decision_mcp_proof_" + scenario.ID,
+			EffectID:   mcpPolicyReceiptPrefix + scenario.ID,
+			Status:     decision.Verdict,
+			// OutputHash binds the complete evaluation (input hash plus actual
+			// AuthorizeAt result) while ArgsHash binds the raw authorization
+			// inputs. Both fields are covered by the receipt signature.
+			OutputHash:   authorizationEvaluationHash,
 			Timestamp:    generatedAt,
 			ExecutorID:   "helm-ai-kernel.mcp.proof",
 			PrevHash:     previousReceiptHash,
 			LamportClock: uint64(idx + 1),
-			ArgsHash:     argsHash,
-			Type:         "mcp_policy_decision",
-			LaunchID:     runID,
-			DecisionHash: decisionHash,
-			Verdict:      decision.Verdict,
-			CreatedAt:    generatedAt,
-			PolicyHash:   scenario.Request.PolicyHash,
-			ToolName:     scenario.Request.ToolName,
-			ReasonCode:   decision.Reason,
-			Metadata: map[string]any{
-				"scenario_id":            scenario.ID,
-				"threat_class":           scenario.ThreatClass,
-				"summary":                scenario.Summary,
-				"mcp_server_id":          scenario.Request.ServerID,
-				"mcp_tool_name":          scenario.Request.ToolName,
-				"schema_hash":            scenario.Request.SchemaHash,
-				"schema_pin":             decision.SchemaPin,
-				"side_effect_class":      string(scenario.Request.Effect),
-				"dispatched":             dispatched,
-				"dispatch_count":         dispatchCount,
-				"replay_no_redispatch":   executionResult != nil,
-				"signature_key_ref":      mcpProofSignatureKeyRef(signer),
-				"signature_key_type":     "ed25519",
-				"signing_public_key_hex": mcpProofSigningPublicKeyHex(signer),
-			},
+			ArgsHash:     authorizationInputsHash,
 		}
 		if err := signer.SignReceipt(receipt); err != nil {
 			return nil, nil, fmt.Errorf("sign receipt for %s: %w", scenario.ID, err)
 		}
-		receiptData, err := json.MarshalIndent(receipt, "", "  ")
+		receiptData, err := mcpProofJSON(receipt)
 		if err != nil {
 			return nil, nil, err
 		}
-		receiptData = append(receiptData, '\n')
 		receiptHash := lpreceipts.HashBytes(receiptData)
 		previousReceiptHash = receiptHash
 		artifacts["receipts/"+scenario.ID+".json"] = receiptData
 
 		result := mcpProofScenarioResult{
-			ScenarioID:         scenario.ID,
-			Name:               scenario.Name,
-			ThreatClass:        scenario.ThreatClass,
-			ServerID:           scenario.Request.ServerID,
-			ToolName:           scenario.Request.ToolName,
-			Verdict:            decision.Verdict,
-			Reason:             decision.Reason,
-			Dispatched:         dispatched,
-			DispatchCount:      dispatchCount,
-			ReplayNoRedispatch: executionResult != nil,
-			ReceiptRef:         "02_PROOFGRAPH/receipts/" + scenario.ID + ".json",
-			ReceiptHash:        receiptHash,
+			ScenarioID:                  scenario.ID,
+			Name:                        scenario.Name,
+			ThreatClass:                 scenario.ThreatClass,
+			ServerID:                    scenario.Request.ServerID,
+			ToolName:                    scenario.Request.ToolName,
+			Verdict:                     decision.Verdict,
+			Reason:                      decision.Reason,
+			Dispatched:                  dispatched,
+			DispatchCount:               dispatchCount,
+			ReplayNoRedispatch:          executionResult != nil && executionResult.replayEnvelopeEqual,
+			ReceiptRef:                  "02_PROOFGRAPH/receipts/" + scenario.ID + ".json",
+			ReceiptHash:                 receiptHash,
+			AuthorizationInputsRef:      authorizationInputsRef,
+			AuthorizationInputsHash:     authorizationInputsHash,
+			AuthorizationEvaluationRef:  authorizationEvaluationRef,
+			AuthorizationEvaluationHash: authorizationEvaluationHash,
 			Details: map[string]interface{}{
 				"launch_id":   scenario.Request.LaunchID,
 				"app_id":      scenario.Request.AppID,
@@ -650,31 +696,42 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 		if executionResult != nil {
 			result.ExecutionReceiptRef = "02_PROOFGRAPH/receipts/" + scenario.ID + "-execution.json"
 			result.ExecutionReceiptHash = executionResult.receiptHash
+			result.ReplayReceiptRef = "02_PROOFGRAPH/receipts/" + scenario.ID + "-execution-replay.json"
+			result.ReplayReceiptHash = executionResult.replayReceiptHash
+			result.ReplayEnvelopeEqual = executionResult.replayEnvelopeEqual
 			result.EffectArtifactRef = executionResult.effectArtifactRef
 			result.Details["execution_receipt_id"] = executionResult.receipt.ReceiptID
+			result.Details["execution_decision_hash"] = executionResult.decisionHash
+			result.Details["execution_intent_hash"] = executionResult.intentHash
 			result.Details["idempotency_key"] = "mcp-proof/" + runID + "/" + scenario.ID
 		}
 		results = append(results, result)
-		resultData, _ := json.MarshalIndent(result, "", "  ")
-		artifacts["scenario_results/"+scenario.ID+".json"] = append(resultData, '\n')
+		resultData, err := mcpProofJSON(result)
+		if err != nil {
+			return nil, nil, fmt.Errorf("marshal scenario result for %s: %w", scenario.ID, err)
+		}
+		artifacts["scenario_results/"+scenario.ID+".json"] = resultData
 	}
 
 	transcript := map[string]any{
-		"schema_version":             "helm.mcp.proof.transcript/v2",
-		"run_id":                     runID,
-		"scenario":                   scenarioName,
-		"generated_at":               generatedAt.Format(time.RFC3339),
-		"negative_cases_no_dispatch": negativeMCPProofCasesNoDispatch(results),
-		"dispatch_count":             totalMCPProofDispatches(results),
-		"replay_no_redispatch":       mcpProofReplayNoRedispatch(results),
-		"positive_and_negative":      mcpProofHasPositiveAndNegative(results),
-		"scenarios":                  results,
+		"schema_version":                 "helm.mcp.proof.transcript/v3",
+		"run_id":                         runID,
+		"scenario":                       scenarioName,
+		"proof_scope":                    mcpProofScope(scenarioName),
+		"generated_at":                   generatedAt.Format(time.RFC3339),
+		"complete_positive_and_negative": mcpProofHasPositiveAndNegative(results),
+		"negative_cases_no_dispatch":     negativeMCPProofCasesNoDispatch(results),
+		"dispatch_count":                 totalMCPProofDispatches(results),
+		"replay_no_redispatch":           mcpProofReplayNoRedispatch(results),
+		"scenarios":                      results,
 	}
-	transcriptData, _ := json.MarshalIndent(transcript, "", "  ")
-	artifacts["mcp_proof_transcript.json"] = append(transcriptData, '\n')
+	transcriptData, err := mcpProofJSON(transcript)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal proof transcript: %w", err)
+	}
+	artifacts["mcp_proof_transcript.json"] = transcriptData
 	artifacts["proofgraph.json"] = buildMCPProofGraph(runID, generatedAt, results)
 	artifacts["09_SCHEMAS/mcp_proof_transcript.schema.json"] = []byte(mcpProofTranscriptSchema + "\n")
-	artifacts["08_TAPES/mcp_replay_reordering_attempt.json"] = []byte(fmt.Sprintf(`{"run_id":%q,"scenario_id":"replay_reordering_attempt","status":"invalid","reason":"ERR_MCP_REPLAY_REORDERING_ATTEMPT"}`+"\n", runID))
 	return results, artifacts, nil
 }
 
@@ -683,7 +740,8 @@ func executeMCPProofScenario(
 	runID string,
 	generatedAt time.Time,
 	scenario mcpProofScenario,
-	policyDecisionHash string,
+	policyEvaluationHash string,
+	authorizationInputsHash string,
 	signer helmcrypto.Signer,
 	safeExecutor *executor.SafeExecutor,
 	driver *mcpProofLocalDriver,
@@ -694,13 +752,14 @@ func executeMCPProofScenario(
 	decisionID := "decision_mcp_proof_" + scenario.ID
 	idempotencyKey := "mcp-proof/" + runID + "/" + scenario.ID
 	effect := &contracts.Effect{
-		EffectID:       "effect_mcp_proof_" + scenario.ID,
+		EffectID:       mcpEffectReceiptPrefix + scenario.ID,
 		EffectType:     contracts.EffectTypeCallTool,
 		DecisionID:     decisionID,
 		IdempotencyKey: idempotencyKey,
 		Params: map[string]any{
-			"tool_name": mcpProofToolName,
-			"content":   "HELM governed reversible local effect for " + runID,
+			"tool_name":  mcpProofToolName,
+			"content":    "HELM governed reversible local effect for " + runID,
+			"reversible": true,
 		},
 	}
 	effect.ArgsHash = lpreceipts.Hash(effect.Params)
@@ -719,16 +778,17 @@ func executeMCPProofScenario(
 		EffectDigest:       effectDigest,
 		PolicyBackend:      "helm",
 		PolicyContentHash:  lpreceipts.Hash(scenario.Request.PolicyHash),
-		PolicyDecisionHash: policyDecisionHash,
+		PolicyDecisionHash: policyEvaluationHash,
 		Verdict:            string(contracts.VerdictAllow),
 		Reason:             scenario.Expected.Reason,
 		ReasonCode:         scenario.Expected.Reason,
 		InputContext: map[string]any{
-			"session_id":           runID,
-			"mcp_approval_receipt": scenario.Request.ApprovalReceiptRef,
-			"mcp_policy_decision":  policyDecisionHash,
-			"mcp_schema_hash":      scenario.Request.SchemaHash,
-			"mcp_server_id":        scenario.Request.ServerID,
+			"session_id":                    runID,
+			"mcp_approval_receipt":          scenario.Request.ApprovalReceiptRef,
+			"mcp_authorization_inputs_hash": authorizationInputsHash,
+			"mcp_policy_evaluation_hash":    policyEvaluationHash,
+			"mcp_schema_hash":               scenario.Request.SchemaHash,
+			"mcp_server_id":                 scenario.Request.ServerID,
 		},
 		Timestamp: generatedAt,
 	}
@@ -748,6 +808,14 @@ func executeMCPProofScenario(
 	if err := signer.SignIntent(intent); err != nil {
 		return nil, fmt.Errorf("sign execution intent: %w", err)
 	}
+	decisionData, err := mcpProofJSON(decision)
+	if err != nil {
+		return nil, fmt.Errorf("marshal signed execution decision: %w", err)
+	}
+	intentData, err := mcpProofJSON(intent)
+	if err != nil {
+		return nil, fmt.Errorf("marshal signed execution intent: %w", err)
+	}
 
 	dispatchesBefore := driver.DispatchCount()
 	receipt, artifact, err := safeExecutor.Execute(ctx, effect, decision, intent)
@@ -763,6 +831,20 @@ func executeMCPProofScenario(
 	if receipt.OutputHash != artifact.Digest {
 		return nil, fmt.Errorf("execution receipt output hash %q does not match artifact %q", receipt.OutputHash, artifact.Digest)
 	}
+	effectArtifactData, err := os.ReadFile(driver.outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("read reversible effect: %w", err)
+	}
+	if !bytes.Equal(artifact.CanonicalBytes, effectArtifactData) {
+		return nil, fmt.Errorf("execution artifact bytes do not match exported reversible effect")
+	}
+	if lpreceipts.HashBytes(effectArtifactData) != receipt.OutputHash {
+		return nil, fmt.Errorf("execution receipt output hash does not bind exported reversible effect")
+	}
+	receiptData, err := mcpProofJSON(receipt)
+	if err != nil {
+		return nil, fmt.Errorf("marshal execution receipt: %w", err)
+	}
 
 	replayReceipt, replayArtifact, err := safeExecutor.Execute(ctx, effect, decision, intent)
 	if err != nil {
@@ -777,49 +859,45 @@ func executeMCPProofScenario(
 	if replayArtifact == nil || replayArtifact.Digest != receipt.OutputHash {
 		return nil, fmt.Errorf("sequential replay artifact is not bound to original output")
 	}
-	receipt.Type = "mcp_governed_effect_execution"
-	receipt.LaunchID = runID
-	receipt.DecisionHash = policyDecisionHash
-	receipt.Verdict = string(contracts.VerdictAllow)
-	receipt.PolicyHash = scenario.Request.PolicyHash
-	receipt.ToolName = scenario.Request.ToolName
-	receipt.ReasonCode = scenario.Expected.Reason
-	receipt.Metadata = map[string]any{
-		"approval_receipt_ref": scenario.Request.ApprovalReceiptRef,
-		"dispatch_count":       driver.DispatchCount() - dispatchesBefore,
-		"replay_no_redispatch": true,
-		"reversible":           true,
-	}
-
-	receiptData, err := json.MarshalIndent(receipt, "", "  ")
+	replayReceiptData, err := mcpProofJSON(replayReceipt)
 	if err != nil {
-		return nil, fmt.Errorf("marshal execution receipt: %w", err)
+		return nil, fmt.Errorf("marshal replayed execution receipt: %w", err)
 	}
-	receiptData = append(receiptData, '\n')
-	effectArtifactData, err := os.ReadFile(driver.outputPath)
-	if err != nil {
-		return nil, fmt.Errorf("read reversible effect: %w", err)
+	if !bytes.Equal(receiptData, replayReceiptData) {
+		return nil, fmt.Errorf("replayed receipt envelope does not equal persisted original")
 	}
 	replayData, err := json.MarshalIndent(map[string]any{
-		"schema_version":      "helm.mcp.proof.replay/v1",
-		"decision_id":         decision.ID,
-		"idempotency_key":     idempotencyKey,
-		"original_receipt_id": receipt.ReceiptID,
-		"replay_receipt_id":   replayReceipt.ReceiptID,
-		"dispatch_count":      driver.DispatchCount() - dispatchesBefore,
-		"redispatched":        false,
+		"schema_version":         "helm.mcp.proof.replay/v2",
+		"decision_id":            decision.ID,
+		"idempotency_key":        idempotencyKey,
+		"original_receipt_id":    receipt.ReceiptID,
+		"original_receipt_hash":  lpreceipts.HashBytes(receiptData),
+		"replay_receipt_id":      replayReceipt.ReceiptID,
+		"replay_receipt_hash":    lpreceipts.HashBytes(replayReceiptData),
+		"receipt_envelope_equal": true,
+		"effect_output_hash":     receipt.OutputHash,
+		"effect_artifact_hash":   lpreceipts.HashBytes(effectArtifactData),
+		"dispatch_count":         driver.DispatchCount() - dispatchesBefore,
+		"redispatched":           false,
 	}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal replay evidence: %w", err)
 	}
 
 	return &mcpProofExecutionResult{
-		receipt:            receipt,
-		receiptData:        receiptData,
-		receiptHash:        lpreceipts.HashBytes(receiptData),
-		effectArtifactData: effectArtifactData,
-		effectArtifactRef:  "04_EXPORTS/reversible_effect.txt",
-		replayData:         append(replayData, '\n'),
+		receipt:             receipt,
+		receiptData:         receiptData,
+		receiptHash:         lpreceipts.HashBytes(receiptData),
+		replayReceiptData:   replayReceiptData,
+		replayReceiptHash:   lpreceipts.HashBytes(replayReceiptData),
+		decisionData:        decisionData,
+		decisionHash:        lpreceipts.HashBytes(decisionData),
+		intentData:          intentData,
+		intentHash:          lpreceipts.HashBytes(intentData),
+		effectArtifactData:  effectArtifactData,
+		effectArtifactRef:   "04_EXPORTS/reversible_effect.txt",
+		replayData:          append(replayData, '\n'),
+		replayEnvelopeEqual: true,
 	}, nil
 }
 
@@ -859,7 +937,7 @@ func verifyMCPProofTamperRejected(packDir, evidenceDataDir string, at time.Time)
 	}
 	mutated := bytes.Replace(
 		transcript,
-		[]byte(`"helm.mcp.proof.transcript/v2"`),
+		[]byte(`"helm.mcp.proof.transcript/v3"`),
 		[]byte(`"helm.mcp.proof.transcript/v9"`),
 		1,
 	)
@@ -894,24 +972,32 @@ func mcpProofSignatureKeyRef(signer helmcrypto.Signer) string {
 	return "ed25519:" + key
 }
 
-// mcpProofSigningPublicKeyHex discloses the full Ed25519 public key so the
-// standalone verifier can validate receipt signatures offline. The disclosure
-// is integrity-anchored by the pack seal and trusted only under the dev-local
-// profile.
-func mcpProofSigningPublicKeyHex(signer helmcrypto.Signer) string {
-	if signer == nil {
-		return ""
+func mcpProofJSON(value any) ([]byte, error) {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return nil, err
 	}
-	return signer.PublicKey()
+	return append(data, '\n'), nil
+}
+
+func mcpProofScope(scenario string) string {
+	if strings.TrimSpace(scenario) == "all" {
+		return "complete"
+	}
+	return "vector_only"
 }
 
 func negativeMCPProofCasesNoDispatch(results []mcpProofScenarioResult) bool {
+	foundNegative := false
 	for _, result := range results {
-		if result.Verdict != "ALLOW" && (result.Dispatched || result.DispatchCount != 0) {
-			return false
+		if result.Verdict != "ALLOW" {
+			foundNegative = true
+			if result.Dispatched || result.DispatchCount != 0 {
+				return false
+			}
 		}
 	}
-	return true
+	return foundNegative
 }
 
 func totalMCPProofDispatches(results []mcpProofScenarioResult) int {
@@ -929,7 +1015,7 @@ func mcpProofReplayNoRedispatch(results []mcpProofScenarioResult) bool {
 			continue
 		}
 		foundPositive = true
-		if !result.ReplayNoRedispatch {
+		if !result.ReplayNoRedispatch || !result.ReplayEnvelopeEqual {
 			return false
 		}
 	}
@@ -993,18 +1079,19 @@ func buildMCPProofGraph(runID string, generatedAt time.Time, results []mcpProofS
 
 const mcpProofTranscriptSchema = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.mindburn.dev/helm/mcp-proof-transcript.v2.schema.json",
+  "$id": "https://schemas.mindburn.dev/helm/mcp-proof-transcript.v3.schema.json",
   "type": "object",
-  "required": ["schema_version", "run_id", "scenario", "generated_at", "negative_cases_no_dispatch", "dispatch_count", "replay_no_redispatch", "positive_and_negative", "scenarios"],
+  "required": ["schema_version", "run_id", "scenario", "proof_scope", "generated_at", "complete_positive_and_negative", "negative_cases_no_dispatch", "dispatch_count", "replay_no_redispatch", "scenarios"],
   "properties": {
-    "schema_version": { "const": "helm.mcp.proof.transcript/v2" },
+    "schema_version": { "const": "helm.mcp.proof.transcript/v3" },
     "run_id": { "type": "string" },
     "scenario": { "type": "string" },
+    "proof_scope": { "enum": ["complete", "vector_only"] },
     "generated_at": { "type": "string", "format": "date-time" },
-    "negative_cases_no_dispatch": { "const": true },
+    "complete_positive_and_negative": { "type": "boolean" },
+    "negative_cases_no_dispatch": { "type": "boolean" },
     "dispatch_count": { "type": "integer", "minimum": 0 },
     "replay_no_redispatch": { "type": "boolean" },
-    "positive_and_negative": { "type": "boolean" },
     "scenarios": {
       "type": "array",
       "items": {

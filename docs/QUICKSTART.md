@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-16
 ---
 
 # Quickstart
@@ -55,9 +55,12 @@ Expected shape:
 
 ```json
 {
-  "schema_version": "helm.mcp.proof/v2",
+  "schema_version": "helm.mcp.proof/v3",
+  "proof_scope": "complete",
   "offline_verified": true,
   "tamper_rejected": true,
+  "complete_positive_and_negative": true,
+  "proof_complete": true,
   "negative_cases_no_dispatch": true,
   "dispatch_count": 1,
   "replay_no_redispatch": true,
@@ -76,12 +79,19 @@ Expected shape:
 ```
 
 The positive case writes one fixed, reversible file under the proof output
-directory through `SafeExecutor`. Replaying the same authorized intent returns
-the stored receipt without a second dispatch. Missing or invalid approvals,
-schema drift, confused-deputy scope, and the other negative cases remain at
-zero dispatch. The command fails unless the complete run—including pack seal,
-offline verification, and a required tamper-negative check—finishes in under
-60 seconds.
+directory through `SafeExecutor`. Its signed execution receipt hashes the exact
+exported file bytes. Replaying the same authorized intent returns the same
+durably stored receipt envelope without a second dispatch. Every policy receipt
+binds exported authorization inputs and the resulting evaluation. Missing or
+invalid approvals, schema drift, confused-deputy scope, and the other negative
+cases remain at zero dispatch. The command fails unless the complete default
+run—including pack seal, offline verification, and a required tamper-negative
+check—finishes in under 60 seconds.
+
+Use `--scenario <id>` only to inspect an individual vector: its summary says
+`proof_scope: "vector_only"` and `proof_complete: false`. The replay result is
+sequential same-effect idempotency, not a concurrency, reordering, or
+crash-recovery exactly-once claim.
 
 Verify the generated EvidencePack offline:
 

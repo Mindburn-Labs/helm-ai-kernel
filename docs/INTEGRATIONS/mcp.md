@@ -102,7 +102,12 @@ helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
 It dispatches one fixed reversible local-file effect through `SafeExecutor`,
 proves identical sequential replay does not redispatch, proves every negative
 case remains at zero dispatch, seals and verifies the EvidencePack offline,
-and requires a tampered copy to fail verification.
+and requires a tampered copy to fail verification. The default run is complete
+only when it contains both positive and negative cases; named `--scenario`
+runs are explicitly vector-only. The receipt binds the exported effect bytes,
+and every policy result binds exported authorization inputs and evaluation
+hashes. This does not claim replay/reordering detection or concurrent
+exactly-once execution.
 
 ## What Still Blocks
 

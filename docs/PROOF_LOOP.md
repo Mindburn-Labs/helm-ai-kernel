@@ -1,6 +1,6 @@
 ---
 title: HELM Proof Loop
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-16
 ---
 
 # HELM Proof Loop
@@ -34,10 +34,12 @@ helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<
 
 1. A pinned tool with a valid scoped approval writes one fixed file inside the
    proof output directory through the real `SafeExecutor` path.
-2. Replaying the identical authorized effect returns the stored signed receipt;
-   the local driver remains at one dispatch.
+2. The signed execution receipt hashes the exact exported file bytes. Replaying
+   the identical authorized effect returns the same durably stored receipt
+   envelope; the local driver remains at one dispatch.
 3. Missing and invalid approval paths, along with the remaining threat cases,
-   produce `DENY` or `ESCALATE` receipts and never call the driver.
+   produce `DENY` or `ESCALATE` receipts and never call the driver. Each policy
+   receipt binds exported authorization inputs and its actual evaluation.
 4. The command seals an EvidencePack, verifies it offline, mutates a copied
    pack, and requires that tampered copy to fail verification.
 5. The command exits non-zero unless the complete proof finishes in under
@@ -48,9 +50,12 @@ helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<
 The effect is deliberately local and reversible: the only dispatched tool can
 write the fixed `effects/reversible_effect.txt` path beneath that proof run.
 The pack contains its content at `04_EXPORTS/reversible_effect.txt`, plus the
-policy receipt, signed execution receipt, and replay tape. The replay guarantee
-demonstrated here is sequential same-effect idempotency; it is not a claim of
-concurrent or crash-recovery exactly-once execution.
+policy receipt, signed execution receipt, and replay tape. The default run is
+complete only when it reports both positive and negative cases;
+`--scenario <id>` is explicitly vector-only. The replay guarantee demonstrated
+here is sequential same-effect idempotency; it is not a claim of replay or
+reordering detection, concurrent execution, or crash-recovery exactly-once
+execution.
 
 For one workstation receipt:
 

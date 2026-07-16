@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-16T17:30:56Z
-# Commit: f95f4fd69496bc22c69ad27d16108a097f6c07a3
+# Generated: 2026-07-16T17:52:22Z
+# Commit: 48677075d928554689c3bc4e39e0fa98349d1806
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -418,7 +418,7 @@ f2229d08f1b6ad50f51e976305814161e9269884bf563c18fb57bb7416285d10  core/pkg/verif
 bfbe8e2d25ff38dc49eb34028cfede4e449bdc63e3b810f1b19913a11b72442b  core/pkg/verifier/externalreceipt/externalreceipt.go
 fdb3835dc6315a0730a961d458a0c1e4f9f5d79059f33b8908718f075718e12f  core/pkg/verifier/externalreceipt/externalreceipt_test.go
 e70d160b80a81e70a4d1019d9903135d25f813bbe5803b1da8582e727e8c819c  core/pkg/verifier/host_evidence_test.go
-2effd1152330883e281f4a73a64c24a422ac8a885503093ff8132973a72e286c  core/pkg/verifier/verifier.go
+34b5b8cd659afa12b4a175a054284641db1fcdaa74965d08e41587f9e2a5c820  core/pkg/verifier/verifier.go
 6826dbc4685bd55768db73e1d39e7195ac05571d2452337aa10c87704027f153  core/pkg/verifier/verifier_behavior_coverage_test.go
 fe2bfd4fec3eb0581d6a8256d2f7c47f5a861166830a1e5415001b91585c8855  core/pkg/verifier/verifier_test.go
 f5332ef5eaa72e342066a9d3dad0f822415efeece0312fd97c9cb23674b2c647  core/pkg/connectors/sandbox/README.md

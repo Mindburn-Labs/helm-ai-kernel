@@ -1,6 +1,6 @@
 ---
 title: MCP Competitive Threat Conformance
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-16
 ---
 
 # MCP Competitive Threat Conformance
@@ -39,15 +39,23 @@ helm-ai-kernel verify --bundle /tmp/helm-mcp-proof/public_mcp_proof/evidencepack
 | `confused_deputy_scope_mismatch` | Launch or principal scope mismatch returns `DENY`. |
 | `missing_schema_pin` | Approved server without a pinned tool schema returns `ESCALATE`. |
 | `schema_drift` | Caller schema hash mismatch returns `DENY`. |
-| `replay_reordering_attempt` | Replay or reordering attempt is marked invalid and returns `DENY`. |
 
 Every negative scenario must emit `dispatched=false`, a receipt under
-`02_PROOFGRAPH/receipts/`, and a decision hash. The positive scenario emits
-exactly one dispatch, a signed execution receipt, the local effect artifact,
-and a replay tape proving that an identical sequential replay did not
-redispatch. The pack seal lives at `07_ATTESTATIONS/evidence_pack.sig`; the CLI
-also requires offline verification, tamper rejection, and a complete duration
-below 60 seconds.
+`02_PROOFGRAPH/receipts/`, and exported authorization inputs plus an evaluation
+artifact. The signed policy receipt binds the input hash in `args_hash` and the
+evaluation hash in `output_hash`. The positive scenario emits exactly one
+dispatch, a signed execution receipt whose `output_hash` is the hash of the
+exported local effect file, and an identical durable receipt envelope on
+sequential replay. The pack seal lives at `07_ATTESTATIONS/evidence_pack.sig`;
+the CLI also requires offline verification, tamper rejection, and a complete
+duration below 60 seconds.
+
+The default `all` run is the complete proof and must report
+`proof_scope=complete` and `proof_complete=true`. A named `--scenario` run is
+explicitly `vector_only`; it is useful for diagnosis but is not a
+positive-and-negative proof claim. This proof demonstrates sequential
+same-effect idempotency only. It does not claim replay/reordering detection,
+concurrent exactly-once execution, or crash-recovery exactly-once execution.
 
 ## Source Truth
 

@@ -1,6 +1,6 @@
 ---
 title: MCP Quarantine Before Tool Dispatch
-last_reviewed: 2026-06-02
+last_reviewed: 2026-07-16
 ---
 
 # MCP Quarantine Before Tool Dispatch
@@ -66,9 +66,12 @@ The command covers one pinned, scoped-approval path that dispatches exactly
 once through `SafeExecutor`, then proves identical sequential replay does not
 redispatch. It also covers malicious or unknown MCP servers, prompt-injected
 tool output, excessive agency, invalid approval scope, confused-deputy scope
-mismatch, missing schema pins, schema drift, and replay or reordering attempts.
-Every negative case must report `dispatched=false`, and the complete proof must
-finish in under 60 seconds.
+mismatch, missing schema pins, and schema drift. Every negative case must
+report `dispatched=false`, and the complete proof must finish in under 60
+seconds. The default `all` run is complete; a named `--scenario` run is marked
+`vector_only` and does not claim the full positive-and-negative proof. The
+replay evidence is limited to sequential same-effect idempotency, not replay
+or reordering detection or concurrent exactly-once execution.
 
 See [MCP competitive threat conformance](../security/mcp-competitive-threat-conformance.md)
 for the source files and validation commands.

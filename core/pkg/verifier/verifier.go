@@ -390,10 +390,14 @@ func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts V
 	case "managed_agent_execution_receipt.v1":
 		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "receipt_hash"))
 	default:
-		if firstString(document, "type") == "mcp_policy_decision" {
+		// New MCP proof receipts identify their class with a signed EffectID.
+		// Keep the legacy Type fallback only so already-published dev-local
+		// packs remain verifiable; Type itself is not signature-bound.
+		effectID := firstString(document, "effect_id")
+		if strings.HasPrefix(effectID, "mcp_policy_decision/") || firstString(document, "type") == "mcp_policy_decision" {
 			return verifyMCPPolicyDecisionReceiptSignature(document, sig, opts)
 		}
-		if firstString(document, "type") == "mcp_governed_effect_execution" {
+		if strings.HasPrefix(effectID, "mcp_governed_effect_execution/") || firstString(document, "type") == "mcp_governed_effect_execution" {
 			return verifyMCPGovernedEffectReceiptSignature(document, sig, opts)
 		}
 		return false
@@ -420,11 +424,10 @@ func verifyMCPGovernedEffectReceiptSignature(document map[string]any, sig string
 }
 
 // verifyMCPPolicyDecisionReceiptSignature verifies kernel-issued MCP proof
-// receipts (`mcp proof` quarantine scenarios). The signing key is disclosed in
-// receipt metadata and is integrity-anchored by the pack seal, so
-// disclosure-based trust is accepted only under the dev-local profile — the
-// same trust decision the seal check already makes for dev-local packs. Every
-// other profile requires out-of-band trust roots and fails closed here.
+// receipts (`mcp proof` quarantine scenarios). New receipts use the signer-
+// populated public_key_set; metadata disclosure remains as a legacy fallback.
+// Both disclosure forms are integrity-anchored by the pack seal and trusted
+// only under dev-local. Every other profile requires an out-of-band root.
 func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string, opts VerifyOptions) bool {
 	profile := opts.Profile
 	if profile == "" {
@@ -432,6 +435,13 @@ func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string
 	}
 	if profile != evidencepkg.EvidenceTrustProfileDevLocal {
 		return false
+	}
+	if firstString(document, "signature_algorithm") == "ed25519" {
+		if keySet, ok := document["public_key_set"].(map[string]any); ok {
+			if keyHex := strings.TrimSpace(firstString(keySet, "ed25519")); keyHex != "" {
+				return verifyEd25519CanonicalReceipt(document, sig, keyHex)
+			}
+		}
 	}
 	meta, _ := document["metadata"].(map[string]any)
 	if meta == nil {
@@ -821,8 +831,10 @@ func checkLamportMonotonicity(bundlePath string) CheckResult {
 }
 
 func checkPolicyDecisionHashes(bundlePath string) CheckResult {
-	// Verify that decision records exist and contain decision hashes.
-	// Check receipts for decision_hash fields.
+	// Verify that decision records expose a signed policy binding. Legacy
+	// receipts use decision_hash. Current MCP proof receipts use the signed
+	// EffectID, OutputHash (complete authorization evaluation), and ArgsHash
+	// (raw authorization inputs), avoiding an unsigned compatibility field.
 	receiptsDir := receiptPath(bundlePath)
 	if !dirExists(receiptsDir) {
 		// Already caught by lamport check, but note here too
@@ -834,8 +846,11 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipt files to verify decision hashes"}
 	}
 
-	// Structural check: parse each receipt and verify decision_hash field exists
-	verified := 0
+	// Structural check: parse each receipt and verify either the legacy field or
+	// the current signed MCP policy-receipt binding exists.
+	legacyVerified := 0
+	mcpPolicyTotal := 0
+	mcpPolicyVerified := 0
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -849,16 +864,32 @@ func checkPolicyDecisionHashes(bundlePath string) CheckResult {
 		if err := json.Unmarshal(data, &receipt); err != nil {
 			continue
 		}
-		if _, ok := receipt["decision_hash"]; ok {
-			verified++
+		if strings.HasPrefix(firstString(receipt, "effect_id"), "mcp_policy_decision/") {
+			mcpPolicyTotal++
+			if firstString(receipt, "output_hash") != "" &&
+				firstString(receipt, "args_hash") != "" &&
+				firstString(receipt, "signature") != "" {
+				mcpPolicyVerified++
+			}
+			continue
+		}
+		if firstString(receipt, "decision_hash") != "" {
+			legacyVerified++
 		}
 	}
 
-	if verified == 0 {
-		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipts contain decision_hash field"}
+	if mcpPolicyTotal > 0 {
+		if mcpPolicyTotal != mcpPolicyVerified {
+			return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: fmt.Sprintf("%d/%d MCP policy receipts lack signed authorization bindings", mcpPolicyTotal-mcpPolicyVerified, mcpPolicyTotal)}
+		}
+		return CheckResult{Name: "policy_decision_hashes", Pass: true, Detail: fmt.Sprintf("%d MCP policy receipts with signed authorization bindings", mcpPolicyVerified)}
 	}
 
-	return CheckResult{Name: "policy_decision_hashes", Pass: true, Detail: fmt.Sprintf("%d receipts with decision hashes", verified)}
+	if legacyVerified == 0 {
+		return CheckResult{Name: "policy_decision_hashes", Pass: false, Reason: "no receipts contain a policy decision binding"}
+	}
+
+	return CheckResult{Name: "policy_decision_hashes", Pass: true, Detail: fmt.Sprintf("%d receipts with legacy decision hashes", legacyVerified)}
 }
 
 func checkReplayDeterminism(bundlePath string) CheckResult {

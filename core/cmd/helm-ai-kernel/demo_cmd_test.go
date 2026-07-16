@@ -28,7 +28,7 @@ func TestDemoMCPAlias(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
 		t.Fatalf("demo mcp output is not valid summary JSON: %v\noutput: %s", err, stdout.String())
 	}
-	if summary.SchemaVersion != "helm.mcp.proof/v2" {
+	if summary.SchemaVersion != "helm.mcp.proof/v3" {
 		t.Errorf("unexpected schema version %q", summary.SchemaVersion)
 	}
 	if !summary.OfflineVerified || !summary.TamperRejected {
@@ -37,8 +37,8 @@ func TestDemoMCPAlias(t *testing.T) {
 	if summary.DispatchCount != 1 || !summary.NegativeCasesNoDispatch || !summary.ReplayNoRedispatch {
 		t.Errorf("MCP proof should dispatch once, preserve negative no-dispatch, and replay idempotently: %+v", summary)
 	}
-	if !summary.DurationGatePass || len(summary.Scenarios) != 9 {
-		t.Errorf("MCP proof should complete its nine cases inside the duration gate: %+v", summary)
+	if !summary.DurationGatePass || !summary.ProofComplete || summary.ProofScope != "complete" || len(summary.Scenarios) != 8 {
+		t.Errorf("MCP proof should complete its eight complete-scope cases inside the duration gate: %+v", summary)
 	}
 }
 

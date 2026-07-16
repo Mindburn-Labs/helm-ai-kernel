@@ -1,6 +1,7 @@
 package inferencegateway
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -116,9 +117,9 @@ func TestLifecycle_NoNegativeBalance(t *testing.T) {
 	l := newLedger(t, 1_000)
 	appr := approvedCeremony(t, "ops:alice", "finance:bob")
 
-	// A debit correction larger than the balance must be refused fail-closed.
-	if _, err := l.Adjust("corr-neg", economic.SettlementDebit, 5_000, "k-corr-neg", "overcharge clawback", appr, "evidence://corr"); err == nil {
-		t.Fatalf("expected debit correction beyond balance to be refused")
+	// Legacy ceremonies are refused before any balance rule is evaluated.
+	if _, err := l.Adjust("corr-neg", economic.SettlementDebit, 5_000, "k-corr-neg", "overcharge clawback", appr, "evidence://corr"); !errors.Is(err, economic.ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("legacy correction error = %v, want %v", err, economic.ErrLegacyApprovalCeremonyUnsupported)
 	}
 	if l.BalanceCents() != 1_000 {
 		t.Fatalf("balance changed on refused correction: %d", l.BalanceCents())
@@ -129,32 +130,32 @@ func TestLifecycle_NoNegativeBalance(t *testing.T) {
 		t.Fatalf("expected reservation beyond available funds to be refused")
 	}
 
-	// Enable enterprise invoicing: now a debit correction may go negative.
+	// Enterprise invoicing must not bypass the approval-authority boundary.
 	l.EnableEnterpriseInvoicing()
 	appr2 := approvedCeremony(t, "ops:alice", "finance:bob")
-	res, err := l.Adjust("corr-inv", economic.SettlementDebit, 5_000, "k-corr-inv", "deferred invoice charge", appr2, "evidence://corr2")
-	if err != nil {
-		t.Fatalf("invoicing correction: %v", err)
+	if _, err := l.Adjust("corr-inv", economic.SettlementDebit, 5_000, "k-corr-inv", "deferred invoice charge", appr2, "evidence://corr2"); !errors.Is(err, economic.ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("invoicing legacy correction error = %v, want %v", err, economic.ErrLegacyApprovalCeremonyUnsupported)
 	}
-	if res.BalanceAfterCents != -4_000 {
-		t.Fatalf("invoicing balance = %d, want -4000", res.BalanceAfterCents)
+	if l.BalanceCents() != 1_000 {
+		t.Fatalf("invoicing legacy correction changed balance: %d", l.BalanceCents())
 	}
 }
 
-// TestLifecycle_CorrectionRequiresApproval proves a manual correction is rejected
-// without a valid dual-control approval ceremony and accepted with one.
-func TestLifecycle_CorrectionRequiresApproval(t *testing.T) {
+// TestLifecycle_CorrectionRejectsLegacyApproval proves caller-constructed
+// ceremonies cannot authorize a balance mutation.
+func TestLifecycle_CorrectionRejectsLegacyApproval(t *testing.T) {
 	l := newLedger(t, 10_000)
+	entriesBefore := len(l.Entries())
 
 	// No ceremony.
 	if _, err := l.Adjust("corr-a", economic.SettlementCredit, 500, "k-a", "goodwill", nil, "evidence://a"); err == nil {
 		t.Fatalf("expected correction without ceremony to be refused")
 	}
 
-	// Single-party "approval" (approver == requester) violates dual control.
+	// Single-party legacy approval is non-authoritative.
 	self := approvedCeremony(t, "ops:alice", "ops:alice")
-	if _, err := l.Adjust("corr-b", economic.SettlementCredit, 500, "k-b", "goodwill", self, "evidence://b"); err == nil {
-		t.Fatalf("expected self-approved correction to be refused (dual control)")
+	if _, err := l.Adjust("corr-b", economic.SettlementCredit, 500, "k-b", "goodwill", self, "evidence://b"); !errors.Is(err, economic.ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("self-approved legacy correction error = %v, want %v", err, economic.ErrLegacyApprovalCeremonyUnsupported)
 	}
 
 	// Pending (not approved) ceremony is refused.
@@ -164,21 +165,20 @@ func TestLifecycle_CorrectionRequiresApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reseal pending: %v", err)
 	}
-	if _, err := l.Adjust("corr-c", economic.SettlementCredit, 500, "k-c", "goodwill", &resealed, "evidence://c"); err == nil {
-		t.Fatalf("expected pending-ceremony correction to be refused")
+	if _, err := l.Adjust("corr-c", economic.SettlementCredit, 500, "k-c", "goodwill", &resealed, "evidence://c"); !errors.Is(err, economic.ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("pending legacy correction error = %v, want %v", err, economic.ErrLegacyApprovalCeremonyUnsupported)
 	}
 
-	// Valid dual-control approved correction posts an append-only ADJUSTMENT.
+	// A sealed dual-control ceremony is still not a source-owned single-use grant.
 	ok := approvedCeremony(t, "ops:alice", "finance:bob")
-	res, err := l.Adjust("corr-d", economic.SettlementCredit, 500, "k-d", "goodwill credit", ok, "evidence://d")
-	if err != nil {
-		t.Fatalf("valid correction: %v", err)
+	if _, err := l.Adjust("corr-d", economic.SettlementCredit, 500, "k-d", "goodwill credit", ok, "evidence://d"); !errors.Is(err, economic.ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("dual-control legacy correction error = %v, want %v", err, economic.ErrLegacyApprovalCeremonyUnsupported)
 	}
-	if res.Entry.Type != economic.UsageLedgerAdjustment {
-		t.Fatalf("correction entry type = %s, want ADJUSTMENT", res.Entry.Type)
+	if l.BalanceCents() != 10_000 {
+		t.Fatalf("legacy corrections changed balance: %d", l.BalanceCents())
 	}
-	if res.BalanceAfterCents != 10_500 {
-		t.Fatalf("balance after credit correction = %d, want 10500", res.BalanceAfterCents)
+	if got := len(l.Entries()); got != entriesBefore {
+		t.Fatalf("legacy corrections appended entries: %d != %d", got, entriesBefore)
 	}
 }
 

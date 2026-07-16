@@ -276,9 +276,10 @@ func (l *BalanceLedger) consumeReservationForDebit(reservationKey string) {
 	res.Consumed = true
 }
 
-// Adjust posts an append-only manual correction. It requires an approved,
-// dual-control approval ceremony and never edits prior history. A debit
-// correction respects the no-negative-balance rule unless invoicing is enabled.
+// Adjust is reserved for append-only manual corrections. Legacy approval
+// ceremonies are descriptive evidence only and are rejected by receipt
+// validation, so this method cannot mutate a balance until the Kernel wires
+// source-owned, single-use approval-grant consumption.
 func (l *BalanceLedger) Adjust(receiptID string, direction economic.SettlementDirection, amountCents int64, idempotencyKey, reason string, approval *contracts.ApprovalCeremony, evidencePackRef string) (*MovementResult, error) {
 	if direction != economic.SettlementDebit && direction != economic.SettlementCredit {
 		return nil, errors.New("inferencegateway: correction direction must be DEBIT or CREDIT")

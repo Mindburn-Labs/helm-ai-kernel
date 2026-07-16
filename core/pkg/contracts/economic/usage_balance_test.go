@@ -1,6 +1,7 @@
 package economic
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -59,7 +60,7 @@ func TestBalanceMovementReceipt_RefundRequiresSource(t *testing.T) {
 	}
 }
 
-func TestBalanceMovementReceipt_CorrectionNeedsDualControl(t *testing.T) {
+func TestBalanceMovementReceipt_CorrectionRejectsLegacyCeremony(t *testing.T) {
 	base := func() *BalanceMovementReceipt {
 		r := NewBalanceMovementReceipt("mv-3", "t1", "b1", BalanceMovementCorrection, 250, "USD", "k3", "evidence://mv-3")
 		r.Direction = SettlementDebit
@@ -74,31 +75,32 @@ func TestBalanceMovementReceipt_CorrectionNeedsDualControl(t *testing.T) {
 		t.Fatalf("expected correction without approval to be invalid")
 	}
 
-	// Self-approval (approver == requester) is not dual control.
+	// A self-approved legacy ceremony cannot authorize the correction.
 	r = base()
 	r.Approval = sealedCeremony(t, "alice", []string{"alice"}, contracts.ApprovalCeremonyAllowed)
 	r.Reseal()
-	if err := r.Validate(); err == nil {
-		t.Fatalf("expected self-approved correction to be invalid")
+	if err := r.Validate(); !errors.Is(err, ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("self-approved legacy ceremony error = %v, want %v", err, ErrLegacyApprovalCeremonyUnsupported)
 	}
 
-	// Approved but distinct approver -> valid; entry type is ADJUSTMENT.
+	// Even a sealed, distinct-approver ceremony is descriptive evidence, not
+	// source-owned executable authority.
 	r = base()
 	r.Approval = sealedCeremony(t, "alice", []string{"bob"}, contracts.ApprovalCeremonyAllowed)
 	r.Reseal()
-	if err := r.Validate(); err != nil {
-		t.Fatalf("valid dual-control correction rejected: %v", err)
+	if err := r.Validate(); !errors.Is(err, ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("dual-control legacy ceremony error = %v, want %v", err, ErrLegacyApprovalCeremonyUnsupported)
 	}
 	if r.LedgerEntryType() != UsageLedgerAdjustment {
 		t.Fatalf("correction ledger entry type = %s, want ADJUSTMENT", r.LedgerEntryType())
 	}
 
-	// Pending (not approved) ceremony is refused even with a distinct approver.
+	// Pending legacy ceremonies fail at the same authority boundary.
 	r = base()
 	r.Approval = sealedCeremony(t, "alice", []string{"bob"}, contracts.ApprovalCeremonyPending)
 	r.Reseal()
-	if err := r.Validate(); err == nil {
-		t.Fatalf("expected pending-ceremony correction to be invalid")
+	if err := r.Validate(); !errors.Is(err, ErrLegacyApprovalCeremonyUnsupported) {
+		t.Fatalf("pending legacy ceremony error = %v, want %v", err, ErrLegacyApprovalCeremonyUnsupported)
 	}
 }
 

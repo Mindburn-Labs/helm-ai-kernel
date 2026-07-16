@@ -363,6 +363,60 @@ func TestConformAdversarialVerifyReportRejectsTamper(t *testing.T) {
 	}
 }
 
+func TestConformAdversarialVerifyReportBindsExpectedContext(t *testing.T) {
+	attestationPublicKeyHex := configureAdversarialCommandTest(t)
+	packDir := createMinimalVerifiableBundle(t)
+	populatePassingCampaignPack(t, packDir)
+	reportPath := filepath.Join(t.TempDir(), "campaign.json")
+	var stdout, stderr bytes.Buffer
+	if code := runConform([]string{"adversarial", "--bundle", packDir, "--profile", "dev-local", "--report", reportPath}, &stdout, &stderr); code != 0 {
+		t.Fatalf("campaign exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	report := readAdversarialCampaignReport(t, reportPath)
+	baseArgs := []string{"adversarial", "verify-report", "--report", reportPath, "--trusted-public-key", attestationPublicKeyHex}
+	matching := append(append([]string{}, baseArgs...),
+		"--expected-kernel-commit", report.RunnerProvenance.KernelCommit,
+		"--expected-executable-sha256", report.RunnerProvenance.ExecutableSHA256,
+		"--expected-trust-profile", report.TrustProfile,
+		"--expected-campaign-key-id", report.CampaignTrustKeyID,
+		"--expected-evidence-root", report.EvidenceRoot,
+		"--expected-merkle-root", report.MerkleRoot,
+		"--expected-evaluation-time", report.EvaluationTime,
+		"--expected-detector-revision", report.RunnerProvenance.DetectorRevision,
+		"--expected-detector-definition-sha256", report.RunnerProvenance.DetectorDefinitionSHA256,
+	)
+	stdout.Reset()
+	stderr.Reset()
+	if code := runConform(matching, &stdout, &stderr); code != 0 {
+		t.Fatalf("matching context exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	for _, tc := range []struct {
+		flag string
+		want string
+	}{
+		{flag: "--expected-kernel-commit", want: "kernel commit mismatch"},
+		{flag: "--expected-executable-sha256", want: "executable digest mismatch"},
+		{flag: "--expected-trust-profile", want: "trust profile mismatch"},
+		{flag: "--expected-campaign-key-id", want: "campaign key id mismatch"},
+		{flag: "--expected-evidence-root", want: "evidence root mismatch"},
+		{flag: "--expected-merkle-root", want: "merkle root mismatch"},
+		{flag: "--expected-evaluation-time", want: "evaluation time mismatch"},
+		{flag: "--expected-detector-revision", want: "detector revision mismatch"},
+		{flag: "--expected-detector-definition-sha256", want: "detector definition digest mismatch"},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+			args := append(append([]string{}, baseArgs...), tc.flag, "mismatched-context")
+			if code := runConform(args, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), tc.want) {
+				t.Fatalf("mismatch exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
 func TestConformAdversarialVerifyReportRejectsUnknownFields(t *testing.T) {
 	attestationPublicKeyHex := configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)

@@ -282,12 +282,31 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("conform adversarial verify-report", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var reportPath, trustedPublicKey, expectedKernelCommit, expectedExecutableSHA string
-	var jsonOutput bool
+	var (
+		reportPath                       string
+		trustedPublicKey                 string
+		expectedKernelCommit             string
+		expectedExecutableSHA            string
+		expectedTrustProfile             string
+		expectedCampaignKeyID            string
+		expectedEvidenceRoot             string
+		expectedMerkleRoot               string
+		expectedEvaluationTime           string
+		expectedDetectorRevision         string
+		expectedDetectorDefinitionSHA256 string
+		jsonOutput                       bool
+	)
 	cmd.StringVar(&reportPath, "report", "", "Path to an attested adversarial campaign report")
 	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Externally trusted Ed25519 report-attestation public key")
 	cmd.StringVar(&expectedKernelCommit, "expected-kernel-commit", "", "Optional exact Kernel commit required by downstream policy")
 	cmd.StringVar(&expectedExecutableSHA, "expected-executable-sha256", "", "Optional exact runner executable digest required by downstream policy")
+	cmd.StringVar(&expectedTrustProfile, "expected-trust-profile", "", "Optional exact EvidencePack trust profile required by downstream policy")
+	cmd.StringVar(&expectedCampaignKeyID, "expected-campaign-key-id", "", "Optional exact campaign trust-key ID required by downstream policy")
+	cmd.StringVar(&expectedEvidenceRoot, "expected-evidence-root", "", "Optional exact EvidencePack manifest root required by downstream policy")
+	cmd.StringVar(&expectedMerkleRoot, "expected-merkle-root", "", "Optional exact EvidencePack Merkle root required by downstream policy")
+	cmd.StringVar(&expectedEvaluationTime, "expected-evaluation-time", "", "Optional exact RFC3339 trust-evaluation time required by downstream policy")
+	cmd.StringVar(&expectedDetectorRevision, "expected-detector-revision", "", "Optional exact adversarial detector revision required by downstream policy")
+	cmd.StringVar(&expectedDetectorDefinitionSHA256, "expected-detector-definition-sha256", "", "Optional exact adversarial detector-definition digest required by downstream policy")
 	cmd.BoolVar(&jsonOutput, "json", false, "Emit the authenticated campaign report as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -314,13 +333,26 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
-	if expected := strings.TrimSpace(expectedKernelCommit); expected != "" && report.RunnerProvenance.KernelCommit != expected {
-		_, _ = fmt.Fprintf(stderr, "Error: kernel commit mismatch: got %s want %s\n", report.RunnerProvenance.KernelCommit, expected)
-		return 1
+	contextChecks := []struct {
+		name     string
+		got      string
+		expected string
+	}{
+		{name: "kernel commit", got: report.RunnerProvenance.KernelCommit, expected: expectedKernelCommit},
+		{name: "executable digest", got: report.RunnerProvenance.ExecutableSHA256, expected: expectedExecutableSHA},
+		{name: "trust profile", got: report.TrustProfile, expected: expectedTrustProfile},
+		{name: "campaign key id", got: report.CampaignTrustKeyID, expected: expectedCampaignKeyID},
+		{name: "evidence root", got: report.EvidenceRoot, expected: expectedEvidenceRoot},
+		{name: "merkle root", got: report.MerkleRoot, expected: expectedMerkleRoot},
+		{name: "evaluation time", got: report.EvaluationTime, expected: expectedEvaluationTime},
+		{name: "detector revision", got: report.RunnerProvenance.DetectorRevision, expected: expectedDetectorRevision},
+		{name: "detector definition digest", got: report.RunnerProvenance.DetectorDefinitionSHA256, expected: expectedDetectorDefinitionSHA256},
 	}
-	if expected := strings.TrimSpace(expectedExecutableSHA); expected != "" && report.RunnerProvenance.ExecutableSHA256 != expected {
-		_, _ = fmt.Fprintf(stderr, "Error: executable digest mismatch: got %s want %s\n", report.RunnerProvenance.ExecutableSHA256, expected)
-		return 1
+	for _, check := range contextChecks {
+		if expected := strings.TrimSpace(check.expected); expected != "" && check.got != expected {
+			_, _ = fmt.Fprintf(stderr, "Error: %s mismatch: got %s want %s\n", check.name, check.got, expected)
+			return 1
+		}
 	}
 	if report.Pass != (report.Status == adversarialCampaignStatusPassed) {
 		_, _ = fmt.Fprintln(stderr, "Error: campaign report pass/status fields are inconsistent")

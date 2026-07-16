@@ -99,7 +99,15 @@ Verify a report independently before any downstream use:
 helm-ai-kernel conform adversarial verify-report \
   --report /absolute/path/to/kernel-adversarial-campaign.json \
   --trusted-public-key <attestation-public-key-hex> \
-  --expected-kernel-commit <exact-40-character-commit>
+  --expected-kernel-commit <exact-40-character-commit> \
+  --expected-executable-sha256 <sha256:runner-binary> \
+  --expected-trust-profile customer \
+  --expected-campaign-key-id <sha256:campaign-public-key> \
+  --expected-evidence-root <sha256:manifest-root> \
+  --expected-merkle-root <sha256:merkle-root> \
+  --expected-evaluation-time <exact-rfc3339-time> \
+  --expected-detector-revision kernel-adversarial-detectors/v1.1.0 \
+  --expected-detector-definition-sha256 <sha256:detector-definition>
 ```
 
 Verification rejects reports larger than 8 MiB, unknown fields, duplicate
@@ -109,7 +117,9 @@ object keys, and trailing JSON values before signature validation. With
 The signature binds the evaluation time, input roots, ordered checks and suite
 results, campaign trust-key ID, exact Kernel commit, runner executable SHA-256,
 detector revision, and detector-definition digest. Downstream release policy
-must also match the executable digest to source-owned build provenance.
+must match every applicable `--expected-*` binding and tie the executable
+digest to source-owned build provenance; signature validity alone is not
+campaign or release-context authorization.
 The fixed key used by the repository CI reference campaign is derivable and
 authorizes only that same-job contract test. It must never be trusted for
 release or production evidence.

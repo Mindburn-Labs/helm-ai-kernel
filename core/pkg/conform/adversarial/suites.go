@@ -180,16 +180,42 @@ func adv03DAGFork() *Suite {
 			receiptsDir := filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts")
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
 
-			t := TestResult{TestID: "ADV-03-T1", Name: "No duplicate parent references (no forks)"}
-			parentCount := make(map[string]int)
+			t := TestResult{TestID: "ADV-03-T1", Name: "No duplicate, dangling, or self parent references"}
+			receipts := make([]map[string]interface{}, 0, len(files))
 			for _, f := range files {
-				receipt := loadReceipt(f)
+				receipts = append(receipts, loadReceipt(f))
+			}
+			referenceIndex := receiptReferenceIndex(receipts)
+			parentCount := make(map[string]int)
+			graph := make(map[string][]string, len(receipts))
+			invalidParents := 0
+			for index, receipt := range receipts {
+				child := receiptIdentity(receipt)
+				if child == "" {
+					invalidParents++
+					t.Evidence += fmt.Sprintf("missing receipt identity in %s; ", filepath.Base(files[index]))
+				}
 				parents, ok := receipt["parent_receipt_hashes"].([]interface{})
 				if ok {
 					for _, p := range parents {
-						if ps, ok := p.(string); ok && ps != "genesis" {
-							parentCount[ps]++
+						ps, valid := p.(string)
+						ps = strings.TrimSpace(ps)
+						if !valid || ps == "" {
+							invalidParents++
+							t.Evidence += fmt.Sprintf("invalid parent in %s; ", filepath.Base(files[index]))
+							continue
 						}
+						if ps == "genesis" {
+							continue
+						}
+						parentTarget, exists := referenceIndex[ps]
+						if !exists || child == "" || parentTarget == child {
+							invalidParents++
+							t.Evidence += fmt.Sprintf("dangling or self parent %s in %s; ", ps, filepath.Base(files[index]))
+							continue
+						}
+						parentCount[parentTarget]++
+						graph[child] = append(graph[child], parentTarget)
 					}
 				}
 			}
@@ -207,9 +233,14 @@ func adv03DAGFork() *Suite {
 					t.Evidence += fmt.Sprintf("parent %s claimed by %d children; ", parent, count)
 				}
 			}
-			if forks > 0 {
+			cycles := 0
+			if receiptGraphHasCycle(graph) {
+				cycles = 1
+				t.Evidence += "receipt parent graph contains a cycle; "
+			}
+			if forks > 0 || invalidParents > 0 || cycles > 0 {
 				t.Pass = false
-				t.Reason = fmt.Sprintf("%d DAG forks detected", forks)
+				t.Reason = fmt.Sprintf("%d DAG forks detected; %d invalid parent references; %d DAG cycles detected", forks, invalidParents, cycles)
 			} else {
 				t.Pass = true
 				t.Reason = "no DAG forks"
@@ -267,7 +298,7 @@ func adv04BudgetOverdraft() *Suite {
 			}
 			for _, decrement := range decrements {
 				for _, boundary := range exhaustedAt[decrement.scope] {
-					if decrement.seq > boundary {
+					if decrement.seq >= boundary {
 						overdraft = true
 						t.Evidence += fmt.Sprintf("budget_decrement seq %.0f after exhaustion seq %.0f for %s: %s; ", decrement.seq, boundary, decrement.scope, decrement.file)
 					}
@@ -760,6 +791,49 @@ func receiptIdentity(receipt map[string]interface{}) string {
 	return value
 }
 
+func receiptReferenceIndex(receipts []map[string]interface{}) map[string]string {
+	index := make(map[string]string, len(receipts)*2)
+	for _, receipt := range receipts {
+		target := receiptIdentity(receipt)
+		if target == "" {
+			continue
+		}
+		for _, key := range []string{"receipt_id", "receipt_hash"} {
+			if value, _ := receipt[key].(string); strings.TrimSpace(value) != "" {
+				index[strings.TrimSpace(value)] = target
+			}
+		}
+	}
+	return index
+}
+
+func receiptGraphHasCycle(graph map[string][]string) bool {
+	state := make(map[string]uint8, len(graph))
+	var visit func(string) bool
+	visit = func(node string) bool {
+		switch state[node] {
+		case 1:
+			return true
+		case 2:
+			return false
+		}
+		state[node] = 1
+		for _, parent := range graph[node] {
+			if visit(parent) {
+				return true
+			}
+		}
+		state[node] = 2
+		return false
+	}
+	for node := range graph {
+		if visit(node) {
+			return true
+		}
+	}
+	return false
+}
+
 func receiptParentRefs(receipt map[string]interface{}) []string {
 	raw, _ := receipt["parent_receipt_hashes"].([]interface{})
 	out := make([]string, 0, len(raw))
@@ -817,7 +891,7 @@ func verifyCampaignSignatures(document map[string]interface{}, field, domain, tr
 			return false
 		}
 		signatureHex, _ := signature["signature"].(string)
-		signatureBytes, err := hex.DecodeString(strings.TrimPrefix(strings.TrimSpace(signatureHex), "hex:"))
+		signatureBytes, err := hex.DecodeString(strings.TrimSpace(signatureHex))
 		if err != nil || len(signatureBytes) != ed25519.SignatureSize || !ed25519.Verify(ed25519.PublicKey(publicKey), signedMessage, signatureBytes) {
 			return false
 		}

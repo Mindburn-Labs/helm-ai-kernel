@@ -83,6 +83,11 @@ func TestCampaignSignaturesAreDomainSeparated(t *testing.T) {
 	if !verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, publicKeyHex) {
 		t.Fatal("domain-bound tool-manifest signature was rejected")
 	}
+	signature := manifest["signatures"].([]any)[0].(map[string]any)
+	signature["signature"] = "hex:" + signature["signature"].(string)
+	if verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, publicKeyHex) {
+		t.Fatal("non-canonical hex-prefixed signature was accepted")
+	}
 }
 
 func writePassingCoverageArtifacts(t *testing.T, dir string) string {

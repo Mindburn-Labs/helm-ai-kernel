@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // CoverageResult proves that the supplied EvidencePack contains enough
@@ -94,17 +95,21 @@ func policyDecisionCoverage(receipts []map[string]interface{}, opts Verification
 }
 
 func proofGraphParentCoverage(receipts []map[string]interface{}) CoverageCheck {
+	referenceIndex := receiptReferenceIndex(receipts)
 	count := 0
 	for _, receipt := range receipts {
+		child := receiptIdentity(receipt)
 		parents, _ := receipt["parent_receipt_hashes"].([]interface{})
 		for _, rawParent := range parents {
-			parent, _ := rawParent.(string)
-			if parent != "" && parent != "genesis" {
+			parent, valid := rawParent.(string)
+			parent = strings.TrimSpace(parent)
+			parentTarget, exists := referenceIndex[parent]
+			if valid && parent != "" && parent != "genesis" && child != "" && exists && parentTarget != child {
 				count++
 			}
 		}
 	}
-	return coverageCheck("ADV-03", count > 0, count, "requires at least one non-genesis parent edge")
+	return coverageCheck("ADV-03", count > 0, count, "requires at least one non-genesis parent edge that resolves to another included receipt")
 }
 
 func budgetBoundaryCoverage(receipts []map[string]interface{}) CoverageCheck {

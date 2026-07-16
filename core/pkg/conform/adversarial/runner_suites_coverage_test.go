@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+var _ func(string) *AggregateResult = RunAll
+
 func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 	dir := t.TempDir()
 
@@ -104,7 +106,7 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 		"last_good_seq": 4,
 	})
 
-	result := RunAll(dir, VerificationOptions{})
+	result := RunAll(dir)
 	if result.Pass || result.FailedSuites != 10 || result.PassedSuites != 0 {
 		t.Fatalf("bad evidence result = %+v, want all suites failing", result)
 	}
@@ -317,6 +319,23 @@ func TestMalformedTapeAndMissingTenantFailClosed(t *testing.T) {
 		}
 		if result := adv06TapeReplayTamper().Run(dir); result.Pass {
 			t.Fatalf("malformed tape passed beside valid tape: %+v", result)
+		}
+	})
+
+	t.Run("unknown tape data class", func(t *testing.T) {
+		dir := t.TempDir()
+		tapesDir := filepath.Join(dir, "08_TAPES")
+		if err := os.MkdirAll(tapesDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		value := []byte("classified")
+		digest := sha256.Sum256(value)
+		writeJSON(t, filepath.Join(tapesDir, "entry_001.json"), map[string]any{"value": value, "value_hash": hex.EncodeToString(digest[:]), "data_class": "invented-class"})
+		if result := adv06TapeReplayTamper().Run(dir); result.Pass {
+			t.Fatalf("unknown tape data class passed: %+v", result)
+		}
+		if coverage := tapeCoverage(dir); coverage.Covered {
+			t.Fatalf("unknown tape data class satisfied ADV-06 coverage: %+v", coverage)
 		}
 	})
 

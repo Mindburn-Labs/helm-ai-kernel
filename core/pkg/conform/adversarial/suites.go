@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // SuiteResult captures the outcome of an adversarial test suite.
@@ -421,9 +422,13 @@ func adv08ToolManifestForge(opts VerificationOptions) *Suite {
 			result := &SuiteResult{SuiteID: "ADV-08", Name: "Tool Manifest Forgery", Pass: true}
 
 			files := toolManifestFiles(evidenceDir)
+			legacyFiles, _ := filepath.Glob(filepath.Join(evidenceDir, "10_TOOLS", "*.json"))
 
 			t := TestResult{TestID: "ADV-08-T1", Name: "Tool manifests verify under the campaign trust root"}
-			unsigned := 0
+			unsigned := len(legacyFiles)
+			for _, f := range legacyFiles {
+				t.Evidence += fmt.Sprintf("undeclared legacy tool manifest: %s; ", filepath.Base(f))
+			}
 			for _, f := range files {
 				data, err := os.ReadFile(f)
 				var manifest map[string]interface{}
@@ -814,7 +819,8 @@ func verifyCampaignSignatures(document map[string]interface{}, field, domain, tr
 
 func validTapeEntry(entry map[string]interface{}) bool {
 	valueHash, ok := entry["value_hash"].(string)
-	if !ok || !hasNonEmptyString(entry, "data_class") {
+	dataClass, classOK := entry["data_class"].(string)
+	if !ok || !classOK || !validTapeDataClass(dataClass) {
 		return false
 	}
 	encodedValue, present := entry["value"].(string)
@@ -827,6 +833,15 @@ func validTapeEntry(entry map[string]interface{}) bool {
 	}
 	digest := sha256.Sum256(value)
 	return strings.EqualFold(strings.TrimPrefix(valueHash, "sha256:"), hex.EncodeToString(digest[:]))
+}
+
+func validTapeDataClass(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case contracts.DataClassPublic, contracts.DataClassInternal, contracts.DataClassConfidential, contracts.DataClassRestricted:
+		return true
+	default:
+		return false
+	}
 }
 
 func isHighFinality(effectClass, actionType string) bool {

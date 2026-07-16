@@ -58,6 +58,12 @@ func TestCoverageRejectsLegacyToolDirectoryAndPlaceholderSignature(t *testing.T)
 	if check := toolManifestCoverage(dir, VerificationOptions{}); check.Covered {
 		t.Fatalf("legacy tool directory unexpectedly covered ADV-08: %+v", check)
 	}
+	privateKey, publicKeyHex := campaignTestKey()
+	validManifest := signCampaignDocument(t, map[string]any{"name": "canonical"}, "signatures", campaignToolManifestSignatureDomain, privateKey)
+	writeJSON(t, filepath.Join(canonicalDir, "canonical.json"), validManifest)
+	if result := adv08ToolManifestForge(VerificationOptions{CampaignPublicKeyHex: publicKeyHex}).Run(dir); result.Pass {
+		t.Fatalf("legacy manifest was ignored beside a valid canonical manifest: %+v", result)
+	}
 	writeJSON(t, filepath.Join(canonicalDir, "canonical.json"), map[string]any{"signatures": []string{"placeholder"}})
 	if check := toolManifestCoverage(dir, VerificationOptions{}); check.Covered {
 		t.Fatalf("placeholder signature unexpectedly covered ADV-08: %+v", check)

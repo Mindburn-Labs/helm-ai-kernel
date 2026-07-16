@@ -190,7 +190,7 @@ func toolManifestCoverage(evidenceDir string, opts VerificationOptions) Coverage
 		if err != nil || json.Unmarshal(data, &manifest) != nil {
 			continue
 		}
-		if verifyCampaignSignatures(manifest, "signatures", opts.CampaignPublicKeyHex) {
+		if verifyCampaignSignatures(manifest, "signatures", campaignToolManifestSignatureDomain, opts.CampaignPublicKeyHex) {
 			count++
 		}
 	}

@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-16
 ---
 
 # Quickstart
@@ -144,6 +144,24 @@ For Codex:
 ```bash
 helm-ai-kernel setup codex --yes
 ```
+
+For a project-scoped HELM Desktop connection, use explicit workspace and data
+directory values, then preview the headless plan:
+
+```bash
+helm-ai-kernel setup codex \
+  --scope project \
+  --workspace /absolute/path/to/project \
+  --data-dir /absolute/path/to/helm-state \
+  --no-quickstart \
+  --json \
+  --dry-run
+```
+
+Apply the reviewed plan with the same command plus `--yes`. This local setup
+does not prove Codex has loaded the project configuration or that every runtime
+action reaches HELM; see [Codex integration](INTEGRATIONS/codex.md) for the
+config lifecycle and explicit runtime-proof boundary.
 
 Preview writes first:
 

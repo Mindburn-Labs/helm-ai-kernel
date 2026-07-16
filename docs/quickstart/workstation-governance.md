@@ -31,6 +31,24 @@ helm-ai-kernel setup codex --yes
 helm-ai-kernel setup claude-code --yes
 ```
 
+For a HELM Desktop project connection, preview the explicit, headless Codex
+plan before applying it:
+
+```bash
+helm-ai-kernel setup codex \
+  --scope project \
+  --workspace /absolute/path/to/project \
+  --data-dir /absolute/path/to/helm-state \
+  --no-quickstart \
+  --json \
+  --dry-run
+```
+
+Use the same command with `--yes` only after review. This configures a local
+project MCP/hook path; it does not prove Codex has loaded the files or that an
+agent's full runtime surface is governed. See [Codex integration](/integrations/codex)
+for the mutation, status, removal, and runtime-proof boundaries.
+
 Setup writes draft policy and quarantine artifacts. It does not approve tools
 or grant broad operating permissions.
 

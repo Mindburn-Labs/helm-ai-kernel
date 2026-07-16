@@ -18,6 +18,9 @@ helm-ai-kernel setup claude-code --yes
 # Codex: helm-ai-kernel setup codex --yes
 ```
 
+For a project-scoped HELM Desktop connection, use the explicit preview/apply
+contract in [Codex integration](docs/INTEGRATIONS/codex.md).
+
 Ask your agent to do something risky. HELM blocks or escalates the action before
 it runs, then records the decision.
 

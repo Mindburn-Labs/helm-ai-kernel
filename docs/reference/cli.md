@@ -1,6 +1,6 @@
 ---
 title: CLI
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-16
 ---
 
 # CLI
@@ -29,6 +29,24 @@ helm-ai-kernel setup --client cursor --print-config
 
 Setup writes local client configuration and draft policy artifacts. It does not
 approve tools.
+
+### Project-Scoped Codex / HELM Desktop
+
+```bash
+helm-ai-kernel setup codex \
+  --scope project \
+  --workspace /absolute/path/to/project \
+  --data-dir /absolute/path/to/helm-state \
+  --no-quickstart \
+  --json \
+  --dry-run
+```
+
+Add `--yes` only to apply the reviewed plan. `--no-quickstart` means the
+project connection starts no Quickstart server and returns no fixed Kernel URL.
+The config lifecycle is not a Codex load, trust, or runtime-coverage proof; see
+[Codex integration](../INTEGRATIONS/codex.md) for the exact mutations, status,
+removal, and proof boundary.
 
 ## MCP Approval Commands
 

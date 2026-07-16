@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 )
 
@@ -20,6 +21,11 @@ const (
 	desktopTransportV1RecordPrefix = "HELM_DESKTOP_TRANSPORT_V1 "
 	desktopTransportV1RecordLimit  = 1024
 	desktopTransportV1SecretLength = 64
+
+	desktopTransportV1ProofPath            = "/api/v1/desktop/transport/proof"
+	desktopTransportV1ChallengeHeader      = "X-Helm-Desktop-Transport-Challenge"
+	desktopTransportV1ProofHeader          = "X-Helm-Desktop-Transport-Proof"
+	desktopTransportV1HandoffMessagePrefix = "helm-desktop-transport-v1-handoff"
 )
 
 // desktopTransportV1 is an opt-in direct-child readiness contract for the
@@ -58,14 +64,18 @@ func desktopTransportV1FromEnv() (*desktopTransportV1, error) {
 
 func desktopTransportV1SecretFromEnv(name string) (string, error) {
 	value := os.Getenv(name)
-	if len(value) != desktopTransportV1SecretLength {
-		return "", fmt.Errorf("%s must be %d lowercase hexadecimal characters", name, desktopTransportV1SecretLength)
-	}
-	decoded, err := hex.DecodeString(value)
-	if err != nil || hex.EncodeToString(decoded) != value {
+	if !desktopTransportV1IsLowerHex(value) {
 		return "", fmt.Errorf("%s must be %d lowercase hexadecimal characters", name, desktopTransportV1SecretLength)
 	}
 	return value, nil
+}
+
+func desktopTransportV1IsLowerHex(value string) bool {
+	if len(value) != desktopTransportV1SecretLength {
+		return false
+	}
+	decoded, err := hex.DecodeString(value)
+	return err == nil && hex.EncodeToString(decoded) == value
 }
 
 // bind reserves the dynamic loopback endpoint before it is disclosed. Do not
@@ -86,15 +96,11 @@ func (t *desktopTransportV1) bind() (net.Listener, string, error) {
 
 func (t *desktopTransportV1) readinessRecord(origin string) (string, error) {
 	message := desktopTransportV1Schema + "\n" + t.nonce + "\n" + origin
-	// The Desktop treats the canonical hex text as the HMAC key bytes; keep the
-	// cross-process contract literal instead of decoding it before signing.
-	mac := hmac.New(sha256.New, []byte(t.key))
-	_, _ = io.WriteString(mac, message)
 	record, err := json.Marshal(desktopTransportV1Record{
 		Schema: desktopTransportV1Schema,
 		Nonce:  t.nonce,
 		Origin: origin,
-		MAC:    hex.EncodeToString(mac.Sum(nil)),
+		MAC:    t.hmac(message),
 	})
 	if err != nil {
 		return "", fmt.Errorf("encode desktop transport readiness record: %w", err)
@@ -119,4 +125,53 @@ func (t *desktopTransportV1) writeReadinessRecord(out io.Writer, origin string) 
 		return io.ErrShortWrite
 	}
 	return nil
+}
+
+func (t *desktopTransportV1) hmac(message string) string {
+	// The Desktop treats the canonical hex text as the HMAC key bytes; keep the
+	// cross-process contract literal instead of decoding it before signing.
+	mac := hmac.New(sha256.New, []byte(t.key))
+	_, _ = io.WriteString(mac, message)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func (t *desktopTransportV1) handoffProof(origin, challenge string) string {
+	return t.hmac(desktopTransportV1HandoffMessagePrefix + "\n" + t.nonce + "\n" + origin + "\n" + challenge)
+}
+
+// registerProofRoute exposes a no-bearer, direct-child proof only while the
+// Desktop transport owns the attested loopback listener. The fresh challenge
+// prevents a released-port claimant from replaying the startup record.
+func (t *desktopTransportV1) registerProofRoute(mux *http.ServeMux, origin string) {
+	mux.HandleFunc(desktopTransportV1ProofPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		challenge := r.Header.Get(desktopTransportV1ChallengeHeader)
+		if !desktopTransportV1IsLowerHex(challenge) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set(desktopTransportV1ProofHeader, t.handoffProof(origin, challenge))
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+func registerDesktopTransportV1ProofRoute(mux *http.ServeMux, transport *desktopTransportV1, origin string) {
+	if transport != nil {
+		transport.registerProofRoute(mux, origin)
+	}
+}
+
+func desktopTransportV1SuppressesAuxiliaryHealth(transport *desktopTransportV1, healthPort int, metricsEnabled bool) (bool, error) {
+	if transport == nil || healthPort != 0 {
+		return false, nil
+	}
+	if metricsEnabled {
+		return false, fmt.Errorf("HELM_METRICS_ENABLED cannot be enabled when HELM_HEALTH_PORT=0")
+	}
+	return true, nil
 }

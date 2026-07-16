@@ -102,7 +102,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
           git add core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
-          git commit -s -m "chore: refresh Launchpad model provider catalog"
+          git commit -m "chore: refresh Launchpad model provider catalog"
           git push origin "$branch"
           if gh pr create \
             --title "chore: refresh Launchpad model provider catalog" \

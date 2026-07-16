@@ -1014,7 +1014,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "${branch}"
           git add "${changed_paths[@]}"
-          git commit -s -m "ci(launchpad): promote signed launchpad image refs"
+          git commit -m "ci(launchpad): promote signed launchpad image refs"
           git push origin "${branch}"
           if gh pr create \
             --title "ci(launchpad): promote signed launchpad image refs" \

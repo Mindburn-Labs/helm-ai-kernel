@@ -509,6 +509,76 @@ func TestConformAdversarialVerifyReportRejectsDuplicateFields(t *testing.T) {
 	}
 }
 
+func TestConformAdversarialVerifyReportRejectsSignedSemanticContradictions(t *testing.T) {
+	attestationPublicKeyHex := configureAdversarialCommandTest(t)
+	packDir := createMinimalVerifiableBundle(t)
+	populatePassingCampaignPack(t, packDir)
+	baseReportPath := filepath.Join(t.TempDir(), "campaign.json")
+	var stdout, stderr bytes.Buffer
+	if code := runConform([]string{"adversarial", "--bundle", packDir, "--profile", "dev-local", "--report", baseReportPath}, &stdout, &stderr); code != 0 {
+		t.Fatalf("campaign exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	base := readAdversarialCampaignReport(t, baseReportPath)
+
+	tests := []struct {
+		name   string
+		mutate func(*adversarialCampaignReport)
+		want   string
+	}{
+		{name: "bundle verdict", mutate: func(report *adversarialCampaignReport) { report.BundleVerified = false }, want: "bundle_verified"},
+		{name: "coverage verdict", mutate: func(report *adversarialCampaignReport) { report.CoverageVerified = false }, want: "coverage_verified"},
+		{name: "mandatory count", mutate: func(report *adversarialCampaignReport) { report.MandatorySuites-- }, want: "mandatory_suites"},
+		{name: "executed count", mutate: func(report *adversarialCampaignReport) { report.ExecutedSuites-- }, want: "suite counters"},
+		{name: "passed count", mutate: func(report *adversarialCampaignReport) { report.PassedSuites-- }, want: "suite counters"},
+		{name: "missing suite result", mutate: func(report *adversarialCampaignReport) { report.Suites = report.Suites[:len(report.Suites)-1] }, want: "suite counters"},
+		{name: "suite verdict", mutate: func(report *adversarialCampaignReport) { report.Suites[0].Pass = false }, want: "does not match its test results"},
+		{name: "coverage counter", mutate: func(report *adversarialCampaignReport) { report.CoverageChecks[0].Covered = false }, want: "coverage counters"},
+		{name: "unknown status", mutate: func(report *adversarialCampaignReport) {
+			report.Pass = false
+			report.Status = adversarialCampaignStatus("invented")
+		}, want: "unsupported status"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			encoded, err := json.Marshal(base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var report adversarialCampaignReport
+			if err := json.Unmarshal(encoded, &report); err != nil {
+				t.Fatal(err)
+			}
+			tc.mutate(&report)
+			if err := signAdversarialCampaignReport(&report); err != nil {
+				t.Fatal(err)
+			}
+			data, err := marshalAdversarialCampaignReport(report)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reportPath := filepath.Join(t.TempDir(), "signed-contradiction.json")
+			if err := writeAdversarialCampaignReport(reportPath, data); err != nil {
+				t.Fatal(err)
+			}
+
+			stdout.Reset()
+			stderr.Reset()
+			code := runConform([]string{"adversarial", "verify-report", "--report", reportPath, "--trusted-public-key", attestationPublicKeyHex}, &stdout, &stderr)
+			if code != 1 || !strings.Contains(stderr.String(), "campaign report semantics are invalid") || !strings.Contains(stderr.String(), tc.want) {
+				t.Fatalf("verify exit=%d accepted signed contradiction; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestAdversarialReportJSONRejectsExcessiveNesting(t *testing.T) {
+	data := []byte(strings.Repeat("[", maxAdversarialJSONDepth+1) + "0" + strings.Repeat("]", maxAdversarialJSONDepth+1))
+	if err := rejectDuplicateJSONKeys(data); err == nil || !strings.Contains(err.Error(), "JSON nesting exceeds") {
+		t.Fatalf("deep JSON err=%v, want bounded nesting rejection", err)
+	}
+}
+
 func readAdversarialCampaignReport(t *testing.T, path string) adversarialCampaignReport {
 	t.Helper()
 	data, err := os.ReadFile(path)

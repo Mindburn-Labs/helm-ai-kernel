@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -86,11 +87,11 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		envelope, err = riskscan.Scan(rootPath, opts)
 	}
 	if err != nil {
-		target := rootPath
-		if strings.TrimSpace(receiptsPath) != "" {
-			target = receiptsPath
+		if errors.Is(err, riskscan.ErrScanCoverageIncomplete) {
+			fmt.Fprintln(stderr, "Error scanning declared input: coverage could not be completed; no artifacts were written")
+			return 2
 		}
-		fmt.Fprintf(stderr, "Error scanning %q: %v\n", target, err)
+		fmt.Fprintf(stderr, "Error scanning declared input: %v\n", err)
 		return 2
 	}
 	body, err := riskscan.EnvelopeJSON(envelope)

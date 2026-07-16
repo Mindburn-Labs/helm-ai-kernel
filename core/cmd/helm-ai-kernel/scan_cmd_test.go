@@ -133,6 +133,34 @@ func TestScanCommandFromReceiptsWritesEnvelope(t *testing.T) {
 	}
 }
 
+func TestScanCommandDoesNotExportOnIncompleteCoverage(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte("{not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	output := filepath.Join(out, "risk.json")
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "scan",
+		"--path", root,
+		"--salt-file", filepath.Join(out, "salt.hex"),
+		"--risk-envelope", output,
+	}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("scan code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "coverage could not be completed") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), root) {
+		t.Fatalf("stderr leaked local root: %s", stderr.String())
+	}
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatalf("risk envelope should not be written, stat error = %v", err)
+	}
+}
+
 func scanFixtureRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

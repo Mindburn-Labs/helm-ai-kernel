@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,13 +74,6 @@ func ScanReceipts(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, er
 		}
 		return findings[i].ResourceID < findings[j].ResourceID
 	})
-	mode := riskenvelope.PermissionModeUnknown
-	if summary.ObservedOnly > 0 {
-		mode = riskenvelope.PermissionModeAsk
-	}
-	if summary.Actions > summary.DeniedActions && hasOperateEvent(events) {
-		mode = riskenvelope.PermissionModeAcceptEdits
-	}
 	envelope := riskenvelope.RiskEnvelope{
 		SchemaVersion:  riskenvelope.SchemaVersion,
 		EnvelopeID:     envelopeID,
@@ -87,8 +81,10 @@ func ScanReceipts(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, er
 		SourcePackHash: sourceHash,
 		Findings:       findings,
 		Posture: riskenvelope.PostureProbe{
-			AgentSurface:           surface,
-			PermissionMode:         mode,
+			AgentSurface: surface,
+			// Receipt projections can describe declared effect modes, but cannot
+			// establish the active agent permission policy. Keep this unknown.
+			PermissionMode:         riskenvelope.PermissionModeUnknown,
 			ManagedSettingsPresent: false,
 			MCPServerCount:         0,
 			OAuthScopeBuckets:      []riskenvelope.OAuthScopeBucketCount{},
@@ -124,8 +120,14 @@ func collectReceiptProjectionInputs(root string) ([]receiptProjectionInput, rece
 	var events []receiptProjectionInput
 	surface := riskenvelope.AgentSurfaceUnknown
 	err = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry == nil {
+		if walkErr != nil {
+			if !shouldSkipPath(path) {
+				return receiptCoverageError("declared receipt input could not be traversed")
+			}
 			return nil
+		}
+		if entry == nil {
+			return receiptCoverageError("declared receipt input could not be traversed")
 		}
 		if entry.IsDir() {
 			if shouldSkipDir(entry.Name()) && path != absRoot {
@@ -156,10 +158,13 @@ func collectReceiptProjectionInputs(root string) ([]receiptProjectionInput, rece
 		return nil
 	})
 	if err != nil {
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, receiptCoverageError("declared receipt input could not be traversed")
+		}
 		return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, err
 	}
 	if len(events) == 0 {
-		return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, fmt.Errorf("no supported receipt events found in %s", root)
+		return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, fmt.Errorf("no supported receipt events found in declared input")
 	}
 	return events, summary, surface, nil
 }
@@ -167,14 +172,18 @@ func collectReceiptProjectionInputs(root string) ([]receiptProjectionInput, rece
 func parseReceiptFile(path string) ([]receiptProjectionInput, receiptSourceSummary, riskenvelope.AgentSurface, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, err
+		return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, receiptCoverageError("declared receipt input could not be read")
 	}
 	if strings.EqualFold(filepath.Ext(path), ".ndjson") {
-		return parseReceiptNDJSON(data)
+		events, summary, surface, err := parseReceiptNDJSON(data)
+		if err != nil {
+			return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, receiptCoverageError("declared receipt input is invalid")
+		}
+		return events, summary, surface, nil
 	}
 	events, summary, surface, ok, err := parseReceiptJSON(data)
 	if err != nil {
-		return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, fmt.Errorf("%s: %w", path, err)
+		return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, receiptCoverageError("declared receipt input is invalid")
 	}
 	if !ok {
 		return nil, receiptSourceSummary{}, riskenvelope.AgentSurfaceUnknown, nil
@@ -392,24 +401,14 @@ func receiptSeverity(event receiptProjectionInput, tool riskenvelope.ToolClass) 
 	}
 }
 
-func permissionModeFromReceiptEvent(event receiptProjectionInput) riskenvelope.PermissionMode {
-	switch strings.ToLower(strings.TrimSpace(event.EffectMode)) {
-	case contracts.WorkstationEffectModeOperate:
-		return riskenvelope.PermissionModeAcceptEdits
-	case contracts.WorkstationEffectModeDraft, contracts.WorkstationEffectModeObserve:
-		return riskenvelope.PermissionModeAsk
-	default:
-		return riskenvelope.PermissionModeUnknown
-	}
+func permissionModeFromReceiptEvent(receiptProjectionInput) riskenvelope.PermissionMode {
+	// An event's declared effect mode is not evidence of the active agent
+	// permission policy. Keep projections conservative until provenance exists.
+	return riskenvelope.PermissionModeUnknown
 }
 
-func hasOperateEvent(events []receiptProjectionInput) bool {
-	for _, event := range events {
-		if strings.EqualFold(event.EffectMode, contracts.WorkstationEffectModeOperate) && !strings.EqualFold(event.Verdict, contracts.WorkstationVerdictDeny) {
-			return true
-		}
-	}
-	return false
+func receiptCoverageError(reason string) error {
+	return fmt.Errorf("%w: %s", ErrScanCoverageIncomplete, reason)
 }
 
 func normalizeReceiptSurface(value string) riskenvelope.AgentSurface {

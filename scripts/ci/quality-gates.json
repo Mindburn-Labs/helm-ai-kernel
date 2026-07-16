@@ -19,7 +19,9 @@
         "python-sdk",
         "ts-sdk",
         "rust-sdk",
-        "java-sdk"
+        "java-sdk",
+        "proto-breaking",
+        "openapi-breaking"
       ]
     },
     "merge": {
@@ -471,6 +473,20 @@
       "timeout_seconds": 600,
       "paths": [
         "protocols/policy-schema/**",
+        "VERSION",
+        "scripts/ci/contract_breaking.sh",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "openapi-breaking",
+      "title": "OpenAPI breaking-change check",
+      "command": "make openapi-breaking",
+      "timeout_seconds": 600,
+      "paths": [
+        "api/openapi/**",
+        "protocols/specs/effects/openapi.yaml",
+        "scripts/ci/contract_breaking.sh",
         "Makefile"
       ]
     },

@@ -19,6 +19,11 @@ surface for the `helm-ai-kernel` project.
 - `make quality-pr` mirrors the CI summary gate for pull requests.
 - `make quality-nightly` mirrors the scheduled advisory assurance workflow.
 - `make quality-release` mirrors release validation before tag publication.
+- `make openapi-breaking` / `make proto-breaking` run the contract
+  breaking-change gate (HELM-151 GATE 1) against the PR base branch —
+  `oasdiff` for the OpenAPI surfaces, `buf breaking` for the policy-schema
+  protos. Both now run in the `pr` profile; a major-version bump or the
+  `contract:breaking-approved` PR label is the explicit override.
 
 ## Active Quality Workflows
 

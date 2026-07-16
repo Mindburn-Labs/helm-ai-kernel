@@ -4,6 +4,7 @@ package main
 // classical Ed25519 trust profiles; no post-quantum assurance is claimed.
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -25,6 +26,7 @@ import (
 const (
 	adversarialCampaignSchemaVersion = "helm.adversarial_campaign_report.v1"
 	maxAdversarialSnapshotEntries    = 4096
+	maxAdversarialReportBytes        = 8 << 20
 )
 
 type adversarialCampaignStatus string
@@ -294,13 +296,13 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 		_, _ = fmt.Fprintln(stderr, "Error: --report and --trusted-public-key are required")
 		return 2
 	}
-	data, err := os.ReadFile(reportPath)
+	data, err := readBoundedAdversarialReport(reportPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot read campaign report: %v\n", err)
 		return 2
 	}
-	var report adversarialCampaignReport
-	if err := json.Unmarshal(data, &report); err != nil {
+	report, err := decodeAdversarialCampaignReport(data)
+	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot decode campaign report: %v\n", err)
 		return 2
 	}
@@ -338,6 +340,113 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 		return 1
 	}
 	return 0
+}
+
+func readBoundedAdversarialReport(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxAdversarialReportBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxAdversarialReportBytes {
+		return nil, fmt.Errorf("report exceeds %d-byte limit", maxAdversarialReportBytes)
+	}
+	return data, nil
+}
+
+func decodeAdversarialCampaignReport(data []byte) (adversarialCampaignReport, error) {
+	if err := rejectDuplicateJSONKeys(data); err != nil {
+		return adversarialCampaignReport{}, err
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var report adversarialCampaignReport
+	if err := decoder.Decode(&report); err != nil {
+		return adversarialCampaignReport{}, err
+	}
+	if err := requireJSONEOF(decoder); err != nil {
+		return adversarialCampaignReport{}, err
+	}
+	return report, nil
+}
+
+func rejectDuplicateJSONKeys(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := consumeUniqueJSONValue(decoder); err != nil {
+		return err
+	}
+	return requireJSONEOF(decoder)
+}
+
+func consumeUniqueJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+
+	switch delim {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return fmt.Errorf("object key is not a string")
+			}
+			if _, exists := seen[key]; exists {
+				return fmt.Errorf("duplicate JSON object key %q", key)
+			}
+			seen[key] = struct{}{}
+			if err := consumeUniqueJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		return consumeJSONClosingDelimiter(decoder, '}')
+	case '[':
+		for decoder.More() {
+			if err := consumeUniqueJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		return consumeJSONClosingDelimiter(decoder, ']')
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q", delim)
+	}
+}
+
+func consumeJSONClosingDelimiter(decoder *json.Decoder, want json.Delim) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if token != want {
+		return fmt.Errorf("unexpected JSON delimiter %q; want %q", token, want)
+	}
+	return nil
+}
+
+func requireJSONEOF(decoder *json.Decoder) error {
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("multiple JSON values are not allowed")
+		}
+		return err
+	}
+	return nil
 }
 
 type adversarialBundleVerifyOptions struct {

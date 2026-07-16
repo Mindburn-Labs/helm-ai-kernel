@@ -78,7 +78,8 @@ func receiptSequenceCoverage(receipts []map[string]interface{}) CoverageCheck {
 func policyDecisionCoverage(receipts []map[string]interface{}, opts VerificationOptions) CoverageCheck {
 	count := 0
 	for _, receipt := range receipts {
-		if receipt["action_type"] != "effect_attempt" {
+		action, _ := receipt["action_type"].(string)
+		if !isEffectAction(action) {
 			continue
 		}
 		decisionID, _ := receipt["decision_id"].(string)
@@ -86,7 +87,7 @@ func policyDecisionCoverage(receipts []map[string]interface{}, opts Verification
 			count++
 		}
 	}
-	return coverageCheck("ADV-02", count > 0, count, "requires an effect_attempt with a preceding, ancestor-linked, envelope-bound, trusted policy_decision")
+	return coverageCheck("ADV-02", count > 0, count, "requires an effect action with a preceding, ancestor-linked, envelope-bound, trusted policy_decision")
 }
 
 func proofGraphParentCoverage(receipts []map[string]interface{}) CoverageCheck {
@@ -130,7 +131,7 @@ func envelopeBindingCoverage(receipts []map[string]interface{}) CoverageCheck {
 	count := 0
 	for _, receipt := range receipts {
 		action, _ := receipt["action_type"].(string)
-		if action != "effect_attempt" && action != "tool_call" && action != "connector_call" {
+		if !isEffectAction(action) {
 			continue
 		}
 		envelopeID, _ := receipt["envelope_id"].(string)

@@ -9,12 +9,12 @@ import (
 	"testing"
 )
 
-func TestRunAllEmptyEvidencePassesAndWritesReport(t *testing.T) {
+func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 	dir := t.TempDir()
 
 	result := RunAll(dir)
-	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
-		t.Fatalf("empty evidence result = %+v, want all suites passing", result)
+	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 || len(result.Suites) != 10 {
+		t.Fatalf("empty evidence result = %+v, want all suites failing closed", result)
 	}
 	if result.EvidenceDir != dir {
 		t.Fatalf("evidence dir = %q, want %q", result.EvidenceDir, dir)
@@ -31,8 +31,8 @@ func TestRunAllEmptyEvidencePassesAndWritesReport(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("decode report: %v", err)
 	}
-	if !decoded.Pass || decoded.PassedSuites != 10 {
-		t.Fatalf("decoded report = %+v, want passing aggregate", decoded)
+	if decoded.Pass || decoded.FailedSuites != 10 {
+		t.Fatalf("decoded report = %+v, want fail-closed aggregate", decoded)
 	}
 
 	filePath := filepath.Join(t.TempDir(), "not-a-directory")

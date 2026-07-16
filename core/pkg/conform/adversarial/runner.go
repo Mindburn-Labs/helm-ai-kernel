@@ -16,6 +16,11 @@ func RunAll(evidenceDir string) *AggregateResult {
 // RunAllWithOptions executes the suites with external campaign trust roots.
 func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateResult {
 	suites := AllSuitesWithOptions(opts)
+	coverage := EvaluateCoverageWithOptions(evidenceDir, opts)
+	coverageBySuite := make(map[string]CoverageCheck, len(coverage.Checks))
+	for _, check := range coverage.Checks {
+		coverageBySuite[check.SuiteID] = check
+	}
 	aggregate := &AggregateResult{
 		EvidenceDir: evidenceDir,
 		Pass:        true,
@@ -24,6 +29,15 @@ func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateR
 
 	for _, suite := range suites {
 		result := suite.Run(evidenceDir)
+		if check, ok := coverageBySuite[suite.ID]; ok && !check.Covered && result.Pass {
+			result.Pass = false
+			result.TestResults = append(result.TestResults, TestResult{
+				TestID: suite.ID + "-COVERAGE",
+				Name:   "Positive-control coverage",
+				Pass:   false,
+				Reason: check.Reason,
+			})
+		}
 		aggregate.Suites = append(aggregate.Suites, result)
 		if !result.Pass {
 			aggregate.Pass = false

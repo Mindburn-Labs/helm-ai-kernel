@@ -363,7 +363,7 @@ func TestConformAdversarialVerifyReportRejectsTamper(t *testing.T) {
 	}
 }
 
-func TestConformAdversarialVerifyReportEmitsTypedAuthenticatedJSON(t *testing.T) {
+func TestConformAdversarialVerifyReportRejectsUnknownFields(t *testing.T) {
 	attestationPublicKeyHex := configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)
 	populatePassingCampaignPack(t, packDir)
@@ -393,8 +393,35 @@ func TestConformAdversarialVerifyReportEmitsTypedAuthenticatedJSON(t *testing.T)
 	stdout.Reset()
 	stderr.Reset()
 	code := runConform([]string{"adversarial", "verify-report", "--report", reportPath, "--trusted-public-key", attestationPublicKeyHex, "--json"}, &stdout, &stderr)
-	if code != 0 || bytes.Contains(stdout.Bytes(), []byte("untrusted_presentation")) {
-		t.Fatalf("verify exit=%d echoed untrusted JSON; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	if code != 2 || !strings.Contains(stderr.String(), "unknown field") {
+		t.Fatalf("verify exit=%d accepted unknown JSON field; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestConformAdversarialVerifyReportRejectsDuplicateFields(t *testing.T) {
+	attestationPublicKeyHex := configureAdversarialCommandTest(t)
+	packDir := createMinimalVerifiableBundle(t)
+	populatePassingCampaignPack(t, packDir)
+	reportPath := filepath.Join(t.TempDir(), "campaign.json")
+	var stdout, stderr bytes.Buffer
+	if code := runConform([]string{"adversarial", "--bundle", packDir, "--profile", "dev-local", "--report", reportPath}, &stdout, &stderr); code != 0 {
+		t.Fatalf("campaign exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate := append([]byte(`{"schema_version":"helm.adversarial_campaign_report.v1",`), data[1:]...)
+	if err := os.WriteFile(reportPath, duplicate, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code := runConform([]string{"adversarial", "verify-report", "--report", reportPath, "--trusted-public-key", attestationPublicKeyHex}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), `duplicate JSON object key "schema_version"`) {
+		t.Fatalf("verify exit=%d accepted duplicate JSON field; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }
 

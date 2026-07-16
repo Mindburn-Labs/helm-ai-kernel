@@ -102,8 +102,9 @@ helm-ai-kernel conform adversarial verify-report \
   --expected-kernel-commit <exact-40-character-commit>
 ```
 
-With `--json`, verification emits a freshly encoded typed report after
-signature validation; it never echoes unknown or duplicate input fields.
+Verification rejects reports larger than 8 MiB, unknown fields, duplicate
+object keys, and trailing JSON values before signature validation. With
+`--json`, it emits a freshly encoded typed report only after validation.
 
 The signature binds the evaluation time, input roots, ordered checks and suite
 results, campaign trust-key ID, exact Kernel commit, runner executable SHA-256,

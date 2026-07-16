@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,6 +42,28 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	result = EvaluateCoverageWithOptions(dir, VerificationOptions{CampaignPublicKeyHex: publicKeyHex})
 	if result.Pass || result.MissingSuites != 1 || result.Checks[5].SuiteID != "ADV-06" || result.Checks[5].Covered {
 		t.Fatalf("missing tape coverage result=%+v, want only ADV-06 missing", result)
+	}
+}
+
+func TestEvaluateCoverageCoversEveryEffectAction(t *testing.T) {
+	for _, action := range []string{"effect_attempt", "tool_call", "connector_call"} {
+		t.Run(action, func(t *testing.T) {
+			dir := t.TempDir()
+			publicKeyHex := writePassingCoverageArtifacts(t, dir)
+			effectPath := filepath.Join(dir, "02_PROOFGRAPH", "receipts", "005.json")
+			var effect map[string]any
+			data, err := os.ReadFile(effectPath)
+			if err != nil || json.Unmarshal(data, &effect) != nil {
+				t.Fatalf("read effect receipt: %v", err)
+			}
+			effect["action_type"] = action
+			writeJSON(t, effectPath, effect)
+
+			result := EvaluateCoverageWithOptions(dir, VerificationOptions{CampaignPublicKeyHex: publicKeyHex})
+			if !result.Pass || result.MissingSuites != 0 {
+				t.Fatalf("%s coverage result=%+v, want complete", action, result)
+			}
+		})
 	}
 }
 

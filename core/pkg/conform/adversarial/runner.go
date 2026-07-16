@@ -11,6 +11,11 @@ import (
 // Returns an aggregate result. Any single suite failure means overall failure.
 func RunAll(evidenceDir string) *AggregateResult {
 	suites := AllSuites()
+	coverage := EvaluateCoverage(evidenceDir)
+	coverageBySuite := make(map[string]CoverageCheck, len(coverage.Checks))
+	for _, check := range coverage.Checks {
+		coverageBySuite[check.SuiteID] = check
+	}
 	aggregate := &AggregateResult{
 		EvidenceDir: evidenceDir,
 		Pass:        true,
@@ -19,6 +24,15 @@ func RunAll(evidenceDir string) *AggregateResult {
 
 	for _, suite := range suites {
 		result := suite.Run(evidenceDir)
+		if check, ok := coverageBySuite[suite.ID]; ok && !check.Covered && result.Pass {
+			result.Pass = false
+			result.TestResults = append(result.TestResults, TestResult{
+				TestID: suite.ID + "-COVERAGE",
+				Name:   "Positive-control coverage",
+				Pass:   false,
+				Reason: check.Reason,
+			})
+		}
 		aggregate.Suites = append(aggregate.Suites, result)
 		if !result.Pass {
 			aggregate.Pass = false

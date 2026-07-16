@@ -340,8 +340,8 @@ func TestBudgetBoundaryUsesExplicitScope(t *testing.T) {
 	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	exhaustedPath := filepath.Join(receiptsDir, "001.json")
-	decrementPath := filepath.Join(receiptsDir, "002.json")
+	exhaustedPath := filepath.Join(receiptsDir, "999.json")
+	decrementPath := filepath.Join(receiptsDir, "001.json")
 	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_id": "budget-a"})
 	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_id": "budget-b"})
 

@@ -18,7 +18,7 @@ make build
 make quality-pr
 ```
 
-Run `make quality-impact` for a quick path-scoped package pass, or use focused targets such as `make quality-contracts`, `make quality-security`, or `make quality-typecheck` for the area you changed. Before merge or release, maintainers use `make quality-merge` and `make quality-release`.
+Run `make quality-impact` for a quick path-scoped package pass, or use focused targets such as `make quality-contracts`, `make quality-security`, or `make quality-typecheck` for the area you changed. For a merge candidate or release, maintainers use `make quality-merge` and `make quality-release` as deterministic evidence.
 
 ## First Contribution Paths
 
@@ -65,8 +65,15 @@ CI rejects pull requests containing commits without a sign-off.
 
 ## Pull Requests
 
-- **Mandatory Peer Review**: Branch protection rules are enforced on all stable branches (`main`). Direct merges are blocked. Every pull request must receive at least one formal approval from an authorized, unaffiliated maintainer (e.g. `@mindburn-labs/helm-platform` codeowners) before merging.
-- **DCO**: every commit is signed off (`git commit -s`); see above.
+- **Machine merge authority**: a protected-branch merge requires the exact
+  candidate to pass source-owned deterministic gates, receive a
+  distinct-provider 2-of-2 permit, and receive an exact-head approval-only App
+  interlock. Private and internal repositories remain merge-held until GitHub
+  entitlement and the equivalent machine interlock are live-proven.
+- **Review, CI, and DCO**: review comments, CI results, labels, human approval,
+  and DCO sign-off are evidence for those controls only; none authorizes a
+  merge by itself. Every commit is still signed off (`git commit -s`); see
+  above.
 - Keep PRs narrow and reviewable.
 - Include the commands you ran.
 - Update docs only when the implementation or release truth changes.

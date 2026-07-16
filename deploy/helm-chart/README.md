@@ -1,5 +1,9 @@
 # HELM Chart
 
+<!-- quantum_posture: this chart documents the current Ed25519 authority and
+policy-signature inputs. It does not add, configure, or claim hybrid or
+post-quantum signing. -->
+
 This chart deploys the retained OSS kernel from source in this repository.
 The chart name is `helm-ai-kernel`. Values remain under the `.Values.helm`
 root for one compatibility window.
@@ -39,9 +43,11 @@ flowchart TD
   hint["reload hints"] --> runtime
   runtime --> snapshot["verified EffectivePolicySnapshot"]
   snapshot --> pod["helm-ai-kernel serve pod"]
-  signing["signing-key Secret"] --> pod
+  signing["signing-key Secret"] --> init["root-only authority-state init"]
+  pvc["data volume"] --> init
+  init --> authority["0700 data dir + 0600 runtime-owned root key"]
+  authority --> pod
   auth["admin/service API-key Secret"] --> pod
-  pvc["data volume"] --> pod
   pod --> service["ClusterIP Service"]
   service --> ingress["optional Ingress"]
   service --> metrics["optional ServiceMonitor"]
@@ -54,6 +60,8 @@ flowchart TD
 | `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image repository. |
 | `image.tag` | chart `appVersion` | Container image tag. |
 | `imagePullSecrets` | `[]` | Pull secrets applied to the kernel and optional launchpad app Pods/Jobs/test Pod. |
+| `runtimeInit.image` | digest-pinned Alpine Helm image | Root-only, one-shot authority-state materializer. It must remain immutable because it creates the local signing-authority boundary. |
+| `runtimeInit.pullPolicy` | `IfNotPresent` | Image pull policy for the authority-state materializer. |
 | `launchpadApps.hermes.mode` | `job` | `job` renders the promoted single-query smoke Job; `deployment` renders a long-lived Hermes gateway Deployment without claiming live F2 promotion. |
 | `launchpadApps.hermes.provider` | `openrouter` | Provider passed to the default Hermes Job command. |
 | `launchpadApps.hermes.model` | `openai/gpt-4o-mini` | Model passed to the default Hermes Job command. |
@@ -97,6 +105,18 @@ flowchart TD
 
 - Set `helm.production=true` and provide `helm.signing.key` or
   `helm.signing.existingSecret`.
+- The signing Secret is mounted only into the root-only `prepare-authority-state`
+  init container. It creates `helm.dataDir` with exact `0700` permissions and
+  copies a runtime-owned `root.key` with exact `0600`; the main kernel container
+  receives the data volume, not a Secret `subPath`.
+- The initializer runs as UID/GID 0 only to temporarily own and materialize the
+  volume, then hand its directory and key to the configured runtime UID/GID.
+  It drops all capabilities except `CHOWN`, disables privilege escalation, has a
+  read-only root filesystem, and exits before the non-root kernel starts.
+- A durable `root.key` must match the configured signing Secret. A mismatch
+  fails startup rather than silently rotating signing authority; use an explicit
+  operator-approved key migration rather than changing a live Secret in place.
+  `fsGroup` is not a substitute for this authority initialization.
 - Provide `helm.auth.adminAPIKey` and `helm.auth.serviceAPIKey`, or
   `helm.auth.existingSecret`; production rendering fails closed without auth
   material.

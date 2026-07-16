@@ -93,12 +93,31 @@
     "podSecurityContext": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Pod-level securityContext. Defaults run the kernel as non-root (UID/GID 65534, nobody) with fsGroup so the data volume is writable."
+      "description": "Pod-level securityContext. Defaults run the kernel as non-root (UID/GID 65534, nobody). fsGroup remains a volume-compatibility setting; the root-only runtimeInit container explicitly creates the authority directory with exact 0700 permissions and the configured runtime owner."
     },
     "securityContext": {
       "type": "object",
       "additionalProperties": true,
       "description": "Container-level securityContext. Defaults drop ALL Linux capabilities, disable privilege escalation, and mount the root filesystem read-only; helm.dataDir is the only writable path."
+    },
+    "runtimeInit": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Root-only one-shot init container that copies the signing Secret into helm.dataDir as an exact-mode, runtime-owned private root key. The image must be immutable because it establishes local signing authority before the non-root kernel starts.",
+      "properties": {
+        "image": {
+          "type": "string",
+          "pattern": "^.+@sha256:[0-9a-f]{64}$",
+          "default": "docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2",
+          "description": "Digest-pinned image used only by the authority-state init container. A mirror is allowed only when referenced by immutable sha256 digest."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent",
+          "description": "Image pull policy for the authority-state init container."
+        }
+      }
     },
     "service": {
       "type": "object",

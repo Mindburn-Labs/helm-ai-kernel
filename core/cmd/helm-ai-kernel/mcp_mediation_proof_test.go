@@ -360,6 +360,36 @@ func TestMCPMediationProofUnsupportedWebSocketTransportFailsClosed(t *testing.T)
 	}
 }
 
+func TestMCPServeStdioUsesExplicitDataDir(t *testing.T) {
+	dir := chdirTempDir(t)
+	stateDir := filepath.Join(dir, "kernel-state")
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdin := os.Stdin
+	os.Stdin = reader
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		_ = reader.Close()
+	})
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runMCPServe([]string{"--transport", "stdio", "--data-dir", stateDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("mcp serve exit = %d stderr = %s", code, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "root.key")); err != nil {
+		t.Fatalf("mcp serve did not use explicit data dir for signer state: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "data", "root.key")); !os.IsNotExist(err) {
+		t.Fatalf("mcp serve unexpectedly used default data dir: %v", err)
+	}
+}
+
 func proofCatalog(t *testing.T) *mcppkg.ToolCatalog {
 	t.Helper()
 	catalog := mcppkg.NewToolCatalog()

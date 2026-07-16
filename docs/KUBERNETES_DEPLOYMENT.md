@@ -1,6 +1,6 @@
 ---
 title: Kubernetes Deployment
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-15
 ---
 
 # Kubernetes Deployment
@@ -48,6 +48,27 @@ policy truth: it reads the active head, loads the canonical bundle, verifies the
 expected hash and signature/provenance, compiles a snapshot, validates it, then
 atomically swaps the per-scope `EffectivePolicySnapshot`.
 
+## Local Signing Authority Boundary
+
+The signing Secret is mounted only into the digest-pinned,
+root-only `prepare-authority-state` init container. Before the non-root kernel
+starts, it sets `helm.dataDir` to exact `0700` and the configured
+`podSecurityContext.runAsUser`/`runAsGroup`, then copies the secret seed to a
+regular `root.key` with exact `0600` and the same owner. The kernel container
+receives the data volume, not a signing-key Secret `subPath`.
+
+The initializer runs as UID/GID 0 only for that materialization step. It first
+takes temporary ownership of the data directory and any durable key,
+materializes and verifies the key, then hands both back to the configured
+runtime UID/GID. It drops all Linux capabilities then adds only `CHOWN`,
+disables privilege escalation, uses a read-only root filesystem, and exits
+before the main kernel container starts; the main container remains non-root.
+
+If a durable `root.key` exists, it must match the signing Secret. A mismatch
+fails closed instead of silently changing receipt-signing authority. Treat a
+key change as an explicit operator migration; do not rely on `fsGroup`, a live
+Secret update, or broader directory permissions to repair startup.
+
 ## Staging Install Skeleton
 
 Use existing Kubernetes Secrets for any sensitive values. Do not put real keys
@@ -72,7 +93,8 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
 | `helm.bindAddr` | `0.0.0.0` | Required because the pod must bind beyond loopback. |
 | `service.port` | `8080` | Runtime HTTP port passed to `helm-ai-kernel serve --port`. |
 | `service.healthPort` | `8081` | Health probe port via `HELM_HEALTH_PORT`. |
-| `helm.dataDir` | `/data` | Mounted from the chart PVC or `emptyDir`. |
+| `helm.dataDir` | `/data` | Mounted from the chart PVC or `emptyDir`; the authority-state initializer makes it runtime-owned and exact-mode private. |
+| `runtimeInit.image` | digest-pinned Alpine Helm image | Root-only init image that materializes the private root key before the kernel starts. |
 | `helm.proxy.enabled` | `true` | Sets `HELM_ENABLE_OPENAI_PROXY=1` and `HELM_UPSTREAM_URL`. |
 | `helm.storage.type` | `sqlite` | Uses local SQLite unless another supported store is configured. |
 | `persistence.enabled` | `true` | Creates or reuses a PVC for receipts, state, and artifacts. |
@@ -89,6 +111,16 @@ curl -fsS http://127.0.0.1:8080/health
 Then run a governed request through the public API or OpenAI-compatible proxy
 and verify that receipts persist after pod restart when `persistence.enabled`
 is true.
+
+For a failed startup, collect the initializer evidence before changing any
+volume permissions:
+
+```bash
+kubectl get pods -l app.kubernetes.io/instance=helm-ai-kernel
+kubectl describe pod <kernel-pod>
+kubectl logs <kernel-pod> -c prepare-authority-state
+kubectl logs <kernel-pod> -c helm-ai-kernel
+```
 
 ## Not Covered
 

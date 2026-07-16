@@ -1,6 +1,6 @@
 ---
 title: PCAS Authorization Propagation Gap Analysis
-last_reviewed: 2026-06-10
+last_reviewed: 2026-07-15
 ---
 
 # PCAS Authorization Propagation Gap Analysis
@@ -28,8 +28,8 @@ calls, results, and messages.
 PCAS reports that a deterministic reference monitor lifts agent policy
 compliance from 48% to 93% with zero policy violations, independent of
 model reasoning. That is a quantitative external validation of HELM's
-core thesis: policy enforcement must live in a fail-closed kernel beneath
-the agent, not in model reasoning. This analysis maps PCAS's formal
+core thesis: policy enforcement must live in a fail-closed kernel boundary
+beneath the agent, not in model reasoning. This analysis maps PCAS's formal
 properties to existing HELM surfaces — per MIN-494 scope, no new engine
 is introduced.
 
@@ -39,10 +39,10 @@ is introduced.
 | --- | --- | --- | --- |
 | Transitive delegation | Datalog rules over delegation edges | `AIPVerifier` delegation chains: authority flows only via explicit claims; every hop bounded by the delegator's effective scope; widening rejected at registration. Guardian Gate 5 links delegation sessions into decisions. | **Covered** — proof `TestPCASTransitiveDelegationBoundedPropagation` |
 | Temporal validity | Validity intervals on authorization facts | `DelegationClaim.ExpiresAt` checked at every verification with fail-closed expiry; effect permits and quarantine approvals are similarly time-bound. | **Covered** — proof `TestPCASTemporalValidityExpiryRevokesAuthority` |
-| Reference monitor at dispatch | Datalog monitor intercepts every tool call | `ExecutionFirewall.AuthorizeToolCall` intercepts every call (quarantine → catalog → scope → schema pin), emits a sealed `ExecutionBoundaryRecord` for allow *and* deny. Policy languages are CEL + WASM bytecode (deterministic, sandboxed) rather than Datalog — equivalent monitor, different policy calculus. | **Covered (different calculus)** — proof `TestPCASPropagatedScopeEnforcedAtDispatchWithEvidence` |
+| Reference monitor at dispatch | Datalog monitor intercepts every tool call | `ExecutionFirewall.AuthorizeToolCall` intercepts each call submitted to that configured firewall (quarantine → catalog → scope → schema pin), emitting a sealed `ExecutionBoundaryRecord` for allow *and* deny. Policy languages are CEL + WASM bytecode (deterministic, sandboxed) rather than Datalog — equivalent monitor, different policy calculus. | **Covered (different calculus)** — proof `TestPCASPropagatedScopeEnforcedAtDispatchWithEvidence` |
 | Dependency-graph state model | Agent state as DAG of calls/results/messages | `proofgraph` records the causal DAG (INTENT, ATTESTATION, EFFECT nodes, Lamport ordering) — but as *evidence*, not as a *policy input*. Policies today evaluate per-call context, not graph queries. | **Partial gap** — causality is recorded, not policy-queryable |
-| Aggregation inference | Deny when combined results cross a boundary | Not enforced. Each tool call is authorized independently; two individually-permitted reads are never re-evaluated as an aggregate. | **Gap** — pinned by `TestPCASAggregationInferenceGapIsDocumentedBehavior` |
-| Compliance benchmark (48%→93%) | Frontier-model agent benchmark | Not reproduced in-repo. HELM governed calls are 100% policy-conformant by construction (fail-closed interception); an apples-to-apples benchmark run is marketing/diligence work, not kernel work. | **Out of scope here** — candidate follow-up |
+| Aggregation inference | Deny when combined results cross a boundary | Not enforced. Each tool call submitted to the firewall is authorized independently; two individually-permitted reads are never re-evaluated as an aggregate. | **Gap** — pinned by `TestPCASAggregationInferenceGapIsDocumentedBehavior` |
+| Compliance benchmark (48%→93%) | Frontier-model agent benchmark | Not reproduced in-repo. The tests establish fail-closed behavior only for submitted calls that reach their configured firewall; they do not establish a general compliance benchmark. | **Out of scope here** — candidate follow-up |
 
 ## Gap detail and direction
 
@@ -66,7 +66,8 @@ is introduced.
 
 PCAS validates the deterministic-enforcement thesis but is a research
 prototype scoped to policy evaluation; HELM additionally signs and
-hash-chains every decision (EvidencePack, AAT export) and fails closed on
-unknown servers/tools. When citing PCAS numbers in public material, use
+hash-chains decisions submitted through its configured boundary (EvidencePack,
+AAT export) and fails closed on unknown servers/tools at that boundary. When
+citing PCAS numbers in public material, use
 the claims registry flow — do not quote the 48%→93% delta as a HELM
 measurement.

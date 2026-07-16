@@ -21,13 +21,19 @@ Active tooling surface for the `helm-ai-kernel` project.
 - `make quality-explain CHECK=<gate-id>` explains one registered check.
 - `make docker-smoke` builds the headless image and verifies the Docker runtime
   can evaluate, persist receipts, export/verify evidence, replay-verify, and
-  survive restart with a stable root key.
+  survive restart with a stable root key. It prepares a separate, private
+  runtime authority directory rather than making a host bind mount broadly
+  writable, and emits container diagnostics before cleanup on failure.
 - `make compose-smoke` runs the same runtime checks through `docker-compose.yml`.
+  Compose must complete its root-only authority-state initializer before the
+  non-root kernel service starts.
 - `make helm-chart-smoke` renders the Kubernetes chart with a Kubernetes Helm
   binary. The local `helm` command may be the HELM AI Kernel CLI, so set
   `KUBE_HELM_CMD` or let the script use the pinned containerized Helm runner.
 - `make kind-smoke` installs the chart into kind, runs the governed-call and
   evidence/replay checks, restarts the pod, and verifies signing-key stability.
+  On failure it retains startup evidence in CI output by describing Pods and
+  printing logs from every init and main container before cleanup.
 - `make release-smoke` verifies reproducible binaries, SBOM JSON, OpenVEX JSON,
   and Cosign bundles when a signed artifact tree is supplied.
 

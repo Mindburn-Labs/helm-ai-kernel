@@ -3,6 +3,20 @@
 # See docs/QUICKSTART.md for configuration guidance.
 
 services:
+  authority-state:
+    image: docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    user: "0:0"
+    command:
+      - sh
+      - -ec
+      - |
+        mkdir -p /var/lib/helm-ai-kernel
+        chown 65532:65532 /var/lib/helm-ai-kernel
+        chmod 0700 /var/lib/helm-ai-kernel
+    volumes:
+      - ${HELM_SMOKE_DATA_DIR:-helmdata}:/var/lib/helm-ai-kernel
+    restart: "no"
+
   helm:
     build:
       context: .
@@ -30,6 +44,9 @@ services:
       HELM_RUNTIME_PRINCIPAL_ID: "${HELM_RUNTIME_PRINCIPAL_ID:-system-admin}"
       HELM_HEALTH_PORT: "8081"
       EVIDENCE_SIGNING_KEY: "${EVIDENCE_SIGNING_KEY:-helm-evidence-dev}"
+    depends_on:
+      authority-state:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${HELM_SMOKE_API_PORT:-8080}:8080"
       - "127.0.0.1:${HELM_SMOKE_HEALTH_PORT:-8081}:8081"

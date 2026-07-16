@@ -1,6 +1,6 @@
 ---
 title: Developer Surface Map
-last_reviewed: 2026-05-05
+last_reviewed: 2026-07-15
 ---
 
 # HELM AI Kernel Developer Surface Map
@@ -67,6 +67,7 @@ flowchart TD
 | --- | --- | --- |
 | Install on macOS, Linux, Windows/WSL, Docker, or source | `/developer-journey` | `docs/DEVELOPER_JOURNEY.md`, `docs/QUICKSTART.md`, `Makefile`, `.goreleaser.yml` |
 | Run the first local boundary | `/developer-journey` | `core/cmd/helm-ai-kernel/server_cmd.go`, `core/cmd/helm-ai-kernel/proxy_cmd.go` |
+| Configure coding-agent hooks and routed MCP paths | `/developer-journey`, `/integrations/mcp` | `docs/DEVELOPER_JOURNEY.md`, `core/cmd/helm-ai-kernel/setup_cmd.go`, `core/cmd/helm-ai-kernel/hook_cmd.go`, `core/cmd/helm-ai-kernel/mcp_cmd.go` |
 | Point OpenAI-compatible clients at HELM | `/integrations/openai-compatible-proxy` | `docs/INTEGRATIONS/openai_baseurl.md`, `examples/python_openai_baseurl/`, `examples/ts_openai_baseurl/` |
 | Use MCP | `/integrations/mcp` | `docs/INTEGRATIONS/mcp.md`, `examples/mcp_client/`, `mcp-bundle.json` |
 | Use Python, TypeScript, JavaScript, Go, Rust, or Java | `/sdks` | `sdk/`, `examples/*_client/`, `examples/*openai_baseurl/` |
@@ -82,6 +83,12 @@ The coverage gate is `docs/developer-coverage.manifest.json`. The docs platform
 loads public pages from `docs/public-docs.manifest.json`, then validates that
 coverage-backed claims appear in public docs, search, Markdown exports,
 `llms.txt`, `llms-full.txt`, and MCP responses.
+
+A setup result or printed client configuration proves only local configuration.
+It intentionally leaves `client_load_observed=false` until a sterile native
+client session loads the configured server. Client claims are limited to the
+configured hook classes and routed MCP calls; direct upstream calls and other
+client actions remain outside that evidence.
 
 ## Troubleshooting
 

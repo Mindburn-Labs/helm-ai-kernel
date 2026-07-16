@@ -12,8 +12,9 @@
 ## Abstract
 
 Authority Court is a **protocol**, not a feature. It defines the deterministic, versioned,
-external-facing contract through which any agent execution request is evaluated, authorized,
-and committed. Every tool invocation passes through Authority Court before producing any effect.
+external-facing contract through which an agent execution request submitted to Authority Court
+is evaluated, authorized, and committed. Every tool invocation routed through a configured
+Authority Court boundary passes through that boundary before producing an effect.
 
 ## Motivation
 
@@ -26,7 +27,7 @@ governance a **standard** that can be independently verified, audited, and repla
 1. **Protocol over feature** — hard schemas, versioned, external.
 2. **Deterministic evaluation** — same inputs → same DecisionRecord, byte-for-byte.
 3. **Fail-closed** — any evaluation error results in DENY.
-4. **Signed and replayable** — every decision produces a DecisionRecord that can reconstruct the evaluation.
+4. **Signed and replayable** — every decision issued by a configured Authority Court produces a DecisionRecord that can reconstruct the evaluation.
 5. **Two-phase for irreversible** — effects classified as irreversible require preflight+commit.
 
 ## Protocol Messages
@@ -138,12 +139,14 @@ The Authority Court runs a **deterministic evaluation pipeline** in strict order
 
 ## CommitToken Semantics
 
-The CommitToken is the **only artifact** that authorizes tool execution.
+The CommitToken is the **only artifact** that authorizes tool execution through
+a configured Authority Court boundary.
 
 - Bound to: `tool_call_draft_hash + ceilings_snapshot_hash + policy_epoch + TTL`
 - Single-use: once consumed, cannot be replayed
 - Time-bound: `expires_at` enforced by authority clock (not wall clock)
-- The tool executor MUST validate the CommitToken before any effect
+- The tool executor MUST validate the CommitToken before any effect dispatched
+  through its configured Authority Court boundary
 
 ### Two-Phase Commit (irreversible effects)
 

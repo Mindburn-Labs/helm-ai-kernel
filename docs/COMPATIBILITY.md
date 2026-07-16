@@ -1,6 +1,6 @@
 ---
 title: Compatibility
-last_reviewed: 2026-05-05
+last_reviewed: 2026-07-15
 ---
 
 # Compatibility
@@ -76,8 +76,8 @@ This page is backed by:
 | Go SDK | Supported | `cd sdk/go && go test ./...` |
 | Rust SDK | Supported | `make test-sdk-rust` |
 | Java SDK | Supported | `make test-sdk-java` |
-| Docker and Docker Compose | Supported | `Dockerfile`, `docker-compose.yml` |
-| Kubernetes Helm chart | Staging/self-hosted guidance | `deploy/helm-chart/` |
+| Docker and Docker Compose | Supported local boundary | `Dockerfile`, `docker-compose.yml`, `make docker-smoke`, `make compose-smoke` |
+| Kubernetes Helm chart | Staging/self-hosted guidance | `deploy/helm-chart/`, `make helm-chart-smoke`, `make kind-smoke` |
 
 ## Framework Adapter Helpers
 
@@ -129,9 +129,16 @@ static report viewer, or tenant-admin services in HELM AI Kernel.
 | Deployment | Status | Source |
 | --- | --- | --- |
 | Local source build | Supported | `Makefile` |
-| Docker image | Supported | `Dockerfile` |
-| Docker Compose | Supported | `docker-compose.yml` |
-| Kubernetes Helm chart | Supported | `deploy/helm-chart/` |
+| Docker image | Supported local boundary; exact-image runtime proof uses `make docker-smoke` | `Dockerfile`, `scripts/ci/docker_smoke.sh` |
+| Docker Compose | Supported local boundary; exact-image runtime proof uses `make compose-smoke` | `docker-compose.yml`, `scripts/ci/docker_smoke.sh` |
+| Kubernetes Helm chart | Self-hosted chart; exact-image runtime proof uses `make kind-smoke` | `deploy/helm-chart/` |
+
+Both container paths deliberately fail closed on unsafe local signing state.
+Compose prepares its authority volume before the non-root kernel starts; direct
+Docker mounts must have the image runtime's exact owner and `0700` directory
+mode. The chart uses a digest-pinned, root-only initializer to create the same
+private directory and a runtime-owned `0600` root key; `fsGroup` alone is not
+authority setup.
 
 ## Verdict Compatibility
 

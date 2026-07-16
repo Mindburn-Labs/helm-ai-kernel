@@ -110,9 +110,13 @@ defense in depth.
 
 ## External review
 
-Workstream F flags formal review as a hard merge gate
-(`docs/ai/operating-model.md`). Before publishing the v1.1 profile axis
-"formal soundness", an independent reviewer with Lean 4 experience
-should re-derive the proof from the model definitions on a clean
-checkout. The proof's brevity (under 50 lines of tactic prose) is
-deliberate — it is meant to be re-read end-to-end in one sitting.
+Workstream F requires formal review evidence. Before publishing the v1.1
+profile axis "formal soundness", an independent reviewer with Lean 4
+experience should re-derive the proof from the model definitions on a clean
+checkout. That review, its CI result, and any human approval are evidence only:
+they do not authorize a merge. A protected-branch merge still requires
+source-owned deterministic gates, a distinct-provider 2-of-2 permit, and an
+exact-head approval-only App interlock; private and internal repositories stay
+merge-held until GitHub entitlement and the equivalent machine interlock are
+live-proven. The proof's brevity (under 50 lines of tactic prose) is deliberate
+— it is meant to be re-read end-to-end in one sitting.

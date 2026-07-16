@@ -1,7 +1,11 @@
 ---
 title: EXECUTION_SECURITY_MODEL
-last_reviewed: 2026-05-05
+last_reviewed: 2026-07-15
 ---
+
+<!-- quantum_posture: this execution model describes the current Ed25519
+receipt-signing boundary. It does not claim a deployed hybrid or post-quantum
+cryptographic control. -->
 
 # Execution Security Model
 
@@ -69,7 +73,8 @@ flowchart TD
 >
 > This document defines HELM's three-layer execution security model.
 > It is the canonical reference for how HELM reduces, enforces, and
-> proves execution safety for AI agent tool calls.
+> proves execution safety for AI agent tool calls submitted through configured
+> HELM dispatch boundaries.
 >
 > **Terminology**: follows the Unified Canonical Standard (UCS v1.3).
 
@@ -79,7 +84,8 @@ flowchart TD
 
 HELM implements three independent, composable layers of execution security.
 Each layer addresses a distinct class of threat and operates at a different
-point in the execution lifecycle. No single layer is sufficient on its own.
+point in the execution lifecycle. The layers apply only to calls routed through
+their configured HELM boundary; no single layer is sufficient on its own.
 
 ## Guarantees And Non-Guarantees
 
@@ -114,7 +120,7 @@ HELM AI Kernel does not:
                                    │
           ┌────────────────────────▼────────────────────────┐
           │  Layer B — Dispatch Enforcement (dispatch-time)  │
-          │  Gates EACH call at PEP boundary                │
+          │  Gates each routed call at the PEP boundary     │
           │  schema PEP · budget locks · contract pinning   │
           │  PDP/CPI verdict · deny-by-default              │
           └────────────────────────┬────────────────────────┘
@@ -176,14 +182,15 @@ not by runtime checking.
 ## Layer B — Dispatch Enforcement
 
 **When**: Dispatch-time (per-call).
-**Purpose**: Runtime per-call admissibility. Every tool call passes through a
+**Purpose**: Runtime per-call admissibility. Every submitted tool call that
+reaches a configured HELM policy-enforcement boundary passes through a
 fail-closed policy gate that evaluates **execution admissibility** — the
 determination that a specific call, with specific args, at a specific time,
 under a specific policy stack, is permitted.
 
 Dispatch enforcement is a **dispatch-time property** — it is computed for
-every individual call. No call reaches an executor without a signed
-`DecisionRecord`.
+every individual routed call. No routed call reaches its configured executor
+without a signed `DecisionRecord`.
 
 ### Mechanisms
 
@@ -205,10 +212,11 @@ artifacts.
 
 ### Architectural Property
 
-**Runtime execution enforcement** provides per-call guarantees:
-every call is individually evaluated, every verdict is signed, every
-denial is recorded. This is the choke point — the single enforcement
-boundary that separates intent from effect.
+**Runtime execution enforcement** provides per-call guarantees for submitted
+calls that reach the configured boundary: each is individually evaluated, each
+resulting HELM verdict is signed, and each denial is recorded. This is the
+choke point — the enforcement boundary that separates routed intent from
+effect.
 
 ### Key Term: Execution Admissibility
 
@@ -243,9 +251,9 @@ signed `DENY` verdict with a deterministic reason code.
 ## Layer C — Verifiable Receipts
 
 **When**: Post-execution.
-**Purpose**: Post-hoc verifiability. Every execution — allowed or denied —
-produces cryptographic evidence that can be independently verified without
-network access.
+**Purpose**: Post-hoc verifiability. Every submitted execution decision at a
+configured HELM boundary — allowed or denied — produces cryptographic evidence
+that can be independently verified without network access.
 
 Verifiable receipts provide **offline-verifiable proof** that the execution
 boundary operated correctly.
@@ -254,20 +262,20 @@ boundary operated correctly.
 
 | Mechanism | Description |
 | :--- | :--- |
-| **Ed25519 signed receipts** | Every verdict (ALLOW and DENY) produces a signed record |
+| **Ed25519 signed receipts** | Every HELM boundary verdict (ALLOW and DENY) produces a signed record |
 | **ProofGraph DAG** | Append-only directed acyclic graph with Lamport causal ordering |
 | **Causal hash chain** | Each receipt signs over the previous receipt's signature (`PrevHash`) |
 | **EvidencePack** | Deterministic `.tar` export — same inputs produce identical output bytes |
 | **Merkle condensation** | Risk-tiered checkpoints; low-risk receipts replaceable by inclusion proofs |
 | **Offline replay** | Replay from genesis without network access |
-| **Deny receipts** | Denied calls produce signed receipts with reason codes — not just silently dropped |
+| **Deny receipts** | Denied routed calls produce signed receipts with reason codes — not just silently dropped |
 
 ### Architectural Property
 
 The receipts layer is **independent of enforcement**. Even if enforcement
-logic changes (Layer B), the receipt chain proves what actually happened.
-This separation is critical: enforcement can err, but errors are always
-visible in the receipt chain.
+logic changes (Layer B), the receipt chain proves what happened on the routed
+boundary. This separation is critical: enforcement can err, but errors on that
+boundary are visible in its receipt chain.
 
 ### Implementation References
 
@@ -295,7 +303,7 @@ A single layer is insufficient:
 The three-layer model provides **defense in depth by construction**:
 
 1. **Layer A** reduces the maximum possible attack surface
-2. **Layer B** gates every individual call at the choke point
+2. **Layer B** gates every individual routed call at the choke point
 3. **Layer C** provides independent proof of correct operation
 
 Each layer protects against failures in the other two.

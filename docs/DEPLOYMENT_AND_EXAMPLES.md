@@ -1,6 +1,6 @@
 ---
 title: Deployment and Examples
-last_reviewed: 2026-05-05
+last_reviewed: 2026-07-15
 ---
 
 # HELM AI Kernel Deployment and Examples
@@ -52,9 +52,9 @@ flowchart TD
 | Target | Source path | Public contract |
 | --- | --- | --- |
 | Local CLI or proxy | `core/cmd/helm-ai-kernel/`, `docs/QUICKSTART.md` | Start with `/developer-journey`. |
-| Docker image | `Dockerfile`, `Makefile`, `docker-compose.yml` | Build and run through the retained Docker targets. |
-| Docker Compose | `docker-compose.yml` | Use for local boundary testing and example orchestration. |
-| Kubernetes Helm chart | `deploy/helm-chart/Chart.yaml`, `deploy/helm-chart/values.yaml`, `deploy/helm-chart/templates/` | Lint with `helm lint deploy/helm-chart` before applying. |
+| Docker image | `Dockerfile`, `Makefile`, `docker-compose.yml` | Build and run through the retained Docker targets; a direct bind mount must preserve the runtime-owned private authority directory. |
+| Docker Compose | `docker-compose.yml` | Use for local boundary testing and example orchestration; its one-shot authority-state service prepares the durable state before the non-root kernel starts. |
+| Kubernetes Helm chart | `deploy/helm-chart/Chart.yaml`, `deploy/helm-chart/values.yaml`, `deploy/helm-chart/templates/` | Lint with `helm lint deploy/helm-chart`; the root-only initializer creates exact-mode signing authority before the kernel starts. |
 | Release artifacts | `.goreleaser.yml`, `.github/workflows/release.yml`, `release/` | Verify checksums, SBOM, Cosign, provenance, and reproducibility. |
 
 ## Runnable Examples
@@ -108,4 +108,4 @@ as example-only or omit a support claim.
 
 ## Deployment Acceptance Checklist
 
-Each deployment example should name the supported target, prerequisites, port exposure, persistence model, health check, and rollback signal. Docker Compose examples must identify which services are durable and which can be recreated. Kubernetes examples must identify ConfigMaps, Secrets, Services, probes, and the release artifact version. A deployment doc should not claim production readiness unless the chart or manifest is linted, the health endpoint is exercised, and receipt verification still works after restart. Include the first diagnostic to collect for failed startup: container logs, effective environment, policy bundle path, and verifier command output.
+Each deployment example should name the supported target, prerequisites, port exposure, persistence model, health check, and rollback signal. Docker Compose examples must identify which services are durable, which can be recreated, and how private authority state is initialized. Kubernetes examples must identify ConfigMaps, Secrets, Services, probes, the authority-state init container, and the release artifact version. A deployment doc should not claim production readiness unless the chart or manifest is linted, the health endpoint is exercised, and receipt verification still works after restart. Include the first diagnostic to collect for failed startup: init/main container logs, non-secret effective configuration, policy bundle path, and verifier command output.

@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-15
 ---
 
 # Troubleshooting
@@ -86,6 +86,22 @@ helm-ai-kernel receipts tail \
 ```
 
 A successful upstream response is not proof that the request crossed HELM.
+
+## Kubernetes Pod Does Not Start
+
+Inspect the authority-state initializer before modifying a volume or Secret:
+
+```bash
+kubectl describe pod <kernel-pod>
+kubectl logs <kernel-pod> -c prepare-authority-state
+kubectl logs <kernel-pod> -c helm-ai-kernel
+```
+
+The chart intentionally requires a runtime-owned `0700` data directory and a
+runtime-owned `0600` `root.key`. An existing durable key that differs from the
+configured signing Secret is a fail-closed authority mismatch, not a retryable
+health failure. Do not loosen permissions or mount the Secret directly into the
+kernel; use an explicit operator-approved signing-key migration.
 
 ## Conformance Failure
 

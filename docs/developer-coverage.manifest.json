@@ -1,4 +1,5 @@
 {
+  "$comment": "quantum_posture: this coverage inventory records source-backed documentation only; it does not change signature algorithms or claim deployed hybrid or post-quantum cryptography.",
   "schema_version": 1,
   "product": "HELM AI Kernel",
   "repo": "helm-ai-kernel",
@@ -85,13 +86,15 @@
       "source_paths": [
         "Dockerfile",
         "docker-compose.yml",
-        "Makefile"
+        "Makefile",
+        "scripts/ci/docker_smoke.sh"
       ],
       "example_paths": [
         "deploy/README.md"
       ],
       "validation_commands": [
-        "make docker"
+        "make docker-smoke",
+        "make compose-smoke"
       ],
       "claim_terms": [
         "Docker",
@@ -113,7 +116,8 @@
         "deploy/helm-chart/README.md"
       ],
       "validation_commands": [
-        "helm lint deploy/helm-chart"
+        "make helm-chart-smoke",
+        "make kind-smoke"
       ],
       "claim_terms": [
         "Kubernetes",

@@ -59,6 +59,15 @@ published drift evidence for that exact version.
 - Homebrew and downstream fanout are release-completeness gates, not follow-up
   niceties.
 
+## Machine Merge Authority
+
+For every prerequisite or release PR, merge authority comes only from the
+exact candidate's source-owned deterministic gates, a distinct-provider 2-of-2
+permit, and an exact-head approval-only App interlock. Reviews, CI status,
+CodeQL, Scorecard, labels, human approval, and commit trailers are evidence for
+those controls only. Private and internal repositories remain merge-held until
+GitHub entitlement and the equivalent machine interlock are live-proven.
+
 ## Per-Release Execution Loop
 
 1. Create a fresh worktree from `origin/main`; record branch, upstream, dirty
@@ -66,7 +75,8 @@ published drift evidence for that exact version.
    dependencies.
 2. Run scoped `/helm-audit`; use codebase-memory or CodeGraph for structural
    code discovery.
-3. Merge only approved and green prerequisite PRs, preserving attribution.
+3. Merge prerequisite PRs only through the machine controls above, preserving
+   attribution; an approved or green PR alone is not merge authority.
 4. Apply one release theme and keep unrelated changes out.
 5. Run `make prepare-version VERSION=<target>`.
 6. Regenerate OpenAPI, proto, schema, and SDK outputs only when source contracts
@@ -83,10 +93,11 @@ make release-readiness
 make release-assets
 ```
 
-10. Open one release PR. Require CI, CodeQL, Scorecard, docs truth, SDKs,
-    contract drift, deployment smoke, kind smoke, release smoke, and launchpad
-    smoke to pass.
-11. Merge only after required review.
+10. Open one release PR. Run and attach CI, CodeQL, Scorecard, docs truth,
+    SDKs, contract drift, deployment smoke, kind smoke, release smoke, and
+    launchpad smoke as deterministic evidence.
+11. Merge only through the machine controls above, never from review or CI
+    status alone.
 12. Tag merged `main` as `v<target>`; create `sdk/go/v<target>` at the same
     commit if the workflow does not already do it.
 13. Monitor the tag workflow: version contract, validate, deployment smoke, kind

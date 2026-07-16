@@ -10,15 +10,19 @@ references:
   - "arXiv:2604.04604 — Deterministic Audit Trails for Autonomous Agents"
 ---
 
+<!-- quantum_posture: this normative format specifies Ed25519 support and an
+optional ML-DSA-65 hybrid profile. Specification support is not a claim that
+every deployed producer or verifier has a post-quantum control enabled. -->
+
 # EvidencePack Format Specification v1.0
 
 ## Abstract
 
 This document specifies the canonical format for HELM EvidencePacks.
 An evidence pack is a content-addressed, tamper-evident archive that bundles
-all governance receipts, policy decisions, tool transcripts, and provenance
-data produced during a single AI agent execution. The format guarantees
-offline verification, deterministic hashing, and constant-size summaries
+the governance receipts, policy decisions, tool transcripts, and provenance
+data emitted or included by a single HELM-routed execution boundary. The format
+guarantees offline verification, deterministic hashing, and constant-size summaries
 for regulatory compliance workflows.
 
 ## Status
@@ -31,10 +35,10 @@ This format is an open specification. Independent implementations are permitted 
 
 ## 1. Introduction
 
-HELM is a fail-closed AI execution firewall. Every tool call, policy decision,
-and side effect produces auditable evidence. The evidence pack is the
-fundamental archival unit that binds this evidence together with cryptographic
-integrity guarantees.
+HELM is a fail-closed AI execution firewall. Tool calls, policy decisions, and
+effects submitted through a configured HELM execution boundary can produce
+auditable evidence. The evidence pack is the fundamental archival unit that
+binds that boundary evidence together with cryptographic integrity guarantees.
 
 ### 1.1 Requirements Language
 

@@ -509,6 +509,9 @@
       "command": "python3 scripts/ci/check_helm_smoke_hardening.py",
       "timeout_seconds": 120,
       "paths": [
+        "deploy/helm-chart/templates/deployment.yaml",
+        "deploy/helm-chart/values.yaml",
+        "deploy/helm-chart/values.schema.json",
         "scripts/ci/kind_smoke.sh",
         "scripts/ci/helm_chart_smoke.sh",
         "scripts/ci/check_helm_smoke_hardening.py",

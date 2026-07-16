@@ -235,10 +235,11 @@ func adv04BudgetOverdraft() *Suite {
 			t := TestResult{TestID: "ADV-04-T1", Name: "No budget_decrement after budget_exhausted"}
 			overdraft := false
 			invalidBoundary := false
-			var exhaustedAt []float64
+			exhaustedAt := make(map[string][]float64)
 			var decrements []struct {
-				seq  float64
-				file string
+				scope string
+				seq   float64
+				file  string
 			}
 			for _, f := range files {
 				receipt := loadReceipt(f)
@@ -246,32 +247,34 @@ func adv04BudgetOverdraft() *Suite {
 				if action != "budget_exhausted" && action != "budget_decrement" {
 					continue
 				}
+				scope := budgetScope(receipt)
 				seq, ok := receiptSequence(receipt)
-				if !ok {
+				if !ok || scope == "" {
 					invalidBoundary = true
-					t.Evidence += fmt.Sprintf("unsequenced budget receipt: %s; ", filepath.Base(f))
+					t.Evidence += fmt.Sprintf("unscoped or unsequenced budget receipt: %s; ", filepath.Base(f))
 					continue
 				}
 				if action == "budget_exhausted" {
-					exhaustedAt = append(exhaustedAt, seq)
+					exhaustedAt[scope] = append(exhaustedAt[scope], seq)
 				} else {
 					decrements = append(decrements, struct {
-						seq  float64
-						file string
-					}{seq: seq, file: filepath.Base(f)})
+						scope string
+						seq   float64
+						file  string
+					}{scope: scope, seq: seq, file: filepath.Base(f)})
 				}
 			}
-			for _, boundary := range exhaustedAt {
-				for _, decrement := range decrements {
+			for _, decrement := range decrements {
+				for _, boundary := range exhaustedAt[decrement.scope] {
 					if decrement.seq > boundary {
 						overdraft = true
-						t.Evidence += fmt.Sprintf("budget_decrement seq %.0f after exhaustion seq %.0f: %s; ", decrement.seq, boundary, decrement.file)
+						t.Evidence += fmt.Sprintf("budget_decrement seq %.0f after exhaustion seq %.0f for %s: %s; ", decrement.seq, boundary, decrement.scope, decrement.file)
 					}
 				}
 			}
 			if invalidBoundary {
 				t.Pass = false
-				t.Reason = "budget boundary contains an unsequenced receipt"
+				t.Reason = "budget boundary contains an unscoped or unsequenced receipt"
 			} else if overdraft {
 				t.Pass = false
 				t.Reason = "BUDGET_OVERDRAFT"
@@ -593,6 +596,15 @@ func loadSequenceNumbers(files []string) []uint64 {
 
 func isEffectAction(action string) bool {
 	return action == "effect_attempt" || action == "tool_call" || action == "connector_call"
+}
+
+func budgetScope(receipt map[string]interface{}) string {
+	for _, key := range []string{"budget_id", "budget_snapshot_ref", "decision_id"} {
+		if value, _ := receipt[key].(string); strings.TrimSpace(value) != "" {
+			return key + ":" + strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func hasPolicyReceiptForDecision(files []string, decisionID string) bool {

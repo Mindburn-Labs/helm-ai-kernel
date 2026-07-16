@@ -10,7 +10,7 @@ import (
 // DetectorRevision is bumped whenever mandatory adversarial detector semantics
 // change. The executable digest remains the exact implementation identity;
 // this revision gives downstream policy a stable compatibility key.
-const DetectorRevision = "kernel-adversarial-detectors/v1.1.0"
+const DetectorRevision = "kernel-adversarial-detectors/v1.2.0"
 
 // DefinitionDigest binds the ordered mandatory suite catalog and semantic
 // revision into campaign provenance.

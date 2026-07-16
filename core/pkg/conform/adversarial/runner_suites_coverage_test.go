@@ -58,6 +58,7 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	writeJSON(t, filepath.Join(receiptsDir, "001_budget_exhausted.json"), map[string]any{
 		"seq":         1,
 		"action_type": "budget_exhausted",
+		"decision_id": "budget-1",
 		"tenant_id":   "tenant-a",
 	})
 	writeJSON(t, filepath.Join(receiptsDir, "003_effect_without_policy.json"), map[string]any{
@@ -71,6 +72,7 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	writeJSON(t, filepath.Join(receiptsDir, "004_budget_decrement.json"), map[string]any{
 		"seq":                   4,
 		"action_type":           "budget_decrement",
+		"decision_id":           "budget-1",
 		"tenant_id":             "tenant-a",
 		"parent_receipt_hashes": []string{"parent-fork"},
 	})
@@ -199,6 +201,33 @@ func TestReceiptSequenceRejectsDuplicateDecreasingAndMissingValues(t *testing.T)
 				t.Fatalf("ADV-01 accepted %s sequence: %+v", name, result)
 			}
 		})
+	}
+}
+
+func TestBudgetBoundaryUsesExplicitScope(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	exhaustedPath := filepath.Join(receiptsDir, "001.json")
+	decrementPath := filepath.Join(receiptsDir, "002.json")
+	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_id": "budget-a"})
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_id": "budget-b"})
+
+	result := adv04BudgetOverdraft().Run(dir)
+	if !result.Pass {
+		t.Fatalf("unrelated budget decrement was treated as an overdraft: %+v", result)
+	}
+	coverage := budgetBoundaryCoverage([]map[string]interface{}{loadReceipt(exhaustedPath), loadReceipt(decrementPath)})
+	if coverage.Covered {
+		t.Fatalf("unrelated budgets satisfied ADV-04 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_id": "budget-a"})
+	result = adv04BudgetOverdraft().Run(dir)
+	if result.Pass || result.TestResults[0].Reason != "BUDGET_OVERDRAFT" {
+		t.Fatalf("same-budget overdraft was accepted: %+v", result)
 	}
 }
 

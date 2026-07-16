@@ -106,7 +106,7 @@ helm-ai-kernel conform adversarial verify-report \
   --expected-evidence-root <sha256:manifest-root> \
   --expected-merkle-root <sha256:merkle-root> \
   --expected-evaluation-time <exact-rfc3339-time> \
-  --expected-detector-revision kernel-adversarial-detectors/v1.1.0 \
+  --expected-detector-revision kernel-adversarial-detectors/v1.2.0 \
   --expected-detector-definition-sha256 <sha256:detector-definition>
 ```
 

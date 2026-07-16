@@ -105,26 +105,35 @@ func proofGraphParentCoverage(receipts []map[string]interface{}) CoverageCheck {
 }
 
 func budgetBoundaryCoverage(receipts []map[string]interface{}) CoverageCheck {
-	var exhaustedAt float64
+	exhaustedAt := make(map[string][]float64)
 	for _, receipt := range receipts {
 		if receipt["action_type"] != "budget_exhausted" {
 			continue
 		}
-		seq, ok := receipt["seq"].(float64)
-		if ok && (exhaustedAt == 0 || seq < exhaustedAt) {
-			exhaustedAt = seq
+		scope := budgetScope(receipt)
+		seq, ok := receiptSequence(receipt)
+		if scope != "" && ok {
+			exhaustedAt[scope] = append(exhaustedAt[scope], seq)
 		}
 	}
 	count := 0
-	if exhaustedAt > 0 {
-		for _, receipt := range receipts {
-			seq, ok := receipt["seq"].(float64)
-			if ok && seq < exhaustedAt && receipt["action_type"] == "budget_decrement" {
+	for _, receipt := range receipts {
+		if receipt["action_type"] != "budget_decrement" {
+			continue
+		}
+		scope := budgetScope(receipt)
+		seq, ok := receiptSequence(receipt)
+		if scope == "" || !ok {
+			continue
+		}
+		for _, boundary := range exhaustedAt[scope] {
+			if seq < boundary {
 				count++
+				break
 			}
 		}
 	}
-	return coverageCheck("ADV-04", count > 0, count, "requires budget_decrement followed by budget_exhausted")
+	return coverageCheck("ADV-04", count > 0, count, "requires budget_decrement followed by budget_exhausted for the same explicit budget scope")
 }
 
 func envelopeBindingCoverage(receipts []map[string]interface{}) CoverageCheck {

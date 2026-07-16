@@ -513,8 +513,18 @@ func TestDAGRejectsDanglingAndSelfParents(t *testing.T) {
 	if coverage := proofGraphParentCoverage(receipts); !coverage.Covered {
 		t.Fatalf("resolved parent edge did not satisfy ADV-03 coverage: %+v", coverage)
 	}
+	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 2, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 1, "parent_receipt_hashes": []string{"parent-id"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("future parent edge passed ADV-03: %+v", result)
+	}
+	receipts[0], receipts[1] = loadReceipt(parentPath), loadReceipt(childPath)
+	if coverage := proofGraphParentCoverage(receipts); coverage.Covered {
+		t.Fatalf("future parent edge satisfied ADV-03 coverage: %+v", coverage)
+	}
 
 	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 1, "parent_receipt_hashes": []string{"child"}})
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"parent-id"}})
 	if result := adv03DAGFork().Run(dir); result.Pass {
 		t.Fatalf("cyclic parent graph passed ADV-03: %+v", result)
 	}

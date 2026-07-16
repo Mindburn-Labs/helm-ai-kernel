@@ -2,6 +2,7 @@ package adversarial
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,6 +172,51 @@ func TestIndividualSuitePassingBranches(t *testing.T) {
 	}
 	if result := adv09ReceiptEmissionPanicHijack().Run(dir); result.Pass || result.TestResults[0].Reason != "panic record unreadable" {
 		t.Fatalf("ADV-09 unreadable panic result = %+v, want fail", result)
+	}
+}
+
+func TestReceiptSequenceRejectsDuplicateDecreasingAndMissingValues(t *testing.T) {
+	for name, seqs := range map[string][]any{
+		"duplicate":  {1, 1},
+		"decreasing": {2, 1},
+		"missing":    {1, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+			if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			for index, seq := range seqs {
+				receipt := map[string]any{"action_type": "noop"}
+				if seq != nil {
+					receipt["seq"] = seq
+				}
+				writeJSON(t, filepath.Join(receiptsDir, fmt.Sprintf("%03d.json", index)), receipt)
+			}
+			if result := adv01ReceiptGapInjection().Run(dir); result.Pass || result.TestResults[0].Reason != "RECEIPT_GAP_DETECTED" {
+				t.Fatalf("ADV-01 accepted %s sequence: %+v", name, result)
+			}
+		})
+	}
+}
+
+func TestPolicyBypassCoversEveryEffectAction(t *testing.T) {
+	for _, action := range []string{"effect_attempt", "tool_call", "connector_call"} {
+		t.Run(action, func(t *testing.T) {
+			dir := t.TempDir()
+			receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+			if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{
+				"seq": 1, "action_type": action, "decision_id": "decision-1",
+				"envelope_id": "envelope-1", "envelope_hash": "sha256:envelope",
+			})
+			if result := adv02PolicyBypass(VerificationOptions{}).Run(dir); result.Pass {
+				t.Fatalf("ADV-02 accepted unauthorized %s: %+v", action, result)
+			}
+		})
 	}
 }
 

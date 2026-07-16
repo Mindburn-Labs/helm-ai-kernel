@@ -20,7 +20,8 @@ It fails closed in this order:
 
 1. require a sealed EvidencePack, explicit trust profile, campaign trust root,
    evaluation time, exact Kernel commit, and report-attestation key;
-2. snapshot directory inputs into an owned, symlink-free temporary tree;
+2. snapshot directory inputs into an owned, symlink-free temporary tree,
+   bounded to 32 MiB and 4,096 filesystem entries;
 3. run the canonical offline EvidencePack verifier, including canonical-layout
    and configured signature checks;
 4. prove positive-control coverage for all ten detectors from indexed pack
@@ -101,10 +102,16 @@ helm-ai-kernel conform adversarial verify-report \
   --expected-kernel-commit <exact-40-character-commit>
 ```
 
+With `--json`, verification emits a freshly encoded typed report after
+signature validation; it never echoes unknown or duplicate input fields.
+
 The signature binds the evaluation time, input roots, ordered checks and suite
 results, campaign trust-key ID, exact Kernel commit, runner executable SHA-256,
 detector revision, and detector-definition digest. Downstream release policy
 must also match the executable digest to source-owned build provenance.
+The fixed key used by the repository CI reference campaign is derivable and
+authorizes only that same-job contract test. It must never be trusted for
+release or production evidence.
 
 ## Result semantics
 

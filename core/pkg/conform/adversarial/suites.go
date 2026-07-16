@@ -102,26 +102,21 @@ func adv01ReceiptGapInjection() *Suite {
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
 
 			t := TestResult{TestID: "ADV-01-T1", Name: "Monotonic sequence with gap detection"}
-			if len(files) < 2 {
-				t.Pass = true
-				t.Reason = "insufficient receipts for gap test"
-			} else {
-				// Check that sequences are contiguous
-				seqs := loadSequenceNumbers(files)
-				gap := false
-				for i := 1; i < len(seqs); i++ {
-					if seqs[i]-seqs[i-1] > 1 {
-						gap = true
-						t.Evidence = fmt.Sprintf("gap between seq %d and %d", seqs[i-1], seqs[i])
-					}
-				}
-				if gap {
+			seqs := loadSequenceNumbers(files)
+			t.Pass = len(seqs) == len(files)
+			if !t.Pass {
+				t.Evidence = "one or more receipts have a missing or invalid seq"
+			}
+			for i := 1; t.Pass && i < len(seqs); i++ {
+				if seqs[i] <= seqs[i-1] || seqs[i]-seqs[i-1] != 1 {
 					t.Pass = false
-					t.Reason = "RECEIPT_GAP_DETECTED"
-				} else {
-					t.Pass = true
-					t.Reason = "no gaps in receipt sequence"
+					t.Evidence = fmt.Sprintf("non-contiguous sequence between seq %d and %d", seqs[i-1], seqs[i])
 				}
+			}
+			if t.Pass {
+				t.Reason = "no gaps in receipt sequence"
+			} else {
+				t.Reason = "RECEIPT_GAP_DETECTED"
 			}
 			result.TestResults = append(result.TestResults, t)
 			result.Pass = t.Pass
@@ -142,11 +137,12 @@ func adv02PolicyBypass(opts VerificationOptions) *Suite {
 			receiptsDir := filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts")
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
 
-			t := TestResult{TestID: "ADV-02-T1", Name: "All effect_attempt has preceding policy_decision"}
+			t := TestResult{TestID: "ADV-02-T1", Name: "All effect actions have preceding policy_decision"}
 			effectsWithoutPolicy := 0
 			for _, f := range files {
 				receipt := loadReceipt(f)
-				if receipt["action_type"] == "effect_attempt" {
+				action, _ := receipt["action_type"].(string)
+				if isEffectAction(action) {
 					// A matching receipt after the effect cannot authorize it.
 					decisionID, _ := receipt["decision_id"].(string)
 					if decisionID == "" || !hasBoundAuthorizationReceipt(files, receipt, "policy_decision", opts) {
@@ -304,7 +300,7 @@ func adv05EnvelopeEscape() *Suite {
 			for _, f := range files {
 				receipt := loadReceipt(f)
 				action, _ := receipt["action_type"].(string)
-				if action == "effect_attempt" || action == "tool_call" || action == "connector_call" {
+				if isEffectAction(action) {
 					envID, _ := receipt["envelope_id"].(string)
 					envHash, _ := receipt["envelope_hash"].(string)
 					if envID == "" || envHash == "" {
@@ -585,12 +581,15 @@ func loadSequenceNumbers(files []string) []uint64 {
 	var seqs []uint64
 	for _, f := range files {
 		receipt := loadReceipt(f)
-		if seq, ok := receipt["seq"].(float64); ok {
+		if seq, ok := receiptSequence(receipt); ok {
 			seqs = append(seqs, uint64(seq))
 		}
 	}
-	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
 	return seqs
+}
+
+func isEffectAction(action string) bool {
+	return action == "effect_attempt" || action == "tool_call" || action == "connector_call"
 }
 
 func hasPolicyReceiptForDecision(files []string, decisionID string) bool {

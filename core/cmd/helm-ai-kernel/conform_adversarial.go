@@ -22,7 +22,10 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
-const adversarialCampaignSchemaVersion = "helm.adversarial_campaign_report.v1"
+const (
+	adversarialCampaignSchemaVersion = "helm.adversarial_campaign_report.v1"
+	maxAdversarialSnapshotEntries    = 4096
+)
 
 type adversarialCampaignStatus string
 
@@ -322,7 +325,12 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 		return 1
 	}
 	if jsonOutput {
-		_, _ = stdout.Write(data)
+		verified, err := marshalAdversarialCampaignReport(report)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: cannot encode verified campaign report: %v\n", err)
+			return 2
+		}
+		_, _ = stdout.Write(verified)
 	} else {
 		_, _ = fmt.Fprintf(stdout, "Kernel adversarial campaign attestation: verified\n  Status: %s\n  Kernel commit: %s\n  Executable: %s\n", report.Status, report.RunnerProvenance.KernelCommit, report.RunnerProvenance.ExecutableSHA256)
 	}
@@ -525,20 +533,25 @@ func withAdversarialEvidenceSnapshot(bundle string, fn func(string) error) error
 	}
 	defer os.RemoveAll(tempDir)
 	snapshot := filepath.Join(tempDir, "evidence-pack")
-	if err := copyAdversarialEvidenceDirectory(bundle, snapshot); err != nil {
+	if err := copyAdversarialEvidenceDirectory(bundle, snapshot, maxAdversarialSnapshotEntries); err != nil {
 		return err
 	}
 	return fn(snapshot)
 }
 
-func copyAdversarialEvidenceDirectory(source, destination string) error {
+func copyAdversarialEvidenceDirectory(source, destination string, maxEntries int) error {
 	var copiedBytes int64
+	entries := 0
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("EvidencePack snapshot rejects symlink: %s", entry.Name())
+		}
+		entries++
+		if entries > maxEntries {
+			return fmt.Errorf("EvidencePack snapshot exceeds %d entries", maxEntries)
 		}
 		rel, err := filepath.Rel(source, path)
 		if err != nil {

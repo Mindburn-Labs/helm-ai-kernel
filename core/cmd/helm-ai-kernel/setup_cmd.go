@@ -364,6 +364,10 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 		fmt.Fprintln(stderr, "setup: --data-dir is required when the home directory is unavailable")
 		return opts, 2
 	}
+	if opts.Scope == "user" && homeDirOrEmpty() == "" {
+		fmt.Fprintln(stderr, "setup: user scope requires an absolute home directory")
+		return opts, 2
+	}
 	if abs, err := filepath.Abs(opts.DataDir); err == nil {
 		opts.DataDir = abs
 	}
@@ -629,12 +633,12 @@ func setupClientConfigPath(opts setupOptions) string {
 		if opts.Scope == "project" {
 			return filepath.Join(opts.Workspace, ".mcp.json")
 		}
-		return filepath.Join(homeDirOrDot(), ".claude.json")
+		return setupUserPath(".claude.json")
 	case "codex":
 		if opts.Scope == "project" {
 			return filepath.Join(opts.Workspace, ".codex", "config.toml")
 		}
-		return filepath.Join(homeDirOrDot(), ".codex", "config.toml")
+		return setupUserPath(".codex", "config.toml")
 	default:
 		return ""
 	}
@@ -646,12 +650,12 @@ func setupHookConfigPath(opts setupOptions) string {
 		if opts.Scope == "project" {
 			return filepath.Join(opts.Workspace, ".claude", "settings.json")
 		}
-		return filepath.Join(homeDirOrDot(), ".claude", "settings.json")
+		return setupUserPath(".claude", "settings.json")
 	case "codex":
 		if opts.Scope == "project" {
 			return filepath.Join(opts.Workspace, ".codex", "hooks.json")
 		}
-		return filepath.Join(homeDirOrDot(), ".codex", "hooks.json")
+		return setupUserPath(".codex", "hooks.json")
 	default:
 		return ""
 	}
@@ -1215,10 +1219,18 @@ func defaultSetupDataDir() string {
 	return filepath.Join(home, ".helm-ai-kernel")
 }
 
-func homeDirOrDot() string {
+func homeDirOrEmpty() string {
 	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return "."
+	if err != nil || strings.TrimSpace(home) == "" || !filepath.IsAbs(home) {
+		return ""
 	}
 	return home
+}
+
+func setupUserPath(parts ...string) string {
+	home := homeDirOrEmpty()
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(append([]string{home}, parts...)...)
 }

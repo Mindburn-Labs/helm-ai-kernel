@@ -227,6 +227,38 @@ func TestSetupRequiresExplicitDataDirWithoutHome(t *testing.T) {
 	}
 }
 
+func TestSetupUserScopeRequiresAbsoluteHomeEvenWithDataDir(t *testing.T) {
+	commands := [][]string{
+		{"helm-ai-kernel", "setup", "codex", "--yes"},
+		{"helm-ai-kernel", "setup", "status", "codex"},
+		{"helm-ai-kernel", "setup", "remove", "codex", "--yes"},
+	}
+	for _, home := range []string{"", "relative-home"} {
+		for _, command := range commands {
+			name := strings.Join(command[1:3], "-")
+			t.Run(home+"/"+name, func(t *testing.T) {
+				t.Setenv("HOME", home)
+				for _, target := range []string{"claude-code", "codex"} {
+					opts := setupOptions{Target: target, Scope: "user"}
+					if path := setupClientConfigPath(opts); path != "" {
+						t.Fatalf("HOME=%q %s client path = %q, want empty", home, target, path)
+					}
+					if path := setupHookConfigPath(opts); path != "" {
+						t.Fatalf("HOME=%q %s hook path = %q, want empty", home, target, path)
+					}
+				}
+				args := append([]string{}, command...)
+				args = append(args, "--data-dir", t.TempDir())
+				var stdout, stderr bytes.Buffer
+				code := Run(args, &stdout, &stderr)
+				if code != 2 || !strings.Contains(stderr.String(), "user scope requires an absolute home directory") {
+					t.Fatalf("HOME=%q args=%q setup = %d stdout=%s stderr=%s", home, args, code, stdout.String(), stderr.String())
+				}
+			})
+		}
+	}
+}
+
 func TestSetupInstallClaudeWritesHookAndRunsQuickstart(t *testing.T) {
 	tmp := t.TempDir()
 	home := filepath.Join(tmp, "home")

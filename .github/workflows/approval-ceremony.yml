@@ -47,6 +47,6 @@ jobs:
           go-version: "1.25.12"
           cache-dependency-path: "core/go.sum"
       - name: Verify ceremony golden vectors
-        run: make verify-fixtures
+        run: make verify-approval-ceremony-vectors
       - name: Prove non-bypass RLS and single-use concurrency
         run: make test-approval-ceremony-postgres

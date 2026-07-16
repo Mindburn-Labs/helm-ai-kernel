@@ -1,5 +1,8 @@
 package adversarial
 
+// quantum_posture: this slice validates classical Ed25519 signature shape
+// only; cryptographic verification and post-quantum assurance are not claimed.
+
 import (
 	"encoding/json"
 	"os"
@@ -99,17 +102,19 @@ func proofGraphParentCoverage(receipts []map[string]interface{}) CoverageCheck {
 
 func budgetBoundaryCoverage(receipts []map[string]interface{}) CoverageCheck {
 	var exhaustedAt float64
+	foundBoundary := false
 	for _, receipt := range receipts {
 		if receipt["action_type"] != "budget_exhausted" {
 			continue
 		}
 		seq, ok := receipt["seq"].(float64)
-		if ok && (exhaustedAt == 0 || seq < exhaustedAt) {
+		if ok && (!foundBoundary || seq < exhaustedAt) {
 			exhaustedAt = seq
+			foundBoundary = true
 		}
 	}
 	count := 0
-	if exhaustedAt > 0 {
+	if foundBoundary {
 		for _, receipt := range receipts {
 			seq, ok := receipt["seq"].(float64)
 			if ok && seq < exhaustedAt && receipt["action_type"] == "budget_decrement" {
@@ -173,31 +178,34 @@ func toolManifestCoverage(evidenceDir string) CoverageCheck {
 		if err != nil || json.Unmarshal(data, &manifest) != nil {
 			continue
 		}
-		switch signatures := manifest["signatures"].(type) {
-		case []interface{}:
-			if len(signatures) > 0 {
-				count++
-			}
-		case string:
-			if signatures != "" {
-				count++
-			}
+		if hasStructuredSignatures(manifest) {
+			count++
 		}
 	}
-	return coverageCheck("ADV-08", count > 0, count, "requires a tool manifest with a non-empty signatures field")
+	return coverageCheck("ADV-08", count > 0, count, "requires a canonical tool manifest with a structurally valid Ed25519 signature")
 }
 
 func panicBoundaryCoverage(evidenceDir string) CoverageCheck {
-	data, err := os.ReadFile(panicEvidencePath(evidenceDir))
-	if err != nil {
+	files := panicEvidenceFiles(evidenceDir)
+	if len(files) == 0 {
 		return coverageCheck("ADV-09", false, 0, "requires a readable panic boundary record")
 	}
-	var panicRecord map[string]interface{}
-	if json.Unmarshal(data, &panicRecord) != nil {
-		return coverageCheck("ADV-09", false, 0, "requires a readable panic boundary record")
+	count := 0
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return coverageCheck("ADV-09", false, count, "requires every present panic boundary record to be readable")
+		}
+		var panicRecord map[string]interface{}
+		if json.Unmarshal(data, &panicRecord) != nil {
+			return coverageCheck("ADV-09", false, count, "requires every present panic boundary record to be readable")
+		}
+		if _, ok := panicRecord["last_good_seq"].(float64); !ok {
+			return coverageCheck("ADV-09", false, count, "requires every present panic boundary record to contain last_good_seq")
+		}
+		count++
 	}
-	_, ok := panicRecord["last_good_seq"].(float64)
-	return coverageCheck("ADV-09", ok, boolCount(ok), "requires a readable panic boundary record")
+	return coverageCheck("ADV-09", true, count, "requires every present panic boundary record to be readable")
 }
 
 func highFinalityApprovalCoverage(receipts []map[string]interface{}) CoverageCheck {

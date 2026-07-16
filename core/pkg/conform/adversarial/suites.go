@@ -187,80 +187,181 @@ func adv03DAGFork() *Suite {
 			for _, f := range files {
 				receipts = append(receipts, loadReceipt(f))
 			}
-			referenceIndex := receiptReferenceIndex(receipts)
-			receiptsByIdentity := make(map[string]map[string]interface{}, len(receipts))
-			for _, receipt := range receipts {
-				if identity := receiptIdentity(receipt); identity != "" {
-					receiptsByIdentity[identity] = receipt
-				}
-			}
-			parentCount := make(map[string]int)
-			graph := make(map[string][]string, len(receipts))
-			invalidParents := 0
-			for index, receipt := range receipts {
-				child := receiptIdentity(receipt)
-				childSeq, childSequenced := receiptSequence(receipt)
-				if child == "" {
-					invalidParents++
-					t.Evidence += fmt.Sprintf("missing receipt identity in %s; ", filepath.Base(files[index]))
-				}
-				parents, ok := receipt["parent_receipt_hashes"].([]interface{})
-				if ok {
-					for _, p := range parents {
-						ps, valid := p.(string)
-						ps = strings.TrimSpace(ps)
-						if !valid || ps == "" {
-							invalidParents++
-							t.Evidence += fmt.Sprintf("invalid parent in %s; ", filepath.Base(files[index]))
-							continue
-						}
-						if ps == "genesis" {
-							continue
-						}
-						parentTarget, exists := referenceIndex[ps]
-						parentReceipt := receiptsByIdentity[parentTarget]
-						parentSeq, parentSequenced := receiptSequence(parentReceipt)
-						if !exists || parentTarget == "" || child == "" || parentTarget == child || !childSequenced || !parentSequenced || parentSeq >= childSeq {
-							invalidParents++
-							t.Evidence += fmt.Sprintf("dangling, self, or non-causal parent %s in %s; ", ps, filepath.Base(files[index]))
-							continue
-						}
-						parentCount[parentTarget]++
-						graph[child] = append(graph[child], parentTarget)
-					}
-				}
-			}
-
-			forks := 0
-			parents := make([]string, 0, len(parentCount))
-			for parent := range parentCount {
-				parents = append(parents, parent)
-			}
-			sort.Strings(parents)
-			for _, parent := range parents {
-				count := parentCount[parent]
-				if count > 1 {
-					forks++
-					t.Evidence += fmt.Sprintf("parent %s claimed by %d children; ", parent, count)
-				}
-			}
-			cycles := 0
-			if receiptGraphHasCycle(graph) {
-				cycles = 1
-				t.Evidence += "receipt parent graph contains a cycle; "
-			}
-			if forks > 0 || invalidParents > 0 || cycles > 0 {
+			analysis := analyzeReceiptProofGraph(receipts, files)
+			t.Evidence = analysis.evidence
+			if analysis.forks > 0 || analysis.invalidParents > 0 || analysis.genesisClaims != 1 || analysis.cycles > 0 {
 				t.Pass = false
-				t.Reason = fmt.Sprintf("%d DAG forks detected; %d invalid parent references; %d DAG cycles detected", forks, invalidParents, cycles)
+				t.Reason = fmt.Sprintf(
+					"%d DAG forks detected; %d invalid parent references; %d genesis roots detected; %d DAG cycles detected",
+					analysis.forks,
+					analysis.invalidParents,
+					analysis.genesisClaims,
+					analysis.cycles,
+				)
 			} else {
 				t.Pass = true
-				t.Reason = "no DAG forks"
+				t.Reason = "single-root connected proof graph with no DAG forks"
 			}
 			result.TestResults = append(result.TestResults, t)
 			result.Pass = t.Pass
 			return result
 		},
 	}
+}
+
+type receiptProofGraphAnalysis struct {
+	causalEdges    int
+	forks          int
+	invalidParents int
+	genesisClaims  int
+	cycles         int
+	evidence       string
+}
+
+// analyzeReceiptProofGraph validates the whole proof graph, not just the
+// existence of one good edge. A valid pack has exactly one genesis claim on
+// sequence 1, and every later receipt has at least one resolvable, strictly
+// earlier parent. Those invariants make disconnected components impossible.
+func analyzeReceiptProofGraph(receipts []map[string]interface{}, files []string) receiptProofGraphAnalysis {
+	analysis := receiptProofGraphAnalysis{}
+	if len(receipts) == 0 {
+		analysis.invalidParents++
+		analysis.evidence = "proof graph has no receipts; "
+		return analysis
+	}
+
+	referenceIndex := receiptReferenceIndex(receipts)
+	receiptsByIdentity := make(map[string]map[string]interface{}, len(receipts))
+	for _, receipt := range receipts {
+		if identity := receiptIdentity(receipt); identity != "" {
+			receiptsByIdentity[identity] = receipt
+		}
+	}
+
+	// Reject ambiguous aliases even when no edge happens to reference them.
+	// Otherwise a later verifier could resolve the same receipt_id differently.
+	ambiguousReferences := make(map[string]bool)
+	for index, receipt := range receipts {
+		for _, key := range []string{"receipt_id", "receipt_hash"} {
+			reference, _ := receipt[key].(string)
+			reference = strings.TrimSpace(reference)
+			if reference == "" || referenceIndex[reference] != "" || ambiguousReferences[reference] {
+				continue
+			}
+			ambiguousReferences[reference] = true
+			analysis.invalidParents++
+			analysis.evidence += fmt.Sprintf("ambiguous receipt reference %s in %s; ", reference, receiptFileLabel(files, index))
+		}
+	}
+
+	parentCount := make(map[string]int)
+	graph := make(map[string][]string, len(receipts))
+	for index, receipt := range receipts {
+		fileLabel := receiptFileLabel(files, index)
+		child := receiptIdentity(receipt)
+		childSeq, childSequenced := receiptSequence(receipt)
+		if child == "" {
+			analysis.invalidParents++
+			analysis.evidence += fmt.Sprintf("missing receipt identity in %s; ", fileLabel)
+		}
+		if !childSequenced {
+			analysis.invalidParents++
+			analysis.evidence += fmt.Sprintf("invalid receipt sequence in %s; ", fileLabel)
+		}
+
+		parents, ok := receipt["parent_receipt_hashes"].([]interface{})
+		if !ok || len(parents) == 0 {
+			analysis.invalidParents++
+			analysis.evidence += fmt.Sprintf("missing or empty parent_receipt_hashes in %s; ", fileLabel)
+			continue
+		}
+
+		genesisParents := 0
+		validNonGenesisParents := 0
+		seenParentTargets := make(map[string]bool, len(parents))
+		for _, parentValue := range parents {
+			parentReference, valid := parentValue.(string)
+			parentReference = strings.TrimSpace(parentReference)
+			if !valid || parentReference == "" {
+				analysis.invalidParents++
+				analysis.evidence += fmt.Sprintf("invalid parent in %s; ", fileLabel)
+				continue
+			}
+			if parentReference == "genesis" {
+				analysis.genesisClaims++
+				genesisParents++
+				if seenParentTargets[parentReference] {
+					analysis.invalidParents++
+					analysis.evidence += fmt.Sprintf("duplicate genesis parent in %s; ", fileLabel)
+					continue
+				}
+				seenParentTargets[parentReference] = true
+				continue
+			}
+
+			parentTarget, exists := referenceIndex[parentReference]
+			parentReceipt := receiptsByIdentity[parentTarget]
+			parentSeq, parentSequenced := receiptSequence(parentReceipt)
+			if !exists || parentTarget == "" || child == "" || parentTarget == child || !childSequenced || !parentSequenced || parentSeq >= childSeq {
+				analysis.invalidParents++
+				analysis.evidence += fmt.Sprintf("dangling, self, or non-causal parent %s in %s; ", parentReference, fileLabel)
+				continue
+			}
+			if seenParentTargets[parentTarget] {
+				analysis.invalidParents++
+				analysis.evidence += fmt.Sprintf("duplicate parent target %s in %s; ", parentTarget, fileLabel)
+				continue
+			}
+			seenParentTargets[parentTarget] = true
+			validNonGenesisParents++
+			analysis.causalEdges++
+			parentCount[parentTarget]++
+			graph[child] = append(graph[child], parentTarget)
+		}
+
+		if !childSequenced {
+			continue
+		}
+		if childSeq == 1 {
+			if genesisParents != 1 || validNonGenesisParents != 0 || len(parents) != 1 {
+				analysis.invalidParents++
+				analysis.evidence += fmt.Sprintf("sequence 1 must have exactly one genesis parent in %s; ", fileLabel)
+			}
+			continue
+		}
+		if genesisParents != 0 || validNonGenesisParents == 0 {
+			analysis.invalidParents++
+			analysis.evidence += fmt.Sprintf("non-root receipt lacks a valid earlier parent in %s; ", fileLabel)
+		}
+	}
+
+	parents := make([]string, 0, len(parentCount))
+	for parent := range parentCount {
+		parents = append(parents, parent)
+	}
+	sort.Strings(parents)
+	for _, parent := range parents {
+		count := parentCount[parent]
+		if count > 1 {
+			analysis.forks++
+			analysis.evidence += fmt.Sprintf("parent %s claimed by %d children; ", parent, count)
+		}
+	}
+	if analysis.genesisClaims != 1 {
+		analysis.evidence += fmt.Sprintf("proof graph contains %d genesis claims; ", analysis.genesisClaims)
+	}
+	if receiptGraphHasCycle(graph) {
+		analysis.cycles = 1
+		analysis.evidence += "receipt parent graph contains a cycle; "
+	}
+	return analysis
+}
+
+func receiptFileLabel(files []string, index int) string {
+	if index >= 0 && index < len(files) && files[index] != "" {
+		return filepath.Base(files[index])
+	}
+	return fmt.Sprintf("receipt[%d]", index)
 }
 
 // ADV-04: Budget Overdraft

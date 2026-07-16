@@ -133,8 +133,7 @@ func signCampaignDocument(t *testing.T, document map[string]any, field, domain s
 	if err != nil {
 		t.Fatal(err)
 	}
-	signedMessage := make([]byte, 0, len(domain)+1+len(canonical))
-	signedMessage = append(signedMessage, domain...)
+	signedMessage := []byte(domain)
 	signedMessage = append(signedMessage, 0)
 	signedMessage = append(signedMessage, canonical...)
 	publicKey := privateKey.Public().(ed25519.PublicKey)

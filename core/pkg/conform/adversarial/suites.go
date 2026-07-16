@@ -804,8 +804,7 @@ func verifyCampaignSignatures(document map[string]interface{}, field, domain, tr
 	if err != nil {
 		return false
 	}
-	signedMessage := make([]byte, 0, len(domain)+1+len(canonical))
-	signedMessage = append(signedMessage, domain...)
+	signedMessage := []byte(domain)
 	signedMessage = append(signedMessage, 0)
 	signedMessage = append(signedMessage, canonical...)
 	wantKeyID, err := CampaignKeyID(trustedPublicKeyHex)

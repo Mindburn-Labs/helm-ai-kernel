@@ -250,31 +250,17 @@ func VerifyQuorum(
 		return VerifiedApprovalRef{}, fmt.Errorf("%w: got %d unique signers, need %d", ErrQuorumNotMet, len(verified), challenge.Quorum)
 	}
 	sort.Slice(verified, func(i, j int) bool {
-		if verified[i].PrincipalID != verified[j].PrincipalID {
-			return verified[i].PrincipalID < verified[j].PrincipalID
-		}
-		if verified[i].CredentialID != verified[j].CredentialID {
-			return verified[i].CredentialID < verified[j].CredentialID
-		}
-		if verified[i].DeviceID != verified[j].DeviceID {
-			return verified[i].DeviceID < verified[j].DeviceID
-		}
-		return verified[i].KeyID < verified[j].KeyID
+		return verifiedSignerLess(verified[i], verified[j])
 	})
 
-	signerSetHash, err := canonicalize.CanonicalHash(struct {
-		Domain                string           `json:"domain"`
-		ChallengeHash         string           `json:"challenge_hash"`
-		AuthoritySnapshotHash string           `json:"authority_snapshot_hash"`
-		Signers               []VerifiedSigner `json:"signers"`
-	}{
-		Domain:                "HELM/ApprovalSignerSet/v1",
-		ChallengeHash:         challenge.ChallengeHash,
-		AuthoritySnapshotHash: challenge.AuthoritySnapshotHash,
-		Signers:               verified,
-	})
+	signerSetHash, err := ComputeSignerSetHash(
+		challenge.ChallengeHash,
+		challenge.AuthoritySnapshotHash,
+		challenge.RequiredRole,
+		verified,
+	)
 	if err != nil {
-		return VerifiedApprovalRef{}, verificationFailed("signer set canonicalization failed")
+		return VerifiedApprovalRef{}, err
 	}
 
 	return VerifiedApprovalRef{
@@ -302,7 +288,7 @@ func VerifyQuorum(
 		RequiredRole:          challenge.RequiredRole,
 		Quorum:                challenge.Quorum,
 		Signers:               verified,
-		SignerSetHash:         "sha256:" + signerSetHash,
+		SignerSetHash:         signerSetHash,
 		VerifiedAt:            now.UTC(),
 	}, nil
 }

@@ -5,13 +5,13 @@
   "quantum_posture": "classical_ed25519_only",
   "consumption": {
     "canonical": "consumption.c14n.json",
-    "sha256": "sha256:f6678eaf506166edde7f51aa804e3660704b659b5a808eab500bffb738af9ccd",
+    "sha256": "sha256:153780a42302dceaa2bbba574b347480e2a7c3146fff49beb294e2559ae74b50",
     "signing_payload": {
       "canonical": "signing_payload.c14n.json",
-      "sha256": "sha256:86acfe67ebca56bad519c84ba8fab5478229043061121a53c0235361e38df010"
+      "sha256": "sha256:9e5a657c9b1bef4fdc6e55d19e15104ffaca59728aafddcc5a32786dfc3ad12f"
     },
     "public_key": "ed25519:ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
-    "signature": "ed25519:dd4dd8deac3be52bfb0b6fa73f8316fa00a2a031341a7acd8cb8d381299c3b7ada8180ac80caeb48cbe6c1a3b283e225b57ca134008d22160a1f9a6b3e28550b"
+    "signature": "ed25519:16a0da2ae2f10673518819f10b0b1d6de3375ade0ea00b1e58795126a55a694af09bd18f2f0ecd45d85716f138a9229a381f634a8a4d829b5691a28ea072ca0f"
   },
   "negative_vectors": [
     {

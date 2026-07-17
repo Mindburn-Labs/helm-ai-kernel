@@ -15,7 +15,7 @@ func TestApprovalGrantAndAssertionGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApprovalGrant.Seal() error = %v", err)
 	}
-	if want := "sha256:f7e42ad98fb74dbd0cb264850e9c20745ca4dfa179aca2a587a9067c78814477"; grant.GrantHash != want {
+	if want := "sha256:b9f38f37e3ca5231b549b0ffe2e0a59e8ede6f11cedcab1402f7098ce7241832"; grant.GrantHash != want {
 		t.Fatalf("ApprovalGrant.GrantHash = %q, want %q", grant.GrantHash, want)
 	}
 
@@ -23,7 +23,7 @@ func TestApprovalGrantAndAssertionGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApprovalChallenge.Seal() error = %v", err)
 	}
-	if want := "sha256:22d0b8f1a836180f7e86fecf81c41c83578c2b4685860174088c576828494552"; challenge.ChallengeHash != want {
+	if want := "sha256:98060a276357d51c0d6661cf2c795f2d99bf84f365ee439d875dd4379ed4bd60"; challenge.ChallengeHash != want {
 		t.Fatalf("ApprovalChallenge.ChallengeHash = %q, want %q", challenge.ChallengeHash, want)
 	}
 
@@ -32,7 +32,7 @@ func TestApprovalGrantAndAssertionGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApprovalAssertion.SigningDigest() error = %v", err)
 	}
-	if got, want := hex.EncodeToString(digest), "b56542f43fa9f0ac3b2f276cb57a2a509d24a46b71013aab70947b09369e52ac"; got != want {
+	if got, want := hex.EncodeToString(digest), "abcebc7fe1dd96040a5a6533f3d38584e7794235d79db0722e3da5f4ba294a8d"; got != want {
 		t.Fatalf("ApprovalAssertion signing digest = %q, want %q", got, want)
 	}
 }

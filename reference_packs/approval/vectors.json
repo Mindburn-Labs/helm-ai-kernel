@@ -10,62 +10,62 @@
   },
   "challenge": {
     "canonical": "challenge.c14n.json",
-    "sha256": "sha256:807532aa6c3a4e9c203845e8926bad4f39f2fbc0166c8837867971d5fc142a45"
+    "sha256": "sha256:84ef287c09881af08066708a8ad0b99f1ac3e58611afb6d1310f0480ee3ea8b7"
   },
   "assertions": [
     {
       "key_id": "key-a",
       "signing_payload": "key-a_signing_payload.c14n.json",
-      "signing_digest": "sha256:3b42649e10d35c7db7fb91e39a3ba0a6d65d614fcf1613c508b797b77a613c69",
+      "signing_digest": "sha256:82655fa63740bd6c6816b6626091de53408d4955928385c53adf986645e622d1",
       "public_key": "ed25519:8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-      "signature": "ed25519:b0c40e2219370d7287c647c8e1faab21152eee89a2875cc581911c8dc44c236850c41662fcbc2033f674b324d837af203e1853ab37f7b0341015ebfa280c480f",
+      "signature": "ed25519:3564363002597e3dd817ac3c90e56bdc06ee25617bdcca20cd3929e0655528cc33fdd164c48f436572a1fe27284a47e35d0ffc4c14f7a7556ba22d9a348ae60e",
       "assertion": {
         "domain": "HELM/ApprovalAssertion/v1",
         "schema_version": "approval-assertion.v1",
         "contract_version": "2026-07-15",
         "challenge_id": "challenge-a",
-        "challenge_hash": "sha256:807532aa6c3a4e9c203845e8926bad4f39f2fbc0166c8837867971d5fc142a45",
+        "challenge_hash": "sha256:84ef287c09881af08066708a8ad0b99f1ac3e58611afb6d1310f0480ee3ea8b7",
         "key_id": "key-a",
         "algorithm": "ed25519",
-        "signature": "ed25519:b0c40e2219370d7287c647c8e1faab21152eee89a2875cc581911c8dc44c236850c41662fcbc2033f674b324d837af203e1853ab37f7b0341015ebfa280c480f"
+        "signature": "ed25519:3564363002597e3dd817ac3c90e56bdc06ee25617bdcca20cd3929e0655528cc33fdd164c48f436572a1fe27284a47e35d0ffc4c14f7a7556ba22d9a348ae60e"
       },
-      "assertion_hash": "sha256:d4b81c5ad185a90c93b6d2a2c657ac12890fab92dc29f43895489685ad5fba6d"
+      "assertion_hash": "sha256:954e3322471e33b8949e244f7a77cfc5926eb1a42c38495824d5aa89f5218ba5"
     },
     {
       "key_id": "key-b",
       "signing_payload": "key-b_signing_payload.c14n.json",
-      "signing_digest": "sha256:023722a301ac8a715fc07dc73f1c3033975c1755018a02ac74d9ffe4789c194a",
+      "signing_digest": "sha256:953e4a0373daa89e2c9c3f0fd92a53e064eef414dc8c513e9b7900dc2c510921",
       "public_key": "ed25519:8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394",
-      "signature": "ed25519:f964734a433805bbe85c0a70c792ceb0cd1694815f9ffccae363e3cee0a1e905cd499d34addb02e401890c3bbb747da8319f2458726b5882d7e387c8fb8c1602",
+      "signature": "ed25519:1f3d43e58bb93f6fb579b1cdae19f52bff3ffbc516d75c5b21ab9b6a9842a06ef256bad87da2d1e4d1d5d8569bd4fa86503cc463ae3494e73f1b96a2aaa4f607",
       "assertion": {
         "domain": "HELM/ApprovalAssertion/v1",
         "schema_version": "approval-assertion.v1",
         "contract_version": "2026-07-15",
         "challenge_id": "challenge-a",
-        "challenge_hash": "sha256:807532aa6c3a4e9c203845e8926bad4f39f2fbc0166c8837867971d5fc142a45",
+        "challenge_hash": "sha256:84ef287c09881af08066708a8ad0b99f1ac3e58611afb6d1310f0480ee3ea8b7",
         "key_id": "key-b",
         "algorithm": "ed25519",
-        "signature": "ed25519:f964734a433805bbe85c0a70c792ceb0cd1694815f9ffccae363e3cee0a1e905cd499d34addb02e401890c3bbb747da8319f2458726b5882d7e387c8fb8c1602"
+        "signature": "ed25519:1f3d43e58bb93f6fb579b1cdae19f52bff3ffbc516d75c5b21ab9b6a9842a06ef256bad87da2d1e4d1d5d8569bd4fa86503cc463ae3494e73f1b96a2aaa4f607"
       },
-      "assertion_hash": "sha256:dcc4708df8dae1bc05113f294d608947c7fa4e76b927d97d349caf8454f8cf1b"
+      "assertion_hash": "sha256:87e8f0d13aa319e991dcb7d14536d5e707deabea6c59caba6320a0c67cd10a9b"
     },
     {
       "key_id": "key-c",
       "signing_payload": "key-c_signing_payload.c14n.json",
-      "signing_digest": "sha256:c8eb2f897c733b0606d5189cc001b3ec4352ad5f963bfe2d5eb0ee1fd6087de2",
+      "signing_digest": "sha256:453e9ed5881ed7b1f824dee3d119a4b2775f431ee5b0c29fa28633ec780e1e6e",
       "public_key": "ed25519:ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
-      "signature": "ed25519:2530e9c28640900d296f7e36513fe54f6baa736cb9c013d0271bbd51ff929986b200f510aec076f7b9d0607ba7c4e647c69d4311dbe3e80a90ed46e4a9c37c09",
+      "signature": "ed25519:122b8262d01207e3d8d0eaad53045a714f2ab47bbefc679e01e507caa298c28ddf216adfdf21a0bd1339255893a5fab2424a26bbe5666190f409a21a7220fc00",
       "assertion": {
         "domain": "HELM/ApprovalAssertion/v1",
         "schema_version": "approval-assertion.v1",
         "contract_version": "2026-07-15",
         "challenge_id": "challenge-a",
-        "challenge_hash": "sha256:807532aa6c3a4e9c203845e8926bad4f39f2fbc0166c8837867971d5fc142a45",
+        "challenge_hash": "sha256:84ef287c09881af08066708a8ad0b99f1ac3e58611afb6d1310f0480ee3ea8b7",
         "key_id": "key-c",
         "algorithm": "ed25519",
-        "signature": "ed25519:2530e9c28640900d296f7e36513fe54f6baa736cb9c013d0271bbd51ff929986b200f510aec076f7b9d0607ba7c4e647c69d4311dbe3e80a90ed46e4a9c37c09"
+        "signature": "ed25519:122b8262d01207e3d8d0eaad53045a714f2ab47bbefc679e01e507caa298c28ddf216adfdf21a0bd1339255893a5fab2424a26bbe5666190f409a21a7220fc00"
       },
-      "assertion_hash": "sha256:5d6d4ba9e21e7e3a8807d7554634bde9cceeccbcea2829c4ffe9d803e9daa245"
+      "assertion_hash": "sha256:da0007a864001544d24c189cbd2478afcd725409064dc6a6cfaa5b4d35b1b2eb"
     }
   ],
   "cases": [
@@ -77,11 +77,11 @@
       ],
       "signer_set": {
         "canonical": "signer_set.c14n.json",
-        "sha256": "sha256:ef41bb7c4acc907a4b7c0ac716ca6c0efe7735d636a5eabb423f67d716852f2f"
+        "sha256": "sha256:0650a692c1acb71f997623e38aec78c6419e55ee3af222f3c71186b7ea150449"
       },
       "verified_projection": {
         "canonical": "verified_projection.c14n.json",
-        "sha256": "sha256:2f54c811e4967a28e761ece8cde3d884af750c6b0d2e73c04a50b67a5e56908c"
+        "sha256": "sha256:974486e2768e0c2530aad3502c1e6ceb19d838ea7ba71f10987598892da255dd"
       },
       "expected_status": "verified"
     },
@@ -94,11 +94,11 @@
       ],
       "signer_set": {
         "canonical": "over_quorum_signer_set.c14n.json",
-        "sha256": "sha256:c8e88eea6261ce79347630e32939d16b849f45ec34281c249aeda55c08586f2b"
+        "sha256": "sha256:158f075f7bbfa08745b50b728259378e1dfbc909eb0df1367124ebeeccccee33"
       },
       "verified_projection": {
         "canonical": "over_quorum_verified_projection.c14n.json",
-        "sha256": "sha256:a6489f7bdc27ab8edfd5c3b8c7055cbbd4437ade34b80fcc24273bf36aa82108"
+        "sha256": "sha256:957af2d9ae713b2a82d11b3abf3613eb87e0840ed9681c77b0db1d2027c93043"
       },
       "expected_status": "verified_over_quorum"
     }

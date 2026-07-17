@@ -142,6 +142,39 @@ func TestCoverageSnapshotMustMatchExternallyVerifiedRoots(t *testing.T) {
 	})
 }
 
+func TestCoverageOmitsOnlyAnExternallyVerifiedDetachedConformanceSignature(t *testing.T) {
+	dir := t.TempDir()
+	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	opts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
+	signaturePath := filepath.Join(dir, "07_ATTESTATIONS", "conformance_report.sig")
+	if err := os.MkdirAll(filepath.Dir(signaturePath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(signaturePath, []byte(`{"signature":"externally-verified-fixture"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	strictResult := EvaluateCoverageWithOptions(dir, opts)
+	if strictResult.Pass || strictResult.CoveredSuites != 0 || strictResult.MissingSuites != 10 {
+		t.Fatalf("unverified detached signature result=%+v, want all coverage to fail closed", strictResult)
+	}
+	opts.AllowVerifiedConformanceSignature = true
+	allowedResult := EvaluateCoverageWithOptions(dir, opts)
+	if !allowedResult.Pass || allowedResult.CoveredSuites != 10 || allowedResult.MissingSuites != 0 {
+		t.Fatalf("externally verified detached signature result=%+v, want complete coverage", allowedResult)
+	}
+	if _, err := os.Stat(signaturePath); err != nil {
+		t.Fatalf("source detached signature was modified: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "unexpected-unindexed.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unexpectedResult := EvaluateCoverageWithOptions(dir, opts)
+	if unexpectedResult.Pass || unexpectedResult.CoveredSuites != 0 || unexpectedResult.MissingSuites != 10 {
+		t.Fatalf("unexpected unindexed file result=%+v, want all coverage to fail closed", unexpectedResult)
+	}
+}
+
 func TestCoverageMutationRestoresTheWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	_ = writePassingCoverageArtifacts(t, dir)

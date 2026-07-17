@@ -4,6 +4,7 @@ package adversarial
 // do not represent post-quantum assurance.
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,15 +25,27 @@ func TestEvaluateCoverageRejectsMissingPositiveControls(t *testing.T) {
 func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	dir := t.TempDir()
 	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	sourceReceipt := filepath.Join(dir, "02_PROOFGRAPH", "receipts", "005.json")
+	sourceBefore, err := os.ReadFile(sourceReceipt)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	result := EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
 	if !result.Pass || result.CoveredSuites != 10 || result.MissingSuites != 0 || len(result.Checks) != 10 {
 		t.Fatalf("complete coverage result=%+v, want all suites covered", result)
 	}
 	for _, check := range result.Checks {
-		if !check.Covered || check.EvidenceCount == 0 {
-			t.Fatalf("coverage check=%+v, want positive evidence", check)
+		if !check.Covered || check.EvidenceCount == 0 || check.MutationID == "" || !check.MutationApplied || !check.MutationRejected {
+			t.Fatalf("coverage check=%+v, want positive evidence and a rejected deterministic mutation", check)
 		}
+	}
+	sourceAfter, err := os.ReadFile(sourceReceipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(sourceBefore, sourceAfter) {
+		t.Fatal("coverage mutations modified the source EvidencePack")
 	}
 
 	if err := os.Remove(filepath.Join(dir, "08_TAPES", "entry_001.json")); err != nil {
@@ -41,6 +54,33 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	result = EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
 	if result.Pass || result.MissingSuites != 1 || result.Checks[5].SuiteID != "ADV-06" || result.Checks[5].Covered {
 		t.Fatalf("missing tape coverage result=%+v, want only ADV-06 missing", result)
+	}
+}
+
+func TestCoverageRequiresTheExpectedDetectorToRejectItsMutation(t *testing.T) {
+	dir := t.TempDir()
+	_ = writePassingCoverageArtifacts(t, dir)
+	mutation := mandatoryCoverageMutations()["ADV-01"]
+	alwaysPass := &Suite{ID: "ADV-01", Run: func(string) *SuiteResult {
+		return &SuiteResult{SuiteID: "ADV-01", Pass: true}
+	}}
+	applied, rejected := runCoverageMutation(dir, alwaysPass, mutation)
+	if !applied || rejected {
+		t.Fatalf("mutation probe applied=%t rejected=%t, want applied mutation and fail-closed rejection proof", applied, rejected)
+	}
+	unrelatedFailure := &Suite{ID: "ADV-01", Run: func(string) *SuiteResult {
+		return &SuiteResult{
+			SuiteID: "ADV-01",
+			Pass:    false,
+			TestResults: []TestResult{{
+				TestID: "UNRELATED-T1",
+				Pass:   false,
+			}},
+		}
+	}}
+	applied, rejected = runCoverageMutation(dir, unrelatedFailure, mutation)
+	if !applied || rejected {
+		t.Fatalf("unrelated failure applied=%t rejected=%t, want only the expected detector to prove rejection", applied, rejected)
 	}
 }
 

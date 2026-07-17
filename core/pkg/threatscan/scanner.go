@@ -6,7 +6,7 @@
 // Guardian and PDP remain the sole policy authorities.
 //
 // Design invariants:
-//   - Deterministic: same input → same findings (no randomness, no ML)
+//   - Deterministic: same input + model artifact → same findings
 //   - Offline: no network calls, no external dependencies
 //   - Evidence-preserving: raw + normalized hashes, matched spans
 //   - Replay-safe: output is fully determined by input + config
@@ -24,8 +24,11 @@ import (
 
 // Scanner performs deterministic threat analysis on textual inputs.
 type Scanner struct {
-	rules []Rule
-	clock func() time.Time
+	rules               []Rule
+	clock               func() time.Time
+	semantic            *SemanticDetector
+	semanticUnavailable *contracts.SemanticThreatAssessment
+	semanticThresholdBP int
 }
 
 // Rule represents a single detection rule.
@@ -47,11 +50,32 @@ func WithClock(clock func() time.Time) Option {
 	}
 }
 
+// WithSemanticModel replaces the embedded advisory model. Model bytes are
+// verified against expectedHash before parsing; failures remain observable in
+// every scan result instead of disabling the stage silently.
+func WithSemanticModel(model []byte, expectedHash string) Option {
+	return func(s *Scanner) {
+		s.setSemanticModel(model, expectedHash)
+	}
+}
+
+// WithSemanticThresholdBP overrides the model's advisory flag threshold.
+// Values outside 1..10000 are ignored so invalid configuration cannot turn
+// every input into a finding.
+func WithSemanticThresholdBP(thresholdBP int) Option {
+	return func(s *Scanner) {
+		if thresholdBP >= 1 && thresholdBP <= 10000 {
+			s.semanticThresholdBP = thresholdBP
+		}
+	}
+}
+
 // New creates a Scanner with all built-in rules.
 func New(opts ...Option) *Scanner {
 	s := &Scanner{
 		clock: time.Now,
 	}
+	s.setSemanticModel(embeddedSemanticModel, embeddedSemanticModelHash)
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -115,6 +139,25 @@ func (s *Scanner) ScanInput(input string, channel contracts.SourceChannel, trust
 	unicodeFindings := checkUnicode(input, normalized, normEvidence, channel, rawHash, normalizedHash)
 	findings = append(findings, unicodeFindings...)
 
+	semanticAssessment := s.semanticAssessment(normalized)
+	if semanticAssessment != nil && semanticAssessment.Available && semanticAssessment.Flagged {
+		findings = append(findings, contracts.ThreatFinding{
+			Class:               contracts.ThreatClassSemanticSimilarity,
+			Severity:            contracts.ThreatSeverityInfo,
+			RuleID:              "SEMANTIC_ADVISORY_V1",
+			SourceChannel:       channel,
+			NormalizedInputHash: normalizedHash,
+			RawInputHash:        rawHash,
+			Notes:               "Deterministic semantic similarity exceeded the advisory threshold; this signal has no direct DENY authority",
+			Metadata: map[string]any{
+				"model_hash":    semanticAssessment.ModelHash,
+				"max_bp":        semanticAssessment.MaxBP,
+				"threshold_bp":  semanticAssessment.ThresholdBP,
+				"nearest_class": semanticAssessment.NearestClass,
+			},
+		})
+	}
+
 	// Compute max severity
 	maxSev := contracts.MaxSeverityOf(findings)
 
@@ -129,6 +172,7 @@ func (s *Scanner) ScanInput(input string, channel contracts.SourceChannel, trust
 		Normalization:       normEvidence,
 		RawInputHash:        rawHash,
 		NormalizedInputHash: normalizedHash,
+		Semantic:            semanticAssessment,
 	}
 }
 

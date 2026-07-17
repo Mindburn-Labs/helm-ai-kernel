@@ -74,6 +74,53 @@ func TestCoverageRejectsAnAlreadyFailingPositiveControl(t *testing.T) {
 	}
 }
 
+func TestCoverageRejectsMutationWorkspaceOverTheByteLimit(t *testing.T) {
+	dir := t.TempDir()
+	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	oversized := filepath.Join(dir, "oversized-untrusted-artifact.bin")
+	if err := os.WriteFile(oversized, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(oversized, maxCoverageMutationBytes+1); err != nil {
+		t.Fatal(err)
+	}
+
+	result := EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	if result.Pass || result.CoveredSuites != 0 || result.MissingSuites != 10 {
+		t.Fatalf("oversized mutation workspace result=%+v, want all coverage to fail closed", result)
+	}
+	for _, check := range result.Checks {
+		if check.PositiveControlPassed || check.MutationApplied || check.MutationRejected {
+			t.Fatalf("oversized workspace check=%+v, want no unbounded control or mutation execution", check)
+		}
+	}
+	aggregate := RunAllWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	if aggregate.Pass || aggregate.PassedSuites != 0 || aggregate.FailedSuites != 10 || len(aggregate.Suites) != 10 {
+		t.Fatalf("oversized aggregate=%+v, want all suites to fail closed before unbounded reads", aggregate)
+	}
+}
+
+func TestCoverageMutationRestoresTheWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	_ = writePassingCoverageArtifacts(t, dir)
+	receiptPath := filepath.Join(dir, "02_PROOFGRAPH", "receipts", "005.json")
+	before, err := os.ReadFile(receiptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied, rejected := runCoverageMutation(dir, adv01ReceiptGapInjection(), mandatoryCoverageMutations()["ADV-01"])
+	if !applied || !rejected {
+		t.Fatalf("mutation applied=%t rejected=%t, want exact detector rejection", applied, rejected)
+	}
+	after, err := os.ReadFile(receiptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("coverage mutation was not restored byte-for-byte")
+	}
+}
+
 func TestCoverageRequiresTheExpectedDetectorToRejectItsMutation(t *testing.T) {
 	dir := t.TempDir()
 	_ = writePassingCoverageArtifacts(t, dir)

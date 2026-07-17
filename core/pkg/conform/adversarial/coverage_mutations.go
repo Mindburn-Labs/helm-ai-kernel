@@ -2,15 +2,24 @@ package adversarial
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
+const (
+	maxCoverageMutationEntries = 4096
+	maxCoverageMutationBytes   = 32 << 20
+)
+
+type restoreCoverageMutation func() bool
+
 type coverageMutation struct {
 	ID             string
 	ExpectedTestID string
-	Apply          func(string) bool
+	Apply          func(string) (restoreCoverageMutation, bool)
 }
 
 func mandatoryCoverageMutations() map[string]coverageMutation {
@@ -28,30 +37,117 @@ func mandatoryCoverageMutations() map[string]coverageMutation {
 	}
 }
 
-func runCoverageMutation(evidenceDir string, suite *Suite, mutation coverageMutation) (bool, bool) {
-	tempDir, err := os.MkdirTemp("", "helm-adversarial-mutation-*")
+func newCoverageMutationWorkspace(evidenceDir string) (string, func(), error) {
+	tempDir, err := os.MkdirTemp("", "helm-adversarial-mutations-*")
 	if err != nil {
-		return false, false
+		return "", func() {}, err
 	}
-	defer os.RemoveAll(tempDir) //nolint:errcheck
+	cleanup := func() { _ = os.RemoveAll(tempDir) }
+	mutationRoot := filepath.Join(tempDir, "evidence-pack")
+	if err := copyCoverageMutationTree(evidenceDir, mutationRoot); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	return mutationRoot, cleanup, nil
+}
 
-	mutantDir := filepath.Join(tempDir, "evidence-pack")
-	if err := os.CopyFS(mutantDir, os.DirFS(evidenceDir)); err != nil {
+func copyCoverageMutationTree(source, destination string) error {
+	var copiedBytes int64
+	entries := 0
+	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("mutation snapshot rejects symlink: %s", entry.Name())
+		}
+		entries++
+		if entries > maxCoverageMutationEntries {
+			return fmt.Errorf("mutation snapshot exceeds %d entries", maxCoverageMutationEntries)
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destination, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o750)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("mutation snapshot rejects non-regular file: %s", entry.Name())
+		}
+		copiedBytes += info.Size()
+		if info.Size() > maxCoverageMutationBytes || copiedBytes > maxCoverageMutationBytes {
+			return fmt.Errorf("mutation snapshot exceeds %d bytes", maxCoverageMutationBytes)
+		}
+		input, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		openedInfo, statErr := input.Stat()
+		if statErr != nil || !os.SameFile(info, openedInfo) || !openedInfo.Mode().IsRegular() {
+			_ = input.Close()
+			return fmt.Errorf("EvidencePack changed while snapshotting: %s", entry.Name())
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+			_ = input.Close()
+			return err
+		}
+		output, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			_ = input.Close()
+			return err
+		}
+		copied, copyErr := io.Copy(output, io.LimitReader(input, info.Size()+1))
+		closeOutputErr := output.Close()
+		closeInputErr := input.Close()
+		switch {
+		case copyErr != nil:
+			return copyErr
+		case closeOutputErr != nil:
+			return closeOutputErr
+		case closeInputErr != nil:
+			return closeInputErr
+		case copied != info.Size():
+			return fmt.Errorf("EvidencePack changed while snapshotting: %s", entry.Name())
+		}
+		return nil
+	})
+}
+
+func runCoverageMutation(evidenceDir string, suite *Suite, mutation coverageMutation) (bool, bool) {
+	if mutation.Apply == nil || mutation.ExpectedTestID == "" {
 		return false, false
 	}
-	if mutation.Apply == nil || mutation.ExpectedTestID == "" || !mutation.Apply(mutantDir) {
+	restore, applied := mutation.Apply(evidenceDir)
+	if !applied || restore == nil {
 		return false, false
 	}
-	result := suite.Run(mutantDir)
-	if result == nil || result.Pass {
-		return true, false
-	}
-	for _, test := range result.TestResults {
-		if test.TestID == mutation.ExpectedTestID && !test.Pass {
-			return true, true
+	restored := false
+	defer func() {
+		if !restored {
+			_ = restore()
+		}
+	}()
+	result := suite.Run(evidenceDir)
+	rejected := false
+	if result != nil && !result.Pass {
+		for _, test := range result.TestResults {
+			if test.TestID == mutation.ExpectedTestID && !test.Pass {
+				rejected = true
+				break
+			}
 		}
 	}
-	return true, false
+	restored = restore()
+	if !restored {
+		return true, false
+	}
+	return true, rejected
 }
 
 func suitePassesExpectedTest(result *SuiteResult, expectedTestID string) bool {
@@ -66,10 +162,9 @@ func suitePassesExpectedTest(result *SuiteResult, expectedTestID string) bool {
 	return false
 }
 
-func mutateReceiptSequenceGap(evidenceDir string) bool {
+func mutateReceiptSequenceGap(evidenceDir string) (restoreCoverageMutation, bool) {
 	files := receiptFiles(evidenceDir)
 	var targetPath string
-	var target map[string]interface{}
 	var maxSequence float64 = -1
 	validSequences := 0
 	for _, path := range files {
@@ -82,29 +177,29 @@ func mutateReceiptSequenceGap(evidenceDir string) bool {
 		if sequence > maxSequence {
 			maxSequence = sequence
 			targetPath = path
-			target = receipt
 		}
 	}
-	if validSequences < 2 || target == nil {
-		return false
+	if validSequences < 2 || targetPath == "" {
+		return nil, false
 	}
 	const maxExactJSONInteger = 1<<53 - 1
-	if maxSequence < maxExactJSONInteger {
-		target["seq"] = maxSequence + 1
-	} else {
-		target["seq"] = float64(0)
-	}
-	return writeMutationJSON(targetPath, target)
+	return applyJSONMutation(targetPath, func(target map[string]interface{}) {
+		if maxSequence < maxExactJSONInteger {
+			target["seq"] = maxSequence + 1
+		} else {
+			target["seq"] = float64(0)
+		}
+	})
 }
 
-func mutatePolicyBinding(evidenceDir string) bool {
+func mutatePolicyBinding(evidenceDir string) (restoreCoverageMutation, bool) {
 	return mutateFirstReceipt(evidenceDir, func(receipt map[string]interface{}) bool {
 		action, _ := receipt["action_type"].(string)
 		return isEffectAction(action)
 	}, mutateDecisionID)
 }
 
-func mutateProofGraphParent(evidenceDir string) bool {
+func mutateProofGraphParent(evidenceDir string) (restoreCoverageMutation, bool) {
 	return mutateFirstReceipt(evidenceDir, func(receipt map[string]interface{}) bool {
 		sequence, ok := receiptSequence(receipt)
 		return ok && sequence > 1
@@ -113,7 +208,7 @@ func mutateProofGraphParent(evidenceDir string) bool {
 	})
 }
 
-func mutateBudgetBoundary(evidenceDir string) bool {
+func mutateBudgetBoundary(evidenceDir string) (restoreCoverageMutation, bool) {
 	type exhaustion struct {
 		scope    string
 		sequence float64
@@ -142,15 +237,16 @@ func mutateBudgetBoundary(evidenceDir string) bool {
 		}
 		for _, boundary := range exhaustions {
 			if boundary.scope == scope && sequence < boundary.sequence {
-				receipt["seq"] = boundary.sequence
-				return writeMutationJSON(path, receipt)
+				return applyJSONMutation(path, func(target map[string]interface{}) {
+					target["seq"] = boundary.sequence
+				})
 			}
 		}
 	}
-	return false
+	return nil, false
 }
 
-func mutateEnvelopeBinding(evidenceDir string) bool {
+func mutateEnvelopeBinding(evidenceDir string) (restoreCoverageMutation, bool) {
 	return mutateFirstReceipt(evidenceDir, func(receipt map[string]interface{}) bool {
 		action, _ := receipt["action_type"].(string)
 		return isEffectAction(action)
@@ -159,21 +255,22 @@ func mutateEnvelopeBinding(evidenceDir string) bool {
 	})
 }
 
-func mutateTapeHash(evidenceDir string) bool {
+func mutateTapeHash(evidenceDir string) (restoreCoverageMutation, bool) {
 	files, _ := filepath.Glob(filepath.Join(evidenceDir, "08_TAPES", "entry_*.json"))
 	for _, path := range files {
 		entry := loadMutationJSON(path)
 		if entry == nil || !validTapeEntry(entry) {
 			continue
 		}
-		current, _ := entry["value_hash"].(string)
-		entry["value_hash"] = differentMutationValue(current)
-		return writeMutationJSON(path, entry)
+		return applyJSONMutation(path, func(target map[string]interface{}) {
+			current, _ := target["value_hash"].(string)
+			target["value_hash"] = differentMutationValue(current)
+		})
 	}
-	return false
+	return nil, false
 }
 
-func mutateTenantBinding(evidenceDir string) bool {
+func mutateTenantBinding(evidenceDir string) (restoreCoverageMutation, bool) {
 	seenTenant := ""
 	seenReceipts := 0
 	return mutateFirstReceipt(evidenceDir, func(receipt map[string]interface{}) bool {
@@ -193,19 +290,20 @@ func mutateTenantBinding(evidenceDir string) bool {
 	})
 }
 
-func mutateToolSignature(evidenceDir string) bool {
+func mutateToolSignature(evidenceDir string) (restoreCoverageMutation, bool) {
 	for _, path := range toolManifestFiles(evidenceDir) {
 		manifest := loadMutationJSON(path)
 		if manifest == nil {
 			continue
 		}
-		delete(manifest, "signatures")
-		return writeMutationJSON(path, manifest)
+		return applyJSONMutation(path, func(target map[string]interface{}) {
+			delete(target, "signatures")
+		})
 	}
-	return false
+	return nil, false
 }
 
-func mutatePanicBoundary(evidenceDir string) bool {
+func mutatePanicBoundary(evidenceDir string) (restoreCoverageMutation, bool) {
 	maxSequence := float64(-1)
 	for _, path := range receiptFiles(evidenceDir) {
 		if sequence, ok := receiptSequence(loadReceipt(path)); ok && sequence > maxSequence {
@@ -213,20 +311,21 @@ func mutatePanicBoundary(evidenceDir string) bool {
 		}
 	}
 	if maxSequence < 1 {
-		return false
+		return nil, false
 	}
 	for _, path := range panicEvidenceFiles(evidenceDir) {
 		panicRecord := loadMutationJSON(path)
 		if panicRecord == nil {
 			continue
 		}
-		panicRecord["last_good_seq"] = maxSequence - 1
-		return writeMutationJSON(path, panicRecord)
+		return applyJSONMutation(path, func(target map[string]interface{}) {
+			target["last_good_seq"] = maxSequence - 1
+		})
 	}
-	return false
+	return nil, false
 }
 
-func mutateApprovalBinding(evidenceDir string) bool {
+func mutateApprovalBinding(evidenceDir string) (restoreCoverageMutation, bool) {
 	return mutateFirstReceipt(evidenceDir, func(receipt map[string]interface{}) bool {
 		action, _ := receipt["action_type"].(string)
 		effectClass, _ := receipt["effect_class"].(string)
@@ -239,16 +338,15 @@ func mutateDecisionID(receipt map[string]interface{}) {
 	receipt["decision_id"] = differentMutationValue(current)
 }
 
-func mutateFirstReceipt(evidenceDir string, match func(map[string]interface{}) bool, mutate func(map[string]interface{})) bool {
+func mutateFirstReceipt(evidenceDir string, match func(map[string]interface{}) bool, mutate func(map[string]interface{})) (restoreCoverageMutation, bool) {
 	for _, path := range receiptFiles(evidenceDir) {
 		receipt := loadReceipt(path)
 		if receipt == nil || !match(receipt) {
 			continue
 		}
-		mutate(receipt)
-		return writeMutationJSON(path, receipt)
+		return applyJSONMutation(path, mutate)
 	}
-	return false
+	return nil, false
 }
 
 func receiptFiles(evidenceDir string) []string {
@@ -266,6 +364,30 @@ func loadMutationJSON(path string) map[string]interface{} {
 		return nil
 	}
 	return value
+}
+
+func applyJSONMutation(path string, mutate func(map[string]interface{})) (restoreCoverageMutation, bool) {
+	original, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, false
+	}
+	var value map[string]interface{}
+	if json.Unmarshal(original, &value) != nil {
+		return nil, false
+	}
+	mutate(value)
+	mutated, err := json.Marshal(value)
+	if err != nil || os.WriteFile(path, mutated, info.Mode().Perm()) != nil {
+		return nil, false
+	}
+	restore := func() bool {
+		return os.WriteFile(path, original, info.Mode().Perm()) == nil
+	}
+	return restore, true
 }
 
 func writeMutationJSON(path string, value map[string]interface{}) bool {

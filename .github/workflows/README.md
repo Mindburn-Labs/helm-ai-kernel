@@ -54,9 +54,9 @@ surface for the `helm-ai-kernel` project.
 - `release.yml` calls `make quality-release` before producing binaries,
   container images, SBOM, VEX, attestations, SDK packages, signatures, and
   `version-status.json`.
-- `scorecard.yml` uploads OpenSSF Scorecard SARIF for `main` and pull requests;
-  PR SARIF is normalized so GitHub code scanning sees the same branch-protection
-  category that exists on `main`.
+- `scorecard.yml` keeps pull-request analysis read-only and retains SARIF as
+  artifact evidence; only trusted `main` and scheduled runs publish Scorecard
+  SARIF through OIDC and code-scanning authority.
 - `slsa-provenance.yml` is a manual repair workflow that re-attests the
   checksum-covered assets already attached to a published release. Normal tag
   releases generate SLSA provenance from `release.yml`.

@@ -29,6 +29,7 @@ type CoverageCheck struct {
 	PositiveControlPassed bool   `json:"positive_control_passed"`
 	MutationApplied       bool   `json:"mutation_applied"`
 	MutationRejected      bool   `json:"mutation_rejected"`
+	MutationRestored      bool   `json:"mutation_restored"`
 	Reason                string `json:"reason"`
 }
 
@@ -44,9 +45,9 @@ func EvaluateCoverage(evidenceDir string, opts VerificationOptions) CoverageResu
 // each detector's negative path is exercised without modifying the source
 // EvidencePack or multiplying untrusted pack I/O by the suite count.
 func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) CoverageResult {
-	workspace, cleanup, err := newCoverageMutationWorkspace(evidenceDir)
+	workspace, cleanup, err := newCoverageMutationWorkspace(evidenceDir, opts)
 	if err != nil {
-		return unavailableCoverageResult(opts)
+		return unavailableCoverageResult(opts, err)
 	}
 	defer cleanup()
 	result, _ := evaluateCoverageInWorkspace(workspace, opts)
@@ -82,11 +83,17 @@ func evaluateCoverageInWorkspace(evidenceDir string, opts VerificationOptions) (
 		baselineResults[suite.ID] = suite.Run(evidenceDir)
 	}
 	mutations := mandatoryCoverageMutations()
+	workspaceHealthy := true
 	for index := range checks {
 		check := &checks[index]
 		mutation, mutationExists := mutations[check.SuiteID]
 		check.MutationID = mutation.ID
 		if !check.Covered {
+			continue
+		}
+		if !workspaceHealthy {
+			check.Covered = false
+			check.Reason = "missing: mutation workspace integrity was lost after an earlier restore failure"
 			continue
 		}
 		suite, suiteExists := suitesByID[check.SuiteID]
@@ -101,11 +108,15 @@ func evaluateCoverageInWorkspace(evidenceDir string, opts VerificationOptions) (
 			check.Reason = "missing: detector did not pass its unchanged positive control"
 			continue
 		}
-		check.MutationApplied, check.MutationRejected = runCoverageMutation(evidenceDir, suite, mutation)
+		check.MutationApplied, check.MutationRejected, check.MutationRestored = runCoverageMutation(evidenceDir, suite, mutation)
 		switch {
 		case !check.MutationApplied:
 			check.Covered = false
 			check.Reason = "missing: deterministic mutation could not be applied to the positive control"
+		case !check.MutationRestored:
+			check.Covered = false
+			check.Reason = "missing: deterministic mutation could not be restored byte-for-byte"
+			workspaceHealthy = false
 		case !check.MutationRejected:
 			check.Covered = false
 			check.Reason = "missing: detector accepted deterministic mutation " + mutation.ID
@@ -125,15 +136,19 @@ func evaluateCoverageInWorkspace(evidenceDir string, opts VerificationOptions) (
 	return result, baselineResults
 }
 
-func unavailableCoverageResult(opts VerificationOptions) CoverageResult {
+func unavailableCoverageResult(opts VerificationOptions, cause error) CoverageResult {
 	suites := AllSuitesWithOptions(opts)
 	mutations := mandatoryCoverageMutations()
+	reason := "missing: bounded mutation snapshot could not be created and bound to externally verified EvidencePack roots"
+	if cause != nil {
+		reason += ": " + cause.Error()
+	}
 	checks := make([]CoverageCheck, 0, len(suites))
 	for _, suite := range suites {
 		checks = append(checks, CoverageCheck{
 			SuiteID:    suite.ID,
 			MutationID: mutations[suite.ID].ID,
-			Reason:     "missing: bounded mutation snapshot could not be created",
+			Reason:     reason,
 		})
 	}
 	return CoverageResult{

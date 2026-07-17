@@ -485,6 +485,15 @@ func ComputeEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, erro
 	return inventory.Roots, err
 }
 
+// VerifyEvidencePackIndexRoots verifies every indexed file, rejects unindexed
+// files, and returns the roots of the verified inventory. Callers that use the
+// result as an authorization boundary must compare it with roots obtained from
+// a separately trusted seal or canonical verification result.
+func VerifyEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, error) {
+	inventory, err := computeEvidencePackInventory(packDir, true)
+	return inventory.Roots, err
+}
+
 func computeEvidencePackInventory(packDir string, verifyFiles bool, allowVerifiedConformanceSignature ...bool) (evidencePackInventory, error) {
 	indexPath := filepath.Join(packDir, "00_INDEX.json")
 	indexData, err := os.ReadFile(indexPath)

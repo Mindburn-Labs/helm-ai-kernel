@@ -29,7 +29,7 @@ const (
 	adversarialReportSigningKeyEnv   = "HELM_BOUNTY_REPORT_SIGNING_KEY_HEX"
 	adversarialReportPublicKeyEnv    = "HELM_BOUNTY_REPORT_PUBLIC_KEY_HEX"
 	maxAdversarialIdentifierBytes    = 128
-	maxAdversarialSnapshotEntries    = 4096
+	maxAdversarialSnapshotEntries    = maxEvidenceArchiveEntries
 	maxAdversarialReportBytes        = 8 << 20
 	maxAdversarialJSONDepth          = 128
 )
@@ -178,11 +178,12 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "Error: --run-id is required and invalid: %v\n", err)
 		return 2
 	}
-	evaluationTime, err := time.Parse(time.RFC3339, strings.TrimSpace(evaluationTimeRaw))
+	evaluationTime, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(evaluationTimeRaw))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: --evaluation-time must be RFC3339: %v\n", err)
 		return 2
 	}
+	evaluationTime = evaluationTime.UTC()
 	if strings.TrimSpace(kernelCommit) == "" {
 		_, _ = fmt.Fprintln(stderr, "Error: --kernel-commit is required for exact runner provenance")
 		return 2
@@ -570,8 +571,8 @@ func validateAdversarialCampaignReportSemantics(report adversarialCampaignReport
 	if _, err := parseAdversarialTrustProfile(report.TrustProfile); err != nil {
 		return err
 	}
-	evaluationTime, err := time.Parse(time.RFC3339, report.EvaluationTime)
-	if err != nil || evaluationTime.UTC().Format(time.RFC3339) != report.EvaluationTime {
+	evaluationTime, err := time.Parse(time.RFC3339Nano, report.EvaluationTime)
+	if err != nil || evaluationTime.UTC().Format(time.RFC3339Nano) != report.EvaluationTime {
 		return fmt.Errorf("evaluation_time must be canonical UTC RFC3339")
 	}
 	if err := validatePrefixedSHA256("campaign_trust_key_id", report.CampaignTrustKeyID); err != nil {
@@ -865,7 +866,7 @@ func newAdversarialCampaignReport(campaignID, runID string, profile evidencepkg.
 		Pass:                   false,
 		Status:                 adversarialCampaignStatusBundleVerificationFailed,
 		TrustProfile:           string(profile),
-		EvaluationTime:         evaluationTime.Format(time.RFC3339),
+		EvaluationTime:         evaluationTime.UTC().Format(time.RFC3339Nano),
 		CampaignTrustKeyID:     campaignTrustKeyID,
 		BundleVerified:         verification.Verified,
 		VerifierVersion:        verification.VerifierVer,

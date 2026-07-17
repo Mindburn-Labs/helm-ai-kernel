@@ -101,6 +101,28 @@ func TestConformAdversarialRequiresCampaignAndRunIdentity(t *testing.T) {
 	}
 }
 
+func TestConformAdversarialPreservesFractionalEvaluationTime(t *testing.T) {
+	configureAdversarialCommandTest(t)
+	const evaluationTime = "2026-07-15T12:00:00.999Z"
+	t.Setenv("HELM_BOUNTY_EVALUATION_TIME_RFC3339", evaluationTime)
+	packDir := createMinimalVerifiableBundle(t)
+	reportPath := filepath.Join(t.TempDir(), "campaign.json")
+	var stdout, stderr bytes.Buffer
+	code := runConform([]string{
+		"adversarial",
+		"--bundle", packDir,
+		"--profile", "dev-local",
+		"--report", reportPath,
+	}, &stdout, &stderr)
+	if code == 2 {
+		t.Fatalf("exit=%d stdout=%s stderr=%s, want a signed campaign verdict", code, stdout.String(), stderr.String())
+	}
+	report := readAdversarialCampaignReport(t, reportPath)
+	if report.EvaluationTime != evaluationTime {
+		t.Fatalf("evaluation_time=%q, want exact %q", report.EvaluationTime, evaluationTime)
+	}
+}
+
 func TestConformAdversarialRequiresDedicatedReportSigningKey(t *testing.T) {
 	configureAdversarialCommandTest(t)
 	t.Setenv(adversarialReportSigningKeyEnv, "")

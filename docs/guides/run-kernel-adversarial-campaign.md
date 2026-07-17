@@ -63,7 +63,7 @@ operator home directory, or model memory mounted into it. Give the runner only:
 1. the sealed candidate EvidencePack or archive;
 2. explicit trust configuration and public verification roots;
 3. one stable campaign ID and one unique run ID;
-4. an explicit RFC3339 evaluation time; and
+4. an explicit RFC3339 evaluation time (fractional seconds are preserved); and
 5. a report output path outside the candidate pack.
 
 Campaign authorization receipts and tool manifests inside the pack must bind

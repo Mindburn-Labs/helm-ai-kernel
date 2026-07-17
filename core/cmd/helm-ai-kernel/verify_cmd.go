@@ -27,6 +27,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
+const maxEvidenceArchiveEntries = 4096
+
 // runVerifyCmd implements `helm-ai-kernel verify` per §2.1.
 //
 // Validates a signed EvidencePack bundle: structure, hashes, and signature.
@@ -277,6 +279,13 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func extractEvidenceArchive(bundlePath, dstDir string) error {
+	return extractEvidenceArchiveWithEntryLimit(bundlePath, dstDir, maxEvidenceArchiveEntries)
+}
+
+func extractEvidenceArchiveWithEntryLimit(bundlePath, dstDir string, maxEntries int) error {
+	if maxEntries <= 0 {
+		return fmt.Errorf("archive entry limit must be positive")
+	}
 	file, err := os.Open(bundlePath)
 	if err != nil {
 		return err
@@ -295,6 +304,7 @@ func extractEvidenceArchive(bundlePath, dstDir string) error {
 
 	tarReader := tar.NewReader(reader)
 	var extractedBytes int64
+	extractedEntries := 0
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -302,6 +312,10 @@ func extractEvidenceArchive(bundlePath, dstDir string) error {
 		}
 		if err != nil {
 			return fmt.Errorf("read tar entry: %w", err)
+		}
+		extractedEntries++
+		if extractedEntries > maxEntries {
+			return fmt.Errorf("archive exceeds %d entries", maxEntries)
 		}
 
 		targetPath, err := safeArchiveEntryPath(dstDir, header.Name)

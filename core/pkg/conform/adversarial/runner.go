@@ -47,7 +47,7 @@ func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateR
 			result.Pass = false
 			result.TestResults = append(result.TestResults, TestResult{
 				TestID: suite.ID + "-COVERAGE",
-				Name:   "Positive-control coverage",
+				Name:   "Positive-control and mutation coverage",
 				Pass:   false,
 				Reason: check.Reason,
 			})

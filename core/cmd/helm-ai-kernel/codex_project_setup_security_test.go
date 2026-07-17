@@ -344,7 +344,7 @@ func TestCodexProjectSetupMigratesOwnedHookOnBinaryRelocation(t *testing.T) {
 		"matcher": "^Read$", // a shared user entry; migration must not widen it.
 		"hooks": []any{
 			map[string]any{"type": "command", "command": oldCommand, "timeout": float64(30), "statusMessage": "Checking HELM policy"},
-			map[string]any{"type": "command", "command": lookalike, "timeout": float64(30), "statusMessage": "A different product"},
+			map[string]any{"type": "command", "command": lookalike, "timeout": float64(30), "statusMessage": "Checking HELM policy"},
 		},
 	}}}}
 	rawHooks, err := json.Marshal(hooks)

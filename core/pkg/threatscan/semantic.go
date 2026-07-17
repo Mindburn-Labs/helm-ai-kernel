@@ -17,6 +17,7 @@ const (
 	semanticFailureUnavailable  = "MODEL_UNAVAILABLE"
 	semanticFailureHashMismatch = "MODEL_HASH_MISMATCH"
 	semanticFailureInvalid      = "MODEL_INVALID"
+	semanticMaxInputWindows     = 16
 )
 
 //go:generate go run ../../cmd/semantic-model-gen -out semantic_model.json -hash-out semantic_model_hash_generated.go
@@ -126,17 +127,34 @@ func (d *SemanticDetector) Assess(input string, thresholdBP int) *contracts.Sema
 	if thresholdBP < 1 || thresholdBP > 10000 {
 		thresholdBP = d.model.ThresholdBP
 	}
-	vector, truncated := d.embed(input)
+	tokens, truncated := d.boundedTokens(input)
 	maxBP := 0
 	nearestClass := ""
-	for _, centroid := range d.model.Centroids {
-		score := cosineBP(vector, centroid.Vector)
-		if semanticIntentCoverage(vector) < 3 {
-			score = 0
+	scoreWindow := func(window []string) {
+		vector := d.embedTokens(window)
+		for _, centroid := range d.model.Centroids {
+			score := cosineBP(vector, centroid.Vector)
+			if semanticIntentCoverage(vector) < 3 {
+				score = 0
+			}
+			if score > maxBP || (score == maxBP && (nearestClass == "" || centroid.Class < nearestClass)) {
+				maxBP = score
+				nearestClass = centroid.Class
+			}
 		}
-		if score > maxBP || (score == maxBP && (nearestClass == "" || centroid.Class < nearestClass)) {
-			maxBP = score
-			nearestClass = centroid.Class
+	}
+
+	if len(tokens) == 0 {
+		scoreWindow(nil)
+	} else {
+		windowSize := d.model.MaxTokens
+		stride := max(windowSize/2, 1)
+		for start := 0; start < len(tokens); start += stride {
+			end := min(start+windowSize, len(tokens))
+			scoreWindow(tokens[start:end])
+			if end == len(tokens) {
+				break
+			}
 		}
 	}
 	return &contracts.SemanticThreatAssessment{
@@ -163,12 +181,25 @@ func semanticIntentCoverage(vector []int64) int {
 }
 
 func (d *SemanticDetector) embed(input string) ([]int64, bool) {
-	vector := make([]int64, d.model.Dimensions)
-	tokens := semanticTokens(input, d.model.MaxTokens+1)
-	truncated := len(tokens) > d.model.MaxTokens
-	if truncated {
+	tokens, truncated := d.boundedTokens(input)
+	if len(tokens) > d.model.MaxTokens {
 		tokens = tokens[:d.model.MaxTokens]
 	}
+	return d.embedTokens(tokens), truncated
+}
+
+func (d *SemanticDetector) boundedTokens(input string) ([]string, bool) {
+	maxInputTokens := d.model.MaxTokens * semanticMaxInputWindows
+	tokens := semanticTokens(input, maxInputTokens+1)
+	truncated := len(tokens) > maxInputTokens
+	if truncated {
+		tokens = tokens[:maxInputTokens]
+	}
+	return tokens, truncated
+}
+
+func (d *SemanticDetector) embedTokens(tokens []string) []int64 {
+	vector := make([]int64, d.model.Dimensions)
 	for _, token := range tokens {
 		tokenVector := make([]int64, d.model.Dimensions)
 		matches := int64(0)
@@ -205,7 +236,7 @@ func (d *SemanticDetector) embed(input string) ([]int64, bool) {
 			vector[i] += tokenVector[i] / matches
 		}
 	}
-	return vector, truncated
+	return vector
 }
 
 func semanticTokens(input string, limit int) []string {
@@ -253,6 +284,9 @@ func cosineBP(left []int64, right []int8) int {
 	if len(left) == 0 || len(left) != len(right) {
 		return 0
 	}
+	// validateSemanticModel caps dimensions at 64 and each scoring window at
+	// 4096 tokens. With int8 embeddings, each accumulated component is at most
+	// 4096*127, so products and sums remain well inside int64/uint64 bounds.
 	var dot, leftSquared, rightSquared uint64
 	var signedDot int64
 	for i, leftValue := range left {

@@ -437,13 +437,17 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 
 			semantic := evalCtx.ThreatScanResult.Semantic
 			thresholdBP := p.g.semanticEscalationThresholdBP
-			if thresholdBP > 0 && semantic != nil && semantic.Available && semantic.MaxBP >= thresholdBP {
+			if thresholdBP > 0 && semantic != nil && semantic.Available && (semantic.InputTruncated || semantic.MaxBP >= thresholdBP) {
+				reason := fmt.Sprintf("%s: semantic score %d bp meets tenant escalation threshold %d bp; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.MaxBP, thresholdBP, semantic.ModelHash)
+				if semantic.InputTruncated {
+					reason = fmt.Sprintf("%s: input exceeds the deterministic semantic coverage bound; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.ModelHash)
+				}
 				decision := &contracts.DecisionRecord{
 					ID:           newDecisionID(),
 					Timestamp:    p.g.clock.Now(),
 					Verdict:      string(contracts.VerdictEscalate),
 					ReasonCode:   string(contracts.ReasonSemanticThreatEscalate),
-					Reason:       fmt.Sprintf("%s: semantic score %d bp meets tenant escalation threshold %d bp; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.MaxBP, thresholdBP, semantic.ModelHash),
+					Reason:       reason,
 					InputContext: evalCtx.Request.Context,
 				}
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {

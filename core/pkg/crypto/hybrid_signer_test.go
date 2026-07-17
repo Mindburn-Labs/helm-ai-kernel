@@ -182,6 +182,11 @@ func TestHybridSigner_SignIntent(t *testing.T) {
 	valid, err := signer.Verify(payload, intent.Signature)
 	require.NoError(t, err)
 	assert.True(t, valid)
+	verifier, err := NewHybridVerifier(signer.ed25519.PublicKeyBytes(), signer.mldsa.PublicKeyBytes())
+	require.NoError(t, err)
+	valid, err = verifier.VerifyIntent(intent)
+	require.NoError(t, err)
+	assert.True(t, valid, "public-key hybrid verifier should accept the signed intent")
 
 	// Tamper
 	intent.AllowedTool = "delete_file"

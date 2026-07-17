@@ -171,9 +171,24 @@ func TestSemanticAssessmentTruncatesBoundedInput(t *testing.T) {
 	if unavailable != nil {
 		t.Fatalf("embedded model unavailable: %+v", unavailable)
 	}
-	assessment := detector.Assess(strings.Repeat("objective ", detector.model.MaxTokens+10), detector.model.ThresholdBP)
+	assessment := detector.Assess(strings.Repeat("objective ", detector.model.MaxTokens*semanticMaxInputWindows+10), detector.model.ThresholdBP)
 	if !assessment.InputTruncated {
 		t.Fatal("expected bounded semantic input truncation evidence")
+	}
+}
+
+func TestSemanticAssessmentScansThreatBeyondFirstWindow(t *testing.T) {
+	detector, unavailable := loadSemanticDetector(embeddedSemanticModel, embeddedSemanticModelHash)
+	if unavailable != nil {
+		t.Fatalf("embedded model unavailable: %+v", unavailable)
+	}
+	input := strings.Repeat("ordinary ", detector.model.MaxTokens) + helm241Bypass
+	assessment := detector.Assess(input, detector.model.ThresholdBP)
+	if !assessment.Flagged {
+		t.Fatalf("threat beyond first semantic window was not flagged: %+v", assessment)
+	}
+	if assessment.InputTruncated {
+		t.Fatal("input within the full-coverage bound was marked truncated")
 	}
 }
 

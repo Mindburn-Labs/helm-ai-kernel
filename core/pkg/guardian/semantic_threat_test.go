@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,6 +76,20 @@ func TestGuardianSemanticThreatCanOnlyEscalate(t *testing.T) {
 	}
 	if decision.Verdict == string(contracts.VerdictDeny) {
 		t.Fatal("semantic policy gained DENY authority")
+	}
+}
+
+func TestGuardianEscalatesWhenSemanticCoverageIsTruncated(t *testing.T) {
+	input := strings.Repeat("ordinary ", 4096) + semanticBypass
+	decision, err := semanticGuardian(t, WithSemanticThreatEscalation(10000)).EvaluateDecision(context.Background(), semanticRequest(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Verdict != string(contracts.VerdictEscalate) || decision.ReasonCode != string(contracts.ReasonSemanticThreatEscalate) {
+		t.Fatalf("truncated semantic coverage verdict = %+v, want ESCALATE", decision)
+	}
+	if decision.ThreatScan == nil || decision.ThreatScan.Semantic == nil || !decision.ThreatScan.Semantic.InputTruncated {
+		t.Fatalf("truncation evidence missing from signed decision: %+v", decision.ThreatScan)
 	}
 }
 

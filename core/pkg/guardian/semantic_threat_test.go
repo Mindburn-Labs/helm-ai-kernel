@@ -208,10 +208,7 @@ func TestGuardianSemanticEvidenceIsSignatureBound(t *testing.T) {
 	}
 	decision.ThreatScan.Semantic.MaxBP--
 	valid, err = verifier.VerifyDecision(decision)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if valid {
+	if err == nil && valid {
 		t.Fatal("semantic evidence tampering did not invalidate decision signature")
 	}
 }
@@ -233,10 +230,7 @@ func TestGuardianSemanticEvidenceCannotBeStrippedIntoEffectDigest(t *testing.T) 
 	decision.EffectDigest += ":sha256:" + hex.EncodeToString(sum[:])
 	decision.ThreatScan = nil
 	valid, err := verifier.VerifyDecision(decision)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if valid {
+	if err == nil && valid {
 		t.Fatal("stripped threat evidence was folded into EffectDigest without invalidating the signature")
 	}
 }

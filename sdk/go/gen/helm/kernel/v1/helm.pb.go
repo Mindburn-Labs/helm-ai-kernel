@@ -245,22 +245,25 @@ func (x *Effect) GetBudgetId() string {
 }
 
 type DecisionRecord struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Timestamp          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Verdict            Verdict                `protobuf:"varint,3,opt,name=verdict,proto3,enum=helm.kernel.v1.Verdict" json:"verdict,omitempty"`
-	Reason             string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	ReasonCode         ReasonCode             `protobuf:"varint,5,opt,name=reason_code,json=reasonCode,proto3,enum=helm.kernel.v1.ReasonCode" json:"reason_code,omitempty"`
-	EffectDigest       string                 `protobuf:"bytes,6,opt,name=effect_digest,json=effectDigest,proto3" json:"effect_digest,omitempty"`
-	RequirementSetHash string                 `protobuf:"bytes,7,opt,name=requirement_set_hash,json=requirementSetHash,proto3" json:"requirement_set_hash,omitempty"`
-	Signature          string                 `protobuf:"bytes,8,opt,name=signature,proto3" json:"signature,omitempty"`
-	SignerKeyId        string                 `protobuf:"bytes,9,opt,name=signer_key_id,json=signerKeyId,proto3" json:"signer_key_id,omitempty"`
-	PolicyRef          string                 `protobuf:"bytes,10,opt,name=policy_ref,json=policyRef,proto3" json:"policy_ref,omitempty"`
-	PolicyDecisionHash string                 `protobuf:"bytes,11,opt,name=policy_decision_hash,json=policyDecisionHash,proto3" json:"policy_decision_hash,omitempty"`
-	InputContext       []byte                 `protobuf:"bytes,12,opt,name=input_context,json=inputContext,proto3" json:"input_context,omitempty"`
-	ThreatScan         []byte                 `protobuf:"bytes,13,opt,name=threat_scan,json=threatScan,proto3" json:"threat_scan,omitempty"` // JSON-encoded typed ThreatScanRef covered by the decision signature
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Id                      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Timestamp               *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Verdict                 Verdict                `protobuf:"varint,3,opt,name=verdict,proto3,enum=helm.kernel.v1.Verdict" json:"verdict,omitempty"`
+	Reason                  string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	ReasonCode              ReasonCode             `protobuf:"varint,5,opt,name=reason_code,json=reasonCode,proto3,enum=helm.kernel.v1.ReasonCode" json:"reason_code,omitempty"`
+	EffectDigest            string                 `protobuf:"bytes,6,opt,name=effect_digest,json=effectDigest,proto3" json:"effect_digest,omitempty"`
+	RequirementSetHash      string                 `protobuf:"bytes,7,opt,name=requirement_set_hash,json=requirementSetHash,proto3" json:"requirement_set_hash,omitempty"`
+	Signature               string                 `protobuf:"bytes,8,opt,name=signature,proto3" json:"signature,omitempty"`
+	SignerKeyId             string                 `protobuf:"bytes,9,opt,name=signer_key_id,json=signerKeyId,proto3" json:"signer_key_id,omitempty"`
+	PolicyRef               string                 `protobuf:"bytes,10,opt,name=policy_ref,json=policyRef,proto3" json:"policy_ref,omitempty"`
+	PolicyDecisionHash      string                 `protobuf:"bytes,11,opt,name=policy_decision_hash,json=policyDecisionHash,proto3" json:"policy_decision_hash,omitempty"`
+	InputContext            []byte                 `protobuf:"bytes,12,opt,name=input_context,json=inputContext,proto3" json:"input_context,omitempty"`
+	ThreatScan              []byte                 `protobuf:"bytes,13,opt,name=threat_scan,json=threatScan,proto3" json:"threat_scan,omitempty"`                                            // JSON-encoded typed ThreatScanRef covered by the decision signature
+	SignatureType           string                 `protobuf:"bytes,14,opt,name=signature_type,json=signatureType,proto3" json:"signature_type,omitempty"`                                   // legacy primary signature profile
+	ThreatScanSignature     string                 `protobuf:"bytes,15,opt,name=threat_scan_signature,json=threatScanSignature,proto3" json:"threat_scan_signature,omitempty"`               // signature over the threat-bound decision preimage
+	ThreatScanSignatureType string                 `protobuf:"bytes,16,opt,name=threat_scan_signature_type,json=threatScanSignatureType,proto3" json:"threat_scan_signature_type,omitempty"` // explicit threat-v1 rollout profile
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *DecisionRecord) Reset() {
@@ -382,6 +385,27 @@ func (x *DecisionRecord) GetThreatScan() []byte {
 		return x.ThreatScan
 	}
 	return nil
+}
+
+func (x *DecisionRecord) GetSignatureType() string {
+	if x != nil {
+		return x.SignatureType
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetThreatScanSignature() string {
+	if x != nil {
+		return x.ThreatScanSignature
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetThreatScanSignatureType() string {
+	if x != nil {
+		return x.ThreatScanSignatureType
+	}
+	return ""
 }
 
 type AuthorizedExecutionIntent struct {
@@ -1254,7 +1278,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"effectType\x12\x1b\n" +
 	"\teffect_id\x18\x02 \x01(\tR\beffectId\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x12\x1b\n" +
-	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x92\x04\n" +
+	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\xaa\x05\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1272,7 +1296,10 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\x14policy_decision_hash\x18\v \x01(\tR\x12policyDecisionHash\x12#\n" +
 	"\rinput_context\x18\f \x01(\fR\finputContext\x12\x1f\n" +
 	"\vthreat_scan\x18\r \x01(\fR\n" +
-	"threatScan\"\xca\x02\n" +
+	"threatScan\x12%\n" +
+	"\x0esignature_type\x18\x0e \x01(\tR\rsignatureType\x122\n" +
+	"\x15threat_scan_signature\x18\x0f \x01(\tR\x13threatScanSignature\x12;\n" +
+	"\x1athreat_scan_signature_type\x18\x10 \x01(\tR\x17threatScanSignatureType\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +

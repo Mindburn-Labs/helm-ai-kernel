@@ -31,4 +31,7 @@ message DecisionRecord {
   // evidence. Optional; outside the decision signature until HELM-303.
   string correlation_id = 14;
   bytes threat_scan = 15; // JSON-encoded typed ThreatScanRef covered by the decision signature
+  bytes threat_scan_signature = 16; // versioned signature over the threat-bound decision preimage
+  string signature_type = 17; // legacy primary signature profile
+  string threat_scan_signature_type = 18; // explicit threat-v1 rollout profile
 }

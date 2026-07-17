@@ -229,6 +229,12 @@ export interface DecisionRecord {
   inputContext: Uint8Array;
   /** JSON-encoded typed ThreatScanRef covered by the decision signature */
   threatScan: Uint8Array;
+  /** legacy primary signature profile */
+  signatureType: string;
+  /** signature over the threat-bound decision preimage */
+  threatScanSignature: string;
+  /** explicit threat-v1 rollout profile */
+  threatScanSignatureType: string;
 }
 
 export interface AuthorizedExecutionIntent {
@@ -467,6 +473,9 @@ function createBaseDecisionRecord(): DecisionRecord {
     policyDecisionHash: "",
     inputContext: new Uint8Array(0),
     threatScan: new Uint8Array(0),
+    signatureType: "",
+    threatScanSignature: "",
+    threatScanSignatureType: "",
   };
 }
 
@@ -510,6 +519,15 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     }
     if (message.threatScan.length !== 0) {
       writer.uint32(106).bytes(message.threatScan);
+    }
+    if (message.signatureType !== "") {
+      writer.uint32(114).string(message.signatureType);
+    }
+    if (message.threatScanSignature !== "") {
+      writer.uint32(122).string(message.threatScanSignature);
+    }
+    if (message.threatScanSignatureType !== "") {
+      writer.uint32(130).string(message.threatScanSignatureType);
     }
     return writer;
   },
@@ -625,6 +643,30 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
           message.threatScan = reader.bytes();
           continue;
         }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.signatureType = reader.string();
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.threatScanSignature = reader.string();
+          continue;
+        }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.threatScanSignatureType = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -681,6 +723,21 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
         : isSet(object.threat_scan)
         ? bytesFromBase64(object.threat_scan)
         : new Uint8Array(0),
+      signatureType: isSet(object.signatureType)
+        ? globalThis.String(object.signatureType)
+        : isSet(object.signature_type)
+        ? globalThis.String(object.signature_type)
+        : "",
+      threatScanSignature: isSet(object.threatScanSignature)
+        ? globalThis.String(object.threatScanSignature)
+        : isSet(object.threat_scan_signature)
+        ? globalThis.String(object.threat_scan_signature)
+        : "",
+      threatScanSignatureType: isSet(object.threatScanSignatureType)
+        ? globalThis.String(object.threatScanSignatureType)
+        : isSet(object.threat_scan_signature_type)
+        ? globalThis.String(object.threat_scan_signature_type)
+        : "",
     };
   },
 
@@ -725,6 +782,15 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.threatScan.length !== 0) {
       obj.threatScan = base64FromBytes(message.threatScan);
     }
+    if (message.signatureType !== "") {
+      obj.signatureType = message.signatureType;
+    }
+    if (message.threatScanSignature !== "") {
+      obj.threatScanSignature = message.threatScanSignature;
+    }
+    if (message.threatScanSignatureType !== "") {
+      obj.threatScanSignatureType = message.threatScanSignatureType;
+    }
     return obj;
   },
 
@@ -746,6 +812,9 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     message.policyDecisionHash = object.policyDecisionHash ?? "";
     message.inputContext = object.inputContext ?? new Uint8Array(0);
     message.threatScan = object.threatScan ?? new Uint8Array(0);
+    message.signatureType = object.signatureType ?? "";
+    message.threatScanSignature = object.threatScanSignature ?? "";
+    message.threatScanSignatureType = object.threatScanSignatureType ?? "";
     return message;
   },
 };

@@ -61,7 +61,7 @@ func (v *Ed25519Verifier) VerifyDecision(d *contracts.DecisionRecord) (bool, err
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload, err := canonicalizeDecisionRecord(d)
+	legacyPayload, threatPayload, err := decisionVerificationPayloads(d, SigPrefixEd25519, SigPrefixEd25519ThreatV1)
 	if err != nil {
 		return false, err
 	}
@@ -69,7 +69,17 @@ func (v *Ed25519Verifier) VerifyDecision(d *contracts.DecisionRecord) (bool, err
 	if err != nil {
 		return false, err
 	}
-	return v.Verify([]byte(payload), sig), nil
+	if !v.Verify([]byte(legacyPayload), sig) {
+		return false, nil
+	}
+	if threatPayload == "" {
+		return true, nil
+	}
+	threatSignature, err := hex.DecodeString(d.ThreatScanSignature)
+	if err != nil {
+		return false, err
+	}
+	return v.Verify([]byte(threatPayload), threatSignature), nil
 }
 
 func (v *Ed25519Verifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, error) {

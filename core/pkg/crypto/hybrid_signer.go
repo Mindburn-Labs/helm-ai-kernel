@@ -29,7 +29,10 @@ const (
 )
 
 // SigPrefixHybrid is the signature type prefix for hybrid Ed25519+ML-DSA-65.
-const SigPrefixHybrid = "Hybrid-Ed25519-MLDSA65"
+const (
+	SigPrefixHybrid         = "Hybrid-Ed25519-MLDSA65"
+	SigPrefixHybridThreatV1 = "Hybrid-Ed25519-MLDSA65-threat-v1"
+)
 
 // HybridSigner wraps an Ed25519Signer and an MLDSASigner, producing composite
 // signatures that bind both classical and post-quantum proofs to every artifact.
@@ -98,19 +101,30 @@ func (h *HybridSigner) PublicKeyBytes() []byte {
 }
 
 // SignDecision signs a DecisionRecord using both Ed25519 and ML-DSA-65.
-// The composite signature is stored in d.Signature and the SignatureType is
-// set to "Hybrid-Ed25519-MLDSA65:<keyID>".
+// Threat-bearing decisions keep a legacy-preimage composite in Signature for
+// rolling compatibility and add a second composite over the threat-v1 preimage.
 func (h *HybridSigner) SignDecision(d *contracts.DecisionRecord) error {
-	payload, err := canonicalizeDecisionRecord(d)
+	legacyPayload, threatPayload, err := decisionSigningPayloads(d)
 	if err != nil {
 		return err
 	}
-	sig, err := h.Sign([]byte(payload))
+	legacySignature, err := h.Sign([]byte(legacyPayload))
 	if err != nil {
 		return err
 	}
-	d.Signature = sig
+	threatSignature := ""
+	if threatPayload != "" {
+		threatSignature, err = h.Sign([]byte(threatPayload))
+		if err != nil {
+			return err
+		}
+	}
+	d.Signature = legacySignature
+	d.ThreatScanSignature = threatSignature
 	d.SignatureType = SigPrefixHybrid + SigSeparator + h.keyID
+	if threatSignature != "" {
+		d.ThreatScanSignatureType = SigPrefixHybridThreatV1 + SigSeparator + h.keyID
+	}
 	return nil
 }
 

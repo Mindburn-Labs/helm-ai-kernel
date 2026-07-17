@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-23T19:39:31Z
+# Generated: 2026-07-23T19:39:45Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -164,7 +164,7 @@ a4d12be0b1401a4ea024f4eacb1f2e2c6f6809356f1060890828812aa8cbb1cd  core/pkg/contr
 3670d455717968e63e8dbcf0c38f79812d0bf72cb7eb234a51b305a27aede0c4  core/pkg/contracts/counterfactual_receipt.go
 ed4994cdbba2b72e5626b91ade9226920896458d6ef4b3c62e127c1fce18e139  core/pkg/contracts/counterfactual_receipt_test.go
 b6f785f573dc93abbfcfbcb3ab065fbdfbd681378889f36a2752bca01d59ca03  core/pkg/contracts/decision.go
-52de96ac3cad7fc04a763a3c3871a80c9309badd87c25a17108792b8ac800a9d  core/pkg/contracts/decision.proto
+1bdabe935d7436a53a04ddc84e5c5c265270afe4632b9ec1e3d2d17466979fa1  core/pkg/contracts/decision.proto
 3e47d320d74867aacd97603f6007a47ba4e7927df8b0a185769566791e74c4b3  core/pkg/contracts/decision_request.go
 e23388a6c24921b11239be71d1b34dd6c3925756a6900ac02c09c8101b9b0cc1  core/pkg/contracts/decision_request_test.go
 7e0c4b7d9d927a3dd649affad9eb50bc4932e25bbba3e494fa34938397ef76e7  core/pkg/contracts/delegation_proof.go
@@ -963,7 +963,7 @@ c0ca0052768b38ddd185451616af6a411f6700d2f55d61544e6b6a327b1ce209  protocols/prot
 2d49a81d17c37627dedf1093504345280a437250fe8edaadb5a7e236768a12f4  protocols/proto/helm/authority/v1/authority.proto
 c28f8d64a15c801dff22c984b977f5a3f899684653ab4307386b842cd0b467bb  protocols/proto/helm/effects/v1/effects.proto
 952f916f65ce4c1bac02c9d93bc7bfd661252d10e3454c1e469cd715c108fe6c  protocols/proto/helm/intervention/v1/intervention.proto
-a0a2dbd4c7fd3d1d79a30165f53ec8028777cdd02f45914cd02c25e786dcf6f3  protocols/proto/helm/kernel/v1/helm.proto
+2536134681195f12b77e294e016463957f3050912a98f7ea8c18149adf7ec4c4  protocols/proto/helm/kernel/v1/helm.proto
 f294ad5b8fcc429072bd16a1dcef407e4884e843c6099c5de8d1ce8ec3cc0f2c  protocols/proto/helm/truth/v1/truth.proto
 6e2ee245f428faa27dbb15747f17cace76a0edabc72d1023b99120aa2a29f925  protocols/spec/PROTOCOL.md
 ec9221b14f36813ced2f351d69a54b927cd234e4d929d8f0feba3d8ba7b6cb5d  protocols/spec/agent-provenance-pack-v1.md

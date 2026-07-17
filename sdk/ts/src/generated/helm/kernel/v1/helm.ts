@@ -227,8 +227,6 @@ export interface DecisionRecord {
   policyRef: string;
   policyDecisionHash: string;
   inputContext: Uint8Array;
-  /** JSON-encoded typed ThreatScanRef covered by the decision signature */
-  threatScan: Uint8Array;
 }
 
 export interface AuthorizedExecutionIntent {
@@ -466,7 +464,6 @@ function createBaseDecisionRecord(): DecisionRecord {
     policyRef: "",
     policyDecisionHash: "",
     inputContext: new Uint8Array(0),
-    threatScan: new Uint8Array(0),
   };
 }
 
@@ -507,9 +504,6 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     }
     if (message.inputContext.length !== 0) {
       writer.uint32(98).bytes(message.inputContext);
-    }
-    if (message.threatScan.length !== 0) {
-      writer.uint32(106).bytes(message.threatScan);
     }
     return writer;
   },
@@ -617,14 +611,6 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
           message.inputContext = reader.bytes();
           continue;
         }
-        case 13: {
-          if (tag !== 106) {
-            break;
-          }
-
-          message.threatScan = reader.bytes();
-          continue;
-        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -676,11 +662,6 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
         : isSet(object.input_context)
         ? bytesFromBase64(object.input_context)
         : new Uint8Array(0),
-      threatScan: isSet(object.threatScan)
-        ? bytesFromBase64(object.threatScan)
-        : isSet(object.threat_scan)
-        ? bytesFromBase64(object.threat_scan)
-        : new Uint8Array(0),
     };
   },
 
@@ -722,9 +703,6 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.inputContext.length !== 0) {
       obj.inputContext = base64FromBytes(message.inputContext);
     }
-    if (message.threatScan.length !== 0) {
-      obj.threatScan = base64FromBytes(message.threatScan);
-    }
     return obj;
   },
 
@@ -745,7 +723,6 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     message.policyRef = object.policyRef ?? "";
     message.policyDecisionHash = object.policyDecisionHash ?? "";
     message.inputContext = object.inputContext ?? new Uint8Array(0);
-    message.threatScan = object.threatScan ?? new Uint8Array(0);
     return message;
   },
 };

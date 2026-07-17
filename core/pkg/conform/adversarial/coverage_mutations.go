@@ -54,6 +54,18 @@ func runCoverageMutation(evidenceDir string, suite *Suite, mutation coverageMuta
 	return true, false
 }
 
+func suitePassesExpectedTest(result *SuiteResult, expectedTestID string) bool {
+	if result == nil || !result.Pass || expectedTestID == "" {
+		return false
+	}
+	for _, test := range result.TestResults {
+		if test.TestID == expectedTestID {
+			return test.Pass
+		}
+	}
+	return false
+}
+
 func mutateReceiptSequenceGap(evidenceDir string) bool {
 	files := receiptFiles(evidenceDir)
 	var targetPath string

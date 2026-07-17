@@ -1,6 +1,11 @@
 package adversarial
 
+// quantum_posture: SHA-256 is used only to detect a torn local snapshot read;
+// campaign authorization remains externally rooted and makes no PQ claim.
+
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -102,7 +107,8 @@ func copyCoverageMutationTree(source, destination string) error {
 			_ = input.Close()
 			return err
 		}
-		copied, copyErr := io.Copy(output, io.LimitReader(input, info.Size()+1))
+		copiedHasher := sha256.New()
+		copied, copyErr := io.Copy(io.MultiWriter(output, copiedHasher), io.LimitReader(input, info.Size()+1))
 		closeOutputErr := output.Close()
 		closeInputErr := input.Close()
 		switch {
@@ -113,6 +119,28 @@ func copyCoverageMutationTree(source, destination string) error {
 		case closeInputErr != nil:
 			return closeInputErr
 		case copied != info.Size():
+			return fmt.Errorf("EvidencePack changed while snapshotting: %s", entry.Name())
+		}
+		verificationInput, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		verificationInfo, statErr := verificationInput.Stat()
+		if statErr != nil || !os.SameFile(info, verificationInfo) || !verificationInfo.Mode().IsRegular() || verificationInfo.Size() != info.Size() || !verificationInfo.ModTime().Equal(info.ModTime()) {
+			_ = verificationInput.Close()
+			return fmt.Errorf("EvidencePack changed while snapshotting: %s", entry.Name())
+		}
+		verificationHasher := sha256.New()
+		verified, verificationErr := io.Copy(verificationHasher, io.LimitReader(verificationInput, info.Size()+1))
+		closeVerificationErr := verificationInput.Close()
+		switch {
+		case verificationErr != nil:
+			return verificationErr
+		case closeVerificationErr != nil:
+			return closeVerificationErr
+		case verified != info.Size():
+			return fmt.Errorf("EvidencePack changed while snapshotting: %s", entry.Name())
+		case !bytes.Equal(copiedHasher.Sum(nil), verificationHasher.Sum(nil)):
 			return fmt.Errorf("EvidencePack changed while snapshotting: %s", entry.Name())
 		}
 		return nil

@@ -58,6 +58,11 @@ type VerificationOptions struct {
 	VerifiedEvidenceIndexHash  string
 	VerifiedEvidenceMerkleRoot string
 	VerifiedEvidenceEntryCount int
+	// AllowVerifiedConformanceSignature authorizes omission of the detached
+	// conformance signature from the detector workspace only after the caller
+	// has verified it against an external trusted key. It never establishes
+	// campaign trust and is never consumed by adversarial detectors.
+	AllowVerifiedConformanceSignature bool
 }
 
 const (

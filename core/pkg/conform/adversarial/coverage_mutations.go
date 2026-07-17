@@ -56,7 +56,7 @@ func newCoverageMutationWorkspace(evidenceDir string, opts VerificationOptions) 
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 	mutationRoot := filepath.Join(tempDir, "evidence-pack")
-	if err := copyCoverageMutationTree(evidenceDir, mutationRoot); err != nil {
+	if err := copyCoverageMutationTree(evidenceDir, mutationRoot, opts.AllowVerifiedConformanceSignature); err != nil {
 		cleanup()
 		return "", func() {}, err
 	}
@@ -105,7 +105,7 @@ func canonicalSHA256Digest(name, value string) (string, error) {
 	return value, nil
 }
 
-func copyCoverageMutationTree(source, destination string) error {
+func copyCoverageMutationTree(source, destination string, omitVerifiedConformanceSignature bool) error {
 	var copiedBytes int64
 	entries := 0
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
@@ -133,6 +133,9 @@ func copyCoverageMutationTree(source, destination string) error {
 		}
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("mutation snapshot rejects non-regular file: %s", entry.Name())
+		}
+		if omitVerifiedConformanceSignature && filepath.ToSlash(rel) == "07_ATTESTATIONS/conformance_report.sig" {
+			return nil
 		}
 		copiedBytes += info.Size()
 		if info.Size() > maxCoverageMutationBytes || copiedBytes > maxCoverageMutationBytes {

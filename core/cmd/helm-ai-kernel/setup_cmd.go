@@ -657,6 +657,13 @@ func installCodexProjectSetup(projectDir *codexProjectDir, opts setupOptions, bi
 }
 
 func removeCodexProjectSetup(projectDir *codexProjectDir, bin string) error {
+	blocked, err := codexProjectRemovalBlocked(projectDir, bin)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return fmt.Errorf("refuse to modify ambiguous Codex HELM setup; manual remediation required")
+	}
 	config, err := prepareCodexProjectMCPRemoval(projectDir, bin)
 	if err != nil {
 		return err
@@ -676,6 +683,18 @@ func removeCodexProjectSetup(projectDir *codexProjectDir, bin string) error {
 		}
 	}
 	return nil
+}
+
+func codexProjectRemovalBlocked(projectDir *codexProjectDir, bin string) (bool, error) {
+	ownsHook, hasAmbiguousHook, err := codexProjectHookOwnershipState(projectDir, bin)
+	if err != nil {
+		return false, err
+	}
+	ownsMCP, hasAmbiguousMCP, err := codexProjectMCPOwnershipState(projectDir, bin)
+	if err != nil {
+		return false, err
+	}
+	return (ownsHook || ownsMCP) && (hasAmbiguousHook || hasAmbiguousMCP), nil
 }
 
 func setupMCPInstalled(opts setupOptions, path, bin string) bool {
@@ -957,6 +976,22 @@ func prepareCodexProjectHookRemoval(projectDir *codexProjectDir, bin string) ([]
 	if err != nil {
 		return nil, err
 	}
+	owned, ambiguous := false, false
+	for _, item := range pre {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range arrayValue(obj, "hooks") {
+			owned = owned || isOwnedCodexHook(hook, bin)
+			ambiguous = ambiguous || isAmbiguousCodexHook(hook, bin)
+		}
+	}
+	if owned && ambiguous {
+		// Do not partially remove a mixed file: the foreign HELM-shaped hook
+		// requires manual remediation before any Codex config is written.
+		return nil, fmt.Errorf("refuse to modify ambiguous Codex HELM hook; manual remediation required")
+	}
 	changed := false
 	filtered := make([]any, 0, len(pre))
 	for _, item := range pre {
@@ -1004,6 +1039,33 @@ func codexProjectHookInstalled(projectDir *codexProjectDir, bin, command string)
 		return false, err
 	}
 	return currentOwnedCodexHookPresent(pre, bin, command), nil
+}
+
+func codexProjectHookOwnershipState(projectDir *codexProjectDir, bin string) (bool, bool, error) {
+	_, _, pre, err := readCodexProjectHooks(projectDir)
+	if os.IsNotExist(err) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	ownsHook := false
+	hasAmbiguousHook := false
+	for _, item := range pre {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range arrayValue(obj, "hooks") {
+			if isOwnedCodexHook(hook, bin) {
+				ownsHook = true
+			}
+			if isAmbiguousCodexHook(hook, bin) {
+				hasAmbiguousHook = true
+			}
+		}
+	}
+	return ownsHook, hasAmbiguousHook, nil
 }
 
 func readCodexProjectHooks(projectDir *codexProjectDir) (map[string]any, map[string]any, []any, error) {
@@ -1307,6 +1369,29 @@ func prepareCodexProjectMCPRemoval(projectDir *codexProjectDir, bin string) ([]b
 		return nil, fmt.Errorf("validate updated Codex config: %w", err)
 	}
 	return []byte(next), nil
+}
+
+func codexProjectMCPOwnershipState(projectDir *codexProjectDir, bin string) (bool, bool, error) {
+	raw, err := projectDir.readRegularFile("config.toml")
+	if os.IsNotExist(err) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	if err := validateCodexProjectTOML(string(raw)); err != nil {
+		return false, false, fmt.Errorf("parse existing Codex config: %w", err)
+	}
+	var config codexProjectConfig
+	if _, err := toml.Decode(string(raw), &config); err != nil {
+		return false, false, fmt.Errorf("parse existing Codex config: %w", err)
+	}
+	server, exists := config.MCPServers[setupMCPServerName]
+	if !exists {
+		return false, false, nil
+	}
+	ownsMCP := isOwnedCodexMCPServer(server, bin)
+	return ownsMCP, !ownsMCP, nil
 }
 
 type codexProjectConfig struct {

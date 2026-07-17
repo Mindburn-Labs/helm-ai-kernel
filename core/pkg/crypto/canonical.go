@@ -4,6 +4,8 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -48,8 +50,24 @@ const (
 // CanonicalizeDecision creates a canonical string representation of a decision record for signing.
 // V2: binds all security-relevant fields including PhenotypeHash, PolicyContentHash, EffectDigest (DRIFT-7 fix).
 // Empty security-relevant hashes are permitted for backward compatibility but logged as a warning.
-func CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest string) string {
-	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s", id, SigSeparator, verdict, SigSeparator, reason, SigSeparator, phenotypeHash, SigSeparator, policyContentHash, SigSeparator, effectDigest)
+func CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest string, threatEvidenceHash ...string) string {
+	base := fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s", id, SigSeparator, verdict, SigSeparator, reason, SigSeparator, phenotypeHash, SigSeparator, policyContentHash, SigSeparator, effectDigest)
+	if len(threatEvidenceHash) == 0 || threatEvidenceHash[0] == "" {
+		return base
+	}
+	return base + SigSeparator + threatEvidenceHash[0]
+}
+
+func decisionThreatEvidenceHash(decision *contracts.DecisionRecord) string {
+	if decision == nil || decision.ThreatScan == nil {
+		return ""
+	}
+	encoded, err := CanonicalMarshal(decision.ThreatScan)
+	if err != nil {
+		return "sha256:invalid"
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // CanonicalizeDecisionStrict is like CanonicalizeDecision but returns an error if any

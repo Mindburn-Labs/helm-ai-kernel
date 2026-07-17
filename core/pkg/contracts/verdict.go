@@ -100,6 +100,7 @@ const (
 	ReasonTaintedInvokeDeny          ReasonCode = "TAINTED_PRIVILEGED_INVOKE_DENY"
 	ReasonTaintedEgressDeny          ReasonCode = "TAINTED_DATA_EGRESS_DENY"
 	ReasonTaintedEscalate            ReasonCode = "TAINTED_HIGH_RISK_ESCALATE"
+	ReasonSemanticThreatEscalate     ReasonCode = "SEMANTIC_THREAT_REVIEW_REQUIRED"
 
 	// ── TON / Acton Connector Reasons (v1.3) ──────────────────
 	ReasonTONActonUnknownCommand             ReasonCode = "ERR_TON_ACTON_UNKNOWN_COMMAND"
@@ -218,6 +219,7 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonTaintedInvokeDeny,
 		ReasonTaintedEgressDeny,
 		ReasonTaintedEscalate,
+		ReasonSemanticThreatEscalate,
 		ReasonTONActonUnknownCommand,
 		ReasonTONActonUnsupportedVersion,
 		ReasonTONTolkCompilerUnpinned,

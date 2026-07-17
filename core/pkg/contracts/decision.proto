@@ -30,4 +30,5 @@ message DecisionRecord {
   // for — the stable join key across lifecycle events, receipts, and
   // evidence. Optional; outside the decision signature until HELM-303.
   string correlation_id = 14;
+  bytes threat_scan = 15; // JSON-encoded typed ThreatScanRef covered by the decision signature
 }

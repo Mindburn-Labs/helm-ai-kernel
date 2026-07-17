@@ -52,6 +52,9 @@ type DecisionRecord struct {
 	Reason         string         `json:"reason"`                  // Human-readable explanation
 	ReasonCode     string         `json:"reason_code,omitempty"`   // Machine-readable registry code
 	InputContext   map[string]any `json:"input_context,omitempty"` // For explainability
+	// ThreatScan is typed evidence covered by the decision signature. InputContext
+	// remains explainability metadata and is not itself a signature preimage.
+	ThreatScan *ThreatScanRef `json:"threat_scan,omitempty"`
 	// Session Risk Memory fields bind trajectory-level authorization state to the signed decision.
 	TrajectoryRiskScore    float64 `json:"trajectory_risk_score,omitempty"`
 	SessionCentroidHash    string  `json:"session_centroid_hash,omitempty"`

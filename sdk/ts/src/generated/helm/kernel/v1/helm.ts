@@ -227,12 +227,8 @@ export interface DecisionRecord {
   policyRef: string;
   policyDecisionHash: string;
   inputContext: Uint8Array;
-  /**
-   * Product request identity (X-Helm-Correlation-ID) this decision was made
-   * for — the stable join key across lifecycle events, receipts, and
-   * evidence. Optional; outside the decision signature until HELM-303.
-   */
-  correlationId: string;
+  /** JSON-encoded typed ThreatScanRef covered by the decision signature */
+  threatScan: Uint8Array;
 }
 
 export interface AuthorizedExecutionIntent {
@@ -263,11 +259,6 @@ export interface Receipt {
   payloadHash: string;
   reasonCode: ReasonCode;
   metadata: { [key: string]: string };
-  /**
-   * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-   * to. Optional; outside the receipt signature until HELM-303.
-   */
-  correlationId: string;
 }
 
 export interface Receipt_MetadataEntry {
@@ -475,7 +466,7 @@ function createBaseDecisionRecord(): DecisionRecord {
     policyRef: "",
     policyDecisionHash: "",
     inputContext: new Uint8Array(0),
-    correlationId: "",
+    threatScan: new Uint8Array(0),
   };
 }
 
@@ -517,8 +508,8 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.inputContext.length !== 0) {
       writer.uint32(98).bytes(message.inputContext);
     }
-    if (message.correlationId !== "") {
-      writer.uint32(106).string(message.correlationId);
+    if (message.threatScan.length !== 0) {
+      writer.uint32(106).bytes(message.threatScan);
     }
     return writer;
   },
@@ -631,7 +622,7 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
             break;
           }
 
-          message.correlationId = reader.string();
+          message.threatScan = reader.bytes();
           continue;
         }
       }
@@ -685,11 +676,11 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
         : isSet(object.input_context)
         ? bytesFromBase64(object.input_context)
         : new Uint8Array(0),
-      correlationId: isSet(object.correlationId)
-        ? globalThis.String(object.correlationId)
-        : isSet(object.correlation_id)
-        ? globalThis.String(object.correlation_id)
-        : "",
+      threatScan: isSet(object.threatScan)
+        ? bytesFromBase64(object.threatScan)
+        : isSet(object.threat_scan)
+        ? bytesFromBase64(object.threat_scan)
+        : new Uint8Array(0),
     };
   },
 
@@ -731,8 +722,8 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.inputContext.length !== 0) {
       obj.inputContext = base64FromBytes(message.inputContext);
     }
-    if (message.correlationId !== "") {
-      obj.correlationId = message.correlationId;
+    if (message.threatScan.length !== 0) {
+      obj.threatScan = base64FromBytes(message.threatScan);
     }
     return obj;
   },
@@ -754,7 +745,7 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     message.policyRef = object.policyRef ?? "";
     message.policyDecisionHash = object.policyDecisionHash ?? "";
     message.inputContext = object.inputContext ?? new Uint8Array(0);
-    message.correlationId = object.correlationId ?? "";
+    message.threatScan = object.threatScan ?? new Uint8Array(0);
     return message;
   },
 };
@@ -982,7 +973,6 @@ function createBaseReceipt(): Receipt {
     payloadHash: "",
     reasonCode: 0,
     metadata: {},
-    correlationId: "",
   };
 }
 
@@ -1036,9 +1026,6 @@ export const Receipt: MessageFns<Receipt> = {
     globalThis.Object.entries(message.metadata).forEach(([key, value]: [string, string]) => {
       Receipt_MetadataEntry.encode({ key: key as any, value }, writer.uint32(130).fork()).join();
     });
-    if (message.correlationId !== "") {
-      writer.uint32(138).string(message.correlationId);
-    }
     return writer;
   },
 
@@ -1180,14 +1167,6 @@ export const Receipt: MessageFns<Receipt> = {
           }
           continue;
         }
-        case 17: {
-          if (tag !== 138) {
-            break;
-          }
-
-          message.correlationId = reader.string();
-          continue;
-        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1255,11 +1234,6 @@ export const Receipt: MessageFns<Receipt> = {
           {},
         )
         : {},
-      correlationId: isSet(object.correlationId)
-        ? globalThis.String(object.correlationId)
-        : isSet(object.correlation_id)
-        ? globalThis.String(object.correlation_id)
-        : "",
     };
   },
 
@@ -1319,9 +1293,6 @@ export const Receipt: MessageFns<Receipt> = {
         });
       }
     }
-    if (message.correlationId !== "") {
-      obj.correlationId = message.correlationId;
-    }
     return obj;
   },
 
@@ -1354,7 +1325,6 @@ export const Receipt: MessageFns<Receipt> = {
       },
       {},
     );
-    message.correlationId = object.correlationId ?? "";
     return message;
   },
 };

@@ -73,14 +73,15 @@ const (
 	ReasonDelegationScopeViolation = "DELEGATION_SCOPE_VIOLATION" // delegate exceeded session scope
 
 	// --- Threat Signal (v1.2.0) ---
-	ReasonTaintedInputDeny           = "TAINTED_INPUT_HIGH_RISK_DENY"   // high-risk effect from tainted source
-	ReasonPromptInjectionDetected    = "PROMPT_INJECTION_DETECTED"      // prompt injection pattern found
-	ReasonUnicodeObfuscationDetected = "UNICODE_OBFUSCATION_DETECTED"   // Unicode obfuscation detected
-	ReasonTaintedCredentialDeny      = "TAINTED_CREDENTIAL_ACCESS_DENY" // credential access from tainted source
-	ReasonTaintedPublishDeny         = "TAINTED_SOFTWARE_PUBLISH_DENY"  // software publish from tainted source
-	ReasonTaintedInvokeDeny          = "TAINTED_PRIVILEGED_INVOKE_DENY" // privileged invoke from tainted source
-	ReasonTaintedEgressDeny          = "TAINTED_DATA_EGRESS_DENY"       // data egress from tainted source
-	ReasonTaintedEscalate            = "TAINTED_HIGH_RISK_ESCALATE"     // high-risk effect requires approval
+	ReasonTaintedInputDeny           = "TAINTED_INPUT_HIGH_RISK_DENY"    // high-risk effect from tainted source
+	ReasonPromptInjectionDetected    = "PROMPT_INJECTION_DETECTED"       // prompt injection pattern found
+	ReasonUnicodeObfuscationDetected = "UNICODE_OBFUSCATION_DETECTED"    // Unicode obfuscation detected
+	ReasonTaintedCredentialDeny      = "TAINTED_CREDENTIAL_ACCESS_DENY"  // credential access from tainted source
+	ReasonTaintedPublishDeny         = "TAINTED_SOFTWARE_PUBLISH_DENY"   // software publish from tainted source
+	ReasonTaintedInvokeDeny          = "TAINTED_PRIVILEGED_INVOKE_DENY"  // privileged invoke from tainted source
+	ReasonTaintedEgressDeny          = "TAINTED_DATA_EGRESS_DENY"        // data egress from tainted source
+	ReasonTaintedEscalate            = "TAINTED_HIGH_RISK_ESCALATE"      // high-risk effect requires approval
+	ReasonSemanticThreatEscalate     = "SEMANTIC_THREAT_REVIEW_REQUIRED" // advisory semantic signal requires review
 
 	// --- L3 Conformance (v1.4.0) ---
 	ReasonSignedEvidencePackInvalid     = "SIGNED_EVIDENCE_PACK_INVALID"     // evidence pack signature invalid or missing

@@ -37,11 +37,9 @@ pub struct DecisionRecord {
     pub policy_decision_hash: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "12")]
     pub input_context: ::prost::alloc::vec::Vec<u8>,
-    /// Product request identity (X-Helm-Correlation-ID) this decision was made
-    /// for — the stable join key across lifecycle events, receipts, and
-    /// evidence. Optional; outside the decision signature until HELM-303.
-    #[prost(string, tag = "13")]
-    pub correlation_id: ::prost::alloc::string::String,
+    /// JSON-encoded typed ThreatScanRef covered by the decision signature
+    #[prost(bytes = "vec", tag = "13")]
+    pub threat_scan: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizedExecutionIntent {
@@ -99,10 +97,6 @@ pub struct Receipt {
         ::prost::alloc::string::String,
         ::prost::alloc::string::String,
     >,
-    /// Product request identity (X-Helm-Correlation-ID) this receipt belongs
-    /// to. Optional; outside the receipt signature until HELM-303.
-    #[prost(string, tag = "17")]
-    pub correlation_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PdpRequest {

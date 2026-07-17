@@ -1471,27 +1471,13 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
 
     /**
      * <pre>
-     * Product request identity (X-Helm-Correlation-ID) this decision was made
-     * for — the stable join key across lifecycle events, receipts, and
-     * evidence. Optional; outside the decision signature until HELM-303.
+     * JSON-encoded typed ThreatScanRef covered by the decision signature
      * </pre>
      *
-     * <code>string correlation_id = 13;</code>
-     * @return The correlationId.
+     * <code>bytes threat_scan = 13;</code>
+     * @return The threatScan.
      */
-    java.lang.String getCorrelationId();
-    /**
-     * <pre>
-     * Product request identity (X-Helm-Correlation-ID) this decision was made
-     * for — the stable join key across lifecycle events, receipts, and
-     * evidence. Optional; outside the decision signature until HELM-303.
-     * </pre>
-     *
-     * <code>string correlation_id = 13;</code>
-     * @return The bytes for correlationId.
-     */
-    com.google.protobuf.ByteString
-        getCorrelationIdBytes();
+    com.google.protobuf.ByteString getThreatScan();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.DecisionRecord}
@@ -1526,7 +1512,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       policyRef_ = "";
       policyDecisionHash_ = "";
       inputContext_ = com.google.protobuf.ByteString.EMPTY;
-      correlationId_ = "";
+      threatScan_ = com.google.protobuf.ByteString.EMPTY;
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -1933,55 +1919,19 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       return inputContext_;
     }
 
-    public static final int CORRELATION_ID_FIELD_NUMBER = 13;
-    @SuppressWarnings("serial")
-    private volatile java.lang.Object correlationId_ = "";
+    public static final int THREAT_SCAN_FIELD_NUMBER = 13;
+    private com.google.protobuf.ByteString threatScan_ = com.google.protobuf.ByteString.EMPTY;
     /**
      * <pre>
-     * Product request identity (X-Helm-Correlation-ID) this decision was made
-     * for — the stable join key across lifecycle events, receipts, and
-     * evidence. Optional; outside the decision signature until HELM-303.
+     * JSON-encoded typed ThreatScanRef covered by the decision signature
      * </pre>
      *
-     * <code>string correlation_id = 13;</code>
-     * @return The correlationId.
+     * <code>bytes threat_scan = 13;</code>
+     * @return The threatScan.
      */
     @java.lang.Override
-    public java.lang.String getCorrelationId() {
-      java.lang.Object ref = correlationId_;
-      if (ref instanceof java.lang.String) {
-        return (java.lang.String) ref;
-      } else {
-        com.google.protobuf.ByteString bs = 
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        correlationId_ = s;
-        return s;
-      }
-    }
-    /**
-     * <pre>
-     * Product request identity (X-Helm-Correlation-ID) this decision was made
-     * for — the stable join key across lifecycle events, receipts, and
-     * evidence. Optional; outside the decision signature until HELM-303.
-     * </pre>
-     *
-     * <code>string correlation_id = 13;</code>
-     * @return The bytes for correlationId.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getCorrelationIdBytes() {
-      java.lang.Object ref = correlationId_;
-      if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        correlationId_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
+    public com.google.protobuf.ByteString getThreatScan() {
+      return threatScan_;
     }
 
     private byte memoizedIsInitialized = -1;
@@ -2034,8 +1984,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (!inputContext_.isEmpty()) {
         output.writeBytes(12, inputContext_);
       }
-      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(correlationId_)) {
-        com.google.protobuf.GeneratedMessage.writeString(output, 13, correlationId_);
+      if (!threatScan_.isEmpty()) {
+        output.writeBytes(13, threatScan_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -2086,8 +2036,9 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(12, inputContext_);
       }
-      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(correlationId_)) {
-        size += com.google.protobuf.GeneratedMessage.computeStringSize(13, correlationId_);
+      if (!threatScan_.isEmpty()) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(13, threatScan_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -2129,8 +2080,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           .equals(other.getPolicyDecisionHash())) return false;
       if (!getInputContext()
           .equals(other.getInputContext())) return false;
-      if (!getCorrelationId()
-          .equals(other.getCorrelationId())) return false;
+      if (!getThreatScan()
+          .equals(other.getThreatScan())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -2168,8 +2119,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       hash = (53 * hash) + getPolicyDecisionHash().hashCode();
       hash = (37 * hash) + INPUT_CONTEXT_FIELD_NUMBER;
       hash = (53 * hash) + getInputContext().hashCode();
-      hash = (37 * hash) + CORRELATION_ID_FIELD_NUMBER;
-      hash = (53 * hash) + getCorrelationId().hashCode();
+      hash = (37 * hash) + THREAT_SCAN_FIELD_NUMBER;
+      hash = (53 * hash) + getThreatScan().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -2323,7 +2274,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         policyRef_ = "";
         policyDecisionHash_ = "";
         inputContext_ = com.google.protobuf.ByteString.EMPTY;
-        correlationId_ = "";
+        threatScan_ = com.google.protobuf.ByteString.EMPTY;
         return this;
       }
 
@@ -2398,7 +2349,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           result.inputContext_ = inputContext_;
         }
         if (((from_bitField0_ & 0x00001000) != 0)) {
-          result.correlationId_ = correlationId_;
+          result.threatScan_ = threatScan_;
         }
         result.bitField0_ |= to_bitField0_;
       }
@@ -2467,10 +2418,8 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         if (!other.getInputContext().isEmpty()) {
           setInputContext(other.getInputContext());
         }
-        if (!other.getCorrelationId().isEmpty()) {
-          correlationId_ = other.correlationId_;
-          bitField0_ |= 0x00001000;
-          onChanged();
+        if (!other.getThreatScan().isEmpty()) {
+          setThreatScan(other.getThreatScan());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -2561,7 +2510,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
                 break;
               } // case 98
               case 106: {
-                correlationId_ = input.readStringRequireUtf8();
+                threatScan_ = input.readBytes();
                 bitField0_ |= 0x00001000;
                 break;
               } // case 106
@@ -3415,104 +3364,46 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         return this;
       }
 
-      private java.lang.Object correlationId_ = "";
+      private com.google.protobuf.ByteString threatScan_ = com.google.protobuf.ByteString.EMPTY;
       /**
        * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this decision was made
-       * for — the stable join key across lifecycle events, receipts, and
-       * evidence. Optional; outside the decision signature until HELM-303.
+       * JSON-encoded typed ThreatScanRef covered by the decision signature
        * </pre>
        *
-       * <code>string correlation_id = 13;</code>
-       * @return The correlationId.
+       * <code>bytes threat_scan = 13;</code>
+       * @return The threatScan.
        */
-      public java.lang.String getCorrelationId() {
-        java.lang.Object ref = correlationId_;
-        if (!(ref instanceof java.lang.String)) {
-          com.google.protobuf.ByteString bs =
-              (com.google.protobuf.ByteString) ref;
-          java.lang.String s = bs.toStringUtf8();
-          correlationId_ = s;
-          return s;
-        } else {
-          return (java.lang.String) ref;
-        }
+      @java.lang.Override
+      public com.google.protobuf.ByteString getThreatScan() {
+        return threatScan_;
       }
       /**
        * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this decision was made
-       * for — the stable join key across lifecycle events, receipts, and
-       * evidence. Optional; outside the decision signature until HELM-303.
+       * JSON-encoded typed ThreatScanRef covered by the decision signature
        * </pre>
        *
-       * <code>string correlation_id = 13;</code>
-       * @return The bytes for correlationId.
-       */
-      public com.google.protobuf.ByteString
-          getCorrelationIdBytes() {
-        java.lang.Object ref = correlationId_;
-        if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
-              com.google.protobuf.ByteString.copyFromUtf8(
-                  (java.lang.String) ref);
-          correlationId_ = b;
-          return b;
-        } else {
-          return (com.google.protobuf.ByteString) ref;
-        }
-      }
-      /**
-       * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this decision was made
-       * for — the stable join key across lifecycle events, receipts, and
-       * evidence. Optional; outside the decision signature until HELM-303.
-       * </pre>
-       *
-       * <code>string correlation_id = 13;</code>
-       * @param value The correlationId to set.
+       * <code>bytes threat_scan = 13;</code>
+       * @param value The threatScan to set.
        * @return This builder for chaining.
        */
-      public Builder setCorrelationId(
-          java.lang.String value) {
+      public Builder setThreatScan(com.google.protobuf.ByteString value) {
         if (value == null) { throw new NullPointerException(); }
-        correlationId_ = value;
+        threatScan_ = value;
         bitField0_ |= 0x00001000;
         onChanged();
         return this;
       }
       /**
        * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this decision was made
-       * for — the stable join key across lifecycle events, receipts, and
-       * evidence. Optional; outside the decision signature until HELM-303.
+       * JSON-encoded typed ThreatScanRef covered by the decision signature
        * </pre>
        *
-       * <code>string correlation_id = 13;</code>
+       * <code>bytes threat_scan = 13;</code>
        * @return This builder for chaining.
        */
-      public Builder clearCorrelationId() {
-        correlationId_ = getDefaultInstance().getCorrelationId();
+      public Builder clearThreatScan() {
         bitField0_ = (bitField0_ & ~0x00001000);
-        onChanged();
-        return this;
-      }
-      /**
-       * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this decision was made
-       * for — the stable join key across lifecycle events, receipts, and
-       * evidence. Optional; outside the decision signature until HELM-303.
-       * </pre>
-       *
-       * <code>string correlation_id = 13;</code>
-       * @param value The bytes for correlationId to set.
-       * @return This builder for chaining.
-       */
-      public Builder setCorrelationIdBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) { throw new NullPointerException(); }
-        checkByteStringIsUtf8(value);
-        correlationId_ = value;
-        bitField0_ |= 0x00001000;
+        threatScan_ = getDefaultInstance().getThreatScan();
         onChanged();
         return this;
       }
@@ -5443,28 +5334,6 @@ java.lang.String defaultValue);
      */
     java.lang.String getMetadataOrThrow(
         java.lang.String key);
-
-    /**
-     * <pre>
-     * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-     * to. Optional; outside the receipt signature until HELM-303.
-     * </pre>
-     *
-     * <code>string correlation_id = 17;</code>
-     * @return The correlationId.
-     */
-    java.lang.String getCorrelationId();
-    /**
-     * <pre>
-     * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-     * to. Optional; outside the receipt signature until HELM-303.
-     * </pre>
-     *
-     * <code>string correlation_id = 17;</code>
-     * @return The bytes for correlationId.
-     */
-    com.google.protobuf.ByteString
-        getCorrelationIdBytes();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.Receipt}
@@ -5501,7 +5370,6 @@ java.lang.String defaultValue);
       signerKeyId_ = "";
       payloadHash_ = "";
       reasonCode_ = 0;
-      correlationId_ = "";
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -6116,55 +5984,6 @@ java.lang.String defaultValue) {
       return map.get(key);
     }
 
-    public static final int CORRELATION_ID_FIELD_NUMBER = 17;
-    @SuppressWarnings("serial")
-    private volatile java.lang.Object correlationId_ = "";
-    /**
-     * <pre>
-     * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-     * to. Optional; outside the receipt signature until HELM-303.
-     * </pre>
-     *
-     * <code>string correlation_id = 17;</code>
-     * @return The correlationId.
-     */
-    @java.lang.Override
-    public java.lang.String getCorrelationId() {
-      java.lang.Object ref = correlationId_;
-      if (ref instanceof java.lang.String) {
-        return (java.lang.String) ref;
-      } else {
-        com.google.protobuf.ByteString bs = 
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        correlationId_ = s;
-        return s;
-      }
-    }
-    /**
-     * <pre>
-     * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-     * to. Optional; outside the receipt signature until HELM-303.
-     * </pre>
-     *
-     * <code>string correlation_id = 17;</code>
-     * @return The bytes for correlationId.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getCorrelationIdBytes() {
-      java.lang.Object ref = correlationId_;
-      if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        correlationId_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
-    }
-
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -6230,9 +6049,6 @@ java.lang.String defaultValue) {
           internalGetMetadata(),
           MetadataDefaultEntryHolder.defaultEntry,
           16);
-      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(correlationId_)) {
-        com.google.protobuf.GeneratedMessage.writeString(output, 17, correlationId_);
-      }
       getUnknownFields().writeTo(output);
     }
 
@@ -6301,9 +6117,6 @@ java.lang.String defaultValue) {
         size += com.google.protobuf.CodedOutputStream
             .computeMessageSize(16, metadata__);
       }
-      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(correlationId_)) {
-        size += com.google.protobuf.GeneratedMessage.computeStringSize(17, correlationId_);
-      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -6352,8 +6165,6 @@ java.lang.String defaultValue) {
       if (reasonCode_ != other.reasonCode_) return false;
       if (!internalGetMetadata().equals(
           other.internalGetMetadata())) return false;
-      if (!getCorrelationId()
-          .equals(other.getCorrelationId())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -6402,8 +6213,6 @@ java.lang.String defaultValue) {
         hash = (37 * hash) + METADATA_FIELD_NUMBER;
         hash = (53 * hash) + internalGetMetadata().hashCode();
       }
-      hash = (37 * hash) + CORRELATION_ID_FIELD_NUMBER;
-      hash = (53 * hash) + getCorrelationId().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -6583,7 +6392,6 @@ java.lang.String defaultValue) {
         payloadHash_ = "";
         reasonCode_ = 0;
         internalGetMutableMetadata().clear();
-        correlationId_ = "";
         return this;
       }
 
@@ -6670,9 +6478,6 @@ java.lang.String defaultValue) {
           result.metadata_ = internalGetMetadata();
           result.metadata_.makeImmutable();
         }
-        if (((from_bitField0_ & 0x00010000) != 0)) {
-          result.correlationId_ = correlationId_;
-        }
         result.bitField0_ |= to_bitField0_;
       }
 
@@ -6758,11 +6563,6 @@ java.lang.String defaultValue) {
         internalGetMutableMetadata().mergeFrom(
             other.internalGetMetadata());
         bitField0_ |= 0x00008000;
-        if (!other.getCorrelationId().isEmpty()) {
-          correlationId_ = other.correlationId_;
-          bitField0_ |= 0x00010000;
-          onChanged();
-        }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
         return this;
@@ -6875,11 +6675,6 @@ java.lang.String defaultValue) {
                 bitField0_ |= 0x00008000;
                 break;
               } // case 130
-              case 138: {
-                correlationId_ = input.readStringRequireUtf8();
-                bitField0_ |= 0x00010000;
-                break;
-              } // case 138
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -8070,103 +7865,6 @@ java.lang.String defaultValue) {
         internalGetMutableMetadata().getMutableMap()
             .putAll(values);
         bitField0_ |= 0x00008000;
-        return this;
-      }
-
-      private java.lang.Object correlationId_ = "";
-      /**
-       * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-       * to. Optional; outside the receipt signature until HELM-303.
-       * </pre>
-       *
-       * <code>string correlation_id = 17;</code>
-       * @return The correlationId.
-       */
-      public java.lang.String getCorrelationId() {
-        java.lang.Object ref = correlationId_;
-        if (!(ref instanceof java.lang.String)) {
-          com.google.protobuf.ByteString bs =
-              (com.google.protobuf.ByteString) ref;
-          java.lang.String s = bs.toStringUtf8();
-          correlationId_ = s;
-          return s;
-        } else {
-          return (java.lang.String) ref;
-        }
-      }
-      /**
-       * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-       * to. Optional; outside the receipt signature until HELM-303.
-       * </pre>
-       *
-       * <code>string correlation_id = 17;</code>
-       * @return The bytes for correlationId.
-       */
-      public com.google.protobuf.ByteString
-          getCorrelationIdBytes() {
-        java.lang.Object ref = correlationId_;
-        if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
-              com.google.protobuf.ByteString.copyFromUtf8(
-                  (java.lang.String) ref);
-          correlationId_ = b;
-          return b;
-        } else {
-          return (com.google.protobuf.ByteString) ref;
-        }
-      }
-      /**
-       * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-       * to. Optional; outside the receipt signature until HELM-303.
-       * </pre>
-       *
-       * <code>string correlation_id = 17;</code>
-       * @param value The correlationId to set.
-       * @return This builder for chaining.
-       */
-      public Builder setCorrelationId(
-          java.lang.String value) {
-        if (value == null) { throw new NullPointerException(); }
-        correlationId_ = value;
-        bitField0_ |= 0x00010000;
-        onChanged();
-        return this;
-      }
-      /**
-       * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-       * to. Optional; outside the receipt signature until HELM-303.
-       * </pre>
-       *
-       * <code>string correlation_id = 17;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearCorrelationId() {
-        correlationId_ = getDefaultInstance().getCorrelationId();
-        bitField0_ = (bitField0_ & ~0x00010000);
-        onChanged();
-        return this;
-      }
-      /**
-       * <pre>
-       * Product request identity (X-Helm-Correlation-ID) this receipt belongs
-       * to. Optional; outside the receipt signature until HELM-303.
-       * </pre>
-       *
-       * <code>string correlation_id = 17;</code>
-       * @param value The bytes for correlationId to set.
-       * @return This builder for chaining.
-       */
-      public Builder setCorrelationIdBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) { throw new NullPointerException(); }
-        checkByteStringIsUtf8(value);
-        correlationId_ = value;
-        bitField0_ |= 0x00010000;
-        onChanged();
         return this;
       }
 
@@ -17380,7 +17078,7 @@ java.lang.String defaultValue) {
       ".v1\032\037google/protobuf/timestamp.proto\"S\n\006" +
       "Effect\022\023\n\013effect_type\030\001 \001(\t\022\021\n\teffect_id" +
       "\030\002 \001(\t\022\016\n\006params\030\003 \001(\014\022\021\n\tbudget_id\030\004 \001(" +
-      "\t\"\366\002\n\016DecisionRecord\022\n\n\002id\030\001 \001(\t\022-\n\ttime" +
+      "\t\"\363\002\n\016DecisionRecord\022\n\n\002id\030\001 \001(\t\022-\n\ttime" +
       "stamp\030\002 \001(\0132\032.google.protobuf.Timestamp\022" +
       "(\n\007verdict\030\003 \001(\0162\027.helm.kernel.v1.Verdic" +
       "t\022\016\n\006reason\030\004 \001(\t\022/\n\013reason_code\030\005 \001(\0162\032" +
@@ -17388,87 +17086,86 @@ java.lang.String defaultValue) {
       "est\030\006 \001(\t\022\034\n\024requirement_set_hash\030\007 \001(\t\022" +
       "\021\n\tsignature\030\010 \001(\t\022\025\n\rsigner_key_id\030\t \001(" +
       "\t\022\022\n\npolicy_ref\030\n \001(\t\022\034\n\024policy_decision" +
-      "_hash\030\013 \001(\t\022\025\n\rinput_context\030\014 \001(\014\022\026\n\016co" +
-      "rrelation_id\030\r \001(\t\"\362\001\n\031AuthorizedExecuti" +
-      "onIntent\022\021\n\tintent_id\030\001 \001(\t\022\023\n\013decision_" +
-      "id\030\002 \001(\t\022\021\n\teffect_id\030\003 \001(\t\022-\n\tissued_at" +
-      "\030\004 \001(\0132\032.google.protobuf.Timestamp\022.\n\nex" +
-      "pires_at\030\005 \001(\0132\032.google.protobuf.Timesta" +
-      "mp\022\021\n\tsignature\030\006 \001(\t\022\025\n\rsigner_key_id\030\007" +
-      " \001(\t\022\021\n\tprincipal\030\010 \001(\t\"\205\004\n\007Receipt\022\027\n\017r" +
-      "eceipt_version\030\001 \001(\t\022\022\n\nreceipt_id\030\002 \001(\t" +
-      "\022\023\n\013decision_id\030\003 \001(\t\022\021\n\teffect_id\030\004 \001(\t" +
-      "\022(\n\007verdict\030\005 \001(\0162\027.helm.kernel.v1.Verdi" +
-      "ct\022\021\n\tprincipal\030\006 \001(\t\022\014\n\004tool\030\007 \001(\t\022\016\n\006a" +
-      "ction\030\010 \001(\t\022-\n\ttimestamp\030\t \001(\0132\032.google." +
-      "protobuf.Timestamp\022\017\n\007lamport\030\n \001(\004\022\027\n\017p" +
-      "roofgraph_node\030\013 \001(\t\022\021\n\tsignature\030\014 \001(\t\022" +
-      "\025\n\rsigner_key_id\030\r \001(\t\022\024\n\014payload_hash\030\016" +
-      " \001(\t\022/\n\013reason_code\030\017 \001(\0162\032.helm.kernel." +
-      "v1.ReasonCode\0227\n\010metadata\030\020 \003(\0132%.helm.k" +
-      "ernel.v1.Receipt.MetadataEntry\022\026\n\016correl" +
-      "ation_id\030\021 \001(\t\032/\n\rMetadataEntry\022\013\n\003key\030\001" +
-      " \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\234\001\n\nPDPRequest\022&" +
-      "\n\006effect\030\001 \001(\0132\026.helm.kernel.v1.Effect\0222" +
-      "\n\007subject\030\002 \001(\0132!.helm.kernel.v1.Subject" +
-      "Descriptor\0222\n\007context\030\003 \001(\0132!.helm.kerne" +
-      "l.v1.ContextDescriptor\"E\n\021SubjectDescrip" +
-      "tor\022\021\n\tprincipal\030\001 \001(\t\022\016\n\006tenant\030\002 \001(\t\022\r" +
-      "\n\005roles\030\003 \003(\t\"\252\001\n\021ContextDescriptor\022\024\n\014j" +
-      "urisdiction\030\001 \001(\t\022\023\n\013environment\030\002 \001(\t\0225" +
-      "\n\021time_window_start\030\003 \001(\0132\032.google.proto" +
-      "buf.Timestamp\0223\n\017time_window_end\030\004 \001(\0132\032" +
-      ".google.protobuf.Timestamp\"\251\001\n\013PDPRespon" +
-      "se\022\r\n\005allow\030\001 \001(\010\022/\n\013reason_code\030\002 \001(\0162\032" +
-      ".helm.kernel.v1.ReasonCode\022\022\n\npolicy_ref" +
-      "\030\003 \001(\t\022\025\n\rdecision_hash\030\004 \001(\t\022/\n\013obligat" +
-      "ions\030\005 \003(\0132\032.helm.kernel.v1.Obligation\"i" +
-      "\n\nObligation\022\n\n\002id\030\001 \001(\t\022\014\n\004type\030\002 \001(\t\022\023" +
-      "\n\013description\030\003 \001(\t\022,\n\010deadline\030\004 \001(\0132\032." +
-      "google.protobuf.Timestamp\"\267\001\n\rEffectRequ" +
-      "est\022&\n\006effect\030\001 \001(\0132\026.helm.kernel.v1.Eff" +
-      "ect\022\021\n\tprincipal\030\002 \001(\t\022;\n\007context\030\003 \003(\0132" +
-      "*.helm.kernel.v1.EffectRequest.ContextEn" +
-      "try\032.\n\014ContextEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005valu" +
-      "e\030\002 \001(\t:\0028\001\"\340\001\n\016EffectResponse\022(\n\007verdic" +
-      "t\030\001 \001(\0162\027.helm.kernel.v1.Verdict\022/\n\013reas" +
-      "on_code\030\002 \001(\0162\032.helm.kernel.v1.ReasonCod" +
-      "e\022\016\n\006reason\030\003 \001(\t\022(\n\007receipt\030\004 \001(\0132\027.hel" +
-      "m.kernel.v1.Receipt\0229\n\006intent\030\005 \001(\0132).he" +
-      "lm.kernel.v1.AuthorizedExecutionIntent\"\216" +
-      "\001\n\017ExecutionResult\022\021\n\tintent_id\030\001 \001(\t\022\017\n" +
-      "\007success\030\002 \001(\010\022\016\n\006output\030\003 \001(\014\022\025\n\rerror_" +
-      "message\030\004 \001(\t\0220\n\014completed_at\030\005 \001(\0132\032.go" +
-      "ogle.protobuf.Timestamp\"V\n\021CompletionRec" +
-      "eipt\022(\n\007receipt\030\001 \001(\0132\027.helm.kernel.v1.R" +
-      "eceipt\022\027\n\017proofgraph_node\030\002 \001(\t*]\n\007Verdi" +
-      "ct\022\027\n\023VERDICT_UNSPECIFIED\020\000\022\021\n\rVERDICT_A" +
-      "LLOW\020\001\022\020\n\014VERDICT_DENY\020\002\022\024\n\020VERDICT_ESCA" +
-      "LATE\020\003*\362\004\n\nReasonCode\022\033\n\027REASON_CODE_UNS" +
-      "PECIFIED\020\000\022 \n\034REASON_CODE_POLICY_VIOLATI" +
-      "ON\020\001\022!\n\035REASON_CODE_NO_POLICY_DEFINED\020\002\022" +
-      "$\n REASON_CODE_PRG_EVALUATION_ERROR\020\003\022#\n" +
-      "\037REASON_CODE_MISSING_REQUIREMENT\020\004\022\030\n\024RE" +
-      "ASON_CODE_PDP_DENY\020\005\022\031\n\025REASON_CODE_PDP_" +
-      "ERROR\020\006\022\037\n\033REASON_CODE_BUDGET_EXCEEDED\020\007" +
-      "\022\034\n\030REASON_CODE_BUDGET_ERROR\020\010\022 \n\034REASON" +
-      "_CODE_ENVELOPE_INVALID\020\t\022 \n\034REASON_CODE_" +
-      "SCHEMA_VIOLATION\020\n\022%\n!REASON_CODE_TEMPOR" +
-      "AL_INTERVENTION\020\013\022!\n\035REASON_CODE_TEMPORA" +
-      "L_THROTTLE\020\014\022!\n\035REASON_CODE_SANDBOX_VIOL" +
-      "ATION\020\r\022\"\n\036REASON_CODE_PROVENANCE_FAILUR" +
-      "E\020\016\022$\n REASON_CODE_VERIFICATION_FAILURE\020" +
-      "\017\022 \n\034REASON_CODE_TENANT_ISOLATION\020\020\022&\n\"R" +
-      "EASON_CODE_JURISDICTION_VIOLATION\020\0212a\n\032P" +
-      "olicyDecisionPointService\022C\n\010Evaluate\022\032." +
-      "helm.kernel.v1.PDPRequest\032\033.helm.kernel." +
-      "v1.PDPResponse2\260\001\n\025EffectBoundaryService" +
-      "\022G\n\006Submit\022\035.helm.kernel.v1.EffectReques" +
-      "t\032\036.helm.kernel.v1.EffectResponse\022N\n\010Com" +
-      "plete\022\037.helm.kernel.v1.ExecutionResult\032!" +
-      ".helm.kernel.v1.CompletionReceiptB&Z$hel" +
-      "m.mindburn.run/kernel/v1;kernelv1b\006proto" +
-      "3"
+      "_hash\030\013 \001(\t\022\025\n\rinput_context\030\014 \001(\014\022\023\n\013th" +
+      "reat_scan\030\r \001(\014\"\362\001\n\031AuthorizedExecutionI" +
+      "ntent\022\021\n\tintent_id\030\001 \001(\t\022\023\n\013decision_id\030" +
+      "\002 \001(\t\022\021\n\teffect_id\030\003 \001(\t\022-\n\tissued_at\030\004 " +
+      "\001(\0132\032.google.protobuf.Timestamp\022.\n\nexpir" +
+      "es_at\030\005 \001(\0132\032.google.protobuf.Timestamp\022" +
+      "\021\n\tsignature\030\006 \001(\t\022\025\n\rsigner_key_id\030\007 \001(" +
+      "\t\022\021\n\tprincipal\030\010 \001(\t\"\355\003\n\007Receipt\022\027\n\017rece" +
+      "ipt_version\030\001 \001(\t\022\022\n\nreceipt_id\030\002 \001(\t\022\023\n" +
+      "\013decision_id\030\003 \001(\t\022\021\n\teffect_id\030\004 \001(\t\022(\n" +
+      "\007verdict\030\005 \001(\0162\027.helm.kernel.v1.Verdict\022" +
+      "\021\n\tprincipal\030\006 \001(\t\022\014\n\004tool\030\007 \001(\t\022\016\n\006acti" +
+      "on\030\010 \001(\t\022-\n\ttimestamp\030\t \001(\0132\032.google.pro" +
+      "tobuf.Timestamp\022\017\n\007lamport\030\n \001(\004\022\027\n\017proo" +
+      "fgraph_node\030\013 \001(\t\022\021\n\tsignature\030\014 \001(\t\022\025\n\r" +
+      "signer_key_id\030\r \001(\t\022\024\n\014payload_hash\030\016 \001(" +
+      "\t\022/\n\013reason_code\030\017 \001(\0162\032.helm.kernel.v1." +
+      "ReasonCode\0227\n\010metadata\030\020 \003(\0132%.helm.kern" +
+      "el.v1.Receipt.MetadataEntry\032/\n\rMetadataE" +
+      "ntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\234\001\n" +
+      "\nPDPRequest\022&\n\006effect\030\001 \001(\0132\026.helm.kerne" +
+      "l.v1.Effect\0222\n\007subject\030\002 \001(\0132!.helm.kern" +
+      "el.v1.SubjectDescriptor\0222\n\007context\030\003 \001(\013" +
+      "2!.helm.kernel.v1.ContextDescriptor\"E\n\021S" +
+      "ubjectDescriptor\022\021\n\tprincipal\030\001 \001(\t\022\016\n\006t" +
+      "enant\030\002 \001(\t\022\r\n\005roles\030\003 \003(\t\"\252\001\n\021ContextDe" +
+      "scriptor\022\024\n\014jurisdiction\030\001 \001(\t\022\023\n\013enviro" +
+      "nment\030\002 \001(\t\0225\n\021time_window_start\030\003 \001(\0132\032" +
+      ".google.protobuf.Timestamp\0223\n\017time_windo" +
+      "w_end\030\004 \001(\0132\032.google.protobuf.Timestamp\"" +
+      "\251\001\n\013PDPResponse\022\r\n\005allow\030\001 \001(\010\022/\n\013reason" +
+      "_code\030\002 \001(\0162\032.helm.kernel.v1.ReasonCode\022" +
+      "\022\n\npolicy_ref\030\003 \001(\t\022\025\n\rdecision_hash\030\004 \001" +
+      "(\t\022/\n\013obligations\030\005 \003(\0132\032.helm.kernel.v1" +
+      ".Obligation\"i\n\nObligation\022\n\n\002id\030\001 \001(\t\022\014\n" +
+      "\004type\030\002 \001(\t\022\023\n\013description\030\003 \001(\t\022,\n\010dead" +
+      "line\030\004 \001(\0132\032.google.protobuf.Timestamp\"\267" +
+      "\001\n\rEffectRequest\022&\n\006effect\030\001 \001(\0132\026.helm." +
+      "kernel.v1.Effect\022\021\n\tprincipal\030\002 \001(\t\022;\n\007c" +
+      "ontext\030\003 \003(\0132*.helm.kernel.v1.EffectRequ" +
+      "est.ContextEntry\032.\n\014ContextEntry\022\013\n\003key\030" +
+      "\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\340\001\n\016EffectRespo" +
+      "nse\022(\n\007verdict\030\001 \001(\0162\027.helm.kernel.v1.Ve" +
+      "rdict\022/\n\013reason_code\030\002 \001(\0162\032.helm.kernel" +
+      ".v1.ReasonCode\022\016\n\006reason\030\003 \001(\t\022(\n\007receip" +
+      "t\030\004 \001(\0132\027.helm.kernel.v1.Receipt\0229\n\006inte" +
+      "nt\030\005 \001(\0132).helm.kernel.v1.AuthorizedExec" +
+      "utionIntent\"\216\001\n\017ExecutionResult\022\021\n\tinten" +
+      "t_id\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\016\n\006output\030\003 " +
+      "\001(\014\022\025\n\rerror_message\030\004 \001(\t\0220\n\014completed_" +
+      "at\030\005 \001(\0132\032.google.protobuf.Timestamp\"V\n\021" +
+      "CompletionReceipt\022(\n\007receipt\030\001 \001(\0132\027.hel" +
+      "m.kernel.v1.Receipt\022\027\n\017proofgraph_node\030\002" +
+      " \001(\t*]\n\007Verdict\022\027\n\023VERDICT_UNSPECIFIED\020\000" +
+      "\022\021\n\rVERDICT_ALLOW\020\001\022\020\n\014VERDICT_DENY\020\002\022\024\n" +
+      "\020VERDICT_ESCALATE\020\003*\362\004\n\nReasonCode\022\033\n\027RE" +
+      "ASON_CODE_UNSPECIFIED\020\000\022 \n\034REASON_CODE_P" +
+      "OLICY_VIOLATION\020\001\022!\n\035REASON_CODE_NO_POLI" +
+      "CY_DEFINED\020\002\022$\n REASON_CODE_PRG_EVALUATI" +
+      "ON_ERROR\020\003\022#\n\037REASON_CODE_MISSING_REQUIR" +
+      "EMENT\020\004\022\030\n\024REASON_CODE_PDP_DENY\020\005\022\031\n\025REA" +
+      "SON_CODE_PDP_ERROR\020\006\022\037\n\033REASON_CODE_BUDG" +
+      "ET_EXCEEDED\020\007\022\034\n\030REASON_CODE_BUDGET_ERRO" +
+      "R\020\010\022 \n\034REASON_CODE_ENVELOPE_INVALID\020\t\022 \n" +
+      "\034REASON_CODE_SCHEMA_VIOLATION\020\n\022%\n!REASO" +
+      "N_CODE_TEMPORAL_INTERVENTION\020\013\022!\n\035REASON" +
+      "_CODE_TEMPORAL_THROTTLE\020\014\022!\n\035REASON_CODE" +
+      "_SANDBOX_VIOLATION\020\r\022\"\n\036REASON_CODE_PROV" +
+      "ENANCE_FAILURE\020\016\022$\n REASON_CODE_VERIFICA" +
+      "TION_FAILURE\020\017\022 \n\034REASON_CODE_TENANT_ISO" +
+      "LATION\020\020\022&\n\"REASON_CODE_JURISDICTION_VIO" +
+      "LATION\020\0212a\n\032PolicyDecisionPointService\022C" +
+      "\n\010Evaluate\022\032.helm.kernel.v1.PDPRequest\032\033" +
+      ".helm.kernel.v1.PDPResponse2\260\001\n\025EffectBo" +
+      "undaryService\022G\n\006Submit\022\035.helm.kernel.v1" +
+      ".EffectRequest\032\036.helm.kernel.v1.EffectRe" +
+      "sponse\022N\n\010Complete\022\037.helm.kernel.v1.Exec" +
+      "utionResult\032!.helm.kernel.v1.CompletionR" +
+      "eceiptB&Z$helm.mindburn.run/kernel/v1;ke" +
+      "rnelv1b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -17486,7 +17183,7 @@ java.lang.String defaultValue) {
     internal_static_helm_kernel_v1_DecisionRecord_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_DecisionRecord_descriptor,
-        new java.lang.String[] { "Id", "Timestamp", "Verdict", "Reason", "ReasonCode", "EffectDigest", "RequirementSetHash", "Signature", "SignerKeyId", "PolicyRef", "PolicyDecisionHash", "InputContext", "CorrelationId", });
+        new java.lang.String[] { "Id", "Timestamp", "Verdict", "Reason", "ReasonCode", "EffectDigest", "RequirementSetHash", "Signature", "SignerKeyId", "PolicyRef", "PolicyDecisionHash", "InputContext", "ThreatScan", });
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_descriptor =
       getDescriptor().getMessageType(2);
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_fieldAccessorTable = new
@@ -17498,7 +17195,7 @@ java.lang.String defaultValue) {
     internal_static_helm_kernel_v1_Receipt_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_Receipt_descriptor,
-        new java.lang.String[] { "ReceiptVersion", "ReceiptId", "DecisionId", "EffectId", "Verdict", "Principal", "Tool", "Action", "Timestamp", "Lamport", "ProofgraphNode", "Signature", "SignerKeyId", "PayloadHash", "ReasonCode", "Metadata", "CorrelationId", });
+        new java.lang.String[] { "ReceiptVersion", "ReceiptId", "DecisionId", "EffectId", "Verdict", "Principal", "Tool", "Action", "Timestamp", "Lamport", "ProofgraphNode", "Signature", "SignerKeyId", "PayloadHash", "ReasonCode", "Metadata", });
     internal_static_helm_kernel_v1_Receipt_MetadataEntry_descriptor =
       internal_static_helm_kernel_v1_Receipt_descriptor.getNestedType(0);
     internal_static_helm_kernel_v1_Receipt_MetadataEntry_fieldAccessorTable = new

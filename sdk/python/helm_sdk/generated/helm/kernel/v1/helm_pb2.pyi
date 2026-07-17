@@ -73,7 +73,7 @@ class Effect(_message.Message):
     def __init__(self, effect_type: _Optional[str] = ..., effect_id: _Optional[str] = ..., params: _Optional[bytes] = ..., budget_id: _Optional[str] = ...) -> None: ...
 
 class DecisionRecord(_message.Message):
-    __slots__ = ("id", "timestamp", "verdict", "reason", "reason_code", "effect_digest", "requirement_set_hash", "signature", "signer_key_id", "policy_ref", "policy_decision_hash", "input_context", "correlation_id")
+    __slots__ = ("id", "timestamp", "verdict", "reason", "reason_code", "effect_digest", "requirement_set_hash", "signature", "signer_key_id", "policy_ref", "policy_decision_hash", "input_context", "threat_scan")
     ID_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     VERDICT_FIELD_NUMBER: _ClassVar[int]
@@ -86,7 +86,7 @@ class DecisionRecord(_message.Message):
     POLICY_REF_FIELD_NUMBER: _ClassVar[int]
     POLICY_DECISION_HASH_FIELD_NUMBER: _ClassVar[int]
     INPUT_CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    CORRELATION_ID_FIELD_NUMBER: _ClassVar[int]
+    THREAT_SCAN_FIELD_NUMBER: _ClassVar[int]
     id: str
     timestamp: _timestamp_pb2.Timestamp
     verdict: Verdict
@@ -99,8 +99,8 @@ class DecisionRecord(_message.Message):
     policy_ref: str
     policy_decision_hash: str
     input_context: bytes
-    correlation_id: str
-    def __init__(self, id: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., reason: _Optional[str] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., effect_digest: _Optional[str] = ..., requirement_set_hash: _Optional[str] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., policy_ref: _Optional[str] = ..., policy_decision_hash: _Optional[str] = ..., input_context: _Optional[bytes] = ..., correlation_id: _Optional[str] = ...) -> None: ...
+    threat_scan: bytes
+    def __init__(self, id: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., reason: _Optional[str] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., effect_digest: _Optional[str] = ..., requirement_set_hash: _Optional[str] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., policy_ref: _Optional[str] = ..., policy_decision_hash: _Optional[str] = ..., input_context: _Optional[bytes] = ..., threat_scan: _Optional[bytes] = ...) -> None: ...
 
 class AuthorizedExecutionIntent(_message.Message):
     __slots__ = ("intent_id", "decision_id", "effect_id", "issued_at", "expires_at", "signature", "signer_key_id", "principal")
@@ -123,7 +123,7 @@ class AuthorizedExecutionIntent(_message.Message):
     def __init__(self, intent_id: _Optional[str] = ..., decision_id: _Optional[str] = ..., effect_id: _Optional[str] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., principal: _Optional[str] = ...) -> None: ...
 
 class Receipt(_message.Message):
-    __slots__ = ("receipt_version", "receipt_id", "decision_id", "effect_id", "verdict", "principal", "tool", "action", "timestamp", "lamport", "proofgraph_node", "signature", "signer_key_id", "payload_hash", "reason_code", "metadata", "correlation_id")
+    __slots__ = ("receipt_version", "receipt_id", "decision_id", "effect_id", "verdict", "principal", "tool", "action", "timestamp", "lamport", "proofgraph_node", "signature", "signer_key_id", "payload_hash", "reason_code", "metadata")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -147,7 +147,6 @@ class Receipt(_message.Message):
     PAYLOAD_HASH_FIELD_NUMBER: _ClassVar[int]
     REASON_CODE_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
-    CORRELATION_ID_FIELD_NUMBER: _ClassVar[int]
     receipt_version: str
     receipt_id: str
     decision_id: str
@@ -164,8 +163,7 @@ class Receipt(_message.Message):
     payload_hash: str
     reason_code: ReasonCode
     metadata: _containers.ScalarMap[str, str]
-    correlation_id: str
-    def __init__(self, receipt_version: _Optional[str] = ..., receipt_id: _Optional[str] = ..., decision_id: _Optional[str] = ..., effect_id: _Optional[str] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., principal: _Optional[str] = ..., tool: _Optional[str] = ..., action: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lamport: _Optional[int] = ..., proofgraph_node: _Optional[str] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., payload_hash: _Optional[str] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., metadata: _Optional[_Mapping[str, str]] = ..., correlation_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, receipt_version: _Optional[str] = ..., receipt_id: _Optional[str] = ..., decision_id: _Optional[str] = ..., effect_id: _Optional[str] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., principal: _Optional[str] = ..., tool: _Optional[str] = ..., action: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lamport: _Optional[int] = ..., proofgraph_node: _Optional[str] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., payload_hash: _Optional[str] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., metadata: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class PDPRequest(_message.Message):
     __slots__ = ("effect", "subject", "context")

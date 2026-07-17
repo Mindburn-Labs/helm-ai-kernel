@@ -53,7 +53,9 @@ suite_id -> mutation_id -> expected_test_id
 
 Pin the revision, definition digest, full Kernel commit, and executable SHA-256
 in campaign policy. A detector change requires a new source-owned definition
-digest.
+digest. The runner pins an open handle to its executable image at process
+initialization (`/proc/self/exe` on Linux), so a later pathname replacement
+cannot substitute the bytes recorded in report provenance.
 
 ## Prepare a clean campaign input
 
@@ -74,8 +76,9 @@ signatures are domain separated. The final report has a third signature domain,
 For directory inputs, the runner creates a bounded read-only snapshot, rejects
 symlinks and non-regular files, reopens and rehashes every source file to detect
 torn reads, and caps the input at 4,096 entries and 32 MiB. Archive extraction
-uses the same byte ceiling. The detector mutation workspace must reproduce the
-index hash, Merkle root, and entry count returned by the canonical verifier.
+enforces the same entry and byte ceilings while reading tar headers. The
+detector mutation workspace must reproduce the index hash, Merkle root, and
+entry count returned by the canonical verifier.
 
 ## Run the campaign
 

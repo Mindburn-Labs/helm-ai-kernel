@@ -123,6 +123,40 @@ func TestConformAdversarialPreservesFractionalEvaluationTime(t *testing.T) {
 	}
 }
 
+func TestHashOpenExecutableImageSurvivesPathReplacement(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not permit replacing an open executable path")
+	}
+	dir := t.TempDir()
+	executablePath := filepath.Join(dir, "runner")
+	original := []byte("original-running-image")
+	if err := os.WriteFile(executablePath, original, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pinned, err := os.Open(executablePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pinned.Close()
+	replacementPath := filepath.Join(dir, "replacement")
+	if err := os.WriteFile(replacementPath, []byte("replacement-at-path"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(replacementPath, executablePath); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := hashOpenExecutableImage(pinned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantHash := sha256.Sum256(original)
+	want := "sha256:" + hex.EncodeToString(wantHash[:])
+	if got != want {
+		t.Fatalf("pinned executable digest=%q, want original image %q", got, want)
+	}
+}
+
 func TestConformAdversarialRequiresDedicatedReportSigningKey(t *testing.T) {
 	configureAdversarialCommandTest(t)
 	t.Setenv(adversarialReportSigningKeyEnv, "")

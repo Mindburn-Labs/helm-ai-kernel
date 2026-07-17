@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -32,6 +33,14 @@ const (
 	maxAdversarialSnapshotEntries    = maxEvidenceArchiveEntries
 	maxAdversarialReportBytes        = 8 << 20
 	maxAdversarialJSONDepth          = 128
+)
+
+// Keep an open handle for the process lifetime so executable provenance is
+// bound to the image that was present at process initialization, not to a
+// pathname that can be replaced later. Linux's /proc/self/exe resolves the
+// running image even after the original pathname is renamed or deleted.
+var (
+	runningExecutableImage, runningExecutableImageErr = openRunningExecutableImage()
 )
 
 type adversarialCampaignStatus string
@@ -1164,18 +1173,46 @@ func copyAdversarialEvidenceDirectory(source, destination string, maxEntries int
 }
 
 func currentExecutableSHA256() (string, error) {
-	path, err := os.Executable()
-	if err != nil {
-		return "", err
+	if runningExecutableImageErr != nil {
+		return "", runningExecutableImageErr
+	}
+	return hashOpenExecutableImage(runningExecutableImage)
+}
+
+func openRunningExecutableImage() (*os.File, error) {
+	path := "/proc/self/exe"
+	if runtime.GOOS != "linux" {
+		var err error
+		path, err = os.Executable()
+		if err != nil {
+			return nil, fmt.Errorf("resolve running executable: %w", err)
+		}
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("pin running executable image: %w", err)
 	}
-	defer file.Close()
+	return file, nil
+}
+
+func hashOpenExecutableImage(file *os.File) (string, error) {
+	if file == nil {
+		return "", fmt.Errorf("running executable image is not pinned")
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("stat pinned executable image: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() <= 0 {
+		return "", fmt.Errorf("pinned executable image is not a non-empty regular file")
+	}
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
+	written, err := io.Copy(hash, io.NewSectionReader(file, 0, info.Size()))
+	if err != nil {
+		return "", fmt.Errorf("hash pinned executable image: %w", err)
+	}
+	if written != info.Size() {
+		return "", fmt.Errorf("pinned executable image changed while hashing")
 	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }

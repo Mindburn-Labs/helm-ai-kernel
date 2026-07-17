@@ -107,13 +107,15 @@ bounty-kernel: build
 	HELM_KERNEL_COMMIT="$(GIT_COMMIT)" ./bin/helm-ai-kernel conform adversarial \
 		--bundle "$(BOUNTY_BUNDLE)" \
 		--profile "$(BOUNTY_PROFILE)" \
+		--storage-receipt "$(BOUNTY_STORAGE_RECEIPT)" \
 		--report "$(BOUNTY_REPORT)"
 
 # Replay-safe verification requires the expected campaign identity, campaign
-# trust root, exact evidence roots, profile, and the source checkout's commit.
+# trust root, runner bytes, exact evidence roots, profile, and source commit.
 bounty-kernel-verify: build
 	@test -n "$(BOUNTY_REPORT)" || (echo "BOUNTY_REPORT is required" && exit 2)
 	@test -n "$(BOUNTY_PROFILE)" || (echo "BOUNTY_PROFILE is required" && exit 2)
+	@test -n "$(BOUNTY_EXECUTABLE_SHA256)" || (echo "BOUNTY_EXECUTABLE_SHA256 is required" && exit 2)
 	@test -n "$(BOUNTY_EVIDENCE_ROOT)" || (echo "BOUNTY_EVIDENCE_ROOT is required" && exit 2)
 	@test -n "$(BOUNTY_MERKLE_ROOT)" || (echo "BOUNTY_MERKLE_ROOT is required" && exit 2)
 	@test -n "$$HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX" || (echo "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX is required" && exit 2)
@@ -125,6 +127,7 @@ bounty-kernel-verify: build
 		--expected-campaign-id "$$HELM_BOUNTY_CAMPAIGN_ID" \
 		--expected-run-id "$$HELM_BOUNTY_RUN_ID" \
 		--expected-kernel-commit "$(GIT_COMMIT)" \
+		--expected-executable-sha256 "$(BOUNTY_EXECUTABLE_SHA256)" \
 		--expected-trust-profile "$(BOUNTY_PROFILE)" \
 		--expected-evidence-root "$(BOUNTY_EVIDENCE_ROOT)" \
 		--expected-merkle-root "$(BOUNTY_MERKLE_ROOT)"

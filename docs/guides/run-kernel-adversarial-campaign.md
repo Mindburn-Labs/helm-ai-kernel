@@ -65,8 +65,10 @@ operator home directory, or model memory mounted into it. Give the runner only:
 1. the sealed candidate EvidencePack or archive;
 2. explicit trust configuration and public verification roots;
 3. one stable campaign ID and one unique run ID;
-4. an explicit RFC3339 evaluation time (fractional seconds are preserved); and
-5. a report output path outside the candidate pack.
+4. an explicit RFC3339 evaluation time (fractional seconds are preserved);
+5. the external storage receipt when the selected trust profile requires one;
+   and
+6. a report output path outside the candidate pack.
 
 Campaign authorization receipts and tool manifests inside the pack must bind
 the same `campaign_id` and `run_id`. Receipt and tool-manifest Ed25519
@@ -94,6 +96,7 @@ export HELM_BOUNTY_REPORT_SIGNING_KEY_HEX='<dedicated-report-signing-seed-or-key
 make bounty-kernel \
   BOUNTY_BUNDLE=/cleanroom/input/evidence-pack \
   BOUNTY_PROFILE=high-assurance \
+  BOUNTY_STORAGE_RECEIPT=/cleanroom/input/storage-receipt.json \
   BOUNTY_REPORT=/cleanroom/output/kernel-campaign.json
 ```
 
@@ -131,6 +134,7 @@ export HELM_BOUNTY_REPORT_PUBLIC_KEY_HEX='<trusted-report-public-key>'
 make bounty-kernel-verify \
   BOUNTY_REPORT=/verifier/input/kernel-campaign.json \
   BOUNTY_PROFILE=high-assurance \
+  BOUNTY_EXECUTABLE_SHA256='sha256:<independently-pinned-runner-digest>' \
   BOUNTY_EVIDENCE_ROOT='<expected-00_INDEX-sha256>' \
   BOUNTY_MERKLE_ROOT='<expected-evidence-merkle-root>'
 ```

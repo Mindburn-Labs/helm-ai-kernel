@@ -80,6 +80,27 @@ func TestReleaseWorkflowEmbedsFullCommitForAdversarialProvenance(t *testing.T) {
 	}
 }
 
+func TestBountyMakeTargetsBindHighAssuranceInputs(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate test source")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", ".."))
+	makefile, err := os.ReadFile(filepath.Join(repoRoot, "Makefile"))
+	if err != nil {
+		t.Fatalf("read Makefile: %v", err)
+	}
+	for _, required := range []string{
+		`--storage-receipt "$(BOUNTY_STORAGE_RECEIPT)"`,
+		`@test -n "$(BOUNTY_EXECUTABLE_SHA256)"`,
+		`--expected-executable-sha256 "$(BOUNTY_EXECUTABLE_SHA256)"`,
+	} {
+		if !bytes.Contains(makefile, []byte(required)) {
+			t.Fatalf("bounty Make targets do not bind required input %q", required)
+		}
+	}
+}
+
 func TestConformAdversarialRequiresExplicitTrustProfile(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runConform([]string{"adversarial", "--bundle", t.TempDir()}, &stdout, &stderr)

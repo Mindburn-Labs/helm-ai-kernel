@@ -55,6 +55,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "guides/implementation-partner",
+      "title": "Implementation Partner Handoff",
+      "section": "guide",
+      "source_path": "docs/guides/implementation-partner.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/implementation-partner",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "how-helm-works",
       "title": "How HELM Works",
       "section": "guide",

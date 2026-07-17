@@ -31,6 +31,8 @@ func TestApprovalConsumptionConfigIsExplicitAndFailClosed(t *testing.T) {
 		t.Fatalf("complete config enabled=%t err=%v", enabled, err)
 	}
 	if config.Scope != defaultApprovalConsumerScope || config.Audience != "helm-data-plane" ||
+		config.DispatchScope != defaultApprovalDispatchScope ||
+		config.DispatchAdmissionTTL != defaultApprovalDispatchAdmissionTTL ||
 		config.MaxTokenTTL != defaultApprovalConsumerMaxTokenTTL {
 		t.Fatalf("config = %+v", config)
 	}
@@ -39,6 +41,16 @@ func TestApprovalConsumptionConfigIsExplicitAndFailClosed(t *testing.T) {
 		t.Fatal("overlong workload token TTL was accepted")
 	}
 	t.Setenv(approvalConsumerMaxTokenTTLEnv, "")
+	t.Setenv(approvalDispatchAdmissionTTLEnv, "61s")
+	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+		t.Fatal("overlong dispatch admission TTL was accepted")
+	}
+	t.Setenv(approvalDispatchAdmissionTTLEnv, "")
+	t.Setenv(approvalDispatchScopeEnv, defaultApprovalConsumerScope)
+	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+		t.Fatal("shared consumption and dispatch scope was accepted")
+	}
+	t.Setenv(approvalDispatchScopeEnv, "")
 
 	t.Setenv(approvalConsumerJWKSURLEnv, "http://identity.example.test/jwks.json")
 	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
@@ -88,7 +100,8 @@ func approvalConsumptionTestEnv(t *testing.T) {
 	for _, name := range []string{
 		approvalConsumptionEnabledEnv, approvalConsumerJWKSURLEnv, approvalConsumerIssuerEnv,
 		approvalConsumerAudienceEnv, approvalConsumerResourceEnv, approvalConsumerScopeEnv,
-		approvalSigningKeyRefEnv, approvalKernelTrustRootIDEnv, approvalConsumerMaxTokenTTLEnv,
+		approvalDispatchScopeEnv, approvalDispatchAdmissionTTLEnv, approvalSigningKeyRefEnv,
+		approvalKernelTrustRootIDEnv, approvalConsumerMaxTokenTTLEnv,
 	} {
 		t.Setenv(name, "")
 	}

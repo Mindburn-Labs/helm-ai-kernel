@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	approvalGrantSignatureDomainV1            = "HELM/ApprovalGrantSignature/v1"
-	approvalGrantConsumptionSignatureDomainV1 = "HELM/ApprovalGrantConsumptionSignature/v1"
+	approvalGrantSignatureDomainV1             = "HELM/ApprovalGrantSignature/v1"
+	approvalGrantConsumptionSignatureDomainV1  = "HELM/ApprovalGrantConsumptionSignature/v1"
+	approvalDispatchAdmissionSignatureDomainV1 = "HELM/ApprovalDispatchAdmissionSignature/v1"
 )
 
 var ErrGrantSignatureRejected = errors.New("approval ceremony grant signature rejected")
@@ -23,6 +24,7 @@ var ErrGrantSignatureRejected = errors.New("approval ceremony grant signature re
 type GrantSignatureVerifier interface {
 	VerifyGrantSignature(contracts.ApprovalGrant, string, string) error
 	VerifyGrantConsumptionSignature(contracts.ApprovalGrantConsumption, string, string) error
+	VerifyDispatchAdmissionSignature(contracts.ApprovalDispatchAdmission, string, string) error
 }
 
 type Ed25519GrantSignatureVerifier struct {
@@ -83,6 +85,28 @@ func (v *Ed25519GrantSignatureVerifier) VerifyGrantConsumptionSignature(consumpt
 	}
 	if !ed25519.Verify(v.publicKey, payload, rawSignature) {
 		return fmt.Errorf("%w: bad consumption ed25519 signature", ErrGrantSignatureRejected)
+	}
+	return nil
+}
+
+func (v *Ed25519GrantSignatureVerifier) VerifyDispatchAdmissionSignature(admission contracts.ApprovalDispatchAdmission, algorithm, signature string) error {
+	if v == nil || len(v.publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
+	}
+	if algorithm != GrantSignatureEd25519 || admission.SigningKeyRef != v.signingKeyRef ||
+		admission.KernelTrustRootID != v.kernelTrustRootID {
+		return fmt.Errorf("%w: dispatch admission trust-root metadata mismatch", ErrGrantSignatureRejected)
+	}
+	payload, err := ApprovalDispatchAdmissionSigningPayload(admission, algorithm)
+	if err != nil {
+		return err
+	}
+	rawSignature, err := hex.DecodeString(signature)
+	if err != nil || len(rawSignature) != ed25519.SignatureSize || hex.EncodeToString(rawSignature) != signature {
+		return fmt.Errorf("%w: dispatch admission signature encoding is invalid", ErrGrantSignatureRejected)
+	}
+	if !ed25519.Verify(v.publicKey, payload, rawSignature) {
+		return fmt.Errorf("%w: bad dispatch admission ed25519 signature", ErrGrantSignatureRejected)
 	}
 	return nil
 }
@@ -180,6 +204,49 @@ func SignApprovalGrantConsumption(consumption contracts.ApprovalGrantConsumption
 	}
 	if !validEd25519Signature(signature) {
 		return "", fmt.Errorf("%w: signer returned invalid consumption signature", ErrGrantSignatureRejected)
+	}
+	return signature, nil
+}
+
+func ApprovalDispatchAdmissionSigningPayload(admission contracts.ApprovalDispatchAdmission, algorithm string) ([]byte, error) {
+	if algorithm != GrantSignatureEd25519 {
+		return nil, fmt.Errorf("%w: unsupported dispatch admission algorithm", ErrGrantSignatureRejected)
+	}
+	if err := admission.ValidateIntegrity(); err != nil {
+		return nil, fmt.Errorf("%w: dispatch admission integrity mismatch: %v", ErrGrantSignatureRejected, err)
+	}
+	payload, err := canonicalize.JCS(struct {
+		Domain            string `json:"domain"`
+		ContractVersion   string `json:"contract_version"`
+		AdmissionHash     string `json:"admission_hash"`
+		KernelTrustRootID string `json:"kernel_trust_root_id"`
+		SigningKeyRef     string `json:"signing_key_ref"`
+		Algorithm         string `json:"algorithm"`
+	}{
+		Domain: approvalDispatchAdmissionSignatureDomainV1, ContractVersion: admission.ContractVersion,
+		AdmissionHash: admission.AdmissionHash, KernelTrustRootID: admission.KernelTrustRootID,
+		SigningKeyRef: admission.SigningKeyRef, Algorithm: algorithm,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: canonicalize dispatch admission signing payload: %v", ErrGrantSignatureRejected, err)
+	}
+	return payload, nil
+}
+
+func SignApprovalDispatchAdmission(admission contracts.ApprovalDispatchAdmission, signer crypto.Signer) (string, error) {
+	if signer == nil {
+		return "", fmt.Errorf("%w: signer is not configured", ErrGrantSignatureRejected)
+	}
+	payload, err := ApprovalDispatchAdmissionSigningPayload(admission, GrantSignatureEd25519)
+	if err != nil {
+		return "", err
+	}
+	signature, err := signer.Sign(payload)
+	if err != nil {
+		return "", fmt.Errorf("%w: sign dispatch admission: %v", ErrGrantSignatureRejected, err)
+	}
+	if !validEd25519Signature(signature) {
+		return "", fmt.Errorf("%w: signer returned invalid dispatch admission signature", ErrGrantSignatureRejected)
 	}
 	return signature, nil
 }

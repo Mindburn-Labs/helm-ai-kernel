@@ -8,11 +8,14 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
 func TestEvaluateCoverageRejectsMissingPositiveControls(t *testing.T) {
@@ -30,13 +33,14 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	opts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
 
-	result := EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	result := EvaluateCoverageWithOptions(dir, opts)
 	if !result.Pass || result.CoveredSuites != 10 || result.MissingSuites != 0 || len(result.Checks) != 10 {
 		t.Fatalf("complete coverage result=%+v, want all suites covered", result)
 	}
 	for _, check := range result.Checks {
-		if !check.Covered || check.EvidenceCount == 0 || check.MutationID == "" || !check.PositiveControlPassed || !check.MutationApplied || !check.MutationRejected {
+		if !check.Covered || check.EvidenceCount == 0 || check.MutationID == "" || !check.PositiveControlPassed || !check.MutationApplied || !check.MutationRejected || !check.MutationRestored {
 			t.Fatalf("coverage check=%+v, want positive evidence and a rejected deterministic mutation", check)
 		}
 	}
@@ -51,7 +55,8 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "08_TAPES", "entry_001.json")); err != nil {
 		t.Fatal(err)
 	}
-	result = EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	writeCoverageIndex(t, dir)
+	result = EvaluateCoverageWithOptions(dir, campaignVerificationOptionsForPack(t, dir, publicKeyHex))
 	if result.Pass || result.MissingSuites != 1 || result.Checks[5].SuiteID != "ADV-06" || result.Checks[5].Covered {
 		t.Fatalf("missing tape coverage result=%+v, want only ADV-06 missing", result)
 	}
@@ -63,13 +68,14 @@ func TestCoverageRejectsAnAlreadyFailingPositiveControl(t *testing.T) {
 	receiptPath := filepath.Join(dir, "02_PROOFGRAPH", "receipts", "005.json")
 	receipt := loadMutationJSON(receiptPath)
 	receipt["seq"] = float64(7)
-	if !writeMutationJSON(receiptPath, receipt) {
+	if !writeTestMutationJSON(receiptPath, receipt) {
 		t.Fatal("could not create pre-failing positive control")
 	}
+	writeCoverageIndex(t, dir)
 
-	result := EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	result := EvaluateCoverageWithOptions(dir, campaignVerificationOptionsForPack(t, dir, publicKeyHex))
 	check := result.Checks[0]
-	if check.SuiteID != "ADV-01" || check.Covered || check.PositiveControlPassed || check.MutationApplied || check.MutationRejected {
+	if check.SuiteID != "ADV-01" || check.Covered || check.PositiveControlPassed || check.MutationApplied || check.MutationRejected || check.MutationRestored {
 		t.Fatalf("pre-failing control check=%+v, want fail-closed differential coverage", check)
 	}
 }
@@ -77,6 +83,7 @@ func TestCoverageRejectsAnAlreadyFailingPositiveControl(t *testing.T) {
 func TestCoverageRejectsMutationWorkspaceOverTheByteLimit(t *testing.T) {
 	dir := t.TempDir()
 	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	opts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
 	oversized := filepath.Join(dir, "oversized-untrusted-artifact.bin")
 	if err := os.WriteFile(oversized, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -85,19 +92,54 @@ func TestCoverageRejectsMutationWorkspaceOverTheByteLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	result := EvaluateCoverageWithOptions(dir, opts)
 	if result.Pass || result.CoveredSuites != 0 || result.MissingSuites != 10 {
 		t.Fatalf("oversized mutation workspace result=%+v, want all coverage to fail closed", result)
 	}
 	for _, check := range result.Checks {
-		if check.PositiveControlPassed || check.MutationApplied || check.MutationRejected {
+		if check.PositiveControlPassed || check.MutationApplied || check.MutationRejected || check.MutationRestored {
 			t.Fatalf("oversized workspace check=%+v, want no unbounded control or mutation execution", check)
 		}
 	}
-	aggregate := RunAllWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	aggregate := RunAllWithOptions(dir, opts)
 	if aggregate.Pass || aggregate.PassedSuites != 0 || aggregate.FailedSuites != 10 || len(aggregate.Suites) != 10 {
 		t.Fatalf("oversized aggregate=%+v, want all suites to fail closed before unbounded reads", aggregate)
 	}
+}
+
+func TestCoverageSnapshotMustMatchExternallyVerifiedRoots(t *testing.T) {
+	t.Run("unindexed post-verification file", func(t *testing.T) {
+		dir := t.TempDir()
+		publicKeyHex := writePassingCoverageArtifacts(t, dir)
+		opts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
+		if err := os.WriteFile(filepath.Join(dir, "post-verification.json"), []byte(`{}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		result := EvaluateCoverageWithOptions(dir, opts)
+		if result.Pass || result.CoveredSuites != 0 || result.MissingSuites != 10 {
+			t.Fatalf("post-verification addition result=%+v, want all coverage to fail closed", result)
+		}
+	})
+
+	t.Run("reindexed pack requires a newly verified root", func(t *testing.T) {
+		dir := t.TempDir()
+		publicKeyHex := writePassingCoverageArtifacts(t, dir)
+		oldOpts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
+		if err := os.WriteFile(filepath.Join(dir, "99_EXT", "adversarial", "campaign-context.json"), []byte(`{"version":"v2"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		writeCoverageIndex(t, dir)
+
+		staleResult := EvaluateCoverageWithOptions(dir, oldOpts)
+		if staleResult.Pass || staleResult.CoveredSuites != 0 || staleResult.MissingSuites != 10 {
+			t.Fatalf("stale root result=%+v, want all coverage to fail closed", staleResult)
+		}
+		freshResult := EvaluateCoverageWithOptions(dir, campaignVerificationOptionsForPack(t, dir, publicKeyHex))
+		if !freshResult.Pass || freshResult.CoveredSuites != 10 {
+			t.Fatalf("newly verified root result=%+v, want complete coverage", freshResult)
+		}
+	})
 }
 
 func TestCoverageMutationRestoresTheWorkspace(t *testing.T) {
@@ -108,9 +150,9 @@ func TestCoverageMutationRestoresTheWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	applied, rejected := runCoverageMutation(dir, adv01ReceiptGapInjection(), mandatoryCoverageMutations()["ADV-01"])
-	if !applied || !rejected {
-		t.Fatalf("mutation applied=%t rejected=%t, want exact detector rejection", applied, rejected)
+	applied, rejected, restored := runCoverageMutation(dir, adv01ReceiptGapInjection(), mandatoryCoverageMutations()["ADV-01"])
+	if !applied || !rejected || !restored {
+		t.Fatalf("mutation applied=%t rejected=%t restored=%t, want exact detector rejection and restoration", applied, rejected, restored)
 	}
 	after, err := os.ReadFile(receiptPath)
 	if err != nil {
@@ -128,9 +170,9 @@ func TestCoverageRequiresTheExpectedDetectorToRejectItsMutation(t *testing.T) {
 	alwaysPass := &Suite{ID: "ADV-01", Run: func(string) *SuiteResult {
 		return &SuiteResult{SuiteID: "ADV-01", Pass: true}
 	}}
-	applied, rejected := runCoverageMutation(dir, alwaysPass, mutation)
-	if !applied || rejected {
-		t.Fatalf("mutation probe applied=%t rejected=%t, want applied mutation and fail-closed rejection proof", applied, rejected)
+	applied, rejected, restored := runCoverageMutation(dir, alwaysPass, mutation)
+	if !applied || rejected || !restored {
+		t.Fatalf("mutation probe applied=%t rejected=%t restored=%t, want applied mutation without detector rejection", applied, rejected, restored)
 	}
 	unrelatedFailure := &Suite{ID: "ADV-01", Run: func(string) *SuiteResult {
 		return &SuiteResult{
@@ -142,9 +184,26 @@ func TestCoverageRequiresTheExpectedDetectorToRejectItsMutation(t *testing.T) {
 			}},
 		}
 	}}
-	applied, rejected = runCoverageMutation(dir, unrelatedFailure, mutation)
-	if !applied || rejected {
-		t.Fatalf("unrelated failure applied=%t rejected=%t, want only the expected detector to prove rejection", applied, rejected)
+	applied, rejected, restored = runCoverageMutation(dir, unrelatedFailure, mutation)
+	if !applied || rejected || !restored {
+		t.Fatalf("unrelated failure applied=%t rejected=%t restored=%t, want only the expected detector to prove rejection", applied, rejected, restored)
+	}
+}
+
+func TestCoverageMutationReportsRestoreFailure(t *testing.T) {
+	mutation := coverageMutation{
+		ID:             "restore-failure/v1",
+		ExpectedTestID: "ADV-01-T1",
+		Apply: func(string) (restoreCoverageMutation, bool) {
+			return func() bool { return false }, true
+		},
+	}
+	suite := &Suite{ID: "ADV-01", Run: func(string) *SuiteResult {
+		return &SuiteResult{SuiteID: "ADV-01", Pass: false, TestResults: []TestResult{{TestID: "ADV-01-T1", Pass: false}}}
+	}}
+	applied, rejected, restored := runCoverageMutation(t.TempDir(), suite, mutation)
+	if !applied || !rejected || restored {
+		t.Fatalf("restore failure applied=%t rejected=%t restored=%t, want explicit dirty-workspace signal", applied, rejected, restored)
 	}
 }
 
@@ -225,7 +284,46 @@ func writePassingCoverageArtifacts(t *testing.T, dir string) string {
 	toolManifest := signCampaignDocument(t, map[string]any{"name": "covered-tool", "campaign_id": testCampaignID, "run_id": testCampaignRunID}, "signatures", campaignToolManifestSignatureDomain, privateKey)
 	writeJSON(t, filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json"), toolManifest)
 	writeJSON(t, filepath.Join(dir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 5})
+	writeCoverageIndex(t, dir)
 	return publicKeyHex
+}
+
+func writeCoverageIndex(t *testing.T, dir string) {
+	t.Helper()
+	entries := make([]map[string]string, 0)
+	if err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "00_INDEX.json" || rel == evidence.EvidencePackSealPath {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256(data)
+		entries = append(entries, map[string]string{"path": rel, "sha256": hex.EncodeToString(digest[:])})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i]["path"] < entries[j]["path"] })
+	data, err := json.MarshalIndent(map[string]any{"version": "1.0.0", "entries": entries}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "00_INDEX.json"), append(data, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func campaignTestKey() (ed25519.PrivateKey, string) {
@@ -245,6 +343,27 @@ func campaignVerificationOptions(publicKeyHex string) VerificationOptions {
 		CampaignID:           testCampaignID,
 		RunID:                testCampaignRunID,
 	}
+}
+
+func campaignVerificationOptionsForPack(t *testing.T, dir, publicKeyHex string) VerificationOptions {
+	t.Helper()
+	roots, err := evidence.VerifyEvidencePackIndexRoots(dir)
+	if err != nil {
+		t.Fatalf("verify fixture EvidencePack roots: %v", err)
+	}
+	opts := campaignVerificationOptions(publicKeyHex)
+	opts.VerifiedEvidenceIndexHash = roots.IndexHash
+	opts.VerifiedEvidenceMerkleRoot = roots.MerkleRoot
+	opts.VerifiedEvidenceEntryCount = roots.EntryCount
+	return opts
+}
+
+func writeTestMutationJSON(path string, value map[string]interface{}) bool {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return false
+	}
+	return os.WriteFile(path, data, 0o600) == nil
 }
 
 func signCampaignDocument(t *testing.T, document map[string]any, field, domain string, privateKey ed25519.PrivateKey) map[string]any {

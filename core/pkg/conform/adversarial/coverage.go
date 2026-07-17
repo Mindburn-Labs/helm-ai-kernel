@@ -40,9 +40,20 @@ func EvaluateCoverage(evidenceDir string, opts VerificationOptions) CoverageResu
 }
 
 // EvaluateCoverageWithOptions proves positive controls using externally rooted
-// cryptographic evidence, then copies and mutates the pack so each detector's
-// negative path is exercised without modifying the source EvidencePack.
+// cryptographic evidence, then uses one bounded snapshot for all mutations so
+// each detector's negative path is exercised without modifying the source
+// EvidencePack or multiplying untrusted pack I/O by the suite count.
 func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) CoverageResult {
+	workspace, cleanup, err := newCoverageMutationWorkspace(evidenceDir)
+	if err != nil {
+		return unavailableCoverageResult(opts)
+	}
+	defer cleanup()
+	result, _ := evaluateCoverageInWorkspace(workspace, opts)
+	return result
+}
+
+func evaluateCoverageInWorkspace(evidenceDir string, opts VerificationOptions) (CoverageResult, map[string]*SuiteResult) {
 	receiptFiles, _ := filepath.Glob(filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts", "*.json"))
 	receipts := make([]map[string]interface{}, 0, len(receiptFiles))
 	for _, path := range receiptFiles {
@@ -66,6 +77,10 @@ func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) C
 	for _, suite := range suites {
 		suitesByID[suite.ID] = suite
 	}
+	baselineResults := make(map[string]*SuiteResult, len(suites))
+	for _, suite := range suites {
+		baselineResults[suite.ID] = suite.Run(evidenceDir)
+	}
 	mutations := mandatoryCoverageMutations()
 	for index := range checks {
 		check := &checks[index]
@@ -80,7 +95,7 @@ func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) C
 			check.Reason = "missing: mandatory detector mutation is not registered"
 			continue
 		}
-		check.PositiveControlPassed = suitePassesExpectedTest(suite.Run(evidenceDir), mutation.ExpectedTestID)
+		check.PositiveControlPassed = suitePassesExpectedTest(baselineResults[check.SuiteID], mutation.ExpectedTestID)
 		if !check.PositiveControlPassed {
 			check.Covered = false
 			check.Reason = "missing: detector did not pass its unchanged positive control"
@@ -107,7 +122,25 @@ func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) C
 		result.Pass = false
 		result.MissingSuites++
 	}
-	return result
+	return result, baselineResults
+}
+
+func unavailableCoverageResult(opts VerificationOptions) CoverageResult {
+	suites := AllSuitesWithOptions(opts)
+	mutations := mandatoryCoverageMutations()
+	checks := make([]CoverageCheck, 0, len(suites))
+	for _, suite := range suites {
+		checks = append(checks, CoverageCheck{
+			SuiteID:    suite.ID,
+			MutationID: mutations[suite.ID].ID,
+			Reason:     "missing: bounded mutation snapshot could not be created",
+		})
+	}
+	return CoverageResult{
+		Pass:          false,
+		MissingSuites: len(checks),
+		Checks:        checks,
+	}
 }
 
 func receiptSequenceCoverage(receipts []map[string]interface{}) CoverageCheck {

@@ -30,7 +30,13 @@ func RunAll(evidenceDir string) *AggregateResult {
 // root. Evidence stored inside the candidate pack never establishes trust.
 func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateResult {
 	suites := AllSuitesWithOptions(opts)
-	coverage := EvaluateCoverageWithOptions(evidenceDir, opts)
+	workspace, cleanup, workspaceErr := newCoverageMutationWorkspace(evidenceDir)
+	defer cleanup()
+	coverage := unavailableCoverageResult(opts)
+	baselineResults := make(map[string]*SuiteResult, len(suites))
+	if workspaceErr == nil {
+		coverage, baselineResults = evaluateCoverageInWorkspace(workspace, opts)
+	}
 	coverageBySuite := make(map[string]CoverageCheck, len(coverage.Checks))
 	for _, check := range coverage.Checks {
 		coverageBySuite[check.SuiteID] = check
@@ -42,8 +48,15 @@ func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateR
 	}
 
 	for _, suite := range suites {
-		result := suite.Run(evidenceDir)
-		if check, ok := coverageBySuite[suite.ID]; ok && !check.Covered && result.Pass {
+		result := baselineResults[suite.ID]
+		if result == nil {
+			result = &SuiteResult{SuiteID: suite.ID, Name: suite.Name, Pass: true}
+		}
+		check, covered := coverageBySuite[suite.ID]
+		if !covered {
+			check = CoverageCheck{SuiteID: suite.ID, Reason: "missing: mandatory coverage check is not registered"}
+		}
+		if !check.Covered && result.Pass {
 			result.Pass = false
 			result.TestResults = append(result.TestResults, TestResult{
 				TestID: suite.ID + "-COVERAGE",

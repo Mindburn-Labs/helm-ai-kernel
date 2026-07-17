@@ -382,6 +382,48 @@ func TestCodexProjectSetupRefusesExactBasenameForeignHookWithoutMutation(t *test
 	}
 }
 
+func TestCodexProjectSetupRejectsMixedForeignAndCurrentHooksWithoutMutation(t *testing.T) {
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	dataDir := filepath.Join(t.TempDir(), "data")
+	foreignBin := filepath.Join(t.TempDir(), "helm-ai-kernel")
+	if err := os.WriteFile(foreignBin, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, err = filepath.Abs(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := setupOptions{Target: "codex", Scope: "project", Workspace: workspace, DataDir: dataDir}
+	configPath := filepath.Join(workspace, ".codex", "config.toml")
+	hooksPath := filepath.Join(workspace, ".codex", "hooks.json")
+	config := []byte("[mcp_servers." + setupMCPServerName + "]\ncommand = " + strconv.Quote(bin) + "\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", " + strconv.Quote(dataDir) + "]\n")
+	hooks := map[string]any{"hooks": map[string]any{"PreToolUse": []any{map[string]any{
+		"matcher": setupHookMatcher("codex"),
+		"hooks": []any{
+			map[string]any{"type": "command", "command": setupHookCommand(opts, foreignBin), "timeout": float64(30)},
+			map[string]any{"type": "command", "command": setupHookCommand(opts, bin), "timeout": float64(30)},
+		},
+	}}}}
+	rawHooks, err := json.Marshal(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignAndCurrentHooks := append(rawHooks, '\n')
+	mustWriteSetupFile(t, configPath, config)
+	mustWriteSetupFile(t, hooksPath, foreignAndCurrentHooks)
+
+	remove := []string{"setup", "remove", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
+	if code, _, _, stderr := runCodexProjectSetupCommand(t, remove); code != 1 || !strings.Contains(stderr, "manual remediation") {
+		t.Fatalf("mixed hooks remove exit=%d stderr=%s", code, stderr)
+	}
+	assertSetupFileBytes(t, configPath, config)
+	assertSetupFileBytes(t, hooksPath, foreignAndCurrentHooks)
+}
+
 func TestCodexProjectSetupPreservesExactBasenameForeignMCPServer(t *testing.T) {
 	workspace := filepath.Join(t.TempDir(), "workspace")
 	dataDir := filepath.Join(t.TempDir(), "data")
@@ -413,6 +455,49 @@ func TestCodexProjectSetupPreservesExactBasenameForeignMCPServer(t *testing.T) {
 	}
 	assertSetupFileBytes(t, configPath, config)
 	assertSetupFileBytes(t, hooksPath, hooks)
+}
+
+func TestCodexProjectSetupRejectsForeignMCPAlongsideCurrentHookWithoutMutation(t *testing.T) {
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	dataDir := filepath.Join(t.TempDir(), "data")
+	foreignBin := filepath.Join(t.TempDir(), "helm-ai-kernel")
+	if err := os.WriteFile(foreignBin, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, err = filepath.Abs(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := setupOptions{Target: "codex", Scope: "project", Workspace: workspace, DataDir: dataDir}
+	configPath := filepath.Join(workspace, ".codex", "config.toml")
+	hooksPath := filepath.Join(workspace, ".codex", "hooks.json")
+	config := []byte("[mcp_servers." + setupMCPServerName + "]\ncommand = " + strconv.Quote(foreignBin) + "\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", " + strconv.Quote(dataDir) + "]\n")
+	hooks := map[string]any{"hooks": map[string]any{"PreToolUse": []any{map[string]any{
+		"matcher": setupHookMatcher("codex"),
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": setupHookCommand(opts, bin),
+			"timeout": float64(30),
+		}},
+	}}}}
+	rawHooks, err := json.Marshal(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentHooks := append(rawHooks, '\n')
+	mustWriteSetupFile(t, configPath, config)
+	mustWriteSetupFile(t, hooksPath, currentHooks)
+
+	remove := []string{"setup", "remove", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
+	if code, _, _, stderr := runCodexProjectSetupCommand(t, remove); code != 1 || !strings.Contains(stderr, "manual remediation") {
+		t.Fatalf("foreign MCP + current hook remove exit=%d stderr=%s", code, stderr)
+	}
+	assertSetupFileBytes(t, configPath, config)
+	assertSetupFileBytes(t, hooksPath, currentHooks)
 }
 
 func TestCodexProjectSetupCurrentBinaryApplyStatusRemove(t *testing.T) {

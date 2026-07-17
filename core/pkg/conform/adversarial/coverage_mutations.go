@@ -6,12 +6,15 @@ package adversarial
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
 const (
@@ -42,7 +45,11 @@ func mandatoryCoverageMutations() map[string]coverageMutation {
 	}
 }
 
-func newCoverageMutationWorkspace(evidenceDir string) (string, func(), error) {
+func newCoverageMutationWorkspace(evidenceDir string, opts VerificationOptions) (string, func(), error) {
+	expectedRoots, err := externallyVerifiedEvidenceRoots(opts)
+	if err != nil {
+		return "", func() {}, err
+	}
 	tempDir, err := os.MkdirTemp("", "helm-adversarial-mutations-*")
 	if err != nil {
 		return "", func() {}, err
@@ -53,7 +60,49 @@ func newCoverageMutationWorkspace(evidenceDir string) (string, func(), error) {
 		cleanup()
 		return "", func() {}, err
 	}
+	verifiedRoots, err := evidence.VerifyEvidencePackIndexRoots(mutationRoot)
+	if err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("verify mutation snapshot inventory: %w", err)
+	}
+	if verifiedRoots != expectedRoots {
+		cleanup()
+		return "", func() {}, fmt.Errorf(
+			"mutation snapshot roots differ from externally verified EvidencePack roots: index_hash=%s merkle_root=%s entry_count=%d",
+			verifiedRoots.IndexHash,
+			verifiedRoots.MerkleRoot,
+			verifiedRoots.EntryCount,
+		)
+	}
 	return mutationRoot, cleanup, nil
+}
+
+func externallyVerifiedEvidenceRoots(opts VerificationOptions) (evidence.EvidencePackIndexRoots, error) {
+	indexHash, err := canonicalSHA256Digest("verified EvidencePack index hash", opts.VerifiedEvidenceIndexHash)
+	if err != nil {
+		return evidence.EvidencePackIndexRoots{}, err
+	}
+	merkleRoot, err := canonicalSHA256Digest("verified EvidencePack Merkle root", opts.VerifiedEvidenceMerkleRoot)
+	if err != nil {
+		return evidence.EvidencePackIndexRoots{}, err
+	}
+	if opts.VerifiedEvidenceEntryCount < 0 {
+		return evidence.EvidencePackIndexRoots{}, fmt.Errorf("verified EvidencePack entry count must be non-negative")
+	}
+	return evidence.EvidencePackIndexRoots{
+		IndexHash:  indexHash,
+		MerkleRoot: merkleRoot,
+		EntryCount: opts.VerifiedEvidenceEntryCount,
+	}, nil
+}
+
+func canonicalSHA256Digest(name, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	digest, err := hex.DecodeString(value)
+	if err != nil || len(digest) != sha256.Size || hex.EncodeToString(digest) != value {
+		return "", fmt.Errorf("%s must be a canonical lowercase %d-byte SHA-256 hex digest", name, sha256.Size)
+	}
+	return value, nil
 }
 
 func copyCoverageMutationTree(source, destination string) error {
@@ -147,13 +196,13 @@ func copyCoverageMutationTree(source, destination string) error {
 	})
 }
 
-func runCoverageMutation(evidenceDir string, suite *Suite, mutation coverageMutation) (bool, bool) {
+func runCoverageMutation(evidenceDir string, suite *Suite, mutation coverageMutation) (bool, bool, bool) {
 	if mutation.Apply == nil || mutation.ExpectedTestID == "" {
-		return false, false
+		return false, false, false
 	}
 	restore, applied := mutation.Apply(evidenceDir)
 	if !applied || restore == nil {
-		return false, false
+		return false, false, false
 	}
 	restored := false
 	defer func() {
@@ -173,9 +222,9 @@ func runCoverageMutation(evidenceDir string, suite *Suite, mutation coverageMuta
 	}
 	restored = restore()
 	if !restored {
-		return true, false
+		return true, rejected, false
 	}
-	return true, rejected
+	return true, rejected, true
 }
 
 func suitePassesExpectedTest(result *SuiteResult, expectedTestID string) bool {
@@ -416,14 +465,6 @@ func applyJSONMutation(path string, mutate func(map[string]interface{})) (restor
 		return os.WriteFile(path, original, info.Mode().Perm()) == nil
 	}
 	return restore, true
-}
-
-func writeMutationJSON(path string, value map[string]interface{}) bool {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return false
-	}
-	return os.WriteFile(path, data, 0o600) == nil
 }
 
 func differentMutationValue(current string) string {

@@ -52,9 +52,12 @@ type Suite struct {
 // VerificationOptions supplies trust roots from outside the candidate
 // EvidencePack. A signature embedded in the pack can never establish trust.
 type VerificationOptions struct {
-	CampaignPublicKeyHex string
-	CampaignID           string
-	RunID                string
+	CampaignPublicKeyHex       string
+	CampaignID                 string
+	RunID                      string
+	VerifiedEvidenceIndexHash  string
+	VerifiedEvidenceMerkleRoot string
+	VerifiedEvidenceEntryCount int
 }
 
 const (

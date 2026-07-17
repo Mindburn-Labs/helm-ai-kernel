@@ -52,6 +52,44 @@ func TestEvidencePackSealIndexRootEdgeCases(t *testing.T) {
 	}
 }
 
+func TestVerifyEvidencePackIndexRootsChecksTheCompleteInventory(t *testing.T) {
+	dir := t.TempDir()
+	artifactPath := filepath.Join(dir, "01_SCORE.json")
+	if err := os.WriteFile(artifactPath, []byte(`{"score":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeSealTestIndex(t, dir, []string{"01_SCORE.json"})
+
+	computed, err := ComputeEvidencePackIndexRoots(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := VerifyEvidencePackIndexRoots(dir)
+	if err != nil {
+		t.Fatalf("verify indexed inventory: %v", err)
+	}
+	if verified != computed {
+		t.Fatalf("verified roots=%+v, computed roots=%+v", verified, computed)
+	}
+
+	if err := os.WriteFile(artifactPath, []byte(`{"score":2}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyEvidencePackIndexRoots(dir); err == nil || !strings.Contains(err.Error(), "hash mismatch") {
+		t.Fatalf("tampered indexed file error=%v, want hash mismatch", err)
+	}
+
+	if err := os.WriteFile(artifactPath, []byte(`{"score":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "unindexed.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyEvidencePackIndexRoots(dir); err == nil || !strings.Contains(err.Error(), "unindexed evidence pack file") {
+		t.Fatalf("unindexed file error=%v, want fail-closed rejection", err)
+	}
+}
+
 func TestFileDevEvidenceSignerParseEdges(t *testing.T) {
 	dir := t.TempDir()
 	keyPath := FileDevEvidenceKeyPath(dir)

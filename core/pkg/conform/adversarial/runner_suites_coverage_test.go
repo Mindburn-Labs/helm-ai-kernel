@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -16,7 +17,8 @@ var _ func(string) *AggregateResult = RunAll
 func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 	dir := t.TempDir()
 
-	result := RunAll(dir)
+	writeCoverageIndex(t, dir)
+	result := RunAllWithOptions(dir, campaignVerificationOptionsForPack(t, dir, ""))
 	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 || len(result.Suites) != 10 {
 		t.Fatalf("empty evidence result = %+v, want all suites rejected for missing positive controls", result)
 	}
@@ -51,17 +53,42 @@ func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 func TestRunAllAcceptsCompletePositiveControls(t *testing.T) {
 	dir := t.TempDir()
 	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	opts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
 
-	result := RunAllWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	result := RunAllWithOptions(dir, opts)
 	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
 		t.Fatalf("complete evidence result = %+v, want all suites passing", result)
 	}
 	t.Setenv(CampaignPublicKeyEnv, publicKeyHex)
 	t.Setenv(CampaignIDEnv, testCampaignID)
 	t.Setenv(CampaignRunIDEnv, testCampaignRunID)
+	t.Setenv(VerifiedEvidenceIndexHashEnv, opts.VerifiedEvidenceIndexHash)
+	t.Setenv(VerifiedEvidenceMerkleRootEnv, opts.VerifiedEvidenceMerkleRoot)
+	t.Setenv(VerifiedEvidenceEntryCountEnv, strconv.Itoa(opts.VerifiedEvidenceEntryCount))
 	result = RunAll(dir)
 	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 {
 		t.Fatalf("environment-bound RunAll result = %+v, want all suites passing", result)
+	}
+}
+
+func TestRunAllFailsClosedWithoutExternallyVerifiedEvidenceRoots(t *testing.T) {
+	dir := t.TempDir()
+	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	t.Setenv(CampaignPublicKeyEnv, publicKeyHex)
+	t.Setenv(CampaignIDEnv, testCampaignID)
+	t.Setenv(CampaignRunIDEnv, testCampaignRunID)
+	t.Setenv(VerifiedEvidenceIndexHashEnv, "")
+	t.Setenv(VerifiedEvidenceMerkleRootEnv, "")
+	t.Setenv(VerifiedEvidenceEntryCountEnv, "")
+
+	result := RunAll(dir)
+	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 {
+		t.Fatalf("unbound environment result=%+v, want all suites to fail closed", result)
+	}
+	for _, suite := range result.Suites {
+		if len(suite.TestResults) != 1 || !strings.Contains(suite.TestResults[0].Reason, "verified EvidencePack index hash") {
+			t.Fatalf("suite=%+v, want explicit missing external root reason", suite)
+		}
 	}
 }
 
@@ -113,7 +140,8 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 		"last_good_seq": 4,
 	})
 
-	result := RunAll(dir)
+	writeCoverageIndex(t, dir)
+	result := RunAllWithOptions(dir, campaignVerificationOptionsForPack(t, dir, ""))
 	if result.Pass || result.FailedSuites != 10 || result.PassedSuites != 0 {
 		t.Fatalf("bad evidence result = %+v, want all suites failing", result)
 	}

@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 const (
-	CampaignPublicKeyEnv = "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX"
-	CampaignIDEnv        = "HELM_BOUNTY_CAMPAIGN_ID"
-	CampaignRunIDEnv     = "HELM_BOUNTY_RUN_ID"
+	CampaignPublicKeyEnv          = "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX"
+	CampaignIDEnv                 = "HELM_BOUNTY_CAMPAIGN_ID"
+	CampaignRunIDEnv              = "HELM_BOUNTY_RUN_ID"
+	VerifiedEvidenceIndexHashEnv  = "HELM_BOUNTY_VERIFIED_EVIDENCE_INDEX_HASH"
+	VerifiedEvidenceMerkleRootEnv = "HELM_BOUNTY_VERIFIED_EVIDENCE_MERKLE_ROOT"
+	VerifiedEvidenceEntryCountEnv = "HELM_BOUNTY_VERIFIED_EVIDENCE_ENTRY_COUNT"
 )
 
 // RunAll executes all 10 mandatory adversarial suites against an EvidencePack.
@@ -19,10 +24,17 @@ const (
 // suites fail closed when the variable is absent or invalid; explicit callers
 // should use RunAllWithOptions.
 func RunAll(evidenceDir string) *AggregateResult {
+	verifiedEntryCount, err := strconv.Atoi(strings.TrimSpace(os.Getenv(VerifiedEvidenceEntryCountEnv)))
+	if err != nil {
+		verifiedEntryCount = -1
+	}
 	return RunAllWithOptions(evidenceDir, VerificationOptions{
-		CampaignPublicKeyHex: os.Getenv(CampaignPublicKeyEnv),
-		CampaignID:           os.Getenv(CampaignIDEnv),
-		RunID:                os.Getenv(CampaignRunIDEnv),
+		CampaignPublicKeyHex:       os.Getenv(CampaignPublicKeyEnv),
+		CampaignID:                 os.Getenv(CampaignIDEnv),
+		RunID:                      os.Getenv(CampaignRunIDEnv),
+		VerifiedEvidenceIndexHash:  os.Getenv(VerifiedEvidenceIndexHashEnv),
+		VerifiedEvidenceMerkleRoot: os.Getenv(VerifiedEvidenceMerkleRootEnv),
+		VerifiedEvidenceEntryCount: verifiedEntryCount,
 	})
 }
 
@@ -30,9 +42,9 @@ func RunAll(evidenceDir string) *AggregateResult {
 // root. Evidence stored inside the candidate pack never establishes trust.
 func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateResult {
 	suites := AllSuitesWithOptions(opts)
-	workspace, cleanup, workspaceErr := newCoverageMutationWorkspace(evidenceDir)
+	workspace, cleanup, workspaceErr := newCoverageMutationWorkspace(evidenceDir, opts)
 	defer cleanup()
-	coverage := unavailableCoverageResult(opts)
+	coverage := unavailableCoverageResult(opts, workspaceErr)
 	baselineResults := make(map[string]*SuiteResult, len(suites))
 	if workspaceErr == nil {
 		coverage, baselineResults = evaluateCoverageInWorkspace(workspace, opts)

@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-23T19:40:14Z
+# Generated: 2026-07-23T19:40:29Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -280,7 +280,7 @@ cec8685ee1984a7d2354c6772225a93f0b2410933199464e7a982e90cf8c17de  core/pkg/contr
 ec5e678d2ee82478613d555157bee76e6219e89e33bff48ba73912064889c879  core/pkg/crypto/audit.go
 7bb309852eb6f56e94608764d95590d12d0363799464cefd13890a6be6337561  core/pkg/crypto/audit_test.go
 4c93d6bca52d1d607b7a6a17431e621dae6a282517502fcdb02c339583d784cc  core/pkg/crypto/cache.go
-269dd7b353c1d6b5f6d63984876c12543b4dd5c6619f327b351ffa3bd6077fc5  core/pkg/crypto/canonical.go
+f02c2a7fe5f0604b685cf77c322d978dc6c86bfb3f57779afbe45a1b78c2c6a4  core/pkg/crypto/canonical.go
 21e64571c1be21d57c3c7fada229e4283b0c06bff51b53fc91d45050c1725579  core/pkg/crypto/canonical_hardening_test.go
 79c5800555e866ef43ef7cc0f0578676770ab6292ea2860e2e331d0ee25c764b  core/pkg/crypto/chaos_test.go
 0319cee4ab2b72af8110ef535a2d1686d748d7ebd8befe932c65e515883d9dd2  core/pkg/crypto/counterfactual_signer_test.go
@@ -620,7 +620,7 @@ d7ad656ec37a80da9538c9435229f2e06214ccdde857fdf81e86dbb18d4ad7d7  core/pkg/guard
 604a3143cb413e5f65278430f7f40c0c98c3eb123b7180d01c05e7b19906f678  core/pkg/guardian/guardian_stress_coverage_test.go
 ac6ed02511a836d82a9c31f650b93e4741f403c6f3fd150306762b12a5fc667d  core/pkg/guardian/guardian_test.go
 b8a92ba80717a401aed15e89883c609ca40e7281b74b2b781fd9b327e9360a9c  core/pkg/guardian/integration_test.go
-3e541d1a3b0a7d6717f73fdb71c6322b2edc4476c9be7ccd003db66362293ada  core/pkg/guardian/interceptor.go
+b84eceefd16fcd1ff47ac6e3ebe295d6c2ce98d9d8aab805a310c9b411a237ba  core/pkg/guardian/interceptor.go
 ff78b833c6f03eecbf994ddf44b2e41cc65346c3cd8bca55d0c1ed2bbfc4fe7d  core/pkg/guardian/interceptor_test.go
 c0118e244adcba44a228c918ffb6c2fddc5be3273b7383914fb81e5f933bdb54  core/pkg/guardian/intervention_test.go
 fa50013f154fd1a1ebe1dcc1448b22f0ef3650990cefef4e7693aed227130b52  core/pkg/guardian/otel.go
@@ -632,7 +632,7 @@ ed69d20637a1737e28994d74fcbd2195dbf2ac6972b053143c5839e89015400a  core/pkg/guard
 4314e6563be45a6956d8cdde64f57506b39710738028bd837c4c5621049510e8  core/pkg/guardian/race_disabled_test.go
 d803b35371310f212cad09ba7158ca644cd8955c56b902921a02f3e552f0aedb  core/pkg/guardian/race_enabled_test.go
 f16ac707e4595963ac289f289b70b995d9832006667d0bdf6baf0605d24c870b  core/pkg/guardian/scoped_stop_test.go
-1f71efb62116c65558f8cfda02631b1e030c7a894a596920ec7f8f49b452b42c  core/pkg/guardian/semantic_threat_test.go
+2d918b88a1a08a122aff01fc50be86238ef1ca2302db090ca847811f585c7d18  core/pkg/guardian/semantic_threat_test.go
 bb0e9beaa7e84800122d2eed895f957f505a53f4bfa2be39cd3701fd8a9f1100  core/pkg/guardian/session_history_test.go
 d76de934fccf7f211698fb38b9de617951db426ea8925ab6932a9021cf1ce41f  core/pkg/guardian/session_risk_memory.go
 f0a2502b70ed3a9b6bbb82898c64ba482dd25b55bfe17124f612c98d393c7343  core/pkg/guardian/session_risk_memory_test.go

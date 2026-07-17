@@ -80,7 +80,6 @@ func decisionThreatEvidenceHash(decision *contracts.DecisionRecord) (string, err
 	}
 	sum := sha256.Sum256(encoded)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
-
 }
 
 func canonicalizeDecisionRecord(decision *contracts.DecisionRecord) (string, error) {

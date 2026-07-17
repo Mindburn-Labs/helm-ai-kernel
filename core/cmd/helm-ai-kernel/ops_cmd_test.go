@@ -72,8 +72,8 @@ func TestRunThreatScanJSON(t *testing.T) {
 		t.Fatalf("threat scan output is not valid JSON: %v\n%s", err, stdout.String())
 	}
 
-	if payload["finding_count"].(float64) < 2 {
-		t.Fatalf("finding_count = %v, want at least 2", payload["finding_count"])
+	if payload["finding_count"] != float64(2) {
+		t.Fatalf("finding_count = %v, want 2", payload["finding_count"])
 	}
 	classes := threatClasses(t, payload)
 	if !classes[string(contracts.ThreatClassPromptInjection)] || !classes[string(contracts.ThreatClassSoftwarePublish)] {
@@ -113,8 +113,8 @@ func TestRunThreatScanReadsStdin(t *testing.T) {
 		t.Fatalf("stdin threat scan output is not valid JSON: %v\n%s", err, stdout.String())
 	}
 
-	if payload["finding_count"].(float64) < 1 {
-		t.Fatalf("finding_count = %v, want at least 1", payload["finding_count"])
+	if payload["finding_count"] != float64(1) {
+		t.Fatalf("finding_count = %v, want 1", payload["finding_count"])
 	}
 	if !threatClasses(t, payload)[string(contracts.ThreatClassPromptInjection)] {
 		t.Fatal("prompt-injection literal class missing")

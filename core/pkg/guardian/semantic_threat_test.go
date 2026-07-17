@@ -93,6 +93,21 @@ func TestGuardianEscalatesWhenSemanticCoverageIsTruncated(t *testing.T) {
 	}
 }
 
+func TestGuardianMultiFieldSelectionPreservesSemanticTruncation(t *testing.T) {
+	req := semanticRequest(strings.Repeat("ordinary ", 4096) + semanticBypass)
+	req.Context["text"] = semanticBypass
+	decision, err := semanticGuardian(t, WithSemanticThreatEscalation(10000)).EvaluateDecision(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Verdict != string(contracts.VerdictEscalate) || decision.ReasonCode != string(contracts.ReasonSemanticThreatEscalate) {
+		t.Fatalf("multi-field truncation verdict = %+v, want ESCALATE", decision)
+	}
+	if decision.ThreatScan == nil || decision.ThreatScan.Semantic == nil || !decision.ThreatScan.Semantic.InputTruncated {
+		t.Fatalf("preferred scan discarded truncation evidence: %+v", decision.ThreatScan)
+	}
+}
+
 func TestGuardianSemanticThreatContextCannotBeSpoofed(t *testing.T) {
 	g := semanticGuardian(t)
 	req := semanticRequest("")
@@ -122,7 +137,21 @@ func TestGuardianSemanticThreatContextCannotBeSpoofedWithoutScanner(t *testing.T
 	}
 }
 
-func TestGuardianBindsSemanticModelFailure(t *testing.T) {
+func TestGuardianConfiguredSemanticPolicyEscalatesWithoutScanner(t *testing.T) {
+	g := semanticGuardian(t, WithThreatScanner(nil), WithSemanticThreatEscalation(7000))
+	decision, err := g.EvaluateDecision(context.Background(), semanticRequest(semanticBypass))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Verdict != string(contracts.VerdictEscalate) || decision.ReasonCode != string(contracts.ReasonSemanticThreatEscalate) {
+		t.Fatalf("missing scanner verdict = %+v, want ESCALATE", decision)
+	}
+	if decision.ThreatScan == nil || decision.ThreatScan.Semantic == nil || decision.ThreatScan.Semantic.FailureReason != semanticScannerMissing {
+		t.Fatalf("missing scanner evidence was not signature-bound: %+v", decision.ThreatScan)
+	}
+}
+
+func TestGuardianConfiguredSemanticPolicyEscalatesModelFailure(t *testing.T) {
 	scanner := threatscan.New(
 		threatscan.WithClock(func() time.Time { return time.Unix(10, 0).UTC() }),
 		threatscan.WithSemanticModel(nil, "sha256:required"),
@@ -132,12 +161,29 @@ func TestGuardianBindsSemanticModelFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decision.Verdict != string(contracts.VerdictAllow) {
-		t.Fatalf("unavailable advisory model changed verdict: %+v", decision)
+	if decision.Verdict != string(contracts.VerdictEscalate) || decision.ReasonCode != string(contracts.ReasonSemanticThreatEscalate) {
+		t.Fatalf("configured model failure verdict = %+v, want ESCALATE", decision)
 	}
 	policyContext := decision.InputContext[ContextThreatScan].(map[string]any)
 	if policyContext["semantic_available"] != false || policyContext["semantic_failure_reason"] != "MODEL_UNAVAILABLE" {
 		t.Fatalf("model failure evidence = %+v", policyContext)
+	}
+	if decision.ThreatScan == nil || decision.ThreatScan.Semantic == nil || decision.ThreatScan.Semantic.Available {
+		t.Fatalf("model failure missing from signed decision: %+v", decision.ThreatScan)
+	}
+}
+
+func TestGuardianSemanticModelFailureRemainsAdvisoryWithoutPolicy(t *testing.T) {
+	scanner := threatscan.New(
+		threatscan.WithClock(func() time.Time { return time.Unix(10, 0).UTC() }),
+		threatscan.WithSemanticModel(nil, "sha256:required"),
+	)
+	decision, err := semanticGuardian(t, WithThreatScanner(scanner)).EvaluateDecision(context.Background(), semanticRequest("ordinary input"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Verdict != string(contracts.VerdictAllow) {
+		t.Fatalf("unconfigured model failure changed advisory-only verdict: %+v", decision)
 	}
 }
 

@@ -2,6 +2,8 @@ package guardian
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -25,6 +27,7 @@ const (
 	ContextTrustLevel      = "trust_level"
 	ContextDestination     = "destination"
 	ContextThreatScan      = "threat_scan"
+	semanticScannerMissing = "SCANNER_UNAVAILABLE"
 )
 
 // IsReservedSecurityContextKey identifies context keys whose values must be
@@ -376,9 +379,31 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 	// reference is always security-owned, including configurations where the
 	// scanner is disabled, so caller-supplied evidence can never reach policy.
 	delete(evalCtx.Request.Context, ContextThreatScan)
+	channel, trustLevel := trustedInputProvenance(evalCtx.Request.Context)
+	if p.g.threatScanner == nil && p.g.semanticEscalationThresholdBP > 0 {
+		for _, key := range []string{"user_input", "text", "content"} {
+			textToScan, ok := evalCtx.Request.Context[key].(string)
+			if !ok || textToScan == "" {
+				continue
+			}
+			sum := sha256.Sum256([]byte(textToScan))
+			inputHash := "sha256:" + hex.EncodeToString(sum[:])
+			evalCtx.ThreatScanResult = &contracts.ThreatScanResult{
+				ScanID:        "scan-unavailable-" + hex.EncodeToString(sum[:8]),
+				Timestamp:     p.g.clock.Now(),
+				SourceChannel: channel,
+				TrustLevel:    trustLevel,
+				RawInputHash:  inputHash,
+				Semantic: &contracts.SemanticThreatAssessment{
+					Available:     false,
+					FailureReason: semanticScannerMissing,
+					ThresholdBP:   p.g.semanticEscalationThresholdBP,
+				},
+			}
+			break
+		}
+	}
 	if p.g.threatScanner != nil {
-		channel, trustLevel := trustedInputProvenance(evalCtx.Request.Context)
-
 		// Every scannable text field must be inspected: first-match-only
 		// scanning lets a payload in a secondary field bypass the gate.
 		for _, key := range []string{"user_input", "text", "content"} {
@@ -428,37 +453,39 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				return decision, nil
 			}
 		}
+	}
 
-		if evalCtx.ThreatScanResult != nil {
-			if evalCtx.Request.Context == nil {
-				evalCtx.Request.Context = make(map[string]interface{})
-			}
-			evalCtx.Request.Context[ContextThreatScan] = evalCtx.ThreatScanResult.Ref().PolicyContext()
+	if evalCtx.ThreatScanResult != nil {
+		if evalCtx.Request.Context == nil {
+			evalCtx.Request.Context = make(map[string]interface{})
+		}
+		evalCtx.Request.Context[ContextThreatScan] = evalCtx.ThreatScanResult.Ref().PolicyContext()
 
-			semantic := evalCtx.ThreatScanResult.Semantic
-			thresholdBP := p.g.semanticEscalationThresholdBP
-			if thresholdBP > 0 && semantic != nil && semantic.Available && (semantic.InputTruncated || semantic.MaxBP >= thresholdBP) {
-				reason := fmt.Sprintf("%s: semantic score %d bp meets tenant escalation threshold %d bp; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.MaxBP, thresholdBP, semantic.ModelHash)
-				if semantic.InputTruncated {
-					reason = fmt.Sprintf("%s: input exceeds the deterministic semantic coverage bound; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.ModelHash)
-				}
-				decision := &contracts.DecisionRecord{
-					ID:           newDecisionID(),
-					Timestamp:    p.g.clock.Now(),
-					Verdict:      string(contracts.VerdictEscalate),
-					ReasonCode:   string(contracts.ReasonSemanticThreatEscalate),
-					Reason:       reason,
-					InputContext: evalCtx.Request.Context,
-				}
-				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
-					return nil, fmt.Errorf("failed to sign semantic-escalation decision: %w", err)
-				}
-				if p.g.auditLog != nil {
-					decisionBytes, _ := canonicalize.JCS(decision)
-					_, _ = p.g.auditLog.Append("guardian", "SEMANTIC_THREAT_ESCALATE", decision.ID, string(decisionBytes))
-				}
-				return decision, nil
+		semantic := evalCtx.ThreatScanResult.Semantic
+		thresholdBP := p.g.semanticEscalationThresholdBP
+		if thresholdBP > 0 && semantic != nil && (!semantic.Available || semantic.InputTruncated || semantic.MaxBP >= thresholdBP) {
+			reason := fmt.Sprintf("%s: semantic score %d bp meets tenant escalation threshold %d bp; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.MaxBP, thresholdBP, semantic.ModelHash)
+			if !semantic.Available {
+				reason = fmt.Sprintf("%s: configured semantic model is unavailable; failure=%s model=%s expected=%s", contracts.ReasonSemanticThreatEscalate, semantic.FailureReason, semantic.ModelHash, semantic.ExpectedModelHash)
+			} else if semantic.InputTruncated {
+				reason = fmt.Sprintf("%s: input exceeds the deterministic semantic coverage bound; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.ModelHash)
 			}
+			decision := &contracts.DecisionRecord{
+				ID:           newDecisionID(),
+				Timestamp:    p.g.clock.Now(),
+				Verdict:      string(contracts.VerdictEscalate),
+				ReasonCode:   string(contracts.ReasonSemanticThreatEscalate),
+				Reason:       reason,
+				InputContext: evalCtx.Request.Context,
+			}
+			if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
+				return nil, fmt.Errorf("failed to sign semantic-escalation decision: %w", err)
+			}
+			if p.g.auditLog != nil {
+				decisionBytes, _ := canonicalize.JCS(decision)
+				_, _ = p.g.auditLog.Append("guardian", "SEMANTIC_THREAT_ESCALATE", decision.ID, string(decisionBytes))
+			}
+			return decision, nil
 		}
 	}
 
@@ -664,6 +691,14 @@ func preferredThreatScanResult(current, candidate *contracts.ThreatScanResult) *
 		}
 		return current
 	}
+	currentSemanticSafety := semanticSafetyPriority(current)
+	candidateSemanticSafety := semanticSafetyPriority(candidate)
+	if currentSemanticSafety != candidateSemanticSafety {
+		if candidateSemanticSafety > currentSemanticSafety {
+			return candidate
+		}
+		return current
+	}
 	currentSemanticBP := semanticMaxBP(current)
 	candidateSemanticBP := semanticMaxBP(candidate)
 	if currentSemanticBP != candidateSemanticBP {
@@ -682,6 +717,19 @@ func preferredThreatScanResult(current, candidate *contracts.ThreatScanResult) *
 		return candidate
 	}
 	return current
+}
+
+func semanticSafetyPriority(result *contracts.ThreatScanResult) int {
+	if result == nil || result.Semantic == nil {
+		return 0
+	}
+	if !result.Semantic.Available {
+		return 2
+	}
+	if result.Semantic.InputTruncated {
+		return 1
+	}
+	return 0
 }
 
 func semanticMaxBP(result *contracts.ThreatScanResult) int {

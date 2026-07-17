@@ -73,7 +73,10 @@ jobs:
           sarif_file: results.sarif
 
   pull-request-evidence:
-    name: Pull request Scorecard evidence
+    # Preserve the current status-check name until the private ruleset binding
+    # is verified. This job intentionally retains evidence only; it never
+    # uploads PR SARIF or receives publication authority.
+    name: Upload pull request SARIF
     if: github.event_name == 'pull_request'
     needs: pull-request-analysis
     runs-on: ubuntu-latest

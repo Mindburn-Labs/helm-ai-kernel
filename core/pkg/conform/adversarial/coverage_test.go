@@ -36,7 +36,7 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 		t.Fatalf("complete coverage result=%+v, want all suites covered", result)
 	}
 	for _, check := range result.Checks {
-		if !check.Covered || check.EvidenceCount == 0 || check.MutationID == "" || !check.MutationApplied || !check.MutationRejected {
+		if !check.Covered || check.EvidenceCount == 0 || check.MutationID == "" || !check.PositiveControlPassed || !check.MutationApplied || !check.MutationRejected {
 			t.Fatalf("coverage check=%+v, want positive evidence and a rejected deterministic mutation", check)
 		}
 	}
@@ -54,6 +54,23 @@ func TestEvaluateCoverageAcceptsAllPositiveControls(t *testing.T) {
 	result = EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
 	if result.Pass || result.MissingSuites != 1 || result.Checks[5].SuiteID != "ADV-06" || result.Checks[5].Covered {
 		t.Fatalf("missing tape coverage result=%+v, want only ADV-06 missing", result)
+	}
+}
+
+func TestCoverageRejectsAnAlreadyFailingPositiveControl(t *testing.T) {
+	dir := t.TempDir()
+	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	receiptPath := filepath.Join(dir, "02_PROOFGRAPH", "receipts", "005.json")
+	receipt := loadMutationJSON(receiptPath)
+	receipt["seq"] = float64(7)
+	if !writeMutationJSON(receiptPath, receipt) {
+		t.Fatal("could not create pre-failing positive control")
+	}
+
+	result := EvaluateCoverageWithOptions(dir, campaignVerificationOptions(publicKeyHex))
+	check := result.Checks[0]
+	if check.SuiteID != "ADV-01" || check.Covered || check.PositiveControlPassed || check.MutationApplied || check.MutationRejected {
+		t.Fatalf("pre-failing control check=%+v, want fail-closed differential coverage", check)
 	}
 }
 

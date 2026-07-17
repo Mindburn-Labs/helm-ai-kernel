@@ -22,13 +22,14 @@ type CoverageResult struct {
 
 // CoverageCheck records the source-owned minimum evidence for one suite.
 type CoverageCheck struct {
-	SuiteID          string `json:"suite_id"`
-	Covered          bool   `json:"covered"`
-	EvidenceCount    int    `json:"evidence_count"`
-	MutationID       string `json:"mutation_id"`
-	MutationApplied  bool   `json:"mutation_applied"`
-	MutationRejected bool   `json:"mutation_rejected"`
-	Reason           string `json:"reason"`
+	SuiteID               string `json:"suite_id"`
+	Covered               bool   `json:"covered"`
+	EvidenceCount         int    `json:"evidence_count"`
+	MutationID            string `json:"mutation_id"`
+	PositiveControlPassed bool   `json:"positive_control_passed"`
+	MutationApplied       bool   `json:"mutation_applied"`
+	MutationRejected      bool   `json:"mutation_rejected"`
+	Reason                string `json:"reason"`
 }
 
 // EvaluateCoverage checks positive controls and detector-rejection mutations.
@@ -77,6 +78,12 @@ func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) C
 		if !mutationExists || !suiteExists {
 			check.Covered = false
 			check.Reason = "missing: mandatory detector mutation is not registered"
+			continue
+		}
+		check.PositiveControlPassed = suitePassesExpectedTest(suite.Run(evidenceDir), mutation.ExpectedTestID)
+		if !check.PositiveControlPassed {
+			check.Covered = false
+			check.Reason = "missing: detector did not pass its unchanged positive control"
 			continue
 		}
 		check.MutationApplied, check.MutationRejected = runCoverageMutation(evidenceDir, suite, mutation)

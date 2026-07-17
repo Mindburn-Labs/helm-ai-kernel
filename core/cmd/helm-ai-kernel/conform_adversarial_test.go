@@ -61,6 +61,25 @@ func TestConformAdversarialDefinition(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowEmbedsFullCommitForAdversarialProvenance(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate test source")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", ".."))
+	workflowPath := filepath.Join(repoRoot, ".github", "workflows", "release.yml")
+	workflow, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("read release workflow: %v", err)
+	}
+	if !bytes.Contains(workflow, []byte(`echo "commit=$(git rev-parse HEAD)"`)) {
+		t.Fatal("release workflow must embed the full checked-out commit in published campaign runners")
+	}
+	if bytes.Contains(workflow, []byte(`echo "commit=$(git rev-parse --short`)) {
+		t.Fatal("release workflow must not shorten the commit embedded in published campaign runners")
+	}
+}
+
 func TestConformAdversarialRequiresExplicitTrustProfile(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runConform([]string{"adversarial", "--bundle", t.TempDir()}, &stdout, &stderr)

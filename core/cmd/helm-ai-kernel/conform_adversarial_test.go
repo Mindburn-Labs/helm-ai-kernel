@@ -742,6 +742,86 @@ func TestConformAdversarialVerifyReportRejectsDuplicateFields(t *testing.T) {
 	}
 }
 
+func TestConformAdversarialVerifyReportRejectsNullOptionalFields(t *testing.T) {
+	tests := []struct {
+		name       string
+		passingRun bool
+		injectNull func(*testing.T, map[string]any)
+	}{
+		{
+			name:       "nested verification optional field",
+			passingRun: true,
+			injectNull: func(t *testing.T, presentation map[string]any) {
+				t.Helper()
+				checks, ok := presentation["verification_checks"].([]any)
+				if !ok {
+					t.Fatal("verification_checks is not an array")
+				}
+				for _, value := range checks {
+					check, ok := value.(map[string]any)
+					if !ok {
+						t.Fatal("verification check is not an object")
+					}
+					for _, field := range []string{"detail", "reason"} {
+						if _, exists := check[field]; !exists {
+							check[field] = nil
+							return
+						}
+					}
+				}
+				t.Fatal("no verification check with an omitted optional field")
+			},
+		},
+		{
+			name: "top-level suites",
+			injectNull: func(t *testing.T, presentation map[string]any) {
+				t.Helper()
+				if _, exists := presentation["suites"]; exists {
+					t.Fatal("failed campaign unexpectedly contains suites")
+				}
+				presentation["suites"] = nil
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			attestationPublicKeyHex := configureAdversarialCommandTest(t)
+			packDir := createMinimalVerifiableBundle(t)
+			if tc.passingRun {
+				populatePassingCampaignPack(t, packDir)
+			}
+			reportPath := filepath.Join(t.TempDir(), "campaign.json")
+			var stdout, stderr bytes.Buffer
+			code := runConform([]string{"adversarial", "--bundle", packDir, "--profile", "dev-local", "--report", reportPath}, &stdout, &stderr)
+			if tc.passingRun && code != 0 {
+				t.Fatalf("campaign exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+			if !tc.passingRun && code != 1 {
+				t.Fatalf("incomplete campaign exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+
+			data, err := os.ReadFile(reportPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var presentation map[string]any
+			if err := json.Unmarshal(data, &presentation); err != nil {
+				t.Fatal(err)
+			}
+			tc.injectNull(t, presentation)
+			writeCampaignJSON(t, reportPath, presentation)
+
+			stdout.Reset()
+			stderr.Reset()
+			code = runConform(adversarialVerifyReportArgs(reportPath, attestationPublicKeyHex), &stdout, &stderr)
+			if code != 2 || !strings.Contains(stderr.String(), "JSON null values are not allowed") {
+				t.Fatalf("verify exit=%d accepted null-valued optional field; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
 func TestConformAdversarialVerifyReportRejectsSignedSemanticContradictions(t *testing.T) {
 	attestationPublicKeyHex := configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)
@@ -885,7 +965,7 @@ func TestAdversarialReportSigningKeyValidatesExpandedPrivateKey(t *testing.T) {
 
 func TestAdversarialReportJSONRejectsExcessiveNesting(t *testing.T) {
 	data := []byte(strings.Repeat("[", maxAdversarialJSONDepth+1) + "0" + strings.Repeat("]", maxAdversarialJSONDepth+1))
-	if err := rejectDuplicateJSONKeys(data); err == nil || !strings.Contains(err.Error(), "JSON nesting exceeds") {
+	if err := validateAdversarialJSONStructure(data); err == nil || !strings.Contains(err.Error(), "JSON nesting exceeds") {
 		t.Fatalf("deep JSON err=%v, want bounded nesting rejection", err)
 	}
 }

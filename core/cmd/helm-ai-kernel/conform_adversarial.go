@@ -500,7 +500,7 @@ func readBoundedAdversarialReport(path string) ([]byte, error) {
 }
 
 func decodeAdversarialCampaignReport(data []byte) (adversarialCampaignReport, error) {
-	if err := rejectDuplicateJSONKeys(data); err != nil {
+	if err := validateAdversarialJSONStructure(data); err != nil {
 		return adversarialCampaignReport{}, err
 	}
 
@@ -516,7 +516,7 @@ func decodeAdversarialCampaignReport(data []byte) (adversarialCampaignReport, er
 	return report, nil
 }
 
-func rejectDuplicateJSONKeys(data []byte) error {
+func validateAdversarialJSONStructure(data []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	if err := consumeUniqueJSONValue(decoder, 0); err != nil {
@@ -529,6 +529,9 @@ func consumeUniqueJSONValue(decoder *json.Decoder, depth int) error {
 	token, err := decoder.Token()
 	if err != nil {
 		return err
+	}
+	if token == nil {
+		return fmt.Errorf("JSON null values are not allowed")
 	}
 	delim, ok := token.(json.Delim)
 	if !ok {

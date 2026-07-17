@@ -58,9 +58,10 @@ type VerificationOptions struct {
 	VerifiedEvidenceIndexHash  string
 	VerifiedEvidenceMerkleRoot string
 	VerifiedEvidenceEntryCount int
-	// AllowVerifiedConformanceSignature authorizes omission of the detached
-	// conformance signature from the detector workspace only after the caller
-	// has verified it against an external trusted key. It never establishes
+	// AllowVerifiedConformanceSignature permits the detached conformance
+	// signature as the only unindexed file in the detector workspace after the
+	// caller verifies it against an external trusted key. Indexed signatures
+	// remain part of the verified inventory. The signature never establishes
 	// campaign trust and is never consumed by adversarial detectors.
 	AllowVerifiedConformanceSignature bool
 }

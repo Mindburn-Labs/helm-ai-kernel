@@ -494,6 +494,15 @@ func VerifyEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, error
 	return inventory.Roots, err
 }
 
+// VerifyEvidencePackIndexRootsAllowingVerifiedConformanceSignature verifies
+// the complete indexed inventory while permitting the legacy detached
+// conformance signature as the only unindexed file. The caller must first
+// verify that signature against an external trusted key.
+func VerifyEvidencePackIndexRootsAllowingVerifiedConformanceSignature(packDir string) (EvidencePackIndexRoots, error) {
+	inventory, err := computeEvidencePackInventory(packDir, true, true)
+	return inventory.Roots, err
+}
+
 func computeEvidencePackInventory(packDir string, verifyFiles bool, allowVerifiedConformanceSignature ...bool) (evidencePackInventory, error) {
 	indexPath := filepath.Join(packDir, "00_INDEX.json")
 	indexData, err := os.ReadFile(indexPath)

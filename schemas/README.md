@@ -15,6 +15,17 @@ Active surface for the `helm-ai-kernel` project.
 ## Local Commands
 
 - `make docs-coverage` from the repository root verifies coverage for this surface.
+- `make verify-connector-release-authority-vectors` verifies the canonical
+  `connector_release.json` authority and detached-signature envelope against
+  independent Go and Python implementations.
+
+## Connector release authority
+
+`connector_release.json` is the source-owned exact-version authority contract,
+not candidate connector metadata. `connector_release_authority_envelope.json`
+wraps it with the detached Ed25519 signature. See
+`docs/operations/connector-release-authority.md` for trust, revocation, and
+current-state boundaries.
 
 ## Documentation Contract
 

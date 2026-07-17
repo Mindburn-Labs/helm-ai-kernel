@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/connector_release_authority_envelope.json",
+  "title": "Connector Release Authority Envelope",
+  "description": "Detached Ed25519 signature over one sealed connector release authority statement.",
+  "type": "object",
+  "required": ["authority", "signature"],
+  "properties": {
+    "authority": { "$ref": "connector_release.json" },
+    "signature": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{128}$"
+    }
+  },
+  "additionalProperties": false
+}

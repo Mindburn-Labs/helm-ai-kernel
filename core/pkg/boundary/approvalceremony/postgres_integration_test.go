@@ -11,14 +11,17 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	"github.com/lib/pq"
 )
 
@@ -57,6 +60,10 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if err := schemaStore.Init(ctx); err != nil {
 		t.Fatalf("Init(): %v", err)
 	}
+	stopStore := kernel.NewScopedStopStore(db, time.Now, kernel.WithPostgresScopeLocks())
+	if err := stopStore.Init(ctx); err != nil {
+		t.Fatalf("initialize emergency-stop store: %v", err)
+	}
 	runtimeRole := fmt.Sprintf("helm_runtime_%d", time.Now().UnixNano())
 	runtimePassword := "helm-approval-test-password"
 	quotedRole := pq.QuoteIdentifier(runtimeRole)
@@ -76,6 +83,9 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `GRANT SELECT, INSERT, UPDATE ON approval_ceremonies TO `+quotedRole); err != nil {
 		t.Fatalf("grant runtime table privileges: %v", err)
 	}
+	if _, err := db.ExecContext(ctx, `GRANT SELECT ON emergency_stop_fences TO `+quotedRole); err != nil {
+		t.Fatalf("grant runtime emergency-stop read privilege: %v", err)
+	}
 	var runtimeSuperuser, runtimeBypassRLS bool
 	if err := db.QueryRowContext(ctx, `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`, runtimeRole).
 		Scan(&runtimeSuperuser, &runtimeBypassRLS); err != nil {
@@ -91,9 +101,10 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	}
 	store := NewPostgresStore(runtimeDB, grantVerifier)
 	clockNow := fixtureHold.HoldStartedAt
+	store.clock = func() time.Time { return clockNow }
 	config := ServiceConfig{
 		MinHoldDuration: 5 * time.Minute, ChallengeTTL: 10 * time.Minute,
-		MaxChallengeLifetime: 20 * time.Minute, GrantTTL: 5 * time.Minute,
+		MaxChallengeLifetime: 20 * time.Minute, GrantTTL: 15 * time.Minute,
 		MaxAssertions: 4, ServerIdentity: fixtureHold.Spec.ServerIdentity,
 		KernelTrustRootID: fixtureGrant.KernelTrustRootID, SigningKeyRef: fixtureGrant.SigningKeyRef,
 	}
@@ -162,6 +173,11 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if winner.State != StateGrantIssued || winner.Grant == nil {
 		t.Fatalf("winning grant record = %+v", winner)
 	}
+	fenceApprovalTestScope(t, ctx, stopStore, kernel.StopScope{
+		TenantID: winner.TenantID, WorkspaceID: "workspace-other",
+	}, "approval-cross-workspace-fence")
+	assertEmergencyStopRLSVisibility(t, ctx, runtimeDB, winner.TenantID, "workspace-other", 1)
+	assertEmergencyStopRLSVisibility(t, ctx, runtimeDB, winner.TenantID, winner.WorkspaceID, 0)
 
 	consumed := make(chan Record, 2)
 	consumeErrors := make(chan error, 2)
@@ -326,6 +342,35 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 		t.Fatalf("tampered consumption recovery error = %v, want ErrGrantSignatureRejected", err)
 	}
 
+	expiryLockedGrant := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
+	var transitionClock atomic.Int64
+	transitionClock.Store(clockNow.UnixMicro())
+	store.clock = func() time.Time { return time.UnixMicro(transitionClock.Load()).UTC() }
+	assertApprovalConsumeExpiresWhileWaitingForScopeLock(t, ctx, db, service, expiryLockedGrant, &transitionClock)
+	store.clock = func() time.Time { return clockNow }
+
+	fencedGrant := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
+	recoveryGrant := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
+	recoveryFinal := consumeApprovalTestGrantAfterLockProof(t, ctx, db, service, recoveryGrant)
+	fenceApprovalTestScopeAfterLockProof(t, ctx, db, stopStore, kernel.StopScope{
+		TenantID: fencedGrant.TenantID, WorkspaceID: fencedGrant.WorkspaceID,
+	}, "approval-same-workspace-fence")
+	assertEmergencyStopRLSVisibility(t, ctx, runtimeDB, fencedGrant.TenantID, fencedGrant.WorkspaceID, 1)
+	if _, err := service.ConsumeGrant(
+		ctx, fencedGrant.ApprovalID, fencedGrant.Grant.GrantID,
+		fencedGrant.Grant.GrantHash, fencedGrant.Grant.Nonce,
+	); !errors.Is(err, ErrEmergencyStopFenced) {
+		t.Fatalf("fenced ConsumeGrant() error = %v, want ErrEmergencyStopFenced", err)
+	}
+	assertApprovalPersistedState(t, ctx, db, fencedGrant, StateGrantIssued, false)
+	recoveredAfterFence, err := service.RecoverGrantConsumption(
+		ctx, recoveryFinal.ApprovalID, recoveryFinal.Grant.GrantID,
+		recoveryFinal.Grant.GrantHash, recoveryFinal.Grant.Nonce,
+	)
+	if err != nil || !reflect.DeepEqual(recoveredAfterFence, recoveryFinal) {
+		t.Fatalf("recovery after FENCE = %+v, error = %v", recoveredAfterFence, err)
+	}
+
 	expiringHold, err := service.BeginHold(ctx, fixtureHold.Spec.BindingRef)
 	if err != nil {
 		t.Fatalf("BeginHold() for expiration: %v", err)
@@ -339,6 +384,191 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	expired, err := service.Expire(ctx, expiring.ApprovalID)
 	if err != nil || expired.State != StateExpired {
 		t.Fatalf("Expire() record = %+v, error = %v", expired, err)
+	}
+}
+
+type approvalConsumeResult struct {
+	record Record
+	err    error
+}
+
+func consumeApprovalTestGrantAfterLockProof(
+	t *testing.T,
+	ctx context.Context,
+	lockDB *sql.DB,
+	service *Service,
+	grant Record,
+) Record {
+	t.Helper()
+	tx, err := lockDB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+		grant.TenantID, grant.WorkspaceID,
+	); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	result := make(chan approvalConsumeResult, 1)
+	go func() {
+		record, consumeErr := service.ConsumeGrant(
+			ctx, grant.ApprovalID, grant.Grant.GrantID, grant.Grant.GrantHash, grant.Grant.Nonce,
+		)
+		result <- approvalConsumeResult{record: record, err: consumeErr}
+	}()
+	select {
+	case early := <-result:
+		_ = tx.Rollback()
+		t.Fatalf("approval consumption bypassed held scope lock: %+v", early)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case completed := <-result:
+		if completed.err != nil {
+			t.Fatalf("approval consumption after scope lock release: %v", completed.err)
+		}
+		return completed.record
+	case <-time.After(5 * time.Second):
+		t.Fatal("approval consumption did not resume after scope lock release")
+	}
+	return Record{}
+}
+
+func assertApprovalConsumeExpiresWhileWaitingForScopeLock(
+	t *testing.T,
+	ctx context.Context,
+	lockDB *sql.DB,
+	service *Service,
+	grant Record,
+	transitionClock *atomic.Int64,
+) {
+	t.Helper()
+	tx, err := lockDB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+		grant.TenantID, grant.WorkspaceID,
+	); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, consumeErr := service.ConsumeGrant(
+			ctx, grant.ApprovalID, grant.Grant.GrantID, grant.Grant.GrantHash, grant.Grant.Nonce,
+		)
+		result <- consumeErr
+	}()
+	select {
+	case early := <-result:
+		_ = tx.Rollback()
+		t.Fatalf("approval consumption bypassed held scope lock: %v", early)
+	case <-time.After(100 * time.Millisecond):
+	}
+	transitionClock.Store(grant.Grant.ExpiresAt.UnixMicro())
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case consumeErr := <-result:
+		if !errors.Is(consumeErr, ErrTransitionConflict) {
+			t.Fatalf("approval consumption after grant expiry = %v, want ErrTransitionConflict", consumeErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("approval consumption did not resume after scope lock release")
+	}
+	assertApprovalPersistedState(t, ctx, lockDB, grant, StateGrantIssued, false)
+}
+
+type approvalFenceResult struct {
+	replayed bool
+	err      error
+}
+
+func fenceApprovalTestScopeAfterLockProof(
+	t *testing.T,
+	ctx context.Context,
+	lockDB *sql.DB,
+	store *kernel.ScopedStopStore,
+	scope kernel.StopScope,
+	commandID string,
+) {
+	t.Helper()
+	tx, err := lockDB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+		scope.TenantID, scope.WorkspaceID,
+	); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	result := make(chan approvalFenceResult, 1)
+	go func() {
+		_, replayed, fenceErr := store.Fence(
+			ctx, approvalTestFenceCommand(scope, commandID), approvalTestFenceAcknowledgement(),
+		)
+		result <- approvalFenceResult{replayed: replayed, err: fenceErr}
+	}()
+	select {
+	case early := <-result:
+		_ = tx.Rollback()
+		t.Fatalf("FENCE bypassed held scope lock: %+v", early)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case completed := <-result:
+		if completed.err != nil || completed.replayed {
+			t.Fatalf("FENCE after scope lock release: replayed=%t error=%v", completed.replayed, completed.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("FENCE did not resume after scope lock release")
+	}
+}
+
+func fenceApprovalTestScope(
+	t *testing.T,
+	ctx context.Context,
+	store *kernel.ScopedStopStore,
+	scope kernel.StopScope,
+	commandID string,
+) {
+	t.Helper()
+	_, replayed, err := store.Fence(
+		ctx, approvalTestFenceCommand(scope, commandID), approvalTestFenceAcknowledgement(),
+	)
+	if err != nil || replayed {
+		t.Fatalf("Fence(%+v) replayed=%t error=%v", scope, replayed, err)
+	}
+}
+
+func approvalTestFenceCommand(scope kernel.StopScope, commandID string) kernel.FenceCommand {
+	now := time.Now().UTC()
+	return kernel.FenceCommand{
+		ContractVersion: kernel.EmergencyStopFenceContractVersion,
+		Audience:        "approval-postgres-test", KeyID: "control-plane-test", CommandID: commandID,
+		TenantID: scope.TenantID, WorkspaceID: scope.WorkspaceID, Epoch: 1,
+		ActorID: "operator-test", Reason: "approval containment proof",
+		IssuedAt: now, ExpiresAt: now.Add(5 * time.Minute),
+	}
+}
+
+func approvalTestFenceAcknowledgement() kernel.AcknowledgementIdentity {
+	return kernel.AcknowledgementIdentity{
+		KeyID: "kernel-test", SignerProfile: kernel.EmergencyStopSignerClassical,
+		PublicKey: strings.Repeat("a", 64),
 	}
 }
 
@@ -361,6 +591,28 @@ func assertApprovalRLSVisibility(t *testing.T, ctx context.Context, db *sql.DB, 
 	}
 	if count != want {
 		t.Fatalf("RLS visibility for tenant %q workspace %q = %d, want %d", tenantID, workspaceID, count, want)
+	}
+}
+
+func assertEmergencyStopRLSVisibility(t *testing.T, ctx context.Context, db *sql.DB, tenantID, workspaceID string, want int) {
+	t.Helper()
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_workspace', $1, true)`, workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM emergency_stop_fences`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != want {
+		t.Fatalf("emergency-stop RLS visibility for tenant %q workspace %q = %d, want %d", tenantID, workspaceID, count, want)
 	}
 }
 
@@ -458,7 +710,7 @@ func approvalTestAuthority(spec ChallengeSpec, holdStarted time.Time) (approvalv
 			PublicKey:    privateKeys[keyID].Public().(ed25519.PublicKey),
 			WorkspaceIDs: []string{spec.WorkspaceID}, Roles: []string{spec.RequiredRole},
 			Actions: []string{spec.Action}, Audiences: []string{spec.Audience}, Enabled: true,
-			NotBefore: holdStarted.Add(-time.Hour), NotAfter: holdStarted.Add(time.Hour),
+			NotBefore: holdStarted.Add(-time.Hour), NotAfter: holdStarted.Add(2 * time.Hour),
 		}
 	}
 	return approvalverify.TrustStore{

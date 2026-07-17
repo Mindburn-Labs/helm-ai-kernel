@@ -139,10 +139,18 @@ created_at, updated_at, expires_at, consumed_at, consumed_by, version
 type PostgresStore struct {
 	db            *sql.DB
 	grantVerifier GrantSignatureVerifier
+	clock         func() time.Time
 }
 
 func NewPostgresStore(db *sql.DB, verifier GrantSignatureVerifier) *PostgresStore {
-	return &PostgresStore{db: db, grantVerifier: verifier}
+	return &PostgresStore{db: db, grantVerifier: verifier, clock: time.Now}
+}
+
+func (s *PostgresStore) transitionTime(fallback time.Time) time.Time {
+	if s == nil || s.clock == nil {
+		return fallback.UTC().Truncate(time.Microsecond)
+	}
+	return s.clock().UTC().Truncate(time.Microsecond)
 }
 
 func (s *PostgresStore) Init(ctx context.Context) error {
@@ -331,8 +339,8 @@ func (s *PostgresStore) issueGrant(ctx context.Context, tenantID, workspaceID, a
 	})
 }
 
-func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID, approvalID, grantID, grantHash, nonce string, consumption contracts.ApprovalGrantConsumption, algorithm, signature string, now time.Time) (Record, error) {
-	if !validToken(workspaceID) || !validToken(consumption.ConsumedBy) || !validToken(consumption.Audience) || !validToken(grantID) || !validSHA256(grantHash) || !validNonce(nonce) {
+func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID, approvalID, grantID, grantHash, nonce string, sealConsumption grantConsumptionSealer, requestedAt time.Time) (Record, error) {
+	if !validToken(workspaceID) || !validToken(grantID) || !validSHA256(grantHash) || !validNonce(nonce) || sealConsumption == nil {
 		return Record{}, invalidRecord("exact workspace, grant id, hash, nonce, consumer, and audience are required")
 	}
 	if s == nil || s.db == nil {
@@ -341,12 +349,15 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 	if s.grantVerifier == nil {
 		return Record{}, fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
 	}
-	consumedAt := now.UTC()
 	tx, err := s.beginScopeTx(ctx, tenantID, workspaceID)
 	if err != nil {
 		return Record{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireUnfencedScope(ctx, tx, tenantID, workspaceID); err != nil {
+		return Record{}, err
+	}
+	consumedAt := s.transitionTime(requestedAt)
 
 	issued, err := scanRecord(tx.QueryRowContext(ctx, `SELECT `+recordColumns+`
 		FROM approval_ceremonies
@@ -368,9 +379,6 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 	if issued.Grant == nil {
 		return Record{}, invalidRecord("grant issued record is missing grant")
 	}
-	if issued.Grant.TenantID != tenantID || issued.Grant.WorkspaceID != workspaceID || issued.Grant.Audience != consumption.Audience {
-		return Record{}, fmt.Errorf("%w: signed grant workload scope mismatch", ErrConsumerUnavailable)
-	}
 	if err := issued.Grant.ValidateAt(consumedAt); err != nil {
 		return Record{}, fmt.Errorf("%w: signed grant is inactive: %v", ErrTransitionConflict, err)
 	}
@@ -379,8 +387,12 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 	); err != nil {
 		return Record{}, err
 	}
-	if !consumption.ConsumedAt.Equal(consumedAt) {
-		return Record{}, invalidRecord("consumption consumed_at must be the server transition time")
+	consumption, algorithm, signature, err := sealConsumption(*issued.Grant, consumedAt)
+	if err != nil {
+		return Record{}, err
+	}
+	if !validToken(consumption.ConsumedBy) || !validToken(consumption.Audience) || !consumption.ConsumedAt.Equal(consumedAt) {
+		return Record{}, invalidRecord("consumption identity, audience, and server transition time are required")
 	}
 	if err := consumption.ValidateGrant(*issued.Grant); err != nil {
 		return Record{}, err
@@ -422,6 +434,34 @@ func (s *PostgresStore) consumeGrant(ctx context.Context, tenantID, workspaceID,
 		return Record{}, fmt.Errorf("commit approval ceremony transaction: %w", err)
 	}
 	return consumed, nil
+}
+
+// requireUnfencedScope shares the same transaction-scoped advisory lock as
+// the PostgreSQL emergency-stop store. Whichever transaction acquires the
+// tenant/workspace lock first defines the ordering: a committed FENCE blocks
+// consumption, while a committed consumption predates a later FENCE. The
+// connector dispatch is a separate data-plane step and may not have begun.
+func requireUnfencedScope(ctx context.Context, tx *sql.Tx, tenantID, workspaceID string) error {
+	if tx == nil {
+		return errors.New("approval ceremony scope transaction is unavailable")
+	}
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+		tenantID, workspaceID,
+	); err != nil {
+		return fmt.Errorf("coordinate approval consumption with emergency stop: %w", err)
+	}
+	var fenced bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM emergency_stop_fences
+		WHERE tenant_id = $1 AND workspace_id = $2
+	)`, tenantID, workspaceID).Scan(&fenced); err != nil {
+		return fmt.Errorf("verify approval consumption emergency-stop scope: %w", err)
+	}
+	if fenced {
+		return ErrEmergencyStopFenced
+	}
+	return nil
 }
 
 func (s *PostgresStore) deny(ctx context.Context, tenantID, workspaceID, approvalID string, now time.Time) (Record, error) {

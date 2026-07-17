@@ -12,6 +12,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
 
@@ -95,13 +96,16 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 	return config, true, nil
 }
 
-func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode string, signer helmcrypto.Signer) (*approvalConsumptionRuntime, error) {
+func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode string, signer helmcrypto.Signer, stops kernel.ScopedStopReader) (*approvalConsumptionRuntime, error) {
 	config, enabled, err := approvalConsumptionConfigFromEnv()
 	if err != nil || !enabled {
 		return nil, err
 	}
 	if databaseMode != "postgres" || db == nil {
 		return nil, errors.New("approval grant consumption requires the durable PostgreSQL runtime")
+	}
+	if stops == nil {
+		return nil, errors.New("approval grant consumption requires durable emergency-stop scope coordination")
 	}
 	approvalSigner, err := classicalApprovalSigner(signer)
 	if err != nil {
@@ -128,7 +132,7 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 		Resource: config.Resource, Scopes: []string{config.Scope},
 	})
 	return &approvalConsumptionRuntime{
-		consumer: consumer, validator: validator, audience: config.Audience,
+		consumer: consumer, validator: validator, stops: stops, audience: config.Audience,
 		maxTokenTTL: config.MaxTokenTTL,
 	}, nil
 }

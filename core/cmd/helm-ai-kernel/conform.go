@@ -1,3 +1,5 @@
+// quantum_posture: conformance command routing exposes classical Ed25519
+// campaign/report verification; it does not claim post-quantum protection.
 package main
 
 import (

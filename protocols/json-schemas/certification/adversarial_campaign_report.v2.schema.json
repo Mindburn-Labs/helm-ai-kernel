@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/certification/adversarial_campaign_report.v2.schema.json",
+  "$comment": "quantum_posture: this schema describes classical Ed25519 campaign report authentication and does not claim post-quantum protection.",
   "title": "HELM Kernel Adversarial Campaign Report v2",
   "description": "Deterministic, campaign/run-bound, Ed25519-attested result of canonical EvidencePack verification and all mandatory Kernel adversarial detectors.",
   "type": "object",

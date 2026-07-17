@@ -3,6 +3,9 @@ title: Run a Kernel Adversarial Campaign
 last_reviewed: 2026-07-17
 ---
 
+<!-- quantum_posture: this guide documents classical Ed25519 campaign and
+report authentication; it does not claim post-quantum campaign signing. -->
+
 # Run a Kernel Adversarial Campaign
 
 This guide runs the source-owned Kernel portion of the HELM bug-bounty loop

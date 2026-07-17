@@ -822,6 +822,47 @@ func TestConformAdversarialVerifyReportRejectsNullOptionalFields(t *testing.T) {
 	}
 }
 
+func TestConformAdversarialVerifyReportRequiresCanonicalByteEncoding(t *testing.T) {
+	attestationPublicKeyHex := configureAdversarialCommandTest(t)
+	reportPath := filepath.Join(t.TempDir(), "campaign.json")
+	var stdout, stderr bytes.Buffer
+	code := runConform([]string{"adversarial", "--bundle", t.TempDir(), "--profile", "dev-local", "--report", reportPath}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("failed campaign exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	canonical, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	omittedRequired := bytes.Replace(canonical, []byte("  \"coverage_checks\": [],\n"), nil, 1)
+	if bytes.Equal(omittedRequired, canonical) {
+		t.Fatal("generated failed report did not contain canonical coverage_checks")
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, canonical); err != nil {
+		t.Fatal(err)
+	}
+	compact.WriteByte('\n')
+
+	for name, mutated := range map[string][]byte{
+		"omitted required field": omittedRequired,
+		"alternate whitespace":   compact.Bytes(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(reportPath, mutated, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			stdout.Reset()
+			stderr.Reset()
+			code := runConform(adversarialVerifyReportArgs(reportPath, attestationPublicKeyHex), &stdout, &stderr)
+			if code != 2 || !strings.Contains(stderr.String(), "campaign report is not in canonical byte encoding") {
+				t.Fatalf("verify exit=%d accepted %s; stdout=%s stderr=%s", code, name, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
 func TestConformAdversarialVerifyReportRejectsSignedSemanticContradictions(t *testing.T) {
 	attestationPublicKeyHex := configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)

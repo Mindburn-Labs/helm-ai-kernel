@@ -135,11 +135,13 @@ make bounty-kernel-verify \
   BOUNTY_MERKLE_ROOT='<expected-evidence-merkle-root>'
 ```
 
-Verification is fail-closed on unknown or duplicate JSON fields, extra JSON
-values, reports above 8 MiB, nesting deeper than 128 containers, signature or
-key-ID mismatch, campaign/run replay, campaign-root substitution, source
-detector drift, counter contradictions, missing mutation evidence, reordered
-suites, or changed limitation text.
+Verification accepts only the exact canonical byte encoding emitted by the
+Kernel. It is fail-closed on omitted required fields, null values, alternate
+whitespace or key order, unknown or duplicate JSON fields, extra JSON values,
+reports above 8 MiB, nesting deeper than 128 containers, signature or key-ID
+mismatch, campaign/run replay, campaign-root substitution, source detector
+drift, counter contradictions, missing mutation evidence, reordered suites, or
+changed limitation text.
 
 The public structural contract is
 `protocols/json-schemas/certification/adversarial_campaign_report.v2.schema.json`.

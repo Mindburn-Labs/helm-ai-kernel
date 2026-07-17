@@ -513,6 +513,13 @@ func decodeAdversarialCampaignReport(data []byte) (adversarialCampaignReport, er
 	if err := requireJSONEOF(decoder); err != nil {
 		return adversarialCampaignReport{}, err
 	}
+	canonical, err := marshalAdversarialCampaignReport(report)
+	if err != nil {
+		return adversarialCampaignReport{}, fmt.Errorf("canonicalize campaign report: %w", err)
+	}
+	if !bytes.Equal(data, canonical) {
+		return adversarialCampaignReport{}, fmt.Errorf("campaign report is not in canonical byte encoding")
+	}
 	return report, nil
 }
 

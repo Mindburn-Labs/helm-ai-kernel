@@ -2,6 +2,9 @@
 // protection is provided or claimed by this implementation.
 package crypto
 
+// quantum_posture: classical Ed25519 decision verification binds threat
+// evidence and makes no post-quantum claim.
+
 import (
 	"crypto/ed25519"
 	"encoding/hex"

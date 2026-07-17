@@ -2,6 +2,9 @@
 // configured; it does not upgrade classical identities or external edges.
 package crypto
 
+// quantum_posture: ML-DSA decision verification binds threat evidence without
+// changing the existing post-quantum signature profile.
+
 import (
 	"encoding/hex"
 	"fmt"

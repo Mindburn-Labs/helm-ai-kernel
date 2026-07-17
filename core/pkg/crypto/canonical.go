@@ -2,6 +2,9 @@
 // not upgrade the posture of the configured signer or external trust edges.
 package crypto
 
+// quantum_posture: canonical threat-evidence binding is signature-algorithm
+// agnostic and makes no post-quantum certification claim.
+
 import (
 	"bytes"
 	"crypto/sha256"

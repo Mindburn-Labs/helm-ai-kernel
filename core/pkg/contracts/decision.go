@@ -2,6 +2,9 @@
 // protection depends on the configured classical, ML-DSA, or hybrid verifier.
 package contracts
 
+// quantum_posture: signed threat evidence is algorithm-agnostic and does not
+// change or imply a decision signature profile.
+
 import (
 	"fmt"
 	"time"

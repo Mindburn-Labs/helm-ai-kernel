@@ -1,21 +1,20 @@
 ---
 title: MCP
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-15
 ---
 
 # MCP
 
-Use HELM as a pre-dispatch firewall for MCP tool calls.
+Use the current MCP surface to generate client configuration, inspect local
+quarantine state, evaluate a scoped call before dispatch, revoke approval, and
+produce receipt-backed no-dispatch evidence.
 
-```text
-tools/list -> visible tools are filtered
-tools/call -> HELM evaluates before dispatch
-ALLOW -> call upstream
-DENY -> block
-ESCALATE -> block, write receipt, show scoped approval command
-```
+The public commands do **not** yet prove a general-purpose upstream MCP proxy.
+`mcp wrap` emits a wrapper profile; it does not launch the upstream command.
+Generated client configuration also does not prove that a native client loaded
+HELM or that arbitrary tool calls cross the boundary.
 
-## Wrap A Server
+## Generate A Wrapper Profile
 
 ```bash
 helm-ai-kernel mcp wrap \
@@ -25,12 +24,27 @@ helm-ai-kernel mcp wrap \
   --json
 ```
 
-Print or install client config:
+Treat the JSON as configuration input to inspect and install through the owning
+client. Do not treat this command as a running proxy.
+
+## Generate Client Configuration
+
+Print a configuration without changing the client:
 
 ```bash
 helm-ai-kernel mcp print-config --client codex
+helm-ai-kernel setup claude-code --dry-run --json
+```
+
+Generate the Claude Code plugin and MCP configuration artifacts:
+
+```bash
 helm-ai-kernel mcp install --client claude-code
 ```
+
+The install command writes the local artifacts and prints the separate
+`claude plugin install` command. Run and verify that client-owned step yourself.
+Setup does not approve detected tools.
 
 ## Authorize Before Dispatch
 
@@ -40,8 +54,10 @@ helm-ai-kernel mcp authorize-call \
   --tool-name pwd
 ```
 
-An unknown or unapproved server returns `ESCALATE`. The action is not
-dispatched. Use the approval loop in [Quickstart](/quickstart#see-an-escalation).
+An unknown or unapproved server returns `ESCALATE`. The authorization check does
+not dispatch the tool call. Use the approval loop in
+[Quickstart](/quickstart#see-an-escalation), then rerun the original configured
+call path.
 
 ## Scan Before Approval
 
@@ -57,7 +73,7 @@ helm-ai-kernel scan \
 
 For API clients, the same public surface is exposed as
 `POST /api/v1/mcp/scan`. A scan is advisory: it records the detected surface and
-does not dispatch, approve, or resume any tool call.
+does not dispatch, approve, or resume a tool call.
 
 ## Effect Scope
 
@@ -83,9 +99,9 @@ helm-ai-kernel mcp revoke \
   --reason "inspection finished"
 ```
 
-Revoked and expired grants fail closed on the next evaluation.
+Revoked and expired grants fail closed on the next configured evaluation.
 
-## Inspect
+## Inspect And Prove
 
 ```bash
 helm-ai-kernel mcp pending --json
@@ -93,15 +109,31 @@ helm-ai-kernel mcp receipts --json
 helm-ai-kernel mcp get --server-id helm-demo-shell --json
 ```
 
-Run the no-dispatch proof:
+Run the local no-dispatch proof:
 
 ```bash
 helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
 ```
 
-## What Still Blocks
+Verify the emitted EvidencePack offline:
 
-HELM denies mismatched scopes, expired or revoked approvals, schema drift,
-side-effect scope mismatch, and policy-forbidden actions. Missing approval or
-unknown tool/server state escalates only when a developer can resolve it with a
-local scoped approval or schema review.
+```bash
+helm-ai-kernel verify \
+  --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> \
+  --profile dev-local \
+  --json
+```
+
+## Current Boundary
+
+The source-owned proof covers configuration generation, quarantine, scoped
+authorization, expiry, revocation, no-dispatch behavior, receipts, and offline
+verification. Before a live client rollout, separately prove:
+
+- the native client loaded the generated configuration;
+- the intended policy graph is wired into the selected MCP runtime;
+- the exact tool call reaches the configured boundary;
+- the allowed path has an explicit executor or upstream proxy;
+- denied and escalated calls do not dispatch;
+- schema drift, expired approval, and revocation fail closed; and
+- the resulting receipt or EvidencePack verifies outside the client.

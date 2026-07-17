@@ -1,48 +1,40 @@
 ---
 title: Tool Runtime Adapters
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-15
 ---
 
 # Tool Runtime Adapters
 
-Use tool runtime adapters when the agent runtime proposes a concrete side
-effect and your wrapper must ask HELM before dispatch.
+Use a runtime adapter only when the owning runtime exposes a concrete call you
+can stop before dispatch. The adapter must map that call into the documented
+HELM HTTP or SDK contract, wait for the verdict, and keep `DENY` and `ESCALATE`
+blocked.
 
-## Supported Wrappers
+## Source Adapter Inventory
 
-| Runtime | Helper |
-| --- | --- |
-| OpenClaw | `fromOpenClawSkillCall` |
-| Hermes | `fromHermesToolCall` |
-| Mastra | `fromMastraToolCall` |
-| Browser Use | `fromBrowserUseAction` |
-| TinyFish | `fromTinyFishSearch`, `fromTinyFishFetch`, `fromTinyFishBrowserSession`, `fromTinyFishAgentRun` |
-| E2B | `fromE2BExecution` |
-| Composio | `fromComposioAction` |
+The separately versioned integration source contains mappings for OpenClaw,
+Hermes, Mastra, Browser Use, TinyFish, E2B, and Composio call shapes. Source
+availability is not a registry-package or client-load claim.
 
-## Pattern
+This page intentionally publishes no adapter package install command. Use one of
+the verified SDK coordinates on [SDKs](/sdks), or generate a client from the
+[public OpenAPI](/openapi.yaml), until a separately released adapter package and
+clean registry check exist.
 
-```ts
-import { preflightAction, fromOpenClawSkillCall } from "@mindburn/helm-tool-wrapper";
+## Required Dispatch Pattern
 
-const intent = fromOpenClawSkillCall({
-  skill: "gmail-send",
-  input: { to: "ops@example.invalid", subject: "Draft follow-up" },
-  conversation_id: "local-session",
-});
+1. Capture the exact runtime call before its side effect.
+2. Map action, resource, context, tenant, and principal into the selected HELM
+   contract.
+3. Call the local boundary with the documented authentication for that route.
+4. Dispatch only on `ALLOW`.
+5. Keep `DENY` and `ESCALATE` blocked.
+6. Read the source result back when the external system changes state.
+7. Retain the decision record and verify the exported evidence offline.
 
-const decision = await preflightAction({
-  helmUrl: "http://127.0.0.1:7714",
-  actionUrn: intent.actionUrn,
-  input: intent.input,
-  metadata: intent.metadata,
-});
-```
+## Release Gate
 
-Dispatch only when the verdict is `ALLOW`. For `DENY` or `ESCALATE`, keep the
-runtime blocked and show the receipt details to the developer.
-
-## Runtime Examples
-
-- [OpenClaw](openclaw.md)
-- [Hermes](hermes.md)
+Do not call an adapter supported from source alone. A public adapter install path
+requires a versioned package, registry availability, source-to-package
+provenance, a clean install, a routed allow case, blocked deny and escalate
+cases, receipt verification, and an explicit support owner.

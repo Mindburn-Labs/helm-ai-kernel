@@ -413,11 +413,12 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 			}
 			scanResult := p.g.threatScanner.ScanInput(textToScan, channel, trustLevel)
 			evalCtx.ThreatScanResult = preferredThreatScanResult(evalCtx.ThreatScanResult, scanResult)
+			selectedScan := evalCtx.ThreatScanResult
 
-			if scanResult.FindingCount > 0 && trustLevel.IsTainted() && threatscan.ContainsHighRiskFindings(scanResult) {
+			if selectedScan.FindingCount > 0 && trustLevel.IsTainted() && threatscan.ContainsHighRiskFindings(selectedScan) {
 				now := p.g.clock.Now()
 				reasonCode := contracts.ReasonTaintedInputDeny
-				for _, f := range scanResult.Findings {
+				for _, f := range selectedScan.Findings {
 					switch f.Class {
 					case contracts.ThreatClassPromptInjection:
 						reasonCode = contracts.ReasonPromptInjectionDetected
@@ -431,15 +432,16 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 						reasonCode = contracts.ReasonTaintedEgressDeny
 					}
 				}
+				selectedRef := selectedScan.Ref()
 
 				decision := &contracts.DecisionRecord{
 					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					ReasonCode: string(reasonCode),
-					Reason:     fmt.Sprintf("%s: %d findings (max=%s) from %s source", reasonCode, scanResult.FindingCount, scanResult.MaxSeverity, trustLevel),
+					Reason:     fmt.Sprintf("%s: %d findings (max=%s) from %s source", reasonCode, selectedScan.FindingCount, selectedScan.MaxSeverity, trustLevel),
 					InputContext: map[string]any{
-						"threat_scan": scanResult.Ref(),
+						ContextThreatScan: selectedRef.PolicyContext(),
 					},
 				}
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
@@ -449,7 +451,7 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 					decisionBytes, _ := canonicalize.JCS(decision)
 					_, _ = p.g.auditLog.Append("guardian", "THREAT_DENY", decision.ID, string(decisionBytes))
 				}
-				p.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventThreatDetected, fmt.Sprintf("threat scan: %d findings", scanResult.FindingCount))
+				p.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventThreatDetected, fmt.Sprintf("threat scan: %d findings", selectedScan.FindingCount))
 				return decision, nil
 			}
 		}

@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-23T19:40:44Z
+# Generated: 2026-07-23T19:40:58Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -621,7 +621,7 @@ d7ad656ec37a80da9538c9435229f2e06214ccdde857fdf81e86dbb18d4ad7d7  core/pkg/guard
 604a3143cb413e5f65278430f7f40c0c98c3eb123b7180d01c05e7b19906f678  core/pkg/guardian/guardian_stress_coverage_test.go
 ac6ed02511a836d82a9c31f650b93e4741f403c6f3fd150306762b12a5fc667d  core/pkg/guardian/guardian_test.go
 b8a92ba80717a401aed15e89883c609ca40e7281b74b2b781fd9b327e9360a9c  core/pkg/guardian/integration_test.go
-b84eceefd16fcd1ff47ac6e3ebe295d6c2ce98d9d8aab805a310c9b411a237ba  core/pkg/guardian/interceptor.go
+893dc0efad2e90306deed937b05efab8c979bb5ea66b73c66608cc1427872689  core/pkg/guardian/interceptor.go
 ff78b833c6f03eecbf994ddf44b2e41cc65346c3cd8bca55d0c1ed2bbfc4fe7d  core/pkg/guardian/interceptor_test.go
 c0118e244adcba44a228c918ffb6c2fddc5be3273b7383914fb81e5f933bdb54  core/pkg/guardian/intervention_test.go
 fa50013f154fd1a1ebe1dcc1448b22f0ef3650990cefef4e7693aed227130b52  core/pkg/guardian/otel.go
@@ -629,7 +629,7 @@ fa50013f154fd1a1ebe1dcc1448b22f0ef3650990cefef4e7693aed227130b52  core/pkg/guard
 fa1a85d544d0ad5594acfc7845e11c9787382f79325354d6e4e43a708577e926  core/pkg/guardian/policy_snapshot_test.go
 ed69d20637a1737e28994d74fcbd2195dbf2ac6972b053143c5839e89015400a  core/pkg/guardian/privilege.go
 1d2c50051328c3c101f74bcbc28527dd0c29dc6606322328e81755c33d49ed4e  core/pkg/guardian/privilege_test.go
-371af3c1394a1c1375eeca544cb7caebbf77a5ec532dbff7a08b7d58b0c2b092  core/pkg/guardian/prompt_armor_test.go
+b3cbcba047ef7a80e1c6dd4d731c064d5543813ac61341521c6de4353583e6e7  core/pkg/guardian/prompt_armor_test.go
 4314e6563be45a6956d8cdde64f57506b39710738028bd837c4c5621049510e8  core/pkg/guardian/race_disabled_test.go
 d803b35371310f212cad09ba7158ca644cd8955c56b902921a02f3e552f0aedb  core/pkg/guardian/race_enabled_test.go
 f16ac707e4595963ac289f289b70b995d9832006667d0bdf6baf0605d24c870b  core/pkg/guardian/scoped_stop_test.go

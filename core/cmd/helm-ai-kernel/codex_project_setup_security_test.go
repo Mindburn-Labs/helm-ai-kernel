@@ -176,11 +176,19 @@ func TestCodexProjectSetupPreflightsIncompatibleHooksWithoutPartialMutation(t *t
 func TestCodexProjectSetupReplacesQuotedNestedOwnedTOMLTables(t *testing.T) {
 	workspace := filepath.Join(t.TempDir(), "workspace")
 	dataDir := filepath.Join(t.TempDir(), "data")
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, err = filepath.Abs(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
 	configPath := filepath.Join(workspace, ".codex", "config.toml")
 	hooksPath := filepath.Join(workspace, ".codex", "hooks.json")
 	config := "model = \"gpt-5\"\n\n" +
 		"[mcp_servers.\"helm-ai-kernel-governance\"] # old owned table\n" +
-		"command = \"/old/helm-ai-kernel\"\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", " + strconv.Quote(dataDir) + "]\n\n" +
+		"command = " + strconv.Quote(bin) + "\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", " + strconv.Quote(dataDir) + "]\n\n" +
 		"[mcp_servers.\"helm-ai-kernel-governance\".env] # old owned nested table\n" +
 		"LEGACY = \"remove-me\"\n\n" +
 		"[mcp_servers.other]\ncommand = \"other\"\nargs = [\"serve\"]\n"
@@ -315,7 +323,7 @@ func TestCodexProjectSetupPreservesNonHELMNamedMCPServer(t *testing.T) {
 	mustWriteSetupFile(t, configPath, config)
 	mustWriteSetupFile(t, filepath.Join(workspace, ".codex", "hooks.json"), []byte(`{"hooks":{"PreToolUse":[]}}`+"\n"))
 	apply := []string{"setup", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
-	if code, _, _, stderr := runCodexProjectSetupCommand(t, apply); code != 1 || !strings.Contains(stderr, "refuse to replace non-HELM") {
+	if code, _, _, stderr := runCodexProjectSetupCommand(t, apply); code != 1 || !strings.Contains(stderr, "manual remediation") {
 		t.Fatalf("unowned named MCP apply exit=%d stderr=%s", code, stderr)
 	}
 	assertSetupFileBytes(t, configPath, config)
@@ -326,58 +334,107 @@ func TestCodexProjectSetupPreservesNonHELMNamedMCPServer(t *testing.T) {
 	assertSetupFileBytes(t, configPath, config)
 }
 
-func TestCodexProjectSetupMigratesOwnedHookOnBinaryRelocation(t *testing.T) {
+func TestCodexProjectSetupRefusesExactBasenameForeignHookWithoutMutation(t *testing.T) {
 	workspace := filepath.Join(t.TempDir(), "workspace")
 	dataDir := filepath.Join(t.TempDir(), "data")
-	bin, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin, err = filepath.Abs(bin)
-	if err != nil {
+	foreignBin := filepath.Join(t.TempDir(), "helm-ai-kernel")
+	if err := os.WriteFile(foreignBin, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	opts := setupOptions{Target: "codex", Scope: "project", Workspace: workspace, DataDir: dataDir}
-	oldCommand := setupHookCommand(opts, "/Applications/HELM-old.app/Contents/MacOS/helm-ai-kernel")
-	lookalike := shellQuote("/usr/local/bin/custom-policy") + " hook pre-tool --client codex --data-dir " + shellQuote(dataDir)
 	hooks := map[string]any{"hooks": map[string]any{"PreToolUse": []any{map[string]any{
-		"matcher": "^Read$", // a shared user entry; migration must not widen it.
-		"hooks": []any{
-			map[string]any{"type": "command", "command": oldCommand, "timeout": float64(30), "statusMessage": "Checking HELM policy"},
-			map[string]any{"type": "command", "command": lookalike, "timeout": float64(30), "statusMessage": "Checking HELM policy"},
-		},
+		"matcher": setupHookMatcher("codex"),
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": setupHookCommand(opts, foreignBin),
+			"timeout": float64(30),
+		}},
 	}}}}
 	rawHooks, err := json.Marshal(hooks)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mustWriteSetupFile(t, filepath.Join(workspace, ".codex", "hooks.json"), append(rawHooks, '\n'))
+	hooksPath := filepath.Join(workspace, ".codex", "hooks.json")
+	configPath := filepath.Join(workspace, ".codex", "config.toml")
+	foreignHooks := append(rawHooks, '\n')
+	mustWriteSetupFile(t, hooksPath, foreignHooks)
+
 	apply := []string{"setup", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
-	if code, _, _, stderr := runCodexProjectSetupCommand(t, apply); code != 0 {
-		t.Fatalf("relocation apply exit=%d stderr=%s", code, stderr)
+	if code, _, _, stderr := runCodexProjectSetupCommand(t, apply); code != 1 || !strings.Contains(stderr, "manual remediation") {
+		t.Fatalf("foreign hook apply exit=%d stderr=%s", code, stderr)
 	}
-	updated, err := os.ReadFile(filepath.Join(workspace, ".codex", "hooks.json"))
-	if err != nil {
+	assertSetupFileBytes(t, hooksPath, foreignHooks)
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("foreign hook apply wrote MCP config: %v", err)
+	}
+
+	status := []string{"setup", "status", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--json"}
+	if code, summary, _, stderr := runCodexProjectSetupCommand(t, status); code != 1 || summary.HookInstalled || summary.MCPInstalled || stderr != "" {
+		t.Fatalf("foreign hook status exit=%d summary=%#v stderr=%s", code, summary, stderr)
+	}
+	remove := []string{"setup", "remove", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
+	if code, _, _, stderr := runCodexProjectSetupCommand(t, remove); code != 0 || stderr != "" {
+		t.Fatalf("foreign hook remove exit=%d stderr=%s", code, stderr)
+	}
+	assertSetupFileBytes(t, hooksPath, foreignHooks)
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("foreign hook remove wrote MCP config: %v", err)
+	}
+}
+
+func TestCodexProjectSetupPreservesExactBasenameForeignMCPServer(t *testing.T) {
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	dataDir := filepath.Join(t.TempDir(), "data")
+	foreignBin := filepath.Join(t.TempDir(), "helm-ai-kernel")
+	if err := os.WriteFile(foreignBin, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	currentCommand := setupHookCommand(opts, bin)
-	if strings.Contains(string(updated), oldCommand) || strings.Count(string(updated), currentCommand) != 1 || !strings.Contains(string(updated), lookalike) {
-		t.Fatalf("hook relocation did not migrate exactly the marked HELM hook:\n%s", updated)
+	configPath := filepath.Join(workspace, ".codex", "config.toml")
+	hooksPath := filepath.Join(workspace, ".codex", "hooks.json")
+	config := []byte("[mcp_servers." + setupMCPServerName + "]\ncommand = " + strconv.Quote(foreignBin) + "\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", " + strconv.Quote(dataDir) + "]\n")
+	hooks := []byte(`{"hooks":{"PreToolUse":[]}}` + "\n")
+	mustWriteSetupFile(t, configPath, config)
+	mustWriteSetupFile(t, hooksPath, hooks)
+
+	apply := []string{"setup", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
+	if code, _, _, stderr := runCodexProjectSetupCommand(t, apply); code != 1 || !strings.Contains(stderr, "manual remediation") {
+		t.Fatalf("foreign MCP apply exit=%d stderr=%s", code, stderr)
+	}
+	assertSetupFileBytes(t, configPath, config)
+	assertSetupFileBytes(t, hooksPath, hooks)
+
+	status := []string{"setup", "status", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--json"}
+	if code, summary, _, stderr := runCodexProjectSetupCommand(t, status); code != 1 || summary.HookInstalled || summary.MCPInstalled || stderr != "" {
+		t.Fatalf("foreign MCP status exit=%d summary=%#v stderr=%s", code, summary, stderr)
+	}
+	remove := []string{"setup", "remove", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
+	if code, _, _, stderr := runCodexProjectSetupCommand(t, remove); code != 0 || stderr != "" {
+		t.Fatalf("foreign MCP remove exit=%d stderr=%s", code, stderr)
+	}
+	assertSetupFileBytes(t, configPath, config)
+	assertSetupFileBytes(t, hooksPath, hooks)
+}
+
+func TestCodexProjectSetupCurrentBinaryApplyStatusRemove(t *testing.T) {
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	apply := []string{"setup", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
+	if code, _, _, stderr := runCodexProjectSetupCommand(t, apply); code != 0 {
+		t.Fatalf("current-binary apply exit=%d stderr=%s", code, stderr)
 	}
 	status := []string{"setup", "status", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--json"}
 	if code, summary, _, stderr := runCodexProjectSetupCommand(t, status); code != 0 || !summary.HookInstalled || !summary.MCPInstalled || stderr != "" {
-		t.Fatalf("relocation status exit=%d summary=%#v stderr=%s", code, summary, stderr)
+		t.Fatalf("current-binary status exit=%d summary=%#v stderr=%s", code, summary, stderr)
 	}
 	remove := []string{"setup", "remove", "codex", "--scope", "project", "--workspace", workspace, "--data-dir", dataDir, "--no-quickstart", "--yes"}
 	if code, _, _, stderr := runCodexProjectSetupCommand(t, remove); code != 0 {
-		t.Fatalf("relocation remove exit=%d stderr=%s", code, stderr)
+		t.Fatalf("current-binary remove exit=%d stderr=%s", code, stderr)
 	}
-	updated, err = os.ReadFile(filepath.Join(workspace, ".codex", "hooks.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(updated), currentCommand) || !strings.Contains(string(updated), lookalike) {
-		t.Fatalf("remove did not preserve unmarked lookalike:\n%s", updated)
+	if code, summary, _, stderr := runCodexProjectSetupCommand(t, status); code != 1 || summary.HookInstalled || summary.MCPInstalled || stderr != "" {
+		t.Fatalf("post-remove status exit=%d summary=%#v stderr=%s", code, summary, stderr)
 	}
 }
 

@@ -6,6 +6,7 @@ quantum_posture: classical Ed25519 only; no hybrid or post-quantum claim.
 
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -24,6 +25,17 @@ from verify_approval_vectors import (  # noqa: E402
 )
 
 
+AUTHORITY_TIME_RE = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?Z$"
+)
+
+
+def parse_authority_time(value):
+    if not isinstance(value, str) or not AUTHORITY_TIME_RE.fullmatch(value):
+        raise VectorError("contract_rejected", "authority timestamp must be UTC with microsecond precision")
+    return parse_time(value)
+
+
 def require_token(authority, field):
     value = authority.get(field)
     if not isinstance(value, str) or not value or len(value) > 512 or any(character.isspace() for character in value):
@@ -38,8 +50,8 @@ def validate_authority(authority):
     ):
         raise VectorError("contract_rejected", "unsupported release authority contract")
     revision = authority.get("registry_revision")
-    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
-        raise VectorError("contract_rejected", "registry revision must be positive")
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1 or revision > 9007199254740991:
+        raise VectorError("contract_rejected", "registry revision must be a positive JCS-safe integer")
     for field in (
         "authority_id",
         "signing_key_ref",
@@ -74,8 +86,8 @@ def validate_authority(authority):
     ):
         prefixed_bytes(authority.get(field), "sha256:", 32)
 
-    signed_at = parse_time(authority["signed_at"])
-    valid_from = parse_time(authority["valid_from"])
+    signed_at = parse_authority_time(authority["signed_at"])
+    valid_from = parse_authority_time(authority["valid_from"])
     if signed_at > valid_from:
         raise VectorError("contract_rejected", "signed_at after valid_from")
     if revision == 1:
@@ -85,7 +97,7 @@ def validate_authority(authority):
         prefixed_bytes(authority.get("previous_authority_hash"), "sha256:", 32)
 
     if authority["state"] == "certified":
-        if "valid_until" not in authority or parse_time(authority["valid_until"]) <= valid_from:
+        if "valid_until" not in authority or parse_authority_time(authority["valid_until"]) <= valid_from:
             raise VectorError("contract_rejected", "invalid certified validity window")
         if "revokes_authority_hash" in authority:
             raise VectorError("contract_rejected", "certified statement revokes authority")
@@ -119,7 +131,7 @@ def verify_statement(index, root, descriptor, authority, envelope, signature_val
         raise VectorError("authority_rejected", "authority_id mismatch")
     if authority["signing_key_ref"] != "kms://helm/connector-release-authority/key-a":
         raise VectorError("trust_rejected", "signing_key_ref is not pinned")
-    signed_at = parse_time(authority["signed_at"])
+    signed_at = parse_authority_time(authority["signed_at"])
     if signed_at < parse_time(index["key_not_before"]) or signed_at >= parse_time(index["key_not_after"]):
         raise VectorError("trust_rejected", "statement outside pinned key lifetime")
 
@@ -155,6 +167,9 @@ def verify_vector(index, root, mutation=None):
     certified_signature = certified_envelope["signature"]
     hide_revocation = False
     require_certified_current = False
+    substitute_revoked_scope = False
+    substitute_revoked_material = False
+    substitute_revoked_timeline = False
     verification_time = parse_time(index["verification_time"])
 
     if mutation == "set_certified_connector_version_to_2":
@@ -175,6 +190,12 @@ def verify_vector(index, root, mutation=None):
     elif mutation == "set_certified_registry_revision_to_zero":
         certified["registry_revision"] = 0
         certified_envelope["authority"]["registry_revision"] = 0
+    elif mutation == "set_certified_registry_revision_above_jcs_safe":
+        certified["registry_revision"] = 9007199254740992
+        certified_envelope["authority"]["registry_revision"] = 9007199254740992
+    elif mutation == "set_certified_signed_at_to_nanosecond_precision":
+        certified["signed_at"] = "2026-07-17T11:59:00.000000001Z"
+        certified_envelope["authority"]["signed_at"] = certified["signed_at"]
     elif mutation == "treat_certified_as_current_after_revocation":
         require_certified_current = True
     elif mutation == "hide_revocation_and_verify_at_certified_expiry":
@@ -185,26 +206,62 @@ def verify_vector(index, root, mutation=None):
         raw_signature = bytearray.fromhex(certified_signature)
         raw_signature[-1] ^= 1
         certified_signature = raw_signature.hex()
+    elif mutation == "substitute_revoked_tenant_workspace_after_verification":
+        substitute_revoked_scope = True
+    elif mutation == "substitute_revoked_binary_hash_after_verification":
+        substitute_revoked_material = True
+    elif mutation == "move_revoked_timeline_backwards_after_verification":
+        substitute_revoked_timeline = True
     elif mutation is not None:
         raise VectorError("unknown_mutation", mutation)
 
     verify_statement(index, root, certified_descriptor, certified, certified_envelope, certified_signature)
     if not hide_revocation:
         verify_statement(index, root, revoked_descriptor, revoked, revoked_envelope, revoked_envelope["signature"])
+        if substitute_revoked_scope:
+            revoked["scope_kind"] = "tenant_workspace"
+            revoked["tenant_id"] = "tenant-substituted"
+            revoked["workspace_id"] = "workspace-substituted"
+        if substitute_revoked_material:
+            revoked["connector_binary_hash"] = "sha256:" + "f" * 64
+        if substitute_revoked_timeline:
+            revoked["signed_at"] = "2026-07-17T11:58:00Z"
+            revoked["valid_from"] = "2026-07-17T11:58:00Z"
+        immutable_fields = (
+            "schema_version",
+            "contract_version",
+            "authority_id",
+            "algorithm",
+            "scope_kind",
+            "tenant_id",
+            "workspace_id",
+            "connector_id",
+            "connector_version",
+            "connector_executor_kind",
+            "connector_sandbox_profile",
+            "connector_drift_policy_ref",
+            "connector_binary_hash",
+            "connector_signature_ref",
+            "connector_signature_hash",
+            "connector_signer_id",
+            "certification_ref",
+            "certification_hash",
+            "certification_authority",
+        )
         if (
-            revoked["connector_id"] != certified["connector_id"]
-            or revoked["connector_version"] != certified["connector_version"]
-            or revoked["scope_kind"] != certified["scope_kind"]
+            any(revoked.get(field) != certified.get(field) for field in immutable_fields)
             or revoked["registry_revision"] != certified["registry_revision"] + 1
             or revoked["previous_authority_hash"] != certified["authority_hash"]
             or revoked["revokes_authority_hash"] != certified["authority_hash"]
+            or parse_authority_time(revoked["signed_at"]) < parse_authority_time(certified["signed_at"])
+            or parse_authority_time(revoked["valid_from"]) < parse_authority_time(certified["valid_from"])
         ):
             raise VectorError("current_state_rejected", "revocation chain mismatch")
 
     if require_certified_current:
         if not hide_revocation:
             raise VectorError("current_state_rejected", "later revocation makes certified statement historical")
-        if verification_time < parse_time(certified["valid_from"]) or verification_time >= parse_time(certified["valid_until"]):
+        if verification_time < parse_authority_time(certified["valid_from"]) or verification_time >= parse_authority_time(certified["valid_until"]):
             raise VectorError("inactive_authority", "certified statement is outside its validity window")
 
 

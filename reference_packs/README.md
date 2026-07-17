@@ -37,7 +37,7 @@ Active surface for the `helm-ai-kernel` project.
 source-authority Ed25519 signature, exact connector version and provenance
 bindings, validity, and a terminal revocation revision. It proves portable
 contract verification only; a signed historical statement is not current state
-without the later durable registry and near-effect checks.
+without the separate durable registry and near-effect admission checks.
 
 ## Documentation Contract
 

@@ -15,6 +15,7 @@ const (
 	ConnectorReleaseAuthorityScopeWorkspace = "tenant_workspace"
 	ConnectorReleaseAuthorityStateCertified = "certified"
 	ConnectorReleaseAuthorityStateRevoked   = "revoked"
+	ConnectorReleaseAuthorityMaxRevision    = uint64(1<<53 - 1)
 )
 
 var (
@@ -84,8 +85,8 @@ func (a ConnectorReleaseAuthority) Validate() error {
 	if a.Algorithm != ConnectorReleaseAuthorityAlgorithmV1 {
 		return connectorReleaseAuthorityInvalid("unsupported algorithm")
 	}
-	if a.RegistryRevision == 0 {
-		return connectorReleaseAuthorityInvalid("registry_revision must be positive")
+	if a.RegistryRevision == 0 || a.RegistryRevision > ConnectorReleaseAuthorityMaxRevision {
+		return connectorReleaseAuthorityInvalid("registry_revision must be a positive JCS-safe integer")
 	}
 	for field, value := range map[string]string{
 		"authority_id": a.AuthorityID, "signing_key_ref": a.SigningKeyRef,
@@ -136,6 +137,9 @@ func (a ConnectorReleaseAuthority) Validate() error {
 	if a.SignedAt.IsZero() || a.ValidFrom.IsZero() || !isApprovalGrantUTC(a.SignedAt) || !isApprovalGrantUTC(a.ValidFrom) {
 		return connectorReleaseAuthorityInvalid("signed_at and valid_from must use UTC")
 	}
+	if !a.SignedAt.Equal(a.SignedAt.Truncate(time.Microsecond)) || !a.ValidFrom.Equal(a.ValidFrom.Truncate(time.Microsecond)) {
+		return connectorReleaseAuthorityInvalid("signed_at and valid_from must use microsecond precision")
+	}
 	if a.SignedAt.After(a.ValidFrom) {
 		return connectorReleaseAuthorityInvalid("signed_at must not be after valid_from")
 	}
@@ -149,6 +153,9 @@ func (a ConnectorReleaseAuthority) Validate() error {
 	if a.State == ConnectorReleaseAuthorityStateCertified {
 		if a.ValidUntil == nil || !isApprovalGrantUTC(*a.ValidUntil) || !a.ValidUntil.After(a.ValidFrom) {
 			return connectorReleaseAuthorityInvalid("certified authority requires a later UTC valid_until")
+		}
+		if !a.ValidUntil.Equal(a.ValidUntil.Truncate(time.Microsecond)) {
+			return connectorReleaseAuthorityInvalid("valid_until must use microsecond precision")
 		}
 		if a.RevokesAuthorityHash != "" {
 			return connectorReleaseAuthorityInvalid("certified authority must not revoke another authority")

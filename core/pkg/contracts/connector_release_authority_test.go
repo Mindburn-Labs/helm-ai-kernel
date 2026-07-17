@@ -41,10 +41,14 @@ func TestConnectorReleaseAuthorityRejectsUnsafeBindings(t *testing.T) {
 	base := connectorReleaseAuthorityFixture(t)
 	tests := map[string]func(*ConnectorReleaseAuthority){
 		"zero revision":                func(a *ConnectorReleaseAuthority) { a.RegistryRevision = 0 },
+		"overflow revision":            func(a *ConnectorReleaseAuthority) { a.RegistryRevision = ConnectorReleaseAuthorityMaxRevision + 1 },
 		"global tenant":                func(a *ConnectorReleaseAuthority) { a.TenantID = "tenant-a" },
 		"bad executor":                 func(a *ConnectorReleaseAuthority) { a.ConnectorExecutorKind = "process" },
 		"bare binary hash":             func(a *ConnectorReleaseAuthority) { a.ConnectorBinaryHash = strings.Repeat("a", 64) },
 		"expired window":               func(a *ConnectorReleaseAuthority) { at := a.ValidFrom; a.ValidUntil = &at },
+		"nanosecond signed time":       func(a *ConnectorReleaseAuthority) { a.SignedAt = a.SignedAt.Add(time.Nanosecond) },
+		"nanosecond validity time":     func(a *ConnectorReleaseAuthority) { a.ValidFrom = a.ValidFrom.Add(time.Nanosecond) },
+		"nanosecond expiry time":       func(a *ConnectorReleaseAuthority) { at := a.ValidUntil.Add(time.Nanosecond); a.ValidUntil = &at },
 		"revision without predecessor": func(a *ConnectorReleaseAuthority) { a.RegistryRevision = 2 },
 		"revocation without target": func(a *ConnectorReleaseAuthority) {
 			a.RegistryRevision = 2

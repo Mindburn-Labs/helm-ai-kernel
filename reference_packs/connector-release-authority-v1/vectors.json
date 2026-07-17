@@ -63,6 +63,16 @@
       "expected_error": "contract_rejected"
     },
     {
+      "id": "revision_overflow",
+      "mutation": "set_certified_registry_revision_above_jcs_safe",
+      "expected_error": "contract_rejected"
+    },
+    {
+      "id": "timestamp_precision",
+      "mutation": "set_certified_signed_at_to_nanosecond_precision",
+      "expected_error": "contract_rejected"
+    },
+    {
       "id": "stale_after_revocation",
       "mutation": "treat_certified_as_current_after_revocation",
       "expected_error": "current_state_rejected"
@@ -76,6 +86,21 @@
       "id": "signature_tamper",
       "mutation": "flip_certified_envelope_signature_last_bit",
       "expected_error": "signature_rejected"
+    },
+    {
+      "id": "chain_scope_substitution",
+      "mutation": "substitute_revoked_tenant_workspace_after_verification",
+      "expected_error": "current_state_rejected"
+    },
+    {
+      "id": "chain_material_substitution",
+      "mutation": "substitute_revoked_binary_hash_after_verification",
+      "expected_error": "current_state_rejected"
+    },
+    {
+      "id": "chain_timeline_rollback",
+      "mutation": "move_revoked_timeline_backwards_after_verification",
+      "expected_error": "current_state_rejected"
     }
   ]
 }

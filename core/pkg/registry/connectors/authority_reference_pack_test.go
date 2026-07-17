@@ -140,9 +140,14 @@ func buildConnectorReleaseAuthorityReferencePack(t *testing.T) map[string][]byte
 			{ID: "authority_substitution", Mutation: "set_certified_authority_id_and_reseal", ExpectedError: "authority_rejected"},
 			{ID: "key_substitution", Mutation: "set_certified_signing_key_ref_and_reseal", ExpectedError: "trust_rejected"},
 			{ID: "revision_zero", Mutation: "set_certified_registry_revision_to_zero", ExpectedError: "contract_rejected"},
+			{ID: "revision_overflow", Mutation: "set_certified_registry_revision_above_jcs_safe", ExpectedError: "contract_rejected"},
+			{ID: "timestamp_precision", Mutation: "set_certified_signed_at_to_nanosecond_precision", ExpectedError: "contract_rejected"},
 			{ID: "stale_after_revocation", Mutation: "treat_certified_as_current_after_revocation", ExpectedError: "current_state_rejected"},
 			{ID: "expiry_boundary", Mutation: "hide_revocation_and_verify_at_certified_expiry", ExpectedError: "inactive_authority"},
 			{ID: "signature_tamper", Mutation: "flip_certified_envelope_signature_last_bit", ExpectedError: "signature_rejected"},
+			{ID: "chain_scope_substitution", Mutation: "substitute_revoked_tenant_workspace_after_verification", ExpectedError: "current_state_rejected"},
+			{ID: "chain_material_substitution", Mutation: "substitute_revoked_binary_hash_after_verification", ExpectedError: "current_state_rejected"},
+			{ID: "chain_timeline_rollback", Mutation: "move_revoked_timeline_backwards_after_verification", ExpectedError: "current_state_rejected"},
 		},
 	}
 	indexJSON, err := json.MarshalIndent(index, "", "  ")

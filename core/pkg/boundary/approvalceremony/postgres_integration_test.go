@@ -237,7 +237,7 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `UPDATE approval_dispatch_admissions
 		SET connector_id = $1
 		WHERE tenant_id = $2 AND workspace_id = $3 AND attempt_id = $4`,
-		dispatchRequest.ConnectorID, final.TenantID, final.WorkspaceID, dispatchRequest.AttemptID,
+		admitted.Admission.ConnectorAuthority.ConnectorID, final.TenantID, final.WorkspaceID, dispatchRequest.AttemptID,
 	); err != nil {
 		t.Fatalf("restore dispatch admission storage shadow: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 		t.Fatalf("exact dispatch retry = %+v, error = %v", exactRetry, err)
 	}
 	changedDispatch := dispatchRequest
-	changedDispatch.ConnectorID = "connector-b"
+	changedDispatch.IdempotencyKeyHash = shaRef("d")
 	if _, err := admitter.Claim(ctx, changedDispatch); !errors.Is(err, ErrTransitionConflict) {
 		t.Fatalf("changed dispatch retry error = %v, want ErrTransitionConflict", err)
 	}

@@ -36,7 +36,7 @@ func TestVerifyQuorumAcceptsDistinctTrustedSignersDeterministically(t *testing.T
 	if len(got.Signers) != 2 || got.Signers[0].PrincipalID != "principal-a" || got.Signers[1].PrincipalID != "principal-b" {
 		t.Fatalf("Signers are not canonically sorted: %+v", got.Signers)
 	}
-	if want := "sha256:1d55fba5c74963688c529912e88f8a52f078744a92cc3f2b0b27f10c703bab8c"; got.SignerSetHash != want {
+	if want := "sha256:8525189c09651a7828b285d7111f04562e83eeaae28b21a974ace81c7d41dc25"; got.SignerSetHash != want {
 		t.Fatalf("SignerSetHash = %q, want %q", got.SignerSetHash, want)
 	}
 
@@ -53,35 +53,45 @@ func TestVerifyQuorumRejectsExpectedBindingSubstitution(t *testing.T) {
 	challenge := sealedChallenge(t)
 	store, privateKeys := trustedStore(challenge)
 	assertions := signedQuorum(t, challenge, privateKeys)
-	mutations := map[string]func(*ExpectedBinding){
-		"challenge id":       func(e *ExpectedBinding) { e.ChallengeID = "challenge-b" },
-		"challenge hash":     func(e *ExpectedBinding) { e.ChallengeHash = shaRef("9") },
-		"approval":           func(e *ExpectedBinding) { e.ApprovalID = "approval-b" },
-		"tenant":             func(e *ExpectedBinding) { e.TenantID = "tenant-b" },
-		"workspace":          func(e *ExpectedBinding) { e.WorkspaceID = "workspace-b" },
-		"audience":           func(e *ExpectedBinding) { e.Audience = "packs.other" },
-		"pack":               func(e *ExpectedBinding) { e.PackID = "pack-b" },
-		"pack version":       func(e *ExpectedBinding) { e.PackVersion = "2.0.0" },
-		"manifest":           func(e *ExpectedBinding) { e.PackManifestHash = shaRef("8") },
-		"action":             func(e *ExpectedBinding) { e.Action = contracts.ApprovalGrantActionRollback },
-		"intent":             func(e *ExpectedBinding) { e.IntentHash = shaRef("7") },
-		"effect":             func(e *ExpectedBinding) { e.EffectHash = shaRef("6") },
-		"plan":               func(e *ExpectedBinding) { e.PlanHash = shaRef("5") },
-		"policy":             func(e *ExpectedBinding) { e.PolicyHash = shaRef("4") },
-		"decision":           func(e *ExpectedBinding) { e.Decision = "DENY" },
-		"policy version":     func(e *ExpectedBinding) { e.PolicyVersion = "policy-v2" },
-		"policy epoch":       func(e *ExpectedBinding) { e.PolicyEpoch = "epoch-2" },
-		"authority source":   func(e *ExpectedBinding) { e.AuthoritySource = "spiffe://helm/authority/other" },
-		"authority version":  func(e *ExpectedBinding) { e.AuthorityVersion = "authority-v2" },
-		"authority snapshot": func(e *ExpectedBinding) { e.AuthoritySnapshotHash = shaRef("b") },
-		"role":               func(e *ExpectedBinding) { e.RequiredRole = "security-admin" },
-		"quorum":             func(e *ExpectedBinding) { e.Quorum = 3 },
-		"server":             func(e *ExpectedBinding) { e.ServerIdentity = "spiffe://helm/server-b" },
+	mutations := map[string]func(*testing.T, *ExpectedBinding){
+		"challenge id":   func(_ *testing.T, e *ExpectedBinding) { e.ChallengeID = "challenge-b" },
+		"challenge hash": func(_ *testing.T, e *ExpectedBinding) { e.ChallengeHash = shaRef("9") },
+		"approval":       func(_ *testing.T, e *ExpectedBinding) { e.ApprovalID = "approval-b" },
+		"tenant":         func(_ *testing.T, e *ExpectedBinding) { e.TenantID = "tenant-b" },
+		"workspace":      func(_ *testing.T, e *ExpectedBinding) { e.WorkspaceID = "workspace-b" },
+		"audience":       func(_ *testing.T, e *ExpectedBinding) { e.Audience = "packs.other" },
+		"pack":           func(_ *testing.T, e *ExpectedBinding) { e.PackID = "pack-b" },
+		"pack version":   func(_ *testing.T, e *ExpectedBinding) { e.PackVersion = "2.0.0" },
+		"manifest":       func(_ *testing.T, e *ExpectedBinding) { e.PackManifestHash = shaRef("8") },
+		"action":         func(_ *testing.T, e *ExpectedBinding) { e.Action = contracts.ApprovalGrantActionRollback },
+		"connector authority": func(t *testing.T, e *ExpectedBinding) {
+			authority := e.ConnectorAuthority
+			authority.ConnectorID = "connector-b"
+			authority.AuthorityHash = ""
+			sealed, err := authority.Seal()
+			if err != nil {
+				t.Fatalf("seal substituted connector authority: %v", err)
+			}
+			e.ConnectorAuthority = sealed
+		},
+		"intent":             func(_ *testing.T, e *ExpectedBinding) { e.IntentHash = shaRef("7") },
+		"effect":             func(_ *testing.T, e *ExpectedBinding) { e.EffectHash = shaRef("6") },
+		"plan":               func(_ *testing.T, e *ExpectedBinding) { e.PlanHash = shaRef("5") },
+		"policy":             func(_ *testing.T, e *ExpectedBinding) { e.PolicyHash = shaRef("4") },
+		"decision":           func(_ *testing.T, e *ExpectedBinding) { e.Decision = "DENY" },
+		"policy version":     func(_ *testing.T, e *ExpectedBinding) { e.PolicyVersion = "policy-v2" },
+		"policy epoch":       func(_ *testing.T, e *ExpectedBinding) { e.PolicyEpoch = "epoch-2" },
+		"authority source":   func(_ *testing.T, e *ExpectedBinding) { e.AuthoritySource = "spiffe://helm/authority/other" },
+		"authority version":  func(_ *testing.T, e *ExpectedBinding) { e.AuthorityVersion = "authority-v2" },
+		"authority snapshot": func(_ *testing.T, e *ExpectedBinding) { e.AuthoritySnapshotHash = shaRef("b") },
+		"role":               func(_ *testing.T, e *ExpectedBinding) { e.RequiredRole = "security-admin" },
+		"quorum":             func(_ *testing.T, e *ExpectedBinding) { e.Quorum = 3 },
+		"server":             func(_ *testing.T, e *ExpectedBinding) { e.ServerIdentity = "spiffe://helm/server-b" },
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
 			opts := optionsFor(challenge)
-			mutate(&opts.Expected)
+			mutate(t, &opts.Expected)
 			if _, err := VerifyQuorum(challenge, assertions, store, opts, challenge.IssuedAt); !errors.Is(err, ErrVerificationFailed) {
 				t.Fatalf("VerifyQuorum() error = %v, want ErrVerificationFailed", err)
 			}
@@ -431,6 +441,7 @@ func sealedChallenge(t *testing.T) contracts.ApprovalChallenge {
 		PackVersion:           "1.0.0",
 		PackManifestHash:      shaRef("a"),
 		Action:                contracts.ApprovalGrantActionInstall,
+		ConnectorAuthority:    connectorAuthorityFixture(t),
 		IntentHash:            shaRef("0"),
 		EffectHash:            shaRef("1"),
 		PlanHash:              shaRef("2"),
@@ -535,6 +546,7 @@ func optionsFor(challenge contracts.ApprovalChallenge) VerifyOptions {
 			PackVersion:           challenge.PackVersion,
 			PackManifestHash:      challenge.PackManifestHash,
 			Action:                challenge.Action,
+			ConnectorAuthority:    challenge.ConnectorAuthority,
 			IntentHash:            challenge.IntentHash,
 			EffectHash:            challenge.EffectHash,
 			PlanHash:              challenge.PlanHash,
@@ -580,6 +592,7 @@ func bindingFromProjection(got VerifiedApprovalRef) ExpectedBinding {
 		PackVersion:           got.PackVersion,
 		PackManifestHash:      got.PackManifestHash,
 		Action:                got.Action,
+		ConnectorAuthority:    got.ConnectorAuthority,
 		IntentHash:            got.IntentHash,
 		EffectHash:            got.EffectHash,
 		PlanHash:              got.PlanHash,
@@ -594,6 +607,27 @@ func bindingFromProjection(got VerifiedApprovalRef) ExpectedBinding {
 		Quorum:                got.Quorum,
 		ServerIdentity:        got.ServerIdentity,
 	}
+}
+
+func connectorAuthorityFixture(t *testing.T) contracts.ApprovalConnectorAuthority {
+	t.Helper()
+	authority, err := (contracts.ApprovalConnectorAuthority{
+		SchemaVersion:   contracts.ApprovalConnectorAuthoritySchemaV1,
+		ContractVersion: contracts.ApprovalConnectorAuthorityContractV1,
+		State:           contracts.ApprovalConnectorAuthorityStateV1,
+		BindingRef:      "binding-a", TenantID: "tenant-a", WorkspaceID: "workspace-a",
+		PackID: "pack-a", PackVersion: "1.0.0", PackManifestHash: shaRef("a"),
+		Action: contracts.ApprovalGrantActionInstall, EffectHash: shaRef("1"), PolicyHash: shaRef("3"),
+		ConnectorID: "connector-a", ConnectorVersion: "1.0.0", ConnectorExecutorKind: "digital",
+		ConnectorBinaryHash: shaRef("7"), ConnectorSignatureRef: "sigstore://connector-a/1.0.0",
+		ConnectorSignerID: "publisher-a", ConnectorSandboxProfile: "sandbox-pack-lifecycle-v1",
+		ConnectorDriftPolicyRef: "policy://connector-drift/v1", CertificationRef: "cert://connector-a/1.0.0",
+		CertificationHash: shaRef("8"), CertificationAuthority: "spiffe://helm/certification-authority",
+	}).Seal()
+	if err != nil {
+		t.Fatalf("seal connector authority: %v", err)
+	}
+	return authority
 }
 
 func shaRef(character string) string {

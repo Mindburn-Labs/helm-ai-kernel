@@ -11,7 +11,7 @@ import (
 
 const (
 	ApprovalGrantSchemaV1   = "approval-grant.v1"
-	ApprovalGrantContractV1 = "2026-07-15"
+	ApprovalGrantContractV1 = "2026-07-17"
 
 	ApprovalGrantDecisionAllow = "ALLOW"
 
@@ -45,10 +45,11 @@ type ApprovalGrant struct {
 	WorkspaceID string `json:"workspace_id"`
 	Audience    string `json:"audience"`
 
-	PackID           string `json:"pack_id"`
-	PackVersion      string `json:"pack_version"`
-	PackManifestHash string `json:"pack_manifest_hash"`
-	Action           string `json:"action"`
+	PackID             string                     `json:"pack_id"`
+	PackVersion        string                     `json:"pack_version"`
+	PackManifestHash   string                     `json:"pack_manifest_hash"`
+	Action             string                     `json:"action"`
+	ConnectorAuthority ApprovalConnectorAuthority `json:"connector_authority"`
 
 	IntentHash string `json:"intent_hash"`
 	EffectHash string `json:"effect_hash"`
@@ -135,6 +136,12 @@ func (g ApprovalGrant) Validate() error {
 	}
 	if g.Decision != ApprovalGrantDecisionAllow {
 		return approvalGrantInvalid("decision must be ALLOW")
+	}
+	if err := g.ConnectorAuthority.ValidateEffectBinding(
+		g.TenantID, g.WorkspaceID, g.PackID, g.PackVersion, g.PackManifestHash,
+		g.Action, g.EffectHash, g.PolicyHash,
+	); err != nil {
+		return approvalGrantInvalid(err.Error())
 	}
 	if g.IssuedAt.IsZero() || g.ExpiresAt.IsZero() {
 		return approvalGrantInvalid("issued_at and expires_at are required")

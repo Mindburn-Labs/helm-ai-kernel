@@ -15,6 +15,19 @@ Active surface for the `helm-ai-kernel` project.
 ## Local Commands
 
 - `make docs-coverage` from the repository root verifies coverage for this surface.
+- `make verify-approval-ceremony-vectors` regenerates nothing and verifies the
+  source-owned Go fixtures plus independent Python implementations for the
+  approval, consumption, and dispatch-admission contracts.
+
+## Approval ceremony packs
+
+- `approval/` covers challenge, assertion, authority, and quorum projection.
+- `approval-consumption-v1/` covers the signed single-use consumption record.
+- `approval-dispatch-admission-v1/` covers the signed, short-lived pre-effect
+  admission and its exact consumption, connector-authority, and liveness
+  bindings. It is an internal interoperability fixture, not evidence of Data
+  Plane enforcement, current connector certification/revocation, effect start,
+  deployment, or production release authority.
 
 ## Documentation Contract
 

@@ -15,7 +15,7 @@ func TestApprovalGrantAndAssertionGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApprovalGrant.Seal() error = %v", err)
 	}
-	if want := "sha256:cbe72fb406de363da696477c4e69dffd930bdeb9603d101a5b389dac98319cd7"; grant.GrantHash != want {
+	if want := "sha256:f7e42ad98fb74dbd0cb264850e9c20745ca4dfa179aca2a587a9067c78814477"; grant.GrantHash != want {
 		t.Fatalf("ApprovalGrant.GrantHash = %q, want %q", grant.GrantHash, want)
 	}
 
@@ -23,7 +23,7 @@ func TestApprovalGrantAndAssertionGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApprovalChallenge.Seal() error = %v", err)
 	}
-	if want := "sha256:8771698d9efa5b3d76dd168ec2f0aab84944e619bdee44fa6dd5ffe45e7b1bce"; challenge.ChallengeHash != want {
+	if want := "sha256:22d0b8f1a836180f7e86fecf81c41c83578c2b4685860174088c576828494552"; challenge.ChallengeHash != want {
 		t.Fatalf("ApprovalChallenge.ChallengeHash = %q, want %q", challenge.ChallengeHash, want)
 	}
 
@@ -32,7 +32,7 @@ func TestApprovalGrantAndAssertionGoldenVectors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApprovalAssertion.SigningDigest() error = %v", err)
 	}
-	if got, want := hex.EncodeToString(digest), "7499e8cf1eba48e127f70c7e74987f350d79426f3766a4716816953fe9e2b25e"; got != want {
+	if got, want := hex.EncodeToString(digest), "b56542f43fa9f0ac3b2f276cb57a2a509d24a46b71013aab70947b09369e52ac"; got != want {
 		t.Fatalf("ApprovalAssertion signing digest = %q, want %q", got, want)
 	}
 }
@@ -69,6 +69,10 @@ func TestApprovalChallengeSealIsDeterministicAndBindsFields(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			candidate := base
 			mutate(&candidate)
+			candidate.ConnectorAuthority = approvalConnectorAuthorityFor(
+				candidate.TenantID, candidate.WorkspaceID, candidate.PackID, candidate.PackVersion,
+				candidate.PackManifestHash, candidate.Action, candidate.EffectHash, candidate.PolicyHash,
+			)
 			changed, err := candidate.Seal()
 			if err != nil {
 				t.Fatalf("Seal() mutated error = %v", err)
@@ -107,8 +111,8 @@ func TestApprovalChallengeValidateAtChecksIssuanceIntegrityAndWindow(t *testing.
 	}
 
 	sealed.EffectHash = sha256Ref("9")
-	if err := sealed.ValidateAt(sealed.IssuedAt); !errors.Is(err, ErrApprovalChallengeIntegrity) {
-		t.Fatalf("ValidateAt() tampered error = %v, want ErrApprovalChallengeIntegrity", err)
+	if err := sealed.ValidateAt(sealed.IssuedAt); !errors.Is(err, ErrApprovalChallengeInvalid) {
+		t.Fatalf("ValidateAt() tampered error = %v, want ErrApprovalChallengeInvalid", err)
 	}
 }
 
@@ -221,18 +225,22 @@ func validApprovalChallenge() ApprovalChallenge {
 	holdStarted := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
 	eligible := holdStarted.Add(5 * time.Minute)
 	return ApprovalChallenge{
-		Domain:                ApprovalChallengeDomainV1,
-		SchemaVersion:         ApprovalChallengeSchemaV1,
-		ContractVersion:       ApprovalChallengeContractV1,
-		ChallengeID:           "challenge-a",
-		ApprovalID:            "approval-a",
-		TenantID:              "tenant-a",
-		WorkspaceID:           "workspace-a",
-		Audience:              "packs.lifecycle",
-		PackID:                "pack-a",
-		PackVersion:           "1.0.0",
-		PackManifestHash:      sha256Ref("a"),
-		Action:                ApprovalGrantActionInstall,
+		Domain:           ApprovalChallengeDomainV1,
+		SchemaVersion:    ApprovalChallengeSchemaV1,
+		ContractVersion:  ApprovalChallengeContractV1,
+		ChallengeID:      "challenge-a",
+		ApprovalID:       "approval-a",
+		TenantID:         "tenant-a",
+		WorkspaceID:      "workspace-a",
+		Audience:         "packs.lifecycle",
+		PackID:           "pack-a",
+		PackVersion:      "1.0.0",
+		PackManifestHash: sha256Ref("a"),
+		Action:           ApprovalGrantActionInstall,
+		ConnectorAuthority: approvalConnectorAuthorityFor(
+			"tenant-a", "workspace-a", "pack-a", "1.0.0", sha256Ref("a"),
+			ApprovalGrantActionInstall, sha256Ref("1"), sha256Ref("3"),
+		),
 		IntentHash:            sha256Ref("0"),
 		EffectHash:            sha256Ref("1"),
 		PlanHash:              sha256Ref("2"),

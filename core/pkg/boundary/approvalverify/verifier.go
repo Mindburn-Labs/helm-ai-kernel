@@ -70,6 +70,7 @@ type ExpectedBinding struct {
 	PackVersion           string
 	PackManifestHash      string
 	Action                string
+	ConnectorAuthority    contracts.ApprovalConnectorAuthority
 	IntentHash            string
 	EffectHash            string
 	PlanHash              string
@@ -110,32 +111,33 @@ type VerifiedSigner struct {
 // the complete record before the Kernel issues a signed, single-use effect
 // permit.
 type VerifiedApprovalRef struct {
-	ApprovalID            string           `json:"approval_id"`
-	ChallengeID           string           `json:"challenge_id"`
-	ChallengeHash         string           `json:"challenge_hash"`
-	TenantID              string           `json:"tenant_id"`
-	WorkspaceID           string           `json:"workspace_id"`
-	Audience              string           `json:"audience"`
-	PackID                string           `json:"pack_id"`
-	PackVersion           string           `json:"pack_version"`
-	PackManifestHash      string           `json:"pack_manifest_hash"`
-	Action                string           `json:"action"`
-	IntentHash            string           `json:"intent_hash"`
-	EffectHash            string           `json:"effect_hash"`
-	PlanHash              string           `json:"plan_hash"`
-	Decision              string           `json:"decision"`
-	PolicyVersion         string           `json:"policy_version"`
-	PolicyEpoch           string           `json:"policy_epoch"`
-	PolicyHash            string           `json:"policy_hash"`
-	AuthoritySource       string           `json:"authority_source"`
-	AuthorityVersion      string           `json:"authority_version"`
-	AuthoritySnapshotHash string           `json:"authority_snapshot_hash"`
-	ServerIdentity        string           `json:"server_identity"`
-	RequiredRole          string           `json:"required_role"`
-	Quorum                int              `json:"quorum"`
-	Signers               []VerifiedSigner `json:"signers"`
-	SignerSetHash         string           `json:"signer_set_hash"`
-	VerifiedAt            time.Time        `json:"verified_at"`
+	ApprovalID            string                               `json:"approval_id"`
+	ChallengeID           string                               `json:"challenge_id"`
+	ChallengeHash         string                               `json:"challenge_hash"`
+	TenantID              string                               `json:"tenant_id"`
+	WorkspaceID           string                               `json:"workspace_id"`
+	Audience              string                               `json:"audience"`
+	PackID                string                               `json:"pack_id"`
+	PackVersion           string                               `json:"pack_version"`
+	PackManifestHash      string                               `json:"pack_manifest_hash"`
+	Action                string                               `json:"action"`
+	ConnectorAuthority    contracts.ApprovalConnectorAuthority `json:"connector_authority"`
+	IntentHash            string                               `json:"intent_hash"`
+	EffectHash            string                               `json:"effect_hash"`
+	PlanHash              string                               `json:"plan_hash"`
+	Decision              string                               `json:"decision"`
+	PolicyVersion         string                               `json:"policy_version"`
+	PolicyEpoch           string                               `json:"policy_epoch"`
+	PolicyHash            string                               `json:"policy_hash"`
+	AuthoritySource       string                               `json:"authority_source"`
+	AuthorityVersion      string                               `json:"authority_version"`
+	AuthoritySnapshotHash string                               `json:"authority_snapshot_hash"`
+	ServerIdentity        string                               `json:"server_identity"`
+	RequiredRole          string                               `json:"required_role"`
+	Quorum                int                                  `json:"quorum"`
+	Signers               []VerifiedSigner                     `json:"signers"`
+	SignerSetHash         string                               `json:"signer_set_hash"`
+	VerifiedAt            time.Time                            `json:"verified_at"`
 }
 
 // VerifyQuorum verifies every supplied assertion and requires distinct
@@ -289,6 +291,7 @@ func VerifyQuorum(
 		PackVersion:           challenge.PackVersion,
 		PackManifestHash:      challenge.PackManifestHash,
 		Action:                challenge.Action,
+		ConnectorAuthority:    challenge.ConnectorAuthority,
 		IntentHash:            challenge.IntentHash,
 		EffectHash:            challenge.EffectHash,
 		PlanHash:              challenge.PlanHash,
@@ -359,6 +362,13 @@ func validateOptions(opts VerifyOptions) error {
 	if opts.Expected.Quorum <= 0 {
 		return verificationFailed("expected quorum must be positive")
 	}
+	if err := opts.Expected.ConnectorAuthority.ValidateEffectBinding(
+		opts.Expected.TenantID, opts.Expected.WorkspaceID, opts.Expected.PackID,
+		opts.Expected.PackVersion, opts.Expected.PackManifestHash, opts.Expected.Action,
+		opts.Expected.EffectHash, opts.Expected.PolicyHash,
+	); err != nil {
+		return verificationFailed("expected connector authority is invalid")
+	}
 	return nil
 }
 
@@ -398,6 +408,9 @@ func verifyExpectedBinding(challenge contracts.ApprovalChallenge, expected Expec
 	}
 	if challenge.Quorum != expected.Quorum {
 		return verificationFailed("quorum binding mismatch")
+	}
+	if challenge.ConnectorAuthority != expected.ConnectorAuthority {
+		return verificationFailed("connector authority binding mismatch")
 	}
 	return nil
 }

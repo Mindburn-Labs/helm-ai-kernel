@@ -49,6 +49,13 @@ func TestRecordRejectsAuthoritySubstitution(t *testing.T) {
 		"challenge tenant": func(record *Record) {
 			mutated := *record.Challenge
 			mutated.TenantID = "tenant-b"
+			mutated.ConnectorAuthority.TenantID = "tenant-b"
+			mutated.ConnectorAuthority.AuthorityHash = ""
+			var err error
+			mutated.ConnectorAuthority, err = mutated.ConnectorAuthority.Seal()
+			if err != nil {
+				t.Fatal(err)
+			}
 			mutated.ChallengeHash = ""
 			sealed, err := mutated.Seal()
 			if err != nil {
@@ -147,7 +154,8 @@ func ceremonyFixtures(t *testing.T) (Record, contracts.ApprovalChallenge, approv
 		ChallengeID:     "challenge-a", ApprovalID: hold.ApprovalID, TenantID: hold.TenantID,
 		WorkspaceID: hold.WorkspaceID, Audience: "packs.lifecycle", PackID: "pack-a",
 		PackVersion: "1.0.0", PackManifestHash: shaRef("a"), Action: contracts.ApprovalGrantActionInstall,
-		IntentHash: shaRef("0"), EffectHash: shaRef("1"), PlanHash: shaRef("2"),
+		ConnectorAuthority: connectorAuthorityFixture(t),
+		IntentHash:         shaRef("0"), EffectHash: shaRef("1"), PlanHash: shaRef("2"),
 		Decision: contracts.ApprovalGrantDecisionAllow, PolicyVersion: "policy-v1",
 		PolicyEpoch: "epoch-1", PolicyHash: shaRef("3"),
 		AuthoritySource: "spiffe://helm/authority/approvers", AuthorityVersion: "authority-v1",
@@ -167,7 +175,8 @@ func ceremonyFixtures(t *testing.T) (Record, contracts.ApprovalChallenge, approv
 		WorkspaceID: challenge.WorkspaceID, Audience: challenge.Audience,
 		PackID: challenge.PackID, PackVersion: challenge.PackVersion,
 		PackManifestHash: challenge.PackManifestHash, Action: challenge.Action,
-		IntentHash: challenge.IntentHash, EffectHash: challenge.EffectHash,
+		ConnectorAuthority: challenge.ConnectorAuthority,
+		IntentHash:         challenge.IntentHash, EffectHash: challenge.EffectHash,
 		PlanHash: challenge.PlanHash, Decision: challenge.Decision,
 		PolicyVersion: challenge.PolicyVersion, PolicyEpoch: challenge.PolicyEpoch,
 		PolicyHash: challenge.PolicyHash, AuthoritySource: challenge.AuthoritySource,
@@ -188,7 +197,8 @@ func ceremonyFixtures(t *testing.T) (Record, contracts.ApprovalChallenge, approv
 		GrantID: "grant-a", TenantID: verified.TenantID, WorkspaceID: verified.WorkspaceID,
 		Audience: verified.Audience, PackID: verified.PackID, PackVersion: verified.PackVersion,
 		PackManifestHash: verified.PackManifestHash, Action: verified.Action,
-		IntentHash: verified.IntentHash, EffectHash: verified.EffectHash, PlanHash: verified.PlanHash,
+		ConnectorAuthority: verified.ConnectorAuthority,
+		IntentHash:         verified.IntentHash, EffectHash: verified.EffectHash, PlanHash: verified.PlanHash,
 		Decision: verified.Decision, PolicyVersion: verified.PolicyVersion,
 		PolicyEpoch: verified.PolicyEpoch, PolicyHash: verified.PolicyHash,
 		ApprovalID: verified.ApprovalID, CeremonyHash: ceremonyHash, SignerSetHash: verified.SignerSetHash,
@@ -207,7 +217,8 @@ func specFromChallenge(challenge contracts.ApprovalChallenge) ChallengeSpec {
 		BindingRef: "decision://helm/policy/approval-a",
 		TenantID:   challenge.TenantID, WorkspaceID: challenge.WorkspaceID, Audience: challenge.Audience,
 		PackID: challenge.PackID, PackVersion: challenge.PackVersion, PackManifestHash: challenge.PackManifestHash,
-		Action: challenge.Action, IntentHash: challenge.IntentHash, EffectHash: challenge.EffectHash,
+		Action: challenge.Action, ConnectorAuthority: challenge.ConnectorAuthority,
+		IntentHash: challenge.IntentHash, EffectHash: challenge.EffectHash,
 		PlanHash: challenge.PlanHash, Decision: challenge.Decision, PolicyVersion: challenge.PolicyVersion,
 		PolicyEpoch: challenge.PolicyEpoch, PolicyHash: challenge.PolicyHash,
 		AuthoritySource: challenge.AuthoritySource, AuthorityVersion: challenge.AuthorityVersion,
@@ -253,7 +264,8 @@ func consumptionForGrant(t *testing.T, grant contracts.ApprovalGrant, consumedBy
 		ApprovalID: grant.ApprovalID, GrantID: grant.GrantID, GrantHash: grant.GrantHash,
 		TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, Audience: grant.Audience, ConsumedBy: consumedBy,
 		PackID: grant.PackID, PackVersion: grant.PackVersion, PackManifestHash: grant.PackManifestHash, Action: grant.Action,
-		IntentHash: grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
+		ConnectorAuthority: grant.ConnectorAuthority,
+		IntentHash:         grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
 		PolicyVersion: grant.PolicyVersion, PolicyEpoch: grant.PolicyEpoch, PolicyHash: grant.PolicyHash,
 		ServerIdentity: grant.ServerIdentity, KernelTrustRootID: grant.KernelTrustRootID, SigningKeyRef: grant.SigningKeyRef,
 		GrantIssuedAt: grant.IssuedAt, GrantExpiresAt: grant.ExpiresAt, ConsumedAt: consumedAt,
@@ -266,4 +278,25 @@ func consumptionForGrant(t *testing.T, grant contracts.ApprovalGrant, consumedBy
 
 func shaRef(char string) string {
 	return "sha256:" + strings.Repeat(char, 64)
+}
+
+func connectorAuthorityFixture(t *testing.T) contracts.ApprovalConnectorAuthority {
+	t.Helper()
+	authority, err := (contracts.ApprovalConnectorAuthority{
+		SchemaVersion:   contracts.ApprovalConnectorAuthoritySchemaV1,
+		ContractVersion: contracts.ApprovalConnectorAuthorityContractV1,
+		State:           contracts.ApprovalConnectorAuthorityStateV1,
+		BindingRef:      "decision://helm/policy/approval-a", TenantID: "tenant-a", WorkspaceID: "workspace-a",
+		PackID: "pack-a", PackVersion: "1.0.0", PackManifestHash: shaRef("a"),
+		Action: contracts.ApprovalGrantActionInstall, EffectHash: shaRef("1"), PolicyHash: shaRef("3"),
+		ConnectorID: "connector-a", ConnectorVersion: "1.0.0", ConnectorExecutorKind: "digital",
+		ConnectorBinaryHash: shaRef("9"), ConnectorSignatureRef: "sigstore://connector-a/1.0.0",
+		ConnectorSignerID: "publisher-a", ConnectorSandboxProfile: "sandbox-pack-lifecycle-v1",
+		ConnectorDriftPolicyRef: "policy://connector-drift/v1", CertificationRef: "cert://connector-a/1.0.0",
+		CertificationHash: shaRef("b"), CertificationAuthority: "spiffe://helm/certification-authority",
+	}).Seal()
+	if err != nil {
+		t.Fatalf("seal connector authority: %v", err)
+	}
+	return authority
 }

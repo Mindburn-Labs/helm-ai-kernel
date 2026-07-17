@@ -148,7 +148,8 @@ func TestApprovalDispatchAdmissionRoutesUseSeparateVerifiedCapability(t *testing
 	if err := json.NewDecoder(claim.Body).Decode(&response); err != nil {
 		t.Fatal(err)
 	}
-	if response.Admission.AttemptID != "attempt-a" || response.AdmissionSignature == "" ||
+	if response.Admission.AttemptID != "attempt-a" ||
+		response.Admission.ConnectorAuthority.ConnectorID != "connector-a" || response.AdmissionSignature == "" ||
 		claim.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("response=%+v headers=%v", response, claim.Header())
 	}
@@ -180,6 +181,11 @@ func TestApprovalDispatchAdmissionRoutesFailClosedBeforeAuthority(t *testing.T) 
 		"unknown authority field": {
 			runtime: approvalDispatchRouteRuntime(admitter),
 			body:    strings.TrimSuffix(validApprovalDispatchAdmissionRequest(), "}") + `,"tenant_id":"attacker"}`,
+			status:  http.StatusBadRequest,
+		},
+		"caller connector selection": {
+			runtime: approvalDispatchRouteRuntime(admitter),
+			body:    strings.TrimSuffix(validApprovalDispatchAdmissionRequest(), "}") + `,"connector_id":"attacker-connector"}`,
 			status:  http.StatusBadRequest,
 		},
 		"bad idempotency hash": {
@@ -419,7 +425,8 @@ func approvalConsumptionRouteRecord() approvalceremony.Record {
 		TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "helm-data-plane",
 		ConsumedBy: "spiffe://helm/data-plane-a", PackID: "pack-a", PackVersion: "1.0.0",
 		PackManifestHash: "sha256:" + strings.Repeat("c", 64), Action: contracts.ApprovalGrantActionInstall,
-		IntentHash: "sha256:" + strings.Repeat("d", 64), EffectHash: "sha256:" + strings.Repeat("e", 64),
+		ConnectorAuthority: approvalRouteConnectorAuthority(),
+		IntentHash:         "sha256:" + strings.Repeat("d", 64), EffectHash: "sha256:" + strings.Repeat("e", 64),
 		PlanHash: "sha256:" + strings.Repeat("f", 64), PolicyVersion: "policy-v1", PolicyEpoch: "epoch-1",
 		PolicyHash: "sha256:" + strings.Repeat("1", 64), ServerIdentity: "kernel-a",
 		KernelTrustRootID: "root-a", SigningKeyRef: "key-a", GrantIssuedAt: now.Add(-time.Minute),
@@ -454,7 +461,7 @@ func approvalDispatchAdmissionRouteRecord(t *testing.T) approvalceremony.Dispatc
 		TenantID: consumption.TenantID, WorkspaceID: consumption.WorkspaceID,
 		Audience: consumption.Audience, AdmittedBy: consumption.ConsumedBy,
 		IdempotencyKeyHash: "sha256:" + strings.Repeat("a", 64), EffectHash: consumption.EffectHash,
-		ConnectorID: "connector-a", Action: consumption.Action,
+		Action: consumption.Action, ConnectorAuthority: consumption.ConnectorAuthority,
 		KernelTrustRootID: consumption.KernelTrustRootID, SigningKeyRef: consumption.SigningKeyRef,
 		IssuedAt: consumption.ConsumedAt.Add(time.Second), ExpiresAt: consumption.ConsumedAt.Add(30 * time.Second),
 	}).Seal()
@@ -473,9 +480,31 @@ func validApprovalDispatchAdmissionRequest() string {
 		ConsumptionHash:    "sha256:" + strings.Repeat("2", 64),
 		IdempotencyKeyHash: "sha256:" + strings.Repeat("a", 64),
 		EffectHash:         "sha256:" + strings.Repeat("e", 64),
-		ConnectorID:        "connector-a", Action: contracts.ApprovalGrantActionInstall,
+		Action:             contracts.ApprovalGrantActionInstall,
 	})
 	return string(body)
+}
+
+func approvalRouteConnectorAuthority() contracts.ApprovalConnectorAuthority {
+	authority, err := (contracts.ApprovalConnectorAuthority{
+		SchemaVersion:   contracts.ApprovalConnectorAuthoritySchemaV1,
+		ContractVersion: contracts.ApprovalConnectorAuthorityContractV1,
+		State:           contracts.ApprovalConnectorAuthorityStateV1,
+		BindingRef:      "decision://helm/policy/approval-a", TenantID: "tenant-a", WorkspaceID: "workspace-a",
+		PackID: "pack-a", PackVersion: "1.0.0", PackManifestHash: "sha256:" + strings.Repeat("c", 64),
+		Action: contracts.ApprovalGrantActionInstall, EffectHash: "sha256:" + strings.Repeat("e", 64),
+		PolicyHash: "sha256:" + strings.Repeat("1", 64), ConnectorID: "connector-a",
+		ConnectorVersion: "1.0.0", ConnectorExecutorKind: "digital",
+		ConnectorBinaryHash:   "sha256:" + strings.Repeat("7", 64),
+		ConnectorSignatureRef: "sigstore://connector-a/1.0.0", ConnectorSignerID: "publisher-a",
+		ConnectorSandboxProfile: "sandbox-pack-lifecycle-v1", ConnectorDriftPolicyRef: "policy://connector-drift/v1",
+		CertificationRef: "cert://connector-a/1.0.0", CertificationHash: "sha256:" + strings.Repeat("8", 64),
+		CertificationAuthority: "spiffe://helm/certification-authority",
+	}).Seal()
+	if err != nil {
+		panic(err)
+	}
+	return authority
 }
 
 func postApprovalConsumptionRoute(t *testing.T, mux *http.ServeMux, path, body, token string) *httptest.ResponseRecorder {

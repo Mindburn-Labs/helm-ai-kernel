@@ -46,6 +46,25 @@ connection role must also own those schema objects; DML-only runtime authority
 is a remaining hardening item. It remains non-superuser and must not receive
 `BYPASSRLS`.
 
+### Contract rollout rule
+
+This contract epoch is intentionally fail-closed and not rolling-upgrade
+compatible with approval artifacts written under an earlier contract version,
+including dispatch-admission `2026-07-17`. The challenge, grant, consumption,
+and dispatch-admission contracts now require the signed `connector_authority`
+object, and their strict readers reject older persisted JSON rather than
+inventing connector authority during recovery.
+
+Before enabling this binary, operators must produce source-owned evidence that
+the non-production approval epoch is empty or fully drained: no live
+`HOLD_PENDING` ceremony, challenge, grant, consumption, or dispatch-admission
+row may survive the cutover. If any
+such artifact must remain recoverable, deployment is blocked until a separately
+reviewed dual-read/data-migration path exists with conformance vectors for both
+epochs. Mixed-version Kernel replicas, in-place rolling deployment, and
+rewriting old signed artifacts are prohibited. This rule does not authorize a
+production rollout; the remaining blockers below still apply.
+
 ## Internal routes
 
 The consume and consumption-recovery routes accept the same strict JSON object
@@ -82,13 +101,26 @@ scope (default `helm.approval.dispatch`) and accept:
   "consumption_hash": "sha256:<64 lowercase hex characters>",
   "idempotency_key_hash": "sha256:<64 lowercase hex characters>",
   "effect_hash": "sha256:<64 lowercase hex characters>",
-  "connector_id": "connector-...",
   "action": "install"
 }
 ```
 
 `action` is one of `install`, `upgrade`, `uninstall`, or `rollback` and must
-match the signed consumption.
+match the signed consumption. The caller cannot select a connector. The
+Kernel copies the self-hashed `connector_authority` committed by the
+policy-owned approval binding through challenge, verified quorum, grant, and
+consumption into the signed admission. That object binds tenant/workspace,
+pack, exact effect/action, policy hash, connector release binary/signature,
+sandbox/drift policy, and certification evidence.
+
+This slice defines and preserves that immutable binding but does not yet wire a
+production `BindingProvider` backed by the durable source-owned connector
+registry, nor does it cryptographically validate the referenced connector
+signature or certification at binding time. `state=certified`, a certification
+reference, and their self-hashed snapshot are not proof that a release is
+currently certified. Until the production provider verifies source-owned
+provenance and the near-effect gate rechecks current revocation state, the
+contract remains internal and non-production.
 
 - `POST /internal/v1/approval-grants/admit-dispatch` acquires the same
   tenant/workspace advisory lock as FENCE, verifies the exact signed
@@ -98,9 +130,12 @@ match the signed consumption.
   record that future FENCE reconciliation must treat as pre-existing work;
   that state does not claim the connector has started. This slice does not yet
   implement admission close transitions or an active-work disposition API.
-- An exact retry of an already committed admission returns the same immutable
-  record and expiry, including after a later FENCE. Reusing an attempt with
-  changed bindings, or reusing one consumption for a second attempt, conflicts.
+- For records written under this exact contract epoch, an exact retry of an
+  already committed admission returns the same immutable record and expiry,
+  including after a later FENCE. Reusing an attempt with changed bindings, or
+  reusing one consumption for a second attempt, conflicts. Earlier contract
+  epochs are governed by the fail-closed cutover rule above and are not
+  recoverable by this binary without a reviewed compatibility path.
 - `POST /internal/v1/approval-grants/recover-dispatch-admission` performs the
   exact read-only response-loss recovery for the same workload identity and
   request bindings. It creates no authority and does not extend the admission
@@ -118,12 +153,12 @@ returned consumption and dispatch-admission records and signatures. Production
 promotion remains blocked until the Data Plane verifies the admission and
 persists it atomically with `CONSUMED -> DISPATCHING` before every connector
 effect, including cached and recovered consumptions. That gate is necessary
-but not sufficient: source-owned connector selection/certification, active-work
-listing and disposition, close/uncertainty transitions, and connector-boundary
+but not sufficient: the near-effect boundary must still compare that immutable
+approved snapshot with a current durable source-owned connector registry so a
+release revoked after approval cannot execute. Active-work listing and
+disposition, close/uncertainty transitions, and connector-boundary
 acknowledgement evidence are also required before production or Emergency Stop
-claims. In this slice `connector_id` is asserted by the dispatch-scoped
-workload and then signed; it is not yet resolved from the approved policy or a
-certified connector binding, so it remains a release blocker.
+claims.
 
 ## Failure handling
 

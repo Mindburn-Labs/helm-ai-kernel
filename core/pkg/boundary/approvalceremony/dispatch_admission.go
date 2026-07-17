@@ -22,16 +22,12 @@ type DispatchAdmissionRequest struct {
 	ConsumptionHash    string `json:"consumption_hash"`
 	IdempotencyKeyHash string `json:"idempotency_key_hash"`
 	EffectHash         string `json:"effect_hash"`
-	// ConnectorID is workload-asserted in this internal contract. It remains
-	// pre-production until a source-owned policy/certification binding resolves
-	// it from the approved effect rather than trusting the dispatch workload.
-	ConnectorID string `json:"connector_id"`
-	Action      string `json:"action"`
+	Action             string `json:"action"`
 }
 
 func (r DispatchAdmissionRequest) Validate() error {
 	for field, value := range map[string]string{
-		"approval_id": r.ApprovalID, "attempt_id": r.AttemptID, "connector_id": r.ConnectorID,
+		"approval_id": r.ApprovalID, "attempt_id": r.AttemptID,
 	} {
 		if !validToken(value) || len(value) > 512 {
 			return invalidRecord("dispatch admission " + field + " is invalid")
@@ -153,7 +149,7 @@ func (s *DispatchAdmitter) Claim(ctx context.Context, request DispatchAdmissionR
 			TenantID: consumption.TenantID, WorkspaceID: consumption.WorkspaceID,
 			Audience: consumption.Audience, AdmittedBy: identity.Subject,
 			IdempotencyKeyHash: request.IdempotencyKeyHash, EffectHash: request.EffectHash,
-			ConnectorID: request.ConnectorID, Action: request.Action,
+			Action: request.Action, ConnectorAuthority: consumption.ConnectorAuthority,
 			KernelTrustRootID: consumption.KernelTrustRootID, SigningKeyRef: consumption.SigningKeyRef,
 			IssuedAt: issuedAt, ExpiresAt: expiresAt,
 		}).Seal()

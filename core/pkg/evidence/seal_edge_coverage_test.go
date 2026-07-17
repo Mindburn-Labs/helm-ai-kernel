@@ -1,5 +1,8 @@
 package evidence
 
+// quantum_posture: these fixtures use SHA-256 and classical Ed25519 only to
+// exercise existing EvidencePack integrity behavior; no PQ assurance is made.
+
 import (
 	"context"
 	"crypto/ed25519"

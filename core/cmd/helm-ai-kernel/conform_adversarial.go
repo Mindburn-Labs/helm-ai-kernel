@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -1239,7 +1240,11 @@ func adversarialReportSigningKey() (ed25519.PrivateKey, string, error) {
 	case ed25519.SeedSize:
 		privateKey = ed25519.NewKeyFromSeed(keyBytes)
 	case ed25519.PrivateKeySize:
-		privateKey = ed25519.PrivateKey(keyBytes)
+		derivedKey := ed25519.NewKeyFromSeed(keyBytes[:ed25519.SeedSize])
+		if subtle.ConstantTimeCompare(derivedKey, keyBytes) != 1 {
+			return nil, "", fmt.Errorf("%s public key does not match its seed", adversarialReportSigningKeyEnv)
+		}
+		privateKey = derivedKey
 	default:
 		return nil, "", fmt.Errorf("%s must be a 32-byte seed or 64-byte private key", adversarialReportSigningKeyEnv)
 	}
@@ -1287,8 +1292,9 @@ func verifyAdversarialCampaignReportAttestation(report adversarialCampaignReport
 	if report.Attestation.KeyID != "sha256:"+hex.EncodeToString(keyHash[:]) {
 		return fmt.Errorf("campaign attestation key id mismatch")
 	}
-	signature, err := hex.DecodeString(strings.TrimSpace(report.Attestation.Signature))
-	if err != nil || len(signature) != ed25519.SignatureSize {
+	signatureHex := report.Attestation.Signature
+	signature, err := hex.DecodeString(signatureHex)
+	if err != nil || len(signature) != ed25519.SignatureSize || hex.EncodeToString(signature) != signatureHex {
 		return fmt.Errorf("invalid campaign attestation signature encoding")
 	}
 	payload, err := canonicalAdversarialCampaignReport(report)

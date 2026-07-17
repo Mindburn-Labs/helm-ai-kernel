@@ -837,6 +837,52 @@ func TestAdversarialReportSignatureIsDomainSeparated(t *testing.T) {
 	}
 }
 
+func TestAdversarialReportSignatureRejectsNonCanonicalEncoding(t *testing.T) {
+	seed := sha256.Sum256([]byte("helm-adversarial-report-canonical-signature-test-key-v1"))
+	privateKey := ed25519.NewKeyFromSeed(seed[:])
+	publicKeyHex := hex.EncodeToString(privateKey.Public().(ed25519.PublicKey))
+	report := adversarialCampaignReport{SchemaVersion: adversarialCampaignSchemaVersion}
+	if err := signAdversarialCampaignReportWithKey(&report, privateKey, publicKeyHex); err != nil {
+		t.Fatal(err)
+	}
+	canonicalSignature := report.Attestation.Signature
+	uppercaseSignature := strings.ToUpper(canonicalSignature)
+	if uppercaseSignature == canonicalSignature {
+		t.Fatal("test signature unexpectedly contains no hexadecimal letters")
+	}
+
+	for _, signature := range []string{
+		" " + canonicalSignature,
+		canonicalSignature + " ",
+		uppercaseSignature,
+	} {
+		report.Attestation.Signature = signature
+		if err := verifyAdversarialCampaignReportAttestation(report, publicKeyHex); err == nil || !strings.Contains(err.Error(), "invalid campaign attestation signature encoding") {
+			t.Fatalf("non-canonical signature %q error=%v, want encoding rejection", signature, err)
+		}
+	}
+}
+
+func TestAdversarialReportSigningKeyValidatesExpandedPrivateKey(t *testing.T) {
+	seed := sha256.Sum256([]byte("helm-adversarial-report-expanded-key-test-v1"))
+	expandedKey := ed25519.NewKeyFromSeed(seed[:])
+	t.Setenv(adversarialReportSigningKeyEnv, hex.EncodeToString(expandedKey))
+	privateKey, publicKeyHex, err := adversarialReportSigningKey()
+	if err != nil {
+		t.Fatalf("valid expanded key: %v", err)
+	}
+	if !bytes.Equal(privateKey, expandedKey) || publicKeyHex != hex.EncodeToString(expandedKey.Public().(ed25519.PublicKey)) {
+		t.Fatal("expanded key was not preserved with its derived public key")
+	}
+
+	corruptedKey := append(ed25519.PrivateKey(nil), expandedKey...)
+	corruptedKey[len(corruptedKey)-1] ^= 0x01
+	t.Setenv(adversarialReportSigningKeyEnv, hex.EncodeToString(corruptedKey))
+	if _, _, err := adversarialReportSigningKey(); err == nil || !strings.Contains(err.Error(), "public key does not match its seed") {
+		t.Fatalf("corrupted expanded key error=%v, want consistency rejection", err)
+	}
+}
+
 func TestAdversarialReportJSONRejectsExcessiveNesting(t *testing.T) {
 	data := []byte(strings.Repeat("[", maxAdversarialJSONDepth+1) + "0" + strings.Repeat("]", maxAdversarialJSONDepth+1))
 	if err := rejectDuplicateJSONKeys(data); err == nil || !strings.Contains(err.Error(), "JSON nesting exceeds") {

@@ -62,6 +62,7 @@ func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateR
 	aggregate := &AggregateResult{
 		EvidenceDir: evidenceDir,
 		Pass:        true,
+		Coverage:    coverage,
 		Suites:      make([]*SuiteResult, 0, len(suites)),
 	}
 
@@ -101,6 +102,7 @@ type AggregateResult struct {
 	Pass         bool           `json:"pass"`
 	PassedSuites int            `json:"passed_suites"`
 	FailedSuites int            `json:"failed_suites"`
+	Coverage     CoverageResult `json:"coverage"`
 	Suites       []*SuiteResult `json:"suites"`
 }
 

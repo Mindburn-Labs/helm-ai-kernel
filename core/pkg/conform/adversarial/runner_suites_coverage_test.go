@@ -22,6 +22,9 @@ func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 || len(result.Suites) != 10 {
 		t.Fatalf("empty evidence result = %+v, want all suites rejected for missing positive controls", result)
 	}
+	if result.Coverage.Pass || result.Coverage.MissingSuites != 10 || len(result.Coverage.Checks) != 10 {
+		t.Fatalf("empty evidence coverage = %+v, want all mandatory mutations unavailable", result.Coverage)
+	}
 	if result.EvidenceDir != dir {
 		t.Fatalf("evidence dir = %q, want %q", result.EvidenceDir, dir)
 	}
@@ -58,6 +61,9 @@ func TestRunAllAcceptsCompletePositiveControls(t *testing.T) {
 	result := RunAllWithOptions(dir, opts)
 	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
 		t.Fatalf("complete evidence result = %+v, want all suites passing", result)
+	}
+	if !result.Coverage.Pass || result.Coverage.CoveredSuites != 10 || result.Coverage.MissingSuites != 0 {
+		t.Fatalf("complete evidence coverage = %+v, want all mutations rejected", result.Coverage)
 	}
 	t.Setenv(CampaignPublicKeyEnv, publicKeyHex)
 	t.Setenv(CampaignIDEnv, testCampaignID)

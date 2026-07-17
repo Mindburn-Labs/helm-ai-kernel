@@ -2,6 +2,8 @@ package guardian
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -92,6 +94,19 @@ func TestGuardianSemanticThreatContextCannotBeSpoofed(t *testing.T) {
 	}
 }
 
+func TestGuardianSemanticThreatContextCannotBeSpoofedWithoutScanner(t *testing.T) {
+	g := semanticGuardian(t, WithThreatScanner(nil))
+	req := semanticRequest("")
+	req.Context[ContextThreatScan] = map[string]any{"semantic_flagged": true, "semantic_max_bp": 10000}
+	decision, err := g.EvaluateDecision(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := decision.InputContext[ContextThreatScan]; exists {
+		t.Fatalf("caller-provided threat context survived without scanner: %#v", decision.InputContext[ContextThreatScan])
+	}
+}
+
 func TestGuardianBindsSemanticModelFailure(t *testing.T) {
 	scanner := threatscan.New(
 		threatscan.WithClock(func() time.Time { return time.Unix(10, 0).UTC() }),
@@ -137,6 +152,31 @@ func TestGuardianSemanticEvidenceIsSignatureBound(t *testing.T) {
 	}
 	if valid {
 		t.Fatal("semantic evidence tampering did not invalidate decision signature")
+	}
+}
+
+func TestGuardianSemanticEvidenceCannotBeStrippedIntoEffectDigest(t *testing.T) {
+	g := semanticGuardian(t)
+	decision, err := g.EvaluateDecision(context.Background(), semanticRequest(semanticBypass))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier := g.signer.(interface {
+		VerifyDecision(*contracts.DecisionRecord) (bool, error)
+	})
+	encoded, err := crypto.CanonicalMarshal(decision.ThreatScan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(encoded)
+	decision.EffectDigest += ":sha256:" + hex.EncodeToString(sum[:])
+	decision.ThreatScan = nil
+	valid, err := verifier.VerifyDecision(decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid {
+		t.Fatal("stripped threat evidence was folded into EffectDigest without invalidating the signature")
 	}
 }
 

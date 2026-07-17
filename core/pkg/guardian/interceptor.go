@@ -372,12 +372,11 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 		}
 	}
 
-	// Gate 4: Threat signal scan — scan untrusted textual inputs
+	// Gate 4: Threat signal scan — scan untrusted textual inputs. The scan
+	// reference is always security-owned, including configurations where the
+	// scanner is disabled, so caller-supplied evidence can never reach policy.
+	delete(evalCtx.Request.Context, ContextThreatScan)
 	if p.g.threatScanner != nil {
-		// The scan reference is security-owned. Remove any caller-provided value
-		// even when there is no scannable text so stale/spoofed metadata cannot
-		// reach policy evaluation.
-		delete(evalCtx.Request.Context, ContextThreatScan)
 		channel, trustLevel := trustedInputProvenance(evalCtx.Request.Context)
 
 		// Every scannable text field must be inspected: first-match-only

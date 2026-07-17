@@ -1,5 +1,8 @@
 package crypto
 
+// quantum_posture: regression coverage verifies algorithm-agnostic canonical
+// threat-evidence binding and makes no post-quantum certification claim.
+
 import (
 	"crypto/ed25519"
 	"crypto/rand"
@@ -545,6 +548,25 @@ func TestClosing_CanonicalizeDecisionStrict_RequiredFields(t *testing.T) {
 				t.Fatal("unexpected error:", err)
 			}
 		})
+	}
+}
+
+func TestCanonicalizeDecisionThreatEvidenceUsesSeparateDomain(t *testing.T) {
+	const evidenceHash = "sha256:0123456789abcdef"
+	bound := CanonicalizeDecision("d1", "ALLOW", "reason", "ph", "pch", "effect", evidenceHash)
+	stripped := CanonicalizeDecision("d1", "ALLOW", "reason", "ph", "pch", "effect:"+evidenceHash)
+	if bound == stripped {
+		t.Fatal("threat evidence can be stripped into the legacy EffectDigest field")
+	}
+	if !strings.HasPrefix(bound, decisionThreatBindingDomain+SigSeparator) {
+		t.Fatalf("evidence-bearing canonical form lacks domain separation: %q", bound)
+	}
+	strict, err := CanonicalizeDecisionStrict("d1", "ALLOW", "reason", "ph", "pch", "effect", evidenceHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strict != bound {
+		t.Fatalf("strict canonical form omitted threat evidence:\nstrict=%q\nbound=%q", strict, bound)
 	}
 }
 

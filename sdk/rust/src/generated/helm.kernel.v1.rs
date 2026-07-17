@@ -37,6 +37,9 @@ pub struct DecisionRecord {
     pub policy_decision_hash: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "12")]
     pub input_context: ::prost::alloc::vec::Vec<u8>,
+    /// JSON-encoded typed ThreatScanRef covered by the decision signature
+    #[prost(bytes = "vec", tag = "13")]
+    pub threat_scan: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizedExecutionIntent {

@@ -140,6 +140,7 @@ func AllReasonCodes() []string {
 		ReasonTaintedInvokeDeny,
 		ReasonTaintedEgressDeny,
 		ReasonTaintedEscalate,
+		ReasonSemanticThreatEscalate,
 		ReasonSignedEvidencePackInvalid,
 		ReasonSignedEvidencePackUnsigned,
 		ReasonGovernanceChainBroken,

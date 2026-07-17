@@ -79,7 +79,10 @@ func (s *MLDSASigner) Verify(message []byte, signature []byte) bool {
 
 // SignDecision signs a DecisionRecord using ML-DSA-65.
 func (s *MLDSASigner) SignDecision(d *contracts.DecisionRecord) error {
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, decisionThreatEvidenceHash(d))
+	payload, err := canonicalizeDecisionRecord(d)
+	if err != nil {
+		return err
+	}
 	sig, err := s.Sign([]byte(payload))
 	if err != nil {
 		return err
@@ -123,7 +126,10 @@ func (s *MLDSASigner) VerifyDecision(d *contracts.DecisionRecord) (bool, error) 
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, decisionThreatEvidenceHash(d))
+	payload, err := canonicalizeDecisionRecord(d)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(d.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)

@@ -258,6 +258,7 @@ type DecisionRecord struct {
 	PolicyRef          string                 `protobuf:"bytes,10,opt,name=policy_ref,json=policyRef,proto3" json:"policy_ref,omitempty"`
 	PolicyDecisionHash string                 `protobuf:"bytes,11,opt,name=policy_decision_hash,json=policyDecisionHash,proto3" json:"policy_decision_hash,omitempty"`
 	InputContext       []byte                 `protobuf:"bytes,12,opt,name=input_context,json=inputContext,proto3" json:"input_context,omitempty"`
+	ThreatScan         []byte                 `protobuf:"bytes,13,opt,name=threat_scan,json=threatScan,proto3" json:"threat_scan,omitempty"` // JSON-encoded typed ThreatScanRef covered by the decision signature
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -372,6 +373,13 @@ func (x *DecisionRecord) GetPolicyDecisionHash() string {
 func (x *DecisionRecord) GetInputContext() []byte {
 	if x != nil {
 		return x.InputContext
+	}
+	return nil
+}
+
+func (x *DecisionRecord) GetThreatScan() []byte {
+	if x != nil {
+		return x.ThreatScan
 	}
 	return nil
 }
@@ -1246,7 +1254,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"effectType\x12\x1b\n" +
 	"\teffect_id\x18\x02 \x01(\tR\beffectId\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x12\x1b\n" +
-	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\xf1\x03\n" +
+	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x92\x04\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1262,7 +1270,9 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"policy_ref\x18\n" +
 	" \x01(\tR\tpolicyRef\x120\n" +
 	"\x14policy_decision_hash\x18\v \x01(\tR\x12policyDecisionHash\x12#\n" +
-	"\rinput_context\x18\f \x01(\fR\finputContext\"\xca\x02\n" +
+	"\rinput_context\x18\f \x01(\fR\finputContext\x12\x1f\n" +
+	"\vthreat_scan\x18\r \x01(\fR\n" +
+	"threatScan\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +

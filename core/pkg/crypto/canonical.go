@@ -45,9 +45,10 @@ func CanonicalMarshal(v interface{}) ([]byte, error) {
 
 // Signature components separators and prefixes
 const (
-	SigSeparator     = ":"
-	SigPrefixEd25519 = "ed25519"
-	SigPrefixMLDSA65 = "ml-dsa-65"
+	SigSeparator                = ":"
+	SigPrefixEd25519            = "ed25519"
+	SigPrefixMLDSA65            = "ml-dsa-65"
+	decisionThreatBindingDomain = "helm-decision-threat-binding-v1"
 )
 
 // CanonicalizeDecision creates a canonical string representation of a decision record for signing.
@@ -58,32 +59,57 @@ func CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash,
 	if len(threatEvidenceHash) == 0 || threatEvidenceHash[0] == "" {
 		return base
 	}
-	return base + SigSeparator + threatEvidenceHash[0]
+
+	// Preserve the legacy preimage byte-for-byte when no threat evidence is
+	// present. Evidence-bearing decisions use a separate domain and bind a
+	// digest of the complete legacy preimage plus a length-framed evidence
+	// digest. This prevents an attacker from stripping ThreatScan and folding
+	// the old ":<hash>" suffix into EffectDigest to recover the same preimage.
+	baseSum := sha256.Sum256([]byte(base))
+	evidenceHash := threatEvidenceHash[0]
+	return fmt.Sprintf("%s%s%x%s%d%s%s", decisionThreatBindingDomain, SigSeparator, baseSum, SigSeparator, len(evidenceHash), SigSeparator, evidenceHash)
 }
 
-func decisionThreatEvidenceHash(decision *contracts.DecisionRecord) string {
+func decisionThreatEvidenceHash(decision *contracts.DecisionRecord) (string, error) {
 	if decision == nil || decision.ThreatScan == nil {
-		return ""
+		return "", nil
 	}
 	encoded, err := CanonicalMarshal(decision.ThreatScan)
 	if err != nil {
-		return "sha256:invalid"
+		return "", fmt.Errorf("canonicalize decision threat evidence: %w", err)
 	}
 	sum := sha256.Sum256(encoded)
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+
+}
+
+func canonicalizeDecisionRecord(decision *contracts.DecisionRecord) (string, error) {
+	threatHash, err := decisionThreatEvidenceHash(decision)
+	if err != nil {
+		return "", err
+	}
+	return CanonicalizeDecision(
+		decision.ID,
+		decision.Verdict,
+		decision.Reason,
+		decision.PhenotypeHash,
+		decision.PolicyContentHash,
+		decision.EffectDigest,
+		threatHash,
+	), nil
 }
 
 // CanonicalizeDecisionStrict is like CanonicalizeDecision but returns an error if any
 // security-relevant hash field is empty. Use this for new code paths where all fields
 // are expected to be populated.
-func CanonicalizeDecisionStrict(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest string) (string, error) {
+func CanonicalizeDecisionStrict(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest string, threatEvidenceHash ...string) (string, error) {
 	if id == "" {
 		return "", fmt.Errorf("decision ID is required for canonicalization")
 	}
 	if verdict == "" {
 		return "", fmt.Errorf("verdict is required for canonicalization")
 	}
-	return CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest), nil
+	return CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest, threatEvidenceHash...), nil
 }
 
 // CanonicalizeIntent creates the historical compact intent preimage.

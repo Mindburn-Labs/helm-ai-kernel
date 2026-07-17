@@ -62,7 +62,10 @@ func (v *HybridVerifier) Verify(message []byte, signature []byte) bool {
 
 // VerifyDecision verifies a hybrid-signed DecisionRecord.
 func (v *HybridVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error) {
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, decisionThreatEvidenceHash(d))
+	payload, err := canonicalizeDecisionRecord(d)
+	if err != nil {
+		return false, err
+	}
 	return v.verifyEnvelope([]byte(payload), d.Signature)
 }
 

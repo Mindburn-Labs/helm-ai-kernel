@@ -26,6 +26,8 @@ import (
 const (
 	adversarialCampaignSchemaVersion = "helm.adversarial_campaign_report.v2"
 	adversarialReportSignatureDomain = "helm.bounty.campaign-report-signature/v1"
+	adversarialReportSigningKeyEnv   = "HELM_BOUNTY_REPORT_SIGNING_KEY_HEX"
+	adversarialReportPublicKeyEnv    = "HELM_BOUNTY_REPORT_PUBLIC_KEY_HEX"
 	maxAdversarialIdentifierBytes    = 128
 	maxAdversarialSnapshotEntries    = 4096
 	maxAdversarialReportBytes        = 8 << 20
@@ -130,7 +132,7 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&externalHostKey, "external-host-public-key", strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")), "Trusted Ed25519 key for external host evidence")
 	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Trusted Ed25519 key for conformance report signatures")
 	cmd.StringVar(&managedAgentKey, "managed-agent-receipt-public-key", strings.TrimSpace(os.Getenv("HELM_MANAGED_AGENT_RECEIPT_PUBLIC_KEY_HEX")), "Trusted Ed25519 key for embedded managed-agent receipts")
-	cmd.StringVar(&campaignPublicKey, "campaign-public-key", strings.TrimSpace(os.Getenv("HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX")), "Required external Ed25519 trust root for campaign authorization and tool signatures")
+	cmd.StringVar(&campaignPublicKey, "campaign-public-key", strings.TrimSpace(os.Getenv(adversarial.CampaignPublicKeyEnv)), "Required external Ed25519 trust root for campaign authorization and tool signatures")
 	cmd.StringVar(&campaignID, "campaign-id", strings.TrimSpace(os.Getenv(adversarial.CampaignIDEnv)), "Required stable campaign identifier")
 	cmd.StringVar(&runID, "run-id", strings.TrimSpace(os.Getenv(adversarial.CampaignRunIDEnv)), "Required unique campaign-run identifier")
 	cmd.StringVar(&evaluationTimeRaw, "evaluation-time", strings.TrimSpace(os.Getenv("HELM_BOUNTY_EVALUATION_TIME_RFC3339")), "Required RFC3339 trust-evaluation time for deterministic replay")
@@ -210,6 +212,11 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 		DetectorRevision:         adversarial.DetectorRevision,
 		DetectorDefinitionSHA256: detectorDigest,
 	}
+	reportPrivateKey, reportPublicKeyHex, err := adversarialReportSigningKey()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: campaign report attestation key is invalid: %v\n", err)
+		return 2
+	}
 	verificationOpts := adversarial.VerificationOptions{
 		CampaignPublicKeyHex: campaignPublicKey,
 		CampaignID:           campaignID,
@@ -282,7 +289,7 @@ func runConformAdversarial(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "Error: refusing to attest an inconsistent campaign report: %v\n", err)
 		return 2
 	}
-	if err := signAdversarialCampaignReport(&campaign); err != nil {
+	if err := signAdversarialCampaignReportWithKey(&campaign, reportPrivateKey, reportPublicKeyHex); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot attest campaign report: %v\n", err)
 		return 2
 	}
@@ -356,7 +363,7 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 		expectedKernelCommit             string
 		expectedExecutableSHA            string
 		expectedTrustProfile             string
-		expectedCampaignKeyID            string
+		expectedCampaignPublicKey        string
 		expectedCampaignID               string
 		expectedRunID                    string
 		expectedEvidenceRoot             string
@@ -367,11 +374,11 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 		jsonOutput                       bool
 	)
 	cmd.StringVar(&reportPath, "report", "", "Path to an attested adversarial campaign report")
-	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Externally trusted Ed25519 report-attestation public key")
+	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv(adversarialReportPublicKeyEnv)), "Externally trusted Ed25519 report-attestation public key")
 	cmd.StringVar(&expectedKernelCommit, "expected-kernel-commit", "", "Optional exact Kernel commit required by downstream policy")
 	cmd.StringVar(&expectedExecutableSHA, "expected-executable-sha256", "", "Optional exact runner executable digest required by downstream policy")
 	cmd.StringVar(&expectedTrustProfile, "expected-trust-profile", "", "Optional exact EvidencePack trust profile required by downstream policy")
-	cmd.StringVar(&expectedCampaignKeyID, "expected-campaign-key-id", "", "Optional exact campaign trust-key ID required by downstream policy")
+	cmd.StringVar(&expectedCampaignPublicKey, "expected-campaign-public-key", strings.TrimSpace(os.Getenv(adversarial.CampaignPublicKeyEnv)), "Required external Ed25519 campaign trust root")
 	cmd.StringVar(&expectedCampaignID, "expected-campaign-id", "", "Required exact campaign identifier for replay-safe verification")
 	cmd.StringVar(&expectedRunID, "expected-run-id", "", "Required exact campaign-run identifier for replay-safe verification")
 	cmd.StringVar(&expectedEvidenceRoot, "expected-evidence-root", "", "Optional exact EvidencePack manifest root required by downstream policy")
@@ -383,8 +390,8 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
-	if cmd.NArg() != 0 || strings.TrimSpace(reportPath) == "" || strings.TrimSpace(trustedPublicKey) == "" || strings.TrimSpace(expectedCampaignID) == "" || strings.TrimSpace(expectedRunID) == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --report, --trusted-public-key, --expected-campaign-id, and --expected-run-id are required")
+	if cmd.NArg() != 0 || strings.TrimSpace(reportPath) == "" || strings.TrimSpace(trustedPublicKey) == "" || strings.TrimSpace(expectedCampaignPublicKey) == "" || strings.TrimSpace(expectedCampaignID) == "" || strings.TrimSpace(expectedRunID) == "" {
+		_, _ = fmt.Fprintln(stderr, "Error: --report, --trusted-public-key, --expected-campaign-public-key, --expected-campaign-id, and --expected-run-id are required")
 		return 2
 	}
 	var err error
@@ -396,6 +403,11 @@ func runVerifyAdversarialCampaignReport(args []string, stdout, stderr io.Writer)
 	expectedRunID, err = validateAdversarialIdentifier("expected run id", expectedRunID)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	expectedCampaignKeyID, err := adversarial.CampaignKeyID(expectedCampaignPublicKey)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: --expected-campaign-public-key is invalid: %v\n", err)
 		return 2
 	}
 	data, err := readBoundedAdversarialReport(reportPath)
@@ -1168,10 +1180,36 @@ func currentExecutableSHA256() (string, error) {
 }
 
 func signAdversarialCampaignReport(report *adversarialCampaignReport) error {
-	privateKey, publicKeyHex, err := externalFailureSigningKey()
+	privateKey, publicKeyHex, err := adversarialReportSigningKey()
 	if err != nil {
-		return fmt.Errorf("HELM_SIGNING_KEY_HEX is required for campaign attestation: %w", err)
+		return err
 	}
+	return signAdversarialCampaignReportWithKey(report, privateKey, publicKeyHex)
+}
+
+func adversarialReportSigningKey() (ed25519.PrivateKey, string, error) {
+	keyHex := strings.TrimSpace(os.Getenv(adversarialReportSigningKeyEnv))
+	if keyHex == "" {
+		return nil, "", fmt.Errorf("%s is required", adversarialReportSigningKeyEnv)
+	}
+	keyBytes, err := hex.DecodeString(keyHex)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid %s: %w", adversarialReportSigningKeyEnv, err)
+	}
+	var privateKey ed25519.PrivateKey
+	switch len(keyBytes) {
+	case ed25519.SeedSize:
+		privateKey = ed25519.NewKeyFromSeed(keyBytes)
+	case ed25519.PrivateKeySize:
+		privateKey = ed25519.PrivateKey(keyBytes)
+	default:
+		return nil, "", fmt.Errorf("%s must be a 32-byte seed or 64-byte private key", adversarialReportSigningKeyEnv)
+	}
+	publicKey := privateKey.Public().(ed25519.PublicKey)
+	return privateKey, hex.EncodeToString(publicKey), nil
+}
+
+func signAdversarialCampaignReportWithKey(report *adversarialCampaignReport, privateKey ed25519.PrivateKey, publicKeyHex string) error {
 	publicKey, err := hex.DecodeString(publicKeyHex)
 	if err != nil || len(publicKey) != ed25519.PublicKeySize {
 		return fmt.Errorf("derive campaign attestation public key")

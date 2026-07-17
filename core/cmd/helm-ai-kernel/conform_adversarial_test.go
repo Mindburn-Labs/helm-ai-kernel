@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform/adversarial"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 const (
@@ -96,6 +98,22 @@ func TestConformAdversarialRequiresCampaignAndRunIdentity(t *testing.T) {
 	}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "--run-id is required") {
 		t.Fatalf("exit=%d stdout=%s stderr=%s, want missing run identity rejection", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestConformAdversarialRequiresDedicatedReportSigningKey(t *testing.T) {
+	configureAdversarialCommandTest(t)
+	t.Setenv(adversarialReportSigningKeyEnv, "")
+	t.Setenv("HELM_SIGNING_KEY_HEX", strings.Repeat("00", ed25519.SeedSize))
+	var stdout, stderr bytes.Buffer
+	code := runConform([]string{
+		"adversarial",
+		"--bundle", t.TempDir(),
+		"--profile", "dev-local",
+		"--report", filepath.Join(t.TempDir(), "campaign.json"),
+	}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), adversarialReportSigningKeyEnv) {
+		t.Fatalf("exit=%d stdout=%s stderr=%s, want dedicated report-key rejection", code, stdout.String(), stderr.String())
 	}
 }
 
@@ -379,6 +397,53 @@ func TestConformAdversarialPropagatesExternallyVerifiedConformanceSignature(t *t
 	}
 }
 
+func TestConformAdversarialReportMatchesPublicSchema(t *testing.T) {
+	configureAdversarialCommandTest(t)
+	packDir := createMinimalVerifiableBundle(t)
+	populatePassingCampaignPack(t, packDir)
+	reportPath := filepath.Join(t.TempDir(), "campaign.json")
+	var stdout, stderr bytes.Buffer
+	if code := runConform([]string{"adversarial", "--bundle", packDir, "--profile", "dev-local", "--report", reportPath}, &stdout, &stderr); code != 0 {
+		t.Fatalf("campaign exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate test source")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", ".."))
+	schemaPath := filepath.Join(repoRoot, "protocols", "json-schemas", "certification", "adversarial_campaign_report.v2.schema.json")
+	schemaData, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.Draft = jsonschema.Draft2020
+	resourceURL := "file:///" + strings.ReplaceAll(schemaPath, string(filepath.Separator), "/")
+	if err := compiler.AddResource(resourceURL, strings.NewReader(string(schemaData))); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile(resourceURL)
+	if err != nil {
+		t.Fatalf("compile public campaign schema: %v", err)
+	}
+	reportData, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reportValue map[string]any
+	if err := json.Unmarshal(reportData, &reportValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(reportValue); err != nil {
+		t.Fatalf("generated campaign report violates public schema: %v", err)
+	}
+	delete(reportValue, "campaign_id")
+	if err := schema.Validate(reportValue); err == nil {
+		t.Fatal("public schema accepted a report without campaign_id")
+	}
+}
+
 func TestConformAdversarialRejectsVerifiedPreFailingControl(t *testing.T) {
 	attestationPublicKeyHex := configureAdversarialCommandTest(t)
 	packDir := createMinimalVerifiableBundle(t)
@@ -479,6 +544,7 @@ func TestConformAdversarialVerifyReportRequiresReplayContext(t *testing.T) {
 		"adversarial", "verify-report",
 		"--report", filepath.Join(t.TempDir(), "campaign.json"),
 		"--trusted-public-key", strings.Repeat("a", 64),
+		"--expected-campaign-public-key", strings.Repeat("b", 64),
 	}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "--expected-campaign-id") || !strings.Contains(stderr.String(), "--expected-run-id") {
 		t.Fatalf("exit=%d stdout=%s stderr=%s, want mandatory replay context", code, stdout.String(), stderr.String())
@@ -501,7 +567,6 @@ func TestConformAdversarialVerifyReportBindsExpectedContext(t *testing.T) {
 		"--expected-kernel-commit", report.RunnerProvenance.KernelCommit,
 		"--expected-executable-sha256", report.RunnerProvenance.ExecutableSHA256,
 		"--expected-trust-profile", report.TrustProfile,
-		"--expected-campaign-key-id", report.CampaignTrustKeyID,
 		"--expected-evidence-root", report.EvidenceRoot,
 		"--expected-merkle-root", report.MerkleRoot,
 		"--expected-evaluation-time", report.EvaluationTime,
@@ -521,7 +586,6 @@ func TestConformAdversarialVerifyReportBindsExpectedContext(t *testing.T) {
 		{flag: "--expected-kernel-commit", want: "kernel commit mismatch"},
 		{flag: "--expected-executable-sha256", want: "executable digest mismatch"},
 		{flag: "--expected-trust-profile", want: "trust profile mismatch"},
-		{flag: "--expected-campaign-key-id", want: "campaign key id mismatch"},
 		{flag: "--expected-campaign-id", want: "campaign id mismatch"},
 		{flag: "--expected-run-id", want: "run id mismatch"},
 		{flag: "--expected-evidence-root", want: "evidence root mismatch"},
@@ -812,7 +876,8 @@ func configureAdversarialCommandTest(t *testing.T) string {
 	t.Setenv(adversarial.CampaignRunIDEnv, testAdversarialRunID)
 	t.Setenv("HELM_BOUNTY_EVALUATION_TIME_RFC3339", "2026-07-15T12:00:00Z")
 	t.Setenv("HELM_KERNEL_COMMIT", strings.Repeat("a", 40))
-	t.Setenv("HELM_SIGNING_KEY_HEX", hex.EncodeToString(attestationSeed[:]))
+	t.Setenv(adversarialReportSigningKeyEnv, hex.EncodeToString(attestationSeed[:]))
+	t.Setenv(adversarialReportPublicKeyEnv, hex.EncodeToString(attestationPublicKey))
 	previousCommit := commit
 	commit = strings.Repeat("a", 40)
 	t.Cleanup(func() { commit = previousCommit })

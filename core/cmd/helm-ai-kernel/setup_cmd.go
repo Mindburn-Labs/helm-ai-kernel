@@ -212,7 +212,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 			defer func() { _ = projectDir.Close() }()
 			summary.MCPInstalled, err = codexProjectMCPInstalled(projectDir, summary.BinaryPath, opts.DataDir)
 			if err == nil {
-				summary.HookInstalled, err = codexProjectHookInstalled(projectDir, setupHookCommand(opts, summary.BinaryPath))
+				summary.HookInstalled, err = codexProjectHookInstalled(projectDir, summary.BinaryPath, setupHookCommand(opts, summary.BinaryPath))
 			}
 			if err != nil {
 				fmt.Fprintf(stderr, "setup status: inspect project Codex config: %v\n", err)
@@ -264,14 +264,14 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 			defer func() { _ = projectDir.Close() }()
 			summary.MCPInstalled, err = codexProjectMCPInstalled(projectDir, summary.BinaryPath, opts.DataDir)
 			if err == nil {
-				summary.HookInstalled, err = codexProjectHookInstalled(projectDir, setupHookCommand(opts, summary.BinaryPath))
+				summary.HookInstalled, err = codexProjectHookInstalled(projectDir, summary.BinaryPath, setupHookCommand(opts, summary.BinaryPath))
 			}
 			if err != nil {
 				fmt.Fprintf(stderr, "setup remove: inspect project Codex config: %v\n", err)
 				return 1
 			}
 			if !opts.DryRun {
-				if err := removeCodexProjectSetup(projectDir); err != nil {
+				if err := removeCodexProjectSetup(projectDir, summary.BinaryPath); err != nil {
 					fmt.Fprintf(stderr, "setup remove: remove project Codex integration: %v\n", err)
 					return 1
 				}
@@ -290,7 +290,7 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stderr, "setup remove: remove hook: %v\n", err)
 				return 1
 			}
-			if err := removeSetupMCP(opts); err != nil {
+			if err := removeSetupMCP(opts, summary.BinaryPath); err != nil {
 				fmt.Fprintf(stderr, "setup remove: remove MCP server: %v\n", err)
 				return 1
 			}
@@ -585,7 +585,7 @@ func installSetupMCP(opts setupOptions, bin string) error {
 	}
 }
 
-func removeSetupMCP(opts setupOptions) error {
+func removeSetupMCP(opts setupOptions, bin string) error {
 	switch opts.Target {
 	case "claude-code":
 		return setupExecCommand("claude", "mcp", "remove", "--scope", opts.Scope, setupMCPServerName)
@@ -599,7 +599,7 @@ func removeSetupMCP(opts setupOptions) error {
 				return err
 			}
 			defer func() { _ = projectDir.Close() }()
-			return removeCodexProjectMCP(projectDir)
+			return removeCodexProjectMCP(projectDir, bin)
 		}
 		return setupExecCommand("codex", "mcp", "remove", setupMCPServerName)
 	default:
@@ -614,7 +614,7 @@ func installSetupHook(opts setupOptions, bin string) error {
 			return err
 		}
 		defer func() { _ = projectDir.Close() }()
-		return upsertCodexProjectHook(projectDir, setupHookMatcher(opts.Target), setupHookCommand(opts, bin))
+		return upsertCodexProjectHook(projectDir, bin, setupHookMatcher(opts.Target), setupHookCommand(opts, bin))
 	}
 	return upsertHookConfig(setupHookConfigPath(opts), setupHookMatcher(opts.Target), setupHookCommand(opts, bin))
 }
@@ -629,7 +629,7 @@ func removeSetupHook(opts setupOptions, bin string) error {
 			return err
 		}
 		defer func() { _ = projectDir.Close() }()
-		return removeCodexProjectHook(projectDir)
+		return removeCodexProjectHook(projectDir, bin)
 	}
 	return removeHookConfig(setupHookConfigPath(opts), setupHookCommand(opts, bin))
 }
@@ -639,7 +639,7 @@ func installCodexProjectSetup(projectDir *codexProjectDir, opts setupOptions, bi
 	if err != nil {
 		return err
 	}
-	hooks, err := prepareCodexProjectHookUpsert(projectDir, setupHookMatcher(opts.Target), setupHookCommand(opts, bin))
+	hooks, err := prepareCodexProjectHookUpsert(projectDir, bin, setupHookMatcher(opts.Target), setupHookCommand(opts, bin))
 	if err != nil {
 		return err
 	}
@@ -656,12 +656,12 @@ func installCodexProjectSetup(projectDir *codexProjectDir, opts setupOptions, bi
 	return nil
 }
 
-func removeCodexProjectSetup(projectDir *codexProjectDir) error {
-	config, err := prepareCodexProjectMCPRemoval(projectDir)
+func removeCodexProjectSetup(projectDir *codexProjectDir, bin string) error {
+	config, err := prepareCodexProjectMCPRemoval(projectDir, bin)
 	if err != nil {
 		return err
 	}
-	hooks, err := prepareCodexProjectHookRemoval(projectDir)
+	hooks, err := prepareCodexProjectHookRemoval(projectDir, bin)
 	if err != nil {
 		return err
 	}
@@ -886,15 +886,15 @@ func hookCommandFromAny(v any) string {
 	return command
 }
 
-func upsertCodexProjectHook(projectDir *codexProjectDir, matcher, command string) error {
-	next, err := prepareCodexProjectHookUpsert(projectDir, matcher, command)
+func upsertCodexProjectHook(projectDir *codexProjectDir, bin, matcher, command string) error {
+	next, err := prepareCodexProjectHookUpsert(projectDir, bin, matcher, command)
 	if err != nil || next == nil {
 		return err
 	}
 	return projectDir.writePrivateFileAtomic("hooks.json", next)
 }
 
-func prepareCodexProjectHookUpsert(projectDir *codexProjectDir, matcher, command string) ([]byte, error) {
+func prepareCodexProjectHookUpsert(projectDir *codexProjectDir, bin, matcher, command string) ([]byte, error) {
 	root, hooks, pre, err := readCodexProjectHooks(projectDir)
 	if os.IsNotExist(err) {
 		root = map[string]any{}
@@ -905,7 +905,18 @@ func prepareCodexProjectHookUpsert(projectDir *codexProjectDir, matcher, command
 	if err != nil {
 		return nil, err
 	}
-	updated, found, changed := reconcileOwnedCodexHooks(pre, matcher, command)
+	for _, item := range pre {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range arrayValue(obj, "hooks") {
+			if isAmbiguousCodexHook(hook, bin) {
+				return nil, fmt.Errorf("refuse to modify ambiguous Codex HELM hook; manual remediation required")
+			}
+		}
+	}
+	updated, found, changed := reconcileOwnedCodexHooks(pre, bin, matcher, command)
 	if found {
 		if !changed {
 			return nil, nil
@@ -930,15 +941,15 @@ func prepareCodexProjectHookUpsert(projectDir *codexProjectDir, matcher, command
 	return marshalCodexProjectHooks(root)
 }
 
-func removeCodexProjectHook(projectDir *codexProjectDir) error {
-	next, err := prepareCodexProjectHookRemoval(projectDir)
+func removeCodexProjectHook(projectDir *codexProjectDir, bin string) error {
+	next, err := prepareCodexProjectHookRemoval(projectDir, bin)
 	if err != nil || next == nil {
 		return err
 	}
 	return projectDir.writePrivateFileAtomic("hooks.json", next)
 }
 
-func prepareCodexProjectHookRemoval(projectDir *codexProjectDir) ([]byte, error) {
+func prepareCodexProjectHookRemoval(projectDir *codexProjectDir, bin string) ([]byte, error) {
 	root, hooks, pre, err := readCodexProjectHooks(projectDir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -961,7 +972,7 @@ func prepareCodexProjectHookRemoval(projectDir *codexProjectDir) ([]byte, error)
 		}
 		keptHooks := make([]any, 0, len(hookItems))
 		for _, hook := range hookItems {
-			if isOwnedCodexHook(hook) {
+			if isOwnedCodexHook(hook, bin) {
 				changed = true
 				continue
 			}
@@ -984,7 +995,7 @@ func prepareCodexProjectHookRemoval(projectDir *codexProjectDir) ([]byte, error)
 	return marshalCodexProjectHooks(root)
 }
 
-func codexProjectHookInstalled(projectDir *codexProjectDir, command string) (bool, error) {
+func codexProjectHookInstalled(projectDir *codexProjectDir, bin, command string) (bool, error) {
 	_, _, pre, err := readCodexProjectHooks(projectDir)
 	if os.IsNotExist(err) {
 		return false, nil
@@ -992,7 +1003,7 @@ func codexProjectHookInstalled(projectDir *codexProjectDir, command string) (boo
 	if err != nil {
 		return false, err
 	}
-	return currentOwnedCodexHookPresent(pre, command), nil
+	return currentOwnedCodexHookPresent(pre, bin, command), nil
 }
 
 func readCodexProjectHooks(projectDir *codexProjectDir) (map[string]any, map[string]any, []any, error) {
@@ -1034,7 +1045,7 @@ func marshalCodexProjectHooks(root map[string]any) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
-func currentOwnedCodexHookPresent(pre []any, command string) bool {
+func currentOwnedCodexHookPresent(pre []any, bin, command string) bool {
 	for _, item := range pre {
 		obj, ok := item.(map[string]any)
 		if !ok {
@@ -1045,7 +1056,7 @@ func currentOwnedCodexHookPresent(pre []any, command string) bool {
 			continue
 		}
 		for _, hook := range hooks {
-			if isOwnedCodexHook(hook) && hookCommandFromAny(hook) == command {
+			if isOwnedCodexHook(hook, bin) && hookCommandFromAny(hook) == command {
 				return true
 			}
 		}
@@ -1053,23 +1064,36 @@ func currentOwnedCodexHookPresent(pre []any, command string) bool {
 	return false
 }
 
-func isOwnedCodexHook(v any) bool {
+func isOwnedCodexHook(v any, bin string) bool {
 	obj, ok := v.(map[string]any)
-	if !ok || obj["type"] != "command" || obj["statusMessage"] != "Checking HELM policy" {
+	if !ok || obj["type"] != "command" {
 		return false
 	}
-	return isCodexHookCommand(hookCommandFromAny(v))
+	commandBin, ok := codexHookCommandBinary(hookCommandFromAny(v))
+	return ok && sameHELMKernelExecutable(commandBin, bin)
 }
 
-func isCodexHookCommand(command string) bool {
+func isAmbiguousCodexHook(v any, bin string) bool {
+	obj, ok := v.(map[string]any)
+	if !ok || obj["type"] != "command" {
+		return false
+	}
+	commandBin, ok := codexHookCommandBinary(hookCommandFromAny(v))
+	return ok && !sameHELMKernelExecutable(commandBin, bin)
+}
+
+func codexHookCommandBinary(command string) (string, bool) {
 	words, ok := splitSetupShellWords(command)
-	if !ok || len(words) != 7 || !isHELMKernelExecutable(words[0]) || words[6] == "" {
-		return false
+	if !ok || len(words) != 7 || words[0] == "" || words[6] == "" {
+		return "", false
 	}
-	return words[1] == "hook" && words[2] == "pre-tool" && words[3] == "--client" && words[4] == "codex" && words[5] == "--data-dir"
+	if words[1] != "hook" || words[2] != "pre-tool" || words[3] != "--client" || words[4] != "codex" || words[5] != "--data-dir" {
+		return "", false
+	}
+	return words[0], true
 }
 
-func reconcileOwnedCodexHooks(pre []any, matcher, command string) ([]any, bool, bool) {
+func reconcileOwnedCodexHooks(pre []any, bin, matcher, command string) ([]any, bool, bool) {
 	updated := make([]any, 0, len(pre))
 	found := false
 	changed := false
@@ -1087,13 +1111,13 @@ func reconcileOwnedCodexHooks(pre []any, matcher, command string) ([]any, bool, 
 		}
 		ownedCount := 0
 		for _, hook := range hookItems {
-			if isOwnedCodexHook(hook) {
+			if isOwnedCodexHook(hook, bin) {
 				ownedCount++
 			}
 		}
 		kept := make([]any, 0, len(hookItems))
 		for _, hook := range hookItems {
-			if !isOwnedCodexHook(hook) {
+			if !isOwnedCodexHook(hook, bin) {
 				kept = append(kept, hook)
 				continue
 			}
@@ -1232,8 +1256,8 @@ func prepareCodexProjectMCPUpsert(projectDir *codexProjectDir, bin, dataDir stri
 		if _, err := toml.Decode(current, &config); err != nil {
 			return nil, fmt.Errorf("parse existing Codex config: %w", err)
 		}
-		if server, exists := config.MCPServers[setupMCPServerName]; exists && !isOwnedCodexMCPServer(server) {
-			return nil, fmt.Errorf("refuse to replace non-HELM Codex MCP server %q", setupMCPServerName)
+		if server, exists := config.MCPServers[setupMCPServerName]; exists && !isOwnedCodexMCPServer(server, bin) {
+			return nil, fmt.Errorf("refuse to replace ambiguous Codex MCP server %q; manual remediation required", setupMCPServerName)
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
@@ -1251,15 +1275,15 @@ func prepareCodexProjectMCPUpsert(projectDir *codexProjectDir, bin, dataDir stri
 	return []byte(next), nil
 }
 
-func removeCodexProjectMCP(projectDir *codexProjectDir) error {
-	next, err := prepareCodexProjectMCPRemoval(projectDir)
+func removeCodexProjectMCP(projectDir *codexProjectDir, bin string) error {
+	next, err := prepareCodexProjectMCPRemoval(projectDir, bin)
 	if err != nil || next == nil {
 		return err
 	}
 	return projectDir.writePrivateFileAtomic("config.toml", next)
 }
 
-func prepareCodexProjectMCPRemoval(projectDir *codexProjectDir) ([]byte, error) {
+func prepareCodexProjectMCPRemoval(projectDir *codexProjectDir, bin string) ([]byte, error) {
 	raw, err := projectDir.readRegularFile("config.toml")
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -1275,7 +1299,7 @@ func prepareCodexProjectMCPRemoval(projectDir *codexProjectDir) ([]byte, error) 
 		return nil, fmt.Errorf("parse existing Codex config: %w", err)
 	}
 	server, exists := config.MCPServers[setupMCPServerName]
-	if !exists || !isOwnedCodexMCPServer(server) {
+	if !exists || !isOwnedCodexMCPServer(server, bin) {
 		return nil, nil
 	}
 	next := strings.TrimRight(removeTOMLTable(string(raw), "[mcp_servers."+setupMCPServerName+"]"), "\n") + "\n"
@@ -1294,8 +1318,8 @@ type codexMCPServer struct {
 	Args    []string `toml:"args"`
 }
 
-func isOwnedCodexMCPServer(server codexMCPServer) bool {
-	if !isHELMKernelExecutable(server.Command) {
+func isOwnedCodexMCPServer(server codexMCPServer, bin string) bool {
+	if !sameHELMKernelExecutable(server.Command, bin) {
 		return false
 	}
 	if len(server.Args) != 6 || server.Args[0] != "mcp" || server.Args[1] != "serve" || server.Args[2] != "--transport" || server.Args[3] != "stdio" || server.Args[4] != "--data-dir" {
@@ -1304,15 +1328,24 @@ func isOwnedCodexMCPServer(server codexMCPServer) bool {
 	return strings.TrimSpace(server.Args[5]) != ""
 }
 
-func isHELMKernelExecutable(command string) bool {
-	switch strings.ToLower(filepath.Base(strings.TrimSpace(command))) {
-	case "helm-ai-kernel", "helm-ai-kernel.exe", "helm-ai-kernel.test":
-		// Exact known HELM kernel executable names only. A named server is not
-		// ownership proof on its own, and lookalike executable names stay intact.
-		return true
-	default:
+func sameHELMKernelExecutable(command, current string) bool {
+	command = strings.TrimSpace(command)
+	current = strings.TrimSpace(current)
+	if command == "" || current == "" {
 		return false
 	}
+	if filepath.Clean(command) == filepath.Clean(current) {
+		return true
+	}
+	commandInfo, err := os.Stat(command)
+	if err != nil {
+		return false
+	}
+	currentInfo, err := os.Stat(current)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(commandInfo, currentInfo)
 }
 
 func validateCodexProjectTOML(raw string) error {
@@ -1337,7 +1370,7 @@ func codexProjectMCPInstalled(projectDir *codexProjectDir, bin, dataDir string) 
 		return false, fmt.Errorf("parse existing Codex config: %w", err)
 	}
 	server, ok := config.MCPServers[setupMCPServerName]
-	if !ok || server.Command != bin {
+	if !ok || !isOwnedCodexMCPServer(server, bin) {
 		return false, nil
 	}
 	return equalSetupStrings(server.Args, setupMCPArgs(dataDir)), nil

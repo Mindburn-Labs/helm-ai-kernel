@@ -1,3 +1,5 @@
+// quantum_posture: lite mode provisions classical Ed25519 and optional ML-DSA
+// receipt keys locally; profile selection still fails closed on unknown values.
 package main
 
 import (

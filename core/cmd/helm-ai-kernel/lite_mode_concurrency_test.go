@@ -1,3 +1,5 @@
+// quantum_posture: concurrency tests cover local classical Ed25519 signer
+// initialization and persistence; they do not claim hybrid/PQ enablement.
 package main
 
 import (

@@ -1,3 +1,5 @@
+// quantum_posture: MCP CLI wiring may emit configs carrying receipt or auth
+// material, but cryptographic policy remains enforced in lower-level packages.
 package main
 
 import (

@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 )
 
-// CoverageResult proves that the supplied EvidencePack contains enough
-// positive-control artifacts to exercise every mandatory detector. It is
-// separate from suite pass/fail: a missing artifact is incomplete coverage,
-// never a successful adversarial result.
+// CoverageResult proves both that the supplied EvidencePack contains a valid
+// positive control and that every mandatory detector rejects its deterministic
+// negative mutation. It is separate from suite pass/fail: a missing control or
+// an accepted mutation is incomplete coverage, never a successful result.
 type CoverageResult struct {
 	Pass          bool            `json:"pass"`
 	CoveredSuites int             `json:"covered_suites"`
@@ -22,21 +22,25 @@ type CoverageResult struct {
 
 // CoverageCheck records the source-owned minimum evidence for one suite.
 type CoverageCheck struct {
-	SuiteID       string `json:"suite_id"`
-	Covered       bool   `json:"covered"`
-	EvidenceCount int    `json:"evidence_count"`
-	Reason        string `json:"reason"`
+	SuiteID          string `json:"suite_id"`
+	Covered          bool   `json:"covered"`
+	EvidenceCount    int    `json:"evidence_count"`
+	MutationID       string `json:"mutation_id"`
+	MutationApplied  bool   `json:"mutation_applied"`
+	MutationRejected bool   `json:"mutation_rejected"`
+	Reason           string `json:"reason"`
 }
 
-// EvaluateCoverage checks for positive controls before the adversarial
-// detectors run. The canonical EvidencePack verifier is responsible for
-// proving that these files are indexed, hashed, and sealed.
+// EvaluateCoverage checks positive controls and detector-rejection mutations.
+// The canonical EvidencePack verifier is responsible for proving that the
+// source files are indexed, hashed, and sealed before this function is called.
 func EvaluateCoverage(evidenceDir string, opts VerificationOptions) CoverageResult {
 	return EvaluateCoverageWithOptions(evidenceDir, opts)
 }
 
 // EvaluateCoverageWithOptions proves positive controls using externally rooted
-// cryptographic evidence where a suite contract requires authorization.
+// cryptographic evidence, then copies and mutates the pack so each detector's
+// negative path is exercised without modifying the source EvidencePack.
 func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) CoverageResult {
 	receiptFiles, _ := filepath.Glob(filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts", "*.json"))
 	receipts := make([]map[string]interface{}, 0, len(receiptFiles))
@@ -55,6 +59,37 @@ func EvaluateCoverageWithOptions(evidenceDir string, opts VerificationOptions) C
 		toolManifestCoverage(evidenceDir, opts),
 		panicBoundaryCoverage(evidenceDir),
 		highFinalityApprovalCoverage(receipts, opts),
+	}
+	suites := AllSuitesWithOptions(opts)
+	suitesByID := make(map[string]*Suite, len(suites))
+	for _, suite := range suites {
+		suitesByID[suite.ID] = suite
+	}
+	mutations := mandatoryCoverageMutations()
+	for index := range checks {
+		check := &checks[index]
+		mutation, mutationExists := mutations[check.SuiteID]
+		check.MutationID = mutation.ID
+		if !check.Covered {
+			continue
+		}
+		suite, suiteExists := suitesByID[check.SuiteID]
+		if !mutationExists || !suiteExists {
+			check.Covered = false
+			check.Reason = "missing: mandatory detector mutation is not registered"
+			continue
+		}
+		check.MutationApplied, check.MutationRejected = runCoverageMutation(evidenceDir, suite, mutation)
+		switch {
+		case !check.MutationApplied:
+			check.Covered = false
+			check.Reason = "missing: deterministic mutation could not be applied to the positive control"
+		case !check.MutationRejected:
+			check.Covered = false
+			check.Reason = "missing: detector accepted deterministic mutation " + mutation.ID
+		default:
+			check.Reason += "; detector rejected mutation " + mutation.ID
+		}
 	}
 	result := CoverageResult{Pass: true, Checks: checks}
 	for _, check := range checks {
@@ -170,7 +205,7 @@ func tenantCoverage(receipts []map[string]interface{}) CoverageCheck {
 			count++
 		}
 	}
-	return coverageCheck("ADV-07", count > 0, count, "requires tenant-bound receipts")
+	return coverageCheck("ADV-07", count >= 2, count, "requires at least two tenant-bound receipts")
 }
 
 func toolManifestCoverage(evidenceDir string, opts VerificationOptions) CoverageCheck {

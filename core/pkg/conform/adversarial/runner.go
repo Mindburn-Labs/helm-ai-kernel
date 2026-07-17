@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	CampaignPublicKeyEnv          = "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX"
-	CampaignIDEnv                 = "HELM_BOUNTY_CAMPAIGN_ID"
-	CampaignRunIDEnv              = "HELM_BOUNTY_RUN_ID"
-	VerifiedEvidenceIndexHashEnv  = "HELM_BOUNTY_VERIFIED_EVIDENCE_INDEX_HASH"
-	VerifiedEvidenceMerkleRootEnv = "HELM_BOUNTY_VERIFIED_EVIDENCE_MERKLE_ROOT"
-	VerifiedEvidenceEntryCountEnv = "HELM_BOUNTY_VERIFIED_EVIDENCE_ENTRY_COUNT"
+	CampaignPublicKeyEnv                 = "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX"
+	CampaignIDEnv                        = "HELM_BOUNTY_CAMPAIGN_ID"
+	CampaignRunIDEnv                     = "HELM_BOUNTY_RUN_ID"
+	VerifiedEvidenceIndexHashEnv         = "HELM_BOUNTY_VERIFIED_EVIDENCE_INDEX_HASH"
+	VerifiedEvidenceMerkleRootEnv        = "HELM_BOUNTY_VERIFIED_EVIDENCE_MERKLE_ROOT"
+	VerifiedEvidenceEntryCountEnv        = "HELM_BOUNTY_VERIFIED_EVIDENCE_ENTRY_COUNT"
+	AllowVerifiedConformanceSignatureEnv = "HELM_BOUNTY_ALLOW_VERIFIED_CONFORMANCE_SIGNATURE"
 )
 
 // RunAll executes all 10 mandatory adversarial suites against an EvidencePack.
@@ -28,13 +29,18 @@ func RunAll(evidenceDir string) *AggregateResult {
 	if err != nil {
 		verifiedEntryCount = -1
 	}
+	allowVerifiedConformanceSignature, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(AllowVerifiedConformanceSignatureEnv)))
+	if err != nil {
+		allowVerifiedConformanceSignature = false
+	}
 	return RunAllWithOptions(evidenceDir, VerificationOptions{
-		CampaignPublicKeyHex:       os.Getenv(CampaignPublicKeyEnv),
-		CampaignID:                 os.Getenv(CampaignIDEnv),
-		RunID:                      os.Getenv(CampaignRunIDEnv),
-		VerifiedEvidenceIndexHash:  os.Getenv(VerifiedEvidenceIndexHashEnv),
-		VerifiedEvidenceMerkleRoot: os.Getenv(VerifiedEvidenceMerkleRootEnv),
-		VerifiedEvidenceEntryCount: verifiedEntryCount,
+		CampaignPublicKeyHex:              os.Getenv(CampaignPublicKeyEnv),
+		CampaignID:                        os.Getenv(CampaignIDEnv),
+		RunID:                             os.Getenv(CampaignRunIDEnv),
+		VerifiedEvidenceIndexHash:         os.Getenv(VerifiedEvidenceIndexHashEnv),
+		VerifiedEvidenceMerkleRoot:        os.Getenv(VerifiedEvidenceMerkleRootEnv),
+		VerifiedEvidenceEntryCount:        verifiedEntryCount,
+		AllowVerifiedConformanceSignature: allowVerifiedConformanceSignature,
 	})
 }
 

@@ -1063,7 +1063,7 @@ func isOwnedCodexHook(v any) bool {
 
 func isCodexHookCommand(command string) bool {
 	words, ok := splitSetupShellWords(command)
-	if !ok || len(words) != 7 || words[0] == "" || words[6] == "" {
+	if !ok || len(words) != 7 || !isHELMKernelExecutable(words[0]) || words[6] == "" {
 		return false
 	}
 	return words[1] == "hook" && words[2] == "pre-tool" && words[3] == "--client" && words[4] == "codex" && words[5] == "--data-dir"
@@ -1295,17 +1295,24 @@ type codexMCPServer struct {
 }
 
 func isOwnedCodexMCPServer(server codexMCPServer) bool {
-	switch strings.ToLower(filepath.Base(strings.TrimSpace(server.Command))) {
-	case "helm-ai-kernel", "helm-ai-kernel.exe", "helm-ai-kernel.test":
-		// Exact known HELM kernel executable names only. A named server is not
-		// ownership proof on its own, and lookalike executable names stay intact.
-	default:
+	if !isHELMKernelExecutable(server.Command) {
 		return false
 	}
 	if len(server.Args) != 6 || server.Args[0] != "mcp" || server.Args[1] != "serve" || server.Args[2] != "--transport" || server.Args[3] != "stdio" || server.Args[4] != "--data-dir" {
 		return false
 	}
 	return strings.TrimSpace(server.Args[5]) != ""
+}
+
+func isHELMKernelExecutable(command string) bool {
+	switch strings.ToLower(filepath.Base(strings.TrimSpace(command))) {
+	case "helm-ai-kernel", "helm-ai-kernel.exe", "helm-ai-kernel.test":
+		// Exact known HELM kernel executable names only. A named server is not
+		// ownership proof on its own, and lookalike executable names stay intact.
+		return true
+	default:
+		return false
+	}
 }
 
 func validateCodexProjectTOML(raw string) error {

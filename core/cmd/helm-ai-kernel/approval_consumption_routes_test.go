@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -42,6 +44,30 @@ type fakeApprovalDispatchAdmitter struct {
 	recoverCalls int
 	identity     approvalceremony.ConsumerIdentity
 	request      approvalceremony.DispatchAdmissionRequest
+}
+
+type fakeEffectDispositionRecorder struct {
+	record       approvalceremony.EffectDispositionRecord
+	err          error
+	recordCalls  int
+	recoverCalls int
+	identity     approvalceremony.ConsumerIdentity
+	envelope     contracts.EffectDispositionCommandEnvelope
+	commandID    string
+}
+
+func (f *fakeEffectDispositionRecorder) Record(ctx context.Context, envelope contracts.EffectDispositionCommandEnvelope) (approvalceremony.EffectDispositionRecord, error) {
+	f.recordCalls++
+	f.identity, _ = (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+	f.envelope = envelope
+	return f.record, f.err
+}
+
+func (f *fakeEffectDispositionRecorder) Recover(ctx context.Context, commandID string) (approvalceremony.EffectDispositionRecord, error) {
+	f.recoverCalls++
+	f.identity, _ = (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+	f.commandID = commandID
+	return f.record, f.err
 }
 
 func (a *fakeApprovalDispatchAdmitter) Claim(ctx context.Context, request approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error) {
@@ -157,6 +183,127 @@ func TestApprovalDispatchAdmissionRoutesUseSeparateVerifiedCapability(t *testing
 	recover := postApprovalConsumptionRoute(t, mux, approvalDispatchAdmissionRecoverPath, validApprovalDispatchAdmissionRequest(), "dispatch-token")
 	if recover.Code != http.StatusOK || admitter.recoverCalls != 1 {
 		t.Fatalf("recover status=%d calls=%d body=%s", recover.Code, admitter.recoverCalls, recover.Body.String())
+	}
+}
+
+func TestEffectDispositionRoutesUseVerifiedWorkloadScopeAndRecoverSignedRecord(t *testing.T) {
+	record := effectDispositionRouteRecord(t)
+	recorder := &fakeEffectDispositionRecorder{record: record}
+	runtime := &approvalConsumptionRuntime{
+		disposition:          recorder,
+		dispositionValidator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(5 * time.Minute)},
+		audience:             "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+	}
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, runtime)
+	body, err := json.Marshal(record.Command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := postApprovalConsumptionRoute(t, mux, effectDispositionPath, string(body), "workload-token")
+	if response.Code != http.StatusOK || recorder.recordCalls != 1 || recorder.envelope != record.Command {
+		t.Fatalf("record status=%d calls=%d body=%s", response.Code, recorder.recordCalls, response.Body.String())
+	}
+	wantIdentity := approvalceremony.ConsumerIdentity{
+		Subject: "spiffe://helm/data-plane-a", TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "helm-data-plane",
+	}
+	if recorder.identity != wantIdentity || response.Header().Get("Cache-Control") != "no-store" ||
+		response.Header().Get("X-Helm-Contract-Status") != "internal_non_production" ||
+		!strings.Contains(response.Body.String(), `"execution_authority":"NONE"`) {
+		t.Fatalf("identity=%+v headers=%v body=%s", recorder.identity, response.Header(), response.Body.String())
+	}
+
+	response = postApprovalConsumptionRoute(t, mux, effectDispositionRecoverPath,
+		`{"command_id":"`+record.Command.Command.CommandID+`"}`, "workload-token")
+	if response.Code != http.StatusOK || recorder.recoverCalls != 1 || recorder.commandID != record.Command.Command.CommandID {
+		t.Fatalf("recover status=%d calls=%d id=%q body=%s", response.Code, recorder.recoverCalls, recorder.commandID, response.Body.String())
+	}
+}
+
+func TestEffectDispositionRoutesAreAbsentWhenDisabled(t *testing.T) {
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, &approvalConsumptionRuntime{})
+	response := postApprovalConsumptionRoute(t, mux, effectDispositionPath, `{}`, "workload-token")
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("disabled disposition route status=%d body=%s", response.Code, response.Body.String())
+	}
+	response = postApprovalConsumptionRoute(t, mux, effectDispositionRecoverPath, `{"command_id":"command-a"}`, "workload-token")
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("disabled disposition recovery route status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestEffectDispositionRecoveryPreservesOpaqueCommandID(t *testing.T) {
+	for _, commandID := range []string{"a/b", ".", ".."} {
+		t.Run(commandID, func(t *testing.T) {
+			recorder := &fakeEffectDispositionRecorder{record: effectDispositionRouteRecord(t), err: approvalceremony.ErrNotFound}
+			runtime := &approvalConsumptionRuntime{
+				disposition:          recorder,
+				dispositionValidator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(5 * time.Minute)},
+				audience:             "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+			}
+			mux := http.NewServeMux()
+			registerApprovalGrantConsumptionRoutes(mux, runtime)
+			body, err := json.Marshal(struct {
+				CommandID string `json:"command_id"`
+			}{CommandID: commandID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := postApprovalConsumptionRoute(t, mux, effectDispositionRecoverPath, string(body), "workload-token")
+			if response.Code != http.StatusNotFound || recorder.recoverCalls != 1 || recorder.commandID != commandID {
+				t.Fatalf("recover status=%d calls=%d id=%q body=%s", response.Code, recorder.recoverCalls, recorder.commandID, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestEffectDispositionRoutesFailClosedBeforeDurableAuthority(t *testing.T) {
+	recorder := &fakeEffectDispositionRecorder{record: effectDispositionRouteRecord(t)}
+	runtime := &approvalConsumptionRuntime{
+		disposition:          recorder,
+		dispositionValidator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(5 * time.Minute)},
+		audience:             "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+	}
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, runtime)
+
+	validBody, err := json.Marshal(recorder.record.Command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	badBody := strings.TrimSuffix(string(validBody), "}") + `,"tenant_id":"attacker"}`
+	response := postApprovalConsumptionRoute(t, mux, effectDispositionPath, badBody, "workload-token")
+	if response.Code != http.StatusBadRequest || recorder.recordCalls != 0 {
+		t.Fatalf("malformed status=%d calls=%d body=%s", response.Code, recorder.recordCalls, response.Body.String())
+	}
+
+	missingToken := httptest.NewRequest(http.MethodPost, effectDispositionRecoverPath, strings.NewReader(`{"command_id":"command-a"}`))
+	missingToken.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, missingToken)
+	if response.Code != http.StatusUnauthorized || recorder.recoverCalls != 0 ||
+		response.Header().Get("Cache-Control") != "no-store" ||
+		response.Header().Get("X-Helm-Contract-Status") != "internal_non_production" {
+		t.Fatalf("missing-token status=%d calls=%d body=%s", response.Code, recorder.recoverCalls, response.Body.String())
+	}
+
+	response = postApprovalConsumptionRoute(t, mux, effectDispositionRecoverPath,
+		`{"command_id":"command-a","tenant_id":"attacker"}`, "workload-token")
+	if response.Code != http.StatusBadRequest || recorder.recoverCalls != 0 {
+		t.Fatalf("unknown-field status=%d calls=%d body=%s", response.Code, recorder.recoverCalls, response.Body.String())
+	}
+
+	response = postApprovalConsumptionRoute(t, mux, effectDispositionRecoverPath,
+		`{"command_id":"command-a"} {}`, "workload-token")
+	if response.Code != http.StatusBadRequest || recorder.recoverCalls != 0 {
+		t.Fatalf("trailing-json status=%d calls=%d body=%s", response.Code, recorder.recoverCalls, response.Body.String())
+	}
+
+	response = httptest.NewRecorder()
+	writeEffectDispositionError(response, errors.New("database password secret"))
+	if response.Code != http.StatusServiceUnavailable || strings.Contains(response.Body.String(), "database password secret") {
+		t.Fatalf("sanitization status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -521,4 +668,61 @@ func postApprovalConsumptionRoute(t *testing.T, mux *http.ServeMux, path, body, 
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 	return response
+}
+
+func effectDispositionRouteRecord(t *testing.T) approvalceremony.EffectDispositionRecord {
+	t.Helper()
+	now := time.Date(2026, 7, 18, 17, 0, 0, 0, time.UTC)
+	fence := kernel.FenceState{
+		StopScope:       kernel.StopScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"},
+		ContractVersion: kernel.EmergencyStopFenceContractVersion, Audience: "helm-data-plane",
+		KeyID: "cp-stop-a", CommandID: "fence-a", CommandHash: "sha256:" + strings.Repeat("1", 64), Epoch: 1,
+		ActorID: "operator-a", Reason: "contain active work", IssuedAt: now.Add(-time.Minute),
+		ExpiresAt: now.Add(time.Hour), FencedAt: now.Add(-30 * time.Second),
+		AcknowledgementIdentity: emergencyStopAcknowledgementIdentityForTest(),
+	}
+	payload, err := fence.AcknowledgementPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	fence.ReceiptHash = "sha256:" + hex.EncodeToString(sum[:])
+	command, err := (contracts.EffectDispositionCommand{
+		SchemaVersion: contracts.EffectDispositionCommandSchemaV1, ContractVersion: contracts.EffectDispositionCommandContractV1,
+		CommandID: "command-a", DispositionSequence: 1, TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "helm-data-plane",
+		FenceCommandID: fence.CommandID, FenceCommandHash: fence.CommandHash, FenceEpoch: fence.Epoch, FenceReceiptHash: fence.ReceiptHash,
+		AdmissionID: "admission-a", AttemptID: "attempt-a", ReservationSequence: 2,
+		ReservationHeadHash: "sha256:" + strings.Repeat("2", 64), ReservationState: string(approvalceremony.EffectReservationStateUncertain),
+		ConnectorID: "github", ConnectorVersion: "1.0.0", ConnectorAction: "github.create_issue",
+		ConnectorExecutionRef: "github-request-a", ProofSessionRef: "proof-a", IntentRef: "intent-a", EffectRef: "issue-a",
+		IdempotencyKeyHash: "sha256:" + strings.Repeat("3", 64), EffectHash: "sha256:" + strings.Repeat("4", 64),
+		Action: contracts.EffectDispositionActionReconcileSource, DispositionRef: "disposition-a", ActorID: "operator-a", Reason: "reconcile active work",
+		AuthorityID: "spiffe://helm/control-plane", SigningKeyRef: "kms://helm/control-plane/disposition-a",
+		Algorithm: contracts.EffectDispositionAlgorithmV1, IssuedAt: now, ExpiresAt: now.Add(5 * time.Minute),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope := contracts.EffectDispositionCommandEnvelope{Command: command, Signature: strings.Repeat("a", 128)}
+	receipt, err := (contracts.EffectDispositionReceipt{
+		SchemaVersion: contracts.EffectDispositionReceiptSchemaV1, ContractVersion: contracts.EffectDispositionReceiptContractV1,
+		ReceiptID: "receipt-a", State: contracts.EffectDispositionReceiptStateAccepted,
+		ExecutionAuthority: contracts.EffectDispositionExecutionAuthorityNone,
+		CommandID:          command.CommandID, CommandHash: command.CommandHash, DispositionSequence: command.DispositionSequence,
+		TenantID: command.TenantID, WorkspaceID: command.WorkspaceID, Audience: command.Audience,
+		FenceCommandID: command.FenceCommandID, FenceCommandHash: command.FenceCommandHash,
+		FenceEpoch: command.FenceEpoch, FenceReceiptHash: command.FenceReceiptHash,
+		AdmissionID: command.AdmissionID, ReservationSequence: command.ReservationSequence,
+		ReservationHeadHash: command.ReservationHeadHash, ReservationState: command.ReservationState,
+		Action: command.Action, DispositionRef: command.DispositionRef,
+		KernelTrustRootID: "kernel-root-a", SigningKeyRef: "kernel-approval-a",
+		AcceptedBy: "spiffe://helm/data-plane-a", AcceptedAt: now,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return approvalceremony.EffectDispositionRecord{
+		Command: envelope, Fence: fence, Receipt: receipt,
+		SignatureAlgorithm: approvalceremony.GrantSignatureEd25519, Signature: strings.Repeat("b", 128), CreatedAt: now,
+	}
 }

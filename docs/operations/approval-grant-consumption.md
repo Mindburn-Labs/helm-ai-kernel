@@ -5,9 +5,11 @@ Status: internal, source-owned, pre-production.
 This runtime lets one authenticated workload consume one live, signed
 `ApprovalGrant` for the exact pack lifecycle action already approved by the
 Kernel ceremony. It also exposes a read-only recovery operation for response
-loss and a separately scoped, signed near-effect dispatch admission. It does
-not create approval authority, mint a generic `EffectPermit`, dispatch a
-connector, cancel admitted work, or prove a production deployment.
+loss, a separately scoped signed near-effect dispatch admission, and an
+optional separately scoped signed-disposition record/recovery boundary for
+already active work. It does not create approval authority, mint a generic
+`EffectPermit`, dispatch a connector, cancel admitted work, or prove a
+production deployment.
 
 ## Startup contract
 
@@ -22,7 +24,7 @@ transaction-scoped advisory lock for the verified tenant/workspace.
 | Variable | Requirement |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL DSN. The configured role must be non-superuser, must not have `BYPASSRLS`, and currently must own the target schema/tables because startup runs idempotent source-owned DDL. A separate migration/runtime credential split is not implemented in this slice. |
-| `HELM_APPROVAL_CONSUMPTION_ENABLED` | Set to `1` to mount the four internal consumption/admission routes. |
+| `HELM_APPROVAL_CONSUMPTION_ENABLED` | Set to `1` to mount the four internal consumption/admission routes. Two additional disposition routes are mounted only when `HELM_EFFECT_DISPOSITION_ENABLED=1`. |
 | `HELM_EMERGENCY_STOP_FENCE_ENABLED` | Must be `1`; approval consumption will not start without the durable scoped-stop coordinator. |
 | `HELM_APPROVAL_CONSUMER_JWKS_URL` | Absolute HTTPS JWKS URL for workload access-token verification. |
 | `HELM_APPROVAL_CONSUMER_ISSUER` | Exact expected JWT `iss`. |
@@ -31,6 +33,8 @@ transaction-scoped advisory lock for the verified tenant/workspace.
 | `HELM_APPROVAL_CONSUMER_SCOPE` | Required scope; defaults to `helm.approval.consume`. |
 | `HELM_APPROVAL_DISPATCH_SCOPE` | Separate dispatch-admission scope; defaults to `helm.approval.dispatch` and must differ from the consumption scope. |
 | `HELM_APPROVAL_DISPATCH_ADMISSION_TTL` | Immutable admission lifetime; defaults to `30s`, cannot exceed `1m`, and is capped by the signed grant expiry. |
+| `HELM_EFFECT_DISPOSITION_ENABLED` | Optional, default off. Set to `1` only with the disposition scope and both pinned authority keyrings described in `docs/operations/effect-disposition.md`. |
+| `HELM_EFFECT_DISPOSITION_SCOPE` | Separate disposition scope; defaults to `helm.effect.disposition` and must differ from both consumption and dispatch scopes. |
 | `HELM_APPROVAL_CONSUMER_MAX_TOKEN_TTL` | Maximum `iat` to `exp` interval; defaults to `5m` and cannot exceed `15m`. |
 | `HELM_APPROVAL_SIGNING_KEY_REF` | Exact key reference already bound into signed grants. |
 | `HELM_APPROVAL_KERNEL_TRUST_ROOT_ID` | Exact Kernel trust-root identifier already bound into signed grants. |
@@ -131,7 +135,11 @@ contract remains internal and non-production.
   rejects a new admission. Admission-first creates an admitted `NOT_STARTED`
   record that future FENCE reconciliation must treat as pre-existing work;
   that state does not claim the connector has started. This slice does not yet
-  implement admission close transitions or an active-work disposition API.
+  implement admission close transitions. When the separately configured
+  disposition transport is enabled, active `STARTED`/`UNCERTAIN` work can
+  accept a signed Control Plane instruction through the routes documented in
+  `docs/operations/effect-disposition.md`; every receipt has
+  `execution_authority: NONE` and cannot authorize cancellation or compensation.
 - For records written under this exact contract epoch, an exact retry of an
   already committed admission returns the same immutable record and expiry,
   including after a later FENCE. Reusing an attempt with changed bindings, or
@@ -159,10 +167,11 @@ but not sufficient. The internal effect reservation boundary now compares the
 immutable approved snapshot with the transactionally locked current release,
 persists append-only `ADMITTED / STARTED / NOT_STARTED / UNCERTAIN` truth, lists
 active work, and enforces the GitHub pre-network seam when explicitly wired.
-Deployed Data Plane wiring, active-work disposition, source connector ACK,
-signed close evidence, and controlled runtime proof remain required before
-production or Emergency Stop claims. See
-`docs/operations/effect-reservation.md`.
+Deployed Data Plane wiring, connector-specific disposition execution under
+separate current authority, source connector ACK, signed close evidence, and
+controlled runtime proof remain required before production or Emergency Stop
+claims. See `docs/operations/effect-reservation.md` and
+`docs/operations/effect-disposition.md`.
 
 ## Failure handling
 

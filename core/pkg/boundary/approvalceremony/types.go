@@ -67,27 +67,28 @@ type Record struct {
 // starts. Challenge IDs, nonce, timestamps, and hashes are intentionally absent
 // because the Kernel creates them after the hold has elapsed.
 type ChallengeSpec struct {
-	BindingRef            string `json:"binding_ref"`
-	TenantID              string `json:"tenant_id"`
-	WorkspaceID           string `json:"workspace_id"`
-	Audience              string `json:"audience"`
-	PackID                string `json:"pack_id"`
-	PackVersion           string `json:"pack_version"`
-	PackManifestHash      string `json:"pack_manifest_hash"`
-	Action                string `json:"action"`
-	IntentHash            string `json:"intent_hash"`
-	EffectHash            string `json:"effect_hash"`
-	PlanHash              string `json:"plan_hash"`
-	Decision              string `json:"decision"`
-	PolicyVersion         string `json:"policy_version"`
-	PolicyEpoch           string `json:"policy_epoch"`
-	PolicyHash            string `json:"policy_hash"`
-	AuthoritySource       string `json:"authority_source"`
-	AuthorityVersion      string `json:"authority_version"`
-	AuthoritySnapshotHash string `json:"authority_snapshot_hash"`
-	RequiredRole          string `json:"required_role"`
-	Quorum                int    `json:"quorum"`
-	ServerIdentity        string `json:"server_identity"`
+	BindingRef                 string `json:"binding_ref"`
+	ApprovalGrantSchemaVersion string `json:"approval_grant_schema_version,omitempty"`
+	TenantID                   string `json:"tenant_id"`
+	WorkspaceID                string `json:"workspace_id"`
+	Audience                   string `json:"audience"`
+	PackID                     string `json:"pack_id"`
+	PackVersion                string `json:"pack_version"`
+	PackManifestHash           string `json:"pack_manifest_hash"`
+	Action                     string `json:"action"`
+	IntentHash                 string `json:"intent_hash"`
+	EffectHash                 string `json:"effect_hash"`
+	PlanHash                   string `json:"plan_hash"`
+	Decision                   string `json:"decision"`
+	PolicyVersion              string `json:"policy_version"`
+	PolicyEpoch                string `json:"policy_epoch"`
+	PolicyHash                 string `json:"policy_hash"`
+	AuthoritySource            string `json:"authority_source"`
+	AuthorityVersion           string `json:"authority_version"`
+	AuthoritySnapshotHash      string `json:"authority_snapshot_hash"`
+	RequiredRole               string `json:"required_role"`
+	Quorum                     int    `json:"quorum"`
+	ServerIdentity             string `json:"server_identity"`
 }
 
 func (s ChallengeSpec) Validate() error {
@@ -115,13 +116,34 @@ func (s ChallengeSpec) Validate() error {
 	if s.Decision != contracts.ApprovalGrantDecisionAllow || s.Quorum <= 0 {
 		return invalidRecord("challenge_spec decision and quorum are invalid")
 	}
-	switch s.Action {
-	case contracts.ApprovalGrantActionInstall, contracts.ApprovalGrantActionUpgrade,
-		contracts.ApprovalGrantActionUninstall, contracts.ApprovalGrantActionRollback:
+	switch s.approvalGrantSchemaVersion() {
+	case contracts.ApprovalGrantSchemaV1:
+		switch s.Action {
+		case contracts.ApprovalGrantActionInstall, contracts.ApprovalGrantActionUpgrade,
+			contracts.ApprovalGrantActionUninstall, contracts.ApprovalGrantActionRollback:
+		default:
+			return invalidRecord("challenge_spec action is unsupported")
+		}
+	case contracts.ApprovalGrantSchemaV2:
+		if s.Action != contracts.ApprovalGrantActionPolicyDraftSandbox ||
+			s.Audience != contracts.ApprovalGrantAudiencePolicyDraftSandboxExecutorV1 ||
+			s.PackID != contracts.ApprovalGrantPackIDPolicyDraftSandbox {
+			return invalidRecord("challenge_spec v2 sandbox scope is unsupported")
+		}
 	default:
-		return invalidRecord("challenge_spec action is unsupported")
+		return invalidRecord("challenge_spec approval_grant_schema_version is unsupported")
 	}
 	return nil
+}
+
+// approvalGrantSchemaVersion defaults persisted legacy specs to V1. The empty
+// selector is intentionally omitted from canonical JSON so old commitments do
+// not change when this V2 capability is introduced.
+func (s ChallengeSpec) approvalGrantSchemaVersion() string {
+	if s.ApprovalGrantSchemaVersion == "" {
+		return contracts.ApprovalGrantSchemaV1
+	}
+	return s.ApprovalGrantSchemaVersion
 }
 
 func (s State) Valid() bool {
@@ -318,6 +340,10 @@ func validateChallenge(record Record, challenge contracts.ApprovalChallenge) err
 		return invalidRecord("challenge hold_started_at mismatch")
 	}
 	spec := record.Spec
+	_, challengeSchemaVersion, _, ok := approvalChallengeEnvelopeForSpec(spec)
+	if !ok || challenge.SchemaVersion != challengeSchemaVersion {
+		return invalidRecord("challenge approval grant schema mismatch")
+	}
 	if challenge.TenantID != spec.TenantID || challenge.WorkspaceID != spec.WorkspaceID ||
 		challenge.Audience != spec.Audience || challenge.PackID != spec.PackID ||
 		challenge.PackVersion != spec.PackVersion || challenge.PackManifestHash != spec.PackManifestHash ||
@@ -363,6 +389,10 @@ func validateGrant(challenge contracts.ApprovalChallenge, verified approvalverif
 	}
 	if grant.GrantHash == "" {
 		return invalidRecord("grant_hash is required")
+	}
+	grantSchemaVersion, grantContractVersion, ok := approvalGrantEnvelopeForChallenge(challenge)
+	if !ok || grant.SchemaVersion != grantSchemaVersion || grant.ContractVersion != grantContractVersion {
+		return invalidRecord("grant approval challenge schema mismatch")
 	}
 	sealed, err := grant.Seal()
 	if err != nil || sealed.GrantHash != grant.GrantHash {
@@ -413,6 +443,39 @@ func validEd25519Signature(value string) bool {
 func isUTC(value time.Time) bool {
 	_, offset := value.Zone()
 	return offset == 0
+}
+
+func approvalChallengeEnvelopeForSpec(spec ChallengeSpec) (domain, schemaVersion, contractVersion string, ok bool) {
+	switch spec.approvalGrantSchemaVersion() {
+	case contracts.ApprovalGrantSchemaV1:
+		return contracts.ApprovalChallengeDomainV1, contracts.ApprovalChallengeSchemaV1, contracts.ApprovalChallengeContractV1, true
+	case contracts.ApprovalGrantSchemaV2:
+		return contracts.ApprovalChallengeDomainV2, contracts.ApprovalChallengeSchemaV2, contracts.ApprovalChallengeContractV2, true
+	default:
+		return "", "", "", false
+	}
+}
+
+func approvalGrantEnvelopeForChallenge(challenge contracts.ApprovalChallenge) (schemaVersion, contractVersion string, ok bool) {
+	switch challenge.SchemaVersion {
+	case contracts.ApprovalChallengeSchemaV1:
+		return contracts.ApprovalGrantSchemaV1, contracts.ApprovalGrantContractV1, true
+	case contracts.ApprovalChallengeSchemaV2:
+		return contracts.ApprovalGrantSchemaV2, contracts.ApprovalGrantContractV2, true
+	default:
+		return "", "", false
+	}
+}
+
+func approvalGrantConsumptionEnvelopeForGrant(grant contracts.ApprovalGrant) (schemaVersion, contractVersion string, ok bool) {
+	switch grant.SchemaVersion {
+	case contracts.ApprovalGrantSchemaV1:
+		return contracts.ApprovalGrantConsumptionSchemaV1, contracts.ApprovalGrantConsumptionContractV1, true
+	case contracts.ApprovalGrantSchemaV2:
+		return contracts.ApprovalGrantConsumptionSchemaV2, contracts.ApprovalGrantConsumptionContractV2, true
+	default:
+		return "", "", false
+	}
 }
 
 func invalidRecord(message string) error {

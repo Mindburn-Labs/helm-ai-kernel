@@ -83,6 +83,62 @@ func TestApprovalGrantConsumptionRejectsExpiredOrUnsealedRecords(t *testing.T) {
 	}
 }
 
+func TestApprovalGrantConsumptionV2MatchesOnlySandboxDraftGrant(t *testing.T) {
+	grant, err := validSandboxApprovalGrant().Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumption := validApprovalGrantConsumption(grant)
+	consumption.SchemaVersion = ApprovalGrantConsumptionSchemaV2
+	consumption.ContractVersion = ApprovalGrantConsumptionContractV2
+	consumption, err = consumption.Seal()
+	if err != nil {
+		t.Fatalf("Seal() V2 error = %v", err)
+	}
+	if err := consumption.ValidateGrant(grant); err != nil {
+		t.Fatalf("ValidateGrant() V2 error = %v", err)
+	}
+
+	for name, mutate := range map[string]func(*ApprovalGrantConsumption){
+		"wrong version": func(c *ApprovalGrantConsumption) {
+			c.SchemaVersion = ApprovalGrantConsumptionSchemaV1
+			c.ContractVersion = ApprovalGrantConsumptionContractV1
+		},
+		"wrong contract": func(c *ApprovalGrantConsumption) { c.ContractVersion = ApprovalGrantConsumptionContractV1 },
+		"wrong action":   func(c *ApprovalGrantConsumption) { c.Action = ApprovalGrantActionInstall },
+		"wrong audience": func(c *ApprovalGrantConsumption) { c.Audience = "helm.policy-draft-sandbox.executor.v2" },
+		"wrong pack":     func(c *ApprovalGrantConsumption) { c.PackID = "helm.policy-draft-sandbox-other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := consumption
+			mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, ErrApprovalGrantIntegrity) {
+				t.Fatalf("Validate() error = %v, want ErrApprovalGrantIntegrity", err)
+			}
+		})
+	}
+
+	wrongBinding := consumption
+	wrongBinding.PlanHash = sha256Ref("f")
+	wrongBinding, err = wrongBinding.Seal()
+	if err != nil {
+		t.Fatalf("Seal() wrong binding error = %v", err)
+	}
+	if err := wrongBinding.ValidateGrant(grant); !errors.Is(err, ErrApprovalGrantIntegrity) {
+		t.Fatalf("ValidateGrant() wrong binding error = %v, want ErrApprovalGrantIntegrity", err)
+	}
+
+	candidate := consumption
+	candidate.SchemaVersion = ApprovalGrantConsumptionSchemaV1
+	candidate.ContractVersion = ApprovalGrantConsumptionContractV1
+	candidate.Action = grant.Action
+	candidate.Audience = grant.Audience
+	candidate.PackID = grant.PackID
+	if _, err := candidate.Seal(); !errors.Is(err, ErrApprovalGrantIntegrity) {
+		t.Fatalf("V1 Seal() accepted sandbox action: %v", err)
+	}
+}
+
 func validApprovalGrantConsumption(grant ApprovalGrant) ApprovalGrantConsumption {
 	return ApprovalGrantConsumption{
 		SchemaVersion: ApprovalGrantConsumptionSchemaV1, ContractVersion: ApprovalGrantConsumptionContractV1,

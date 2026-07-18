@@ -135,6 +135,45 @@ func TestApprovalChallengeRejectsUnsafeTemporalShape(t *testing.T) {
 	}
 }
 
+func TestApprovalChallengeV2PermitsOnlySandboxDraftScope(t *testing.T) {
+	challenge := validSandboxApprovalChallenge()
+	if err := challenge.Validate(); err != nil {
+		t.Fatalf("Validate() V2 error = %v", err)
+	}
+	sealed, err := challenge.Seal()
+	if err != nil {
+		t.Fatalf("Seal() V2 error = %v", err)
+	}
+
+	for name, mutate := range map[string]func(*ApprovalChallenge){
+		"wrong version": func(c *ApprovalChallenge) {
+			c.Domain = ApprovalChallengeDomainV1
+			c.SchemaVersion = ApprovalChallengeSchemaV1
+			c.ContractVersion = ApprovalChallengeContractV1
+		},
+		"wrong contract": func(c *ApprovalChallenge) { c.ContractVersion = ApprovalChallengeContractV1 },
+		"wrong action":   func(c *ApprovalChallenge) { c.Action = ApprovalGrantActionInstall },
+		"wrong audience": func(c *ApprovalChallenge) { c.Audience = "helm.policy-draft-sandbox.executor.v2" },
+		"wrong pack":     func(c *ApprovalChallenge) { c.PackID = "helm.policy-draft-sandbox-other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := challenge
+			mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, ErrApprovalChallengeInvalid) {
+				t.Fatalf("Validate() error = %v, want ErrApprovalChallengeInvalid", err)
+			}
+		})
+	}
+
+	assertion := validApprovalAssertion(sealed)
+	if err := assertion.Validate(); err != nil {
+		t.Fatalf("V1 ApprovalAssertion should sign the V2 challenge hash: %v", err)
+	}
+	if _, err := assertion.SigningDigest(); err != nil {
+		t.Fatalf("V1 ApprovalAssertion SigningDigest() error = %v", err)
+	}
+}
+
 func TestApprovalContractsRejectNonUTCTimestamps(t *testing.T) {
 	nonUTC := time.FixedZone("UTC+2", 2*60*60)
 
@@ -252,6 +291,17 @@ func validApprovalChallenge() ApprovalChallenge {
 		ExpiresAt:             eligible.Add(10 * time.Minute),
 		Nonce:                 repeatHex("6"),
 	}
+}
+
+func validSandboxApprovalChallenge() ApprovalChallenge {
+	challenge := validApprovalChallenge()
+	challenge.Domain = ApprovalChallengeDomainV2
+	challenge.SchemaVersion = ApprovalChallengeSchemaV2
+	challenge.ContractVersion = ApprovalChallengeContractV2
+	challenge.Audience = ApprovalGrantAudiencePolicyDraftSandboxExecutorV1
+	challenge.PackID = ApprovalGrantPackIDPolicyDraftSandbox
+	challenge.Action = ApprovalGrantActionPolicyDraftSandbox
+	return challenge
 }
 
 func validApprovalAssertion(challenge ApprovalChallenge) ApprovalAssertion {

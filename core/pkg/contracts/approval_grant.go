@@ -12,6 +12,8 @@ import (
 const (
 	ApprovalGrantSchemaV1   = "approval-grant.v1"
 	ApprovalGrantContractV1 = "2026-07-15"
+	ApprovalGrantSchemaV2   = "approval-grant.v2"
+	ApprovalGrantContractV2 = "2026-07-18"
 
 	ApprovalGrantDecisionAllow = "ALLOW"
 
@@ -19,6 +21,15 @@ const (
 	ApprovalGrantActionUpgrade   = "upgrade"
 	ApprovalGrantActionUninstall = "uninstall"
 	ApprovalGrantActionRollback  = "rollback"
+
+	// ApprovalGrantActionPolicyDraftSandbox is intentionally the only
+	// non-lifecycle action admitted by the versioned V2 envelope.
+	ApprovalGrantActionPolicyDraftSandbox = "policy.draft.sandbox"
+
+	// ApprovalGrantAudiencePolicyDraftSandboxExecutorV1 and
+	// ApprovalGrantPackIDPolicyDraftSandbox fence V2 to its dedicated consumer.
+	ApprovalGrantAudiencePolicyDraftSandboxExecutorV1 = "helm.policy-draft-sandbox.executor.v1"
+	ApprovalGrantPackIDPolicyDraftSandbox             = "helm.policy-draft-sandbox"
 )
 
 var (
@@ -31,6 +42,11 @@ var (
 // single-use approval authority. It is deliberately not an authorization on
 // its own: callers MUST verify the server signature and atomically consume the
 // grant in a durable store before performing a mutation.
+//
+// V2 introduces no duplicate release or binding fields: PackID, PackVersion,
+// PackManifestHash, IntentHash, EffectHash, and PlanHash remain the complete
+// portable, signed binding tuple. The ceremony's BindingRef stays internal to
+// its source-owned durable record and commitment.
 //
 // GrantHash seals every authority-bearing field below. The approvalceremony
 // boundary owns its signature, durable single-use transition, and the separate
@@ -77,11 +93,17 @@ type ApprovalGrant struct {
 // Validate checks the immutable grant shape. It does not establish signature
 // trust, liveness, or replay safety.
 func (g ApprovalGrant) Validate() error {
-	if g.SchemaVersion != ApprovalGrantSchemaV1 {
+	switch g.SchemaVersion {
+	case ApprovalGrantSchemaV1:
+		if g.ContractVersion != ApprovalGrantContractV1 {
+			return approvalGrantInvalid("unsupported contract_version")
+		}
+	case ApprovalGrantSchemaV2:
+		if g.ContractVersion != ApprovalGrantContractV2 {
+			return approvalGrantInvalid("unsupported contract_version")
+		}
+	default:
 		return approvalGrantInvalid("unsupported schema_version")
-	}
-	if g.ContractVersion != ApprovalGrantContractV1 {
-		return approvalGrantInvalid("unsupported contract_version")
 	}
 
 	required := []struct {
@@ -125,13 +147,8 @@ func (g ApprovalGrant) Validate() error {
 		}
 	}
 
-	switch g.Action {
-	case ApprovalGrantActionInstall,
-		ApprovalGrantActionUpgrade,
-		ApprovalGrantActionUninstall,
-		ApprovalGrantActionRollback:
-	default:
-		return approvalGrantInvalid("unsupported action")
+	if err := validateApprovalGrantActionScope(g.SchemaVersion, g.Audience, g.PackID, g.Action); err != nil {
+		return approvalGrantInvalid(err.Error())
 	}
 	if g.Decision != ApprovalGrantDecisionAllow {
 		return approvalGrantInvalid("decision must be ALLOW")
@@ -227,4 +244,32 @@ func isApprovalGrantNonce(value string) bool {
 func isApprovalGrantUTC(value time.Time) bool {
 	_, offset := value.Zone()
 	return offset == 0
+}
+
+func validateApprovalGrantActionScope(schemaVersion, audience, packID, action string) error {
+	switch schemaVersion {
+	case ApprovalGrantSchemaV1:
+		switch action {
+		case ApprovalGrantActionInstall,
+			ApprovalGrantActionUpgrade,
+			ApprovalGrantActionUninstall,
+			ApprovalGrantActionRollback:
+			return nil
+		default:
+			return errors.New("unsupported action")
+		}
+	case ApprovalGrantSchemaV2:
+		if action != ApprovalGrantActionPolicyDraftSandbox {
+			return errors.New("v2 action must be policy.draft.sandbox")
+		}
+		if audience != ApprovalGrantAudiencePolicyDraftSandboxExecutorV1 {
+			return errors.New("v2 audience is unsupported")
+		}
+		if packID != ApprovalGrantPackIDPolicyDraftSandbox {
+			return errors.New("v2 pack_id is unsupported")
+		}
+		return nil
+	default:
+		return errors.New("unsupported schema_version")
+	}
 }

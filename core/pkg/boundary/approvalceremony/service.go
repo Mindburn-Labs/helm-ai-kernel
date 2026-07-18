@@ -196,9 +196,13 @@ func (s *Service) IssueChallenge(ctx context.Context, approvalID string) (Record
 		return Record{}, err
 	}
 	spec := record.Spec
+	challengeDomain, challengeSchemaVersion, challengeContractVersion, ok := approvalChallengeEnvelopeForSpec(spec)
+	if !ok {
+		return Record{}, invalidRecord("unsupported approval grant schema")
+	}
 	challenge, err := (contracts.ApprovalChallenge{
-		Domain: contracts.ApprovalChallengeDomainV1, SchemaVersion: contracts.ApprovalChallengeSchemaV1,
-		ContractVersion: contracts.ApprovalChallengeContractV1,
+		Domain: challengeDomain, SchemaVersion: challengeSchemaVersion,
+		ContractVersion: challengeContractVersion,
 		ChallengeID:     challengeID, ApprovalID: record.ApprovalID, TenantID: spec.TenantID,
 		WorkspaceID: spec.WorkspaceID, Audience: spec.Audience, PackID: spec.PackID,
 		PackVersion: spec.PackVersion, PackManifestHash: spec.PackManifestHash, Action: spec.Action,
@@ -283,8 +287,12 @@ func (s *Service) IssueGrant(ctx context.Context, approvalID string) (Record, er
 		return Record{}, err
 	}
 	verified := record.VerifiedRef
+	grantSchemaVersion, grantContractVersion, ok := approvalGrantEnvelopeForChallenge(*record.Challenge)
+	if !ok {
+		return Record{}, invalidRecord("unsupported approval challenge schema")
+	}
 	grant, err := (contracts.ApprovalGrant{
-		SchemaVersion: contracts.ApprovalGrantSchemaV1, ContractVersion: contracts.ApprovalGrantContractV1,
+		SchemaVersion: grantSchemaVersion, ContractVersion: grantContractVersion,
 		GrantID: grantID, TenantID: verified.TenantID, WorkspaceID: verified.WorkspaceID,
 		Audience: verified.Audience, PackID: verified.PackID, PackVersion: verified.PackVersion,
 		PackManifestHash: verified.PackManifestHash, Action: verified.Action,

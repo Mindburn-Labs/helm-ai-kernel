@@ -141,6 +141,56 @@ func TestApprovalGrantValidateRejectsMalformedOrUnsafeValues(t *testing.T) {
 	}
 }
 
+func TestApprovalGrantV2PermitsOnlySandboxDraftScope(t *testing.T) {
+	grant := validSandboxApprovalGrant()
+	if err := grant.Validate(); err != nil {
+		t.Fatalf("Validate() V2 error = %v", err)
+	}
+	sealed, err := grant.Seal()
+	if err != nil {
+		t.Fatalf("Seal() V2 error = %v", err)
+	}
+
+	for name, mutate := range map[string]func(*ApprovalGrant){
+		"wrong version": func(g *ApprovalGrant) {
+			g.SchemaVersion = ApprovalGrantSchemaV1
+			g.ContractVersion = ApprovalGrantContractV1
+		},
+		"wrong contract": func(g *ApprovalGrant) { g.ContractVersion = ApprovalGrantContractV1 },
+		"wrong action":   func(g *ApprovalGrant) { g.Action = ApprovalGrantActionInstall },
+		"wrong audience": func(g *ApprovalGrant) { g.Audience = "helm.policy-draft-sandbox.executor.v2" },
+		"wrong pack":     func(g *ApprovalGrant) { g.PackID = "helm.policy-draft-sandbox-other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := grant
+			mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, ErrApprovalGrantInvalid) {
+				t.Fatalf("Validate() error = %v, want ErrApprovalGrantInvalid", err)
+			}
+		})
+	}
+
+	for name, mutate := range map[string]func(*ApprovalGrant){
+		"pack version":  func(g *ApprovalGrant) { g.PackVersion = "2.0.0" },
+		"pack manifest": func(g *ApprovalGrant) { g.PackManifestHash = sha256Ref("b") },
+		"intent":        func(g *ApprovalGrant) { g.IntentHash = sha256Ref("c") },
+		"effect":        func(g *ApprovalGrant) { g.EffectHash = sha256Ref("d") },
+		"plan":          func(g *ApprovalGrant) { g.PlanHash = sha256Ref("e") },
+	} {
+		t.Run("portable binding "+name, func(t *testing.T) {
+			candidate := grant
+			mutate(&candidate)
+			candidate, err := candidate.Seal()
+			if err != nil {
+				t.Fatalf("Seal() error = %v", err)
+			}
+			if candidate.GrantHash == sealed.GrantHash {
+				t.Fatalf("%s did not change the V2 grant hash", name)
+			}
+		})
+	}
+}
+
 func TestApprovalGrantValidateAtChecksIntegrityAndWindow(t *testing.T) {
 	grant := validApprovalGrant()
 	now := grant.IssuedAt.Add(time.Minute)
@@ -202,6 +252,16 @@ func validApprovalGrant() ApprovalGrant {
 		ExpiresAt:         issuedAt.Add(5 * time.Minute),
 		Nonce:             repeatHex("6"),
 	}
+}
+
+func validSandboxApprovalGrant() ApprovalGrant {
+	grant := validApprovalGrant()
+	grant.SchemaVersion = ApprovalGrantSchemaV2
+	grant.ContractVersion = ApprovalGrantContractV2
+	grant.Audience = ApprovalGrantAudiencePolicyDraftSandboxExecutorV1
+	grant.PackID = ApprovalGrantPackIDPolicyDraftSandbox
+	grant.Action = ApprovalGrantActionPolicyDraftSandbox
+	return grant
 }
 
 func sha256Ref(character string) string {

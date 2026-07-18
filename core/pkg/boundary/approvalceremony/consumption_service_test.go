@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
@@ -66,5 +67,49 @@ func TestGrantConsumerRejectsMissingDependencies(t *testing.T) {
 	var consumer *GrantConsumer
 	if _, err := consumer.ConsumeGrant(context.Background(), "approval-a", "grant-a", shaRef("a"), string(bytes.Repeat([]byte{'b'}, 64))); err == nil {
 		t.Fatal("nil GrantConsumer accepted consumption")
+	}
+}
+
+func TestGrantConsumerReusesTransportForV2SandboxGrant(t *testing.T) {
+	_, _, _, grant := ceremonyFixtures(t)
+	grant.SchemaVersion = contracts.ApprovalGrantSchemaV2
+	grant.ContractVersion = contracts.ApprovalGrantContractV2
+	grant.Audience = contracts.ApprovalGrantAudiencePolicyDraftSandboxExecutorV1
+	grant.PackID = contracts.ApprovalGrantPackIDPolicyDraftSandbox
+	grant.Action = contracts.ApprovalGrantActionPolicyDraftSandbox
+	grant.GrantHash = ""
+	var err error
+	grant, err = grant.Seal()
+	if err != nil {
+		t.Fatalf("Seal() V2 grant error = %v", err)
+	}
+	store := &serviceTestStore{record: Record{
+		ApprovalID: grant.ApprovalID, TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID,
+		State: StateGrantIssued, Grant: &grant,
+	}}
+	now := grant.IssuedAt.Add(time.Minute)
+	consumer, err := newGrantConsumer(
+		store,
+		&serviceTestConsumer{identity: ConsumerIdentity{
+			Subject: "spiffe://helm/policy-draft-sandbox-a", TenantID: grant.TenantID,
+			WorkspaceID: grant.WorkspaceID, Audience: grant.Audience,
+		}},
+		crypto.NewEd25519SignerFromKey(
+			ed25519.NewKeyFromSeed(bytes.Repeat([]byte{9}, ed25519.SeedSize)),
+			"approval-test",
+		),
+		func() time.Time { return now },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumed, err := consumer.ConsumeGrant(context.Background(), grant.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce)
+	if err != nil {
+		t.Fatalf("ConsumeGrant() V2 error = %v", err)
+	}
+	if consumed.GrantConsumption == nil ||
+		consumed.GrantConsumption.SchemaVersion != contracts.ApprovalGrantConsumptionSchemaV2 ||
+		consumed.GrantConsumption.ContractVersion != contracts.ApprovalGrantConsumptionContractV2 {
+		t.Fatalf("V2 consumption envelope = %+v", consumed.GrantConsumption)
 	}
 }

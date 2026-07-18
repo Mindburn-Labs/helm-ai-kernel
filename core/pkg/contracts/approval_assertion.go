@@ -15,6 +15,9 @@ const (
 	ApprovalChallengeDomainV1   = "HELM/ApprovalChallenge/v1"
 	ApprovalChallengeSchemaV1   = "approval-challenge.v1"
 	ApprovalChallengeContractV1 = "2026-07-15"
+	ApprovalChallengeDomainV2   = "HELM/ApprovalChallenge/v2"
+	ApprovalChallengeSchemaV2   = "approval-challenge.v2"
+	ApprovalChallengeContractV2 = "2026-07-18"
 
 	ApprovalAssertionDomainV1   = "HELM/ApprovalAssertion/v1"
 	ApprovalAssertionSchemaV1   = "approval-assertion.v1"
@@ -76,14 +79,9 @@ type ApprovalChallenge struct {
 }
 
 func (c ApprovalChallenge) Validate() error {
-	if c.Domain != ApprovalChallengeDomainV1 {
-		return approvalChallengeInvalid("unsupported domain")
-	}
-	if c.SchemaVersion != ApprovalChallengeSchemaV1 {
-		return approvalChallengeInvalid("unsupported schema_version")
-	}
-	if c.ContractVersion != ApprovalChallengeContractV1 {
-		return approvalChallengeInvalid("unsupported contract_version")
+	grantSchemaVersion, err := approvalChallengeGrantSchemaVersion(c)
+	if err != nil {
+		return approvalChallengeInvalid(err.Error())
 	}
 
 	required := []struct {
@@ -127,13 +125,8 @@ func (c ApprovalChallenge) Validate() error {
 		}
 	}
 
-	switch c.Action {
-	case ApprovalGrantActionInstall,
-		ApprovalGrantActionUpgrade,
-		ApprovalGrantActionUninstall,
-		ApprovalGrantActionRollback:
-	default:
-		return approvalChallengeInvalid("unsupported action")
+	if err := validateApprovalGrantActionScope(grantSchemaVersion, c.Audience, c.PackID, c.Action); err != nil {
+		return approvalChallengeInvalid(err.Error())
 	}
 	if c.Decision != ApprovalGrantDecisionAllow {
 		return approvalChallengeInvalid("decision must be ALLOW")
@@ -314,4 +307,27 @@ func approvalChallengeInvalid(message string) error {
 
 func approvalAssertionInvalid(message string) error {
 	return fmt.Errorf("%w: %s", ErrApprovalAssertionInvalid, message)
+}
+
+func approvalChallengeGrantSchemaVersion(challenge ApprovalChallenge) (string, error) {
+	switch challenge.SchemaVersion {
+	case ApprovalChallengeSchemaV1:
+		if challenge.Domain != ApprovalChallengeDomainV1 {
+			return "", errors.New("unsupported domain")
+		}
+		if challenge.ContractVersion != ApprovalChallengeContractV1 {
+			return "", errors.New("unsupported contract_version")
+		}
+		return ApprovalGrantSchemaV1, nil
+	case ApprovalChallengeSchemaV2:
+		if challenge.Domain != ApprovalChallengeDomainV2 {
+			return "", errors.New("unsupported domain")
+		}
+		if challenge.ContractVersion != ApprovalChallengeContractV2 {
+			return "", errors.New("unsupported contract_version")
+		}
+		return ApprovalGrantSchemaV2, nil
+	default:
+		return "", errors.New("unsupported schema_version")
+	}
 }

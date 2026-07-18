@@ -32,7 +32,7 @@ func (ContextConsumerIdentityProvider) LoadConsumerIdentity(ctx context.Context)
 }
 
 // GrantConsumer is the narrow execution-boundary capability that consumes or
-// recovers a signed pack-lifecycle ApprovalGrant. It cannot create challenges,
+// recovers a signed, versioned ApprovalGrant. It cannot create challenges,
 // verify human quorum, issue grants, or promote a grant into a generic effect
 // permit.
 type GrantConsumer struct {
@@ -91,8 +91,12 @@ func consumeGrant(ctx context.Context, store ceremonyStore, consumer ConsumerIde
 		return Record{}, fmt.Errorf("%w: signed grant is inactive: %v", ErrTransitionConflict, err)
 	}
 	grant := record.Grant
+	consumptionSchemaVersion, consumptionContractVersion, ok := approvalGrantConsumptionEnvelopeForGrant(*grant)
+	if !ok {
+		return Record{}, ErrTransitionConflict
+	}
 	consumption, err := (contracts.ApprovalGrantConsumption{
-		SchemaVersion: contracts.ApprovalGrantConsumptionSchemaV1, ContractVersion: contracts.ApprovalGrantConsumptionContractV1,
+		SchemaVersion: consumptionSchemaVersion, ContractVersion: consumptionContractVersion,
 		ApprovalID: grant.ApprovalID, GrantID: grant.GrantID, GrantHash: grant.GrantHash,
 		TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, Audience: grant.Audience, ConsumedBy: identity.Subject,
 		PackID: grant.PackID, PackVersion: grant.PackVersion, PackManifestHash: grant.PackManifestHash, Action: grant.Action,

@@ -7,8 +7,62 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalverify"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
+
+func TestChallengeSpecDefaultsToV1WithoutChangingLegacyJSON(t *testing.T) {
+	_, challenge, _, _ := ceremonyFixtures(t)
+	spec := specFromChallenge(challenge)
+	if err := spec.Validate(); err != nil {
+		t.Fatalf("Validate() legacy V1 error = %v", err)
+	}
+	if got := spec.approvalGrantSchemaVersion(); got != contracts.ApprovalGrantSchemaV1 {
+		t.Fatalf("approvalGrantSchemaVersion() = %q, want V1", got)
+	}
+	_, schemaVersion, _, ok := approvalChallengeEnvelopeForSpec(spec)
+	if !ok || schemaVersion != contracts.ApprovalChallengeSchemaV1 {
+		t.Fatalf("approvalChallengeEnvelopeForSpec() = %q, %t; want V1", schemaVersion, ok)
+	}
+	payload, err := canonicalize.JCS(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), "approval_grant_schema_version") {
+		t.Fatalf("legacy V1 spec serialized its empty selector: %s", payload)
+	}
+}
+
+func TestChallengeSpecV2RestrictsSandboxDraftScope(t *testing.T) {
+	_, challenge, _, _ := ceremonyFixtures(t)
+	spec := specFromChallenge(challenge)
+	spec.ApprovalGrantSchemaVersion = contracts.ApprovalGrantSchemaV2
+	spec.Audience = contracts.ApprovalGrantAudiencePolicyDraftSandboxExecutorV1
+	spec.PackID = contracts.ApprovalGrantPackIDPolicyDraftSandbox
+	spec.Action = contracts.ApprovalGrantActionPolicyDraftSandbox
+	if err := spec.Validate(); err != nil {
+		t.Fatalf("Validate() V2 error = %v", err)
+	}
+	domain, schemaVersion, contractVersion, ok := approvalChallengeEnvelopeForSpec(spec)
+	if !ok || domain != contracts.ApprovalChallengeDomainV2 || schemaVersion != contracts.ApprovalChallengeSchemaV2 || contractVersion != contracts.ApprovalChallengeContractV2 {
+		t.Fatalf("approvalChallengeEnvelopeForSpec() = %q, %q, %q, %t; want V2", domain, schemaVersion, contractVersion, ok)
+	}
+
+	for name, mutate := range map[string]func(*ChallengeSpec){
+		"wrong version":  func(s *ChallengeSpec) { s.ApprovalGrantSchemaVersion = "approval-grant.v3" },
+		"wrong action":   func(s *ChallengeSpec) { s.Action = contracts.ApprovalGrantActionInstall },
+		"wrong audience": func(s *ChallengeSpec) { s.Audience = "helm.policy-draft-sandbox.executor.v2" },
+		"wrong pack":     func(s *ChallengeSpec) { s.PackID = "helm.policy-draft-sandbox-other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := spec
+			mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, ErrInvalidRecord) {
+				t.Fatalf("Validate() error = %v, want ErrInvalidRecord", err)
+			}
+		})
+	}
+}
 
 func TestRecordValidatesCompleteLifecycle(t *testing.T) {
 	hold, challenge, verified, grant := ceremonyFixtures(t)

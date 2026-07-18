@@ -58,6 +58,10 @@ PUBLIC_HTTP_API_SLUG = 'reference/http-api'
 PUBLIC_HTTP_API_SOURCE_PATH = 'docs/reference/http-api.md'
 SHA256_DIGEST_RE = re.compile(r'^sha256:[0-9a-f]{64}$')
 GIT_BLOB_SHA1_RE = re.compile(r'^[0-9a-f]{40}$')
+OPENAPI_EXAMPLE_SOURCE_TEST_RE = re.compile(
+    r'^\s*source_test:\s*["\']?([^"\'\s]+#[A-Za-z_][A-Za-z0-9_]*)["\']?\s*$',
+    re.MULTILINE,
+)
 PUBLIC_DOC_TAXONOMY_VOCABULARIES = {
     'category': 'categories',
     'task': 'tasks',
@@ -254,6 +258,21 @@ def validate_public_api_contract(failures: list[str], manifest: dict) -> None:
     if not source.exists():
         failures.append(f'docs/public-docs.manifest.json api_contract source does not exist: {source_path}')
         return
+
+    openapi_text = read_text(source)
+    for source_test_ref in OPENAPI_EXAMPLE_SOURCE_TEST_RE.findall(openapi_text):
+        source_test_path, test_name = source_test_ref.split('#', 1)
+        test_file = ROOT / source_test_path
+        if not test_file.is_file():
+            failures.append(
+                f'OpenAPI docs example source_test file does not exist: {source_test_ref}'
+            )
+            continue
+        test_text = read_text(test_file)
+        if not re.search(rf'^func\s+{re.escape(test_name)}\s*\(', test_text, re.MULTILINE):
+            failures.append(
+                f'OpenAPI docs example source_test symbol does not exist: {source_test_ref}'
+            )
 
     content_sha256 = str(contract.get('content_sha256') or '')
     if not SHA256_DIGEST_RE.fullmatch(content_sha256):

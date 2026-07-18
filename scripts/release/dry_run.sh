@@ -47,6 +47,7 @@ done
 python3 - "$ASSETS_DIR" "$VERSION" <<'PY'
 import json
 import pathlib
+import re
 import sys
 import tarfile
 
@@ -56,6 +57,26 @@ version = sys.argv[2]
 attestation = json.loads((assets / "release-attestation.json").read_text(encoding="utf-8"))
 if attestation.get("version") != version:
     raise SystemExit("release attestation version mismatch")
+public_docs_contract = attestation.get("public_docs_contract")
+if not isinstance(public_docs_contract, dict):
+    raise SystemExit("release attestation is missing public_docs_contract")
+if public_docs_contract.get("manifest_path") != "docs/public-docs.manifest.json":
+    raise SystemExit("release attestation public docs manifest path mismatch")
+if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(public_docs_contract.get("manifest_sha256") or "")):
+    raise SystemExit("release attestation public docs manifest SHA-256 is invalid")
+api_contract = public_docs_contract.get("api_contract")
+if not isinstance(api_contract, dict):
+    raise SystemExit("release attestation public docs API contract is missing")
+if api_contract.get("schema_version") != 1:
+    raise SystemExit("release attestation public docs API contract schema version mismatch")
+if api_contract.get("source_path") != "api/openapi/helm.openapi.yaml":
+    raise SystemExit("release attestation public docs API contract source path mismatch")
+if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(api_contract.get("content_sha256") or "")):
+    raise SystemExit("release attestation public docs API contract SHA-256 is invalid")
+if not re.fullmatch(r"[0-9a-f]{40}", str(api_contract.get("git_blob_sha1") or "")):
+    raise SystemExit("release attestation public docs API contract Git blob is invalid")
+if not isinstance(api_contract.get("public_operations"), list) or not api_contract["public_operations"]:
+    raise SystemExit("release attestation public docs API contract has no public operations")
 names = {artifact["name"] for artifact in attestation.get("artifacts", [])}
 required_names = {
     "helm-ai-kernel-linux-amd64",

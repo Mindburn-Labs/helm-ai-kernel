@@ -82,7 +82,7 @@ func main() {
 		fatal(fmt.Errorf("encode release permit: %w", err))
 	}
 	encoded = append(encoded, '\n')
-	if err := os.WriteFile(outputPath, encoded, 0o644); err != nil {
+	if err := writePermitFile(outputPath, encoded); err != nil {
 		fatal(fmt.Errorf("write release permit: %w", err))
 	}
 	if _, err := os.Stdout.Write(encoded); err != nil {
@@ -499,6 +499,31 @@ func requireKeys(
 		strings.Join(missing, ","),
 		strings.Join(unexpected, ","),
 	)
+}
+
+// writePermitFile refuses symlinked or irregular output paths so an
+// untrusted checkout cannot redirect the permit write onto another
+// runner-accessible file, and keeps the artifact owner-only.
+func writePermitFile(path string, content []byte) error {
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("output path %q is a symlink", path)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("output path %q is not a regular file", path)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect output path %q: %w", path, err)
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(content); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 func fatal(err error) {

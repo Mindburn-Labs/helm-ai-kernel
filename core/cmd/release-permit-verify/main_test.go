@@ -219,3 +219,39 @@ func validContextJSON() string {
 func validPermitJSON() string {
 	return `{"schema":"mindburn.release-permit/v2","permit_id":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","decision":"ALLOW","repository":"Mindburn-Labs/example","pull_request":42,"base_ref":"refs/heads/main","base_sha":"1111111111111111111111111111111111111111","head_sha":"2222222222222222222222222222222222222222","merge_sha":"4444444444444444444444444444444444444444","merge_tree_sha":"5555555555555555555555555555555555555555","workflow_repository":"Mindburn-Labs/.github","workflow_path":".github/workflows/ci.yml","workflow_ref":"refs/heads/main","workflow_sha":"3333333333333333333333333333333333333333","run_id":101,"run_attempt":1,"issued_at":"2026-07-14T10:00:00Z","authority":{"schema":"mindburn.release-authority/v1","generation":2,"kernel_sha":"6666666666666666666666666666666666666666","gate_profiles_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","adversarial_corpus_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","parent":{"generation":1,"workflow_sha":"7777777777777777777777777777777777777777"}},"context_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","reviews":[{"reviewer":{"provider":"anthropic","model":"claude-fable-5"},"verdict":"ALLOW","response_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","blocking_findings":0,"advisory_findings":0},{"reviewer":{"provider":"openai","model":"gpt-5.6-sol"},"verdict":"ALLOW","response_sha256":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","blocking_findings":0,"advisory_findings":0}],"reasons":[]}`
 }
+
+func TestWritePermitFileRejectsSymlinkOutput(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.json")
+	if err := os.WriteFile(target, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "release-permit.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePermitFile(link, []byte("overwritten")); err == nil {
+		t.Fatal("writePermitFile accepted a symlinked output path")
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "{}" {
+		t.Fatalf("symlink target was overwritten: %q", content)
+	}
+}
+
+func TestWritePermitFileCreatesOwnerOnlyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "release-permit.json")
+	if err := writePermitFile(path, []byte("ok")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("permit file mode = %o, want 600", perm)
+	}
+}

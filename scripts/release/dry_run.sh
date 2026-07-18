@@ -44,19 +44,36 @@ done
 (cd "$ASSETS_DIR" && shasum -a 256 -c SHA256SUMS.txt >/dev/null)
 "$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
 
-python3 - "$ASSETS_DIR" "$VERSION" <<'PY'
+python3 - "$ASSETS_DIR" "$VERSION" "$ROOT" <<'PY'
+import hashlib
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import tarfile
 
 assets = pathlib.Path(sys.argv[1])
 version = sys.argv[2]
+root = pathlib.Path(sys.argv[3])
 
 attestation = json.loads((assets / "release-attestation.json").read_text(encoding="utf-8"))
 if attestation.get("version") != version:
     raise SystemExit("release attestation version mismatch")
+if not re.fullmatch(r"[0-9a-f]{40}", str(attestation.get("source_commit") or "")):
+    raise SystemExit("release attestation source commit is invalid")
+if not re.fullmatch(r"[0-9a-f]{40}", str(attestation.get("source_tree_git_oid") or "")):
+    raise SystemExit("release attestation source tree is invalid")
+
+def git_text(*args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+
+def git_bytes(revision: str) -> bytes:
+    return subprocess.check_output(["git", "show", revision], cwd=root)
+
+source_commit = attestation["source_commit"]
+if git_text("rev-parse", "--verify", f"{source_commit}^{{tree}}") != attestation["source_tree_git_oid"]:
+    raise SystemExit("release attestation source tree does not resolve from source commit")
 public_docs_contract = attestation.get("public_docs_contract")
 if not isinstance(public_docs_contract, dict):
     raise SystemExit("release attestation is missing public_docs_contract")
@@ -77,6 +94,16 @@ if not re.fullmatch(r"[0-9a-f]{40}", str(api_contract.get("git_blob_sha1") or ""
     raise SystemExit("release attestation public docs API contract Git blob is invalid")
 if not isinstance(api_contract.get("public_operations"), list) or not api_contract["public_operations"]:
     raise SystemExit("release attestation public docs API contract has no public operations")
+manifest_bytes = git_bytes(f"{source_commit}:{public_docs_contract['manifest_path']}")
+if public_docs_contract["manifest_sha256"] != "sha256:" + hashlib.sha256(manifest_bytes).hexdigest():
+    raise SystemExit("release attestation public docs manifest is not bound to source commit")
+source_manifest = json.loads(manifest_bytes)
+if source_manifest.get("api_contract") != api_contract:
+    raise SystemExit("release attestation public docs API contract drifted from source commit")
+if git_text("rev-parse", "--verify", f"{source_commit}:{api_contract['source_path']}") != api_contract["git_blob_sha1"]:
+    raise SystemExit("release attestation public docs OpenAPI blob is not bound to source commit")
+if api_contract["content_sha256"] != "sha256:" + hashlib.sha256(git_bytes(f"{source_commit}:{api_contract['source_path']}")).hexdigest():
+    raise SystemExit("release attestation public docs OpenAPI digest is not bound to source commit")
 names = {artifact["name"] for artifact in attestation.get("artifacts", [])}
 required_names = {
     "helm-ai-kernel-linux-amd64",

@@ -71,6 +71,21 @@ PY
 cd "$ROOT"
 
 require_clean_source
+SOURCE_COMMIT="$(git rev-parse --verify 'HEAD^{commit}')"
+SOURCE_TREE="$(git rev-parse --verify "${SOURCE_COMMIT}^{tree}")"
+
+require_source_snapshot_current() {
+    # The release must stay on the clean source commit captured before any
+    # expensive staging. The attestation reads Git objects from this snapshot,
+    # never mutable files in the working tree.
+    require_clean_source
+    local current_commit
+    current_commit="$(git rev-parse --verify 'HEAD^{commit}')"
+    if [ "$current_commit" != "$SOURCE_COMMIT" ]; then
+        echo "::error file=scripts/release/stage_release_assets.sh::source commit changed during release asset staging" >&2
+        exit 1
+    fi
+}
 
 log_step "staging $TAG into $ASSETS_DIR"
 
@@ -245,7 +260,13 @@ ruby "$ROOT/scripts/release/homebrew_formula.rb" \
     --launchpad-data-sha256 "$launchpad_data_sha" \
     --repo Mindburn-Labs/helm-ai-kernel > "$ASSETS_DIR/helm-ai-kernel.rb"
 
-python3 - "$ROOT" "$ASSETS_DIR" "$TAG" <<'PY'
+# Bind the release attestation to the exact source snapshot captured above. The
+# Python block reads Git objects by commit, never mutable checkout paths.
+require_source_snapshot_current
+
+HELM_RELEASE_SOURCE_COMMIT="$SOURCE_COMMIT" \
+    HELM_RELEASE_SOURCE_TREE="$SOURCE_TREE" \
+    python3 - "$ROOT" "$ASSETS_DIR" "$TAG" <<'PY'
 import hashlib
 import json
 import os
@@ -265,9 +286,24 @@ def sha256(path: pathlib.Path) -> str:
             digest.update(chunk)
     return digest.hexdigest()
 
-commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-public_docs_manifest_path = root / "docs" / "public-docs.manifest.json"
-public_docs_manifest = json.loads(public_docs_manifest_path.read_text(encoding="utf-8"))
+source_commit = os.environ["HELM_RELEASE_SOURCE_COMMIT"]
+source_tree = os.environ["HELM_RELEASE_SOURCE_TREE"]
+
+def git_text(*args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+
+def git_show(revision: str) -> bytes:
+    return subprocess.check_output(["git", "show", revision], cwd=root)
+
+if git_text("rev-parse", "--verify", f"{source_commit}^{{tree}}") != source_tree:
+    raise SystemExit("release source tree does not match source commit")
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+public_docs_manifest_path = "docs/public-docs.manifest.json"
+public_docs_manifest_data = git_show(f"{source_commit}:{public_docs_manifest_path}")
+public_docs_manifest = json.loads(public_docs_manifest_data)
 api_contract = public_docs_manifest.get("api_contract")
 if not isinstance(api_contract, dict):
     raise SystemExit("public docs manifest is missing api_contract")
@@ -275,20 +311,20 @@ if api_contract.get("schema_version") != 1:
     raise SystemExit("public docs API contract schema_version must be 1")
 if api_contract.get("source_path") != "api/openapi/helm.openapi.yaml":
     raise SystemExit("public docs API contract source_path must be api/openapi/helm.openapi.yaml")
-openapi_path = root / api_contract["source_path"]
-actual_openapi_sha256 = "sha256:" + sha256(openapi_path)
+openapi_data = git_show(f"{source_commit}:{api_contract['source_path']}")
+actual_openapi_sha256 = "sha256:" + sha256_bytes(openapi_data)
 if api_contract.get("content_sha256") != actual_openapi_sha256:
     raise SystemExit("public docs API contract content_sha256 does not match OpenAPI source")
 actual_openapi_blob = subprocess.check_output(
-    ["git", "hash-object", api_contract["source_path"]], cwd=root, text=True
+    ["git", "rev-parse", "--verify", f"{source_commit}:{api_contract['source_path']}"], cwd=root, text=True
 ).strip()
 if api_contract.get("git_blob_sha1") != actual_openapi_blob:
     raise SystemExit("public docs API contract git_blob_sha1 does not match OpenAPI source")
 if not isinstance(api_contract.get("public_operations"), list) or not api_contract["public_operations"]:
     raise SystemExit("public docs API contract must declare public_operations")
 public_docs_contract = {
-    "manifest_path": "docs/public-docs.manifest.json",
-    "manifest_sha256": "sha256:" + sha256(public_docs_manifest_path),
+    "manifest_path": public_docs_manifest_path,
+    "manifest_sha256": "sha256:" + sha256_bytes(public_docs_manifest_data),
     "api_contract": api_contract,
 }
 
@@ -307,7 +343,8 @@ payload = {
     "release": tag,
     "version": tag.removeprefix("v"),
     "source_repository": "Mindburn-Labs/helm-ai-kernel",
-    "source_commit": commit,
+    "source_commit": source_commit,
+    "source_tree_git_oid": source_tree,
     "public_docs_contract": public_docs_contract,
     "created_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "offline_checks": {
@@ -319,6 +356,8 @@ payload = {
 }
 (assets_dir / "release-attestation.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
+
+require_source_snapshot_current
 
 (
     cd "$ASSETS_DIR"

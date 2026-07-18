@@ -100,6 +100,16 @@ func NewPostgresReleaseAuthorityStore(db *sql.DB, verifier ReleaseAuthorityEnvel
 	return &PostgresReleaseAuthorityStore{db: db, verifier: verifier}, nil
 }
 
+// VerifyEnvelope verifies historical source-authority evidence loaded from a
+// composed reservation stream. It proves signature provenance, not that the
+// statement is still the current certified head.
+func (s *PostgresReleaseAuthorityStore) VerifyEnvelope(envelope contracts.ConnectorReleaseAuthorityEnvelope) error {
+	if s == nil || s.verifier == nil {
+		return releaseAuthorityStoreRejected("runtime verifier is not configured")
+	}
+	return s.verifier.VerifyEnvelope(envelope)
+}
+
 const releaseAuthorityRecordColumns = `
 scope_kind, tenant_id, workspace_id, connector_id, connector_version,
 registry_revision, state, authority_hash, previous_authority_hash,
@@ -110,6 +120,46 @@ envelope_json, signature, created_at
 type releaseAuthorityRecord struct {
 	Envelope  contracts.ConnectorReleaseAuthorityEnvelope
 	CreatedAt time.Time
+}
+
+// LockCurrentCertifiedForEffectAdmission joins the source-owned release head
+// to a caller-owned effect-admission transaction. The caller must already have
+// set the tenant/workspace RLS context and must persist its durable reservation
+// before committing. This method deliberately does not commit or execute a
+// connector callback.
+func (s *PostgresReleaseAuthorityStore) LockCurrentCertifiedForEffectAdmission(
+	ctx context.Context,
+	tx *sql.Tx,
+	lookup ReleaseAuthorityLookup,
+) (contracts.ConnectorReleaseAuthorityEnvelope, time.Time, error) {
+	if s == nil || s.verifier == nil || tx == nil {
+		return contracts.ConnectorReleaseAuthorityEnvelope{}, time.Time{}, releaseAuthorityStoreRejected("effect admission transaction and verifier are required")
+	}
+	if err := lookup.validate(); err != nil {
+		return contracts.ConnectorReleaseAuthorityEnvelope{}, time.Time{}, err
+	}
+	if err := lockReleaseAuthority(ctx, tx, lookup, true); err != nil {
+		return contracts.ConnectorReleaseAuthorityEnvelope{}, time.Time{}, err
+	}
+	record, err := queryCurrentReleaseAuthority(ctx, tx, lookup)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return contracts.ConnectorReleaseAuthorityEnvelope{}, time.Time{}, ErrReleaseAuthorityNotFound
+		}
+		return contracts.ConnectorReleaseAuthorityEnvelope{}, time.Time{}, err
+	}
+	if err := validateStoredReleaseAuthority(record, s.verifier); err != nil {
+		return contracts.ConnectorReleaseAuthorityEnvelope{}, time.Time{}, err
+	}
+	var databaseNow time.Time
+	if err := tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&databaseNow); err != nil {
+		return contracts.ConnectorReleaseAuthorityEnvelope{}, time.Time{}, fmt.Errorf("read effect admission database clock: %w", err)
+	}
+	databaseNow = databaseNow.UTC().Truncate(time.Microsecond)
+	if err := s.verifier.VerifyCurrentCertifiedAt(record.Envelope, databaseNow); err != nil {
+		return contracts.ConnectorReleaseAuthorityEnvelope{}, time.Time{}, err
+	}
+	return record.Envelope, databaseNow, nil
 }
 
 func (s *PostgresReleaseAuthorityAdminStore) Append(ctx context.Context, envelope contracts.ConnectorReleaseAuthorityEnvelope) (ReleaseAuthorityAppendResult, error) {

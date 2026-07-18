@@ -3,15 +3,51 @@ package github
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connector"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 )
+
+type recordingExecutionLifecycle struct {
+	mu     sync.Mutex
+	states []string
+	meta   []effects.ExecutionLifecycleMeta
+}
+
+func (r *recordingExecutionLifecycle) append(state string, meta effects.ExecutionLifecycleMeta) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.states = append(r.states, state)
+	r.meta = append(r.meta, meta)
+	return nil
+}
+
+func (r *recordingExecutionLifecycle) MarkStarted(_ context.Context, meta effects.ExecutionLifecycleMeta) error {
+	return r.append("STARTED", meta)
+}
+
+func (r *recordingExecutionLifecycle) MarkNotStarted(_ context.Context, meta effects.ExecutionLifecycleMeta) error {
+	return r.append("NOT_STARTED", meta)
+}
+
+func (r *recordingExecutionLifecycle) MarkUncertain(_ context.Context, meta effects.ExecutionLifecycleMeta) error {
+	return r.append("UNCERTAIN", meta)
+}
+
+func (r *recordingExecutionLifecycle) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.states...)
+}
 
 func validPermit() *effects.EffectPermit {
 	return permitFor("github.list_prs", "nonce-001", allowedParamsForTool("github.list_prs")...)
@@ -98,6 +134,25 @@ func TestNewConnector_CustomID(t *testing.T) {
 	}
 }
 
+func TestPermitScopeBindsExactGitHubWrite(t *testing.T) {
+	c := NewConnector(Config{ConnectorID: "github"})
+	effectType, scope, resourceRef, err := c.PermitScope("github.create_issue", map[string]any{
+		"repo": "owner/repo", "title": "Ship it", "labels": []any{"release"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effectType != effects.EffectTypeWrite || resourceRef != "owner/repo" || scope.AllowedAction != "github.create_issue" {
+		t.Fatalf("permit scope = type=%s resource=%q scope=%+v", effectType, resourceRef, scope)
+	}
+	joined := strings.Join(scope.AllowedParams, "|")
+	for _, exact := range []string{"repo=owner/repo", "title=Ship it", `labels=["release"]`} {
+		if !strings.Contains(joined, exact) {
+			t.Fatalf("exact permit scope %q missing %q", joined, exact)
+		}
+	}
+}
+
 func TestDispatch_AllTools(t *testing.T) {
 	c := NewConnector(Config{BaseURL: "https://api.github.com"})
 	ctx := context.Background()
@@ -178,6 +233,125 @@ func TestExecute_GateEnforcesDataClass(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "gate denied") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExecuteWithLifecycleMarksLastPreNetworkSeam(t *testing.T) {
+	lifecycle := &recordingExecutionLifecycle{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if states := lifecycle.snapshot(); len(states) != 1 || states[0] != "STARTED" {
+			t.Errorf("request reached GitHub before durable STARTED: %v", states)
+			http.Error(w, "missing durable start", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"number":11,"html_url":"https://github.test/owner/repo/issues/11"}`))
+	}))
+	defer server.Close()
+	connector := NewConnector(Config{BaseURL: server.URL, Token: "ghp-test"})
+	connector.client.httpClient = server.Client()
+	permit := permitFor("github.create_issue", "nonce-lifecycle-success", allowedParamsForTool("github.create_issue")...)
+	if _, err := connector.ExecuteWithLifecycle(context.Background(), permit, "github.create_issue", map[string]any{
+		"repo": "owner/repo", "title": "Lifecycle proof",
+	}, lifecycle); err != nil {
+		t.Fatalf("ExecuteWithLifecycle(): %v", err)
+	}
+	if states := lifecycle.snapshot(); len(states) != 1 || states[0] != "STARTED" {
+		t.Fatalf("success lifecycle states = %v, want STARTED", states)
+	}
+}
+
+func TestExecuteWithLifecycleDistinguishesNotStartedAndUncertain(t *testing.T) {
+	precheck := &recordingExecutionLifecycle{}
+	connector := NewConnector(Config{BaseURL: "https://api.github.com", Token: "ghp-test"})
+	wrongPermit := permitFor("github.create_issue", "nonce-lifecycle-precheck", allowedParamsForTool("github.create_issue")...)
+	wrongPermit.ConnectorID = "other"
+	if _, err := connector.ExecuteWithLifecycle(context.Background(), wrongPermit, "github.create_issue", map[string]any{
+		"repo": "owner/repo", "title": "Denied",
+	}, precheck); err == nil {
+		t.Fatal("expected precheck denial")
+	}
+	if states := precheck.snapshot(); len(states) != 1 || states[0] != "NOT_STARTED" {
+		t.Fatalf("precheck lifecycle states = %v, want NOT_STARTED", states)
+	}
+
+	clientPreflight := &recordingExecutionLifecycle{}
+	malformedRepoPermit := permitFor("github.create_issue", "nonce-lifecycle-client-preflight", allowedParamsForTool("github.create_issue")...)
+	malformedRepoPermit.ResourceRef = "malformed-repo"
+	if _, err := connector.ExecuteWithLifecycle(context.Background(), malformedRepoPermit, "github.create_issue", map[string]any{
+		"repo": "malformed-repo", "title": "Denied before HTTP",
+	}, clientPreflight); err == nil || !strings.Contains(err.Error(), "must be 'owner/name'") {
+		t.Fatalf("expected deterministic client preflight denial, got %v", err)
+	}
+	if states := clientPreflight.snapshot(); len(states) != 1 || states[0] != "NOT_STARTED" {
+		t.Fatalf("client preflight lifecycle states = %v, want NOT_STARTED", states)
+	}
+
+	baseURLPreflight := &recordingExecutionLifecycle{}
+	malformedBaseURLConnector := NewConnector(Config{BaseURL: "://malformed", Token: "ghp-test"})
+	malformedBaseURLPermit := permitFor("github.create_issue", "nonce-lifecycle-base-url", allowedParamsForTool("github.create_issue")...)
+	if _, err := malformedBaseURLConnector.ExecuteWithLifecycle(context.Background(), malformedBaseURLPermit, "github.create_issue", map[string]any{
+		"repo": "owner/repo", "title": "Denied before HTTP",
+	}, baseURLPreflight); err == nil || !strings.Contains(err.Error(), "invalid base URL") {
+		t.Fatalf("expected base URL preflight denial, got %v", err)
+	}
+	if states := baseURLPreflight.snapshot(); len(states) != 1 || states[0] != "NOT_STARTED" {
+		t.Fatalf("base URL preflight lifecycle states = %v, want NOT_STARTED", states)
+	}
+
+	uncertain := &recordingExecutionLifecycle{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream ambiguity", http.StatusBadGateway)
+	}))
+	defer server.Close()
+	connector = NewConnector(Config{BaseURL: server.URL, Token: "ghp-test"})
+	connector.client.httpClient = server.Client()
+	permit := permitFor("github.create_issue", "nonce-lifecycle-uncertain", allowedParamsForTool("github.create_issue")...)
+	if _, err := connector.ExecuteWithLifecycle(context.Background(), permit, "github.create_issue", map[string]any{
+		"repo": "owner/repo", "title": "Ambiguous",
+	}, uncertain); err == nil {
+		t.Fatal("expected dispatch error")
+	}
+	states := uncertain.snapshot()
+	if len(states) != 2 || states[0] != "STARTED" || states[1] != "UNCERTAIN" {
+		t.Fatalf("dispatch error lifecycle states = %v, want STARTED -> UNCERTAIN", states)
+	}
+}
+
+func TestExecuteWithLifecycleRejectsLossyParamsBeforeStart(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	connector := NewConnector(Config{BaseURL: server.URL, Token: "ghp-test"})
+	connector.client.httpClient = server.Client()
+
+	tests := []struct {
+		tool   string
+		nonce  string
+		params map[string]any
+	}{
+		{tool: "github.add_comment", nonce: "nonce-fractional-issue", params: map[string]any{
+			"repo": "owner/repo", "issue_number": 1.9, "body": "must not truncate",
+		}},
+		{tool: "github.create_issue", nonce: "nonce-mixed-labels", params: map[string]any{
+			"repo": "owner/repo", "title": "must not filter", "labels": []any{"bug", 7},
+		}},
+	}
+	for _, test := range tests {
+		lifecycle := &recordingExecutionLifecycle{}
+		permit := permitFor(test.tool, test.nonce, allowedParamsForTool(test.tool)...)
+		if _, err := connector.ExecuteWithLifecycle(context.Background(), permit, test.tool, test.params, lifecycle); err == nil {
+			t.Fatalf("%s accepted lossy params", test.tool)
+		}
+		if states := lifecycle.snapshot(); len(states) != 1 || states[0] != "NOT_STARTED" {
+			t.Fatalf("%s lifecycle states = %v, want NOT_STARTED", test.tool, states)
+		}
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("lossy params reached GitHub %d times", got)
 	}
 }
 
@@ -441,6 +615,14 @@ func TestIntParam_Float64(t *testing.T) {
 	}
 }
 
+func TestIntParamRejectsLossyJSONNumbers(t *testing.T) {
+	for _, value := range []any{float64(1.9), math.NaN(), math.Inf(1), math.Ldexp(1, strconv.IntSize-1)} {
+		if got, ok := intParam(map[string]any{"number": value}, "number"); ok {
+			t.Fatalf("intParam(%v) = %d,true; want rejection", value, got)
+		}
+	}
+}
+
 func TestIntParam_Int(t *testing.T) {
 	params := map[string]any{"number": 42}
 	v, ok := intParam(params, "number")
@@ -460,24 +642,30 @@ func TestIntParam_Missing(t *testing.T) {
 func TestStringSliceParam(t *testing.T) {
 	// []any is the common case from JSON decode
 	params := map[string]any{"labels": []any{"bug", "critical"}}
-	result := stringSliceParam(params, "labels")
-	if len(result) != 2 || result[0] != "bug" || result[1] != "critical" {
+	result, ok := stringSliceParam(params, "labels")
+	if !ok || len(result) != 2 || result[0] != "bug" || result[1] != "critical" {
 		t.Fatalf("stringSliceParam = %v, want [bug critical]", result)
 	}
 }
 
 func TestStringSliceParam_Native(t *testing.T) {
 	params := map[string]any{"labels": []string{"bug"}}
-	result := stringSliceParam(params, "labels")
-	if len(result) != 1 || result[0] != "bug" {
+	result, ok := stringSliceParam(params, "labels")
+	if !ok || len(result) != 1 || result[0] != "bug" {
 		t.Fatalf("stringSliceParam = %v, want [bug]", result)
 	}
 }
 
 func TestStringSliceParam_Missing(t *testing.T) {
 	params := map[string]any{}
-	result := stringSliceParam(params, "labels")
-	if result != nil {
+	result, ok := stringSliceParam(params, "labels")
+	if !ok || result != nil {
 		t.Fatalf("expected nil, got %v", result)
+	}
+}
+
+func TestStringSliceParamRejectsMixedArrays(t *testing.T) {
+	if result, ok := stringSliceParam(map[string]any{"labels": []any{"bug", 7}}, "labels"); ok || result != nil {
+		t.Fatalf("mixed labels = %v,%t; want rejection", result, ok)
 	}
 }

@@ -150,6 +150,7 @@ def verify_connector_authority(authority, outer):
         "workspace_id",
         "pack_id",
         "pack_version",
+        "connector_action",
         "connector_id",
         "connector_version",
         "release_scope_kind",

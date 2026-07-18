@@ -26,6 +26,89 @@ import (
 
 const testAdminAPIKey = "test-admin-key"
 
+var publicDocsContractExampleFixtures = map[string]*publicDocsExampleFixture{
+	"getPublicDemoHealth": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime",
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	},
+	"listReceipts": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime",
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	},
+	"tailReceipts": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime",
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "text/event-stream",
+		Cancel:                  true,
+	},
+	"getConsoleReceipt": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime",
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+		PathValues:              map[string]string{"receipt_id": "rcpt-test"},
+	},
+	"getBoundaryStatus": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime",
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	},
+	"exportEvidence": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestEvidenceExportAndVerifyRoundTrip",
+		RequestContentType:      "application/json",
+		Literal:                 map[string]any{"session_id": "agent.test", "format": "tar.gz"},
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/octet-stream",
+	},
+	"verifyEvidence": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestEvidenceExportAndVerifyRoundTrip",
+		RequestContentType:      "application/octet-stream",
+		File:                    "evidence-pack.tar.gz",
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	},
+	"listNegativeConformanceVectors": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime",
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	},
+	"listMcpRegistry": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime",
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	},
+	"scanMcpServer": {
+		SourceTest:         "core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime",
+		RequestContentType: "application/json",
+		Literal: map[string]any{
+			"server_id":  "docs-example-mcp",
+			"name":       "docs example MCP server",
+			"transport":  "stdio",
+			"endpoint":   "stdio://docs-example",
+			"tool_names": []any{"local.echo"},
+		},
+		WantStatus:              http.StatusAccepted,
+		WantResponseContentType: "application/json",
+	},
+	"authorizeMcpCall": {
+		SourceTest:              "core/cmd/helm-ai-kernel/contract_routes_test.go#TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow",
+		RequestContentType:      "application/json",
+		Literal:                 map[string]any{"server_id": "api-fixture", "tool_name": "local.missing", "args_hash": "sha256:unknown-tool"},
+		WantStatus:              http.StatusForbidden,
+		WantResponseContentType: "application/json",
+	},
+}
+
+func publicDocsContractExampleFixture(t *testing.T, operationID string) *publicDocsExampleFixture {
+	t.Helper()
+	fixture := publicDocsContractExampleFixtures[operationID]
+	if fixture == nil {
+		t.Fatalf("contract source-test fixture %q is missing", operationID)
+	}
+	return fixture
+}
+
 func TestContractRoutesServeDocumentedEvidenceProofgraphAndConformancePaths(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
@@ -72,86 +155,77 @@ func TestPublicDocsExamplesExerciseLocalRuntime(t *testing.T) {
 	registerContractRoutes(contractMux, svc)
 
 	cases := []struct {
+		operationID string
 		name        string
 		method      string
 		target      string
 		body        string
-		wantStatus  int
-		contentType string
-		cancel      bool
 	}{
 		{
+			operationID: "listReceipts",
 			name:        "list receipts",
 			method:      http.MethodGet,
 			target:      "/api/v1/receipts",
-			wantStatus:  http.StatusOK,
-			contentType: "application/json",
 		},
 		{
+			operationID: "tailReceipts",
 			name:        "tail receipts",
 			method:      http.MethodGet,
 			target:      "/api/v1/receipts/tail",
-			wantStatus:  http.StatusOK,
-			contentType: "text/event-stream",
-			cancel:      true,
 		},
 		{
+			operationID: "getConsoleReceipt",
 			name:        "get receipt by id",
 			method:      http.MethodGet,
 			target:      "/api/v1/receipts/rcpt-test",
-			wantStatus:  http.StatusOK,
-			contentType: "application/json",
 		},
 		{
+			operationID: "getBoundaryStatus",
 			name:        "read boundary status",
 			method:      http.MethodGet,
 			target:      "/api/v1/boundary/status",
-			wantStatus:  http.StatusOK,
-			contentType: "application/json",
 		},
 		{
+			operationID: "listNegativeConformanceVectors",
 			name:        "list negative conformance vectors",
 			method:      http.MethodGet,
 			target:      "/api/v1/conformance/negative",
-			wantStatus:  http.StatusOK,
-			contentType: "application/json",
 		},
 		{
+			operationID: "listMcpRegistry",
 			name:        "list mcp registry",
 			method:      http.MethodGet,
 			target:      "/api/v1/mcp/registry",
-			wantStatus:  http.StatusOK,
-			contentType: "application/json",
 		},
 		{
+			operationID: "scanMcpServer",
 			name:        "scan mcp server",
 			method:      http.MethodPost,
 			target:      "/api/v1/mcp/scan",
-			body:        `{"server_id":"docs-example-mcp","name":"docs example MCP server","transport":"stdio","endpoint":"stdio://docs-example","tool_names":["local.echo"]}`,
-			wantStatus:  http.StatusAccepted,
-			contentType: "application/json",
+			body:        string(publicDocsExampleFixtureJSON(t, publicDocsContractExampleFixture(t, "scanMcpServer"), nil)),
 		},
 	}
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
+			fixture := publicDocsContractExampleFixture(t, testCase.operationID)
 			req := httptest.NewRequest(testCase.method, testCase.target, strings.NewReader(testCase.body))
 			authorizeTestRequest(req)
 			if testCase.body != "" {
-				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Content-Type", fixture.RequestContentType)
 			}
-			if testCase.cancel {
+			if fixture.Cancel {
 				ctx, cancel := context.WithCancel(req.Context())
 				cancel()
 				req = req.WithContext(ctx)
 			}
 			rec := httptest.NewRecorder()
 			contractMux.ServeHTTP(rec, req)
-			if rec.Code != testCase.wantStatus {
-				t.Fatalf("status=%d want=%d body=%s", rec.Code, testCase.wantStatus, rec.Body.String())
+			if rec.Code != fixture.WantStatus {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, fixture.WantStatus, rec.Body.String())
 			}
-			if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, testCase.contentType) {
-				t.Fatalf("content type=%q want prefix %q", got, testCase.contentType)
+			if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, fixture.WantResponseContentType) {
+				t.Fatalf("content type=%q want prefix %q", got, fixture.WantResponseContentType)
 			}
 		})
 	}
@@ -165,10 +239,11 @@ func TestPublicDocsExamplesExerciseLocalRuntime(t *testing.T) {
 	healthReq := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	healthRec := httptest.NewRecorder()
 	demoMux.ServeHTTP(healthRec, healthReq)
-	if healthRec.Code != http.StatusOK {
+	healthFixture := publicDocsContractExampleFixture(t, "getPublicDemoHealth")
+	if healthRec.Code != healthFixture.WantStatus {
 		t.Fatalf("health status=%d body=%s", healthRec.Code, healthRec.Body.String())
 	}
-	if got := healthRec.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+	if got := healthRec.Header().Get("Content-Type"); !strings.HasPrefix(got, healthFixture.WantResponseContentType) {
 		t.Fatalf("health content type=%q", got)
 	}
 }
@@ -234,7 +309,7 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
 
-	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"agent.test","format":"tar.gz"}`))
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", bytes.NewReader(publicDocsExampleFixtureJSON(t, publicDocsContractExampleFixture(t, "exportEvidence"), nil)))
 	authorizeTestRequest(exportReq)
 	exportReq.Header.Set("Content-Type", "application/json")
 	exportRec := httptest.NewRecorder()
@@ -263,7 +338,7 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 				t.Helper()
 				var body bytes.Buffer
 				writer := multipart.NewWriter(&body)
-				file, err := writer.CreateFormFile("bundle", "evidence-pack.tar.gz")
+				file, err := writer.CreateFormFile("bundle", publicDocsExampleFixtureFile(t, publicDocsContractExampleFixture(t, "verifyEvidence")))
 				if err != nil {
 					t.Fatalf("create multipart evidence bundle: %v", err)
 				}
@@ -433,11 +508,7 @@ func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
 		t.Fatalf("approve status=%d body=%s", approveRec.Code, approveRec.Body.String())
 	}
 
-	unknownTool := postMCPAuthorizeForTest(t, mux, map[string]any{
-		"server_id": "api-fixture",
-		"tool_name": "local.missing",
-		"args_hash": "sha256:unknown-tool",
-	}, http.StatusForbidden)
+	unknownTool := postMCPAuthorizeForTest(t, mux, publicDocsExampleFixtureLiteral(publicDocsContractExampleFixture(t, "authorizeMcpCall")), http.StatusForbidden)
 	if unknownTool["verdict"] != "DENY" && unknownTool["verdict"] != "ESCALATE" {
 		t.Fatalf("unknown tool verdict = %+v", unknownTool)
 	}

@@ -353,6 +353,14 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	}
 }
 
+var publicDocsEvaluateFixture = &publicDocsExampleFixture{
+	SourceTest:              "core/cmd/helm-ai-kernel/receipt_routes_test.go#TestPublicDocsEvaluateExampleExercisesLocalRuntime",
+	RequestContentType:      "application/json",
+	Literal:                 map[string]any{"action": "EXECUTE_TOOL", "resource": "local.echo"},
+	WantStatus:              http.StatusOK,
+	WantResponseContentType: "application/json",
+}
+
 func TestPublicDocsEvaluateExampleExercisesLocalRuntime(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
@@ -361,7 +369,7 @@ func TestPublicDocsEvaluateExampleExercisesLocalRuntime(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(`{"action":"EXECUTE_TOOL","resource":"local.echo"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(publicDocsExampleFixtureJSON(t, publicDocsEvaluateFixture, nil)))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(tenantHeader, "tenant-trusted")

@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +21,8 @@ import (
 
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	"gopkg.in/yaml.v3"
 )
 
@@ -183,6 +189,7 @@ func TestPublicDocsOpenAPIContract(t *testing.T) {
 		}
 		assertPublicDocsExample(t, root, requirement, operation.DocsExample)
 	}
+	assertPublicDocsExamplesMatchSourceFixturesAndExerciseRuntime(t, spec)
 }
 
 type publicDocsManifest struct {
@@ -336,6 +343,359 @@ func assertPublicDocsExampleSource(t *testing.T, root, operationID, sourceTest s
 	if !regexp.MustCompile(`(?m)^func\s+` + regexp.QuoteMeta(sourceTestName) + `\s*\(`).Match(sourceTestData) {
 		t.Fatalf("%s docs example source_test symbol %q is not declared in %s", operationID, sourceTestName, sourceFile)
 	}
+}
+
+type publicDocsExampleFixture struct {
+	SourceTest              string
+	RequestContentType      string
+	Literal                 map[string]any
+	Bindings                map[string]publicDocsResponseBind
+	File                    string
+	WantStatus              int
+	WantResponseContentType string
+	PathValues              map[string]string
+	Cancel                  bool
+}
+
+type publicDocsExampleRoute struct {
+	Method    string
+	Path      string
+	Operation publicDocsOpenAPIOperation
+}
+
+type publicDocsExampleResponse struct {
+	Body []byte
+}
+
+var publicDocsExampleFixtures = map[string]*publicDocsExampleFixture{
+	"getPublicDemoHealth":            publicDocsContractExampleFixtures["getPublicDemoHealth"],
+	"runPublicDemo":                  publicDocsDemoRunFixture,
+	"verifyPublicDemoReceipt":        publicDocsDemoVerifyFixture,
+	"tamperPublicDemoReceipt":        publicDocsDemoTamperFixture,
+	"chatCompletions":                publicDocsOpenAIChatFixture,
+	"evaluateDecision":               publicDocsEvaluateFixture,
+	"listReceipts":                   publicDocsContractExampleFixtures["listReceipts"],
+	"tailReceipts":                   publicDocsContractExampleFixtures["tailReceipts"],
+	"getConsoleReceipt":              publicDocsContractExampleFixtures["getConsoleReceipt"],
+	"getBoundaryStatus":              publicDocsContractExampleFixtures["getBoundaryStatus"],
+	"exportEvidence":                 publicDocsContractExampleFixtures["exportEvidence"],
+	"verifyEvidence":                 publicDocsContractExampleFixtures["verifyEvidence"],
+	"listNegativeConformanceVectors": publicDocsContractExampleFixtures["listNegativeConformanceVectors"],
+	"listMcpRegistry":                publicDocsContractExampleFixtures["listMcpRegistry"],
+	"scanMcpServer":                  publicDocsContractExampleFixtures["scanMcpServer"],
+	"authorizeMcpCall":               publicDocsContractExampleFixtures["authorizeMcpCall"],
+}
+
+func publicDocsResponseBinding(method, path, jsonPath string) publicDocsResponseBind {
+	var binding publicDocsResponseBind
+	binding.FromResponse.Method = method
+	binding.FromResponse.Path = path
+	binding.FromResponse.JSONPath = jsonPath
+	return binding
+}
+
+func assertPublicDocsExamplesMatchSourceFixturesAndExerciseRuntime(t *testing.T, spec publicDocsOpenAPISpec) {
+	t.Helper()
+	routes := make(map[string]publicDocsExampleRoute)
+	for path, pathItem := range spec.Paths {
+		for method, operation := range pathItem {
+			if operation.DocsExample == nil {
+				continue
+			}
+			if operation.OperationID == "" {
+				t.Fatalf("OpenAPI docs example at %s %s has no operationId", strings.ToUpper(method), path)
+			}
+			if _, duplicate := routes[operation.OperationID]; duplicate {
+				t.Fatalf("duplicate OpenAPI docs example operationId %q", operation.OperationID)
+			}
+			routes[operation.OperationID] = publicDocsExampleRoute{Method: strings.ToUpper(method), Path: path, Operation: operation}
+		}
+	}
+	if got, want := len(routes), len(publicDocsExampleFixtures); got != want {
+		t.Fatalf("OpenAPI docs example count=%d, want %d source-test fixtures", got, want)
+	}
+	for operationID, fixture := range publicDocsExampleFixtures {
+		if fixture == nil {
+			t.Fatalf("source-test fixture %q is nil", operationID)
+		}
+		route, ok := routes[operationID]
+		if !ok {
+			t.Fatalf("source-test fixture %q has no OpenAPI docs example", operationID)
+		}
+		example := route.Operation.DocsExample
+		if example == nil || example.Request == nil {
+			t.Fatalf("%s is missing request metadata", operationID)
+		}
+		if got := example.SourceTest; got != fixture.SourceTest {
+			t.Fatalf("%s source_test=%q, want %q", operationID, got, fixture.SourceTest)
+		}
+		if got := example.Request.ContentType; got != fixture.RequestContentType {
+			t.Fatalf("%s content_type=%q, want source-test fixture %q", operationID, got, fixture.RequestContentType)
+		}
+		if !reflect.DeepEqual(example.Request.Literal, fixture.Literal) {
+			t.Fatalf("%s literal=%#v, want source-test fixture %#v", operationID, example.Request.Literal, fixture.Literal)
+		}
+		if !reflect.DeepEqual(example.Request.Bindings, fixture.Bindings) {
+			t.Fatalf("%s bindings=%#v, want source-test fixture %#v", operationID, example.Request.Bindings, fixture.Bindings)
+		}
+		if got := example.Request.File; got != fixture.File {
+			t.Fatalf("%s file=%q, want source-test fixture %q", operationID, got, fixture.File)
+		}
+	}
+	for operationID := range routes {
+		if _, ok := publicDocsExampleFixtures[operationID]; !ok {
+			t.Fatalf("OpenAPI docs example %q has no source-test fixture", operationID)
+		}
+	}
+
+	exercisePublicDocsOpenAPIExamples(t, routes)
+}
+
+func exercisePublicDocsOpenAPIExamples(t *testing.T, routes map[string]publicDocsExampleRoute) {
+	t.Helper()
+	responses := make(map[string]publicDocsExampleResponse)
+
+	signer, err := helmcrypto.NewEd25519Signer("public-docs-openapi-example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	demoMux := http.NewServeMux()
+	registerDemoRoutes(demoMux, &Services{ReceiptSigner: signer})
+	servePublicDocsOpenAPIExample(t, demoMux, publicDocsExampleRouteFor(t, routes, "getPublicDemoHealth"), responses, nil)
+	servePublicDocsOpenAPIExample(t, demoMux, publicDocsExampleRouteFor(t, routes, "runPublicDemo"), responses, nil)
+	servePublicDocsOpenAPIExample(t, demoMux, publicDocsExampleRouteFor(t, routes, "verifyPublicDemoReceipt"), responses, nil)
+	servePublicDocsOpenAPIExample(t, demoMux, publicDocsExampleRouteFor(t, routes, "tamperPublicDemoReceipt"), responses, nil)
+
+	openAIHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handleGovernedOpenAIProxy(w, r, &Services{EmergencyStops: &kernel.ScopedStopStore{}})
+	})
+	servePublicDocsOpenAPIExample(t, openAIHandler, publicDocsExampleRouteFor(t, routes, "chatCompletions"), responses, nil)
+
+	if !t.Run("evaluate metadata", func(t *testing.T) {
+		t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+		t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+		t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+		evaluateSvc, evaluateReceipts := newEvaluateRouteTestServices(t)
+		evaluateMux := http.NewServeMux()
+		registerReceiptRoutes(evaluateMux, evaluateSvc)
+		servePublicDocsOpenAPIExample(t, evaluateMux, publicDocsExampleRouteFor(t, routes, "evaluateDecision"), responses, func(req *http.Request) {
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+		})
+		if evaluateReceipts.stored == nil || evaluateReceipts.stored.ExecutorID != "principal-trusted" {
+			t.Fatalf("metadata-derived evaluate example did not bind the authenticated principal: %+v", evaluateReceipts.stored)
+		}
+	}) {
+		return
+	}
+
+	contractSvc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	contractMux := http.NewServeMux()
+	registerReceiptRoutes(contractMux, contractSvc)
+	registerContractRoutes(contractMux, contractSvc)
+	for _, operationID := range []string{
+		"listReceipts",
+		"tailReceipts",
+		"getConsoleReceipt",
+		"getBoundaryStatus",
+		"exportEvidence",
+		"verifyEvidence",
+		"listNegativeConformanceVectors",
+		"listMcpRegistry",
+		"scanMcpServer",
+	} {
+		servePublicDocsOpenAPIExample(t, contractMux, publicDocsExampleRouteFor(t, routes, operationID), responses, nil)
+	}
+	authorizeRoute := publicDocsExampleRouteFor(t, routes, "authorizeMcpCall")
+	preparePublicDocsMCPAuthorizeFixture(t, contractMux, authorizeRoute)
+	servePublicDocsOpenAPIExample(t, contractMux, authorizeRoute, responses, nil)
+}
+
+func publicDocsExampleRouteFor(t *testing.T, routes map[string]publicDocsExampleRoute, operationID string) publicDocsExampleRoute {
+	t.Helper()
+	route, ok := routes[operationID]
+	if !ok {
+		t.Fatalf("OpenAPI docs example %q is missing", operationID)
+	}
+	return route
+}
+
+func servePublicDocsOpenAPIExample(t *testing.T, handler http.Handler, route publicDocsExampleRoute, responses map[string]publicDocsExampleResponse, configure func(*http.Request)) {
+	t.Helper()
+	fixture := publicDocsExampleFixtureFor(t, route.Operation.OperationID)
+	body := publicDocsOpenAPIExampleRequestBody(t, route.Operation.DocsExample, responses)
+	req := httptest.NewRequest(route.Method, publicDocsExamplePath(t, route.Path, fixture), body)
+	authorizeTestRequest(req)
+	if contentType := route.Operation.DocsExample.Request.ContentType; contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	if configure != nil {
+		configure(req)
+	}
+	if fixture.Cancel {
+		ctx, cancel := context.WithCancel(req.Context())
+		cancel()
+		req = req.WithContext(ctx)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != fixture.WantStatus {
+		t.Fatalf("%s metadata-derived request status=%d, want=%d body=%s", route.Operation.OperationID, rec.Code, fixture.WantStatus, rec.Body.String())
+	}
+	if fixture.WantResponseContentType != "" && !strings.HasPrefix(rec.Header().Get("Content-Type"), fixture.WantResponseContentType) {
+		t.Fatalf("%s metadata-derived response content_type=%q, want prefix %q", route.Operation.OperationID, rec.Header().Get("Content-Type"), fixture.WantResponseContentType)
+	}
+	responses[route.Method+" "+route.Path] = publicDocsExampleResponse{Body: append([]byte(nil), rec.Body.Bytes()...)}
+}
+
+func publicDocsOpenAPIExampleRequestBody(t *testing.T, example *publicDocsOpenAPIExample, responses map[string]publicDocsExampleResponse) io.Reader {
+	t.Helper()
+	if example == nil || example.Request == nil {
+		t.Fatal("OpenAPI docs example is missing request metadata")
+	}
+	if example.Request.File != "" {
+		response, ok := responses[http.MethodPost+" /api/v1/evidence/export"]
+		if !ok || len(response.Body) == 0 {
+			t.Fatalf("docs example file %q has no in-memory EvidencePack source", example.Request.File)
+		}
+		return bytes.NewReader(response.Body)
+	}
+	body := clonePublicDocsLiteral(example.Request.Literal)
+	for name, binding := range example.Request.Bindings {
+		response, ok := responses[binding.FromResponse.Method+" "+binding.FromResponse.Path]
+		if !ok {
+			t.Fatalf("docs example binding %q has no response for %s %s", name, binding.FromResponse.Method, binding.FromResponse.Path)
+		}
+		body[name] = publicDocsResponseJSONPath(t, response.Body, binding.FromResponse.JSONPath)
+	}
+	if len(body) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("encode metadata-derived docs request: %v", err)
+	}
+	return bytes.NewReader(encoded)
+}
+
+func publicDocsResponseJSONPath(t *testing.T, body []byte, jsonPath string) any {
+	t.Helper()
+	if !strings.HasPrefix(jsonPath, "$.") {
+		t.Fatalf("unsupported docs response JSON path %q", jsonPath)
+	}
+	var value any
+	if err := json.Unmarshal(body, &value); err != nil {
+		t.Fatalf("decode docs response for JSON path %q: %v", jsonPath, err)
+	}
+	for _, segment := range strings.Split(strings.TrimPrefix(jsonPath, "$."), ".") {
+		object, ok := value.(map[string]any)
+		if !ok {
+			t.Fatalf("docs response JSON path %q traverses non-object %T", jsonPath, value)
+		}
+		var found bool
+		value, found = object[segment]
+		if !found {
+			t.Fatalf("docs response JSON path %q is missing segment %q", jsonPath, segment)
+		}
+	}
+	return value
+}
+
+func publicDocsExamplePath(t *testing.T, path string, fixture *publicDocsExampleFixture) string {
+	t.Helper()
+	for name, value := range fixture.PathValues {
+		path = strings.ReplaceAll(path, "{"+name+"}", value)
+	}
+	if strings.Contains(path, "{") {
+		t.Fatalf("docs example path %q has an unbound parameter", path)
+	}
+	return path
+}
+
+func preparePublicDocsMCPAuthorizeFixture(t *testing.T, mux *http.ServeMux, route publicDocsExampleRoute) {
+	t.Helper()
+	literal := clonePublicDocsLiteral(route.Operation.DocsExample.Request.Literal)
+	serverID, ok := literal["server_id"].(string)
+	if !ok || serverID == "" {
+		t.Fatalf("authorizeMcpCall docs example has no server_id literal")
+	}
+	discoverBody, err := json.Marshal(map[string]any{"server_id": serverID, "tool_names": []string{"local.echo"}, "risk": "high"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	discoverReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry", bytes.NewReader(discoverBody))
+	authorizeTestRequest(discoverReq)
+	discoverReq.Header.Set("Content-Type", "application/json")
+	discoverRec := httptest.NewRecorder()
+	mux.ServeHTTP(discoverRec, discoverReq)
+	if discoverRec.Code != http.StatusAccepted {
+		t.Fatalf("metadata-derived MCP prerequisite discovery status=%d body=%s", discoverRec.Code, discoverRec.Body.String())
+	}
+	approveBody := []byte(`{"approver_id":"user:docs","approval_receipt_id":"docs-approval","reason":"fixture prerequisite","tool_names":["local.echo"]}`)
+	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/"+serverID+"/approve", bytes.NewReader(approveBody))
+	authorizeTestRequest(approveReq)
+	approveReq.Header.Set("Content-Type", "application/json")
+	approveRec := httptest.NewRecorder()
+	mux.ServeHTTP(approveRec, approveReq)
+	if approveRec.Code != http.StatusOK {
+		t.Fatalf("metadata-derived MCP prerequisite approval status=%d body=%s", approveRec.Code, approveRec.Body.String())
+	}
+}
+
+func publicDocsExampleFixtureFor(t *testing.T, operationID string) *publicDocsExampleFixture {
+	t.Helper()
+	fixture, ok := publicDocsExampleFixtures[operationID]
+	if !ok || fixture == nil {
+		t.Fatalf("source-test fixture %q is missing", operationID)
+	}
+	return fixture
+}
+
+func publicDocsExampleFixtureLiteral(fixture *publicDocsExampleFixture) map[string]any {
+	if fixture == nil {
+		return nil
+	}
+	return clonePublicDocsLiteral(fixture.Literal)
+}
+
+func publicDocsExampleFixtureJSON(t *testing.T, fixture *publicDocsExampleFixture, bindings map[string]any) []byte {
+	t.Helper()
+	if fixture == nil {
+		t.Fatal("source-test fixture is nil")
+	}
+	body := publicDocsExampleFixtureLiteral(fixture)
+	for name, value := range bindings {
+		body[name] = value
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("encode source-test fixture %q: %v", fixture.SourceTest, err)
+	}
+	return encoded
+}
+
+func publicDocsExampleFixtureFile(t *testing.T, fixture *publicDocsExampleFixture) string {
+	t.Helper()
+	if fixture == nil {
+		t.Fatal("source-test fixture is nil")
+	}
+	file := fixture.File
+	if file == "" {
+		t.Fatalf("source-test fixture %q has no file", fixture.SourceTest)
+	}
+	return file
+}
+
+func clonePublicDocsLiteral(literal map[string]any) map[string]any {
+	if len(literal) == 0 {
+		return make(map[string]any)
+	}
+	clone := make(map[string]any, len(literal))
+	for name, value := range literal {
+		clone[name] = value
+	}
+	return clone
 }
 
 func openAPIRepositoryRoot(t *testing.T) string {

@@ -10,6 +10,13 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 )
 
+var publicDocsOpenAIChatFixture = &publicDocsExampleFixture{
+	SourceTest:         "core/cmd/helm-ai-kernel/subsystems_openai_test.go#TestGovernedOpenAIProxyUnavailableWhenScopedFenceEnabled",
+	RequestContentType: "application/json",
+	Literal:            map[string]any{"model": "gpt-test", "messages": []any{}},
+	WantStatus:         http.StatusServiceUnavailable,
+}
+
 func TestReadGovernedOpenAIRequestResetsBody(t *testing.T) {
 	body := []byte(`{"model":"gpt-test","messages":[]}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
@@ -47,7 +54,7 @@ func TestReadGovernedOpenAIRequestRejectsOversize(t *testing.T) {
 }
 
 func TestGovernedOpenAIProxyUnavailableWhenScopedFenceEnabled(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-test","messages":[]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(publicDocsExampleFixtureJSON(t, publicDocsOpenAIChatFixture, nil)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 

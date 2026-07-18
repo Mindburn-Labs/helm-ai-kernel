@@ -55,6 +55,11 @@ elif [[ -e "$SENTINEL_PATH" ]]; then
 fi
 
 mkdir -p "$(dirname "$SENTINEL_PATH")"
+if [[ "$SENTINEL_STATE" == "symlink" ]]; then
+  # Shell redirection follows a symlink. Remove the link first so the
+  # sentinel never mutates its pre-existing target; cleanup recreates it.
+  rm -f "$SENTINEL_PATH"
+fi
 printf '%s\n' "$SENTINEL_CONTENT" > "$SENTINEL_PATH"
 chmod 700 "$SENTINEL_PATH"
 

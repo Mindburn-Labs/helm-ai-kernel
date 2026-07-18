@@ -162,10 +162,11 @@ func runServerWithOptions(opts serverOptions) {
 	}
 
 	var (
-		db           *sql.DB
-		receiptStore store.ReceiptStore
-		err          error
-		databaseMode = "sqlite"
+		db                    *sql.DB
+		receiptStore          store.ReceiptStore
+		principalBindingStore store.PrincipalBindingStore
+		err                   error
+		databaseMode          = "sqlite"
 	)
 
 	// 0.2 Connect to Database (Infrastructure)
@@ -180,6 +181,10 @@ func runServerWithOptions(opts serverOptions) {
 		}
 		if err != nil {
 			log.Fatalf("Failed to setup Lite Mode: %v", err)
+		}
+		principalBindingStore, err = store.NewSQLitePrincipalBindingStore(db)
+		if err != nil {
+			log.Fatalf("Failed to init sqlite principal binding store: %v", err)
 		}
 	} else {
 		databaseMode = "postgres"
@@ -209,6 +214,11 @@ func runServerWithOptions(opts serverOptions) {
 			log.Fatalf("Failed to init receipt store: %v", err)
 		}
 		receiptStore = ps
+		pbs, pbErr := store.NewPostgresPrincipalBindingStore(db)
+		if pbErr != nil {
+			log.Fatalf("Failed to init postgres principal binding store: %v", pbErr)
+		}
+		principalBindingStore = pbs
 	}
 
 	// 1. Initialize Kernel Layers
@@ -356,6 +366,7 @@ func runServerWithOptions(opts serverOptions) {
 		services.Guardian = guard
 		services.ReceiptStore = receiptStore
 		services.ReceiptSigner = signer
+		services.PrincipalBindings = principalBindingStore
 		services.PolicyReconciler = policyReconciler
 		services.PolicySnapshotStore = policyStore
 		services.PolicyScope = policyScope
@@ -381,6 +392,7 @@ func runServerWithOptions(opts serverOptions) {
 			RegisterSubsystemRoutes(mux, services)
 			RegisterConsoleRoutes(mux, services, opts)
 			RegisterLocalFirstRunRoutes(mux, services, opts)
+			RegisterPrincipalBindingRoutes(mux, services, opts)
 		}
 	}
 

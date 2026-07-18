@@ -294,12 +294,40 @@ func (s *PostgresStore) transitionEffectReservation(
 		return EffectReservationEvent{}, ErrEffectReservationConflict
 	}
 	var now time.Time
-	if err := tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return EffectReservationEvent{}, fmt.Errorf("read effect transition database clock: %w", err)
-	}
-	now = now.UTC().Truncate(time.Microsecond)
-	if state == EffectReservationStateStarted && !now.Before(current.Admission.Admission.ExpiresAt) {
-		return EffectReservationEvent{}, fmt.Errorf("%w: dispatch admission expired before connector start", ErrEffectReservationConflict)
+	if state == EffectReservationStateStarted {
+		fenced, fenceErr := approvalScopeFenced(ctx, tx, identity.TenantID, identity.WorkspaceID)
+		if fenceErr != nil {
+			return EffectReservationEvent{}, effectReservationStartDenied(fenceErr)
+		}
+		if fenced {
+			return EffectReservationEvent{}, effectReservationStartDenied(ErrEmergencyStopFenced)
+		}
+		authority := current.Admission.Admission.ConnectorAuthority
+		lookup := connectorregistry.ReleaseAuthorityLookup{
+			ScopeKind: authority.ReleaseScopeKind, ConnectorID: authority.ConnectorID, ConnectorVersion: authority.ConnectorVersion,
+		}
+		if authority.ReleaseScopeKind == contracts.ConnectorReleaseAuthorityScopeWorkspace {
+			lookup.TenantID = identity.TenantID
+			lookup.WorkspaceID = identity.WorkspaceID
+		}
+		currentRelease, observedAt, releaseErr := releaseAuthorities.LockCurrentCertifiedForEffectAdmission(ctx, tx, lookup)
+		if releaseErr != nil {
+			return EffectReservationEvent{}, effectReservationStartDenied(releaseErr)
+		}
+		if releaseErr := authority.ValidateCurrentRelease(currentRelease.Authority); releaseErr != nil {
+			return EffectReservationEvent{}, effectReservationStartDenied(releaseErr)
+		}
+		now = observedAt
+		if !now.Before(current.Admission.Admission.ExpiresAt) {
+			return EffectReservationEvent{}, effectReservationStartDenied(fmt.Errorf(
+				"%w: dispatch admission expired before connector start", ErrEffectReservationConflict,
+			))
+		}
+	} else {
+		if err := tx.QueryRowContext(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+			return EffectReservationEvent{}, fmt.Errorf("read effect transition database clock: %w", err)
+		}
+		now = now.UTC().Truncate(time.Microsecond)
 	}
 	if current.State == EffectReservationStateStarted && state == EffectReservationStateUncertain {
 		var mergeErr error
@@ -355,6 +383,10 @@ func preserveEffectReference(existing, proposed string, allowAddition bool) (str
 		return "", ErrEffectReservationConflict
 	}
 	return proposed, nil
+}
+
+func effectReservationStartDenied(cause error) error {
+	return errors.Join(ErrEffectReservationStartDenied, cause)
 }
 
 func (s *PostgresStore) listActiveEffectReservations(

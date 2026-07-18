@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,7 @@ type fakeEffectReservationBoundary struct {
 	mu             sync.Mutex
 	current        approvalceremony.EffectReservationEvent
 	states         []approvalceremony.EffectReservationState
+	failStart      error
 	failNotStarted bool
 }
 
@@ -50,6 +52,9 @@ func (f *fakeEffectReservationBoundary) Recover(_ context.Context, admissionID s
 }
 
 func (f *fakeEffectReservationBoundary) MarkStarted(_ context.Context, admissionID string, meta approvalceremony.EffectTransitionMeta) (approvalceremony.EffectReservationEvent, error) {
+	if f.failStart != nil {
+		return approvalceremony.EffectReservationEvent{}, f.failStart
+	}
 	return f.transition(admissionID, approvalceremony.EffectReservationStateStarted, meta)
 }
 
@@ -550,6 +555,60 @@ func TestGovernedBridgeExecutesRealGitHubConnectorAfterDurableStart(t *testing.T
 	reservations.mu.Unlock()
 	if len(states) != 2 || states[0] != approvalceremony.EffectReservationStateAdmitted || states[1] != approvalceremony.EffectReservationStateStarted {
 		t.Fatalf("real GitHub reservation states = %v, want ADMITTED -> STARTED", states)
+	}
+}
+
+func TestGovernedBridgeStartInterlockDenialNeverInvokesGitHub(t *testing.T) {
+	req := &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "github.create_issue",
+		Arguments:   map[string]any{"repo": "owner/repo", "title": "Must not dispatch"},
+		PrincipalID: "ve-assistant",
+	}
+	inputHash, err := canonicalize.CanonicalHash(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission := approvalceremony.DispatchAdmissionRecord{Admission: contracts.ApprovalDispatchAdmission{
+		AdmissionID: "dispatch-admission-start-denied", AdmissionHash: "admission-hash-start-denied", EffectHash: inputHash,
+		ConnectorAuthority: contracts.ApprovalConnectorAuthority{ConnectorID: "github", ConnectorAction: req.ToolName},
+	}}
+	approvals := NewMemoryApprovalStore()
+	approvals.Grant(inputHash, ApprovalEvidence{
+		ApproverID: "ivan", ApprovalHash: admission.Admission.AdmissionHash, GrantedScope: req.ToolName,
+		DispatchAdmission: &admission,
+	})
+	reservations := &fakeEffectReservationBoundary{failStart: errors.Join(
+		approvalceremony.ErrEffectReservationStartDenied,
+		approvalceremony.ErrEmergencyStopFenced,
+	)}
+	var networkCalls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		networkCalls.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	connector := githubconnector.NewConnector(githubconnector.Config{
+		BaseURL: server.URL, ConnectorID: "github", Token: "test-token",
+	})
+	adapter, _ := newAdapter(t, BridgeConfig{
+		Profile: operateProfile(), Approvals: approvals, Connector: connector,
+		EffectReservations: reservations, Now: func() time.Time { return time.Now().UTC() },
+	})
+	response, err := adapter.Intercept(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Allowed {
+		t.Fatalf("start-interlocked write was allowed: %+v", response)
+	}
+	if got := networkCalls.Load(); got != 0 {
+		t.Fatalf("start-interlocked write reached GitHub %d times", got)
+	}
+	reservations.mu.Lock()
+	states := append([]approvalceremony.EffectReservationState(nil), reservations.states...)
+	reservations.mu.Unlock()
+	if len(states) != 2 || states[0] != approvalceremony.EffectReservationStateAdmitted || states[1] != approvalceremony.EffectReservationStateNotStarted {
+		t.Fatalf("start-interlocked reservation states = %v, want ADMITTED -> NOT_STARTED", states)
 	}
 }
 

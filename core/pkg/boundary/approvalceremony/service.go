@@ -122,6 +122,9 @@ func newService(store ceremonyStore, bindings BindingProvider, authority Authori
 }
 
 func (s *Service) BeginHold(ctx context.Context, bindingRef string) (Record, error) {
+	if ctx == nil {
+		return Record{}, fmt.Errorf("%w: context is required", ErrControlUnavailable)
+	}
 	if !validToken(bindingRef) {
 		return Record{}, invalidRecord("binding_ref is required")
 	}
@@ -130,7 +133,7 @@ func (s *Service) BeginHold(ctx context.Context, bindingRef string) (Record, err
 		return Record{}, err
 	}
 	spec, err := s.bindings.LoadApprovalBinding(
-		ctx, identity.TenantID, identity.WorkspaceID, bindingRef,
+		withBindingControlIdentity(ctx, identity), identity.TenantID, identity.WorkspaceID, bindingRef,
 	)
 	if err != nil {
 		return Record{}, fmt.Errorf("%w: %v", ErrBindingUnavailable, err)

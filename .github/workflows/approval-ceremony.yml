@@ -13,6 +13,9 @@ on:
       - "core/pkg/canonicalize/**"
       - "core/pkg/contracts/**"
       - "core/pkg/crypto/**"
+      - "core/pkg/effects/**"
+      - "core/pkg/runtimeadapters/mcp/**"
+      - "core/pkg/connectors/github/**"
       - "core/pkg/registry/connectors/**"
       - "reference_packs/approval/**"
       - "reference_packs/connector-release-authority-v1/**"
@@ -30,6 +33,9 @@ on:
       - "core/pkg/canonicalize/**"
       - "core/pkg/contracts/**"
       - "core/pkg/crypto/**"
+      - "core/pkg/effects/**"
+      - "core/pkg/runtimeadapters/mcp/**"
+      - "core/pkg/connectors/github/**"
       - "core/pkg/registry/connectors/**"
       - "reference_packs/approval/**"
       - "reference_packs/connector-release-authority-v1/**"
@@ -72,3 +78,5 @@ jobs:
         run: make test-approval-ceremony-postgres
       - name: Prove connector authority append-only isolation and ordering
         run: make test-connector-release-authority-postgres
+      - name: Prove effect reservation fence and revocation ordering
+        run: make test-effect-reservation-postgres

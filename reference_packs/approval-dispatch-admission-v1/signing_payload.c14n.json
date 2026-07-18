@@ -1,1 +1,1 @@
-{"admission_hash":"sha256:264029036f34ab84827910a4cf6eeb1cc5ef65fa2e0cfe6059d0b465a5804b2b","algorithm":"ed25519","contract_version":"2026-07-17.1","domain":"HELM/ApprovalDispatchAdmissionSignature/v1","kernel_trust_root_id":"kernel-root-a","signing_key_ref":"kms://helm/approval-a"}
+{"admission_hash":"sha256:597b241d4f98df139992d374aabfc186c40895ee0885f500d891a980f6d74772","algorithm":"ed25519","contract_version":"2026-07-17.1","domain":"HELM/ApprovalDispatchAdmissionSignature/v1","kernel_trust_root_id":"kernel-root-a","signing_key_ref":"kms://helm/approval-a"}

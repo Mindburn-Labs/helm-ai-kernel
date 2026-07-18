@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -18,9 +19,10 @@ import (
 )
 
 type recordingExecutionLifecycle struct {
-	mu     sync.Mutex
-	states []string
-	meta   []effects.ExecutionLifecycleMeta
+	mu       sync.Mutex
+	states   []string
+	meta     []effects.ExecutionLifecycleMeta
+	startErr error
 }
 
 func (r *recordingExecutionLifecycle) append(state string, meta effects.ExecutionLifecycleMeta) error {
@@ -32,6 +34,9 @@ func (r *recordingExecutionLifecycle) append(state string, meta effects.Executio
 }
 
 func (r *recordingExecutionLifecycle) MarkStarted(_ context.Context, meta effects.ExecutionLifecycleMeta) error {
+	if r.startErr != nil {
+		return r.startErr
+	}
 	return r.append("STARTED", meta)
 }
 
@@ -315,6 +320,32 @@ func TestExecuteWithLifecycleDistinguishesNotStartedAndUncertain(t *testing.T) {
 	states := uncertain.snapshot()
 	if len(states) != 2 || states[0] != "STARTED" || states[1] != "UNCERTAIN" {
 		t.Fatalf("dispatch error lifecycle states = %v, want STARTED -> UNCERTAIN", states)
+	}
+}
+
+func TestExecuteWithLifecycleResolvesAuthoritativeStartDenialWithoutNetwork(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	connector := NewConnector(Config{BaseURL: server.URL, Token: "ghp-test"})
+	connector.client.httpClient = server.Client()
+	lifecycle := &recordingExecutionLifecycle{
+		startErr: errors.Join(effects.ErrExecutionStartDenied, errors.New("scope fenced")),
+	}
+	permit := permitFor("github.create_issue", "nonce-start-interlock", allowedParamsForTool("github.create_issue")...)
+	if _, err := connector.ExecuteWithLifecycle(context.Background(), permit, "github.create_issue", map[string]any{
+		"repo": "owner/repo", "title": "Must not dispatch",
+	}, lifecycle); err == nil || !errors.Is(err, effects.ErrExecutionStartDenied) {
+		t.Fatalf("authoritative start denial error = %v", err)
+	}
+	if states := lifecycle.snapshot(); len(states) != 1 || states[0] != "NOT_STARTED" {
+		t.Fatalf("start denial lifecycle states = %v, want NOT_STARTED", states)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("start-denied execution reached GitHub %d times", got)
 	}
 }
 

@@ -58,6 +58,21 @@ PUBLIC_HTTP_API_SLUG = 'reference/http-api'
 PUBLIC_HTTP_API_SOURCE_PATH = 'docs/reference/http-api.md'
 SHA256_DIGEST_RE = re.compile(r'^sha256:[0-9a-f]{64}$')
 GIT_BLOB_SHA1_RE = re.compile(r'^[0-9a-f]{40}$')
+PUBLIC_DOC_TAXONOMY_VOCABULARIES = {
+    'category': 'categories',
+    'task': 'tasks',
+    'audience': 'audiences',
+    'publication_status': 'publication_statuses',
+    'runtime_scope': 'runtime_scopes',
+}
+REQUIRED_PUBLIC_DOC_METADATA = (
+    'category',
+    'tasks',
+    'audiences',
+    'publication_status',
+    'runtime_scope',
+    'inbound_human_path',
+)
 
 
 def expected_repo_name() -> str:
@@ -311,6 +326,119 @@ def validate_public_api_contract(failures: list[str], manifest: dict) -> None:
             )
 
 
+def validate_public_docs_taxonomy(failures: list[str], manifest: dict, documents: list[dict]) -> None:
+    taxonomy = manifest.get('taxonomy')
+    if not isinstance(taxonomy, dict):
+        failures.append('docs/public-docs.manifest.json taxonomy is missing')
+        return
+    if taxonomy.get('schema_version') != 1:
+        failures.append('docs/public-docs.manifest.json taxonomy schema_version must be 1')
+
+    metadata = taxonomy.get('document_metadata')
+    if not isinstance(metadata, dict):
+        failures.append('docs/public-docs.manifest.json taxonomy document_metadata is missing')
+    else:
+        for field in REQUIRED_PUBLIC_DOC_METADATA:
+            if not isinstance(metadata.get(field), str) or not metadata[field].strip():
+                failures.append(
+                    'docs/public-docs.manifest.json taxonomy document_metadata '
+                    f'must document {field}'
+                )
+
+    vocabularies: dict[str, set[str]] = {}
+    for field, taxonomy_key in PUBLIC_DOC_TAXONOMY_VOCABULARIES.items():
+        entries = taxonomy.get(taxonomy_key)
+        if not isinstance(entries, list) or not entries:
+            failures.append(
+                f'docs/public-docs.manifest.json taxonomy {taxonomy_key} must be a non-empty list'
+            )
+            vocabularies[field] = set()
+            continue
+        ids: set[str] = set()
+        for entry in entries:
+            if not isinstance(entry, dict):
+                failures.append(
+                    f'docs/public-docs.manifest.json taxonomy {taxonomy_key} entries must be objects'
+                )
+                continue
+            identifier = str(entry.get('id') or '').strip()
+            label = str(entry.get('label') or '').strip()
+            description = str(entry.get('description') or '').strip()
+            if not identifier or not label or not description:
+                failures.append(
+                    f'docs/public-docs.manifest.json taxonomy {taxonomy_key} entries need id, label, and description'
+                )
+                continue
+            if identifier in ids:
+                failures.append(
+                    f'docs/public-docs.manifest.json taxonomy {taxonomy_key} has duplicate id: {identifier}'
+                )
+            ids.add(identifier)
+        vocabularies[field] = ids
+
+    slugs = {str(document.get('slug') or '').strip() for document in documents}
+    for document in documents:
+        slug = str(document.get('slug') or '').strip() or '<blank-slug>'
+        category = document.get('category')
+        if not isinstance(category, str) or category not in vocabularies['category']:
+            failures.append(
+                f'docs/public-docs.manifest.json slug {slug} must set category from taxonomy categories'
+            )
+
+        for field, vocabulary_field in (('tasks', 'task'), ('audiences', 'audience')):
+            values = document.get(field)
+            if not isinstance(values, list) or not values:
+                failures.append(
+                    f'docs/public-docs.manifest.json slug {slug} must set non-empty {field}'
+                )
+                continue
+            if not all(isinstance(value, str) and value for value in values):
+                failures.append(
+                    f'docs/public-docs.manifest.json slug {slug} {field} must contain non-empty strings'
+                )
+                continue
+            if len(values) != len(set(values)):
+                failures.append(
+                    f'docs/public-docs.manifest.json slug {slug} has duplicate {field}'
+                )
+            for value in values:
+                if value not in vocabularies[vocabulary_field]:
+                    failures.append(
+                        f'docs/public-docs.manifest.json slug {slug} has unknown {field} value: {value!r}'
+                    )
+
+        for field in ('publication_status', 'runtime_scope'):
+            value = document.get(field)
+            if not isinstance(value, str) or value not in vocabularies[field]:
+                failures.append(
+                    f'docs/public-docs.manifest.json slug {slug} must set {field} from taxonomy'
+                )
+
+        path = document.get('inbound_human_path')
+        if not isinstance(path, list) or not path or not all(isinstance(part, str) and part for part in path):
+            failures.append(
+                f'docs/public-docs.manifest.json slug {slug} must set non-empty inbound_human_path'
+            )
+            continue
+        if len(path) != len(set(path)):
+            failures.append(
+                f'docs/public-docs.manifest.json slug {slug} inbound_human_path has duplicate slugs'
+            )
+        if path[0] != 'index':
+            failures.append(
+                f'docs/public-docs.manifest.json slug {slug} inbound_human_path must start at index'
+            )
+        if path[-1] != slug:
+            failures.append(
+                f'docs/public-docs.manifest.json slug {slug} inbound_human_path must end at its slug'
+            )
+        for path_slug in path:
+            if path_slug not in slugs:
+                failures.append(
+                    f'docs/public-docs.manifest.json slug {slug} inbound_human_path references unknown slug: {path_slug}'
+                )
+
+
 def validate_sdk_freshness_docs(failures: list[str]) -> None:
     version_path = ROOT / 'VERSION'
     if not version_path.exists():
@@ -487,6 +615,7 @@ def main() -> int:
             if not (ROOT / source_path).exists():
                 failures.append(f'docs/public-docs.manifest.json source does not exist for {slug}: {source_path}')
         public_slugs = slugs
+        validate_public_docs_taxonomy(failures, manifest, documents)
         validate_public_api_contract(failures, manifest)
 
     validate_source_inventory(failures, public_slugs)

@@ -84,10 +84,12 @@ The migration connection must pin `search_path` to a deployment-owned schema.
 Runtime diagnostics may call `LoadCurrent`. Non-effecting planning may call
 `LoadCurrentCertified`, which verifies validity against the database clock
 rather than caller-supplied time. Neither method authorizes connector start.
-This slice deliberately does not expose a callback-based effect gate: connector
-start still requires a separate durable, idempotent admission reservation with
-structured `not-started`, `started`, and `uncertain` outcomes, plus active-work
-disposition and reconciliation. That boundary remains a production gate.
+`LockCurrentCertifiedForEffectAdmission` is the transaction-composition seam
+used only by the durable effect reservation boundary: it takes the shared
+exact-release lock, verifies the current head and database time, and leaves the
+caller responsible for appending `ADMITTED` before commit. It does not run a
+callback or start a connector. See
+`docs/operations/effect-reservation.md`.
 
 ## Portable verification
 
@@ -110,9 +112,6 @@ includes two signed statements and thirteen negative mutations.
 - a source-owned signing/import path with audited trust-root rotation;
 - a production approval `BindingProvider` that derives approval connector
   authority only from the verified current certified release;
-- transactionally ordered revocation versus a durable, idempotent dispatch
-  admission reservation;
-- Data Plane atomic admission persistence and near-effect current-state checks
-  with explicit effect-start uncertainty semantics;
-- active-work disposition, close/uncertainty evidence, connector ACK, and
-  controlled deployment proof.
+- deployment wiring for the implemented durable effect reservation boundary;
+- active-work disposition beyond listing, source connector ACK, signed close
+  evidence, and controlled deployment proof.

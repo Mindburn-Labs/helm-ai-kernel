@@ -44,6 +44,9 @@ func TestApprovalConnectorAuthorityRejectsUncertifiedOrIncompleteRelease(t *test
 		"candidate state":       func(a *ApprovalConnectorAuthority) { a.State = "candidate" },
 		"missing release scope": func(a *ApprovalConnectorAuthority) { a.ReleaseScopeKind = "" },
 		"missing authority id":  func(a *ApprovalConnectorAuthority) { a.ReleaseAuthorityID = "" },
+		"missing connector action": func(a *ApprovalConnectorAuthority) {
+			a.ConnectorAction = ""
+		},
 		"zero registry revision": func(a *ApprovalConnectorAuthority) {
 			a.ReleaseRegistryRevision = 0
 		},

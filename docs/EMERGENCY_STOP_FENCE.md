@@ -82,18 +82,21 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
   FENCE-first denies new admission; admission-first creates a pre-FENCE
   admitted record even when its signed state is still `NOT_STARTED`. Exact
   replay returns the original record without extending expiry; changed
-  bindings conflict. The current slice has no close transitions, active-work
-  listing/disposition API, or renewal after expiry.
+  bindings conflict. The separate internal effect reservation stream can now
+  order an explicitly wired connector start against FENCE and expose active
+  `ADMITTED / STARTED / UNCERTAIN` work, but it has no disposition command,
+  source-acknowledged close, or renewal after expiry.
 - This Kernel gate does not by itself enforce the connector boundary. Merge,
   deploy, and production claims remain blocked until the Data Plane requires
   and atomically persists the signed admission before every
   `CONSUMED -> DISPATCHING` transition, including cached and recovered
-  consumption records. That is necessary but not sufficient: active-admission
-  listing/disposition, close and uncertainty transitions, connector-boundary
-  acknowledgement evidence, and a current durable source-owned revocation
-  check for the policy-bound connector release/certification snapshot are also
-  required. The dispatch workload cannot select `connector_id`; the Kernel
-  derives it from the signed approval chain.
+  consumption records. The internal boundary now implements append-only
+  lifecycle transitions, active-work listing, exact current-release locking,
+  and the GitHub pre-network seam when configured. Production remains blocked
+  on deployed Data Plane wiring, disposition commands, connector
+  acknowledgement/close evidence, and controlled runtime proof. The dispatch
+  workload cannot select `connector_id`, `connector_action`, release scope, or
+  revision; the Kernel derives them from the signed approval chain.
 - It does not revoke existing permits, cancel in-flight work, stop unmanaged
   adapters, or implement release/unfence. Those remain separate contracts.
 

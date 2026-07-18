@@ -261,7 +261,7 @@ release-binaries:
 	cp bin/helm-ai-kernel-windows-amd64.exe bin/helm-windows-amd64.exe
 	cd bin && shasum -a 256 helm-ai-kernel-* helm-linux-* helm-darwin-* helm-windows-* > SHA256SUMS.txt
 
-release-assets: docs-truth docs-openapi-parity release-binaries-reproducible mcp-pack sbom vex
+release-assets:
 	bash scripts/release/stage_release_assets.sh
 
 build-release: release-assets

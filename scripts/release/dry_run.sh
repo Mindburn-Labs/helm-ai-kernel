@@ -7,14 +7,65 @@ cd "$ROOT"
 VERSION="$(cat VERSION)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-release-dry-run.XXXXXX")"
 ASSETS_DIR="$TMP_DIR/assets"
+SENTINEL_PATH="$ROOT/bin/helm-ai-kernel-linux-amd64"
+SENTINEL_BACKUP="$TMP_DIR/root-linux-amd64.backup"
+SENTINEL_CONTENT="HELM_RELEASE_DRY_RUN_ROOT_BINARY_SENTINEL"
+SENTINEL_STATE="absent"
+SENTINEL_LINK_TARGET=""
+
+restore_sentinel() {
+  case "$SENTINEL_STATE" in
+    absent)
+      rm -f "$SENTINEL_PATH"
+      ;;
+    file)
+      rm -f "$SENTINEL_PATH"
+      cp -p "$SENTINEL_BACKUP" "$SENTINEL_PATH"
+      ;;
+    symlink)
+      rm -f "$SENTINEL_PATH"
+      ln -s "$SENTINEL_LINK_TARGET" "$SENTINEL_PATH"
+      ;;
+    restored)
+      return 0
+      ;;
+  esac
+  SENTINEL_STATE="restored"
+}
 
 cleanup() {
+  local status=$?
+  restore_sentinel || true
   rm -rf "$TMP_DIR"
+  return "$status"
 }
 trap cleanup EXIT
 
 echo "==> HELM Release Asset Dry Run v$VERSION"
-RELEASE_ASSETS_DIR="$ASSETS_DIR" make release-assets >/dev/null
+if [[ -L "$SENTINEL_PATH" ]]; then
+  SENTINEL_STATE="symlink"
+  SENTINEL_LINK_TARGET="$(readlink "$SENTINEL_PATH")"
+elif [[ -e "$SENTINEL_PATH" ]]; then
+  if [[ -d "$SENTINEL_PATH" ]]; then
+    echo "cannot install root-binary sentinel over directory: $SENTINEL_PATH" >&2
+    exit 1
+  fi
+  SENTINEL_STATE="file"
+  cp -p "$SENTINEL_PATH" "$SENTINEL_BACKUP"
+fi
+
+mkdir -p "$(dirname "$SENTINEL_PATH")"
+printf '%s\n' "$SENTINEL_CONTENT" > "$SENTINEL_PATH"
+chmod 700 "$SENTINEL_PATH"
+
+# Invoke the stage script directly: a matching ignored root binary must never
+# become a release asset because every build input comes from its snapshot.
+RELEASE_ASSETS_DIR="$ASSETS_DIR" bash "$ROOT/scripts/release/stage_release_assets.sh" >/dev/null
+if cmp -s "$SENTINEL_PATH" "$ASSETS_DIR/helm-ai-kernel-linux-amd64"; then
+  echo "release stage consumed the ignored root binary sentinel" >&2
+  exit 1
+fi
+restore_sentinel
 
 required=(
   helm-ai-kernel-linux-amd64
@@ -42,7 +93,6 @@ for artifact in "${required[@]}"; do
 done
 
 (cd "$ASSETS_DIR" && shasum -a 256 -c SHA256SUMS.txt >/dev/null)
-"$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
 
 python3 - "$ASSETS_DIR" "$VERSION" "$ROOT" <<'PY'
 import hashlib

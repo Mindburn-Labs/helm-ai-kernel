@@ -3,18 +3,19 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-VERSION="${HELM_VERSION:-${GITHUB_REF_NAME:-}}"
-VERSION="${VERSION#v}"
-if [[ "$VERSION" == */* || -z "$VERSION" ]]; then
-    VERSION="$(cat "$ROOT/VERSION")"
-fi
-TAG="v${VERSION}"
 ASSETS_DIR="${RELEASE_ASSETS_DIR:-$ROOT/dist/release-assets}"
 TMP_PARENT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 mkdir -p "$TMP_PARENT"
 TMP_DIR="$(mktemp -d "$TMP_PARENT/helm-release-assets.XXXXXX")"
+SNAPSHOT_ROOT="$TMP_DIR/source"
+SNAPSHOT_WORKTREE_CREATED=0
 
 cleanup() {
+    # Remove the exact detached checkout through Git so its ignored build
+    # outputs can never be mistaken for inputs to a later staging run.
+    if [ "$SNAPSHOT_WORKTREE_CREATED" = "1" ]; then
+        git -C "$ROOT" worktree remove --force "$SNAPSHOT_ROOT" >/dev/null 2>&1 || true
+    fi
     rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
@@ -42,9 +43,9 @@ require_clean_source() {
     # Release assets and their attestation must describe one committed source
     # tree. Build outputs are ignored; any tracked or untracked source edit is
     # a hard stop so an attestation can never claim a different HEAD.
-    if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
+    if [ -n "$(git -C "$ROOT" status --porcelain=v1 --untracked-files=all)" ]; then
         echo "::error file=scripts/release/stage_release_assets.sh::refusing to attest release assets from a dirty source tree" >&2
-        git status --short >&2
+        git -C "$ROOT" status --short >&2
         exit 1
     fi
 }
@@ -68,11 +69,25 @@ for gate in payload.get("gate_results", []):
 PY
 }
 
-cd "$ROOT"
-
 require_clean_source
-SOURCE_COMMIT="$(git rev-parse --verify 'HEAD^{commit}')"
-SOURCE_TREE="$(git rev-parse --verify "${SOURCE_COMMIT}^{tree}")"
+SOURCE_COMMIT="$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}')"
+SOURCE_TREE="$(git -C "$ROOT" rev-parse --verify "${SOURCE_COMMIT}^{tree}")"
+
+git -C "$ROOT" worktree add --detach "$SNAPSHOT_ROOT" "$SOURCE_COMMIT" >/dev/null
+SNAPSHOT_WORKTREE_CREATED=1
+
+if [ "$(git -C "$SNAPSHOT_ROOT" rev-parse --verify 'HEAD^{commit}')" != "$SOURCE_COMMIT" ] || \
+    [ "$(git -C "$SNAPSHOT_ROOT" rev-parse --verify 'HEAD^{tree}')" != "$SOURCE_TREE" ]; then
+    echo "::error file=scripts/release/stage_release_assets.sh::detached source snapshot does not match captured source objects" >&2
+    exit 1
+fi
+
+VERSION="${HELM_VERSION:-${GITHUB_REF_NAME:-}}"
+VERSION="${VERSION#v}"
+if [[ "$VERSION" == */* || -z "$VERSION" ]]; then
+    VERSION="$(cat "$SNAPSHOT_ROOT/VERSION")"
+fi
+TAG="v${VERSION}"
 
 require_source_snapshot_current() {
     # The release must stay on the clean source commit captured before any
@@ -80,14 +95,22 @@ require_source_snapshot_current() {
     # never mutable files in the working tree.
     require_clean_source
     local current_commit
-    current_commit="$(git rev-parse --verify 'HEAD^{commit}')"
+    current_commit="$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}')"
     if [ "$current_commit" != "$SOURCE_COMMIT" ]; then
         echo "::error file=scripts/release/stage_release_assets.sh::source commit changed during release asset staging" >&2
+        exit 1
+    fi
+    if [ "$(git -C "$SNAPSHOT_ROOT" rev-parse --verify 'HEAD^{commit}')" != "$SOURCE_COMMIT" ] || \
+        [ "$(git -C "$SNAPSHOT_ROOT" rev-parse --verify 'HEAD^{tree}')" != "$SOURCE_TREE" ]; then
+        echo "::error file=scripts/release/stage_release_assets.sh::detached source snapshot changed during release asset staging" >&2
         exit 1
     fi
 }
 
 log_step "staging $TAG into $ASSETS_DIR"
+log_step "building release inputs from detached source snapshot $SOURCE_COMMIT"
+make -C "$SNAPSHOT_ROOT" docs-truth docs-openapi-parity release-binaries-reproducible mcp-pack sbom vex
+require_source_snapshot_current
 
 for artifact in \
     bin/helm-ai-kernel-linux-amd64 \
@@ -100,33 +123,33 @@ for artifact in \
     sbom.json \
     release.high_risk.v3.toml \
     reference_packs/eu_ai_act_high_risk.v1.json; do
-    require_file "$ROOT/$artifact"
+    require_file "$SNAPSHOT_ROOT/$artifact"
 done
 
-vex_path="$ROOT/release/vex/${TAG}.openvex.json"
+vex_path="$SNAPSHOT_ROOT/release/vex/${TAG}.openvex.json"
 if [ ! -f "$vex_path" ]; then
     if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
         echo "::error file=scripts/release/stage_release_assets.sh::missing exact OpenVEX document for $TAG" >&2
         exit 1
     fi
-    vex_path="$(find "$ROOT/release/vex" -maxdepth 1 -name 'v*.openvex.json' -type f | sort | tail -n 1)"
+    vex_path="$(find "$SNAPSHOT_ROOT/release/vex" -maxdepth 1 -name 'v*.openvex.json' -type f | sort | tail -n 1)"
 fi
 require_file "$vex_path"
 
 rm -rf "$ASSETS_DIR"
 mkdir -p "$ASSETS_DIR"
 
-cp "$ROOT"/bin/helm-ai-kernel-linux-amd64 "$ASSETS_DIR/"
-cp "$ROOT"/bin/helm-ai-kernel-linux-arm64 "$ASSETS_DIR/"
-cp "$ROOT"/bin/helm-ai-kernel-darwin-amd64 "$ASSETS_DIR/"
-cp "$ROOT"/bin/helm-ai-kernel-darwin-arm64 "$ASSETS_DIR/"
-cp "$ROOT"/bin/helm-ai-kernel-windows-amd64.exe "$ASSETS_DIR/"
-cp "$ROOT"/dist/helm-ai-kernel.mcpb "$ASSETS_DIR/"
-cp "$ROOT"/sbom.json "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-linux-amd64 "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-linux-arm64 "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-darwin-amd64 "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-darwin-arm64 "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/bin/helm-ai-kernel-windows-amd64.exe "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/dist/helm-ai-kernel.mcpb "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/sbom.json "$ASSETS_DIR/"
 cp "$vex_path" "$ASSETS_DIR/$(basename "$vex_path")"
-cp "$ROOT"/release.high_risk.v3.toml "$ASSETS_DIR/"
+cp "$SNAPSHOT_ROOT"/release.high_risk.v3.toml "$ASSETS_DIR/"
 
-python3 - "$ROOT" "$ASSETS_DIR/sample-policy-material.tar" <<'PY'
+python3 - "$SNAPSHOT_ROOT" "$ASSETS_DIR/sample-policy-material.tar" <<'PY'
 import pathlib
 import sys
 import tarfile
@@ -152,8 +175,11 @@ PY
 log_step "generating release conformance evidence"
 conformance_dir="$TMP_DIR/conformance"
 conformance_report="$conformance_dir/conform_report.json"
-HELM_CONFORMANCE_ARTIFACTS_DIR="$ROOT/artifacts" bash "$ROOT/scripts/release/prepare_conformance_release_inputs.sh"
-if ! HELM_RELEASE_EVIDENCE_RECEIPT=1 "$ROOT/bin/helm-ai-kernel" conform --profile SMB --gate G0 --signed --output "$conformance_dir" > "$TMP_DIR/conformance-run.log"; then
+HELM_CONFORMANCE_ARTIFACTS_DIR="$SNAPSHOT_ROOT/artifacts" bash "$SNAPSHOT_ROOT/scripts/release/prepare_conformance_release_inputs.sh"
+if ! (
+    cd "$SNAPSHOT_ROOT"
+    HELM_RELEASE_EVIDENCE_RECEIPT=1 "$SNAPSHOT_ROOT/bin/helm-ai-kernel" conform --profile SMB --gate G0 --signed --output "$conformance_dir"
+) > "$TMP_DIR/conformance-run.log"; then
 	echo "::error file=scripts/release/stage_release_assets.sh::conformance failed during release asset staging" >&2
 	if [ -f "$conformance_report" ]; then
 		print_conformance_failures "$conformance_report"
@@ -162,7 +188,7 @@ if ! HELM_RELEASE_EVIDENCE_RECEIPT=1 "$ROOT/bin/helm-ai-kernel" conform --profil
 	fi
 	exit 1
 fi
-if ! bash "$ROOT/scripts/release/conformance_release_gate.sh" "$conformance_report"; then
+if ! bash "$SNAPSHOT_ROOT/scripts/release/conformance_release_gate.sh" "$conformance_report"; then
 	echo "::error file=scripts/release/stage_release_assets.sh::release conformance gate rejected staged EvidencePack" >&2
 	exit 1
 fi
@@ -171,8 +197,11 @@ if [ -z "$pack_root" ]; then
     echo "::error file=scripts/release/stage_release_assets.sh::conformance did not produce an EvidencePack directory" >&2
     exit 1
 fi
-"$ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar"
-"$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar"
+(
+    cd "$SNAPSHOT_ROOT"
+    "$SNAPSHOT_ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar"
+    "$SNAPSHOT_ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar"
+)
 tampered_pack="$TMP_DIR/evidence-pack-tampered.tar"
 python3 - "$ASSETS_DIR/evidence-pack.tar" "$tampered_pack" <<'PY'
 import copy
@@ -205,7 +234,10 @@ with tarfile.open(src, "r:*") as inp, tarfile.open(dst, "w") as out:
     info.mtime = 0
     out.addfile(info, io.BytesIO(payload))
 PY
-if "$ROOT/bin/helm-ai-kernel" verify "$tampered_pack" > "$TMP_DIR/tampered-verify.log" 2>&1; then
+if (
+    cd "$SNAPSHOT_ROOT"
+    "$SNAPSHOT_ROOT/bin/helm-ai-kernel" verify "$tampered_pack"
+) > "$TMP_DIR/tampered-verify.log" 2>&1; then
     echo "::error file=scripts/release/stage_release_assets.sh::tampered release EvidencePack unexpectedly verified" >&2
     cat "$TMP_DIR/tampered-verify.log" >&2
     exit 1
@@ -216,7 +248,7 @@ log_step "tampered release EvidencePack rejected"
     cd "$ASSETS_DIR"
     shasum -a 256 helm-ai-kernel-darwin-amd64 helm-ai-kernel-darwin-arm64 helm-ai-kernel-linux-amd64 helm-ai-kernel-linux-arm64 helm-ai-kernel-windows-amd64.exe > "$TMP_DIR/binary-SHA256SUMS.txt"
 )
-python3 - "$ROOT" "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" <<'PY'
+python3 - "$SNAPSHOT_ROOT" "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" <<'PY'
 import pathlib
 import sys
 import tarfile
@@ -254,19 +286,18 @@ with tarfile.open(out, "w") as tar:
 PY
 launchpad_data_sha="$(shasum -a 256 "$ASSETS_DIR/helm-ai-kernel-launchpad-data.tar" | awk '{print $1}')"
 
-ruby "$ROOT/scripts/release/homebrew_formula.rb" \
+ruby "$SNAPSHOT_ROOT/scripts/release/homebrew_formula.rb" \
     --version "$VERSION" \
     --checksums "$TMP_DIR/binary-SHA256SUMS.txt" \
     --launchpad-data-sha256 "$launchpad_data_sha" \
     --repo Mindburn-Labs/helm-ai-kernel > "$ASSETS_DIR/helm-ai-kernel.rb"
 
-# Bind the release attestation to the exact source snapshot captured above. The
-# Python block reads Git objects by commit, never mutable checkout paths.
+# Bind the release attestation to the exact source snapshot captured above.
 require_source_snapshot_current
 
 HELM_RELEASE_SOURCE_COMMIT="$SOURCE_COMMIT" \
     HELM_RELEASE_SOURCE_TREE="$SOURCE_TREE" \
-    python3 - "$ROOT" "$ASSETS_DIR" "$TAG" <<'PY'
+    python3 - "$SNAPSHOT_ROOT" "$ASSETS_DIR" "$TAG" <<'PY'
 import hashlib
 import json
 import os

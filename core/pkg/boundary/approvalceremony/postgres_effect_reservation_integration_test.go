@@ -51,6 +51,9 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	if err := ownerStore.Init(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if err := ownerStore.Init(ctx); err != nil {
+		t.Fatalf("idempotent effect close schema init: %v", err)
+	}
 	stopStore := kernel.NewScopedStopStore(ownerDB, time.Now, kernel.WithPostgresScopeLocks())
 	if err := stopStore.Init(ctx); err != nil {
 		t.Fatal(err)
@@ -78,6 +81,7 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	for _, grant := range []string{
 		`GRANT SELECT ON approval_dispatch_admissions TO ` + quotedRole,
 		`GRANT SELECT, INSERT ON approval_effect_reservation_events TO ` + quotedRole,
+		`GRANT SELECT, INSERT ON approval_effect_closures TO ` + quotedRole,
 		`GRANT SELECT ON connector_release_authorities TO ` + quotedRole,
 		`GRANT SELECT ON emergency_stop_fences TO ` + quotedRole,
 	} {
@@ -88,6 +92,8 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 
 	releaseKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{43}, ed25519.SeedSize))
 	releaseSigner := crypto.NewEd25519SignerFromKey(releaseKey, "effect-reservation-release-test")
+	acknowledgementKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{44}, ed25519.SeedSize))
+	acknowledgementSigner := crypto.NewEd25519SignerFromKey(acknowledgementKey, "effect-acknowledgement-test")
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	keyNotBefore := now.Add(-time.Hour)
 	keyNotAfter := now.Add(time.Hour)
@@ -135,10 +141,31 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	acknowledgementVerifier, err := NewEd25519EffectAcknowledgementVerifier([]TrustedEffectAcknowledgementKey{{
+		IssuerID: "publisher-a", SigningKeyRef: "kms://helm/connector-ack-a",
+		ConnectorID: "connector-a", ConnectorVersion: "1.0.0",
+		PublicKey: acknowledgementSigner.PublicKeyBytes(), Enabled: true,
+		NotBefore: keyNotBefore, NotAfter: keyNotAfter,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	consumer := ConsumerIdentity{
 		Subject: "spiffe://helm/data-plane-a", TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "packs.lifecycle",
 	}
 	admitter, err := NewEffectReservationAdmitter(runtimeStore, staticConsumerProvider{identity: consumer}, releaseRuntime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidencePackHash := shaRef("e")
+	closer, err := NewEffectCloser(
+		runtimeStore,
+		staticConsumerProvider{identity: consumer},
+		releaseRuntime,
+		acknowledgementVerifier,
+		staticEffectEvidencePackVerifier{ref: "evidence-pack-a", hash: evidencePackHash},
+		approvalSigner,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,6 +312,75 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	}); err != nil {
 		t.Fatal(err)
 	}
+	directCloseAdmission := effectReservationAdmissionFixture(t, approvalSigner, release, consumer, "attempt-direct-close", now)
+	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, directCloseAdmission)
+	if _, err := admitter.Admit(ctx, directCloseAdmission); err != nil {
+		t.Fatal(err)
+	}
+	directCloseStarted, err := admitter.MarkStarted(ctx, directCloseAdmission.Admission.AdmissionID, EffectTransitionMeta{
+		ConnectorExecutionRef: "github-request-direct-close", IntentRef: "intent-direct-close",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEffectReservationRejectsCompletionWithoutClosure(t, ctx, runtimeStore, directCloseStarted)
+	directAcknowledgement, err := (contracts.ConnectorEffectAcknowledgement{
+		SchemaVersion:     contracts.ConnectorEffectAcknowledgementSchemaV1,
+		ContractVersion:   contracts.ConnectorEffectAcknowledgementContractV1,
+		AcknowledgementID: "effect-ack-direct-close", AdmissionID: directCloseAdmission.Admission.AdmissionID,
+		AttemptID: directCloseAdmission.Admission.AttemptID,
+		TenantID:  consumer.TenantID, WorkspaceID: consumer.WorkspaceID, Audience: consumer.Audience,
+		ConnectorID: release.ConnectorID, ConnectorVersion: release.ConnectorVersion,
+		ConnectorAction:       directCloseAdmission.Admission.ConnectorAuthority.ConnectorAction,
+		ConnectorExecutionRef: directCloseStarted.ConnectorExecutionRef, IntentRef: directCloseStarted.IntentRef,
+		IdempotencyKeyHash: directCloseAdmission.Admission.IdempotencyKeyHash,
+		EffectHash:         directCloseAdmission.Admission.EffectHash,
+		Outcome:            contracts.ConnectorEffectOutcomeNotApplied, ResponseHash: shaRef("d"),
+		IssuerID: release.ConnectorSignerID, SigningKeyRef: "kms://helm/connector-ack-a",
+		Algorithm:  contracts.ConnectorEffectAcknowledgementAlgorithm,
+		ObservedAt: time.Now().UTC().Truncate(time.Microsecond),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	directAcknowledgementEnvelope, err := SignConnectorEffectAcknowledgement(directAcknowledgement, acknowledgementSigner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directCloseRequest := EffectCloseRequest{
+		AdmissionID:     directCloseAdmission.Admission.AdmissionID,
+		Acknowledgement: directAcknowledgementEnvelope,
+		EvidencePackRef: "evidence-pack-a", EvidencePackHash: evidencePackHash,
+	}
+	directCloseGate := make(chan struct{})
+	directCloseResults := make(chan EffectClosureRecord, 2)
+	directCloseErrors := make(chan error, 2)
+	for range 2 {
+		go func() {
+			<-directCloseGate
+			record, closeErr := closer.Close(ctx, directCloseRequest)
+			directCloseResults <- record
+			directCloseErrors <- closeErr
+		}()
+	}
+	close(directCloseGate)
+	var directCloseHash string
+	for range 2 {
+		record, closeErr := <-directCloseResults, <-directCloseErrors
+		if closeErr != nil {
+			t.Fatalf("concurrent direct Close(): %v", closeErr)
+		}
+		if directCloseHash == "" {
+			directCloseHash = record.Receipt.ReceiptHash
+		} else if record.Receipt.ReceiptHash != directCloseHash {
+			t.Fatalf("concurrent direct close hashes differ: %s != %s", record.Receipt.ReceiptHash, directCloseHash)
+		}
+	}
+	if recovered, err := admitter.Recover(ctx, directCloseAdmission.Admission.AdmissionID); err != nil ||
+		recovered.State != EffectReservationStateCompleted || recovered.Sequence != 3 ||
+		recovered.Outcome != contracts.ConnectorEffectOutcomeNotApplied || recovered.EffectRef != "" {
+		t.Fatalf("direct completed reservation = %+v, %v", recovered, err)
+	}
 	active, err := admitter.ListActive(ctx)
 	activeIDs := map[string]bool{}
 	for _, event := range active {
@@ -399,8 +495,100 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		t.Fatalf("Recover() after fence/revoke = %+v, %v", recovered, err)
 	}
 
+	acknowledgedAt := time.Now().UTC().Truncate(time.Microsecond)
+	acknowledgement, err := (contracts.ConnectorEffectAcknowledgement{
+		SchemaVersion:     contracts.ConnectorEffectAcknowledgementSchemaV1,
+		ContractVersion:   contracts.ConnectorEffectAcknowledgementContractV1,
+		AcknowledgementID: "effect-ack-a", AdmissionID: first.Admission.AdmissionID,
+		AttemptID: first.Admission.AttemptID,
+		TenantID:  consumer.TenantID, WorkspaceID: consumer.WorkspaceID, Audience: consumer.Audience,
+		ConnectorID: release.ConnectorID, ConnectorVersion: release.ConnectorVersion,
+		ConnectorAction:       first.Admission.ConnectorAuthority.ConnectorAction,
+		ConnectorExecutionRef: started.ConnectorExecutionRef,
+		ProofSessionRef:       started.ProofSessionRef, IntentRef: started.IntentRef,
+		IdempotencyKeyHash: first.Admission.IdempotencyKeyHash, EffectHash: first.Admission.EffectHash,
+		Outcome: contracts.ConnectorEffectOutcomeApplied, ResponseHash: shaRef("9"), EffectRef: uncertain.EffectRef,
+		ReconciliationRef: "reconciliation-a", IssuerID: release.ConnectorSignerID,
+		SigningKeyRef: "kms://helm/connector-ack-a",
+		Algorithm:     contracts.ConnectorEffectAcknowledgementAlgorithm, ObservedAt: acknowledgedAt,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	acknowledgementEnvelope, err := SignConnectorEffectAcknowledgement(acknowledgement, acknowledgementSigner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeRequest := EffectCloseRequest{
+		AdmissionID: first.Admission.AdmissionID, Acknowledgement: acknowledgementEnvelope,
+		EvidencePackRef: "evidence-pack-a", EvidencePackHash: evidencePackHash,
+	}
+	closed, err := closer.Close(ctx, closeRequest)
+	if err != nil {
+		t.Fatalf("Close() after fence/revocation: %v", err)
+	}
+	if closed.Receipt.PriorState != contracts.EffectClosePriorStateUncertain ||
+		closed.Receipt.Outcome != contracts.ConnectorEffectOutcomeApplied ||
+		closed.Receipt.ReservationSequence != uncertain.Sequence ||
+		closed.Receipt.AcknowledgementHash != acknowledgement.AcknowledgementHash {
+		t.Fatalf("effect close receipt = %+v", closed.Receipt)
+	}
+	if err := grantVerifier.VerifyEffectCloseReceiptSignature(
+		closed.Receipt, closed.SignatureAlgorithm, closed.Signature,
+	); err != nil {
+		t.Fatalf("effect close receipt signature: %v", err)
+	}
+	replayedClose, err := closer.Close(ctx, closeRequest)
+	if err != nil || replayedClose.Receipt.ReceiptHash != closed.Receipt.ReceiptHash ||
+		!replayedClose.CreatedAt.Equal(closed.CreatedAt) {
+		t.Fatalf("Close() replay = %+v, %v", replayedClose, err)
+	}
+	conflictingClose := closeRequest
+	conflictingClose.EvidencePackHash = shaRef("f")
+	if _, err := closer.Close(ctx, conflictingClose); !errors.Is(err, ErrEffectCloseConflict) {
+		t.Fatalf("conflicting Close() error = %v", err)
+	}
+	recoveredClose, err := closer.Recover(ctx, first.Admission.AdmissionID)
+	if err != nil || recoveredClose.Receipt.ReceiptHash != closed.Receipt.ReceiptHash {
+		t.Fatalf("Recover close = %+v, %v", recoveredClose, err)
+	}
+	if recovered, err := admitter.Recover(ctx, first.Admission.AdmissionID); err != nil ||
+		recovered.State != EffectReservationStateCompleted || recovered.Sequence != 4 ||
+		recovered.CloseReceiptHash != closed.Receipt.ReceiptHash {
+		t.Fatalf("Recover() completed reservation = %+v, %v", recovered, err)
+	}
+	activeAfterClose, err := admitter.ListActive(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range activeAfterClose {
+		if event.Admission.Admission.AdmissionID == first.Admission.AdmissionID {
+			t.Fatalf("completed reservation remained active: %+v", event)
+		}
+	}
+
 	assertEffectReservationRLSIsolation(t, ctx, runtimeDB, "tenant-b", consumer.WorkspaceID)
 	assertEffectReservationAppendOnly(t, ctx, ownerDB, consumer, first.Admission.AdmissionID)
+	assertEffectClosureAppendOnly(t, ctx, ownerDB, consumer, first.Admission.AdmissionID)
+}
+
+type staticEffectEvidencePackVerifier struct {
+	ref  string
+	hash string
+}
+
+func (v staticEffectEvidencePackVerifier) VerifyEffectEvidencePack(
+	_ context.Context,
+	identity ConsumerIdentity,
+	ref, hash string,
+	acknowledgement contracts.ConnectorEffectAcknowledgementEnvelope,
+) error {
+	if identity.TenantID != acknowledgement.Acknowledgement.TenantID ||
+		identity.WorkspaceID != acknowledgement.Acknowledgement.WorkspaceID ||
+		ref != v.ref || hash != v.hash {
+		return ErrEffectCloseConflict
+	}
+	return nil
 }
 
 func effectReservationAdmissionFixture(
@@ -517,6 +705,12 @@ func assertEffectReservationRLSIsolation(t *testing.T, ctx context.Context, db *
 	if count != 0 {
 		t.Fatalf("cross-tenant effect reservation visibility = %d, want 0", count)
 	}
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM approval_effect_closures`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("cross-tenant effect closure visibility = %d, want 0", count)
+	}
 }
 
 func assertEffectReservationAppendOnly(t *testing.T, ctx context.Context, db *sql.DB, consumer ConsumerIdentity, admissionID string) {
@@ -538,6 +732,25 @@ func assertEffectReservationAppendOnly(t *testing.T, ctx context.Context, db *sq
 	}
 }
 
+func assertEffectClosureAppendOnly(t *testing.T, ctx context.Context, db *sql.DB, consumer ConsumerIdentity, admissionID string) {
+	t.Helper()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, consumer.TenantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_workspace', $1, true)`, consumer.WorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE approval_effect_closures SET outcome = outcome
+		WHERE tenant_id = $1 AND workspace_id = $2 AND admission_id = $3`, consumer.TenantID, consumer.WorkspaceID, admissionID); err == nil {
+		t.Fatal("append-only effect closure accepted UPDATE")
+	}
+}
+
 func assertEffectReservationRejectsStartedRefRewrite(t *testing.T, ctx context.Context, store *PostgresStore, started EffectReservationEvent) {
 	t.Helper()
 	identity := ConsumerIdentity{TenantID: started.Admission.Admission.TenantID, WorkspaceID: started.Admission.Admission.WorkspaceID}
@@ -555,5 +768,35 @@ func assertEffectReservationRejectsStartedRefRewrite(t *testing.T, ctx context.C
 	tampered.ConnectorExecutionRef = "other-execution"
 	if _, err := insertEffectReservationEvent(ctx, tx, tampered); err == nil {
 		t.Fatal("database trigger accepted STARTED execution-ref rewrite")
+	}
+}
+
+func assertEffectReservationRejectsCompletionWithoutClosure(
+	t *testing.T,
+	ctx context.Context,
+	store *PostgresStore,
+	started EffectReservationEvent,
+) {
+	t.Helper()
+	identity := ConsumerIdentity{TenantID: started.Admission.Admission.TenantID, WorkspaceID: started.Admission.Admission.WorkspaceID}
+	tx, err := store.beginScopeTx(ctx, identity.TenantID, identity.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	completed := started
+	completed.Sequence++
+	completed.State = EffectReservationStateCompleted
+	completed.ResolvedAt = timePointer(started.OccurredAt.Add(time.Microsecond))
+	completed.OccurredAt = *completed.ResolvedAt
+	completed.EffectRef = "forged-effect"
+	completed.ClosePriorState = contracts.EffectClosePriorStateStarted
+	completed.AcknowledgementHash = shaRef("a")
+	completed.CloseReceiptHash = shaRef("b")
+	completed.Outcome = contracts.ConnectorEffectOutcomeApplied
+	completed.EvidencePackRef = "forged-evidence-pack"
+	completed.EvidencePackHash = shaRef("c")
+	if _, err := insertEffectReservationEvent(ctx, tx, completed); err == nil {
+		t.Fatal("database accepted COMPLETED event without atomic signed closure")
 	}
 }

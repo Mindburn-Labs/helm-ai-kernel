@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/connector_effect_acknowledgement_envelope.json",
+  "title": "Connector Effect Acknowledgement Envelope",
+  "description": "Detached Ed25519 signature over one sealed connector effect acknowledgement.",
+  "type": "object",
+  "required": ["acknowledgement", "signature"],
+  "properties": {
+    "acknowledgement": { "$ref": "connector_effect_acknowledgement.json" },
+    "signature": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{128}$"
+    }
+  },
+  "additionalProperties": false
+}

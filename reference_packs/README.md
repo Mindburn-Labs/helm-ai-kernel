@@ -20,6 +20,8 @@ Active surface for the `helm-ai-kernel` project.
   approval, consumption, and dispatch-admission contracts.
 - `make verify-connector-release-authority-vectors` verifies the signed
   certified-to-revoked release-authority chain in Go and independent Python.
+- `make verify-effect-close-vectors` verifies the connector acknowledgement
+  and Kernel close receipt in Go and independent Python.
 
 ## Approval ceremony packs
 
@@ -38,6 +40,15 @@ source-authority Ed25519 signature, exact connector version and provenance
 bindings, validity, and a terminal revocation revision. It proves portable
 contract verification only; a signed historical statement is not current state
 without the separate durable registry and near-effect admission checks.
+
+## Effect close pack
+
+`effect-close-v1/` covers connector acknowledgement and Kernel close receipt
+self-hashes, independent Ed25519 signature domains, exact reservation and
+EvidencePack bindings, explicit `APPLIED` versus `NOT_APPLIED` outcomes, and
+negative mutations. It proves portable contract verification only; it is not
+evidence of a deployed connector acknowledgement publisher, Data Plane close
+adapter, source-system reconciliation, or production release authority.
 
 ## Documentation Contract
 

@@ -1,0 +1,79 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 effect acknowledgement and close receipt only; no hybrid or post-quantum claim.",
+  "schema_version": "effect-close-vectors.v1",
+  "contract_version": "2026-07-18",
+  "quantum_posture": "classical_ed25519_only",
+  "acknowledgement": {
+    "artifact": {
+      "canonical": "acknowledgement.c14n.json",
+      "sha256": "sha256:86d05934a96fa4ac5cc5095fb8d638b1003e5732857c0e2af44ef36ab8ce5043"
+    },
+    "envelope": {
+      "canonical": "acknowledgement_envelope.c14n.json",
+      "sha256": "sha256:5e61de90137f2b0ce924a4af58df8e62ad6772a110b0935c8c9c278c3030af6a"
+    },
+    "signing_payload": {
+      "canonical": "acknowledgement_signing_payload.c14n.json",
+      "sha256": "sha256:50ec1fbcf68aa0b26f20146a6b0a907c9b0f8b845a6160cf29efb32eef74a55d"
+    },
+    "public_key": "ed25519:e28a8970753332bd72fef413e6b0b2ef1b4aadda7aa2c141f233712a6876b351",
+    "signature": "ed25519:f67de1b55c09a97a5724d2528c0da6d0c7458801db6f306196e7a7574b8c9d147872fc2022bd167d1084a362d9442467e31f7d8210d6e207812f7cbe4800370a",
+    "key_not_before": "2026-07-18T11:00:00.123456Z",
+    "key_not_after": "2026-07-18T13:00:00.123456Z"
+  },
+  "receipt": {
+    "artifact": {
+      "canonical": "receipt.c14n.json",
+      "sha256": "sha256:b897e2414a5849dc8b9bfbc762a2bfa04ad1bf57517501d81c4b34a76a4b8de6"
+    },
+    "envelope": {
+      "canonical": "",
+      "sha256": ""
+    },
+    "signing_payload": {
+      "canonical": "receipt_signing_payload.c14n.json",
+      "sha256": "sha256:b6e25d29f5fb9a52f3c4583dfc34eeab3fcc6f0717614cedd7b27706a1754ec7"
+    },
+    "public_key": "ed25519:d4eec1869fb1b8a4e817516ad5a931557cb56805c3eb16e8f3a803d647df7869",
+    "signature": "ed25519:66ccf683d39336697c55c605436b7edb11baa84d229246100c3ae607251580909c7ff838841ec9a06dda633109ecd5e54aa1aa0c18033e4cb52ca1a92fc08c09",
+    "key_not_before": "2026-07-18T11:00:00.123456Z",
+    "key_not_after": "2026-07-18T13:00:00.123456Z"
+  },
+  "negative_vectors": [
+    {
+      "id": "acknowledgement_hash_tamper",
+      "mutation": "set_acknowledgement_response_hash_to_tampered",
+      "expected_error": "acknowledgement_hash_mismatch"
+    },
+    {
+      "id": "acknowledgement_signature_tamper",
+      "mutation": "flip_acknowledgement_signature_last_bit",
+      "expected_error": "acknowledgement_signature_rejected"
+    },
+    {
+      "id": "acknowledgement_key_substitution",
+      "mutation": "set_acknowledgement_signing_key_ref_to_other_and_reseal",
+      "expected_error": "acknowledgement_trust_rejected"
+    },
+    {
+      "id": "receipt_evidence_tamper",
+      "mutation": "set_receipt_evidence_pack_hash_to_tampered",
+      "expected_error": "receipt_hash_mismatch"
+    },
+    {
+      "id": "receipt_acknowledgement_substitution",
+      "mutation": "set_receipt_acknowledgement_hash_to_other_and_reseal",
+      "expected_error": "acknowledgement_binding_rejected"
+    },
+    {
+      "id": "receipt_signature_tamper",
+      "mutation": "flip_receipt_signature_last_bit",
+      "expected_error": "receipt_signature_rejected"
+    },
+    {
+      "id": "uncertain_without_reconciliation",
+      "mutation": "remove_receipt_reconciliation_ref_and_reseal",
+      "expected_error": "receipt_contract_rejected"
+    }
+  ]
+}

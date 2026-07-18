@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/connector_effect_acknowledgement.json",
+  "title": "Connector Effect Acknowledgement",
+  "description": "Connector-signed source-system outcome bound to one exact HELM effect reservation. This acknowledgement is evidence input and is not terminal Kernel authority.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contract_version",
+    "acknowledgement_id",
+    "admission_id",
+    "attempt_id",
+    "tenant_id",
+    "workspace_id",
+    "audience",
+    "connector_id",
+    "connector_version",
+    "connector_action",
+    "connector_execution_ref",
+    "intent_ref",
+    "idempotency_key_hash",
+    "effect_hash",
+    "outcome",
+    "response_hash",
+    "issuer_id",
+    "signing_key_ref",
+    "algorithm",
+    "observed_at",
+    "acknowledgement_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "connector-effect-acknowledgement.v1" },
+    "contract_version": { "const": "2026-07-18" },
+    "acknowledgement_id": { "$ref": "#/$defs/token" },
+    "admission_id": { "$ref": "#/$defs/token" },
+    "attempt_id": { "$ref": "#/$defs/token" },
+    "tenant_id": { "$ref": "#/$defs/token" },
+    "workspace_id": { "$ref": "#/$defs/token" },
+    "audience": { "$ref": "#/$defs/token" },
+    "connector_id": { "$ref": "#/$defs/token" },
+    "connector_version": { "$ref": "#/$defs/token" },
+    "connector_action": { "$ref": "#/$defs/token" },
+    "connector_execution_ref": { "$ref": "#/$defs/token" },
+    "proof_session_ref": { "$ref": "#/$defs/token" },
+    "intent_ref": { "$ref": "#/$defs/token" },
+    "idempotency_key_hash": { "$ref": "#/$defs/sha256" },
+    "effect_hash": { "$ref": "#/$defs/sha256" },
+    "outcome": { "enum": ["APPLIED", "NOT_APPLIED"] },
+    "response_hash": { "$ref": "#/$defs/sha256" },
+    "effect_ref": { "$ref": "#/$defs/token" },
+    "reconciliation_ref": { "$ref": "#/$defs/token" },
+    "issuer_id": { "$ref": "#/$defs/token" },
+    "signing_key_ref": { "$ref": "#/$defs/token" },
+    "algorithm": { "const": "ed25519" },
+    "observed_at": { "$ref": "#/$defs/timestamp" },
+    "acknowledgement_hash": { "$ref": "#/$defs/sha256" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "const": "APPLIED" } } },
+      "then": { "required": ["effect_ref"] },
+      "else": { "not": { "required": ["effect_ref"] } }
+    }
+  ],
+  "$defs": {
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^\\S+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$"
+    }
+  },
+  "additionalProperties": false
+}

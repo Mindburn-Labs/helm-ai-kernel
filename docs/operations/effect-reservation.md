@@ -47,10 +47,15 @@ order is fixed:
    approach its network sink.
 
 The source-authority writer takes the exclusive form of the same exact-release
-lock. Therefore either revocation commits first and admission fails, or
-admission commits first and becomes pre-existing active work. FENCE uses the
-same scope lock: FENCE-first fails admission; admission-first remains visible
-for reconciliation. No connector callback or network request runs under a
+lock. FENCE uses the same scope lock. `ADMITTED` records remain visible for
+recovery, but admission alone is not a durable right to cross the network seam:
+`MarkStarted` reacquires the scope lock, rejects the current FENCE, acquires the
+shared exact-release lock, reloads the current certified head using the
+PostgreSQL clock, and requires an exact match to the release signed into the
+approval chain before appending `STARTED`. Therefore the two legal orderings
+are explicit: `STARTED` commits first and the effect is active work requiring
+reconciliation, or FENCE/revocation commits first and start is denied with no
+network request. No connector callback or network request runs under a
 database lock.
 
 ## Append-only lifecycle
@@ -75,8 +80,10 @@ cannot detach reconciliation from the execution that crossed the network seam.
 The current states mean:
 
 - `ADMITTED`: FENCE and the current certified release were transactionally
-  checked and committed; no connector start has been reported. This is active
-  pre-existing work if a later FENCE or revocation commits.
+  checked and committed; no connector start has been reported. A later FENCE
+  or revocation is rechecked at `MarkStarted` and can still deny the network
+  seam. The record remains active until it is closed as `NOT_STARTED` or moves
+  to `STARTED`/`UNCERTAIN`.
 - `STARTED`: the connector completed all local prechecks and durably marked the
   last pre-network seam before issuing the external request. The source-side
   effect may exist; never retry under a new idempotency key. The PostgreSQL
@@ -118,6 +125,11 @@ The GitHub connector implements that interface. It emits:
 - `UNCERTAIN` for ambiguous REST failure, missing effect evidence, or an
   ambiguous start transition.
 
+A typed start-interlock denial is not ambiguous: the GitHub connector appends
+`NOT_STARTED` with `GITHUB_START_INTERLOCK_DENIED` and returns without issuing
+HTTP. Any other `MarkStarted` failure remains `UNCERTAIN`, because the caller
+cannot prove whether the durable start claim committed before response loss.
+
 GitHub parameter decoding is strict at that seam: fractional/overflowing issue
 numbers and mixed-type label/assignee arrays become `NOT_STARTED` instead of
 being truncated or filtered. Mutating GitHub HTTP methods are attempted once;
@@ -147,7 +159,7 @@ deployed Data Plane proof.
 | Observation | Meaning | Required response |
 | --- | --- | --- |
 | No reservation exists | Admission did not commit, or the caller used the wrong authenticated scope. | Recover the signed dispatch admission first; do not call the connector. |
-| `ADMITTED` | Pre-existing work with no reported start. | Reconcile the worker before disposition; a later FENCE/revoke does not rewrite history. |
+| `ADMITTED` | Reserved work with no reported start. Current stop/release authority must still pass at the start seam. | Recover the worker. If the start interlock denied it, close `NOT_STARTED`; never dispatch from the old admission. |
 | `STARTED` | The outbound seam was crossed. | Query the source system by the original idempotency key/execution reference; do not replay. |
 | `NOT_STARTED` | Proven local pre-dispatch stop. | Close the attempt; a new attempt requires new approval authority. |
 | `UNCERTAIN` | Start or outcome cannot be disproved. | Quarantine automatic retry and obtain connector/source acknowledgement evidence. |
@@ -166,13 +178,14 @@ make docs-truth
 
 The PostgreSQL proof covers exact replay, `ADMITTED -> STARTED -> UNCERTAIN`,
 `ADMITTED -> NOT_STARTED`, terminal transitions, active-work listing,
-cross-tenant RLS, append-only rejection, and a concurrent admission/revocation
-race whose only accepted outcomes are a committed `ADMITTED` record or the
-typed current-release rejection. Separate checks prove revocation-first denial,
-FENCE-first denial, single-winner concurrent `STARTED`, and read-only recovery
-of pre-existing active work. They also prove that `STARTED` correlation
-references cannot be rewritten and that mutating HTTP 307/308 redirects do not
-reach their target.
+cross-tenant RLS, append-only rejection, and concurrent admission/revocation,
+start/FENCE, and start/revocation races. For each start race, the only accepted
+outcomes are `STARTED` committed before the new authority or a typed start
+denial after that authority committed; denial is then durably closed as
+`NOT_STARTED`. Separate checks prove single-winner concurrent `STARTED`, bridge
+and connector denial without HTTP, and read-only recovery of active work. They
+also prove that `STARTED` correlation references cannot be rewritten and that
+mutating HTTP 307/308 redirects do not reach their target.
 
 ## Remaining production gates
 

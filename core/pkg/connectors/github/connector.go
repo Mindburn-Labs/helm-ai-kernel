@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/url"
@@ -256,6 +257,14 @@ func (c *Connector) execute(ctx context.Context, permit *effects.EffectPermit, t
 		}
 	} else if lifecycle != nil {
 		if err := lifecycle.MarkStarted(ctx, executionMeta); err != nil {
+			if errors.Is(err, effects.ErrExecutionStartDenied) {
+				if transitionErr := lifecycle.MarkNotStarted(ctx, effects.ExecutionLifecycleMeta{
+					ReasonCode: "GITHUB_START_INTERLOCK_DENIED", IntentRef: executionMeta.IntentRef,
+				}); transitionErr != nil {
+					return nil, fmt.Errorf("github: start interlock denied: %v; persist NOT_STARTED: %w", err, transitionErr)
+				}
+				return nil, fmt.Errorf("github: start interlock denied before dispatch: %w", err)
+			}
 			_ = lifecycle.MarkUncertain(ctx, effects.ExecutionLifecycleMeta{
 				ReasonCode: "GITHUB_START_TRANSITION_AMBIGUOUS", ConnectorExecutionRef: executionMeta.ConnectorExecutionRef,
 				IntentRef: executionMeta.IntentRef,

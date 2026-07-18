@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -129,19 +130,54 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 		t.Fatal("export missing evidence hash header")
 	}
 
-	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/verify", bytes.NewReader(exportRec.Body.Bytes()))
-	verifyReq.Header.Set("Content-Type", "application/octet-stream")
-	verifyRec := httptest.NewRecorder()
-	mux.ServeHTTP(verifyRec, verifyReq)
-	if verifyRec.Code != http.StatusOK {
-		t.Fatalf("verify status = %d body=%s", verifyRec.Code, verifyRec.Body.String())
-	}
-	var result map[string]any
-	if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
-		t.Fatal(err)
-	}
-	if result["verdict"] != "PASS" {
-		t.Fatalf("verification result = %+v", result)
+	for _, upload := range []struct {
+		name  string
+		build func(t *testing.T) (*bytes.Reader, string)
+	}{
+		{
+			name: "octet-stream",
+			build: func(t *testing.T) (*bytes.Reader, string) {
+				t.Helper()
+				return bytes.NewReader(exportRec.Body.Bytes()), "application/octet-stream"
+			},
+		},
+		{
+			name: "multipart",
+			build: func(t *testing.T) (*bytes.Reader, string) {
+				t.Helper()
+				var body bytes.Buffer
+				writer := multipart.NewWriter(&body)
+				file, err := writer.CreateFormFile("bundle", "evidence-pack.tar.gz")
+				if err != nil {
+					t.Fatalf("create multipart evidence bundle: %v", err)
+				}
+				if _, err := file.Write(exportRec.Body.Bytes()); err != nil {
+					t.Fatalf("write multipart evidence bundle: %v", err)
+				}
+				if err := writer.Close(); err != nil {
+					t.Fatalf("close multipart evidence bundle: %v", err)
+				}
+				return bytes.NewReader(body.Bytes()), writer.FormDataContentType()
+			},
+		},
+	} {
+		t.Run(upload.name, func(t *testing.T) {
+			body, contentType := upload.build(t)
+			verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/verify", body)
+			verifyReq.Header.Set("Content-Type", contentType)
+			verifyRec := httptest.NewRecorder()
+			mux.ServeHTTP(verifyRec, verifyReq)
+			if verifyRec.Code != http.StatusOK {
+				t.Fatalf("verify status = %d body=%s", verifyRec.Code, verifyRec.Body.String())
+			}
+			var result map[string]any
+			if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result["verdict"] != "PASS" {
+				t.Fatalf("verification result = %+v", result)
+			}
+		})
 	}
 }
 

@@ -10,6 +10,7 @@ workflow wiring, and basic package/source identity.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import re
 import subprocess
@@ -52,6 +53,11 @@ REQUIRED_RUNTIME_REFERENCE_SLUGS = {
 CANONICAL_REPO_RENAMES = {
     'helm' + '-oss': 'helm-ai-kernel',
 }
+CANONICAL_PUBLIC_OPENAPI_PATH = 'api/openapi/helm.openapi.yaml'
+PUBLIC_HTTP_API_SLUG = 'reference/http-api'
+PUBLIC_HTTP_API_SOURCE_PATH = 'docs/reference/http-api.md'
+SHA256_DIGEST_RE = re.compile(r'^sha256:[0-9a-f]{64}$')
+GIT_BLOB_SHA1_RE = re.compile(r'^[0-9a-f]{40}$')
 
 
 def expected_repo_name() -> str:
@@ -100,6 +106,25 @@ def parse_env_names(path: Path) -> list[str]:
 
 def load_manifest(path: Path) -> dict:
     return json.loads(read_text(path))
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open('rb') as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return 'sha256:' + digest.hexdigest()
+
+
+def git_blob_sha1(path: str) -> str | None:
+    result = subprocess.run(
+        ['git', 'hash-object', path],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 def git_ls_files() -> list[str]:
@@ -193,6 +218,97 @@ def validate_source_inventory(failures: list[str], public_slugs: set[str]) -> No
     missing_reference_slugs = REQUIRED_RUNTIME_REFERENCE_SLUGS - inventory_slugs
     for slug in sorted(missing_reference_slugs):
         failures.append(f'docs/source-inventory.manifest.json does not link required runtime reference slug: {slug}')
+
+
+def validate_public_api_contract(failures: list[str], manifest: dict) -> None:
+    contract = manifest.get('api_contract')
+    if not isinstance(contract, dict):
+        failures.append('docs/public-docs.manifest.json api_contract is missing')
+        return
+    if contract.get('schema_version') != 1:
+        failures.append('docs/public-docs.manifest.json api_contract schema_version must be 1')
+
+    source_path = contract.get('source_path')
+    if source_path != CANONICAL_PUBLIC_OPENAPI_PATH:
+        failures.append(
+            'docs/public-docs.manifest.json api_contract source_path must be '
+            f'{CANONICAL_PUBLIC_OPENAPI_PATH!r}, got {source_path!r}'
+        )
+        return
+    source = ROOT / source_path
+    if not source.exists():
+        failures.append(f'docs/public-docs.manifest.json api_contract source does not exist: {source_path}')
+        return
+
+    content_sha256 = str(contract.get('content_sha256') or '')
+    if not SHA256_DIGEST_RE.fullmatch(content_sha256):
+        failures.append('docs/public-docs.manifest.json api_contract content_sha256 must be sha256:<64 lowercase hex>')
+    elif actual := sha256_file(source):
+        if content_sha256 != actual:
+            failures.append(
+                'docs/public-docs.manifest.json api_contract content_sha256 does not match '
+                f'{source_path}: {content_sha256} != {actual}'
+            )
+
+    git_blob = str(contract.get('git_blob_sha1') or '')
+    if not GIT_BLOB_SHA1_RE.fullmatch(git_blob):
+        failures.append('docs/public-docs.manifest.json api_contract git_blob_sha1 must be 40 lowercase hex')
+    else:
+        actual_blob = git_blob_sha1(source_path)
+        if actual_blob is None:
+            failures.append(f'cannot resolve git blob for public OpenAPI source: {source_path}')
+        elif git_blob != actual_blob:
+            failures.append(
+                'docs/public-docs.manifest.json api_contract git_blob_sha1 does not match '
+                f'{source_path}: {git_blob} != {actual_blob}'
+            )
+
+    documents = manifest.get('documents') or manifest.get('owned_documents') or []
+    http_api_docs = [document for document in documents if document.get('slug') == PUBLIC_HTTP_API_SLUG]
+    if len(http_api_docs) != 1:
+        failures.append(f'docs/public-docs.manifest.json must define exactly one {PUBLIC_HTTP_API_SLUG!r} document')
+        return
+    if http_api_docs[0].get('source_path') != PUBLIC_HTTP_API_SOURCE_PATH:
+        failures.append(
+            f'docs/public-docs.manifest.json {PUBLIC_HTTP_API_SLUG} source_path must be '
+            f'{PUBLIC_HTTP_API_SOURCE_PATH!r}'
+        )
+        return
+
+    http_api_source = ROOT / PUBLIC_HTTP_API_SOURCE_PATH
+    if not http_api_source.exists():
+        failures.append(f'{PUBLIC_HTTP_API_SOURCE_PATH} is missing')
+        return
+    http_api_text = read_text(http_api_source)
+
+    operations = contract.get('public_operations')
+    if not isinstance(operations, list) or not operations:
+        failures.append('docs/public-docs.manifest.json api_contract public_operations must be a non-empty list')
+        return
+    seen_routes: set[str] = set()
+    seen_operation_ids: set[str] = set()
+    for operation in operations:
+        if not isinstance(operation, dict):
+            failures.append('docs/public-docs.manifest.json api_contract public_operations must contain objects')
+            continue
+        method = str(operation.get('method') or '').strip()
+        path = str(operation.get('path') or '').strip()
+        operation_id = str(operation.get('operation_id') or '').strip()
+        route = f'{method} {path}'
+        if method not in {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'} or not path.startswith('/') or not operation_id:
+            failures.append(f'docs/public-docs.manifest.json api_contract has invalid public operation: {operation!r}')
+            continue
+        if route in seen_routes:
+            failures.append(f'docs/public-docs.manifest.json api_contract has duplicate public route: {route}')
+        seen_routes.add(route)
+        if operation_id in seen_operation_ids:
+            failures.append(f'docs/public-docs.manifest.json api_contract has duplicate operation_id: {operation_id}')
+        seen_operation_ids.add(operation_id)
+        if route not in http_api_text:
+            failures.append(
+                f'{PUBLIC_HTTP_API_SOURCE_PATH} does not list public API contract route {route} '
+                'from docs/public-docs.manifest.json'
+            )
 
 
 def validate_sdk_freshness_docs(failures: list[str]) -> None:
@@ -371,6 +487,7 @@ def main() -> int:
             if not (ROOT / source_path).exists():
                 failures.append(f'docs/public-docs.manifest.json source does not exist for {slug}: {source_path}')
         public_slugs = slugs
+        validate_public_api_contract(failures, manifest)
 
     validate_source_inventory(failures, public_slugs)
 

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,6 +72,217 @@ func TestRuntimeRouteRegistryMatchesOpenAPI(t *testing.T) {
 			t.Fatalf("operationId drift for %s: registry=%s openapi=%s", key, registered.OperationID, operationID)
 		}
 	}
+}
+
+func TestPublicDocsOpenAPIContract(t *testing.T) {
+	root := openAPIRepositoryRoot(t)
+	manifestPath := filepath.Join(root, "docs", "public-docs.manifest.json")
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read public docs manifest: %v", err)
+	}
+	var manifest publicDocsManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatalf("parse public docs manifest: %v", err)
+	}
+	if manifest.APIContract.SchemaVersion != 1 {
+		t.Fatalf("public docs API contract schema_version=%d, want 1", manifest.APIContract.SchemaVersion)
+	}
+	if manifest.APIContract.SourcePath != "api/openapi/helm.openapi.yaml" {
+		t.Fatalf("public docs API contract source_path=%q", manifest.APIContract.SourcePath)
+	}
+	if len(manifest.APIContract.PublicOperations) == 0 {
+		t.Fatal("public docs API contract has no public operations")
+	}
+
+	openAPIPath := filepath.Join(root, filepath.FromSlash(manifest.APIContract.SourcePath))
+	openAPIData, err := os.ReadFile(openAPIPath)
+	if err != nil {
+		t.Fatalf("read public OpenAPI source: %v", err)
+	}
+	digest := sha256.Sum256(openAPIData)
+	if got, want := manifest.APIContract.ContentSHA256, "sha256:"+hex.EncodeToString(digest[:]); got != want {
+		t.Fatalf("public docs API contract content_sha256=%q, want %q", got, want)
+	}
+
+	var spec publicDocsOpenAPISpec
+	if err := yaml.Unmarshal(openAPIData, &spec); err != nil {
+		t.Fatalf("parse public OpenAPI source: %v", err)
+	}
+	operationsByID := make(map[string]publicDocsOpenAPIOperation)
+	for _, pathItem := range spec.Paths {
+		for _, operation := range pathItem {
+			if operation.OperationID != "" {
+				operationsByID[operation.OperationID] = operation
+			}
+		}
+	}
+	for _, expected := range manifest.APIContract.PublicOperations {
+		operation, ok := spec.Paths[expected.Path][strings.ToLower(expected.Method)]
+		if !ok {
+			t.Fatalf("public docs API contract route %s %s is missing from OpenAPI", expected.Method, expected.Path)
+		}
+		if operation.OperationID != expected.OperationID {
+			t.Fatalf("public docs API contract operationId drift for %s %s: manifest=%s openapi=%s", expected.Method, expected.Path, expected.OperationID, operation.OperationID)
+		}
+	}
+
+	verifyEvidence, ok := operationsByID["verifyEvidence"]
+	if !ok {
+		t.Fatal("OpenAPI is missing verifyEvidence")
+	}
+	for _, contentType := range []string{"application/octet-stream", "multipart/form-data"} {
+		if _, ok := verifyEvidence.RequestBody.Content[contentType]; !ok {
+			t.Fatalf("verifyEvidence does not declare %s request content", contentType)
+		}
+	}
+
+	for _, requirement := range []publicDocsExampleRequirement{
+		{
+			OperationID: "runPublicDemo",
+			ContentType: "application/json",
+			LiteralKeys: []string{"action_id", "policy_id"},
+		},
+		{
+			OperationID: "verifyPublicDemoReceipt",
+			ContentType: "application/json",
+			Bindings: map[string]string{
+				"receipt":               "$.receipt",
+				"expected_receipt_hash": "$.proof_refs.receipt_hash",
+			},
+		},
+		{
+			OperationID: "tamperPublicDemoReceipt",
+			ContentType: "application/json",
+			LiteralKeys: []string{"mutation"},
+			Bindings: map[string]string{
+				"receipt":               "$.receipt",
+				"expected_receipt_hash": "$.proof_refs.receipt_hash",
+			},
+		},
+		{
+			OperationID: "evaluateDecision",
+			ContentType: "application/json",
+			LiteralKeys: []string{"action", "resource"},
+		},
+		{
+			OperationID: "verifyEvidence",
+			ContentType: "application/octet-stream",
+			RequireFile: true,
+		},
+		{
+			OperationID: "authorizeMcpCall",
+			ContentType: "application/json",
+			LiteralKeys: []string{"server_id", "tool_name", "args_hash"},
+		},
+	} {
+		operation, ok := operationsByID[requirement.OperationID]
+		if !ok {
+			t.Fatalf("OpenAPI is missing %s", requirement.OperationID)
+		}
+		assertPublicDocsExample(t, root, requirement, operation.DocsExample)
+	}
+}
+
+type publicDocsManifest struct {
+	APIContract struct {
+		SchemaVersion    int                           `json:"schema_version"`
+		SourcePath       string                        `json:"source_path"`
+		ContentSHA256    string                        `json:"content_sha256"`
+		PublicOperations []publicDocsManifestOperation `json:"public_operations"`
+	} `json:"api_contract"`
+}
+
+type publicDocsManifestOperation struct {
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	OperationID string `json:"operation_id"`
+}
+
+type publicDocsOpenAPISpec struct {
+	Paths map[string]map[string]publicDocsOpenAPIOperation `yaml:"paths"`
+}
+
+type publicDocsOpenAPIOperation struct {
+	OperationID string                    `yaml:"operationId"`
+	RequestBody publicDocsRequestBody     `yaml:"requestBody"`
+	DocsExample *publicDocsOpenAPIExample `yaml:"x-helm-docs-example"`
+}
+
+type publicDocsRequestBody struct {
+	Content map[string]any `yaml:"content"`
+}
+
+type publicDocsOpenAPIExample struct {
+	SourceTest string `yaml:"source_test"`
+	Request    struct {
+		ContentType string                            `yaml:"content_type"`
+		Literal     map[string]any                    `yaml:"literal"`
+		Bindings    map[string]publicDocsResponseBind `yaml:"bindings"`
+		File        string                            `yaml:"file"`
+	} `yaml:"request"`
+}
+
+type publicDocsResponseBind struct {
+	FromResponse struct {
+		Method   string `yaml:"method"`
+		Path     string `yaml:"path"`
+		JSONPath string `yaml:"json_path"`
+	} `yaml:"from_response"`
+}
+
+type publicDocsExampleRequirement struct {
+	OperationID string
+	ContentType string
+	LiteralKeys []string
+	Bindings    map[string]string
+	RequireFile bool
+}
+
+func assertPublicDocsExample(t *testing.T, root string, requirement publicDocsExampleRequirement, example *publicDocsOpenAPIExample) {
+	t.Helper()
+	if example == nil {
+		t.Fatalf("%s is missing x-helm-docs-example", requirement.OperationID)
+	}
+	if example.Request.ContentType != requirement.ContentType {
+		t.Fatalf("%s docs example content_type=%q, want %q", requirement.OperationID, example.Request.ContentType, requirement.ContentType)
+	}
+	sourceFile, _, ok := strings.Cut(example.SourceTest, "#")
+	if !ok || sourceFile == "" {
+		t.Fatalf("%s docs example source_test=%q, want path#TestName", requirement.OperationID, example.SourceTest)
+	}
+	if filepath.IsAbs(sourceFile) {
+		t.Fatalf("%s docs example source_test must be repository-relative: %q", requirement.OperationID, example.SourceTest)
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(sourceFile))); err != nil {
+		t.Fatalf("%s docs example source_test does not resolve: %v", requirement.OperationID, err)
+	}
+	for _, key := range requirement.LiteralKeys {
+		if _, ok := example.Request.Literal[key]; !ok {
+			t.Fatalf("%s docs example is missing literal %q", requirement.OperationID, key)
+		}
+	}
+	for key, jsonPath := range requirement.Bindings {
+		binding, ok := example.Request.Bindings[key]
+		if !ok {
+			t.Fatalf("%s docs example is missing response binding %q", requirement.OperationID, key)
+		}
+		if binding.FromResponse.Method != http.MethodPost || binding.FromResponse.Path != "/api/demo/run" || binding.FromResponse.JSONPath != jsonPath {
+			t.Fatalf("%s docs example binding %q=%+v, want POST /api/demo/run %s", requirement.OperationID, key, binding.FromResponse, jsonPath)
+		}
+	}
+	if requirement.RequireFile && example.Request.File == "" {
+		t.Fatalf("%s docs example must name its source-owned input file", requirement.OperationID)
+	}
+}
+
+func openAPIRepositoryRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate OpenAPI contract test source")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 }
 
 func TestBoundaryStatusOpenAPIMatchesRuntimeContract(t *testing.T) {

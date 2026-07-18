@@ -216,12 +216,35 @@ type GovernedOutcome struct {
 // hash of the request, already computed by the adapter.
 func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash string) GovernedOutcome {
 	now := b.now().UTC()
+	permitScope, err := b.resolvePermitScope(req)
+	if err != nil {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    "CONNECTOR_PERMIT_SCOPE_REJECTED",
+			Reason:        err.Error(),
+			DispatchState: DispatchStateNotDispatched,
+		}
+	}
+	if b.reservations != nil && !permitScope.connectorDeclared {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    "CONNECTOR_PERMIT_SCOPE_UNSUPPORTED",
+			Reason:        "durable execution connector does not declare its exact permit scope",
+			DispatchState: DispatchStateNotDispatched,
+		}
+	}
+	boundaryEffect := "read"
+	if permitScope.connectorDeclared {
+		boundaryEffect = strings.ToLower(string(permitScope.effectType))
+	} else if b.isWrite(req.ToolName, req.Arguments) {
+		boundaryEffect = "write"
+	}
 
 	// Boundary gate (allowlist / server identity / scope / pinned schema) runs
 	// before policy. A boundary refusal short-circuits; policy is never asked to
 	// authorize a call the boundary already rejected.
 	if b.firewall != nil {
-		if outcome, ok := b.authorizeBoundary(ctx, req, inputHash); !ok {
+		if outcome, ok := b.authorizeBoundary(ctx, req, inputHash, boundaryEffect); !ok {
 			return outcome
 		}
 	}
@@ -263,20 +286,6 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	// Base policy DENY is terminal.
 	if receipt.Verdict != contracts.WorkstationVerdictAllow {
 		base.Verdict = contracts.VerdictDeny
-		return base
-	}
-
-	permitScope, err := b.resolvePermitScope(req)
-	if err != nil {
-		base.Verdict = contracts.VerdictDeny
-		base.ReasonCode = "CONNECTOR_PERMIT_SCOPE_REJECTED"
-		base.Reason = err.Error()
-		return base
-	}
-	if b.reservations != nil && !permitScope.connectorDeclared {
-		base.Verdict = contracts.VerdictDeny
-		base.ReasonCode = "CONNECTOR_PERMIT_SCOPE_UNSUPPORTED"
-		base.Reason = "durable execution connector does not declare its exact permit scope"
 		return base
 	}
 
@@ -587,12 +596,8 @@ func approvalEffectTransitionMeta(meta effects.ExecutionLifecycleMeta) approvalc
 // when the boundary refuses (caller returns that outcome); (_,true) when the
 // boundary authorizes dispatch and policy evaluation should proceed. It is
 // fail-closed: schema/canonicalization or firewall errors deny.
-func (b *GovernedBridge) authorizeBoundary(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash string) (GovernedOutcome, bool) {
+func (b *GovernedBridge) authorizeBoundary(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash, effect string) (GovernedOutcome, bool) {
 	serverID := firstNonEmpty(b.serverID, req.Metadata["server_id"])
-	effect := "read"
-	if b.isWrite(req.ToolName, req.Arguments) {
-		effect = "write"
-	}
 	argsHash := inputHash
 	if tool, ok := b.firewall.Catalog.Lookup(req.ToolName); ok {
 		hash, err := mcpcore.ValidateToolArguments(tool, req.Arguments)

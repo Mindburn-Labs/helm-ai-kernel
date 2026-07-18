@@ -178,6 +178,10 @@ paths:
       operationId: verifyPublicDemoReceipt
       tags: [demo]
       summary: Verify a HELM AI Kernel demo receipt
+      description: |
+        Checks the signed demo receipt returned by `/api/demo/run` against its
+        expected receipt hash. It verifies only the supplied sandbox receipt and
+        dispatches no external work.
       x-helm-docs-example:
         source_test: core/cmd/helm-ai-kernel/demo_routes_test.go#TestDemoRunVerifyAndTamper
         request:
@@ -232,6 +236,10 @@ paths:
       operationId: tamperPublicDemoReceipt
       tags: [demo]
       summary: Tamper with a demo receipt and verify that validation fails
+      description: |
+        Creates a deliberately mutated copy of a demo receipt and returns the
+        expected verification failure. It is a sandbox test route and does not
+        alter durable receipts or dispatch external work.
       x-helm-docs-example:
         source_test: core/cmd/helm-ai-kernel/demo_routes_test.go#TestDemoRunVerifyAndTamper
         request:
@@ -400,6 +408,10 @@ paths:
       operationId: evaluateDecision
       tags: [console]
       summary: Evaluate a governed intent and emit a receipt
+      description: |
+        Evaluates a tenant- and principal-bound request at the configured local
+        boundary. The decision is recorded as a governed receipt; a denied or
+        unavailable boundary prevents execution.
       x-helm-docs-example:
         source_test: core/cmd/helm-ai-kernel/receipt_routes_test.go#TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal
         request:
@@ -451,6 +463,10 @@ paths:
       operationId: listReceipts
       tags: [console]
       summary: List durable receipts
+      description: |
+        Lists receipt records visible to the authenticated tenant and principal
+        bindings. Use `limit`, `since`, and `agent` to page or filter the local
+        receipt stream; the response reports cursor metadata.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -486,6 +502,10 @@ paths:
       operationId: tailReceipts
       tags: [console]
       summary: Tail durable receipts as server-sent events
+      description: |
+        Streams receipt events for the authenticated tenant and principal
+        bindings using server-sent events. The stream is read-only; use filters
+        to limit records and the receipt lookup route for a specific record.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -521,6 +541,9 @@ paths:
       operationId: getConsoleReceipt
       tags: [console]
       summary: Get a receipt by ID
+      description: |
+        Returns one receipt record visible to the authenticated tenant and
+        principal bindings. It does not resolve a record outside that scope.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -2000,6 +2023,10 @@ paths:
       operationId: getBoundaryStatus
       tags: [boundary]
       summary: Read execution-boundary health and authority status
+      description: |
+        Reports local boundary health and authority components, including the
+        PDP, MCP firewall, receipt store, and signer. It is evidence for the
+        configured local runtime, not a hosted-service availability claim.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -3095,6 +3122,9 @@ paths:
       operationId: listMcpRegistry
       tags: [mcp]
       summary: List quarantined and approved MCP servers
+      description: |
+        Lists quarantine and approval records held by the local MCP boundary.
+        This read endpoint does not approve a server or dispatch a tool call.
       security:
         - AdminBearerAuth: []
       responses:
@@ -3265,6 +3295,10 @@ paths:
       operationId: scanMcpServer
       tags: [mcp]
       summary: Scan and quarantine an MCP server or tool bundle
+      description: |
+        Scans an MCP server or tool bundle and records a quarantine assessment.
+        It does not approve or dispatch an upstream tool call; approval requires
+        the separate governed authorization path.
       security:
         - AdminBearerAuth: []
       requestBody:
@@ -3339,6 +3373,10 @@ paths:
       operationId: authorizeMcpCall
       tags: [mcp]
       summary: Authorize an MCP tools/call before upstream dispatch
+      description: |
+        Evaluates an MCP `tools/call` at the local boundary before upstream
+        dispatch. A missing or quarantined server, schema pin, or policy approval
+        fails closed; only an ALLOW record permits the caller to proceed.
       x-helm-docs-example:
         source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow
         request:
@@ -6395,7 +6433,10 @@ components:
   # ── Responses ───────────────────────────────────────
   responses:
     HelmError:
-      description: HELM error response
+      description: >-
+        Structured HELM error envelope. Inspect `error.type`, `error.code`, and
+        `error.reason_code` to identify the failure category; correct the request
+        or boundary state before retrying. This response does not authorize an effect.
       content:
         application/json:
           schema:

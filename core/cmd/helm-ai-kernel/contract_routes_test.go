@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 
@@ -55,6 +56,120 @@ func TestContractRoutesServeDocumentedEvidenceProofgraphAndConformancePaths(t *t
 				t.Fatalf("route returned %d: %s", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestPublicDocsExamplesExerciseLocalRuntime is the executable provenance for
+// the source-owned public documentation examples that do not need a response
+// binding. Each request stays inside the in-memory local runtime; no network
+// service or external MCP server is contacted.
+func TestPublicDocsExamplesExerciseLocalRuntime(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+
+	contractMux := http.NewServeMux()
+	registerReceiptRoutes(contractMux, svc)
+	registerContractRoutes(contractMux, svc)
+
+	cases := []struct {
+		name        string
+		method      string
+		target      string
+		body        string
+		wantStatus  int
+		contentType string
+		cancel      bool
+	}{
+		{
+			name:        "list receipts",
+			method:      http.MethodGet,
+			target:      "/api/v1/receipts",
+			wantStatus:  http.StatusOK,
+			contentType: "application/json",
+		},
+		{
+			name:        "tail receipts",
+			method:      http.MethodGet,
+			target:      "/api/v1/receipts/tail",
+			wantStatus:  http.StatusOK,
+			contentType: "text/event-stream",
+			cancel:      true,
+		},
+		{
+			name:        "get receipt by id",
+			method:      http.MethodGet,
+			target:      "/api/v1/receipts/rcpt-test",
+			wantStatus:  http.StatusOK,
+			contentType: "application/json",
+		},
+		{
+			name:        "read boundary status",
+			method:      http.MethodGet,
+			target:      "/api/v1/boundary/status",
+			wantStatus:  http.StatusOK,
+			contentType: "application/json",
+		},
+		{
+			name:        "list negative conformance vectors",
+			method:      http.MethodGet,
+			target:      "/api/v1/conformance/negative",
+			wantStatus:  http.StatusOK,
+			contentType: "application/json",
+		},
+		{
+			name:        "list mcp registry",
+			method:      http.MethodGet,
+			target:      "/api/v1/mcp/registry",
+			wantStatus:  http.StatusOK,
+			contentType: "application/json",
+		},
+		{
+			name:        "scan mcp server",
+			method:      http.MethodPost,
+			target:      "/api/v1/mcp/scan",
+			body:        `{"server_id":"docs-example-mcp","name":"docs example MCP server","transport":"stdio","endpoint":"stdio://docs-example","tool_names":["local.echo"]}`,
+			wantStatus:  http.StatusAccepted,
+			contentType: "application/json",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			req := httptest.NewRequest(testCase.method, testCase.target, strings.NewReader(testCase.body))
+			authorizeTestRequest(req)
+			if testCase.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			if testCase.cancel {
+				ctx, cancel := context.WithCancel(req.Context())
+				cancel()
+				req = req.WithContext(ctx)
+			}
+			rec := httptest.NewRecorder()
+			contractMux.ServeHTTP(rec, req)
+			if rec.Code != testCase.wantStatus {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, testCase.wantStatus, rec.Body.String())
+			}
+			if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, testCase.contentType) {
+				t.Fatalf("content type=%q want prefix %q", got, testCase.contentType)
+			}
+		})
+	}
+
+	signer, err := helmcrypto.NewEd25519Signer("docs-example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	demoMux := http.NewServeMux()
+	registerDemoRoutes(demoMux, &Services{ReceiptSigner: signer})
+	healthReq := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	healthRec := httptest.NewRecorder()
+	demoMux.ServeHTTP(healthRec, healthReq)
+	if healthRec.Code != http.StatusOK {
+		t.Fatalf("health status=%d body=%s", healthRec.Code, healthRec.Body.String())
+	}
+	if got := healthRec.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Fatalf("health content type=%q", got)
 	}
 }
 

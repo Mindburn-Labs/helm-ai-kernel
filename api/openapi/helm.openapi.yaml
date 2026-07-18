@@ -88,6 +88,9 @@ paths:
       description: |
         Public health endpoint for the self-hostable HELM AI Kernel proof console.
         Includes build and version metadata used by deployment smoke tests.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       responses:
         '200':
           description: Public demo service health
@@ -306,6 +309,13 @@ paths:
         When the opt-in scoped emergency-stop fence is enabled, this
         unauthenticated route returns 503 until an authenticated adapter can
         bind tenant and workspace scope.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/subsystems_openai_test.go#TestGovernedOpenAIProxyUnavailableWhenScopedFenceEnabled
+        request:
+          content_type: application/json
+          literal:
+            model: gpt-test
+            messages: []
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyHeader'
       requestBody:
@@ -467,6 +477,9 @@ paths:
         Lists receipt records visible to the authenticated tenant and principal
         bindings. Use `limit`, `since`, and `agent` to page or filter the local
         receipt stream; the response reports cursor metadata.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       security:
         - AdminBearerAuth: []
       parameters:
@@ -506,6 +519,9 @@ paths:
         Streams receipt events for the authenticated tenant and principal
         bindings using server-sent events. The stream is read-only; use filters
         to limit records and the receipt lookup route for a specific record.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       security:
         - AdminBearerAuth: []
       parameters:
@@ -552,7 +568,10 @@ paths:
         - name: receipt_id
           in: path
           required: true
-          schema: { type: string }
+          schema: { type: string, example: rcpt-test }
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       responses:
         '200':
           description: Receipt detail
@@ -2027,6 +2046,9 @@ paths:
         Reports local boundary health and authority components, including the
         PDP, MCP firewall, receipt store, and signer. It is evidence for the
         configured local runtime, not a hosted-service availability claim.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       security:
         - AdminBearerAuth: []
       parameters:
@@ -2311,6 +2333,13 @@ paths:
       description: |
         Exports a deterministic .tar.gz containing all receipts, ProofGraph nodes, and metadata.
         Same content always produces same SHA-256.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestEvidenceExportAndVerifyRoundTrip
+        request:
+          content_type: application/json
+          literal:
+            session_id: agent.test
+            format: tar.gz
       parameters:
         - $ref: '#/components/parameters/HelmTenantIDHeader'
         - $ref: '#/components/parameters/HelmPrincipalIDHeader'
@@ -3106,6 +3135,9 @@ paths:
         policy-not-ready, stale policy, PDP outage, direct bypass, schema drift,
         malformed arguments, missing credentials, sandbox overgrant, blocked
         egress, and deny receipt emission behavior.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       responses:
         '200':
           description: Negative conformance vector list
@@ -3125,6 +3157,9 @@ paths:
       description: |
         Lists quarantine and approval records held by the local MCP boundary.
         This read endpoint does not approve a server or dispatch a tool call.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       security:
         - AdminBearerAuth: []
       responses:
@@ -3299,6 +3334,16 @@ paths:
         Scans an MCP server or tool bundle and records a quarantine assessment.
         It does not approve or dispatch an upstream tool call; approval requires
         the separate governed authorization path.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request:
+          content_type: application/json
+          literal:
+            server_id: docs-example-mcp
+            name: docs example MCP server
+            transport: stdio
+            endpoint: stdio://docs-example
+            tool_names: [local.echo]
       security:
         - AdminBearerAuth: []
       requestBody:

@@ -125,6 +125,7 @@ func TestPublicDocsOpenAPIContract(t *testing.T) {
 		if operation.OperationID != expected.OperationID {
 			t.Fatalf("public docs API contract operationId drift for %s %s: manifest=%s openapi=%s", expected.Method, expected.Path, expected.OperationID, operation.OperationID)
 		}
+		assertPublicDocsOperationSemantics(t, root, expected.OperationID, operation)
 	}
 
 	verifyEvidence, ok := operationsByID["verifyEvidence"]
@@ -205,6 +206,7 @@ type publicDocsOpenAPISpec struct {
 
 type publicDocsOpenAPIOperation struct {
 	OperationID string                    `yaml:"operationId"`
+	Description string                    `yaml:"description"`
 	RequestBody publicDocsRequestBody     `yaml:"requestBody"`
 	DocsExample *publicDocsOpenAPIExample `yaml:"x-helm-docs-example"`
 }
@@ -214,13 +216,15 @@ type publicDocsRequestBody struct {
 }
 
 type publicDocsOpenAPIExample struct {
-	SourceTest string `yaml:"source_test"`
-	Request    struct {
-		ContentType string                            `yaml:"content_type"`
-		Literal     map[string]any                    `yaml:"literal"`
-		Bindings    map[string]publicDocsResponseBind `yaml:"bindings"`
-		File        string                            `yaml:"file"`
-	} `yaml:"request"`
+	SourceTest string                           `yaml:"source_test"`
+	Request    *publicDocsOpenAPIExampleRequest `yaml:"request"`
+}
+
+type publicDocsOpenAPIExampleRequest struct {
+	ContentType string                            `yaml:"content_type"`
+	Literal     map[string]any                    `yaml:"literal"`
+	Bindings    map[string]publicDocsResponseBind `yaml:"bindings"`
+	File        string                            `yaml:"file"`
 }
 
 type publicDocsResponseBind struct {
@@ -243,6 +247,9 @@ func assertPublicDocsExample(t *testing.T, root string, requirement publicDocsEx
 	t.Helper()
 	if example == nil {
 		t.Fatalf("%s is missing x-helm-docs-example", requirement.OperationID)
+	}
+	if example.Request == nil {
+		t.Fatalf("%s docs example is missing request metadata", requirement.OperationID)
 	}
 	if example.Request.ContentType != requirement.ContentType {
 		t.Fatalf("%s docs example content_type=%q, want %q", requirement.OperationID, example.Request.ContentType, requirement.ContentType)
@@ -281,6 +288,53 @@ func assertPublicDocsExample(t *testing.T, root string, requirement publicDocsEx
 	}
 	if requirement.RequireFile && example.Request.File == "" {
 		t.Fatalf("%s docs example must name its source-owned input file", requirement.OperationID)
+	}
+}
+
+func assertPublicDocsOperationSemantics(t *testing.T, root, operationID string, operation publicDocsOpenAPIOperation) {
+	t.Helper()
+	if strings.TrimSpace(operation.Description) == "" {
+		t.Fatalf("%s is missing a source-owned operation description", operationID)
+	}
+	example := operation.DocsExample
+	if example == nil {
+		t.Fatalf("%s is missing x-helm-docs-example", operationID)
+	}
+	if example.Request == nil {
+		t.Fatalf("%s docs example is missing request metadata", operationID)
+	}
+	if len(operation.RequestBody.Content) > 0 && example.Request.ContentType == "" {
+		t.Fatalf("%s has a request body but its docs example has no content_type", operationID)
+	}
+	if example.Request.ContentType != "" {
+		if _, ok := operation.RequestBody.Content[example.Request.ContentType]; !ok {
+			t.Fatalf("%s docs example content_type=%q is not declared by the operation", operationID, example.Request.ContentType)
+		}
+	} else if len(example.Request.Literal) > 0 || len(example.Request.Bindings) > 0 || example.Request.File != "" {
+		t.Fatalf("%s docs example declares a body or binding without content_type", operationID)
+	}
+	assertPublicDocsExampleSource(t, root, operationID, example.SourceTest)
+}
+
+func assertPublicDocsExampleSource(t *testing.T, root, operationID, sourceTest string) {
+	t.Helper()
+	sourceFile, sourceTestName, ok := strings.Cut(sourceTest, "#")
+	if !ok || sourceFile == "" || sourceTestName == "" {
+		t.Fatalf("%s docs example source_test=%q, want path#TestName", operationID, sourceTest)
+	}
+	if filepath.IsAbs(sourceFile) {
+		t.Fatalf("%s docs example source_test must be repository-relative: %q", operationID, sourceTest)
+	}
+	sourceTestPath := filepath.Join(root, filepath.FromSlash(sourceFile))
+	if _, err := os.Stat(sourceTestPath); err != nil {
+		t.Fatalf("%s docs example source_test does not resolve: %v", operationID, err)
+	}
+	sourceTestData, err := os.ReadFile(sourceTestPath)
+	if err != nil {
+		t.Fatalf("%s read docs example source_test: %v", operationID, err)
+	}
+	if !regexp.MustCompile(`(?m)^func\s+` + regexp.QuoteMeta(sourceTestName) + `\s*\(`).Match(sourceTestData) {
+		t.Fatalf("%s docs example source_test symbol %q is not declared in %s", operationID, sourceTestName, sourceFile)
 	}
 }
 

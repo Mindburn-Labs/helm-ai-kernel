@@ -82,8 +82,13 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
   FENCE-first denies new admission; admission-first creates a pre-FENCE
   admitted record even when its signed state is still `NOT_STARTED`. Exact
   replay returns the original record without extending expiry; changed
-  bindings conflict. The separate internal effect reservation stream can now
-  order an explicitly wired connector start against FENCE and expose active
+  bindings conflict. Admission alone no longer authorizes a later connector
+  start: the separate internal effect reservation stream reacquires the same
+  scope lock at `MarkStarted`, rechecks current FENCE, and rechecks the current
+  certified exact-release head before durably crossing the pre-network seam.
+  If FENCE/revocation commits first, the connector closes `NOT_STARTED` and
+  emits no network request; if `STARTED` commits first, the effect is active
+  work that the later stop must reconcile. The stream exposes active
   `ADMITTED / STARTED / UNCERTAIN` work, but it has no disposition command,
   source-acknowledged close, or renewal after expiry.
 - This Kernel gate does not by itself enforce the connector boundary. Merge,
@@ -91,12 +96,13 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
   and atomically persists the signed admission before every
   `CONSUMED -> DISPATCHING` transition, including cached and recovered
   consumption records. The internal boundary now implements append-only
-  lifecycle transitions, active-work listing, exact current-release locking,
-  and the GitHub pre-network seam when configured. Production remains blocked
-  on deployed Data Plane wiring, disposition commands, connector
-  acknowledgement/close evidence, and controlled runtime proof. The dispatch
-  workload cannot select `connector_id`, `connector_action`, release scope, or
-  revision; the Kernel derives them from the signed approval chain.
+  lifecycle transitions, active-work listing, exact current-release locking at
+  both admission and start, typed no-network denial, and the GitHub pre-network
+  seam when configured. Production remains blocked on deployed Data Plane
+  wiring, disposition commands, connector acknowledgement/close evidence, and
+  controlled runtime proof. The dispatch workload cannot select
+  `connector_id`, `connector_action`, release scope, or revision; the Kernel
+  derives them from the signed approval chain.
 - It does not revoke existing permits, cancel in-flight work, stop unmanaged
   adapters, or implement release/unfence. Those remain separate contracts.
 

@@ -194,6 +194,62 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	if err != nil || notStarted.State != EffectReservationStateNotStarted {
 		t.Fatalf("MarkNotStarted() = %+v, %v", notStarted, err)
 	}
+
+	fenceStartConsumer := consumer
+	fenceStartConsumer.WorkspaceID = "workspace-fence-start"
+	fenceStartAdmitter, err := NewEffectReservationAdmitter(
+		runtimeStore,
+		staticConsumerProvider{identity: fenceStartConsumer},
+		releaseRuntime,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fenceStart := effectReservationAdmissionFixture(t, approvalSigner, release, fenceStartConsumer, "attempt-fence-start", now)
+	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, fenceStart)
+	if _, err := fenceStartAdmitter.Admit(ctx, fenceStart); err != nil {
+		t.Fatal(err)
+	}
+	fenceStartMeta := EffectTransitionMeta{ConnectorExecutionRef: "github-request-fence-start", IntentRef: "intent-fence-start"}
+	fenceStartGate := make(chan struct{})
+	fenceStartResult := make(chan error, 1)
+	fenceResult := make(chan error, 1)
+	go func() {
+		<-fenceStartGate
+		_, startErr := fenceStartAdmitter.MarkStarted(ctx, fenceStart.Admission.AdmissionID, fenceStartMeta)
+		fenceStartResult <- startErr
+	}()
+	go func() {
+		<-fenceStartGate
+		command := approvalTestFenceCommand(
+			kernel.StopScope{TenantID: fenceStartConsumer.TenantID, WorkspaceID: fenceStartConsumer.WorkspaceID},
+			"fence-effect-start-race",
+		)
+		_, _, fenceErr := stopStore.Fence(ctx, command, approvalTestFenceAcknowledgement())
+		fenceResult <- fenceErr
+	}()
+	close(fenceStartGate)
+	if err := <-fenceResult; err != nil {
+		t.Fatalf("concurrent start fence: %v", err)
+	}
+	fenceStartErr := <-fenceStartResult
+	if fenceStartErr == nil {
+		if recovered, err := fenceStartAdmitter.Recover(ctx, fenceStart.Admission.AdmissionID); err != nil || recovered.State != EffectReservationStateStarted {
+			t.Fatalf("start-first fence ordering = %+v, %v", recovered, err)
+		}
+	} else {
+		if !errors.Is(fenceStartErr, ErrEffectReservationStartDenied) || !errors.Is(fenceStartErr, ErrEmergencyStopFenced) {
+			t.Fatalf("fence-first start error = %v, want typed emergency-stop start denial", fenceStartErr)
+		}
+		closed, err := fenceStartAdmitter.MarkNotStarted(ctx, fenceStart.Admission.AdmissionID, EffectTransitionMeta{
+			ReasonCode: "START_INTERLOCK_FENCED",
+			IntentRef:  fenceStartMeta.IntentRef,
+		})
+		if err != nil || closed.State != EffectReservationStateNotStarted {
+			t.Fatalf("close fence-denied start = %+v, %v", closed, err)
+		}
+	}
+
 	startClaim := effectReservationAdmissionFixture(t, approvalSigner, release, consumer, "attempt-start-claim", now)
 	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, startClaim)
 	if _, err := admitter.Admit(ctx, startClaim); err != nil {
@@ -240,6 +296,22 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 
 	third := effectReservationAdmissionFixture(t, approvalSigner, release, consumer, "attempt-c", now)
 	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, third)
+	revokeStartConsumer := consumer
+	revokeStartConsumer.WorkspaceID = "workspace-revoke-start"
+	revokeStartAdmitter, err := NewEffectReservationAdmitter(
+		runtimeStore,
+		staticConsumerProvider{identity: revokeStartConsumer},
+		releaseRuntime,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revokeStart := effectReservationAdmissionFixture(t, approvalSigner, release, revokeStartConsumer, "attempt-revoke-start", now)
+	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, revokeStart)
+	if _, err := revokeStartAdmitter.Admit(ctx, revokeStart); err != nil {
+		t.Fatal(err)
+	}
+	revokeStartMeta := EffectTransitionMeta{ConnectorExecutionRef: "github-request-revoke-start", IntentRef: "intent-revoke-start"}
 
 	revoked := release
 	revoked.RegistryRevision = 2
@@ -261,6 +333,7 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	startRace := make(chan struct{})
 	revokeResult := make(chan error, 1)
 	admitResult := make(chan error, 1)
+	revokeStartResult := make(chan error, 1)
 	go func() {
 		<-startRace
 		_, appendErr := releaseAdmin.Append(ctx, revokedEnvelope)
@@ -270,6 +343,11 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		<-startRace
 		_, admitErr := admitter.Admit(ctx, third)
 		admitResult <- admitErr
+	}()
+	go func() {
+		<-startRace
+		_, startErr := revokeStartAdmitter.MarkStarted(ctx, revokeStart.Admission.AdmissionID, revokeStartMeta)
+		revokeStartResult <- startErr
 	}()
 	close(startRace)
 	if err := <-revokeResult; err != nil {
@@ -282,6 +360,24 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		}
 	} else if !errors.Is(concurrentAdmitErr, connectorregistry.ErrReleaseAuthorityRejected) {
 		t.Fatalf("revocation-first admission error = %v, want current-release rejection", concurrentAdmitErr)
+	}
+	concurrentStartErr := <-revokeStartResult
+	if concurrentStartErr == nil {
+		if recovered, err := revokeStartAdmitter.Recover(ctx, revokeStart.Admission.AdmissionID); err != nil || recovered.State != EffectReservationStateStarted {
+			t.Fatalf("start-first release ordering = %+v, %v", recovered, err)
+		}
+	} else {
+		if !errors.Is(concurrentStartErr, ErrEffectReservationStartDenied) ||
+			!errors.Is(concurrentStartErr, connectorregistry.ErrReleaseAuthorityRejected) {
+			t.Fatalf("revocation-first start error = %v, want typed current-release start denial", concurrentStartErr)
+		}
+		closed, err := revokeStartAdmitter.MarkNotStarted(ctx, revokeStart.Admission.AdmissionID, EffectTransitionMeta{
+			ReasonCode: "START_INTERLOCK_RELEASE_REVOKED",
+			IntentRef:  revokeStartMeta.IntentRef,
+		})
+		if err != nil || closed.State != EffectReservationStateNotStarted {
+			t.Fatalf("close release-denied start = %+v, %v", closed, err)
+		}
 	}
 
 	fourth := effectReservationAdmissionFixture(t, approvalSigner, release, consumer, "attempt-d", now)

@@ -21,6 +21,7 @@ var (
 	ErrEffectReservationConflict       = errors.New("approval effect reservation conflict")
 	ErrEffectReservationTerminal       = errors.New("approval effect reservation is terminal")
 	ErrEffectReservationAlreadyStarted = errors.New("approval effect reservation start already claimed")
+	ErrEffectReservationStartDenied    = errors.New("approval effect reservation start denied by current authority")
 )
 
 // EffectReservationEvent is one append-only transition for a connector effect.

@@ -2,8 +2,14 @@ package effects
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrExecutionStartDenied means a lifecycle authority proved that the effect
+// must not cross its external seam. Connectors may resolve the still-ADMITTED
+// attempt as NOT_STARTED; other start errors remain ambiguous.
+var ErrExecutionStartDenied = errors.New("effect execution start denied")
 
 // EffectType classifies the kind of side effect being executed.
 // The taxonomy is defined in protocols/json-schemas/effects/.

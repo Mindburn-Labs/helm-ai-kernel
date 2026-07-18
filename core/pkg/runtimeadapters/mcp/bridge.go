@@ -566,6 +566,9 @@ func (l *bridgeExecutionLifecycle) MarkStarted(ctx context.Context, meta effects
 		return fmt.Errorf("effect reservation lifecycle is unavailable")
 	}
 	_, err := l.boundary.MarkStarted(ctx, l.admissionID, approvalEffectTransitionMeta(meta))
+	if errors.Is(err, approvalceremony.ErrEffectReservationStartDenied) {
+		return errors.Join(effects.ErrExecutionStartDenied, err)
+	}
 	return err
 }
 

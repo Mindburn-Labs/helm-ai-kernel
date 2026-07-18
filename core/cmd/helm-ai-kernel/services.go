@@ -69,9 +69,10 @@ type Services struct {
 	ApprovalConsumption *approvalConsumptionRuntime
 
 	// --- Evidence ---
-	Evidence      *evidence.DefaultExporter
-	ReceiptStore  store.ReceiptStore
-	ReceiptSigner helmcrypto.Signer
+	Evidence          *evidence.DefaultExporter
+	ReceiptStore      store.ReceiptStore
+	ReceiptSigner     helmcrypto.Signer
+	PrincipalBindings store.PrincipalBindingStore
 
 	// --- Receipt Transparency Log (RFC 6962) ---
 	// TranspLog anchors every issued receipt hash in an append-only Merkle

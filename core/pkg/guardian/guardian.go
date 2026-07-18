@@ -547,6 +547,17 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		if !ok || current == nil {
 			return nil, fmt.Errorf("%s: policy snapshot missing for %s", contracts.ReasonPolicyEpochChanged, scope.Key())
 		}
+		// A signed decision is only executable while its bound snapshot remains
+		// active. Invalidation intentionally preserves the hash and epoch for
+		// operator evidence, so comparing those fields alone would let a decision
+		// issued before invalidation cross the execution boundary.
+		if current.Validation.Status != policyreconcile.StatusActive {
+			return nil, fmt.Errorf("%s: policy snapshot for %s is %s",
+				contracts.ReasonPolicyEpochChanged,
+				scope.Key(),
+				current.Validation.Status,
+			)
+		}
 		decisionEpoch, err := strconv.ParseUint(decision.PolicyEpoch, 10, 64)
 		if err != nil || decision.PolicyContentHash == "" {
 			return nil, fmt.Errorf("%s: decision missing policy hash/epoch binding", contracts.ReasonPolicyEpochChanged)
@@ -752,7 +763,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			}
 			return decision, nil
 		}
-		if snapshot.Validation.Status != "" && snapshot.Validation.Status != policyreconcile.StatusActive {
+		if snapshot.Validation.Status != policyreconcile.StatusActive {
 			decision := &contracts.DecisionRecord{
 				ID:            newDecisionID(),
 				Timestamp:     g.clock.Now(),

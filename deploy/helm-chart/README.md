@@ -1,5 +1,8 @@
 # HELM Chart
 
+<!-- quantum_posture: Helm values can configure classical Ed25519 policy
+verification; chart rendering makes no post-quantum resistance claim. -->
+
 This chart deploys the retained OSS kernel from source in this repository.
 The chart name is `helm-ai-kernel`. Values remain under the `.Values.helm`
 root for one compatibility window.
@@ -83,6 +86,8 @@ flowchart TD
 | `helm.limits.loadShed.enabled` | `false` | Enable low-priority load shedding. |
 | `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
 | `helm.policy.source.pollInterval` | `10s` | Runtime reconciler polling interval. Lost hints are recovered by polling. |
+| `helm.policy.failClosed.onInvalidUpdate` | `keepLastKnownGood` | Retain only a snapshot with a fresh successful source verification after a fault, or `deny` to invalidate immediately. |
+| `helm.policy.failClosed.lastKnownGoodMaxAge` | `10m` | Positive maximum age since the last successful source verification after a source fault. |
 | `helm.policy.signature.required` | `false` | Rejects unsigned policy heads during reconciliation when enabled. |
 | `helm.policy.signature.publicKey` | empty | 64-char hex Ed25519 public key for canonical policy bundle signatures. |
 | `helm.policy.signature.existingSecret` | empty | Existing secret containing `HELM_POLICY_TRUST_PUBLIC_KEY`. |

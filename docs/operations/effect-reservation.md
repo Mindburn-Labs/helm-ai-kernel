@@ -104,8 +104,10 @@ admission and implement `effects.LifecycleConnector`. The bridge verifies the
 admission hash, effect hash, connector ID, granted tool scope, and signed
 `connector_action`, then persists `ADMITTED`. The connector-owned permit scope
 supplies the exact effect class, parameter values, and resource reference used
-to mint the permit, and overrides the legacy tool-name verb heuristic for
-approval classification.
+to mint the permit. It is resolved before MCP firewall authorization, so the
+same exact effect class is checked against the server quarantine approval and
+then used for approval classification; the legacy tool-name verb heuristic
+cannot downgrade a connector-declared mutation to a read.
 
 The GitHub connector implements that interface. It emits:
 

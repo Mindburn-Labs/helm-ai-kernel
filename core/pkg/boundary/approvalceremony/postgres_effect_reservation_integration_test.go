@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,6 +83,7 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		`GRANT SELECT ON approval_dispatch_admissions TO ` + quotedRole,
 		`GRANT SELECT, INSERT ON approval_effect_reservation_events TO ` + quotedRole,
 		`GRANT SELECT, INSERT ON approval_effect_closures TO ` + quotedRole,
+		`GRANT SELECT, INSERT ON approval_effect_dispositions TO ` + quotedRole,
 		`GRANT SELECT ON connector_release_authorities TO ` + quotedRole,
 		`GRANT SELECT ON emergency_stop_fences TO ` + quotedRole,
 	} {
@@ -94,12 +96,22 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	releaseSigner := crypto.NewEd25519SignerFromKey(releaseKey, "effect-reservation-release-test")
 	acknowledgementKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{44}, ed25519.SeedSize))
 	acknowledgementSigner := crypto.NewEd25519SignerFromKey(acknowledgementKey, "effect-acknowledgement-test")
+	dispositionKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{45}, ed25519.SeedSize))
+	dispositionSigner := crypto.NewEd25519SignerFromKey(dispositionKey, "effect-disposition-test")
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	keyNotBefore := now.Add(-time.Hour)
 	keyNotAfter := now.Add(time.Hour)
 	releaseVerifier, err := connectorregistry.NewEd25519ReleaseAuthorityVerifier("connector-registry-a", []connectorregistry.TrustedReleaseAuthorityKey{{
 		AuthorityID: "connector-registry-a", SigningKeyRef: "kms://helm/connectors-a",
 		PublicKey: releaseKey.Public().(ed25519.PublicKey), Enabled: true,
+		NotBefore: keyNotBefore, NotAfter: keyNotAfter,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispositionVerifier, err := NewEd25519EffectDispositionCommandVerifier([]TrustedEffectDispositionCommandKey{{
+		AuthorityID: "spiffe://helm/control-plane", SigningKeyRef: "kms://helm/control-plane/disposition-a",
+		Audience: "packs.lifecycle", PublicKey: dispositionSigner.PublicKeyBytes(), Enabled: true,
 		NotBefore: keyNotBefore, NotAfter: keyNotAfter,
 	}})
 	if err != nil {
@@ -163,8 +175,15 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		staticConsumerProvider{identity: consumer},
 		releaseRuntime,
 		acknowledgementVerifier,
+		dispositionVerifier,
 		staticEffectEvidencePackVerifier{ref: "evidence-pack-a", hash: evidencePackHash},
 		approvalSigner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispositions, err := NewEffectDispositionService(
+		runtimeStore, staticConsumerProvider{identity: consumer}, releaseRuntime, dispositionVerifier, approvalSigner,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -311,6 +330,19 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		ReasonCode: "TEST_RECONCILIATION_REQUIRED", ConnectorExecutionRef: claimMeta.ConnectorExecutionRef, IntentRef: claimMeta.IntentRef,
 	}); err != nil {
 		t.Fatal(err)
+	}
+	startClaimUncertain, err := admitter.Recover(ctx, startClaim.Admission.AdmissionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preFenceDisposition := effectDispositionTestEnvelope(
+		t, dispositionSigner, startClaimUncertain, kernel.FenceState{
+			StopScope: kernel.StopScope{TenantID: consumer.TenantID, WorkspaceID: consumer.WorkspaceID},
+			CommandID: "not-yet-fenced", CommandHash: shaRef("1"), Epoch: 1, ReceiptHash: shaRef("2"),
+		}, 1, "", contracts.EffectDispositionActionHold, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	if _, err := dispositions.Record(ctx, preFenceDisposition); !errors.Is(err, ErrEffectDispositionRequiresFence) {
+		t.Fatalf("pre-FENCE disposition error = %v", err)
 	}
 	directCloseAdmission := effectReservationAdmissionFixture(t, approvalSigner, release, consumer, "attempt-direct-close", now)
 	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, directCloseAdmission)
@@ -486,6 +518,217 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	if _, replayed, err := stopStore.Fence(ctx, fenceCommand, approvalTestFenceAcknowledgement()); err != nil || replayed {
 		t.Fatalf("Fence() replayed=%t error=%v", replayed, err)
 	}
+	fenceState, fenced, err := stopStore.IsFenced(ctx, fenceCommand.Scope())
+	if err != nil || !fenced {
+		t.Fatalf("active disposition FENCE = %+v fenced=%t error=%v", fenceState, fenced, err)
+	}
+	if historicalClose, err := closer.Recover(ctx, directCloseAdmission.Admission.AdmissionID); err != nil ||
+		historicalClose.Receipt.ReceiptHash != directCloseHash {
+		t.Fatalf("recover pre-FENCE close after FENCE = %+v, %v", historicalClose, err)
+	}
+	noDispositionAcknowledgement := effectAcknowledgementTestEnvelope(
+		t, acknowledgementSigner, release, startClaimUncertain, "effect-ack-no-disposition",
+		contracts.ConnectorEffectOutcomeNotApplied, shaRef("4"), "reconciliation-no-disposition", "",
+	)
+	if _, err := closer.Close(ctx, EffectCloseRequest{
+		AdmissionID: startClaim.Admission.AdmissionID, Acknowledgement: noDispositionAcknowledgement,
+		EvidencePackRef: "evidence-pack-a", EvidencePackHash: evidencePackHash,
+	}); !errors.Is(err, ErrEffectCloseConflict) {
+		t.Fatalf("close under FENCE without disposition error = %v", err)
+	}
+	firstDispositionEnvelope := effectDispositionTestEnvelope(
+		t, dispositionSigner, uncertain, fenceState, 1, "",
+		contracts.EffectDispositionActionReconcileSource, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	wrongScopeRecord := effectDispositionRecordFixture(
+		t, approvalSigner, uncertain, fenceState, firstDispositionEnvelope, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	assertEffectDispositionWrongScopeInsert(t, ctx, runtimeStore, consumer, wrongScopeRecord)
+	firstDisposition, err := dispositions.Record(ctx, firstDispositionEnvelope)
+	if err != nil {
+		t.Fatalf("Record first disposition: %v", err)
+	}
+	if firstDisposition.Receipt.ExecutionAuthority != contracts.EffectDispositionExecutionAuthorityNone ||
+		firstDisposition.Receipt.ReservationHeadHash != firstDispositionEnvelope.Command.ReservationHeadHash {
+		t.Fatalf("first disposition receipt = %+v", firstDisposition.Receipt)
+	}
+	if replay, err := dispositions.Record(ctx, firstDispositionEnvelope); err != nil ||
+		replay.Receipt.ReceiptHash != firstDisposition.Receipt.ReceiptHash || !replay.CreatedAt.Equal(firstDisposition.CreatedAt) {
+		t.Fatalf("Record disposition replay = %+v, %v", replay, err)
+	}
+	conflictingDisposition := firstDispositionEnvelope
+	conflictingDisposition.Command.Reason = "changed reason"
+	if _, err := dispositions.Record(ctx, conflictingDisposition); !errors.Is(err, ErrEffectDispositionCommandRejected) {
+		t.Fatalf("mutated disposition replay error = %v", err)
+	}
+	secondDispositionEnvelope := effectDispositionTestEnvelope(
+		t, dispositionSigner, uncertain, fenceState, 2, firstDisposition.Receipt.ReceiptHash,
+		contracts.EffectDispositionActionRequestCancel, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	secondDisposition, err := dispositions.Record(ctx, secondDispositionEnvelope)
+	if err != nil || secondDisposition.Receipt.DispositionSequence != 2 ||
+		secondDisposition.Receipt.PreviousReceiptHash != firstDisposition.Receipt.ReceiptHash {
+		t.Fatalf("Record chained disposition = %+v, %v", secondDisposition, err)
+	}
+	if recovered, err := dispositions.Recover(ctx, secondDispositionEnvelope.Command.CommandID); err != nil ||
+		recovered.Receipt.ReceiptHash != secondDisposition.Receipt.ReceiptHash {
+		t.Fatalf("Recover disposition = %+v, %v", recovered, err)
+	}
+	listedDispositions, err := dispositions.ListForEffect(ctx, first.Admission.AdmissionID)
+	if err != nil || len(listedDispositions) != 2 ||
+		listedDispositions[0].Receipt.ReceiptHash != firstDisposition.Receipt.ReceiptHash ||
+		listedDispositions[1].Receipt.ReceiptHash != secondDisposition.Receipt.ReceiptHash {
+		t.Fatalf("ListForEffect dispositions = %+v, %v", listedDispositions, err)
+	}
+	type dispositionRaceResult struct {
+		record EffectDispositionRecord
+		err    error
+	}
+	thirdDispositionA := effectDispositionTestEnvelope(
+		t, dispositionSigner, uncertain, fenceState, 3, secondDisposition.Receipt.ReceiptHash,
+		contracts.EffectDispositionActionHold, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	thirdDispositionB := effectDispositionTestEnvelope(
+		t, dispositionSigner, uncertain, fenceState, 3, secondDisposition.Receipt.ReceiptHash,
+		contracts.EffectDispositionActionRequestCompensate, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	dispositionRaceGate := make(chan struct{})
+	dispositionRaceResults := make(chan dispositionRaceResult, 2)
+	for _, envelope := range []contracts.EffectDispositionCommandEnvelope{thirdDispositionA, thirdDispositionB} {
+		envelope := envelope
+		go func() {
+			<-dispositionRaceGate
+			record, recordErr := dispositions.Record(ctx, envelope)
+			dispositionRaceResults <- dispositionRaceResult{record: record, err: recordErr}
+		}()
+	}
+	close(dispositionRaceGate)
+	var thirdDisposition EffectDispositionRecord
+	dispositionRaceSuccesses, dispositionRaceConflicts := 0, 0
+	for range 2 {
+		result := <-dispositionRaceResults
+		switch {
+		case result.err == nil:
+			dispositionRaceSuccesses++
+			thirdDisposition = result.record
+		case errors.Is(result.err, ErrEffectDispositionConflict):
+			dispositionRaceConflicts++
+		default:
+			t.Fatalf("concurrent disposition error = %v", result.err)
+		}
+	}
+	if dispositionRaceSuccesses != 1 || dispositionRaceConflicts != 1 {
+		t.Fatalf("concurrent disposition results = success:%d conflict:%d", dispositionRaceSuccesses, dispositionRaceConflicts)
+	}
+
+	newFenceCommand := approvalTestFenceCommand(fenceCommand.Scope(), "fence-effect-reservation-b")
+	newFenceCommand.Epoch = fenceCommand.Epoch + 1
+	newFenceState, fenceReplayed, err := stopStore.Fence(ctx, newFenceCommand, approvalTestFenceAcknowledgement())
+	if err != nil || fenceReplayed {
+		t.Fatalf("advance disposition FENCE = %+v replayed=%t error=%v", newFenceState, fenceReplayed, err)
+	}
+	forgedDispositionEnvelope := effectDispositionTestEnvelope(
+		t, dispositionSigner, startClaimUncertain, newFenceState, 1, "",
+		contracts.EffectDispositionActionReconcileSource, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	forgedDisposition := insertForgedEffectDispositionForTest(
+		t, ctx, runtimeStore, consumer, startClaimUncertain, newFenceState, forgedDispositionEnvelope,
+	)
+	forgedSuccessor := effectDispositionTestEnvelope(
+		t, dispositionSigner, startClaimUncertain, newFenceState, 2, forgedDisposition.Receipt.ReceiptHash,
+		contracts.EffectDispositionActionHold, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	if _, err := dispositions.Record(ctx, forgedSuccessor); !errors.Is(err, ErrGrantSignatureRejected) {
+		t.Fatalf("append after forged disposition row error = %v", err)
+	}
+	forgedAcknowledgement, err := (contracts.ConnectorEffectAcknowledgement{
+		SchemaVersion:     contracts.ConnectorEffectAcknowledgementSchemaV1,
+		ContractVersion:   contracts.ConnectorEffectAcknowledgementContractV1,
+		AcknowledgementID: "effect-ack-forged-disposition", AdmissionID: startClaim.Admission.AdmissionID,
+		AttemptID: startClaim.Admission.AttemptID,
+		TenantID:  consumer.TenantID, WorkspaceID: consumer.WorkspaceID, Audience: consumer.Audience,
+		ConnectorID: release.ConnectorID, ConnectorVersion: release.ConnectorVersion,
+		ConnectorAction:       startClaim.Admission.ConnectorAuthority.ConnectorAction,
+		ConnectorExecutionRef: startClaimUncertain.ConnectorExecutionRef,
+		ProofSessionRef:       startClaimUncertain.ProofSessionRef, IntentRef: startClaimUncertain.IntentRef,
+		IdempotencyKeyHash: startClaim.Admission.IdempotencyKeyHash, EffectHash: startClaim.Admission.EffectHash,
+		Outcome: contracts.ConnectorEffectOutcomeNotApplied, ResponseHash: shaRef("6"),
+		ReconciliationRef:      forgedDispositionEnvelope.Command.DispositionRef,
+		DispositionReceiptHash: forgedDisposition.Receipt.ReceiptHash, IssuerID: release.ConnectorSignerID,
+		SigningKeyRef: "kms://helm/connector-ack-a",
+		Algorithm:     contracts.ConnectorEffectAcknowledgementAlgorithm,
+		ObservedAt:    time.Now().UTC().Truncate(time.Microsecond),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgedAcknowledgementEnvelope, err := SignConnectorEffectAcknowledgement(forgedAcknowledgement, acknowledgementSigner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := closer.Close(ctx, EffectCloseRequest{
+		AdmissionID: startClaim.Admission.AdmissionID, Acknowledgement: forgedAcknowledgementEnvelope,
+		EvidencePackRef: "evidence-pack-a", EvidencePackHash: evidencePackHash,
+	}); !errors.Is(err, ErrGrantSignatureRejected) {
+		t.Fatalf("close trusted forged disposition row error = %v", err)
+	}
+	staleFenceDisposition := effectDispositionTestEnvelope(
+		t, dispositionSigner, uncertain, fenceState, 4, thirdDisposition.Receipt.ReceiptHash,
+		contracts.EffectDispositionActionHold, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	if _, err := dispositions.Record(ctx, staleFenceDisposition); !errors.Is(err, ErrEffectDispositionConflict) {
+		t.Fatalf("stale-FENCE disposition error = %v", err)
+	}
+	staleFenceAcknowledgement := effectAcknowledgementTestEnvelope(
+		t, acknowledgementSigner, release, uncertain, "effect-ack-stale-fence-disposition",
+		contracts.ConnectorEffectOutcomeApplied, shaRef("5"), thirdDisposition.Command.Command.DispositionRef,
+		thirdDisposition.Receipt.ReceiptHash,
+	)
+	if _, err := closer.Close(ctx, EffectCloseRequest{
+		AdmissionID: first.Admission.AdmissionID, Acknowledgement: staleFenceAcknowledgement,
+		EvidencePackRef: "evidence-pack-a", EvidencePackHash: evidencePackHash,
+	}); !errors.Is(err, ErrEffectCloseConflict) {
+		t.Fatalf("close with pre-rotation disposition error = %v", err)
+	}
+	fourthDispositionEnvelope := effectDispositionTestEnvelope(
+		t, dispositionSigner, uncertain, newFenceState, 4, thirdDisposition.Receipt.ReceiptHash,
+		contracts.EffectDispositionActionHold, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	fourthDisposition, err := dispositions.Record(ctx, fourthDispositionEnvelope)
+	if err != nil || fourthDisposition.Receipt.FenceReceiptHash != newFenceState.ReceiptHash {
+		t.Fatalf("new-FENCE disposition = %+v, %v", fourthDisposition, err)
+	}
+	holdAcknowledgement := effectAcknowledgementTestEnvelope(
+		t, acknowledgementSigner, release, uncertain, "effect-ack-hold-disposition",
+		contracts.ConnectorEffectOutcomeApplied, shaRef("7"), fourthDispositionEnvelope.Command.DispositionRef,
+		fourthDisposition.Receipt.ReceiptHash,
+	)
+	if _, err := closer.Close(ctx, EffectCloseRequest{
+		AdmissionID: first.Admission.AdmissionID, Acknowledgement: holdAcknowledgement,
+		EvidencePackRef: "evidence-pack-a", EvidencePackHash: evidencePackHash,
+	}); !errors.Is(err, ErrEffectCloseConflict) {
+		t.Fatalf("close under HOLD disposition error = %v", err)
+	}
+	fifthDispositionEnvelope := effectDispositionTestEnvelope(
+		t, dispositionSigner, uncertain, newFenceState, 5, fourthDisposition.Receipt.ReceiptHash,
+		contracts.EffectDispositionActionReconcileSource, time.Now().UTC().Truncate(time.Microsecond),
+	)
+	fifthDisposition, err := dispositions.Record(ctx, fifthDispositionEnvelope)
+	if err != nil || fifthDisposition.Receipt.PreviousReceiptHash != fourthDisposition.Receipt.ReceiptHash {
+		t.Fatalf("post-HOLD reconciliation disposition = %+v, %v", fifthDisposition, err)
+	}
+	expiredDisposition := effectDispositionTestEnvelope(
+		t, dispositionSigner, uncertain, newFenceState, 6, fifthDisposition.Receipt.ReceiptHash,
+		contracts.EffectDispositionActionHold, time.Now().UTC().Add(-6*time.Minute).Truncate(time.Microsecond),
+	)
+	if _, err := dispositions.Record(ctx, expiredDisposition); !errors.Is(err, ErrEffectDispositionCommandRejected) {
+		t.Fatalf("expired disposition error = %v", err)
+	}
+	listedDispositions, err = dispositions.ListForEffect(ctx, first.Admission.AdmissionID)
+	if err != nil || len(listedDispositions) != 5 ||
+		listedDispositions[4].Receipt.ReceiptHash != fifthDisposition.Receipt.ReceiptHash {
+		t.Fatalf("chained disposition history = %+v, %v", listedDispositions, err)
+	}
 	fifth := effectReservationAdmissionFixture(t, approvalSigner, release, consumer, "attempt-e", now)
 	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, fifth)
 	if _, err := admitter.Admit(ctx, fifth); !errors.Is(err, ErrEmergencyStopFenced) {
@@ -508,7 +751,8 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		ProofSessionRef:       started.ProofSessionRef, IntentRef: started.IntentRef,
 		IdempotencyKeyHash: first.Admission.IdempotencyKeyHash, EffectHash: first.Admission.EffectHash,
 		Outcome: contracts.ConnectorEffectOutcomeApplied, ResponseHash: shaRef("9"), EffectRef: uncertain.EffectRef,
-		ReconciliationRef: "reconciliation-a", IssuerID: release.ConnectorSignerID,
+		ReconciliationRef:      fifthDispositionEnvelope.Command.DispositionRef,
+		DispositionReceiptHash: fifthDisposition.Receipt.ReceiptHash, IssuerID: release.ConnectorSignerID,
 		SigningKeyRef: "kms://helm/connector-ack-a",
 		Algorithm:     contracts.ConnectorEffectAcknowledgementAlgorithm, ObservedAt: acknowledgedAt,
 	}).Seal()
@@ -518,6 +762,23 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	acknowledgementEnvelope, err := SignConnectorEffectAcknowledgement(acknowledgement, acknowledgementSigner)
 	if err != nil {
 		t.Fatal(err)
+	}
+	missingDispositionBinding := acknowledgement
+	missingDispositionBinding.DispositionReceiptHash = ""
+	missingDispositionBinding.AcknowledgementHash = ""
+	missingDispositionBinding, err = missingDispositionBinding.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingDispositionEnvelope, err := SignConnectorEffectAcknowledgement(missingDispositionBinding, acknowledgementSigner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := closer.Close(ctx, EffectCloseRequest{
+		AdmissionID: first.Admission.AdmissionID, Acknowledgement: missingDispositionEnvelope,
+		EvidencePackRef: "evidence-pack-a", EvidencePackHash: evidencePackHash,
+	}); !errors.Is(err, ErrEffectCloseConflict) {
+		t.Fatalf("close without latest disposition receipt error = %v", err)
 	}
 	closeRequest := EffectCloseRequest{
 		AdmissionID: first.Admission.AdmissionID, Acknowledgement: acknowledgementEnvelope,
@@ -570,6 +831,7 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	assertEffectReservationRLSIsolation(t, ctx, runtimeDB, "tenant-b", consumer.WorkspaceID)
 	assertEffectReservationAppendOnly(t, ctx, ownerDB, consumer, first.Admission.AdmissionID)
 	assertEffectClosureAppendOnly(t, ctx, ownerDB, consumer, first.Admission.AdmissionID)
+	assertEffectDispositionAppendOnly(t, ctx, ownerDB, consumer, first.Admission.AdmissionID)
 }
 
 type staticEffectEvidencePackVerifier struct {
@@ -711,6 +973,12 @@ func assertEffectReservationRLSIsolation(t *testing.T, ctx context.Context, db *
 	if count != 0 {
 		t.Fatalf("cross-tenant effect closure visibility = %d, want 0", count)
 	}
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM approval_effect_dispositions`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("cross-tenant effect disposition visibility = %d, want 0", count)
+	}
 }
 
 func assertEffectReservationAppendOnly(t *testing.T, ctx context.Context, db *sql.DB, consumer ConsumerIdentity, admissionID string) {
@@ -749,6 +1017,259 @@ func assertEffectClosureAppendOnly(t *testing.T, ctx context.Context, db *sql.DB
 		WHERE tenant_id = $1 AND workspace_id = $2 AND admission_id = $3`, consumer.TenantID, consumer.WorkspaceID, admissionID); err == nil {
 		t.Fatal("append-only effect closure accepted UPDATE")
 	}
+}
+
+func assertEffectDispositionAppendOnly(t *testing.T, ctx context.Context, db *sql.DB, consumer ConsumerIdentity, admissionID string) {
+	t.Helper()
+	beginScope := func() *sql.Tx {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, consumer.TenantID); err != nil {
+			_ = tx.Rollback()
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_workspace', $1, true)`, consumer.WorkspaceID); err != nil {
+			_ = tx.Rollback()
+			t.Fatal(err)
+		}
+		return tx
+	}
+	updateTx := beginScope()
+	if _, err := updateTx.ExecContext(ctx, `UPDATE approval_effect_dispositions SET action = action
+		WHERE tenant_id = $1 AND workspace_id = $2 AND admission_id = $3`, consumer.TenantID, consumer.WorkspaceID, admissionID); err == nil {
+		_ = updateTx.Rollback()
+		t.Fatal("append-only effect disposition accepted UPDATE")
+	}
+	_ = updateTx.Rollback()
+
+	deleteTx := beginScope()
+	if _, err := deleteTx.ExecContext(ctx, `DELETE FROM approval_effect_dispositions
+		WHERE tenant_id = $1 AND workspace_id = $2 AND admission_id = $3`, consumer.TenantID, consumer.WorkspaceID, admissionID); err == nil {
+		_ = deleteTx.Rollback()
+		t.Fatal("append-only effect disposition accepted DELETE")
+	}
+	_ = deleteTx.Rollback()
+}
+
+func effectDispositionTestEnvelope(
+	t *testing.T,
+	signer crypto.Signer,
+	reservation EffectReservationEvent,
+	fence kernel.FenceState,
+	sequence uint64,
+	previousReceiptHash string,
+	action string,
+	issuedAt time.Time,
+) contracts.EffectDispositionCommandEnvelope {
+	t.Helper()
+	headHash, err := effectReservationHeadHash(reservation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := reservation.Admission.Admission
+	command, err := (contracts.EffectDispositionCommand{
+		SchemaVersion:       contracts.EffectDispositionCommandSchemaV1,
+		ContractVersion:     contracts.EffectDispositionCommandContractV1,
+		CommandID:           fmt.Sprintf("effect-disposition-%s-%d", a.AttemptID, sequence),
+		DispositionSequence: sequence, PreviousReceiptHash: previousReceiptHash,
+		TenantID: a.TenantID, WorkspaceID: a.WorkspaceID, Audience: a.Audience,
+		FenceCommandID: fence.CommandID, FenceCommandHash: fence.CommandHash,
+		FenceEpoch: fence.Epoch, FenceReceiptHash: fence.ReceiptHash,
+		AdmissionID: a.AdmissionID, AttemptID: a.AttemptID,
+		ReservationSequence: reservation.Sequence, ReservationHeadHash: headHash,
+		ReservationState: string(reservation.State),
+		ConnectorID:      a.ConnectorAuthority.ConnectorID, ConnectorVersion: a.ConnectorAuthority.ConnectorVersion,
+		ConnectorAction:       a.ConnectorAuthority.ConnectorAction,
+		ConnectorExecutionRef: reservation.ConnectorExecutionRef,
+		ProofSessionRef:       reservation.ProofSessionRef, IntentRef: reservation.IntentRef, EffectRef: reservation.EffectRef,
+		IdempotencyKeyHash: a.IdempotencyKeyHash, EffectHash: a.EffectHash,
+		Action: action, DispositionRef: fmt.Sprintf("disposition-workflow-%s-%d", a.AttemptID, sequence),
+		ActorID: "operator-a", Reason: "emergency-stop active-work disposition",
+		AuthorityID: "spiffe://helm/control-plane", SigningKeyRef: "kms://helm/control-plane/disposition-a",
+		Algorithm: contracts.EffectDispositionAlgorithmV1,
+		IssuedAt:  issuedAt, ExpiresAt: issuedAt.Add(5 * time.Minute),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := SignEffectDispositionCommand(command, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return envelope
+}
+
+func effectAcknowledgementTestEnvelope(
+	t *testing.T,
+	signer crypto.Signer,
+	release contracts.ConnectorReleaseAuthority,
+	reservation EffectReservationEvent,
+	acknowledgementID, outcome, responseHash, reconciliationRef, dispositionReceiptHash string,
+) contracts.ConnectorEffectAcknowledgementEnvelope {
+	t.Helper()
+	a := reservation.Admission.Admission
+	acknowledgement := contracts.ConnectorEffectAcknowledgement{
+		SchemaVersion:     contracts.ConnectorEffectAcknowledgementSchemaV1,
+		ContractVersion:   contracts.ConnectorEffectAcknowledgementContractV1,
+		AcknowledgementID: acknowledgementID, AdmissionID: a.AdmissionID, AttemptID: a.AttemptID,
+		TenantID: a.TenantID, WorkspaceID: a.WorkspaceID, Audience: a.Audience,
+		ConnectorID: release.ConnectorID, ConnectorVersion: release.ConnectorVersion,
+		ConnectorAction:       a.ConnectorAuthority.ConnectorAction,
+		ConnectorExecutionRef: reservation.ConnectorExecutionRef,
+		ProofSessionRef:       reservation.ProofSessionRef, IntentRef: reservation.IntentRef,
+		IdempotencyKeyHash: a.IdempotencyKeyHash, EffectHash: a.EffectHash,
+		Outcome: outcome, ResponseHash: responseHash, ReconciliationRef: reconciliationRef,
+		DispositionReceiptHash: dispositionReceiptHash, IssuerID: release.ConnectorSignerID,
+		SigningKeyRef: "kms://helm/connector-ack-a",
+		Algorithm:     contracts.ConnectorEffectAcknowledgementAlgorithm,
+		ObservedAt:    time.Now().UTC().Truncate(time.Microsecond),
+	}
+	if outcome == contracts.ConnectorEffectOutcomeApplied {
+		acknowledgement.EffectRef = reservation.EffectRef
+	}
+	sealed, err := acknowledgement.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := SignConnectorEffectAcknowledgement(sealed, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return envelope
+}
+
+func effectDispositionRecordFixture(
+	t *testing.T,
+	signer crypto.Signer,
+	reservation EffectReservationEvent,
+	fence kernel.FenceState,
+	envelope contracts.EffectDispositionCommandEnvelope,
+	acceptedAt time.Time,
+) EffectDispositionRecord {
+	t.Helper()
+	command := envelope.Command
+	receiptID, err := deterministicEffectDispositionReceiptID(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := reservation.Admission.Admission
+	receipt, err := (contracts.EffectDispositionReceipt{
+		SchemaVersion: contracts.EffectDispositionReceiptSchemaV1, ContractVersion: contracts.EffectDispositionReceiptContractV1,
+		ReceiptID: receiptID, State: contracts.EffectDispositionReceiptStateAccepted,
+		ExecutionAuthority: contracts.EffectDispositionExecutionAuthorityNone,
+		CommandID:          command.CommandID, CommandHash: command.CommandHash,
+		DispositionSequence: command.DispositionSequence, PreviousReceiptHash: command.PreviousReceiptHash,
+		TenantID: command.TenantID, WorkspaceID: command.WorkspaceID, Audience: command.Audience,
+		FenceCommandID: command.FenceCommandID, FenceCommandHash: command.FenceCommandHash,
+		FenceEpoch: command.FenceEpoch, FenceReceiptHash: command.FenceReceiptHash,
+		AdmissionID: command.AdmissionID, ReservationSequence: command.ReservationSequence,
+		ReservationHeadHash: command.ReservationHeadHash, ReservationState: command.ReservationState,
+		Action: command.Action, DispositionRef: command.DispositionRef,
+		KernelTrustRootID: a.KernelTrustRootID, SigningKeyRef: a.SigningKeyRef,
+		AcceptedBy: a.AdmittedBy, AcceptedAt: acceptedAt,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature, err := SignEffectDispositionReceipt(receipt, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return EffectDispositionRecord{
+		Command: envelope, Fence: fence, Receipt: receipt,
+		SignatureAlgorithm: GrantSignatureEd25519, Signature: signature, CreatedAt: acceptedAt,
+	}
+}
+
+func assertEffectDispositionWrongScopeInsert(
+	t *testing.T,
+	ctx context.Context,
+	store *PostgresStore,
+	consumer ConsumerIdentity,
+	record EffectDispositionRecord,
+) {
+	t.Helper()
+	tx, err := store.beginScopeTx(ctx, "tenant-b", consumer.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := insertEffectDispositionRecord(ctx, tx, record); err == nil {
+		_ = tx.Rollback()
+		t.Fatal("wrong-scope direct disposition INSERT succeeded")
+	}
+	_ = tx.Rollback()
+
+	checkTx, err := store.beginScopeTx(ctx, consumer.TenantID, consumer.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = checkTx.Rollback() }()
+	var count int
+	if err := checkTx.QueryRowContext(ctx, `SELECT count(*) FROM approval_effect_dispositions
+		WHERE command_id = $1`, record.Command.Command.CommandID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("wrong-scope direct disposition INSERT persisted %d rows", count)
+	}
+}
+
+func insertForgedEffectDispositionForTest(
+	t *testing.T,
+	ctx context.Context,
+	store *PostgresStore,
+	consumer ConsumerIdentity,
+	reservation EffectReservationEvent,
+	fence kernel.FenceState,
+	envelope contracts.EffectDispositionCommandEnvelope,
+) EffectDispositionRecord {
+	t.Helper()
+	command := envelope.Command
+	acceptedAt := time.Now().UTC().Truncate(time.Microsecond)
+	receiptID, err := deterministicEffectDispositionReceiptID(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := reservation.Admission.Admission
+	receipt, err := (contracts.EffectDispositionReceipt{
+		SchemaVersion: contracts.EffectDispositionReceiptSchemaV1, ContractVersion: contracts.EffectDispositionReceiptContractV1,
+		ReceiptID: receiptID, State: contracts.EffectDispositionReceiptStateAccepted,
+		ExecutionAuthority: contracts.EffectDispositionExecutionAuthorityNone,
+		CommandID:          command.CommandID, CommandHash: command.CommandHash,
+		DispositionSequence: command.DispositionSequence, PreviousReceiptHash: command.PreviousReceiptHash,
+		TenantID: command.TenantID, WorkspaceID: command.WorkspaceID, Audience: command.Audience,
+		FenceCommandID: command.FenceCommandID, FenceCommandHash: command.FenceCommandHash,
+		FenceEpoch: command.FenceEpoch, FenceReceiptHash: command.FenceReceiptHash,
+		AdmissionID: command.AdmissionID, ReservationSequence: command.ReservationSequence,
+		ReservationHeadHash: command.ReservationHeadHash, ReservationState: command.ReservationState,
+		Action: command.Action, DispositionRef: command.DispositionRef,
+		KernelTrustRootID: a.KernelTrustRootID, SigningKeyRef: a.SigningKeyRef,
+		AcceptedBy: consumer.Subject, AcceptedAt: acceptedAt,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := EffectDispositionRecord{
+		Command: envelope, Fence: fence, Receipt: receipt,
+		SignatureAlgorithm: GrantSignatureEd25519,
+		Signature:          strings.Repeat("00", ed25519.SignatureSize),
+		CreatedAt:          acceptedAt,
+	}
+	tx, err := store.beginScopeTx(ctx, consumer.TenantID, consumer.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	created, err := insertEffectDispositionRecord(ctx, tx, record)
+	if err != nil {
+		t.Fatalf("insert structurally valid forged disposition: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return created
 }
 
 func assertEffectReservationRejectsStartedRefRewrite(t *testing.T, ctx context.Context, store *PostgresStore, started EffectReservationEvent) {

@@ -88,6 +88,7 @@ func buildEffectCloseReferencePack(t *testing.T) map[string][]byte {
 		IdempotencyKeyHash: effectCloseVectorSHA("idempotency"), EffectHash: effectCloseVectorSHA("effect"),
 		Outcome: contracts.ConnectorEffectOutcomeApplied, ResponseHash: effectCloseVectorSHA("response"),
 		EffectRef: "github-issue-42", ReconciliationRef: "reconciliation-vector-a",
+		DispositionReceiptHash: effectCloseVectorSHA("disposition-receipt"),
 		IssuerID: "publisher-a", SigningKeyRef: "kms://helm/connector-ack/key-a",
 		Algorithm: contracts.ConnectorEffectAcknowledgementAlgorithm, ObservedAt: observedAt,
 	}).Seal()
@@ -122,6 +123,7 @@ func buildEffectCloseReferencePack(t *testing.T) map[string][]byte {
 		ResponseHash: acknowledgement.ResponseHash, ConnectorExecutionRef: acknowledgement.ConnectorExecutionRef,
 		ProofSessionRef: acknowledgement.ProofSessionRef, IntentRef: acknowledgement.IntentRef,
 		EffectRef: acknowledgement.EffectRef, ReconciliationRef: acknowledgement.ReconciliationRef,
+		DispositionReceiptHash: acknowledgement.DispositionReceiptHash,
 		EvidencePackRef: "evidence-pack-vector-a", EvidencePackHash: effectCloseVectorSHA("evidence-pack"),
 		KernelTrustRootID: "kernel-root-a", SigningKeyRef: "kms://helm/approval/key-a",
 		ClosedBy: "spiffe://helm/data-plane-a", ClosedAt: observedAt.Add(time.Second),
@@ -167,6 +169,7 @@ func buildEffectCloseReferencePack(t *testing.T) map[string][]byte {
 			{ID: "receipt_evidence_tamper", Mutation: "set_receipt_evidence_pack_hash_to_tampered", ExpectedError: "receipt_hash_mismatch"},
 			{ID: "receipt_acknowledgement_substitution", Mutation: "set_receipt_acknowledgement_hash_to_other_and_reseal", ExpectedError: "acknowledgement_binding_rejected"},
 			{ID: "receipt_signature_tamper", Mutation: "flip_receipt_signature_last_bit", ExpectedError: "receipt_signature_rejected"},
+			{ID: "receipt_disposition_substitution", Mutation: "set_receipt_disposition_hash_to_other_and_reseal", ExpectedError: "acknowledgement_binding_rejected"},
 			{ID: "uncertain_without_reconciliation", Mutation: "remove_receipt_reconciliation_ref_and_reseal", ExpectedError: "receipt_contract_rejected"},
 		},
 	}

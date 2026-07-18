@@ -93,6 +93,7 @@ type EffectCloser struct {
 	consumer                ConsumerIdentityProvider
 	releaseAuthorities      *connectorregistry.PostgresReleaseAuthorityStore
 	acknowledgementVerifier EffectAcknowledgementVerifier
+	dispositionVerifier     EffectDispositionCommandVerifier
 	evidencePackVerifier    EffectEvidencePackVerifier
 	signer                  crypto.Signer
 }
@@ -102,21 +103,24 @@ func NewEffectCloser(
 	consumer ConsumerIdentityProvider,
 	releaseAuthorities *connectorregistry.PostgresReleaseAuthorityStore,
 	acknowledgementVerifier EffectAcknowledgementVerifier,
+	dispositionVerifier EffectDispositionCommandVerifier,
 	evidencePackVerifier EffectEvidencePackVerifier,
 	signer crypto.Signer,
 ) (*EffectCloser, error) {
-	if store == nil || consumer == nil || releaseAuthorities == nil || acknowledgementVerifier == nil ||
+	if store == nil || consumer == nil || releaseAuthorities == nil || acknowledgementVerifier == nil || dispositionVerifier == nil ||
 		evidencePackVerifier == nil || signer == nil {
 		return nil, errors.New("effect close dependencies are required")
 	}
 	return &EffectCloser{
 		store: store, consumer: consumer, releaseAuthorities: releaseAuthorities,
-		acknowledgementVerifier: acknowledgementVerifier, evidencePackVerifier: evidencePackVerifier, signer: signer,
+		acknowledgementVerifier: acknowledgementVerifier, dispositionVerifier: dispositionVerifier,
+		evidencePackVerifier: evidencePackVerifier, signer: signer,
 	}, nil
 }
 
 func (s *EffectCloser) Close(ctx context.Context, request EffectCloseRequest) (EffectClosureRecord, error) {
-	if s == nil || s.store == nil || s.acknowledgementVerifier == nil || s.evidencePackVerifier == nil || s.signer == nil {
+	if s == nil || s.store == nil || s.acknowledgementVerifier == nil || s.dispositionVerifier == nil ||
+		s.evidencePackVerifier == nil || s.signer == nil {
 		return EffectClosureRecord{}, errors.New("effect closer is not initialized")
 	}
 	if err := request.Validate(); err != nil {
@@ -135,12 +139,12 @@ func (s *EffectCloser) Close(ctx context.Context, request EffectCloseRequest) (E
 		return EffectClosureRecord{}, err
 	}
 	return s.store.closeEffectReservation(
-		ctx, identity, request, s.releaseAuthorities, s.acknowledgementVerifier, s.signer,
+		ctx, identity, request, s.releaseAuthorities, s.acknowledgementVerifier, s.dispositionVerifier, s.signer,
 	)
 }
 
 func (s *EffectCloser) Recover(ctx context.Context, admissionID string) (EffectClosureRecord, error) {
-	if s == nil || s.store == nil || s.acknowledgementVerifier == nil {
+	if s == nil || s.store == nil || s.acknowledgementVerifier == nil || s.dispositionVerifier == nil {
 		return EffectClosureRecord{}, errors.New("effect closer is not initialized")
 	}
 	if !validToken(admissionID) || len(admissionID) > 512 {
@@ -150,5 +154,7 @@ func (s *EffectCloser) Recover(ctx context.Context, admissionID string) (EffectC
 	if err != nil {
 		return EffectClosureRecord{}, err
 	}
-	return s.store.recoverEffectClosure(ctx, identity, admissionID, s.acknowledgementVerifier)
+	return s.store.recoverEffectClosure(
+		ctx, identity, admissionID, s.releaseAuthorities, s.acknowledgementVerifier, s.dispositionVerifier,
+	)
 }

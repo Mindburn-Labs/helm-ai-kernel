@@ -103,6 +103,8 @@ The current states mean:
 `ListActive` returns the latest `ADMITTED`, `STARTED`, and `UNCERTAIN` events in
 the authenticated scope. Reservation and signed-close recovery remain available
 after later FENCE or revocation and create no authority. See
+`docs/operations/effect-disposition.md` for the signed, append-only active-work
+instruction chain and its explicit `execution_authority: NONE` boundary. See
 `docs/operations/effect-close.md` for the separate connector acknowledgement,
 Kernel receipt, EvidencePack, and recovery contract. No deployed adapter invokes
 that close boundary yet, so the current GitHub integration still leaves a
@@ -169,7 +171,7 @@ deployed Data Plane proof.
 | `ADMITTED` | Reserved work with no reported start. Current stop/release authority must still pass at the start seam. | Recover the worker. If the start interlock denied it, close `NOT_STARTED`; never dispatch from the old admission. |
 | `STARTED` | The outbound seam was crossed. | Query the source system by the original idempotency key/execution reference; do not replay. |
 | `NOT_STARTED` | Proven local pre-dispatch stop. | Close the attempt; a new attempt requires new approval authority. |
-| `UNCERTAIN` | Start or outcome cannot be disproved. | Quarantine automatic retry and obtain connector/source acknowledgement evidence. |
+| `UNCERTAIN` | Start or outcome cannot be disproved. | Quarantine automatic retry; under active FENCE, record a signed disposition and obtain connector/source acknowledgement evidence. |
 | `COMPLETED` | A verified connector acknowledgement and EvidencePack were atomically bound to a Kernel-signed close receipt. | Verify the signed closure through `EffectCloser`; inspect its explicit `APPLIED` or `NOT_APPLIED` outcome. |
 
 ## Verification
@@ -181,6 +183,7 @@ Run unit and real database proofs:
 HELM_TEST_POSTGRES_URL='postgres://...' make test-effect-reservation-postgres
 make verify-approval-ceremony-vectors
 make verify-effect-close-vectors
+make verify-effect-disposition-vectors
 make docs-coverage
 make docs-truth
 ```
@@ -198,7 +201,12 @@ mutating HTTP 307/308 redirects do not reach their target. Signed-close checks
 cover direct and reconciled `COMPLETED`, exact/conflicting replay, concurrent
 single-winner close, signature recovery, forced-RLS closure isolation,
 append-only closure history, and refusal of a terminal event without its exact
-closure.
+closure. Disposition checks cover active-FENCE and exact-head binding, chained
+exact replay/recovery, stale epoch and expiry rejection, concurrent
+single-winner insertion, forced-RLS append-only history, and mandatory binding
+of terminal close to a current-FENCE non-`HOLD` disposition receipt. Close
+without disposition after FENCE, with a pre-rotation disposition, or under
+`HOLD` is rejected.
 
 ## Remaining production gates
 
@@ -211,7 +219,9 @@ closure.
 - wire the source-owned connector acknowledgement and signed close contracts
   into real connectors, sealed EvidencePack production, and the deployed Data
   Plane; the internal close boundary exists but no deployed adapter invokes it;
-- add FENCE/revocation active-work disposition commands and cross-plane
-  acknowledgement reconciliation rather than listing alone;
+- wire the internal signed active-work disposition contract into a durable
+  Control Plane ledger/outbox, authenticated Data Plane adapter, connector
+  acknowledgement reconciliation, and operator Console; its Kernel receipt
+  grants no cancellation or compensation authority;
 - add Data Plane deployment, restart/crash recovery, load, failover, and live
   controlled-effect evidence before production or Emergency Stop claims.

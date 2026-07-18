@@ -1,0 +1,79 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 disposition command and receipt only; no hybrid or post-quantum claim.",
+  "schema_version": "effect-disposition-vectors.v1",
+  "contract_version": "2026-07-18",
+  "quantum_posture": "classical_ed25519_only",
+  "command": {
+    "artifact": {
+      "canonical": "command.c14n.json",
+      "sha256": "sha256:7b31026cca34be8d24d4e048ed1c11c452bf1405a2faf8393efcf915ea6b190b"
+    },
+    "envelope": {
+      "canonical": "command_envelope.c14n.json",
+      "sha256": "sha256:8454f4b1133e65fbf13c6b0b0848b113d03020f88528e083509da7e9dd8728f1"
+    },
+    "signing_payload": {
+      "canonical": "command_signing_payload.c14n.json",
+      "sha256": "sha256:b908ba110320763f7ab072c4612ef04e9ed28e4aef36adb6ce4e9b7441520e32"
+    },
+    "public_key": "ed25519:772c8a442b7db06e166cfbc1ccbcbcde6f3eba76a4e98ef3ffc519502237d6ef",
+    "signature": "ed25519:e3b155ed1fb790eda0d7994685faf5645b612273914fe7a723797b7d93e97cc71ecc183d4095f8b6f1fce196106b14c897de52bfe399bc73523ffe799ff86306",
+    "key_not_before": "2026-07-18T12:00:00.123456Z",
+    "key_not_after": "2026-07-18T14:00:00.123456Z"
+  },
+  "receipt": {
+    "artifact": {
+      "canonical": "receipt.c14n.json",
+      "sha256": "sha256:474702b8fe1fcdc8cc965b757bb175c00180c94fae577eada22a58f0f0185ae1"
+    },
+    "envelope": {
+      "canonical": "",
+      "sha256": ""
+    },
+    "signing_payload": {
+      "canonical": "receipt_signing_payload.c14n.json",
+      "sha256": "sha256:138d772597c4ff546b751962601fc3a4061e51607a38dc5490dfd7cb5744d5cd"
+    },
+    "public_key": "ed25519:353c8a7feeca38b2c4536e0bd2586fdb18d070e50e059f1d43f8bfefb97a7ce1",
+    "signature": "ed25519:472f334ffd6c38020f927c1f3c0e2a3b9738a26d2c25de3487b405e4f1541b8bd2bdad2c44839392d84f487edcfa815ba997ebb11386005ca76bc28eb1ae3b02",
+    "key_not_before": "2026-07-18T12:00:00.123456Z",
+    "key_not_after": "2026-07-18T14:00:00.123456Z"
+  },
+  "negative_vectors": [
+    {
+      "id": "command_reservation_head_tamper",
+      "mutation": "set_command_reservation_head_hash_to_tampered",
+      "expected_error": "command_hash_mismatch"
+    },
+    {
+      "id": "command_signature_tamper",
+      "mutation": "flip_command_signature_last_bit",
+      "expected_error": "command_signature_rejected"
+    },
+    {
+      "id": "command_authority_substitution",
+      "mutation": "set_command_authority_id_to_other_and_reseal",
+      "expected_error": "command_trust_rejected"
+    },
+    {
+      "id": "receipt_command_substitution",
+      "mutation": "set_receipt_command_hash_to_other_and_reseal",
+      "expected_error": "command_binding_rejected"
+    },
+    {
+      "id": "receipt_execution_authority_escalation",
+      "mutation": "set_receipt_execution_authority_to_effect_and_reseal",
+      "expected_error": "receipt_contract_rejected"
+    },
+    {
+      "id": "receipt_signature_tamper",
+      "mutation": "flip_receipt_signature_last_bit",
+      "expected_error": "receipt_signature_rejected"
+    },
+    {
+      "id": "receipt_chain_predecessor_mismatch",
+      "mutation": "set_receipt_previous_hash_to_other_and_reseal",
+      "expected_error": "command_binding_rejected"
+    }
+  ]
+}

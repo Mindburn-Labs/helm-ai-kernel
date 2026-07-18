@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/effect_disposition_command_envelope.json",
+  "title": "Effect Disposition Command Envelope",
+  "description": "Detached Ed25519 signature envelope for an exact effect disposition command.",
+  "type": "object",
+  "required": ["command", "signature"],
+  "properties": {
+    "command": { "$ref": "effect_disposition_command.json" },
+    "signature": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{128}$"
+    }
+  },
+  "additionalProperties": false
+}

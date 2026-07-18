@@ -22,6 +22,8 @@ Active surface for the `helm-ai-kernel` project.
   certified-to-revoked release-authority chain in Go and independent Python.
 - `make verify-effect-close-vectors` verifies the connector acknowledgement
   and Kernel close receipt in Go and independent Python.
+- `make verify-effect-disposition-vectors` verifies the Control Plane
+  disposition command and Kernel receipt in Go and independent Python.
 
 ## Approval ceremony packs
 
@@ -49,6 +51,15 @@ EvidencePack bindings, explicit `APPLIED` versus `NOT_APPLIED` outcomes, and
 negative mutations. It proves portable contract verification only; it is not
 evidence of a deployed connector acknowledgement publisher, Data Plane close
 adapter, source-system reconciliation, or production release authority.
+
+## Effect disposition pack
+
+`effect-disposition-v1/` covers a Control Plane-signed command bound to an exact
+active FENCE and reservation head plus a chained Kernel-signed receipt. Negative
+vectors enforce pinned identities, exact bindings, predecessor order, and
+`execution_authority: NONE`. It proves portable contract verification only; it
+is not evidence of deployed cross-plane delivery, connector cancellation or
+compensation, source reconciliation, or production release authority.
 
 ## Documentation Contract
 

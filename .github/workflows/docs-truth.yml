@@ -15,4 +15,4 @@ jobs:
     name: docs-truth
     uses: Mindburn-Labs/.github/.github/workflows/docs-truth-public.yml@1382586657b369c9c81947b42f04525e3922b0f9
     secrets:
-      MINDBURN_ORG_READ_TOKEN: ${{ secrets.MINDBURN_ORG_READ_TOKEN }}
+      MINDBURN_ORG_READ_TOKEN: ${{ secrets.PLATFORM_DESIGN_SYSTEM_REPO_READ_TOKEN }}

@@ -8,6 +8,30 @@
     "source_repo": "Mindburn-Labs/helm-ai-kernel",
     "source_root": "docs/"
   },
+  "api_contract": {
+    "schema_version": 1,
+    "source_path": "api/openapi/helm.openapi.yaml",
+    "content_sha256": "sha256:414c393c8e2948cda4c4308bf619affb79dcc82c1e54118be6dafab9035e60c4",
+    "git_blob_sha1": "a95a832a2b2a81b03d020b960367c0f628139da1",
+    "public_operations": [
+      {"method": "GET", "path": "/api/health", "operation_id": "getPublicDemoHealth"},
+      {"method": "POST", "path": "/api/demo/run", "operation_id": "runPublicDemo"},
+      {"method": "POST", "path": "/api/demo/verify", "operation_id": "verifyPublicDemoReceipt"},
+      {"method": "POST", "path": "/api/demo/tamper", "operation_id": "tamperPublicDemoReceipt"},
+      {"method": "POST", "path": "/api/v1/evaluate", "operation_id": "evaluateDecision"},
+      {"method": "GET", "path": "/api/v1/receipts", "operation_id": "listReceipts"},
+      {"method": "GET", "path": "/api/v1/receipts/tail", "operation_id": "tailReceipts"},
+      {"method": "GET", "path": "/api/v1/receipts/{receipt_id}", "operation_id": "getConsoleReceipt"},
+      {"method": "POST", "path": "/api/v1/evidence/export", "operation_id": "exportEvidence"},
+      {"method": "POST", "path": "/api/v1/evidence/verify", "operation_id": "verifyEvidence"},
+      {"method": "GET", "path": "/api/v1/boundary/status", "operation_id": "getBoundaryStatus"},
+      {"method": "GET", "path": "/api/v1/conformance/negative", "operation_id": "listNegativeConformanceVectors"},
+      {"method": "GET", "path": "/api/v1/mcp/registry", "operation_id": "listMcpRegistry"},
+      {"method": "POST", "path": "/api/v1/mcp/scan", "operation_id": "scanMcpServer"},
+      {"method": "POST", "path": "/api/v1/mcp/authorize-call", "operation_id": "authorizeMcpCall"},
+      {"method": "POST", "path": "/v1/chat/completions", "operation_id": "chatCompletions"}
+    ]
+  },
   "documents": [
     {
       "slug": "index",

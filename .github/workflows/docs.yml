@@ -27,4 +27,4 @@ jobs:
           python-version: "3.13"
 
       - name: Run docs gates
-        run: make docs-coverage docs-truth
+        run: make docs-coverage docs-truth docs-openapi-parity

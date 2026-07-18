@@ -317,6 +317,11 @@ jobs:
     # gate) and this job skips on tag pushes.
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
+    # One publish in flight per sha: the tag is deterministic, so two
+    # concurrent dispatches would race the same ghcr tag to different digests.
+    concurrency:
+      group: container-sha-${{ inputs.source_sha }}
+      cancel-in-progress: false
     permissions:
       actions: read
       contents: read
@@ -337,11 +342,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          total="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&status=success" --jq '.total_count')"
-          if [[ "${total}" -lt 1 ]]; then
-            echo "::error::No successful CI (ci.yml) run found for ${SOURCE_SHA}; refusing to publish an unverified commit"
+          # Only count runs whose head repository is THIS repo. A pull_request
+          # run from a fork also lands in this workflow's run list with the
+          # fork's head_sha, so an unfiltered total_count would let a dispatch
+          # publish a signed image built from untrusted, never-merged fork code.
+          matching="$(gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&status=success&per_page=100" \
+            | jq --arg repo "${GITHUB_REPOSITORY}" \
+                '[.workflow_runs[] | select(.head_repository.full_name == $repo)] | length')"
+          if [[ "${matching}" -lt 1 ]]; then
+            echo "::error::No successful CI (ci.yml) run for ${SOURCE_SHA} originating in ${GITHUB_REPOSITORY}; refusing to publish an unverified commit"
             exit 1
           fi
+          echo "Found ${matching} successful in-repo CI run(s) for ${SOURCE_SHA}"
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ inputs.source_sha }}
@@ -378,6 +391,16 @@ jobs:
             BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ inputs.source_sha }}
+          # The cosign identity of a dispatch build is the same release.yml as
+          # a v* release, so the image itself must state that it is dev-grade:
+          # never a released version, only a preview of one commit.
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ inputs.source_sha }}
+            org.opencontainers.image.version=${{ steps.build-meta.outputs.version }}
+            org.opencontainers.image.created=${{ steps.build-meta.outputs.build_time }}
+            dev.mindburn.build-grade=dev
+            dev.mindburn.build-origin=release.yml/container-sha(workflow_dispatch)
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: Sign sha image keyless
         env:

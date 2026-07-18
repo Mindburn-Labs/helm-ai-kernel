@@ -253,6 +253,32 @@ def sha256(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+public_docs_manifest_path = root / "docs" / "public-docs.manifest.json"
+public_docs_manifest = json.loads(public_docs_manifest_path.read_text(encoding="utf-8"))
+api_contract = public_docs_manifest.get("api_contract")
+if not isinstance(api_contract, dict):
+    raise SystemExit("public docs manifest is missing api_contract")
+if api_contract.get("schema_version") != 1:
+    raise SystemExit("public docs API contract schema_version must be 1")
+if api_contract.get("source_path") != "api/openapi/helm.openapi.yaml":
+    raise SystemExit("public docs API contract source_path must be api/openapi/helm.openapi.yaml")
+openapi_path = root / api_contract["source_path"]
+actual_openapi_sha256 = "sha256:" + sha256(openapi_path)
+if api_contract.get("content_sha256") != actual_openapi_sha256:
+    raise SystemExit("public docs API contract content_sha256 does not match OpenAPI source")
+actual_openapi_blob = subprocess.check_output(
+    ["git", "hash-object", api_contract["source_path"]], cwd=root, text=True
+).strip()
+if api_contract.get("git_blob_sha1") != actual_openapi_blob:
+    raise SystemExit("public docs API contract git_blob_sha1 does not match OpenAPI source")
+if not isinstance(api_contract.get("public_operations"), list) or not api_contract["public_operations"]:
+    raise SystemExit("public docs API contract must declare public_operations")
+public_docs_contract = {
+    "manifest_path": "docs/public-docs.manifest.json",
+    "manifest_sha256": "sha256:" + sha256(public_docs_manifest_path),
+    "api_contract": api_contract,
+}
+
 artifacts = []
 for path in sorted(assets_dir.iterdir(), key=lambda p: p.name):
     if not path.is_file() or path.name in {"release-attestation.json", "SHA256SUMS.txt"}:
@@ -269,6 +295,7 @@ payload = {
     "version": tag.removeprefix("v"),
     "source_repository": "Mindburn-Labs/helm-ai-kernel",
     "source_commit": commit,
+    "public_docs_contract": public_docs_contract,
     "created_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "offline_checks": {
         "evidence_pack_verified": True,

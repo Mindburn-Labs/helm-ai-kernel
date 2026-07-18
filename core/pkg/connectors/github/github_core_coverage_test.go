@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -159,7 +160,7 @@ func TestClientValidationAndHelpers(t *testing.T) {
 	if _, ok := intParam(map[string]any{"n": "bad"}, "n"); ok {
 		t.Fatal("intParam should reject strings")
 	}
-	if stringSliceParam(map[string]any{"labels": "bug"}, "labels") != nil {
+	if value, ok := stringSliceParam(map[string]any{"labels": "bug"}, "labels"); ok || value != nil {
 		t.Fatal("stringSliceParam should reject scalar values")
 	}
 
@@ -169,7 +170,8 @@ func TestClientValidationAndHelpers(t *testing.T) {
 	if bytesReader([]byte("x")) == nil {
 		t.Fatal("bytesReader(non-empty) returned nil")
 	}
-	if backoff(1) != time.Second || !shouldRetry(0) || shouldRetry(maxRetries-1) {
+	if backoff(1) != time.Second || !shouldRetry(0) || shouldRetry(maxRetries-1) ||
+		!shouldRetryRequest(http.MethodGet, 0) || shouldRetryRequest(http.MethodPost, 0) {
 		t.Fatal("unexpected retry helper result")
 	}
 
@@ -205,6 +207,53 @@ func TestClientValidationAndHelpers(t *testing.T) {
 	}
 	if got := fieldErr.Error(); !strings.Contains(got, "Issue.title: missing") {
 		t.Fatalf("field APIError string = %q", got)
+	}
+}
+
+func TestClientDoesNotRetryMutatingRequest(t *testing.T) {
+	var calls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "ambiguous write", http.StatusBadGateway)
+	}))
+	defer server.Close()
+	client := NewClientWithToken(server.URL, "ghp-test")
+	client.httpClient = server.Client()
+	if err := client.doJSON(context.Background(), http.MethodPost, "/repos/owner/repo/issues", map[string]any{"title": "once"}, nil); err == nil {
+		t.Fatal("expected ambiguous POST error")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("mutating request attempts = %d, want 1", got)
+	}
+}
+
+func TestClientDoesNotFollowMutatingRedirect(t *testing.T) {
+	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			var originCalls atomic.Int64
+			var redirectedCalls atomic.Int64
+			redirected := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				redirectedCalls.Add(1)
+				w.WriteHeader(http.StatusCreated)
+			}))
+			defer redirected.Close()
+			origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				originCalls.Add(1)
+				w.Header().Set("Location", redirected.URL+"/sink")
+				w.WriteHeader(status)
+			}))
+			defer origin.Close()
+			client := NewClientWithToken(origin.URL, "ghp-test")
+			client.httpClient = origin.Client()
+			err := client.doJSON(context.Background(), http.MethodPost, "/write", map[string]any{"title": "once"}, nil)
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) || apiErr.StatusCode != status {
+				t.Fatalf("redirect error = %v", err)
+			}
+			if originCalls.Load() != 1 || redirectedCalls.Load() != 0 {
+				t.Fatalf("redirect attempts = origin:%d sink:%d, want 1/0", originCalls.Load(), redirectedCalls.Load())
+			}
+		})
 	}
 }
 

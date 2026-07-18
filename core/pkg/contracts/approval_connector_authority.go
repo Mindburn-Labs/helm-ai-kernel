@@ -29,6 +29,7 @@ type ApprovalConnectorAuthority struct {
 	PackVersion      string `json:"pack_version"`
 	PackManifestHash string `json:"pack_manifest_hash"`
 	Action           string `json:"action"`
+	ConnectorAction  string `json:"connector_action"`
 	EffectHash       string `json:"effect_hash"`
 	PolicyHash       string `json:"policy_hash"`
 
@@ -65,7 +66,8 @@ func (a ApprovalConnectorAuthority) Validate() error {
 	}
 	for field, value := range map[string]string{
 		"binding_ref": a.BindingRef, "tenant_id": a.TenantID, "workspace_id": a.WorkspaceID,
-		"pack_id": a.PackID, "pack_version": a.PackVersion, "connector_id": a.ConnectorID,
+		"pack_id": a.PackID, "pack_version": a.PackVersion, "connector_action": a.ConnectorAction,
+		"connector_id":      a.ConnectorID,
 		"connector_version": a.ConnectorVersion, "release_authority_id": a.ReleaseAuthorityID,
 		"connector_executor_kind": a.ConnectorExecutorKind,
 		"connector_signature_ref": a.ConnectorSignatureRef, "connector_signer_id": a.ConnectorSignerID,

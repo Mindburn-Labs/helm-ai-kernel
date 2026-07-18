@@ -1,1 +1,1 @@
-{"algorithm":"ed25519","consumption_hash":"sha256:9f9b155c9794acafc03cc66e4e24274fd7a6f28e43cba0c0e9a3f500df0c5d56","contract_version":"2026-07-17","domain":"HELM/ApprovalGrantConsumptionSignature/v1","kernel_trust_root_id":"kernel-root-a","signing_key_ref":"kms://helm/approval-a"}
+{"algorithm":"ed25519","consumption_hash":"sha256:d4e5373c20e7df3b2b97a7937e4b9b9c71e8dc8942a2d6908d3e58cca712f04d","contract_version":"2026-07-17","domain":"HELM/ApprovalGrantConsumptionSignature/v1","kernel_trust_root_id":"kernel-root-a","signing_key_ref":"kms://helm/approval-a"}

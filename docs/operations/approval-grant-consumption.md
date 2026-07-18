@@ -110,7 +110,8 @@ match the signed consumption. The caller cannot select a connector. The
 Kernel copies the self-hashed `connector_authority` committed by the
 policy-owned approval binding through challenge, verified quorum, grant, and
 consumption into the signed admission. That object binds tenant/workspace,
-pack, exact effect/action, policy hash, connector release binary/signature,
+pack, exact effect/lifecycle action, exact connector action, policy hash,
+connector release scope/authority/revision, binary/signature,
 sandbox/drift policy, and certification evidence.
 
 This slice defines and preserves that immutable binding but does not yet wire a
@@ -118,8 +119,9 @@ production `BindingProvider` backed by the durable source-owned connector
 registry, nor does it cryptographically validate the referenced connector
 signature or certification at binding time. `state=certified`, a certification
 reference, and their self-hashed snapshot are not proof that a release is
-currently certified. Until the production provider verifies source-owned
-provenance and the near-effect gate rechecks current revocation state, the
+currently certified. The internal effect reservation boundary now rechecks
+current revocation state, but until the production provider verifies
+source-owned provenance and the boundary is deployed in the Data Plane, the
 contract remains internal and non-production.
 
 - `POST /internal/v1/approval-grants/admit-dispatch` acquires the same
@@ -153,12 +155,14 @@ returned consumption and dispatch-admission records and signatures. Production
 promotion remains blocked until the Data Plane verifies the admission and
 persists it atomically with `CONSUMED -> DISPATCHING` before every connector
 effect, including cached and recovered consumptions. That gate is necessary
-but not sufficient: the near-effect boundary must still compare that immutable
-approved snapshot with a current durable source-owned connector registry so a
-release revoked after approval cannot execute. Active-work listing and
-disposition, close/uncertainty transitions, and connector-boundary
-acknowledgement evidence are also required before production or Emergency Stop
-claims.
+but not sufficient. The internal effect reservation boundary now compares the
+immutable approved snapshot with the transactionally locked current release,
+persists append-only `ADMITTED / STARTED / NOT_STARTED / UNCERTAIN` truth, lists
+active work, and enforces the GitHub pre-network seam when explicitly wired.
+Deployed Data Plane wiring, active-work disposition, source connector ACK,
+signed close evidence, and controlled runtime proof remain required before
+production or Emergency Stop claims. See
+`docs/operations/effect-reservation.md`.
 
 ## Failure handling
 

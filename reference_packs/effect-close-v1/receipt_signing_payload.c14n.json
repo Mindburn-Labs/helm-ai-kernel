@@ -1,0 +1,1 @@
+{"algorithm":"ed25519","contract_version":"2026-07-18","domain":"HELM/EffectCloseReceiptSignature/v1","kernel_trust_root_id":"kernel-root-a","receipt_hash":"sha256:d8990608f85f2ae58cc3382a4144df0300a5a09dc7b3bca574598609af7577fb","signing_key_ref":"kms://helm/approval/key-a"}

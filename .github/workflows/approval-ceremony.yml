@@ -19,8 +19,12 @@ on:
       - "core/pkg/registry/connectors/**"
       - "reference_packs/approval/**"
       - "reference_packs/connector-release-authority-v1/**"
+      - "reference_packs/effect-close-v1/**"
       - "schemas/connector_release.json"
       - "schemas/connector_release_authority_envelope.json"
+      - "schemas/connector_effect_acknowledgement.json"
+      - "schemas/connector_effect_acknowledgement_envelope.json"
+      - "schemas/effect_close_receipt.json"
   push:
     branches: [main]
     paths:
@@ -39,8 +43,12 @@ on:
       - "core/pkg/registry/connectors/**"
       - "reference_packs/approval/**"
       - "reference_packs/connector-release-authority-v1/**"
+      - "reference_packs/effect-close-v1/**"
       - "schemas/connector_release.json"
       - "schemas/connector_release_authority_envelope.json"
+      - "schemas/connector_effect_acknowledgement.json"
+      - "schemas/connector_effect_acknowledgement_envelope.json"
+      - "schemas/effect_close_receipt.json"
 
 permissions:
   contents: read
@@ -74,9 +82,11 @@ jobs:
         run: make verify-approval-ceremony-vectors
       - name: Verify connector release authority vectors
         run: make verify-connector-release-authority-vectors
+      - name: Verify signed effect close vectors
+        run: make verify-effect-close-vectors
       - name: Prove non-bypass RLS and single-use concurrency
         run: make test-approval-ceremony-postgres
       - name: Prove connector authority append-only isolation and ordering
         run: make test-connector-release-authority-postgres
-      - name: Prove effect reservation fence and revocation ordering
+      - name: Prove effect reservation and signed close ordering
         run: make test-effect-reservation-postgres

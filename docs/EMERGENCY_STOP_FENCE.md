@@ -89,8 +89,13 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
   If FENCE/revocation commits first, the connector closes `NOT_STARTED` and
   emits no network request; if `STARTED` commits first, the effect is active
   work that the later stop must reconcile. The stream exposes active
-  `ADMITTED / STARTED / UNCERTAIN` work, but it has no disposition command,
-  source-acknowledged close, or renewal after expiry.
+  `ADMITTED / STARTED / UNCERTAIN` work. A separate internal signed-close
+  boundary can reconcile `STARTED` or `UNCERTAIN` after FENCE/revocation by
+  verifying a connector acknowledgement and EvidencePack and atomically
+  appending a Kernel-signed `COMPLETED` receipt. Close creates no execution
+  authority and does not re-open the stopped scope. There is still no deployed
+  close adapter, active-work disposition command, compensation controller, or
+  renewal after expiry.
 - This Kernel gate does not by itself enforce the connector boundary. Merge,
   deploy, and production claims remain blocked until the Data Plane requires
   and atomically persists the signed admission before every
@@ -99,8 +104,8 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
   lifecycle transitions, active-work listing, exact current-release locking at
   both admission and start, typed no-network denial, and the GitHub pre-network
   seam when configured. Production remains blocked on deployed Data Plane
-  wiring, disposition commands, connector acknowledgement/close evidence, and
-  controlled runtime proof. The dispatch workload cannot select
+  wiring, deployed connector acknowledgement/close evidence, disposition
+  commands, and controlled runtime proof. The dispatch workload cannot select
   `connector_id`, `connector_action`, release scope, or revision; the Kernel
   derives them from the signed approval chain.
 - It does not revoke existing permits, cancel in-flight work, stop unmanaged

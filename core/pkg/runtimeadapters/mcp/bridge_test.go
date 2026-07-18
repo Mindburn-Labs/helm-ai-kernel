@@ -329,6 +329,68 @@ func TestGovernedBridgeUsesConnectorEffectClassInsteadOfVerbHeuristic(t *testing
 		t.Fatalf("connector-declared read = %+v calls=%d err=%v", readResponse, declaredRead.calls, err)
 	}
 }
+
+func TestGovernedBridgeUsesConnectorEffectClassAtFirewall(t *testing.T) {
+	ctx := context.Background()
+	now := fixedClock()()
+	const serverID = "system-server"
+	req := &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "system.apply",
+		Arguments: map[string]any{"target": "prod"}, PrincipalID: "ve-assistant",
+	}
+	if DefaultWriteClassifier(req.ToolName, req.Arguments) {
+		t.Fatal("regression requires a tool name that the legacy heuristic classifies as read")
+	}
+
+	catalog := mcpcore.NewToolCatalog()
+	if err := catalog.Register(ctx, mcpcore.ToolRef{
+		Name: req.ToolName, ServerID: serverID, Description: "apply system state",
+		Schema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"target": map[string]any{"type": "string"}},
+			"required":   []string{"target"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	quarantine := mcpcore.NewQuarantineRegistry()
+	if _, err := quarantine.Discover(ctx, mcpcore.DiscoverServerRequest{
+		ServerID: serverID, ToolNames: []string{req.ToolName}, DiscoveredAt: now, ExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := quarantine.Approve(ctx, mcpcore.ApprovalDecision{
+		ServerID: serverID, ApproverID: "reviewer", ApprovalReceiptID: "receipt-read-only",
+		ApprovedAt: now, ExpiresAt: now.Add(time.Hour), Reason: "read-only approval",
+		ToolNames: []string{req.ToolName}, Effects: []string{"read"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	firewall := mcpcore.NewExecutionFirewall(catalog, quarantine, "epoch-test")
+	firewall.Clock = fixedClock()
+	readRecord, err := firewall.AuthorizeToolCall(ctx, mcpcore.ToolCallAuthorization{
+		ServerID: serverID, ToolName: req.ToolName, Effect: "read", ArgsHash: "read-control",
+	})
+	if err != nil || !mcpcore.ShouldDispatch(readRecord) {
+		t.Fatalf("read-only control must pass the configured firewall: record=%+v err=%v", readRecord, err)
+	}
+
+	connector := &fakeConnector{id: "system", effect: effects.EffectTypeWrite}
+	adapter, _ := newAdapter(t, BridgeConfig{
+		Firewall: firewall, ServerID: serverID, Profile: operateProfile(), Connector: connector, Now: fixedClock(),
+	})
+	response, err := adapter.Intercept(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Allowed || response.DenyReason == nil || response.DenyReason.Code != string(contracts.ReasonApprovalRequired) {
+		t.Fatalf("connector-declared write used read-only firewall approval: %+v", response)
+	}
+	if connector.calls != 0 {
+		t.Fatalf("connector calls = %d, want 0", connector.calls)
+	}
+}
+
 func (f *fakeConnector) Execute(_ context.Context, _ *effects.EffectPermit, _ string, params map[string]any) (any, error) {
 	f.calls++
 	f.lastArg = params

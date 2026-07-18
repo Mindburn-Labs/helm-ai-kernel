@@ -1,6 +1,7 @@
 package releasepermit
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 var (
@@ -268,7 +271,19 @@ func calculatePermitID(permit Permit) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal permit digest input: %w", err)
 	}
-	digest := sha256.Sum256(encoded)
+	// Kernel-wide JCS (RFC 8785) mandate: re-encode through a key-sorted
+	// generic value so the digest is independent of struct field order.
+	dec := json.NewDecoder(bytes.NewReader(encoded))
+	dec.UseNumber()
+	var generic interface{}
+	if err := dec.Decode(&generic); err != nil {
+		return "", fmt.Errorf("decode permit digest input: %w", err)
+	}
+	canonical, err := crypto.CanonicalMarshal(generic)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize permit digest input: %w", err)
+	}
+	digest := sha256.Sum256(canonical)
 	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
 

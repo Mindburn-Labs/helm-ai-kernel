@@ -12,6 +12,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/releasepermit"
 )
@@ -515,7 +516,9 @@ func writePermitFile(path string, content []byte) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("inspect output path %q: %w", path, err)
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	// O_NOFOLLOW closes the Lstat->open race: a symlink swapped in after
+	// the check still fails at open time instead of truncating its target.
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return err
 	}

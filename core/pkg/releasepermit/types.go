@@ -6,7 +6,7 @@ package releasepermit
 const (
 	ContextSchema   = "mindburn.release-permit-context/v2"
 	ReviewSchema    = "mindburn.release-review/v1"
-	PermitSchema    = "mindburn.release-permit/v2"
+	PermitSchema    = "mindburn.release-permit/v3"
 	AuthoritySchema = "mindburn.release-authority/v1"
 
 	DecisionAllow = "ALLOW"

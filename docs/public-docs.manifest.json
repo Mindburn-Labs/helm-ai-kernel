@@ -487,6 +487,36 @@
       "docs_origin_hint": "helm.docs.mindburn.org/sdks",
       "access": "public",
       "sensitivity": "public"
+    },
+    {
+      "slug": "developer-journey",
+      "title": "Developer Journey",
+      "section": "guide",
+      "category": "build",
+      "tasks": ["install", "integrate", "reference-contract"],
+      "audiences": ["local-operator", "integrator"],
+      "publication_status": "source-public",
+      "runtime_scope": "local-runtime",
+      "inbound_human_path": ["index", "public-docs", "developer-journey"],
+      "source_path": "docs/DEVELOPER_JOURNEY.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/developer-journey",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
+      "slug": "examples",
+      "title": "HELM AI Kernel Examples Matrix",
+      "section": "guide",
+      "category": "reference",
+      "tasks": ["reference-contract", "integrate", "inspect-receipt", "verify-evidencepack"],
+      "audiences": ["local-operator", "integrator", "verifier"],
+      "publication_status": "source-public",
+      "runtime_scope": "local-runtime",
+      "inbound_human_path": ["index", "public-docs", "examples"],
+      "source_path": "docs/EXAMPLES.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/examples",
+      "access": "public",
+      "sensitivity": "public"
     }
   ]
 }

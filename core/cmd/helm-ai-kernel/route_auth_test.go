@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +15,29 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+// recordingPrincipalBindingStore is a fake store.PrincipalBindingStore that
+// records every Exists call and panics if invoked with an empty tenant or
+// principal ID — this pins down that requireRuntimeTenant must reject empty
+// headers before ever reaching the store. existsErr/existsOK control the
+// (bool, error) returned for non-empty lookups.
+type recordingPrincipalBindingStore struct {
+	calls     int
+	existsOK  bool
+	existsErr error
+}
+
+func (s *recordingPrincipalBindingStore) Upsert(ctx context.Context, b store.PrincipalBinding) error {
+	return nil
+}
+
+func (s *recordingPrincipalBindingStore) Exists(ctx context.Context, tenantID, principalID string) (bool, error) {
+	s.calls++
+	if tenantID == "" || principalID == "" {
+		panic("Exists called with an empty tenantID/principalID; the empty-header 403 must fire before any store lookup")
+	}
+	return s.existsOK, s.existsErr
+}
 
 // newRouteAuthTestBindingStore returns a fresh in-memory SQLite-backed
 // store.PrincipalBindingStore for tenant-gate registry tests.
@@ -324,6 +349,65 @@ func TestTenantScopedRuntimeAuthNilStoreRejectsNonEnvPair(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("tenant-scoped route with nil store and non-env pair status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthEmptyPrincipalHeaderSkipsStoreLookup(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+
+	fake := &recordingPrincipalBindingStore{existsOK: true}
+	SetPrincipalBindingStore(fake)
+	t.Cleanup(func() { SetPrincipalBindingStore(nil) })
+
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run without explicit principal binding")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-a")
+	// principalHeader intentionally left unset (empty).
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("tenant-scoped route with empty principal header status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "requires explicit principal binding") {
+		t.Fatalf("body = %s, want message containing %q", rec.Body.String(), "requires explicit principal binding")
+	}
+	if fake.calls != 0 {
+		t.Fatalf("store.Exists called %d time(s), want 0 (empty-header 403 must precede any store lookup)", fake.calls)
+	}
+}
+
+func TestTenantScopedRuntimeAuthStoreErrorFailsClosed(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+
+	fake := &recordingPrincipalBindingStore{existsOK: false, existsErr: errors.New("store unavailable")}
+	SetPrincipalBindingStore(fake)
+	t.Cleanup(func() { SetPrincipalBindingStore(nil) })
+
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run when the binding store errors")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-b")
+	req.Header.Set(principalHeader, "principal-b")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("tenant-scoped route with store error status = %d, want %d (fail closed) body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if fake.calls == 0 {
+		t.Fatal("expected store.Exists to be called for the non-env pair")
 	}
 }
 

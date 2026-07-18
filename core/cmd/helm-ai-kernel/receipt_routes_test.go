@@ -326,6 +326,7 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	body := []byte(`{"principal":"attacker","action":"EXECUTE_TOOL","resource":"local.echo","context":{"tenant_id":"tenant-attacker","principal_id":"attacker","session_id":"session-1"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(tenantHeader, "tenant-trusted")
 	req.Header.Set(principalHeader, "principal-trusted")
 	rec := httptest.NewRecorder()
@@ -349,6 +350,30 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	}
 	if decision.InputContext["tenant_id"] != "tenant-trusted" || decision.InputContext["principal_id"] != "principal-trusted" {
 		t.Fatalf("decision context did not use trusted identity: %+v", decision.InputContext)
+	}
+}
+
+func TestPublicDocsEvaluateExampleExercisesLocalRuntime(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(`{"action":"EXECUTE_TOOL","resource":"local.echo"}`))
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("public docs evaluate status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored == nil || receipts.stored.ExecutorID != "principal-trusted" {
+		t.Fatalf("public docs evaluate did not bind the authenticated principal: %+v", receipts.stored)
 	}
 }
 

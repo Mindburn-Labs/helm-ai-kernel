@@ -23,6 +23,7 @@ func TestDemoRunVerifyAndTamper(t *testing.T) {
 
 	runBody := []byte(`{"action_id":"export_customer_list","policy_id":"agent_tool_call_boundary"}`)
 	runReq := httptest.NewRequest(http.MethodPost, "/api/demo/run", bytes.NewReader(runBody))
+	runReq.Header.Set("Content-Type", "application/json")
 	runRec := httptest.NewRecorder()
 	mux.ServeHTTP(runRec, runReq)
 	if runRec.Code != http.StatusOK {
@@ -56,6 +57,7 @@ func TestDemoRunVerifyAndTamper(t *testing.T) {
 	expectedHash := runPayload.ProofRefs["receipt_hash"]
 	verifyBody, _ := json.Marshal(map[string]any{"receipt": runPayload.Receipt, "expected_receipt_hash": expectedHash})
 	verifyReq := httptest.NewRequest(http.MethodPost, "/api/demo/verify", bytes.NewReader(verifyBody))
+	verifyReq.Header.Set("Content-Type", "application/json")
 	verifyRec := httptest.NewRecorder()
 	mux.ServeHTTP(verifyRec, verifyReq)
 	if verifyRec.Code != http.StatusOK {
@@ -74,6 +76,7 @@ func TestDemoRunVerifyAndTamper(t *testing.T) {
 
 	tamperBody, _ := json.Marshal(map[string]any{"receipt": runPayload.Receipt, "expected_receipt_hash": expectedHash, "mutation": "flip_verdict"})
 	tamperReq := httptest.NewRequest(http.MethodPost, "/api/demo/tamper", bytes.NewReader(tamperBody))
+	tamperReq.Header.Set("Content-Type", "application/json")
 	tamperRec := httptest.NewRecorder()
 	mux.ServeHTTP(tamperRec, tamperReq)
 	if tamperRec.Code != http.StatusOK {

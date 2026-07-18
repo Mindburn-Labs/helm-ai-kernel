@@ -423,7 +423,7 @@ paths:
         boundary. The decision is recorded as a governed receipt; a denied or
         unavailable boundary prevents execution.
       x-helm-docs-example:
-        source_test: core/cmd/helm-ai-kernel/receipt_routes_test.go#TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal
+        source_test: core/cmd/helm-ai-kernel/receipt_routes_test.go#TestPublicDocsEvaluateExampleExercisesLocalRuntime
         request:
           content_type: application/json
           literal:

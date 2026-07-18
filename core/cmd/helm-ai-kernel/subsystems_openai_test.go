@@ -48,6 +48,7 @@ func TestReadGovernedOpenAIRequestRejectsOversize(t *testing.T) {
 
 func TestGovernedOpenAIProxyUnavailableWhenScopedFenceEnabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-test","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	// This route has no authenticated tenant/workspace binding. It must stay

@@ -236,6 +236,7 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 
 	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"agent.test","format":"tar.gz"}`))
 	authorizeTestRequest(exportReq)
+	exportReq.Header.Set("Content-Type", "application/json")
 	exportRec := httptest.NewRecorder()
 	mux.ServeHTTP(exportRec, exportReq)
 	if exportRec.Code != http.StatusOK {
@@ -726,6 +727,7 @@ func postMCPAuthorizeForTest(t *testing.T, mux *http.ServeMux, body map[string]a
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/authorize-call", bytes.NewReader(data))
 	authorizeTestRequest(req)
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != wantStatus {

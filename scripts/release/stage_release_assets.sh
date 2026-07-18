@@ -38,11 +38,12 @@ require_file() {
     fi
 }
 
-require_clean_tracked_source() {
+require_clean_source() {
     # Release assets and their attestation must describe one committed source
-    # tree. Build outputs are ignored; any tracked source edit is a hard stop.
-    if ! git diff --quiet || ! git diff --cached --quiet; then
-        echo "::error file=scripts/release/stage_release_assets.sh::refusing to attest release assets from a dirty tracked source tree" >&2
+    # tree. Build outputs are ignored; any tracked or untracked source edit is
+    # a hard stop so an attestation can never claim a different HEAD.
+    if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
+        echo "::error file=scripts/release/stage_release_assets.sh::refusing to attest release assets from a dirty source tree" >&2
         git status --short >&2
         exit 1
     fi
@@ -69,7 +70,7 @@ PY
 
 cd "$ROOT"
 
-require_clean_tracked_source
+require_clean_source
 
 log_step "staging $TAG into $ASSETS_DIR"
 

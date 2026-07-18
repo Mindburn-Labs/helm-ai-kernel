@@ -247,15 +247,23 @@ func assertPublicDocsExample(t *testing.T, root string, requirement publicDocsEx
 	if example.Request.ContentType != requirement.ContentType {
 		t.Fatalf("%s docs example content_type=%q, want %q", requirement.OperationID, example.Request.ContentType, requirement.ContentType)
 	}
-	sourceFile, _, ok := strings.Cut(example.SourceTest, "#")
-	if !ok || sourceFile == "" {
+	sourceFile, sourceTestName, ok := strings.Cut(example.SourceTest, "#")
+	if !ok || sourceFile == "" || sourceTestName == "" {
 		t.Fatalf("%s docs example source_test=%q, want path#TestName", requirement.OperationID, example.SourceTest)
 	}
 	if filepath.IsAbs(sourceFile) {
 		t.Fatalf("%s docs example source_test must be repository-relative: %q", requirement.OperationID, example.SourceTest)
 	}
-	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(sourceFile))); err != nil {
+	sourceTestPath := filepath.Join(root, filepath.FromSlash(sourceFile))
+	if _, err := os.Stat(sourceTestPath); err != nil {
 		t.Fatalf("%s docs example source_test does not resolve: %v", requirement.OperationID, err)
+	}
+	sourceTestData, err := os.ReadFile(sourceTestPath)
+	if err != nil {
+		t.Fatalf("%s read docs example source_test: %v", requirement.OperationID, err)
+	}
+	if !regexp.MustCompile(`(?m)^func\s+` + regexp.QuoteMeta(sourceTestName) + `\s*\(`).Match(sourceTestData) {
+		t.Fatalf("%s docs example source_test symbol %q is not declared in %s", requirement.OperationID, sourceTestName, sourceFile)
 	}
 	for _, key := range requirement.LiteralKeys {
 		if _, ok := example.Request.Literal[key]; !ok {

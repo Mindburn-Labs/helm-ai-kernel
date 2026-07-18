@@ -38,6 +38,16 @@ require_file() {
     fi
 }
 
+require_clean_tracked_source() {
+    # Release assets and their attestation must describe one committed source
+    # tree. Build outputs are ignored; any tracked source edit is a hard stop.
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo "::error file=scripts/release/stage_release_assets.sh::refusing to attest release assets from a dirty tracked source tree" >&2
+        git status --short >&2
+        exit 1
+    fi
+}
+
 print_conformance_failures() {
     local report="$1"
     python3 - "$report" <<'PY' >&2 || cat "$report" >&2
@@ -58,6 +68,8 @@ PY
 }
 
 cd "$ROOT"
+
+require_clean_tracked_source
 
 log_step "staging $TAG into $ASSETS_DIR"
 

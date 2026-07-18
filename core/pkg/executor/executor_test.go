@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -54,6 +55,63 @@ type safeDepGateFunc func(context.Context, safedep.GateRequest) (safedep.GateRes
 
 func (f safeDepGateFunc) Gate(ctx context.Context, req safedep.GateRequest) (safedep.GateResult, error) {
 	return f(ctx, req)
+}
+
+type reverifyingOutbox struct {
+	verifier  crypto.Verifier
+	scheduled bool
+}
+
+func (o *reverifyingOutbox) Schedule(_ context.Context, _ *contracts.Effect, intent *contracts.AuthorizedExecutionIntent) error {
+	valid, err := o.verifier.VerifyIntent(intent)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return errors.New("invalid intent signature")
+	}
+	o.scheduled = true
+	return nil
+}
+
+func (o *reverifyingOutbox) GetPending(context.Context) ([]*OutboxRecord, error) {
+	return nil, nil
+}
+
+func (o *reverifyingOutbox) MarkDone(context.Context, string) error {
+	return nil
+}
+
+func TestValidateSafeDepIntentBindingRejectsMismatchedSignedAuthority(t *testing.T) {
+	result := safedep.GateResult{
+		ActivationReceipt: &contracts.ActivationReceipt{
+			ActivationID:        "actual-activation",
+			DelegationSessionID: "actual-session",
+		},
+		EmergencyScopeHash: "sha256:actual-scope",
+	}
+	tests := []struct {
+		name   string
+		intent contracts.AuthorizedExecutionIntent
+	}{
+		{name: "activation", intent: contracts.AuthorizedExecutionIntent{EmergencyActivationID: "signed-activation"}},
+		{name: "delegation session", intent: contracts.AuthorizedExecutionIntent{EmergencyDelegationSessionID: "signed-session"}},
+		{name: "scope", intent: contracts.AuthorizedExecutionIntent{EmergencyScopeHash: "sha256:signed-scope"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateSafeDepIntentBinding(&tt.intent, result); err == nil {
+				t.Fatal("expected signed emergency authority mismatch to fail closed")
+			}
+		})
+	}
+}
+
+func TestValidateSafeDepIntentBindingRequiresRuntimeActivation(t *testing.T) {
+	intent := &contracts.AuthorizedExecutionIntent{EmergencyActivationID: "signed-activation"}
+	if err := validateSafeDepIntentBinding(intent, safedep.GateResult{}); err == nil {
+		t.Fatal("expected missing runtime activation evidence to fail closed")
+	}
 }
 
 func testEffectDigest(t *testing.T, effect *contracts.Effect) string {
@@ -254,17 +312,25 @@ func TestSafeExecutorSafeDepGateRequired(t *testing.T) {
 	}
 }
 
-func TestSafeExecutorCopiesEmergencyAuthorityToReceipt(t *testing.T) {
+func TestSafeExecutorPreservesSignedIntentThroughSafeDepOutboxReverification(t *testing.T) {
 	signer, _ := crypto.NewEd25519Signer("test-key")
 	mockDriver := &MockDriver{}
-	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil).
+	outbox := &reverifyingOutbox{verifier: signer}
+	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, outbox, "", nil, nil, nil, nil).
 		WithSafeDepGate(safeDepGateFunc(func(_ context.Context, req safedep.GateRequest) (safedep.GateResult, error) {
-			req.Intent.EmergencyActivationID = "act-1"
-			req.Intent.EmergencyDelegationSessionID = "session-1"
-			req.Intent.EmergencyScopeHash = "sha256:scope"
+			// Exercise the former shared-pointer bug: even a mutating gate must not
+			// invalidate the verified intent later passed to the outbox.
+			req.Intent.EmergencyActivationID = "mutated-act"
+			req.Intent.EmergencyDelegationSessionID = "mutated-session"
+			req.Intent.EmergencyScopeHash = "sha256:mutated"
 			return safedep.GateResult{
 				DispatchAllowed: true,
 				ReasonCode:      contracts.ReasonSafeDepDegradedNarrowing,
+				ActivationReceipt: &contracts.ActivationReceipt{
+					ActivationID:        "act-1",
+					DelegationSessionID: "session-1",
+				},
+				EmergencyScopeHash: "sha256:scope",
 				Classification: contracts.HazardClassification{
 					HazardCode: contracts.HazardCredentialExpired,
 					State:      contracts.SafeDepDegradedNarrowing,
@@ -284,11 +350,31 @@ func TestSafeExecutorCopiesEmergencyAuthorityToReceipt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !outbox.scheduled {
+		t.Fatal("outbox did not reverify and schedule the signed intent")
+	}
+	if intent.EmergencyActivationID != "" || intent.EmergencyDelegationSessionID != "" || intent.EmergencyScopeHash != "" {
+		t.Fatalf("SafeDep gate mutated original signed intent: %+v", intent)
+	}
+	if valid, verifyErr := signer.VerifyIntent(intent); verifyErr != nil || !valid {
+		t.Fatalf("intent failed post-gate reverification: valid=%v err=%v", valid, verifyErr)
+	}
 	if receipt.EmergencyActivationID != "act-1" || receipt.EmergencyDelegationSessionID != "session-1" || receipt.EmergencyScopeHash != "sha256:scope" {
 		t.Fatalf("receipt missing emergency authority fields: %+v", receipt)
 	}
 	if receipt.SafeDepState != string(contracts.SafeDepDegradedNarrowing) || receipt.SafeDepReasonCode != string(contracts.ReasonSafeDepDegradedNarrowing) {
 		t.Fatalf("receipt missing SafeDep state: %+v", receipt)
+	}
+	if receipt.SignatureVersion != contracts.ReceiptSignatureVersionV2 {
+		t.Fatalf("receipt signature version = %q", receipt.SignatureVersion)
+	}
+	if valid, verifyErr := signer.VerifyReceipt(receipt); verifyErr != nil || !valid {
+		t.Fatalf("SafeDep receipt signature did not verify: valid=%v err=%v", valid, verifyErr)
+	}
+	tamperedReceipt := *receipt
+	tamperedReceipt.EmergencyActivationID = "act-tampered"
+	if valid, verifyErr := signer.VerifyReceipt(&tamperedReceipt); verifyErr == nil && valid {
+		t.Fatal("receipt signature accepted tampered SafeDep activation evidence")
 	}
 }
 

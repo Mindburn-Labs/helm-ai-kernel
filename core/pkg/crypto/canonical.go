@@ -1,9 +1,15 @@
 package crypto
 
+// quantum_posture: canonical intent payloads bind authorization fields but do
+// not change the security strength of the configured signature algorithm.
+
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // CanonicalMarshal marshals v into canonical JSON format (RFC 8785).
@@ -59,10 +65,9 @@ func CanonicalizeDecisionStrict(id, verdict, reason, phenotypeHash, policyConten
 	return CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest), nil
 }
 
-// CanonicalizeIntent creates a canonical string representation of an intent for signing.
-// New signing paths pass effectDigestHash to bind the intent to the exact
-// effect approved by the decision; the variadic form preserves old callers
-// that only need to inspect the legacy component ordering.
+// CanonicalizeIntent preserves the legacy compact formatter for callers that
+// need to display or inspect old intent identifiers. It is not used for new
+// authorization signatures.
 func CanonicalizeIntent(id, decisionID, allowedTool string, effectDigestHash ...string) string {
 	if len(effectDigestHash) == 0 {
 		return fmt.Sprintf("%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool)
@@ -70,8 +75,140 @@ func CanonicalizeIntent(id, decisionID, allowedTool string, effectDigestHash ...
 	return fmt.Sprintf("%s%s%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool, SigSeparator, effectDigestHash[0])
 }
 
-// CanonicalizeReceipt creates a canonical string representation of a receipt for signing.
-// V4: includes ArgsHash for PEP boundary binding.
+func canonicalizeIntentForSigning(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
+	if intent == nil {
+		return nil, fmt.Errorf("intent is required for canonicalization")
+	}
+	intent.SignatureVersion = contracts.IntentSignatureVersionV2
+	return canonicalizeIntentV2(intent)
+}
+
+// canonicalizeIntentForVerification keeps the legacy read path explicit for
+// short-lived intents queued before the v2 rollout. A versioned intent never
+// falls back: clearing or changing the signature-bound version changes the
+// selected preimage and fails verification.
+func canonicalizeIntentForVerification(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
+	if intent == nil {
+		return nil, fmt.Errorf("intent is required for canonicalization")
+	}
+	switch intent.SignatureVersion {
+	case "":
+		return []byte(CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)), nil
+	case contracts.IntentSignatureVersionV2:
+		return canonicalizeIntentV2(intent)
+	default:
+		return nil, fmt.Errorf("unsupported intent signature version %q", intent.SignatureVersion)
+	}
+}
+
+// canonicalizeIntentV2 binds every authority-relevant intent field. It
+// intentionally excludes only Signature itself. A map is used so
+// encoding/json emits keys lexicographically, as required by CanonicalMarshal.
+func canonicalizeIntentV2(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
+	if intent == nil {
+		return nil, fmt.Errorf("intent is required for canonicalization")
+	}
+	if intent.SignatureVersion != contracts.IntentSignatureVersionV2 {
+		return nil, fmt.Errorf("intent signature version %q is not %q", intent.SignatureVersion, contracts.IntentSignatureVersionV2)
+	}
+
+	payload := map[string]any{
+		"allowed_tool":                    intent.AllowedTool,
+		"decision_id":                     intent.DecisionID,
+		"effect_digest_hash":              intent.EffectDigestHash,
+		"emergency_activation_id":         intent.EmergencyActivationID,
+		"emergency_delegation_session_id": intent.EmergencyDelegationSessionID,
+		"emergency_scope_hash":            intent.EmergencyScopeHash,
+		"expires_at":                      intent.ExpiresAt.UTC().Format(time.RFC3339Nano),
+		"id":                              intent.ID,
+		"idempotency_key":                 intent.IdempotencyKey,
+		"issued_at":                       intent.IssuedAt.UTC().Format(time.RFC3339Nano),
+		"signature_type":                  intent.SignatureType,
+		"signer":                          intent.Signer,
+		"taint":                           contracts.NormalizeTaintLabels(intent.Taint),
+		"version":                         intent.SignatureVersion,
+	}
+	return CanonicalMarshal(payload)
+}
+
+// CanonicalizeReceipt preserves the legacy compact receipt preimage. New
+// receipts use canonicalizeReceiptForSigning so SafeDep authority evidence is
+// signature-bound without invalidating queued receipts issued before v2.
 func CanonicalizeReceipt(receiptID, decisionID, effectID, status, outputHash, prevHash string, lamportClock uint64, argsHash string) string {
 	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s%s%d%s%s", receiptID, SigSeparator, decisionID, SigSeparator, effectID, SigSeparator, status, SigSeparator, outputHash, SigSeparator, prevHash, SigSeparator, lamportClock, SigSeparator, argsHash)
+}
+
+func canonicalizeReceiptForSigning(receipt *contracts.Receipt) ([]byte, error) {
+	if receipt == nil {
+		return nil, fmt.Errorf("receipt is required for canonicalization")
+	}
+	receipt.SignatureVersion = contracts.ReceiptSignatureVersionV2
+	return canonicalizeReceiptV2(receipt)
+}
+
+// canonicalizeReceiptForVerification retains the legacy read path for
+// receipts issued before v2. Versioned receipts never fall back to the legacy
+// preimage, so clearing or changing the version invalidates the signature.
+func canonicalizeReceiptForVerification(receipt *contracts.Receipt) ([]byte, error) {
+	if receipt == nil {
+		return nil, fmt.Errorf("receipt is required for canonicalization")
+	}
+	switch receipt.SignatureVersion {
+	case "":
+		if hasSafeDepReceiptEvidence(receipt) {
+			return nil, fmt.Errorf("legacy receipt signature cannot authenticate SafeDep evidence")
+		}
+		return []byte(CanonicalizeReceipt(
+			receipt.ReceiptID,
+			receipt.DecisionID,
+			receipt.EffectID,
+			receipt.Status,
+			receipt.OutputHash,
+			receipt.PrevHash,
+			receipt.LamportClock,
+			receipt.ArgsHash,
+		)), nil
+	case contracts.ReceiptSignatureVersionV2:
+		return canonicalizeReceiptV2(receipt)
+	default:
+		return nil, fmt.Errorf("unsupported receipt signature version %q", receipt.SignatureVersion)
+	}
+}
+
+func hasSafeDepReceiptEvidence(receipt *contracts.Receipt) bool {
+	return receipt.EmergencyActivationID != "" ||
+		receipt.EmergencyDelegationSessionID != "" ||
+		receipt.EmergencyScopeHash != "" ||
+		receipt.SafeDepState != "" ||
+		receipt.SafeDepReasonCode != ""
+}
+
+// canonicalizeReceiptV2 binds the execution identity, causal chain, PEP
+// arguments, and all SafeDep emergency authority evidence. Signature envelope
+// metadata is excluded because signers populate it after producing the proof.
+func canonicalizeReceiptV2(receipt *contracts.Receipt) ([]byte, error) {
+	if receipt == nil {
+		return nil, fmt.Errorf("receipt is required for canonicalization")
+	}
+	if receipt.SignatureVersion != contracts.ReceiptSignatureVersionV2 {
+		return nil, fmt.Errorf("receipt signature version %q is not %q", receipt.SignatureVersion, contracts.ReceiptSignatureVersionV2)
+	}
+
+	payload := map[string]any{
+		"args_hash":                       receipt.ArgsHash,
+		"decision_id":                     receipt.DecisionID,
+		"effect_id":                       receipt.EffectID,
+		"emergency_activation_id":         receipt.EmergencyActivationID,
+		"emergency_delegation_session_id": receipt.EmergencyDelegationSessionID,
+		"emergency_scope_hash":            receipt.EmergencyScopeHash,
+		"lamport_clock":                   receipt.LamportClock,
+		"output_hash":                     receipt.OutputHash,
+		"prev_hash":                       receipt.PrevHash,
+		"receipt_id":                      receipt.ReceiptID,
+		"safe_dep_reason_code":            receipt.SafeDepReasonCode,
+		"safe_dep_state":                  receipt.SafeDepState,
+		"status":                          receipt.Status,
+		"version":                         receipt.SignatureVersion,
+	}
+	return CanonicalMarshal(payload)
 }

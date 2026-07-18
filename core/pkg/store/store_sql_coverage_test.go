@@ -247,7 +247,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 		t.Fatal("expected init error")
 	}
 
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(25)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	if err := store.Store(ctx, receipt); err != nil {
 		t.Fatalf("Store: %v", err)
 	}
@@ -264,8 +264,11 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.ReceiptID != receipt.ReceiptID || got.Metadata["k"] != "v" {
+	if got.ReceiptID != receipt.ReceiptID || got.Metadata["k"] != "v" || got.SignatureVersion != contracts.ReceiptSignatureVersionV2 {
 		t.Fatalf("unexpected receipt: %+v", got)
+	}
+	if got.EmergencyActivationID != receipt.EmergencyActivationID || got.EmergencyDelegationSessionID != receipt.EmergencyDelegationSessionID || got.EmergencyScopeHash != receipt.EmergencyScopeHash || got.SafeDepState != receipt.SafeDepState || got.SafeDepReasonCode != receipt.SafeDepReasonCode {
+		t.Fatalf("Postgres scan dropped SafeDep receipt evidence: %+v", got)
 	}
 	mock.ExpectQuery("FROM receipts WHERE decision_id").WithArgs("missing").WillReturnError(sql.ErrNoRows)
 	if _, err := store.Get(ctx, "missing"); err == nil || !strings.Contains(err.Error(), "receipt not found") {
@@ -278,7 +281,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 
 	mock.ExpectQuery("FROM receipts ORDER BY timestamp DESC").WithArgs(2).
 		WillReturnRows(storePostgresReceiptRows(receipt, []byte(`null`)).
-			AddRow("receipt-2", "decision-2", "effect", "", "OK", "blob", "output", now.Add(time.Second), "agent-2", []byte(`{"x":1}`), nil, nil, "", int64(8), "args", "", int64(0), nil))
+			AddRow("receipt-2", "decision-2", "effect", "", "OK", "blob", "output", now.Add(time.Second), "agent-2", []byte(`{"x":1}`), nil, "", nil, "", int64(8), "args", "", "", "", "", "", "", int64(0), nil))
 	list, err := store.List(ctx, 2)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -292,7 +295,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	}
 	mock.ExpectQuery("FROM receipts ORDER BY timestamp DESC").
 		WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()).
-			AddRow("receipt-bad", "decision-bad", "effect", "", "OK", "blob", "output", "not-time", "agent", []byte(`null`), nil, nil, "", int64(1), "args", "", int64(0), nil))
+			AddRow("receipt-bad", "decision-bad", "effect", "", "OK", "blob", "output", "not-time", "agent", []byte(`null`), nil, "", nil, "", int64(1), "args", "", "", "", "", "", "", int64(0), nil))
 	if _, err := store.List(ctx, 1); err == nil {
 		t.Fatal("expected list scan error")
 	}
@@ -391,10 +394,16 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 		sql.NullString{String: "agent", Valid: true},
 		sql.NullString{String: `{"a":1}`, Valid: true},
 		sql.NullString{String: "sig", Valid: true},
+		sql.NullString{String: contracts.ReceiptSignatureVersionV2, Valid: true},
 		sql.NullString{String: "root", Valid: true},
 		sql.NullString{String: "prev", Valid: true},
 		9,
 		sql.NullString{String: "args", Valid: true},
+		sql.NullString{String: "activation", Valid: true},
+		sql.NullString{String: "delegation", Valid: true},
+		sql.NullString{String: "scope", Valid: true},
+		sql.NullString{String: "degraded_narrowing", Valid: true},
+		sql.NullString{String: "reason", Valid: true},
 		sql.NullString{String: "logid", Valid: true},
 		11,
 		sql.NullString{String: `{"backend":"translog","deferred":true}`, Valid: true},
@@ -402,13 +411,16 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("receiptFromSQLiteFields: %v", err)
 	}
-	if receipt.Metadata["a"].(float64) != 1 || receipt.ExternalReferenceID != "external" || receipt.ArgsHash != "args" {
+	if receipt.Metadata["a"].(float64) != 1 || receipt.ExternalReferenceID != "external" || receipt.ArgsHash != "args" || receipt.SignatureVersion != contracts.ReceiptSignatureVersionV2 {
 		t.Fatalf("unexpected SQLite receipt: %+v", receipt)
+	}
+	if receipt.EmergencyActivationID != "activation" || receipt.EmergencyDelegationSessionID != "delegation" || receipt.EmergencyScopeHash != "scope" || receipt.SafeDepState != "degraded_narrowing" || receipt.SafeDepReasonCode != "reason" {
+		t.Fatalf("SafeDep receipt fields not decoded: %+v", receipt)
 	}
 	if receipt.LogID != "logid" || receipt.LeafIndex != 11 || receipt.Transparency == nil || !receipt.Transparency.Deferred {
 		t.Fatalf("transparency fields not decoded: %+v", receipt)
 	}
-	if _, err := receiptFromSQLiteFields("r", "d", "e", sql.NullString{}, "OK", "", "", "", sql.NullString{}, sql.NullString{String: `{`, Valid: true}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}); err == nil {
+	if _, err := receiptFromSQLiteFields("r", "d", "e", sql.NullString{}, "OK", "", "", "", sql.NullString{}, sql.NullString{String: `{`, Valid: true}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}); err == nil {
 		t.Fatal("expected SQLite metadata decode error")
 	}
 
@@ -477,7 +489,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(25)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous != nil || lamport != 1 || prevHash != "" {
@@ -488,7 +500,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatalf("AppendCausal genesis: %v", err)
 	}
 
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(25)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous == nil || previous.ReceiptID != "receipt-genesis" || lamport != 2 || prevHash == "" {
 			t.Fatalf("unexpected chained inputs previous=%+v lamport=%d prev=%q", previous, lamport, prevHash)
@@ -544,7 +556,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(19)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(25)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return storeCoverageReceipt("receipt-commit-fail", "decision-commit-fail", "agent", 1, now), nil
@@ -629,21 +641,27 @@ func storeAnySQLArgs(count int) []driver.Value {
 
 func storeCoverageReceipt(receiptID, decisionID, executorID string, lamport uint64, timestamp time.Time) *contracts.Receipt {
 	return &contracts.Receipt{
-		ReceiptID:           receiptID,
-		DecisionID:          decisionID,
-		EffectID:            "effect",
-		ExternalReferenceID: "external",
-		Status:              "OK",
-		BlobHash:            "blob",
-		OutputHash:          "output",
-		Timestamp:           timestamp,
-		ExecutorID:          executorID,
-		Metadata:            map[string]any{"source": "coverage"},
-		Signature:           "signature",
-		MerkleRoot:          "merkle",
-		PrevHash:            "",
-		LamportClock:        lamport,
-		ArgsHash:            "args",
+		ReceiptID:                    receiptID,
+		DecisionID:                   decisionID,
+		EffectID:                     "effect",
+		ExternalReferenceID:          "external",
+		Status:                       "OK",
+		BlobHash:                     "blob",
+		OutputHash:                   "output",
+		Timestamp:                    timestamp,
+		ExecutorID:                   executorID,
+		Metadata:                     map[string]any{"source": "coverage"},
+		Signature:                    "signature",
+		SignatureVersion:             contracts.ReceiptSignatureVersionV2,
+		MerkleRoot:                   "merkle",
+		PrevHash:                     "",
+		LamportClock:                 lamport,
+		ArgsHash:                     "args",
+		EmergencyActivationID:        "activation",
+		EmergencyDelegationSessionID: "delegation",
+		EmergencyScopeHash:           "scope",
+		SafeDepState:                 "degraded_narrowing",
+		SafeDepReasonCode:            "reason",
 	}
 }
 
@@ -660,10 +678,16 @@ func storePostgresReceiptColumns() []string {
 		"executor_id",
 		"metadata",
 		"signature",
+		"signature_version",
 		"merkle_root",
 		"prev_hash",
 		"lamport_clock",
 		"args_hash",
+		"emergency_activation_id",
+		"emergency_delegation_session_id",
+		"emergency_scope_hash",
+		"safe_dep_state",
+		"safe_dep_reason_code",
 		"log_id",
 		"leaf_index",
 		"transparency",
@@ -687,10 +711,16 @@ func storePostgresReceiptRows(receipt *contracts.Receipt, metadata []byte) *sqlm
 			receipt.ExecutorID,
 			metadata,
 			receipt.Signature,
+			receipt.SignatureVersion,
 			receipt.MerkleRoot,
 			receipt.PrevHash,
 			int64(receipt.LamportClock),
 			receipt.ArgsHash,
+			receipt.EmergencyActivationID,
+			receipt.EmergencyDelegationSessionID,
+			receipt.EmergencyScopeHash,
+			receipt.SafeDepState,
+			receipt.SafeDepReasonCode,
 			receipt.LogID,
 			int64(receipt.LeafIndex),
 			storePostgresTransparencyValue(receipt),

@@ -91,20 +91,29 @@ func (s *MLDSASigner) SignDecision(d *contracts.DecisionRecord) error {
 
 // SignIntent signs an AuthorizedExecutionIntent using ML-DSA-65.
 func (s *MLDSASigner) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
-	sig, err := s.Sign([]byte(payload))
+	if i == nil {
+		return fmt.Errorf("intent is required")
+	}
+	i.SignatureType = SigPrefixMLDSA65 + SigSeparator + s.keyID
+	payload, err := canonicalizeIntentForSigning(i)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
 	i.Signature = sig
-	i.SignatureType = SigPrefixMLDSA65 + SigSeparator + s.keyID
 	return nil
 }
 
 // SignReceipt signs a Receipt using ML-DSA-65.
 func (s *MLDSASigner) SignReceipt(r *contracts.Receipt) error {
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
-	sig, err := s.Sign([]byte(payload))
+	payload, err := canonicalizeReceiptForSigning(r)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -134,12 +143,15 @@ func (s *MLDSASigner) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
+	payload, err := canonicalizeIntentForVerification(i)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(i.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(s.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(s.publicKey, payload, nil, sig), nil
 }
 
 // VerifyReceipt verifies a Receipt signature using ML-DSA-65.
@@ -147,10 +159,13 @@ func (s *MLDSASigner) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if r.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	payload, err := canonicalizeReceiptForVerification(r)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(r.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(s.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(s.publicKey, payload, nil, sig), nil
 }

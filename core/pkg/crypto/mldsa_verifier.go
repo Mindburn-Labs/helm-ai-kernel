@@ -1,5 +1,8 @@
 package crypto
 
+// quantum_posture: ML-DSA verification is available when configured; the
+// selected signature profile determines the deployed quantum resistance.
+
 import (
 	"encoding/hex"
 	"fmt"
@@ -49,12 +52,15 @@ func (v *MLDSAVerifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bo
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
+	payload, err := canonicalizeIntentForVerification(i)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(i.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(v.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(v.publicKey, payload, nil, sig), nil
 }
 
 // VerifyReceipt verifies a Receipt signature using ML-DSA-65.
@@ -62,12 +68,15 @@ func (v *MLDSAVerifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if r.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	payload, err := canonicalizeReceiptForVerification(r)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(r.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(v.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(v.publicKey, payload, nil, sig), nil
 }
 
 // VerifyMLDSA65 verifies a hex-encoded ML-DSA-65 signature against a hex-encoded public key.

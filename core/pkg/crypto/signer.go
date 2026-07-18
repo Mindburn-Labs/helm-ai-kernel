@@ -128,8 +128,15 @@ func (s *Ed25519Signer) SignDecision(d *contracts.DecisionRecord) error {
 }
 
 func (s *Ed25519Signer) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
-	sig, err := s.Sign([]byte(payload))
+	if i == nil {
+		return fmt.Errorf("intent is required")
+	}
+	i.SignatureType = SigPrefixEd25519 + SigSeparator + s.KeyID
+	payload, err := canonicalizeIntentForSigning(i)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -139,9 +146,11 @@ func (s *Ed25519Signer) SignIntent(i *contracts.AuthorizedExecutionIntent) error
 
 // SignReceipt signs a Receipt
 func (s *Ed25519Signer) SignReceipt(r *contracts.Receipt) error {
-	// Canonicalize: ID:DecisionID:EffectID:Status:OutputHash
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
-	sig, err := s.Sign([]byte(payload))
+	payload, err := canonicalizeReceiptForSigning(r)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -166,16 +175,22 @@ func (s *Ed25519Signer) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bo
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
-	return Verify(s.PublicKey(), i.Signature, []byte(payload))
+	payload, err := canonicalizeIntentForVerification(i)
+	if err != nil {
+		return false, err
+	}
+	return Verify(s.PublicKey(), i.Signature, payload)
 }
 
 func (s *Ed25519Signer) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if r.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
-	return Verify(s.PublicKey(), r.Signature, []byte(payload))
+	payload, err := canonicalizeReceiptForVerification(r)
+	if err != nil {
+		return false, err
+	}
+	return Verify(s.PublicKey(), r.Signature, payload)
 }
 
 // SignCounterfactualReceipt seals (if needed) and signs a counterfactual

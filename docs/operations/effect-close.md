@@ -13,8 +13,8 @@ outcome remains explicit as `APPLIED` or `NOT_APPLIED`.
 
 This is source-owned contract, persistence, and real-PostgreSQL evidence. It is
 internal and pre-production. There is no deployed Data Plane close endpoint,
-connector acknowledgement publisher, cross-plane disposition controller, or
-controlled-live effect proof in this slice.
+connector acknowledgement publisher, deployed cross-plane disposition
+controller, or controlled-live effect proof in this slice.
 
 ## Two independent authorities
 
@@ -46,6 +46,8 @@ The acknowledgement and receipt bind:
 - connector ID/version and the release-bound connector signer identity;
 - original idempotency-key hash and effect hash;
 - connector execution, proof-session, intent, effect, and reconciliation refs;
+- under FENCE, the exact latest current-FENCE non-`HOLD` disposition receipt
+  hash;
 - source response hash and outcome;
 - the prior reservation state, sequence, and canonical head hash;
 - verified EvidencePack ref/hash; and
@@ -71,23 +73,32 @@ before taking database locks. The storage transaction then:
 3. loads the latest reservation and verifies its immutable signed authorities;
 4. returns a previously committed exact close replay, or rejects a conflict;
 5. requires a current `STARTED` or `UNCERTAIN` head;
-6. validates every acknowledgement binding and the bounded clock window;
-7. derives a deterministic close ID from admission, acknowledgement, and
+6. loads current FENCE state; while fenced, requires a latest disposition,
+   fully verifies its Control Plane and Kernel signatures plus historical
+   authority, requires it to bind the exact current FENCE, and rejects `HOLD`;
+7. requires the acknowledgement's receipt hash and reconciliation ref to bind
+   that disposition exactly;
+8. validates every acknowledgement binding and the bounded clock window;
+9. derives a deterministic close ID from admission, acknowledgement, and
    EvidencePack hashes;
-8. inserts the immutable signed closure;
-9. appends the matching `COMPLETED` event; and
-10. commits both records atomically.
+10. inserts the immutable signed closure;
+11. appends the matching `COMPLETED` event; and
+12. commits both records atomically.
 
-Close remains possible after a later FENCE or connector-release revocation. It
-creates no new execution authority and performs no external effect; it only
-reconciles work that may already have crossed the network seam. Current FENCE
-and release state are therefore not re-evaluated as execution gates during
-close. The persisted historical release envelope and all signed admission
-bindings are still verified.
+Close remains possible after FENCE only through a disposition bound to the
+exact current FENCE. A missing disposition, a receipt from an older FENCE
+epoch, or `HOLD` fails closed. A connector-release revocation does not prevent
+reconciling already-active work. Close creates no new execution authority and
+performs no external effect; current FENCE is evaluated as reconciliation
+authority, not as a new execution grant. The persisted historical release
+envelope and all signed admission bindings are still verified.
 
-This behavior does not cancel, retry, compensate, or otherwise dispose active
-work. Those require separate signed disposition commands and source-specific
-connectors.
+This behavior does not cancel, retry, or compensate active work. The separate
+signed disposition contract records `HOLD`, `RECONCILE_SOURCE`,
+`REQUEST_CANCEL`, or `REQUEST_COMPENSATE`, but its receipt explicitly carries
+`execution_authority: NONE`; any external cancel or compensation still requires
+a separate governed effect path and source-specific connector. See
+`docs/operations/effect-disposition.md`.
 
 ## Persistence invariants
 
@@ -132,7 +143,7 @@ The source-owned `reference_packs/effect-close-v1` pack contains canonical
 acknowledgement, envelope, signing payload, receipt, signing payload, positive
 vectors, and negative mutations. Go and independent Python implementations
 verify exact hashes, signature domains, pinned identities, outcome semantics,
-clock rules, and cross-artifact bindings.
+clock rules, latest-disposition binding, and cross-artifact bindings.
 
 Run:
 
@@ -146,8 +157,10 @@ make docs-truth
 The PostgreSQL proof includes direct and reconciled close, exact replay,
 conflicting replay, verified recovery, concurrent single-winner close, forced
 RLS isolation, append-only rejection, schema idempotence, and database refusal
-of `COMPLETED` without a matching closure. These are local and CI proofs, not
-deployed or controlled-live evidence.
+of `COMPLETED` without a matching closure. It also rejects close under FENCE
+without a disposition, with a pre-rotation disposition, under `HOLD`, or from a
+structurally valid but cryptographically forged disposition row. These are
+local and CI proofs, not deployed or controlled-live evidence.
 
 ## Remaining production gates
 
@@ -158,8 +171,11 @@ deployed or controlled-live evidence.
 - deploy and rotate connector acknowledgement and Kernel receipt trust roots
   through source-owned KMS/HSM configuration;
 - give close writers a dedicated least-privilege PostgreSQL role;
-- add signed active-work disposition commands, command/acknowledgement ledgers,
-  compensation policy, and cross-plane reconciliation;
+- deploy the existing internal signed-disposition boundary through a durable
+  Control Plane command ledger/outbox and authenticated Data Plane adapter;
+- add separate governed cancellation/compensation execution policy and
+  source-specific connectors; disposition acceptance itself has no effect
+  authority;
 - prove restart recovery, retry safety, load, failover, backup/restore, and
   controlled-live source outcomes; and
 - pass the repository's source-owned release gates before any production,

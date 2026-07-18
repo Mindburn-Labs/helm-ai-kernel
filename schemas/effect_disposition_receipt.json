@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/effect_disposition_receipt.json",
+  "title": "Effect Disposition Receipt",
+  "description": "Kernel-signed acknowledgement that one disposition command was durably recorded against an exact current FENCE and active reservation. It grants no external execution authority.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contract_version",
+    "receipt_id",
+    "state",
+    "execution_authority",
+    "command_id",
+    "command_hash",
+    "disposition_sequence",
+    "tenant_id",
+    "workspace_id",
+    "audience",
+    "fence_command_id",
+    "fence_command_hash",
+    "fence_epoch",
+    "fence_receipt_hash",
+    "admission_id",
+    "reservation_sequence",
+    "reservation_head_hash",
+    "reservation_state",
+    "action",
+    "disposition_ref",
+    "kernel_trust_root_id",
+    "signing_key_ref",
+    "accepted_by",
+    "accepted_at",
+    "receipt_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "effect-disposition-receipt.v1" },
+    "contract_version": { "const": "2026-07-18" },
+    "receipt_id": { "$ref": "#/$defs/token" },
+    "state": { "const": "ACCEPTED" },
+    "execution_authority": { "const": "NONE" },
+    "command_id": { "$ref": "#/$defs/token" },
+    "command_hash": { "$ref": "#/$defs/sha256" },
+    "disposition_sequence": { "$ref": "#/$defs/sequence" },
+    "previous_receipt_hash": { "$ref": "#/$defs/sha256" },
+    "tenant_id": { "$ref": "#/$defs/token" },
+    "workspace_id": { "$ref": "#/$defs/token" },
+    "audience": { "$ref": "#/$defs/token" },
+    "fence_command_id": { "$ref": "#/$defs/token" },
+    "fence_command_hash": { "$ref": "#/$defs/sha256" },
+    "fence_epoch": { "$ref": "#/$defs/sequence" },
+    "fence_receipt_hash": { "$ref": "#/$defs/sha256" },
+    "admission_id": { "$ref": "#/$defs/token" },
+    "reservation_sequence": { "$ref": "#/$defs/sequence" },
+    "reservation_head_hash": { "$ref": "#/$defs/sha256" },
+    "reservation_state": { "enum": ["STARTED", "UNCERTAIN"] },
+    "action": {
+      "enum": ["HOLD", "RECONCILE_SOURCE", "REQUEST_CANCEL", "REQUEST_COMPENSATE"]
+    },
+    "disposition_ref": { "$ref": "#/$defs/token" },
+    "kernel_trust_root_id": { "$ref": "#/$defs/token" },
+    "signing_key_ref": { "$ref": "#/$defs/token" },
+    "accepted_by": { "$ref": "#/$defs/token" },
+    "accepted_at": { "$ref": "#/$defs/timestamp" },
+    "receipt_hash": { "$ref": "#/$defs/sha256" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "disposition_sequence": { "const": 1 } },
+        "required": ["disposition_sequence"]
+      },
+      "then": { "not": { "required": ["previous_receipt_hash"] } },
+      "else": { "required": ["previous_receipt_hash"] }
+    }
+  ],
+  "$defs": {
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^\\S+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$"
+    }
+  },
+  "additionalProperties": false
+}

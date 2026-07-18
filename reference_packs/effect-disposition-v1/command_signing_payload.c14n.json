@@ -1,0 +1,1 @@
+{"algorithm":"ed25519","audience":"packs.lifecycle","authority_id":"control-plane-a","command_hash":"sha256:24c6848a5df3d8de717acb820cb5c4434b6c1b7bebad0f5cc405fcd18adf9f51","contract_version":"2026-07-18","domain":"HELM/EffectDispositionCommandSignature/v1","signing_key_ref":"kms://helm/control-plane/disposition/key-a"}

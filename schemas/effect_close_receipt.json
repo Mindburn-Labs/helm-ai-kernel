@@ -61,6 +61,7 @@
     "intent_ref": { "$ref": "#/$defs/token" },
     "effect_ref": { "$ref": "#/$defs/token" },
     "reconciliation_ref": { "$ref": "#/$defs/token" },
+    "disposition_receipt_hash": { "$ref": "#/$defs/sha256" },
     "evidence_pack_ref": { "$ref": "#/$defs/token" },
     "evidence_pack_hash": { "$ref": "#/$defs/sha256" },
     "kernel_trust_root_id": { "$ref": "#/$defs/token" },

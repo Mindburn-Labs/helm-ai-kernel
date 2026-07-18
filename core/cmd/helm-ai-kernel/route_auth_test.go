@@ -1,13 +1,34 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
+
+	_ "modernc.org/sqlite"
 )
+
+// newRouteAuthTestBindingStore returns a fresh in-memory SQLite-backed
+// store.PrincipalBindingStore for tenant-gate registry tests.
+func newRouteAuthTestBindingStore(t *testing.T) (store.PrincipalBindingStore, func()) {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := store.NewSQLitePrincipalBindingStore(db)
+	if err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	return s, func() { _ = db.Close() }
+}
 
 func TestTenantScopedRuntimeAuthRejectsMissingTenantBinding(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
@@ -187,6 +208,122 @@ func TestServiceInternalRuntimeAuthFailsClosedWhenUnconfigured(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("service-internal route without configured token status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthAllowsRegisteredNonEnvBinding(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+
+	bindingStore, cleanup := newRouteAuthTestBindingStore(t)
+	defer cleanup()
+	if err := bindingStore.Upsert(context.Background(), store.PrincipalBinding{
+		TenantID:    "tenant-b",
+		PrincipalID: "principal-b",
+	}); err != nil {
+		t.Fatalf("seeding binding store: %v", err)
+	}
+	SetPrincipalBindingStore(bindingStore)
+	t.Cleanup(func() { SetPrincipalBindingStore(nil) })
+
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		principal, err := helmauth.GetPrincipal(r.Context())
+		if err != nil {
+			t.Fatalf("principal missing from tenant-scoped context: %v", err)
+		}
+		if principal.GetTenantID() != "tenant-b" {
+			t.Fatalf("tenant = %q, want tenant-b", principal.GetTenantID())
+		}
+		if principal.GetID() != "principal-b" {
+			t.Fatalf("principal = %q, want principal-b", principal.GetID())
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-b")
+	req.Header.Set(principalHeader, "principal-b")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("tenant-scoped route with registered non-env binding status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthRejectsNonEnvPairNotInStore(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+
+	bindingStore, cleanup := newRouteAuthTestBindingStore(t)
+	defer cleanup()
+	SetPrincipalBindingStore(bindingStore)
+	t.Cleanup(func() { SetPrincipalBindingStore(nil) })
+
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run for an unregistered non-env pair")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-c")
+	req.Header.Set(principalHeader, "principal-c")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("tenant-scoped route with unregistered non-env pair status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthNilStoreAllowsEnvPair(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+
+	SetPrincipalBindingStore(nil)
+	t.Cleanup(func() { SetPrincipalBindingStore(nil) })
+
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-a")
+	req.Header.Set(principalHeader, "principal-a")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("tenant-scoped route with nil store and env pair status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTenantScopedRuntimeAuthNilStoreRejectsNonEnvPair(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+
+	SetPrincipalBindingStore(nil)
+	t.Cleanup(func() { SetPrincipalBindingStore(nil) })
+
+	handler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("tenant-scoped handler should not run for a non-env pair when store is nil")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-b")
+	req.Header.Set(principalHeader, "principal-b")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("tenant-scoped route with nil store and non-env pair status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

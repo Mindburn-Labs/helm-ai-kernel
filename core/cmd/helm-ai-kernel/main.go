@@ -367,6 +367,7 @@ func runServerWithOptions(opts serverOptions) {
 		services.ReceiptStore = receiptStore
 		services.ReceiptSigner = signer
 		services.PrincipalBindings = principalBindingStore
+		SetPrincipalBindingStore(principalBindingStore)
 		services.PolicyReconciler = policyReconciler
 		services.PolicySnapshotStore = policyStore
 		services.PolicyScope = policyScope

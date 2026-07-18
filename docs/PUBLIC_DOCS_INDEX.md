@@ -24,6 +24,7 @@ it does not claim that a live docs route or runtime is available.
 ## Build
 
 - [Quickstart](QUICKSTART.md)
+- [Developer Journey](DEVELOPER_JOURNEY.md)
 - [Write Policies](architecture/policy-languages.md)
 - [OpenAI Proxy](INTEGRATIONS/openai_baseurl.md)
 - [OpenClaw](INTEGRATIONS/openclaw.md)
@@ -51,3 +52,4 @@ it does not claim that a live docs route or runtime is available.
 - [Skill Packs](reference/skill-packs.md)
 - [HTTP API](reference/http-api.md)
 - [SDKs](sdks/00_INDEX.md)
+- [Examples Matrix](EXAMPLES.md)

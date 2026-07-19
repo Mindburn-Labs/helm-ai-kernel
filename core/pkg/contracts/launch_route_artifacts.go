@@ -17,6 +17,7 @@ const (
 	LaunchResourceGraphSchemaVersion      = "launch_resource_graph.v1"
 	LaunchProviderPayloadSetSchemaVersion = "launch_provider_payload_set.v1"
 	LaunchBlueprintSchemaVersion          = "launch_blueprint.v1"
+	LaunchPortableVocabularyVersion       = "launch_portable_vocabulary.v1"
 	LaunchCreditVerified                  = "ACTIVE_CREDIT_VERIFIED"
 	LaunchCreditAdvisory                  = "MAY_QUALIFY"
 	LaunchCreditNone                      = "NONE"
@@ -24,6 +25,42 @@ const (
 )
 
 var launchCurrencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
+
+var launchBlueprintIDPattern = regexp.MustCompile(`^blueprint:sha256:[a-f0-9]{64}$`)
+
+// Clean-room blueprints deliberately use a small, versioned public vocabulary.
+// Repository analysis and certified provider profiles remain extensible, but an
+// unregistered vendor or tenant token must never be copied into a shareable
+// blueprint. New portable semantics require an explicit contract release.
+var launchPortableWorkloadKinds = map[string]struct{}{
+	"cache": {}, "composite": {}, "container": {}, "database": {},
+	"function": {}, "gpu_workload": {}, "http_service": {}, "infrastructure": {},
+	"kubernetes_workload": {}, "message_queue": {}, "object_storage": {},
+	"scheduled_job": {}, "static_site": {}, "worker": {},
+}
+
+var launchPortableCapabilities = map[string]struct{}{
+	"autoscaling": {}, "custom-domain": {}, "gpu-runtime": {}, "health-check": {},
+	"http-ingress": {}, "https-endpoint": {}, "managed-mysql": {},
+	"managed-postgresql": {}, "managed-redis": {}, "object-storage": {},
+	"persistent-storage": {}, "private-network": {}, "scheduled-execution": {},
+	"secret-injection": {}, "stateless-runtime": {}, "websocket": {},
+	"zero-downtime-release": {},
+}
+
+var launchPortableRelationships = map[string]struct{}{
+	"connects_to": {}, "depends_on": {}, "mounts": {}, "publishes_to": {},
+	"reads_from": {}, "replicates_to": {}, "routes_to": {}, "scheduled_by": {},
+	"subscribes_to": {}, "writes_to": {},
+}
+
+var launchPortableResidencyTags = map[string]struct{}{
+	"customer-selected": {}, "eea": {}, "eu": {}, "global": {}, "uk": {}, "us": {},
+}
+
+var launchPortableCommitmentTerms = map[string]struct{}{
+	"annual": {}, "hourly": {}, "monthly": {}, "prepaid": {}, "spot": {},
+}
 
 // LaunchConstraintSet is the versioned, approval-bound policy input to route
 // selection. The Kernel stays provider-neutral: individual missions can bind
@@ -136,6 +173,7 @@ type LaunchProviderPayloadEntry struct {
 // approvals, payloads, receipts, or EvidencePack references.
 type LaunchBlueprint struct {
 	SchemaVersion             string                    `json:"schema_version"`
+	PortableVocabularyVersion string                    `json:"portable_vocabulary_version"`
 	BlueprintID               string                    `json:"blueprint_id"`
 	SourceReconnectRequired   bool                      `json:"source_reconnect_required"`
 	ProviderSelectionRequired bool                      `json:"provider_selection_required"`
@@ -398,7 +436,7 @@ func ValidateLaunchProviderPayloadSet(value LaunchProviderPayloadSet) error {
 }
 
 func ValidateLaunchBlueprint(value LaunchBlueprint) error {
-	if value.SchemaVersion != LaunchBlueprintSchemaVersion || value.BlueprintID == "" || !value.SourceReconnectRequired || !value.ProviderSelectionRequired || len(value.Nodes) == 0 {
+	if value.SchemaVersion != LaunchBlueprintSchemaVersion || value.PortableVocabularyVersion != LaunchPortableVocabularyVersion || !launchBlueprintIDPattern.MatchString(value.BlueprintID) || !value.SourceReconnectRequired || !value.ProviderSelectionRequired || len(value.Nodes) == 0 {
 		return errors.New("launch blueprint identity or clean-room reconnect flags are invalid")
 	}
 	nodes := make(map[string]struct{}, len(value.Nodes))
@@ -407,10 +445,10 @@ func ValidateLaunchBlueprint(value LaunchBlueprint) error {
 		if node.NodeID == "" || node.NodeID <= previous || !launchLifecycleClassKnown(node.LifecycleClass) {
 			return errors.New("launch blueprint nodes must be complete, unique, and sorted")
 		}
-		if !launchWorkloadKindPattern.MatchString(node.Kind) || node.Kind == "unknown" {
-			return fmt.Errorf("launch blueprint has unsupported workload kind %q", node.Kind)
+		if _, ok := launchPortableWorkloadKinds[node.Kind]; !ok {
+			return errors.New("launch blueprint has a non-portable workload kind")
 		}
-		if err := validateSortedUniqueNonEmpty(node.RequiredCapabilities, "blueprint required capabilities"); err != nil {
+		if err := validateLaunchPortableValues(node.RequiredCapabilities, "blueprint required capabilities", launchPortableCapabilities, true); err != nil {
 			return err
 		}
 		previous = node.NodeID
@@ -429,33 +467,47 @@ func ValidateLaunchBlueprint(value LaunchBlueprint) error {
 		if _, ok := nodes[edge.ToNodeID]; !ok {
 			return errors.New("launch blueprint edge references unknown target node")
 		}
-		if !launchRelationshipPattern.MatchString(edge.Relationship) {
-			return errors.New("launch blueprint edge relationship is invalid")
+		if _, ok := launchPortableRelationships[edge.Relationship]; !ok {
+			return errors.New("launch blueprint edge relationship is not portable")
 		}
 	}
 	if !launchCurrencyPattern.MatchString(value.Constraints.MaximumGrossCurrency) || value.Constraints.MaximumGrossMinor < 0 {
 		return errors.New("launch blueprint gross constraint is invalid")
 	}
-	for name, values := range map[string][]string{
-		"blueprint allowed jurisdictions":       value.Constraints.AllowedJurisdictions,
-		"blueprint required residency tags":     value.Constraints.RequiredResidencyTags,
-		"blueprint allowed commitment terms":    value.Constraints.AllowedCommitmentTerms,
-		"blueprint required route capabilities": value.Constraints.RequiredRouteCapabilities,
+	if err := validateSortedUniqueOptional(value.Constraints.AllowedJurisdictions, "blueprint allowed jurisdictions"); err != nil {
+		return err
+	}
+	for _, jurisdiction := range value.Constraints.AllowedJurisdictions {
+		if len(jurisdiction) != 2 || jurisdiction[0] < 'A' || jurisdiction[0] > 'Z' || jurisdiction[1] < 'A' || jurisdiction[1] > 'Z' {
+			return errors.New("launch blueprint contains a non-portable jurisdiction")
+		}
+	}
+	for name, valuesAndVocabulary := range map[string]struct {
+		values     []string
+		vocabulary map[string]struct{}
+	}{
+		"blueprint required residency tags":     {value.Constraints.RequiredResidencyTags, launchPortableResidencyTags},
+		"blueprint allowed commitment terms":    {value.Constraints.AllowedCommitmentTerms, launchPortableCommitmentTerms},
+		"blueprint required route capabilities": {value.Constraints.RequiredRouteCapabilities, launchPortableCapabilities},
 	} {
-		if err := validateSortedUniqueOptional(values, name); err != nil {
+		if err := validateLaunchPortableValues(valuesAndVocabulary.values, name, valuesAndVocabulary.vocabulary, false); err != nil {
 			return err
 		}
+	}
+	identityProjection := value
+	identityProjection.BlueprintID = ""
+	identityHash, err := canonicalize.CanonicalHash(identityProjection)
+	if err != nil || !launchConstantEqual(value.BlueprintID, "blueprint:sha256:"+identityHash) {
+		return errors.New("launch blueprint identity does not bind its sanitized content")
 	}
 	return nil
 }
 
 // ProjectLaunchBlueprint removes all source, tenancy, provider, account,
 // approval, and evidence identities. Node IDs are replaced with deterministic
-// ordinal IDs so private service names are not copied into a fork.
-func ProjectLaunchBlueprint(blueprintID string, graph LaunchWorkloadGraph, constraints LaunchConstraintSet) (LaunchBlueprint, error) {
-	if blueprintID == "" {
-		return LaunchBlueprint{}, errors.New("launch blueprint ID is required")
-	}
+// ordinal IDs, arbitrary semantic tokens are rejected, and the blueprint ID is
+// derived from the sanitized projection rather than accepted from a caller.
+func ProjectLaunchBlueprint(graph LaunchWorkloadGraph, constraints LaunchConstraintSet) (LaunchBlueprint, error) {
 	if err := ValidateLaunchWorkloadGraph(graph); err != nil {
 		return LaunchBlueprint{}, err
 	}
@@ -464,7 +516,7 @@ func ProjectLaunchBlueprint(blueprintID string, graph LaunchWorkloadGraph, const
 	}
 	remap := make(map[string]string, len(graph.Nodes))
 	blueprint := LaunchBlueprint{
-		SchemaVersion: LaunchBlueprintSchemaVersion, BlueprintID: blueprintID,
+		SchemaVersion: LaunchBlueprintSchemaVersion, PortableVocabularyVersion: LaunchPortableVocabularyVersion,
 		SourceReconnectRequired: true, ProviderSelectionRequired: true,
 		Nodes: make([]LaunchBlueprintNode, 0, len(graph.Nodes)),
 		Edges: make([]LaunchBlueprintEdge, 0, len(graph.Edges)),
@@ -492,6 +544,11 @@ func ProjectLaunchBlueprint(blueprintID string, graph LaunchWorkloadGraph, const
 			FromNodeID: remap[edge.FromNodeID], ToNodeID: remap[edge.ToNodeID], Relationship: edge.Relationship,
 		})
 	}
+	identityHash, err := canonicalize.CanonicalHash(blueprint)
+	if err != nil {
+		return LaunchBlueprint{}, fmt.Errorf("derive sanitized launch blueprint identity: %w", err)
+	}
+	blueprint.BlueprintID = "blueprint:sha256:" + identityHash
 	if err := ValidateLaunchBlueprint(blueprint); err != nil {
 		return LaunchBlueprint{}, err
 	}
@@ -544,6 +601,24 @@ func validateSortedUniqueOptional(values []string, name string) error {
 		return nil
 	}
 	return validateSortedUniqueNonEmpty(values, name)
+}
+
+func validateLaunchPortableValues(values []string, name string, vocabulary map[string]struct{}, required bool) error {
+	var err error
+	if required {
+		err = validateSortedUniqueNonEmpty(values, name)
+	} else {
+		err = validateSortedUniqueOptional(values, name)
+	}
+	if err != nil {
+		return err
+	}
+	for _, value := range values {
+		if _, ok := vocabulary[value]; !ok {
+			return fmt.Errorf("%s contains a non-portable value", name)
+		}
+	}
+	return nil
 }
 
 func addLaunchMinor(left, right int64) (int64, bool) {

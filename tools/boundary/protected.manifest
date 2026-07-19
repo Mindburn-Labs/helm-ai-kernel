@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-19T16:36:19Z
-# Commit: 479724325acc3188891d063224f68009893baefb
+# Generated: 2026-07-19T17:14:06Z
+# Commit: aae469cc0e73bea9001f362ede2471f0191822bf
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -221,9 +221,9 @@ bcfd4bc7c3f9463be26db2922ad02336c8f987812e7efe442b879359cd652bf6  core/pkg/contr
 b95ce4ab74876b2afcbbe7179d53445163f9eef9f3625a19f91ed832eef8a91e  core/pkg/contracts/launch_contract_helpers.go
 071f7ecf81895c32094cdf167bf57c030f79b8960c5cbd3cbd95b4907b1bc83c  core/pkg/contracts/launch_offer_snapshot.go
 915cf7b668a98cb90fb86960f7c7c19051d3e81d6477a4536c7acfd8d6f96c78  core/pkg/contracts/launch_provider_certification.go
-49783507e78b2a67c70090eeac8918b142188d51afb660e7d4c33f267955b2ca  core/pkg/contracts/launch_route_artifacts.go
-6eeb3cc006db32ac023fcf9ae2222ebbddb5b0a99cdab7e50bcf88796f9cf2ef  core/pkg/contracts/launch_routing.go
-c4f57d963306b7bdedb85ae080c8cd3dc79d07dcbb39664a91927f1eccf3ceb8  core/pkg/contracts/launch_routing_test.go
+b507862f8820ee317c5b0f04c8a7b38ed98044d174b406411aaedf63781ab3aa  core/pkg/contracts/launch_route_artifacts.go
+dc7508950071a4333fd233c79a6f0fb6a7ad7753fe4323de5de49eb2a43246f5  core/pkg/contracts/launch_routing.go
+484773d84dcbbdbe2bddc5086e0dc218d9e63135fcd3035736d3d4d315aededa  core/pkg/contracts/launch_routing_test.go
 6942aa79152e00619823bfbd9ce6fba5e004deff66c4137f4cba3842bfb4dff2  core/pkg/contracts/migration.go
 7073aecde8cbabaf1736a69f45570ccfc31eeedf80fe75b344777baa393df16d  core/pkg/contracts/model_catalog.go
 7341c7e71cc60b56057805fec95cdcd50325905f7a1a64c5c6f3e0d20e3ac708  core/pkg/contracts/model_catalog_test.go
@@ -745,7 +745,7 @@ ab9655c079a05ed360dae4597c4bc4ce18490d6314143da3fe46548c602e7d4d  protocols/json
 c89c31f70d7945684bbdc93e5929f12c380b438a8706a8e7df308de8888e16c5  protocols/json-schemas/effects/infra/scale_droplet.json
 2dac2cff2b1ff3628ce4de2e5c47e712eba5e81cb86b72aed63ec57c50cadf7a  protocols/json-schemas/effects/infra/send_alert.json
 ab7ee99a5c6ea8eaef3cd9ab93cf2cbec25733b17581960e5cc36f81d182d1e3  protocols/json-schemas/effects/launch/constraint_set.v1.json
-f3bf1680fa23bf9c44921ded84e46d1cb83fc3f10885f79dbc7fdf685af63e19  protocols/json-schemas/effects/launch/launch_blueprint.v1.json
+4cd5d27f36b5ad7616ce91a453b508d08c330c6891e4a74a37e8686c5019e012  protocols/json-schemas/effects/launch/launch_blueprint.v1.json
 bb6132a8388713aea9a6f0b65f06aa21c42e6b914cd987e8bc38017bcdaa99ca  protocols/json-schemas/effects/launch/offer_snapshot.v1.json
 551aa88ae907ad3bb46e0a34b3ce2b5211bcd63039e1c2f6652e2e1b39a1be14  protocols/json-schemas/effects/launch/provider_capability_profile.v1.json
 c9e61ca6ca51a807840c24bdf017941b92a9525375dcd1d61ac4b5a6f64fd0fe  protocols/json-schemas/effects/launch/provider_certification.v1.json

@@ -99,12 +99,8 @@ func TestWorkloadKindsAndRelationshipsAreProviderExtensible(t *testing.T) {
 	if err := contracts.ValidateLaunchProviderCapabilityProfile(profile); err != nil {
 		t.Fatalf("provider-specific workload capability was rejected: %v", err)
 	}
-	blueprint, err := contracts.ProjectLaunchBlueprint("blueprint-custom", graph, launchConstraintSet())
-	if err != nil {
-		t.Fatalf("clean-room fork lost extensible workload semantics: %v", err)
-	}
-	if blueprint.Nodes[0].Kind != "acme.state-machine" || blueprint.Edges[0].Relationship != "acme.replicates_to" {
-		t.Fatal("clean-room blueprint did not preserve provider-neutral workload semantics")
+	if _, err := contracts.ProjectLaunchBlueprint(graph, launchConstraintSet()); err == nil || !strings.Contains(err.Error(), "non-portable") {
+		t.Fatalf("clean-room fork copied unregistered vendor semantics: %v", err)
 	}
 
 	profile.Regions[0].Offerings[0].SupportedWorkloads = []string{"unknown"}
@@ -346,7 +342,7 @@ func TestLaunchBlueprintIsCleanRoomAndProviderNeutral(t *testing.T) {
 	graph.Nodes[0].NodeID = "private-service-name"
 	constraints := launchConstraintSet()
 	constraints.AllowedProviders = []string{"private-cloud-provider"}
-	blueprint, err := contracts.ProjectLaunchBlueprint("blueprint-public-1", graph, constraints)
+	blueprint, err := contracts.ProjectLaunchBlueprint(graph, constraints)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,6 +360,37 @@ func TestLaunchBlueprintIsCleanRoomAndProviderNeutral(t *testing.T) {
 	}
 	if hash, err := contracts.DeriveLaunchBlueprintHash(blueprint); err != nil || !strings.HasPrefix(hash, "sha256:") {
 		t.Fatalf("clean-room blueprint is not content addressable: %s %v", hash, err)
+	}
+	tampered := blueprint
+	tampered.Constraints.MaximumGrossMinor++
+	if err := contracts.ValidateLaunchBlueprint(tampered); err == nil {
+		t.Fatal("content-addressed clean-room blueprint accepted tampered content")
+	}
+}
+
+func TestLaunchBlueprintRejectsIdentityBearingPortableFields(t *testing.T) {
+	for name, mutate := range map[string]func(*contracts.LaunchWorkloadGraph, *contracts.LaunchConstraintSet){
+		"capability": func(graph *contracts.LaunchWorkloadGraph, _ *contracts.LaunchConstraintSet) {
+			graph.Nodes[0].RequiredCapabilities = []string{"health-check", "tenant-secret-capability"}
+		},
+		"workload kind": func(graph *contracts.LaunchWorkloadGraph, _ *contracts.LaunchConstraintSet) {
+			graph.Nodes[0].Kind = "tenant-private-service"
+		},
+		"residency tag": func(_ *contracts.LaunchWorkloadGraph, constraints *contracts.LaunchConstraintSet) {
+			constraints.RequiredResidencyTags = []string{"tenant-private-region"}
+		},
+		"jurisdiction": func(_ *contracts.LaunchWorkloadGraph, constraints *contracts.LaunchConstraintSet) {
+			constraints.AllowedJurisdictions = []string{"tenant-private-jurisdiction"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			graph := launchHTTPWorkloadGraph()
+			constraints := launchConstraintSet()
+			mutate(&graph, &constraints)
+			if _, err := contracts.ProjectLaunchBlueprint(graph, constraints); err == nil {
+				t.Fatal("identity-bearing field was copied into clean-room blueprint")
+			}
+		})
 	}
 }
 

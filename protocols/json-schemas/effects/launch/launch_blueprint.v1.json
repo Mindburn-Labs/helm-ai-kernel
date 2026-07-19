@@ -6,10 +6,11 @@
   "description": "Clean-room fork template containing only workload shape and portable constraints. Source, tenant, provider, account, approval, receipt, and EvidencePack identity are excluded by schema.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "blueprint_id", "source_reconnect_required", "provider_selection_required", "nodes", "edges", "constraints"],
+  "required": ["schema_version", "portable_vocabulary_version", "blueprint_id", "source_reconnect_required", "provider_selection_required", "nodes", "edges", "constraints"],
   "properties": {
     "schema_version": { "const": "launch_blueprint.v1" },
-    "blueprint_id": { "$ref": "#/$defs/non_empty" },
+    "portable_vocabulary_version": { "const": "launch_portable_vocabulary.v1" },
+    "blueprint_id": { "type": "string", "pattern": "^blueprint:sha256:[a-f0-9]{64}$" },
     "source_reconnect_required": { "const": true },
     "provider_selection_required": { "const": true },
     "nodes": {
@@ -19,9 +20,9 @@
         "required": ["node_id", "kind", "lifecycle_class", "required_capabilities"],
         "properties": {
           "node_id": { "type": "string", "pattern": "^node-[0-9]{4}$" },
-          "kind": { "$ref": "#/$defs/workload_kind" },
+          "kind": { "$ref": "#/$defs/portable_workload_kind" },
           "lifecycle_class": { "$ref": "#/$defs/lifecycle_class" },
-          "required_capabilities": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/non_empty" } }
+          "required_capabilities": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/portable_capability" } }
         }
       }
     },
@@ -33,7 +34,7 @@
         "properties": {
           "from_node_id": { "type": "string", "pattern": "^node-[0-9]{4}$" },
           "to_node_id": { "type": "string", "pattern": "^node-[0-9]{4}$" },
-          "relationship": { "$ref": "#/$defs/relationship" }
+          "relationship": { "$ref": "#/$defs/portable_relationship" }
         }
       }
     },
@@ -43,18 +44,17 @@
       "properties": {
         "maximum_gross_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
         "maximum_gross_minor": { "type": "integer", "minimum": 0 },
-        "allowed_jurisdictions": { "$ref": "#/$defs/string_set" },
-        "required_residency_tags": { "$ref": "#/$defs/string_set" },
-        "allowed_commitment_terms": { "$ref": "#/$defs/string_set" },
-        "required_route_capabilities": { "$ref": "#/$defs/string_set" }
+        "allowed_jurisdictions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z]{2}$" } },
+        "required_residency_tags": { "type": "array", "uniqueItems": true, "items": { "enum": ["customer-selected", "eea", "eu", "global", "uk", "us"] } },
+        "allowed_commitment_terms": { "type": "array", "uniqueItems": true, "items": { "enum": ["annual", "hourly", "monthly", "prepaid", "spot"] } },
+        "required_route_capabilities": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/portable_capability" } }
       }
     }
   },
   "$defs": {
-    "non_empty": { "type": "string", "minLength": 1 },
-    "string_set": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/non_empty" } },
-    "workload_kind": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
-    "relationship": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
+    "portable_workload_kind": { "enum": ["cache", "composite", "container", "database", "function", "gpu_workload", "http_service", "infrastructure", "kubernetes_workload", "message_queue", "object_storage", "scheduled_job", "static_site", "worker"] },
+    "portable_capability": { "enum": ["autoscaling", "custom-domain", "gpu-runtime", "health-check", "http-ingress", "https-endpoint", "managed-mysql", "managed-postgresql", "managed-redis", "object-storage", "persistent-storage", "private-network", "scheduled-execution", "secret-injection", "stateless-runtime", "websocket", "zero-downtime-release"] },
+    "portable_relationship": { "enum": ["connects_to", "depends_on", "mounts", "publishes_to", "reads_from", "replicates_to", "routes_to", "scheduled_by", "subscribes_to", "writes_to"] },
     "lifecycle_class": { "enum": ["EPHEMERAL", "STATEFUL_DATA", "STATEFUL_RESOURCE", "COMPOSITE"] }
   },
   "x-helm": { "status": "preview", "execution_enabled": false, "clean_room": true, "fresh_analysis_and_approval_required": true }

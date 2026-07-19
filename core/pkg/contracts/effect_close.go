@@ -1,5 +1,8 @@
 package contracts
 
+// quantum_posture: classical Ed25519 connector effect-close acknowledgement and
+// receipt contract types only; no hybrid or post-quantum claim.
+
 import (
 	"encoding/hex"
 	"errors"

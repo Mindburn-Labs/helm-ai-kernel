@@ -4,6 +4,8 @@ status: internal-foundation
 last_reviewed: 2026-07-18
 ---
 
+<!-- quantum_posture: documents classical Ed25519 connector effect-close acknowledgement and receipt signing plus offline verification; no post-quantum control is added or claimed. -->
+
 # Signed connector effect close
 
 The Kernel can atomically close a durable connector effect reservation from

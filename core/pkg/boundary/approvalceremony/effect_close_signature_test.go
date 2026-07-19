@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: tests the classical Ed25519 connector effect-close
+// acknowledgement and receipt signing; no post-quantum claim.
+
 import (
 	"bytes"
 	"crypto/ed25519"

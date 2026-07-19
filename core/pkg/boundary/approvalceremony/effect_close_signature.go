@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: classical Ed25519 connector effect-close acknowledgement and
+// receipt signing/verification only; no hybrid or post-quantum claim.
+
 import (
 	"crypto/ed25519"
 	"encoding/hex"

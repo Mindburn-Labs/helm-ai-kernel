@@ -20,101 +20,129 @@ const LaunchEffectEnvelopeSchemaVersion = "launch_effect_envelope.v1"
 // constructing this value grants no authority: VerifyLaunchEffectAuthorizationEnvelope
 // must resolve and bind the single-use permit immediately before dispatch.
 type LaunchEffectAuthorizationEnvelope struct {
-	SchemaVersion          string         `json:"schema_version"`
-	EffectID               string         `json:"effect_id"`
-	TenantID               string         `json:"tenant_id"`
-	WorkspaceID            string         `json:"workspace_id"`
-	MissionID              string         `json:"mission_id"`
-	EffectOrdinal          int            `json:"effect_ordinal"`
-	InputSchemaRef         string         `json:"input_schema_ref"`
-	InputSchemaHash        string         `json:"input_schema_hash"`
-	Input                  map[string]any `json:"input"`
-	InputHash              string         `json:"input_hash"`
-	IdempotencyKey         string         `json:"idempotency_key"`
-	PlanHash               string         `json:"plan_hash"`
-	ApprovalArtifactRef    string         `json:"approval_artifact_ref"`
-	ApprovalArtifactHash   string         `json:"approval_artifact_hash"`
-	PolicyEpoch            string         `json:"policy_epoch"`
-	EmergencyFenceEpoch    int64          `json:"emergency_fence_epoch"`
-	Verdict                string         `json:"verdict"`
-	KernelVerdictRef       string         `json:"kernel_verdict_ref"`
-	KernelVerdictIssuedAt  string         `json:"kernel_verdict_issued_at"`
-	KernelVerdictExpiry    string         `json:"kernel_verdict_expiry"`
-	KernelVerdictSignerKey string         `json:"kernel_verdict_signer_key_id"`
-	KernelVerdictHash      string         `json:"kernel_verdict_hash"`
-	KernelVerdictSignature string         `json:"kernel_verdict_signature"`
-	EffectPermitRef        string         `json:"effect_permit_ref"`
-	EffectPermitHash       string         `json:"effect_permit_hash"`
-	PermitNonce            string         `json:"permit_nonce"`
-	PermitIssuedAt         string         `json:"permit_issued_at"`
-	PermitExpiry           string         `json:"permit_expiry"`
-	ProofSessionRef        string         `json:"proof_session_ref"`
-	EvidenceReservationRef string         `json:"evidence_reservation_ref"`
-	ConnectorID            string         `json:"connector_id"`
-	ConnectorContractHash  string         `json:"connector_contract_hash"`
-	ActionURN              string         `json:"action_urn"`
-	RequestBodyHash        string         `json:"request_body_hash"`
-	ArgsC14NHash           string         `json:"args_c14n_hash"`
-	DispatchDeadline       string         `json:"dispatch_deadline"`
-	ReplayHint             string         `json:"replay_hint"`
+	SchemaVersion           string         `json:"schema_version"`
+	EffectID                string         `json:"effect_id"`
+	TenantID                string         `json:"tenant_id"`
+	WorkspaceID             string         `json:"workspace_id"`
+	MissionID               string         `json:"mission_id"`
+	Principal               string         `json:"principal"`
+	Audience                string         `json:"audience"`
+	KernelTrustRootID       string         `json:"kernel_trust_root_id"`
+	EffectOrdinal           int            `json:"effect_ordinal"`
+	InputSchemaRef          string         `json:"input_schema_ref"`
+	InputSchemaHash         string         `json:"input_schema_hash"`
+	Input                   map[string]any `json:"input"`
+	InputHash               string         `json:"input_hash"`
+	IdempotencyKey          string         `json:"idempotency_key"`
+	PlanHash                string         `json:"plan_hash"`
+	ApprovalArtifactRef     string         `json:"approval_artifact_ref"`
+	ApprovalArtifactHash    string         `json:"approval_artifact_hash"`
+	ApprovalConsumptionRef  string         `json:"approval_consumption_ref"`
+	ApprovalConsumptionHash string         `json:"approval_consumption_hash"`
+	DependencySetRef        string         `json:"dependency_set_ref"`
+	DependencySetHash       string         `json:"dependency_set_hash"`
+	PolicyEpoch             string         `json:"policy_epoch"`
+	EmergencyFenceEpoch     int64          `json:"emergency_fence_epoch"`
+	Verdict                 string         `json:"verdict"`
+	KernelVerdictRef        string         `json:"kernel_verdict_ref"`
+	KernelVerdictIssuedAt   string         `json:"kernel_verdict_issued_at"`
+	KernelVerdictExpiry     string         `json:"kernel_verdict_expiry"`
+	KernelVerdictSignerKey  string         `json:"kernel_verdict_signer_key_id"`
+	KernelVerdictHash       string         `json:"kernel_verdict_hash"`
+	KernelVerdictSignature  string         `json:"kernel_verdict_signature"`
+	EffectPermitRef         string         `json:"effect_permit_ref"`
+	EffectPermitHash        string         `json:"effect_permit_hash"`
+	PermitNonce             string         `json:"permit_nonce"`
+	PermitIssuedAt          string         `json:"permit_issued_at"`
+	PermitExpiry            string         `json:"permit_expiry"`
+	ProofSessionRef         string         `json:"proof_session_ref"`
+	EvidenceReservationRef  string         `json:"evidence_reservation_ref"`
+	ConnectorID             string         `json:"connector_id"`
+	ConnectorContractHash   string         `json:"connector_contract_hash"`
+	ActionURN               string         `json:"action_urn"`
+	RequestBodyHash         string         `json:"request_body_hash"`
+	ArgsC14NHash            string         `json:"args_c14n_hash"`
+	DispatchDeadline        string         `json:"dispatch_deadline"`
+	ReplayHint              string         `json:"replay_hint"`
 }
 
-// LaunchEffectPermitBinding is the authoritative, server-side permit record
-// resolved by reference. Every field is compared to the signed envelope.
+// LaunchEffectPermitBinding is a data-plane dispatch CAS, not a parallel
+// approval. It is usable only after a canonical ApprovalGrant has already been
+// verified and consumed by the exact principal/audience below.
 type LaunchEffectPermitBinding struct {
-	EffectPermitRef       string
-	EffectPermitHash      string
-	PermitNonce           string
-	PermitIssuedAt        time.Time
-	PermitExpiry          time.Time
-	KernelVerdictRef      string
-	KernelVerdictHash     string
-	KernelVerdictIssuedAt time.Time
-	KernelVerdictExpiry   time.Time
-	EffectID              string
-	TenantID              string
-	WorkspaceID           string
-	MissionID             string
-	EffectOrdinal         int
-	InputSchemaHash       string
-	InputHash             string
-	IdempotencyKey        string
-	PlanHash              string
-	ApprovalArtifactRef   string
-	ApprovalArtifactHash  string
-	ConnectorID           string
-	ConnectorContractHash string
-	ActionURN             string
-	RequestBodyHash       string
-	ArgsC14NHash          string
-	PolicyEpoch           string
-	EmergencyFenceEpoch   int64
-	DispatchDeadline      time.Time
-	SingleUse             bool
+	EffectPermitRef         string
+	EffectPermitHash        string
+	PermitNonce             string
+	PermitIssuedAt          time.Time
+	PermitExpiry            time.Time
+	KernelVerdictRef        string
+	KernelVerdictHash       string
+	KernelVerdictIssuedAt   time.Time
+	KernelVerdictExpiry     time.Time
+	EffectID                string
+	TenantID                string
+	WorkspaceID             string
+	MissionID               string
+	Principal               string
+	Audience                string
+	KernelTrustRootID       string
+	EffectOrdinal           int
+	InputSchemaHash         string
+	InputHash               string
+	IdempotencyKey          string
+	PlanHash                string
+	ApprovalArtifactRef     string
+	ApprovalArtifactHash    string
+	ApprovalConsumptionRef  string
+	ApprovalConsumptionHash string
+	DependencySetRef        string
+	DependencySetHash       string
+	ConnectorID             string
+	ConnectorContractHash   string
+	ActionURN               string
+	RequestBodyHash         string
+	ArgsC14NHash            string
+	PolicyEpoch             string
+	EmergencyFenceEpoch     int64
+	DispatchDeadline        time.Time
+	SingleUse               bool
+}
+
+// LaunchEffectApprovalAuthority is independently loaded from the canonical
+// approvalceremony boundary. Signatures are retained beside their canonical
+// Grant and Consumption records because those portable contracts deliberately
+// exclude transport/storage signature envelopes.
+type LaunchEffectApprovalAuthority struct {
+	Grant                         ApprovalGrant            `json:"grant"`
+	GrantSignatureAlgorithm       string                   `json:"grant_signature_algorithm"`
+	GrantSignature                string                   `json:"grant_signature"`
+	Consumption                   ApprovalGrantConsumption `json:"consumption"`
+	ConsumptionSignatureAlgorithm string                   `json:"consumption_signature_algorithm"`
+	ConsumptionSignature          string                   `json:"consumption_signature"`
 }
 
 // LaunchEffectEnvelopeVerificationContext supplies independently resolved
 // source truth. Values copied from the envelope are not valid inputs here.
 type LaunchEffectEnvelopeVerificationContext struct {
-	Now           time.Time
-	ValidateInput func(schemaRef, schemaHash string, input map[string]any) error
-	// ValidateProviderRoute independently resolves the RouteBinding, provider
-	// capability profile, quote, constraint set, and connector certification.
-	// It is mandatory for provider and spend effects; values copied only from
-	// the signed envelope do not satisfy this source-truth check.
-	ValidateProviderRoute   func(effectID string, input map[string]any) error
-	ExpectedInputSchemaHash string
-	ExpectedRequestBodyHash string
-	ExpectedArgsC14NHash    string
-	ExpectedPolicyEpoch     string
-	CurrentEmergencyFence   int64
-	MaximumPermitTTL        time.Duration
-	ResolveVerdictKey       func(signerKeyID string) (ed25519.PublicKey, error)
-	// ConsumePermit MUST atomically compare every binding and transition the
-	// permit from fresh to consumed. It is invoked only after schema, semantic,
-	// temporal, fence, binding, and signature verification all succeed.
-	ConsumePermit func(expected LaunchEffectPermitBinding) error
-	Permit        LaunchEffectPermitBinding
+	Now                      time.Time
+	ResolveInputSchema       func(schemaRef string) ([]byte, error)
+	ValidateInput            func(schemaRef, schemaHash string, input map[string]any) error
+	ResolveRouteBinding      func(routeRef string) (LaunchRouteBinding, error)
+	RouteArtifacts           LaunchRouteArtifactResolver
+	ResolveApprovalAuthority func(grantRef, grantHash, consumptionRef, consumptionHash string) (LaunchEffectApprovalAuthority, error)
+	VerifyApprovalAuthority  func(LaunchEffectApprovalAuthority) error
+	VerifyDependencyState    func(dependencySetRef, dependencySetHash string) error
+	ExpectedRequestBodyHash  string
+	ExpectedArgsC14NHash     string
+	ExpectedPolicyEpoch      string
+	MaximumPermitTTL         time.Duration
+	ResolveVerdictKey        func(signerKeyID string) (ed25519.PublicKey, error)
+	// FinalizeDispatch MUST atomically: re-read the canonical scoped-stop state,
+	// deny an active or unavailable fence, re-check predecessor receipt state,
+	// compare the canonical approval consumption, and CAS this single-use
+	// dispatch permit. A separate pre-read is insufficient.
+	FinalizeDispatch func(expected LaunchEffectPermitBinding) error
+	Permit           LaunchEffectPermitBinding
 }
 
 // LaunchEffectVerdictSigningBytes returns the RFC 8785 payload signed by the
@@ -140,9 +168,9 @@ func SignLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnv
 	return envelope, nil
 }
 
-// VerifyLaunchEffectAuthorizationEnvelope fails closed unless the signed
-// envelope, canonical effect input, independently resolved permit, current
-// policy epoch, and emergency fence all describe the same one-shot dispatch.
+// VerifyLaunchEffectAuthorizationEnvelope fails closed unless the Kernel-signed
+// envelope, source-owned schema bytes, canonical approval consumption, exact
+// certified route, dependency state, and final atomic dispatch guard all agree.
 func VerifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
 	contract := LookupLaunchMissionEffectPreview(envelope.EffectID)
 	if contract == nil {
@@ -163,15 +191,6 @@ func VerifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	if envelope.InputSchemaRef != contract.InputSchema {
 		return errors.New("launch authorization envelope input schema reference does not match effect contract")
 	}
-	if ctx.ExpectedInputSchemaHash == "" || !launchConstantEqual(envelope.InputSchemaHash, ctx.ExpectedInputSchemaHash) {
-		return errors.New("launch authorization envelope input schema hash is stale or untrusted")
-	}
-	if ctx.ValidateInput == nil {
-		return errors.New("launch authorization envelope requires source-owned input schema validation")
-	}
-	if err := ctx.ValidateInput(envelope.InputSchemaRef, envelope.InputSchemaHash, envelope.Input); err != nil {
-		return fmt.Errorf("launch authorization envelope input schema validation failed: %w", err)
-	}
 	if envelope.ConnectorID != contract.ConnectorID || envelope.ActionURN != contract.ActionURN {
 		return errors.New("launch authorization envelope connector action is not admitted for effect")
 	}
@@ -184,29 +203,11 @@ func VerifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	if ctx.ExpectedPolicyEpoch == "" || envelope.PolicyEpoch != ctx.ExpectedPolicyEpoch {
 		return errors.New("launch authorization envelope policy epoch is stale")
 	}
-	if ctx.CurrentEmergencyFence < 0 || envelope.EmergencyFenceEpoch != ctx.CurrentEmergencyFence {
-		return errors.New("launch authorization envelope emergency fence epoch does not equal the current dispatch fence")
-	}
 	if err := verifyLaunchEnvelopeInputBindings(envelope); err != nil {
 		return err
 	}
-	if launchEffectRequiresProviderRoute(envelope.EffectID) {
-		if ctx.ValidateProviderRoute == nil {
-			return errors.New("launch authorization envelope requires source-owned provider route validation")
-		}
-		if err := ctx.ValidateProviderRoute(envelope.EffectID, envelope.Input); err != nil {
-			return fmt.Errorf("launch authorization envelope provider route validation failed: %w", err)
-		}
-	}
-	if err := verifyLaunchApprovalArtifactBinding(envelope); err != nil {
-		return err
-	}
-	if err := verifyLaunchEnvelopeTimes(envelope, ctx); err != nil {
-		return err
-	}
-	if err := verifyLaunchPermitBinding(envelope, ctx.Permit); err != nil {
-		return err
-	}
+	// Verify the Kernel signature before any source-owned route or registry
+	// resolution to avoid unsigned tenancy probes and expensive-work oracles.
 	if ctx.ResolveVerdictKey == nil {
 		return errors.New("launch authorization envelope requires a verdict trust-root resolver")
 	}
@@ -217,11 +218,44 @@ func VerifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	if err := verifyLaunchVerdictSignature(envelope, verdictPublicKey); err != nil {
 		return err
 	}
-	if ctx.ConsumePermit == nil {
-		return errors.New("launch authorization envelope requires atomic permit consumption")
+	if ctx.ResolveInputSchema == nil || ctx.ValidateInput == nil {
+		return errors.New("launch authorization envelope requires source-owned schema bytes and validation")
 	}
-	if err := ctx.ConsumePermit(ctx.Permit); err != nil {
-		return fmt.Errorf("consume launch authorization envelope permit: %w", err)
+	schemaBytes, err := ctx.ResolveInputSchema(envelope.InputSchemaRef)
+	if err != nil {
+		return fmt.Errorf("resolve launch authorization envelope input schema: %w", err)
+	}
+	if schemaHash := canonicalize.ComputeArtifactHash(schemaBytes); !launchConstantEqual(envelope.InputSchemaHash, schemaHash) {
+		return errors.New("launch authorization envelope input schema hash does not match source-owned bytes")
+	}
+	if err := ctx.ValidateInput(envelope.InputSchemaRef, envelope.InputSchemaHash, envelope.Input); err != nil {
+		return fmt.Errorf("launch authorization envelope input schema validation failed: %w", err)
+	}
+	if err := verifyLaunchEnvelopeTimes(envelope, ctx); err != nil {
+		return err
+	}
+	if err := verifyLaunchPermitBinding(envelope, ctx.Permit); err != nil {
+		return err
+	}
+	if err := verifyLaunchCanonicalApproval(envelope, ctx); err != nil {
+		return err
+	}
+	if launchEffectRequiresProviderRoute(envelope.EffectID) {
+		if err := verifyLaunchProviderRouteBinding(envelope, ctx); err != nil {
+			return fmt.Errorf("launch authorization envelope provider route validation failed: %w", err)
+		}
+	}
+	if ctx.VerifyDependencyState == nil {
+		return errors.New("launch authorization envelope requires source-owned dependency receipt verification")
+	}
+	if err := ctx.VerifyDependencyState(envelope.DependencySetRef, envelope.DependencySetHash); err != nil {
+		return fmt.Errorf("launch authorization envelope dependency state is not dispatchable: %w", err)
+	}
+	if ctx.FinalizeDispatch == nil {
+		return errors.New("launch authorization envelope requires atomic fence/dependency/permit finalization")
+	}
+	if err := ctx.FinalizeDispatch(ctx.Permit); err != nil {
+		return fmt.Errorf("finalize launch authorization envelope dispatch: %w", err)
 	}
 	return nil
 }
@@ -267,24 +301,214 @@ func verifyLaunchEnvelopeInputBindings(envelope LaunchEffectAuthorizationEnvelop
 	return nil
 }
 
-func verifyLaunchApprovalArtifactBinding(envelope LaunchEffectAuthorizationEnvelope) error {
-	var refField, hashField string
-	switch envelope.EffectID {
-	case EffectTypeDeployProductionActivate:
-		refField, hashField = "promotion_permit_ref", "promotion_permit_hash"
-	case EffectTypeProviderRollback:
-		refField, hashField = "rollback_permit_ref", "rollback_permit_hash"
-	case EffectTypeProviderTeardown:
-		refField, hashField = "fresh_teardown_approval_ref", "fresh_teardown_approval_hash"
-	default:
-		return nil
+func verifyLaunchCanonicalApproval(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+	if ctx.ResolveApprovalAuthority == nil || ctx.VerifyApprovalAuthority == nil {
+		return errors.New("launch authorization envelope requires canonical approval authority resolution and signature verification")
 	}
-	ref, refOK := envelope.Input[refField].(string)
-	hash, hashOK := envelope.Input[hashField].(string)
-	if !refOK || !hashOK || !launchConstantEqual(ref, envelope.ApprovalArtifactRef) || !launchConstantEqual(hash, envelope.ApprovalArtifactHash) {
-		return fmt.Errorf("launch authorization envelope approval artifact does not bind %s/%s", refField, hashField)
+	authority, err := ctx.ResolveApprovalAuthority(envelope.ApprovalArtifactRef, envelope.ApprovalArtifactHash, envelope.ApprovalConsumptionRef, envelope.ApprovalConsumptionHash)
+	if err != nil {
+		return fmt.Errorf("resolve canonical launch approval authority: %w", err)
+	}
+	if err := authority.Grant.ValidateAt(ctx.Now); err != nil {
+		return fmt.Errorf("canonical launch approval grant is invalid: %w", err)
+	}
+	if err := authority.Consumption.ValidateGrant(authority.Grant); err != nil {
+		return fmt.Errorf("canonical launch approval consumption is invalid: %w", err)
+	}
+	if err := ctx.VerifyApprovalAuthority(authority); err != nil {
+		return fmt.Errorf("canonical launch approval signatures are invalid: %w", err)
+	}
+	expectedAction, err := launchApprovalActionForEffect(envelope.EffectID)
+	if err != nil {
+		return err
+	}
+	grant := authority.Grant
+	consumption := authority.Consumption
+	if grant.GrantID != envelope.ApprovalArtifactRef || !launchConstantEqual(grant.GrantHash, envelope.ApprovalArtifactHash) ||
+		!launchConstantEqual(consumption.ConsumptionHash, envelope.ApprovalConsumptionHash) ||
+		grant.TenantID != envelope.TenantID || grant.WorkspaceID != envelope.WorkspaceID || grant.Audience != envelope.Audience ||
+		consumption.TenantID != envelope.TenantID || consumption.WorkspaceID != envelope.WorkspaceID || consumption.Audience != envelope.Audience || consumption.ConsumedBy != envelope.Principal ||
+		grant.KernelTrustRootID != envelope.KernelTrustRootID || consumption.KernelTrustRootID != envelope.KernelTrustRootID ||
+		grant.PackID != envelope.MissionID || grant.PackVersion != LaunchEffectCatalogVersion ||
+		!launchConstantEqual(grant.PackManifestHash, envelope.PlanHash) || !launchConstantEqual(grant.IntentHash, envelope.PlanHash) ||
+		!launchConstantEqual(grant.EffectHash, envelope.InputHash) || !launchConstantEqual(grant.PlanHash, envelope.PlanHash) ||
+		grant.PolicyEpoch != envelope.PolicyEpoch || grant.Action != expectedAction {
+		return errors.New("canonical launch approval grant or consumption does not bind the exact dispatch")
+	}
+	if consumption.ConsumedAt.After(ctx.Now) {
+		return errors.New("canonical launch approval consumption is in the future")
 	}
 	return nil
+}
+
+func launchApprovalActionForEffect(effectID string) (string, error) {
+	switch effectID {
+	case EffectTypeProviderProvision, EffectTypeSpendAuthorize:
+		return ApprovalGrantActionInstall, nil
+	case EffectTypeDeployProductionActivate, EffectTypeCompanyArtifactUpdate:
+		return ApprovalGrantActionUpgrade, nil
+	case EffectTypeProviderRollback:
+		return ApprovalGrantActionRollback, nil
+	case EffectTypeProviderTeardown:
+		return ApprovalGrantActionUninstall, nil
+	default:
+		return "", fmt.Errorf("launch effect %s has no canonical approval action", effectID)
+	}
+}
+
+func verifyLaunchProviderRouteBinding(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+	if ctx.ResolveRouteBinding == nil || ctx.RouteArtifacts == nil {
+		return errors.New("source-owned route binding and artifact resolver are required")
+	}
+	routeRef, ok := envelope.Input["route_binding_ref"].(string)
+	if !ok || routeRef == "" {
+		return errors.New("launch provider input has no route binding reference")
+	}
+	routeHash, ok := envelope.Input["route_binding_hash"].(string)
+	if !ok || !validLaunchSHA256(routeHash) {
+		return errors.New("launch provider input has no canonical route binding hash")
+	}
+	route, err := ctx.ResolveRouteBinding(routeRef)
+	if err != nil {
+		return fmt.Errorf("resolve launch route binding: %w", err)
+	}
+	resolvedHash, err := DeriveLaunchRouteBindingHash(route)
+	if err != nil || !launchConstantEqual(routeHash, resolvedHash) {
+		return errors.New("launch provider input route binding hash does not match source-owned content")
+	}
+	if err := ValidateLaunchRouteBinding(route, ctx.RouteArtifacts, ctx.Now, true); err != nil {
+		return err
+	}
+	if route.RouteID != routeRef || route.TenantID != envelope.TenantID || route.WorkspaceID != envelope.WorkspaceID || route.MissionID != envelope.MissionID {
+		return errors.New("launch provider route identity does not match the dispatch envelope")
+	}
+	placementID, _ := envelope.Input["route_placement_id"].(string)
+	var placement *LaunchRoutePlacement
+	for index := range route.Placements {
+		if route.Placements[index].PlacementID == placementID {
+			placement = &route.Placements[index]
+			break
+		}
+	}
+	if placement == nil {
+		return errors.New("launch provider input route placement is absent from route")
+	}
+	for field, expected := range map[string]string{
+		"provider":                         placement.ProviderID,
+		"provider_account_ref":             placement.ProviderAccountRef,
+		"provider_account_hash":            placement.ProviderAccountHash,
+		"provider_capability_profile_ref":  placement.ProviderProfileRef,
+		"provider_capability_profile_hash": placement.ProviderProfileHash,
+		"provider_certification_ref":       placement.ProviderCertificationRef,
+		"provider_certification_hash":      placement.ProviderCertificationHash,
+		"workload_graph_ref":               route.WorkloadGraphRef,
+		"workload_graph_hash":              route.WorkloadGraphHash,
+	} {
+		if !launchInputMatchesString(envelope.Input, field, expected) {
+			return fmt.Errorf("launch provider input does not match route placement field %s", field)
+		}
+	}
+	for field, expected := range map[string]string{
+		"region":                           placement.RegionID,
+		"jurisdiction":                     placement.Jurisdiction,
+		"provider_connector_id":            placement.ProviderConnectorID,
+		"provider_connector_contract_hash": placement.ProviderConnectorContractHash,
+		"repository_analysis_ref":          route.RepositoryAnalysisRef,
+		"repository_analysis_hash":         route.RepositoryAnalysisHash,
+		"resource_graph_ref":               route.ResourceGraphRef,
+		"resource_graph_hash":              route.ResourceGraphHash,
+		"route_quote_ref":                  route.RouteQuoteRef,
+		"route_quote_hash":                 route.RouteQuoteHash,
+		"quote_hash":                       route.RouteQuoteHash,
+		"constraint_set_hash":              route.ConstraintSetHash,
+		"generated_spec_hash":              route.GeneratedSpecHash,
+	} {
+		if _, present := envelope.Input[field]; present && !launchInputMatchesString(envelope.Input, field, expected) {
+			return fmt.Errorf("launch provider input does not match route field %s", field)
+		}
+	}
+	if err := verifyLaunchRouteCommercialBindings(envelope, route, placement, ctx.RouteArtifacts); err != nil {
+		return err
+	}
+	if launchEffectIsProviderMutation(envelope.EffectID) {
+		var action *LaunchRouteActionBinding
+		for index := range placement.ActionBindings {
+			if placement.ActionBindings[index].EffectID == envelope.EffectID {
+				action = &placement.ActionBindings[index]
+				break
+			}
+		}
+		if action == nil || !launchInputMatchesString(envelope.Input, "provider_action_urn", action.ProviderActionURN) || !launchInputMatchesString(envelope.Input, "provider_payload_hash", action.ProviderPayloadHash) {
+			return errors.New("launch provider input action or payload is absent from route placement")
+		}
+	}
+	return nil
+}
+
+func verifyLaunchRouteCommercialBindings(envelope LaunchEffectAuthorizationEnvelope, route LaunchRouteBinding, placement *LaunchRoutePlacement, resolver LaunchRouteArtifactResolver) error {
+	quote, err := resolver.ResolveLaunchRouteQuote(route.RouteQuoteRef)
+	if err != nil {
+		return fmt.Errorf("resolve launch route quote for dispatch: %w", err)
+	}
+	constraints, err := resolver.ResolveLaunchConstraintSet(route.ConstraintSetRef)
+	if err != nil {
+		return fmt.Errorf("resolve launch constraint set for dispatch: %w", err)
+	}
+	if _, present := envelope.Input["gross_cap_minor"]; present && !launchInputMatchesInteger(envelope.Input, "gross_cap_minor", constraints.MaximumGrossMinor) {
+		return errors.New("launch provider input gross cap does not match the approval-bound constraint set")
+	}
+	var placementCost *LaunchPlacementCost
+	for index := range quote.PlacementCosts {
+		if quote.PlacementCosts[index].PlacementID == placement.PlacementID {
+			placementCost = &quote.PlacementCosts[index]
+			break
+		}
+	}
+	if placementCost == nil {
+		return errors.New("launch provider input placement is absent from its route quote")
+	}
+	for field, expected := range map[string]int64{
+		"base_provider_cost_minor": placementCost.BaseCostMinor,
+		"tax_fx_reserve_minor":     placementCost.TaxFXReserveMinor,
+		"gross_exposure_minor":     placementCost.GrossExposureMinor,
+		"verified_credit_minor":    placementCost.VerifiedCreditMinor,
+		"expected_cash_minor":      placementCost.ExpectedCashMinor,
+	} {
+		if _, present := envelope.Input[field]; present && !launchInputMatchesInteger(envelope.Input, field, expected) {
+			return fmt.Errorf("launch provider input %s does not match the approval-bound route quote", field)
+		}
+	}
+	for field, expected := range map[string]string{
+		"currency":             quote.Currency,
+		"gross_cap_currency":   constraints.MaximumGrossCurrency,
+		"credit_status":        placementCost.CreditStatus,
+		"credit_snapshot_hash": placementCost.OfferSnapshotHash,
+		"fx_snapshot_hash":     quote.FXSnapshotHash,
+		"tax_snapshot_hash":    quote.TaxSnapshotHash,
+	} {
+		if _, present := envelope.Input[field]; present && !launchInputMatchesString(envelope.Input, field, expected) {
+			return fmt.Errorf("launch provider input %s does not match the approval-bound route quote", field)
+		}
+	}
+	for field, expected := range map[string]string{
+		"price_snapshot_hash":         placementCost.PriceEvidenceHash,
+		"provider_terms_profile_hash": placementCost.TermsEvidenceHash,
+	} {
+		if _, present := envelope.Input[field]; present && !launchInputMatchesString(envelope.Input, field, expected) {
+			return fmt.Errorf("launch provider input %s does not match its exact placement quote", field)
+		}
+	}
+	return nil
+}
+
+func launchInputMatchesString(input map[string]any, field, expected string) bool {
+	actual, ok := input[field].(string)
+	return ok && actual != "" && launchConstantEqual(actual, expected)
+}
+
+func launchInputMatchesInteger(input map[string]any, field string, expected int64) bool {
+	actual, err := launchInteger(input, field)
+	return err == nil && actual == expected
 }
 
 func validateLaunchEnvelopeShape(envelope LaunchEffectAuthorizationEnvelope) error {
@@ -295,7 +519,12 @@ func validateLaunchEnvelopeShape(envelope LaunchEffectAuthorizationEnvelope) err
 		"tenant_id":                 envelope.TenantID,
 		"workspace_id":              envelope.WorkspaceID,
 		"mission_id":                envelope.MissionID,
+		"principal":                 envelope.Principal,
+		"audience":                  envelope.Audience,
+		"kernel_trust_root_id":      envelope.KernelTrustRootID,
 		"approval_artifact_ref":     envelope.ApprovalArtifactRef,
+		"approval_consumption_ref":  envelope.ApprovalConsumptionRef,
+		"dependency_set_ref":        envelope.DependencySetRef,
 		"kernel_verdict_ref":        envelope.KernelVerdictRef,
 		"kernel_verdict_signer_key": envelope.KernelVerdictSignerKey,
 		"effect_permit_ref":         envelope.EffectPermitRef,
@@ -312,16 +541,18 @@ func validateLaunchEnvelopeShape(envelope LaunchEffectAuthorizationEnvelope) err
 		return errors.New("launch authorization envelope permit nonce is not canonical")
 	}
 	hashes := map[string]string{
-		"input_schema_hash":       envelope.InputSchemaHash,
-		"input_hash":              envelope.InputHash,
-		"idempotency_key":         envelope.IdempotencyKey,
-		"plan_hash":               envelope.PlanHash,
-		"approval_artifact_hash":  envelope.ApprovalArtifactHash,
-		"kernel_verdict_hash":     envelope.KernelVerdictHash,
-		"effect_permit_hash":      envelope.EffectPermitHash,
-		"connector_contract_hash": envelope.ConnectorContractHash,
-		"request_body_hash":       envelope.RequestBodyHash,
-		"args_c14n_hash":          envelope.ArgsC14NHash,
+		"input_schema_hash":         envelope.InputSchemaHash,
+		"input_hash":                envelope.InputHash,
+		"idempotency_key":           envelope.IdempotencyKey,
+		"plan_hash":                 envelope.PlanHash,
+		"approval_artifact_hash":    envelope.ApprovalArtifactHash,
+		"approval_consumption_hash": envelope.ApprovalConsumptionHash,
+		"dependency_set_hash":       envelope.DependencySetHash,
+		"kernel_verdict_hash":       envelope.KernelVerdictHash,
+		"effect_permit_hash":        envelope.EffectPermitHash,
+		"connector_contract_hash":   envelope.ConnectorContractHash,
+		"request_body_hash":         envelope.RequestBodyHash,
+		"args_c14n_hash":            envelope.ArgsC14NHash,
 	}
 	for field, value := range hashes {
 		if !validLaunchSHA256(value) {
@@ -428,12 +659,19 @@ func verifyLaunchPermitBinding(envelope LaunchEffectAuthorizationEnvelope, permi
 		{"tenant_id", envelope.TenantID, permit.TenantID},
 		{"workspace_id", envelope.WorkspaceID, permit.WorkspaceID},
 		{"mission_id", envelope.MissionID, permit.MissionID},
+		{"principal", envelope.Principal, permit.Principal},
+		{"audience", envelope.Audience, permit.Audience},
+		{"kernel_trust_root_id", envelope.KernelTrustRootID, permit.KernelTrustRootID},
 		{"input_schema_hash", envelope.InputSchemaHash, permit.InputSchemaHash},
 		{"input_hash", envelope.InputHash, permit.InputHash},
 		{"idempotency_key", envelope.IdempotencyKey, permit.IdempotencyKey},
 		{"plan_hash", envelope.PlanHash, permit.PlanHash},
 		{"approval_artifact_ref", envelope.ApprovalArtifactRef, permit.ApprovalArtifactRef},
 		{"approval_artifact_hash", envelope.ApprovalArtifactHash, permit.ApprovalArtifactHash},
+		{"approval_consumption_ref", envelope.ApprovalConsumptionRef, permit.ApprovalConsumptionRef},
+		{"approval_consumption_hash", envelope.ApprovalConsumptionHash, permit.ApprovalConsumptionHash},
+		{"dependency_set_ref", envelope.DependencySetRef, permit.DependencySetRef},
+		{"dependency_set_hash", envelope.DependencySetHash, permit.DependencySetHash},
 		{"kernel_verdict_ref", envelope.KernelVerdictRef, permit.KernelVerdictRef},
 		{"kernel_verdict_hash", envelope.KernelVerdictHash, permit.KernelVerdictHash},
 		{"connector_id", envelope.ConnectorID, permit.ConnectorID},
@@ -532,6 +770,15 @@ func validLaunchNonce(value string) bool {
 }
 
 func validateLaunchEffectFixedSemantics(typeID string, input map[string]any) error {
+	if launchEffectRequiresProviderRoute(typeID) {
+		if !launchInputNonEmptyString(input, "route_placement_id") || !launchInputNonEmptyString(input, "provider_certification_ref") {
+			return errors.New("launch provider effect must bind an exact route placement and certification record")
+		}
+		certificationHash, ok := input["provider_certification_hash"].(string)
+		if !ok || !validLaunchSHA256(certificationHash) {
+			return errors.New("launch provider effect certification hash is invalid")
+		}
+	}
 	switch typeID {
 	case EffectTypeProviderProvision:
 		if !launchInputNonEmptyString(input, "provider") ||
@@ -563,6 +810,9 @@ func validateLaunchEffectFixedSemantics(typeID string, input map[string]any) err
 		if !launchInputNonEmptyString(input, "provider") || !launchInputNonEmptyString(input, "region") || !launchInputNonEmptyString(input, "jurisdiction") || !launchInputStringIs(input, "rollback_authorization_mode", "PREAUTHORIZED_EXACT_TARGET") {
 			return errors.New("production activation violates route or exact-target rollback constraints")
 		}
+		if err := validateLaunchActivationCompensation(input); err != nil {
+			return err
+		}
 		if err := validateLaunchPrimaryEndpoint(input); err != nil {
 			return err
 		}
@@ -585,6 +835,10 @@ func validateLaunchEffectFixedSemantics(typeID string, input map[string]any) err
 		if !launchInputNonEmptyString(input, "provider") || !launchInputNonEmptyString(input, "region") || !launchInputNonEmptyString(input, "jurisdiction") ||
 			!launchInputStringIs(input, "rollback_authorization_mode", "PREAUTHORIZED_EXACT_TARGET") {
 			return errors.New("provider rollback must bind an exact route using exact-target preauthorization")
+		}
+		compensationClass, _ := input["compensation_class"].(string)
+		if _, ok := launchCompensationClasses[compensationClass]; !ok || !launchInputNonEmptyString(input, "source_state_ref") || !launchInputNonEmptyString(input, "target_state_ref") || !launchInputNonEmptyString(input, "compensation_plan_ref") {
+			return errors.New("provider rollback must bind an exact supported state compensation")
 		}
 		if _, err := launchInputTime(input, "rollback_permit_expiry"); err != nil {
 			return err
@@ -616,7 +870,7 @@ func launchEffectIsProviderMutation(effectID string) bool {
 }
 
 func validateLaunchPrimaryEndpoint(input map[string]any) error {
-	targetKind, _ := input["activation_target_kind"].(string)
+	targetKind, _ := input["exposure_kind"].(string)
 	raw, present := input["primary_endpoint"].(string)
 	if targetKind != "ENDPOINT" {
 		if present && raw != "" {
@@ -633,6 +887,27 @@ func validateLaunchPrimaryEndpoint(input map[string]any) error {
 	}
 	if !launchInputNonEmptyString(input, "tls_evidence_hash") {
 		return errors.New("endpoint production activation requires TLS evidence")
+	}
+	return nil
+}
+
+func validateLaunchActivationCompensation(input map[string]any) error {
+	activationClass, _ := input["activation_class"].(string)
+	compensationClass, _ := input["compensation_class"].(string)
+	expected := map[string]string{
+		LaunchTransitionReleaseCutover: LaunchCompensationReleaseRollback,
+		LaunchTransitionResourceState:  LaunchCompensationResourceRestore,
+		LaunchTransitionDataRestore:    LaunchCompensationDataRestore,
+		LaunchTransitionInfraReconcile: LaunchCompensationInfraReconcile,
+		LaunchTransitionComposite:      LaunchCompensationComposite,
+	}
+	if expected[activationClass] == "" || expected[activationClass] != compensationClass {
+		return errors.New("production activation transition and compensation classes are incompatible")
+	}
+	for _, field := range []string{"source_state_ref", "target_state_ref", "transition_plan_ref", "compensation_target_ref"} {
+		if !launchInputNonEmptyString(input, field) {
+			return fmt.Errorf("production activation %s is required", field)
+		}
 	}
 	return nil
 }

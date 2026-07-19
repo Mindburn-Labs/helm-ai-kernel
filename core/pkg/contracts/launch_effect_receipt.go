@@ -30,58 +30,74 @@ type LaunchEffectReceiptMetadata struct {
 // Mission effect. ReceiptID is content-addressed, Signature is Ed25519 over the
 // ReceiptID, and revisions form an append-only chain through PreviousReceiptID.
 type LaunchEffectReceipt struct {
-	SchemaVersion          string                      `json:"schema_version"`
-	ReceiptVersion         string                      `json:"receipt_version"`
-	Kind                   string                      `json:"kind"`
-	ReceiptID              string                      `json:"receipt_id"`
-	ReceiptChainID         string                      `json:"receipt_chain_id"`
-	ReceiptRevision        int                         `json:"receipt_revision"`
-	ReconciliationRevision int                         `json:"reconciliation_revision"`
-	DecisionID             string                      `json:"decision_id"`
-	EffectID               string                      `json:"effect_id"`
-	Verdict                string                      `json:"verdict"`
-	Principal              string                      `json:"principal"`
-	Tool                   string                      `json:"tool"`
-	Action                 string                      `json:"action"`
-	Timestamp              string                      `json:"timestamp"`
-	Lamport                uint64                      `json:"lamport"`
-	ProofGraphNode         string                      `json:"proofgraph_node"`
-	SignerKeyID            string                      `json:"signer_key_id"`
-	PayloadHash            string                      `json:"payload_hash"`
-	Metadata               LaunchEffectReceiptMetadata `json:"metadata"`
-	TenantID               string                      `json:"tenant_id"`
-	WorkspaceID            string                      `json:"workspace_id"`
-	MissionID              string                      `json:"mission_id"`
-	EffectOrdinal          int                         `json:"effect_ordinal"`
-	InputSchemaHash        string                      `json:"input_schema_hash"`
-	InputHash              string                      `json:"input_hash"`
-	IdempotencyKey         string                      `json:"idempotency_key"`
-	RequestHash            string                      `json:"request_hash"`
-	ResultHash             string                      `json:"result_hash"`
-	KernelVerdictRef       string                      `json:"kernel_verdict_ref"`
-	KernelVerdictHash      string                      `json:"kernel_verdict_hash"`
-	ApprovalArtifactRef    string                      `json:"approval_artifact_ref"`
-	ApprovalArtifactHash   string                      `json:"approval_artifact_hash"`
-	EffectPermitRef        string                      `json:"effect_permit_ref"`
-	EffectPermitHash       string                      `json:"effect_permit_hash"`
-	PermitNonce            string                      `json:"permit_nonce"`
-	PermitConsumptionRef   string                      `json:"permit_consumption_ref"`
-	PermitConsumptionHash  string                      `json:"permit_consumption_hash"`
-	PolicyEpoch            string                      `json:"policy_epoch"`
-	EmergencyFenceEpoch    int64                       `json:"emergency_fence_epoch"`
-	ConnectorContractHash  string                      `json:"connector_contract_hash"`
-	ReconciliationLocator  string                      `json:"reconciliation_locator_hash"`
-	ProviderOperationRef   string                      `json:"provider_operation_ref,omitempty"`
-	ProviderResourceRefs   []string                    `json:"provider_resource_refs,omitempty"`
-	Outcome                string                      `json:"outcome"`
-	ReconciliationStatus   string                      `json:"reconciliation_status"`
-	DependencyState        string                      `json:"dependency_state"`
-	DependencySetHash      string                      `json:"dependency_set_hash"`
-	DependencyStateHash    string                      `json:"dependency_state_hash"`
-	EvidencePackRef        string                      `json:"evidence_pack_ref,omitempty"`
-	EvidencePackHash       string                      `json:"evidence_pack_hash,omitempty"`
-	PreviousReceiptID      string                      `json:"previous_receipt_id,omitempty"`
-	Signature              string                      `json:"signature"`
+	SchemaVersion             string                      `json:"schema_version"`
+	ReceiptVersion            string                      `json:"receipt_version"`
+	Kind                      string                      `json:"kind"`
+	ReceiptID                 string                      `json:"receipt_id"`
+	ReceiptChainID            string                      `json:"receipt_chain_id"`
+	ReceiptRevision           int                         `json:"receipt_revision"`
+	ReconciliationRevision    int                         `json:"reconciliation_revision"`
+	DecisionID                string                      `json:"decision_id"`
+	EffectID                  string                      `json:"effect_id"`
+	Verdict                   string                      `json:"verdict"`
+	Principal                 string                      `json:"principal"`
+	Audience                  string                      `json:"audience"`
+	KernelTrustRootID         string                      `json:"kernel_trust_root_id"`
+	Tool                      string                      `json:"tool"`
+	Action                    string                      `json:"action"`
+	Timestamp                 string                      `json:"timestamp"`
+	Lamport                   uint64                      `json:"lamport"`
+	ProofGraphNode            string                      `json:"proofgraph_node"`
+	SignerKeyID               string                      `json:"signer_key_id"`
+	PayloadHash               string                      `json:"payload_hash"`
+	Metadata                  LaunchEffectReceiptMetadata `json:"metadata"`
+	TenantID                  string                      `json:"tenant_id"`
+	WorkspaceID               string                      `json:"workspace_id"`
+	MissionID                 string                      `json:"mission_id"`
+	EffectOrdinal             int                         `json:"effect_ordinal"`
+	InputSchemaHash           string                      `json:"input_schema_hash"`
+	InputHash                 string                      `json:"input_hash"`
+	IdempotencyKey            string                      `json:"idempotency_key"`
+	RequestHash               string                      `json:"request_hash"`
+	ResultHash                string                      `json:"result_hash"`
+	KernelVerdictRef          string                      `json:"kernel_verdict_ref"`
+	KernelVerdictHash         string                      `json:"kernel_verdict_hash"`
+	ApprovalArtifactRef       string                      `json:"approval_artifact_ref"`
+	ApprovalArtifactHash      string                      `json:"approval_artifact_hash"`
+	ApprovalConsumptionRef    string                      `json:"approval_consumption_ref"`
+	ApprovalConsumptionHash   string                      `json:"approval_consumption_hash"`
+	EffectPermitRef           string                      `json:"effect_permit_ref"`
+	EffectPermitHash          string                      `json:"effect_permit_hash"`
+	PermitNonce               string                      `json:"permit_nonce"`
+	PermitConsumptionRef      string                      `json:"permit_consumption_ref"`
+	PermitConsumptionHash     string                      `json:"permit_consumption_hash"`
+	PolicyEpoch               string                      `json:"policy_epoch"`
+	EmergencyFenceEpoch       int64                       `json:"emergency_fence_epoch"`
+	ConnectorContractHash     string                      `json:"connector_contract_hash"`
+	ReconciliationLocator     string                      `json:"reconciliation_locator_hash"`
+	ProviderOperationRef      string                      `json:"provider_operation_ref,omitempty"`
+	ProviderResourceRefs      []string                    `json:"provider_resource_refs,omitempty"`
+	Outcome                   string                      `json:"outcome"`
+	ReconciliationStatus      string                      `json:"reconciliation_status"`
+	DependencyState           string                      `json:"dependency_state"`
+	DependencySetRef          string                      `json:"dependency_set_ref"`
+	DependencySetHash         string                      `json:"dependency_set_hash"`
+	DependencyStateHash       string                      `json:"dependency_state_hash"`
+	RouteBindingRef           string                      `json:"route_binding_ref,omitempty"`
+	RouteBindingHash          string                      `json:"route_binding_hash,omitempty"`
+	RoutePlacementID          string                      `json:"route_placement_id,omitempty"`
+	ProviderProfileRef        string                      `json:"provider_capability_profile_ref,omitempty"`
+	ProviderProfileHash       string                      `json:"provider_capability_profile_hash,omitempty"`
+	ProviderCertificationRef  string                      `json:"provider_certification_ref,omitempty"`
+	ProviderCertificationHash string                      `json:"provider_certification_hash,omitempty"`
+	OfferSnapshotRef          string                      `json:"offer_snapshot_ref,omitempty"`
+	OfferSnapshotHash         string                      `json:"offer_snapshot_hash,omitempty"`
+	PriceEvidenceHash         string                      `json:"price_evidence_hash,omitempty"`
+	TermsEvidenceHash         string                      `json:"terms_evidence_hash,omitempty"`
+	EvidencePackRef           string                      `json:"evidence_pack_ref,omitempty"`
+	EvidencePackHash          string                      `json:"evidence_pack_hash,omitempty"`
+	PreviousReceiptID         string                      `json:"previous_receipt_id,omitempty"`
+	Signature                 string                      `json:"signature"`
 }
 
 // LaunchEffectReceiptVerificationContext supplies trust-root and ProofGraph
@@ -105,37 +121,62 @@ func LaunchEffectReceiptSigningBytes(receipt LaunchEffectReceipt) ([]byte, error
 // dispatch identity while allowing reconciliation material to evolve.
 func DeriveLaunchEffectReceiptChainID(receipt LaunchEffectReceipt) (string, error) {
 	binding := struct {
-		EffectID              string `json:"effect_id"`
-		TenantID              string `json:"tenant_id"`
-		WorkspaceID           string `json:"workspace_id"`
-		MissionID             string `json:"mission_id"`
-		EffectOrdinal         int    `json:"effect_ordinal"`
-		InputSchemaHash       string `json:"input_schema_hash"`
-		InputHash             string `json:"input_hash"`
-		IdempotencyKey        string `json:"idempotency_key"`
-		RequestHash           string `json:"request_hash"`
-		KernelVerdictRef      string `json:"kernel_verdict_ref"`
-		KernelVerdictHash     string `json:"kernel_verdict_hash"`
-		ApprovalArtifactRef   string `json:"approval_artifact_ref"`
-		ApprovalArtifactHash  string `json:"approval_artifact_hash"`
-		EffectPermitRef       string `json:"effect_permit_ref"`
-		EffectPermitHash      string `json:"effect_permit_hash"`
-		PermitNonce           string `json:"permit_nonce"`
-		PermitConsumptionRef  string `json:"permit_consumption_ref"`
-		PermitConsumptionHash string `json:"permit_consumption_hash"`
-		PolicyEpoch           string `json:"policy_epoch"`
-		EmergencyFenceEpoch   int64  `json:"emergency_fence_epoch"`
-		ConnectorContractHash string `json:"connector_contract_hash"`
+		EffectID                  string `json:"effect_id"`
+		TenantID                  string `json:"tenant_id"`
+		WorkspaceID               string `json:"workspace_id"`
+		MissionID                 string `json:"mission_id"`
+		EffectOrdinal             int    `json:"effect_ordinal"`
+		InputSchemaHash           string `json:"input_schema_hash"`
+		InputHash                 string `json:"input_hash"`
+		IdempotencyKey            string `json:"idempotency_key"`
+		RequestHash               string `json:"request_hash"`
+		KernelVerdictRef          string `json:"kernel_verdict_ref"`
+		KernelVerdictHash         string `json:"kernel_verdict_hash"`
+		Principal                 string `json:"principal"`
+		Audience                  string `json:"audience"`
+		KernelTrustRootID         string `json:"kernel_trust_root_id"`
+		ApprovalArtifactRef       string `json:"approval_artifact_ref"`
+		ApprovalArtifactHash      string `json:"approval_artifact_hash"`
+		ApprovalConsumptionRef    string `json:"approval_consumption_ref"`
+		ApprovalConsumptionHash   string `json:"approval_consumption_hash"`
+		EffectPermitRef           string `json:"effect_permit_ref"`
+		EffectPermitHash          string `json:"effect_permit_hash"`
+		PermitNonce               string `json:"permit_nonce"`
+		PermitConsumptionRef      string `json:"permit_consumption_ref"`
+		PermitConsumptionHash     string `json:"permit_consumption_hash"`
+		PolicyEpoch               string `json:"policy_epoch"`
+		EmergencyFenceEpoch       int64  `json:"emergency_fence_epoch"`
+		ConnectorContractHash     string `json:"connector_contract_hash"`
+		DependencySetRef          string `json:"dependency_set_ref"`
+		DependencySetHash         string `json:"dependency_set_hash"`
+		RouteBindingRef           string `json:"route_binding_ref,omitempty"`
+		RouteBindingHash          string `json:"route_binding_hash,omitempty"`
+		RoutePlacementID          string `json:"route_placement_id,omitempty"`
+		ProviderProfileRef        string `json:"provider_capability_profile_ref,omitempty"`
+		ProviderProfileHash       string `json:"provider_capability_profile_hash,omitempty"`
+		ProviderCertificationRef  string `json:"provider_certification_ref,omitempty"`
+		ProviderCertificationHash string `json:"provider_certification_hash,omitempty"`
+		OfferSnapshotRef          string `json:"offer_snapshot_ref,omitempty"`
+		OfferSnapshotHash         string `json:"offer_snapshot_hash,omitempty"`
+		PriceEvidenceHash         string `json:"price_evidence_hash,omitempty"`
+		TermsEvidenceHash         string `json:"terms_evidence_hash,omitempty"`
 	}{
 		EffectID: receipt.EffectID, TenantID: receipt.TenantID, WorkspaceID: receipt.WorkspaceID,
 		MissionID: receipt.MissionID, EffectOrdinal: receipt.EffectOrdinal, InputSchemaHash: receipt.InputSchemaHash, InputHash: receipt.InputHash,
 		IdempotencyKey: receipt.IdempotencyKey, RequestHash: receipt.RequestHash,
 		KernelVerdictRef: receipt.KernelVerdictRef, KernelVerdictHash: receipt.KernelVerdictHash,
+		Principal: receipt.Principal, Audience: receipt.Audience, KernelTrustRootID: receipt.KernelTrustRootID,
 		ApprovalArtifactRef: receipt.ApprovalArtifactRef, ApprovalArtifactHash: receipt.ApprovalArtifactHash,
+		ApprovalConsumptionRef: receipt.ApprovalConsumptionRef, ApprovalConsumptionHash: receipt.ApprovalConsumptionHash,
 		EffectPermitRef: receipt.EffectPermitRef, EffectPermitHash: receipt.EffectPermitHash, PermitNonce: receipt.PermitNonce,
 		PermitConsumptionRef: receipt.PermitConsumptionRef, PermitConsumptionHash: receipt.PermitConsumptionHash,
 		PolicyEpoch: receipt.PolicyEpoch, EmergencyFenceEpoch: receipt.EmergencyFenceEpoch,
-		ConnectorContractHash: receipt.ConnectorContractHash,
+		ConnectorContractHash: receipt.ConnectorContractHash, DependencySetRef: receipt.DependencySetRef, DependencySetHash: receipt.DependencySetHash,
+		RouteBindingRef: receipt.RouteBindingRef, RouteBindingHash: receipt.RouteBindingHash, RoutePlacementID: receipt.RoutePlacementID,
+		ProviderProfileRef: receipt.ProviderProfileRef, ProviderProfileHash: receipt.ProviderProfileHash,
+		ProviderCertificationRef: receipt.ProviderCertificationRef, ProviderCertificationHash: receipt.ProviderCertificationHash,
+		OfferSnapshotRef: receipt.OfferSnapshotRef, OfferSnapshotHash: receipt.OfferSnapshotHash,
+		PriceEvidenceHash: receipt.PriceEvidenceHash, TermsEvidenceHash: receipt.TermsEvidenceHash,
 	}
 	hash, err := canonicalize.CanonicalHash(binding)
 	if err != nil {
@@ -243,6 +284,8 @@ func VerifyLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, ct
 		{"effect_id", current.EffectID, previous.EffectID},
 		{"verdict", current.Verdict, previous.Verdict},
 		{"principal", current.Principal, previous.Principal},
+		{"audience", current.Audience, previous.Audience},
+		{"kernel_trust_root_id", current.KernelTrustRootID, previous.KernelTrustRootID},
 		{"tool", current.Tool, previous.Tool},
 		{"action", current.Action, previous.Action},
 		{"signer_key_id", current.SignerKeyID, previous.SignerKeyID},
@@ -258,6 +301,8 @@ func VerifyLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, ct
 		{"kernel_verdict_hash", current.KernelVerdictHash, previous.KernelVerdictHash},
 		{"approval_artifact_ref", current.ApprovalArtifactRef, previous.ApprovalArtifactRef},
 		{"approval_artifact_hash", current.ApprovalArtifactHash, previous.ApprovalArtifactHash},
+		{"approval_consumption_ref", current.ApprovalConsumptionRef, previous.ApprovalConsumptionRef},
+		{"approval_consumption_hash", current.ApprovalConsumptionHash, previous.ApprovalConsumptionHash},
 		{"effect_permit_ref", current.EffectPermitRef, previous.EffectPermitRef},
 		{"effect_permit_hash", current.EffectPermitHash, previous.EffectPermitHash},
 		{"permit_nonce", current.PermitNonce, previous.PermitNonce},
@@ -267,6 +312,18 @@ func VerifyLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, ct
 		{"connector_contract_hash", current.ConnectorContractHash, previous.ConnectorContractHash},
 		{"reconciliation_locator_hash", current.ReconciliationLocator, previous.ReconciliationLocator},
 		{"dependency_set_hash", current.DependencySetHash, previous.DependencySetHash},
+		{"dependency_set_ref", current.DependencySetRef, previous.DependencySetRef},
+		{"route_binding_ref", current.RouteBindingRef, previous.RouteBindingRef},
+		{"route_binding_hash", current.RouteBindingHash, previous.RouteBindingHash},
+		{"route_placement_id", current.RoutePlacementID, previous.RoutePlacementID},
+		{"provider_capability_profile_ref", current.ProviderProfileRef, previous.ProviderProfileRef},
+		{"provider_capability_profile_hash", current.ProviderProfileHash, previous.ProviderProfileHash},
+		{"provider_certification_ref", current.ProviderCertificationRef, previous.ProviderCertificationRef},
+		{"provider_certification_hash", current.ProviderCertificationHash, previous.ProviderCertificationHash},
+		{"offer_snapshot_ref", current.OfferSnapshotRef, previous.OfferSnapshotRef},
+		{"offer_snapshot_hash", current.OfferSnapshotHash, previous.OfferSnapshotHash},
+		{"price_evidence_hash", current.PriceEvidenceHash, previous.PriceEvidenceHash},
+		{"terms_evidence_hash", current.TermsEvidenceHash, previous.TermsEvidenceHash},
 		{"metadata.profile", current.Metadata.Profile, previous.Metadata.Profile},
 		{"metadata.redaction_profile_hash", current.Metadata.RedactionProfileHash, previous.Metadata.RedactionProfileHash},
 	}
@@ -306,8 +363,8 @@ func ValidateLaunchEffectReceiptSemantics(receipt LaunchEffectReceipt) error {
 	if contract == nil {
 		return errors.New("launch effect receipt effect is not registered")
 	}
-	if receipt.DecisionID == "" || receipt.Principal == "" || receipt.TenantID == "" || receipt.WorkspaceID == "" || receipt.MissionID == "" ||
-		receipt.KernelVerdictRef == "" || receipt.ApprovalArtifactRef == "" || receipt.EffectPermitRef == "" || receipt.PermitConsumptionRef == "" ||
+	if receipt.DecisionID == "" || receipt.Principal == "" || receipt.Audience == "" || receipt.KernelTrustRootID == "" || receipt.TenantID == "" || receipt.WorkspaceID == "" || receipt.MissionID == "" ||
+		receipt.KernelVerdictRef == "" || receipt.ApprovalArtifactRef == "" || receipt.ApprovalConsumptionRef == "" || receipt.EffectPermitRef == "" || receipt.PermitConsumptionRef == "" || receipt.DependencySetRef == "" ||
 		receipt.PolicyEpoch == "" || receipt.SignerKeyID == "" {
 		return errors.New("launch effect receipt is missing an identity, authority, or signer reference")
 	}
@@ -352,6 +409,7 @@ func ValidateLaunchEffectReceiptSemantics(receipt LaunchEffectReceipt) error {
 		"result_hash":                 receipt.ResultHash,
 		"kernel_verdict_hash":         receipt.KernelVerdictHash,
 		"approval_artifact_hash":      receipt.ApprovalArtifactHash,
+		"approval_consumption_hash":   receipt.ApprovalConsumptionHash,
 		"effect_permit_hash":          receipt.EffectPermitHash,
 		"permit_consumption_hash":     receipt.PermitConsumptionHash,
 		"connector_contract_hash":     receipt.ConnectorContractHash,
@@ -363,6 +421,23 @@ func ValidateLaunchEffectReceiptSemantics(receipt LaunchEffectReceipt) error {
 	} {
 		if !validLaunchSHA256(value) {
 			return fmt.Errorf("launch effect receipt %s is not a canonical SHA-256 reference", field)
+		}
+	}
+	if launchEffectRequiresProviderRoute(receipt.EffectID) {
+		if receipt.RouteBindingRef == "" || receipt.RoutePlacementID == "" || receipt.ProviderProfileRef == "" || receipt.ProviderCertificationRef == "" || receipt.OfferSnapshotRef == "" {
+			return errors.New("provider launch receipt is missing exact route or certification lineage")
+		}
+		for field, value := range map[string]string{
+			"route_binding_hash":               receipt.RouteBindingHash,
+			"provider_capability_profile_hash": receipt.ProviderProfileHash,
+			"provider_certification_hash":      receipt.ProviderCertificationHash,
+			"offer_snapshot_hash":              receipt.OfferSnapshotHash,
+			"price_evidence_hash":              receipt.PriceEvidenceHash,
+			"terms_evidence_hash":              receipt.TermsEvidenceHash,
+		} {
+			if !validLaunchSHA256(value) {
+				return fmt.Errorf("provider launch receipt %s is not a canonical SHA-256 reference", field)
+			}
 		}
 	}
 	chainID, err := DeriveLaunchEffectReceiptChainID(receipt)
@@ -384,8 +459,8 @@ func ValidateLaunchEffectReceiptSemantics(receipt LaunchEffectReceipt) error {
 func validateLaunchReceiptState(receipt LaunchEffectReceipt) error {
 	switch receipt.Outcome {
 	case "UNKNOWN":
-		if receipt.ReconciliationStatus != "PENDING" || receipt.DependencyState != "FROZEN" {
-			return errors.New("UNKNOWN launch effect receipt must remain PENDING with dependants FROZEN")
+		if (receipt.ReconciliationStatus != "PENDING" && receipt.ReconciliationStatus != "CONFLICT") || receipt.DependencyState != "FROZEN" {
+			return errors.New("UNKNOWN launch effect receipt must remain PENDING or CONFLICT with dependants FROZEN")
 		}
 		if receipt.EvidencePackRef != "" || receipt.EvidencePackHash != "" {
 			return errors.New("UNKNOWN launch effect receipt cannot claim a finalized EvidencePack")
@@ -402,7 +477,7 @@ func validateLaunchReceiptState(receipt LaunchEffectReceipt) error {
 			return errors.New("FAILED launch effect receipt must remain reconciled and FROZEN")
 		}
 		switch receipt.ReconciliationStatus {
-		case "PROVEN_APPLIED", "PROVEN_NOT_APPLIED", "CONFLICT":
+		case "PROVEN_APPLIED", "PROVEN_NOT_APPLIED":
 		default:
 			return errors.New("FAILED launch effect receipt has no terminal reconciliation proof")
 		}

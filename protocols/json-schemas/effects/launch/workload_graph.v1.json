@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/effects/launch/workload_graph.v1.json",
-  "version": "1.1.0-alpha.1",
+  "version": "1.2.0-alpha.1",
   "title": "Launch Workload Graph (Preview)",
-  "description": "Provider-neutral graph of workloads and dependencies detected in one immutable repository commit.",
+  "description": "Provider-neutral graph of arbitrary deployable, stateful, background, data, compute, and infrastructure workloads discovered in a repository.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "graph_id", "tenant_id", "workspace_id", "source_commit_sha", "source_tree_hash", "nodes", "edges", "unknown_set_hash"],
@@ -15,32 +15,30 @@
     "source_commit_sha": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
     "source_tree_hash": { "$ref": "#/$defs/hash" },
     "nodes": {
-      "type": "array",
-      "minItems": 1,
+      "type": "array", "minItems": 1,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["node_id", "kind", "definition_hash", "requirements_hash", "required_capabilities", "deployability"],
+        "type": "object", "additionalProperties": false,
+        "required": ["node_id", "kind", "lifecycle_class", "definition_hash", "requirements_hash", "required_capabilities", "deployability"],
         "properties": {
           "node_id": { "$ref": "#/$defs/non_empty" },
           "kind": { "$ref": "#/$defs/workload_kind" },
+          "lifecycle_class": { "$ref": "#/$defs/lifecycle_class" },
           "definition_hash": { "$ref": "#/$defs/hash" },
           "requirements_hash": { "$ref": "#/$defs/hash" },
           "required_capabilities": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/non_empty" } },
-          "deployability": { "$ref": "#/$defs/status" }
+          "deployability": { "enum": ["SUPPORTED", "NEEDS_INPUT", "UNSUPPORTED", "UNKNOWN"] }
         }
       }
     },
     "edges": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
+        "type": "object", "additionalProperties": false,
         "required": ["from_node_id", "to_node_id", "relationship"],
         "properties": {
           "from_node_id": { "$ref": "#/$defs/non_empty" },
           "to_node_id": { "$ref": "#/$defs/non_empty" },
-          "relationship": { "enum": ["consumes_from", "depends_on", "publishes_to", "reads_from", "routes_to", "writes_to"] }
+          "relationship": { "$ref": "#/$defs/relationship" }
         }
       }
     },
@@ -49,8 +47,9 @@
   "$defs": {
     "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "non_empty": { "type": "string", "minLength": 1 },
-    "status": { "enum": ["SUPPORTED", "NEEDS_INPUT", "UNSUPPORTED", "UNKNOWN"] },
-    "workload_kind": { "enum": ["cache", "database", "function", "gpu_service", "http_service", "kubernetes", "object_storage", "queue", "scheduled_job", "static_site", "unknown", "virtual_machine", "worker"] }
+    "workload_kind": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
+    "relationship": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
+    "lifecycle_class": { "enum": ["EPHEMERAL", "STATEFUL_DATA", "STATEFUL_RESOURCE", "COMPOSITE"] }
   },
-  "x-helm": { "status": "preview", "execution_enabled": false, "provider_neutral": true, "canonical_ordering_required": true }
+  "x-helm": { "status": "preview", "execution_enabled": false, "provider_neutral": true, "status_aggregation_required": true }
 }

@@ -1,0 +1,1450 @@
+{
+  "artifact_hashes": {
+    "constraint_set": "sha256:ef0ee0df2951ac7719cf2db431a995ec636cc349cb1dbe6cb39397baa54baac9",
+    "offer_snapshot": "sha256:042ca6a9fc9ba1619bcab69e0b201d0d3cee2dc610e4ee8ed3c91458775c8ada",
+    "provider_capability_profile": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+    "provider_certification": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+    "provider_payload_set": "sha256:27f518230eff3b56ae7002e0680d29c7171596ce465116c1342b7ea594165524",
+    "repository_analysis": "sha256:2911b337b3b27f2ca0f9520ba12794256909b226a59d428e6e3fe7a48ae5262a",
+    "resource_graph": "sha256:8281f465a126d454b4c62c0a94980399ebef98c1fc6ca820c792602b7c0b6ca5",
+    "route_binding": "sha256:0cf3a2c9f6731668ac3ba6de82b45e5894d5e7049f95ae508e961b0dc795440a",
+    "route_quote": "sha256:5b8f42c39cd5110fc19ed6b9d1ed36ec5e6e5da180c539ff1a79c87c8d0bee67",
+    "workload_graph": "sha256:7938f84388d3ec7f77767605e1a9765a9011000d03e5473801991e8ac62267a9"
+  },
+  "artifacts": {
+    "constraint_set": {
+      "schema_version": "launch_constraint_set.v1",
+      "constraint_set_id": "constraints-1",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "mission_id": "mission-1",
+      "maximum_gross_currency": "EUR",
+      "maximum_gross_minor": 5000,
+      "allowed_providers": [],
+      "allowed_jurisdictions": [
+        "EU"
+      ],
+      "required_residency_tags": [
+        "eu"
+      ],
+      "allowed_commitment_terms": [
+        "monthly"
+      ],
+      "required_route_capabilities": [],
+      "policy_expression_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "offer_snapshot": {
+      "schema_version": "launch_offer_snapshot.v1",
+      "snapshot_id": "offer-snapshot-1",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "provider_id": "digitalocean",
+      "provider_account_ref": "account:1",
+      "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "official_source_url": "https://example.invalid/digitalocean/official-offers",
+      "content_version_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "terms_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "exclusions_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "status": "ACTIVE_CREDIT_VERIFIED",
+      "currency": "EUR",
+      "verified_credit_minor": 200,
+      "evidence_refs": [
+        "evidence:offer-snapshot-1"
+      ],
+      "retrieved_at": "2026-07-19T00:00:00Z",
+      "expires_at": "2026-07-19T13:00:00Z"
+    },
+    "provider_capability_profile": {
+      "schema_version": "launch_provider_capability_profile.v1",
+      "profile_id": "digitalocean-candidate",
+      "provider_id": "digitalocean",
+      "connector_id": "digitalocean-app-platform",
+      "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "profile_version": "candidate-1",
+      "profile_status": "CANDIDATE",
+      "regions": [
+        {
+          "region_id": "fra",
+          "jurisdiction": "EU",
+          "residency_tags": [
+            "eu"
+          ],
+          "offerings": [
+            {
+              "offering_id": "app-platform",
+              "supported_workload_kinds": [
+                "http_service",
+                "static_site"
+              ],
+              "supported_capabilities": [
+                "health-check",
+                "https-endpoint",
+                "stateless-runtime"
+              ],
+              "supported_lifecycle_classes": [
+                "EPHEMERAL"
+              ]
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+          "action_urn": "urn:helm:connector:digitalocean:apps:activate",
+          "reconciliation_mode": "OPERATION_POLL",
+          "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+          "supported_transition_classes": [
+            "RELEASE_CUTOVER",
+            "RESOURCE_STATE_TRANSITION"
+          ],
+          "supported_compensation_classes": []
+        },
+        {
+          "effect_id": "PROVIDER_PROVISION",
+          "action_urn": "urn:helm:connector:digitalocean:apps:create",
+          "reconciliation_mode": "OPERATION_POLL",
+          "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+          "supported_transition_classes": [],
+          "supported_compensation_classes": []
+        },
+        {
+          "effect_id": "PROVIDER_ROLLBACK",
+          "action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
+          "reconciliation_mode": "OPERATION_POLL",
+          "idempotency_mode": "COMPARE_AND_SET",
+          "supported_transition_classes": [],
+          "supported_compensation_classes": [
+            "RELEASE_ROLLBACK",
+            "RESOURCE_STATE_RESTORE"
+          ]
+        },
+        {
+          "effect_id": "PROVIDER_TEARDOWN",
+          "action_urn": "urn:helm:connector:digitalocean:apps:delete",
+          "reconciliation_mode": "READ_AFTER_WRITE",
+          "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+          "supported_transition_classes": [],
+          "supported_compensation_classes": []
+        }
+      ],
+      "pricing_evidence_ref": "fixture://digitalocean/pricing",
+      "pricing_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "terms_evidence_ref": "fixture://digitalocean/terms",
+      "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "retrieved_at": "2026-07-19T00:00:00Z",
+      "expires_at": "2026-07-20T00:00:00Z"
+    },
+    "provider_certification": {
+      "schema_version": "launch_provider_certification.v1",
+      "certification_id": "certification-1",
+      "profile_ref": "digitalocean-candidate",
+      "profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+      "provider_id": "digitalocean",
+      "connector_id": "digitalocean-app-platform",
+      "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "certification_tier": "provider-mutation-tier-1",
+      "certification_suite_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "certification_evidence_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "admission_status": "ACTIVE",
+      "issued_at": "2026-07-19T00:00:00Z",
+      "expires_at": "2026-07-20T00:00:00Z",
+      "signer_key_id": "cert-root-1",
+      "record_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+      "signature": "ed25519:7cf2483dd8147012ed13047771ae33e661d3cb0cf388a46198d5c3d909387432a7ad5d3d3de7c1d7838c4e39b05d96f61911f79a2f354e47e64d7e886a60a10b"
+    },
+    "provider_payload_set": {
+      "schema_version": "launch_provider_payload_set.v1",
+      "payload_set_id": "payload-set-1",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "mission_id": "mission-1",
+      "entries": [
+        {
+          "placement_id": "placement-1",
+          "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+          "provider_action_urn": "urn:helm:connector:digitalocean:apps:activate",
+          "payload_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+        },
+        {
+          "placement_id": "placement-1",
+          "effect_id": "PROVIDER_PROVISION",
+          "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
+          "payload_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+        },
+        {
+          "placement_id": "placement-1",
+          "effect_id": "PROVIDER_ROLLBACK",
+          "provider_action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
+          "payload_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        },
+        {
+          "placement_id": "placement-1",
+          "effect_id": "PROVIDER_TEARDOWN",
+          "provider_action_urn": "urn:helm:connector:digitalocean:apps:delete",
+          "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    "repository_analysis": {
+      "schema_version": "launch_repository_analysis.v1",
+      "analysis_id": "analysis-1",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "source_connection_ref": "source:repo-1",
+      "source_commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_tree_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "analyzer_contract_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "status": "SUPPORTED",
+      "workload_graph_ref": "workload-graph-http",
+      "workload_graph_hash": "sha256:7938f84388d3ec7f77767605e1a9765a9011000d03e5473801991e8ac62267a9",
+      "finding_set_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "analyzed_at": "2026-07-19T01:00:00Z"
+    },
+    "resource_graph": {
+      "schema_version": "launch_resource_graph.v1",
+      "resource_graph_id": "resource-graph-1",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "mission_id": "mission-1",
+      "nodes": [
+        {
+          "resource_id": "resource-api",
+          "placement_id": "placement-1",
+          "workload_node_id": "api",
+          "resource_kind": "service",
+          "lifecycle_class": "EPHEMERAL",
+          "desired_state_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "ownership_tag_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+      ],
+      "edges": []
+    },
+    "route_binding": {
+      "schema_version": "launch_route_binding.v1",
+      "route_id": "route-1",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "mission_id": "mission-1",
+      "repository_analysis_ref": "analysis-1",
+      "repository_analysis_hash": "sha256:2911b337b3b27f2ca0f9520ba12794256909b226a59d428e6e3fe7a48ae5262a",
+      "workload_graph_ref": "workload-graph-http",
+      "workload_graph_hash": "sha256:7938f84388d3ec7f77767605e1a9765a9011000d03e5473801991e8ac62267a9",
+      "constraint_set_ref": "constraints-1",
+      "constraint_set_hash": "sha256:ef0ee0df2951ac7719cf2db431a995ec636cc349cb1dbe6cb39397baa54baac9",
+      "route_quote_ref": "quote-1",
+      "route_quote_hash": "sha256:5b8f42c39cd5110fc19ed6b9d1ed36ec5e6e5da180c539ff1a79c87c8d0bee67",
+      "resource_graph_ref": "resource-graph-1",
+      "resource_graph_hash": "sha256:8281f465a126d454b4c62c0a94980399ebef98c1fc6ca820c792602b7c0b6ca5",
+      "provider_payload_set_ref": "payload-set-1",
+      "provider_payload_set_hash": "sha256:27f518230eff3b56ae7002e0680d29c7171596ce465116c1342b7ea594165524",
+      "generated_spec_ref": "generated-spec-1",
+      "generated_spec_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "placements": [
+        {
+          "placement_id": "placement-1",
+          "workload_node_ids": [
+            "api"
+          ],
+          "provider_profile_ref": "digitalocean-candidate",
+          "provider_profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+          "provider_certification_ref": "certification-1",
+          "provider_certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+          "provider_id": "digitalocean",
+          "provider_account_ref": "account:1",
+          "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "region_id": "fra",
+          "jurisdiction": "EU",
+          "offering_id": "app-platform",
+          "provider_connector_id": "digitalocean-app-platform",
+          "provider_connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "action_bindings": [
+            {
+              "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+              "provider_action_urn": "urn:helm:connector:digitalocean:apps:activate",
+              "provider_payload_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            },
+            {
+              "effect_id": "PROVIDER_PROVISION",
+              "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
+              "provider_payload_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+            },
+            {
+              "effect_id": "PROVIDER_ROLLBACK",
+              "provider_action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
+              "provider_payload_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+            },
+            {
+              "effect_id": "PROVIDER_TEARDOWN",
+              "provider_action_urn": "urn:helm:connector:digitalocean:apps:delete",
+              "provider_payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "resource_subset_hash": "sha256:43da036abfec765bc3b47a88021f04560cd8a56226dc323fc3c27b8fb65fcd42",
+          "provider_payload_subset_hash": "sha256:329cdaba27a27f2d1d0eb07843cf469ecff5770f37bdc3b227640296c27753c1"
+        }
+      ],
+      "placement_dependencies": [],
+      "expires_at": "2026-07-19T11:00:00Z"
+    },
+    "route_quote": {
+      "schema_version": "launch_route_quote.v1",
+      "quote_id": "quote-1",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "mission_id": "mission-1",
+      "workload_graph_hash": "sha256:7938f84388d3ec7f77767605e1a9765a9011000d03e5473801991e8ac62267a9",
+      "constraint_set_hash": "sha256:ef0ee0df2951ac7719cf2db431a995ec636cc349cb1dbe6cb39397baa54baac9",
+      "currency": "EUR",
+      "placement_costs": [
+        {
+          "placement_id": "placement-1",
+          "provider_id": "digitalocean",
+          "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "region_id": "fra",
+          "offering_id": "app-platform",
+          "billing_cadence": "monthly",
+          "commitment_term": "monthly",
+          "base_cost_minor": 1000,
+          "tax_fx_reserve_minor": 200,
+          "gross_exposure_minor": 1200,
+          "verified_credit_minor": 200,
+          "expected_cash_minor": 1000,
+          "credit_status": "ACTIVE_CREDIT_VERIFIED",
+          "offer_snapshot_ref": "offer-snapshot-1",
+          "offer_snapshot_hash": "sha256:042ca6a9fc9ba1619bcab69e0b201d0d3cee2dc610e4ee8ed3c91458775c8ada",
+          "price_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "base_provider_cost_minor": 1000,
+      "tax_fx_reserve_minor": 200,
+      "gross_exposure_minor": 1200,
+      "verified_credit_minor": 200,
+      "expected_cash_minor": 1000,
+      "credit_status": "ACTIVE_CREDIT_VERIFIED",
+      "credit_snapshot_hash": "sha256:63fd77849f493fa685b160c0228b78ddc53a49847ffdba4c28b40085112454aa",
+      "fx_snapshot_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "tax_snapshot_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "commercial_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "retrieved_at": "2026-07-19T00:00:00Z",
+      "expires_at": "2026-07-19T12:00:00Z"
+    },
+    "workload_graph": {
+      "schema_version": "launch_workload_graph.v1",
+      "graph_id": "workload-graph-http",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "source_commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_tree_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "nodes": [
+        {
+          "node_id": "api",
+          "kind": "http_service",
+          "lifecycle_class": "EPHEMERAL",
+          "definition_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "requirements_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "required_capabilities": [
+            "health-check",
+            "https-endpoint",
+            "stateless-runtime"
+          ],
+          "deployability": "SUPPORTED"
+        }
+      ],
+      "edges": [],
+      "unknown_set_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  },
+  "authorization": {
+    "approval_authority": {
+      "grant": {
+        "schema_version": "approval-grant.v1",
+        "contract_version": "2026-07-15",
+        "grant_id": "launch-grant-PROVIDER_PROVISION",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "audience": "launch.dispatch",
+        "pack_id": "mission-1",
+        "pack_version": "1.1.0-alpha.1",
+        "pack_manifest_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "action": "install",
+        "intent_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "effect_hash": "sha256:56fd50b82d67288a2e259ef9dd9b672b93551cf062ce5b968b97f5c10827ea18",
+        "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "decision": "ALLOW",
+        "policy_version": "policy-v1",
+        "policy_epoch": "epoch-1",
+        "policy_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "approval_id": "launch-approval-PROVIDER_PROVISION",
+        "ceremony_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "signer_set_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "server_identity": "spiffe://helm/control-plane-1",
+        "kernel_trust_root_id": "kernel-root-1",
+        "signing_key_ref": "approval-key-1",
+        "issued_at": "2026-07-19T00:58:00Z",
+        "expires_at": "2026-07-19T01:06:00Z",
+        "nonce": "1111111111111111111111111111111111111111111111111111111111111111",
+        "grant_hash": "sha256:bde0e445afe2875af6d2fbbde04522fff5e5212d53ec0daca67164637a93c7d8"
+      },
+      "grant_signature_algorithm": "ed25519",
+      "grant_signature": "359f5d3a7cc6629ff8540714c5811002d19e4e742bc57d499859ba204de6fa3cbaf1a51d98ab4292af17190b38436f0d8b0034a01cbcdcb13f8aa490f7038706",
+      "consumption": {
+        "schema_version": "approval-grant-consumption.v1",
+        "contract_version": "2026-07-16",
+        "approval_id": "launch-approval-PROVIDER_PROVISION",
+        "grant_id": "launch-grant-PROVIDER_PROVISION",
+        "grant_hash": "sha256:bde0e445afe2875af6d2fbbde04522fff5e5212d53ec0daca67164637a93c7d8",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "audience": "launch.dispatch",
+        "consumed_by": "spiffe://helm/data-plane-1",
+        "pack_id": "mission-1",
+        "pack_version": "1.1.0-alpha.1",
+        "pack_manifest_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "action": "install",
+        "intent_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "effect_hash": "sha256:56fd50b82d67288a2e259ef9dd9b672b93551cf062ce5b968b97f5c10827ea18",
+        "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "policy_version": "policy-v1",
+        "policy_epoch": "epoch-1",
+        "policy_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "server_identity": "spiffe://helm/control-plane-1",
+        "kernel_trust_root_id": "kernel-root-1",
+        "signing_key_ref": "approval-key-1",
+        "grant_issued_at": "2026-07-19T00:58:00Z",
+        "grant_expires_at": "2026-07-19T01:06:00Z",
+        "consumed_at": "2026-07-19T00:59:30Z",
+        "consumption_hash": "sha256:8e4ce0b4cdb161fc5c122852e27b817649631ac28efab3ed98563bfec6559517"
+      },
+      "consumption_signature_algorithm": "ed25519",
+      "consumption_signature": "2ba99956aa305580538e019afea68e3ee896b2c8d3ae2beed88b15d6940f21bd30f69b0443f48443921a08c05563754e6ca3fb90416910d608c71286d5eaec0c"
+    },
+    "approval_public_key": "ed25519:25586bb1c991c266f0baa1b56df4dba0c535b79a951d777dd1dbf08c0a067b5b",
+    "envelope": {
+      "schema_version": "launch_effect_envelope.v1",
+      "effect_id": "PROVIDER_PROVISION",
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "mission_id": "mission-1",
+      "principal": "spiffe://helm/data-plane-1",
+      "audience": "launch.dispatch",
+      "kernel_trust_root_id": "kernel-root-1",
+      "effect_ordinal": 1,
+      "input_schema_ref": "effects/launch/provider_provision.v1.json",
+      "input_schema_hash": "sha256:366126ae4e96bf9b3d76c7e68a921e51bb449eea2aa225555e2bbe5c01465d91",
+      "input": {
+        "billing_cadence": "MONTHLY",
+        "budget_reservation_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "budget_reservation_ref": "budget-reservation-1",
+        "budget_verdict_receipt_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "commitment_term": "MONTH_TO_MONTH",
+        "compensation_graph_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "constraint_set_hash": "sha256:ef0ee0df2951ac7719cf2db431a995ec636cc349cb1dbe6cb39397baa54baac9",
+        "effect_id": "PROVIDER_PROVISION",
+        "effect_ordinal": 1,
+        "failure_teardown_policy_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generated_spec_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "gross_cap_currency": "EUR",
+        "gross_cap_minor": 5000,
+        "gross_exposure_minor": 1200,
+        "jurisdiction": "EU",
+        "mission_id": "mission-1",
+        "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "provider": "digitalocean",
+        "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "provider_account_ref": "account:1",
+        "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
+        "provider_capability_profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+        "provider_capability_profile_ref": "digitalocean-candidate",
+        "provider_certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+        "provider_certification_ref": "certification-1",
+        "provider_connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "provider_connector_id": "digitalocean-app-platform",
+        "provider_payload_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "provider_terms_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "region": "fra",
+        "repository_analysis_hash": "sha256:2911b337b3b27f2ca0f9520ba12794256909b226a59d428e6e3fe7a48ae5262a",
+        "repository_analysis_ref": "analysis-1",
+        "resource_graph_hash": "sha256:8281f465a126d454b4c62c0a94980399ebef98c1fc6ca820c792602b7c0b6ca5",
+        "route_binding_hash": "sha256:0cf3a2c9f6731668ac3ba6de82b45e5894d5e7049f95ae508e961b0dc795440a",
+        "route_binding_ref": "route-1",
+        "route_placement_id": "placement-1",
+        "route_quote_hash": "sha256:5b8f42c39cd5110fc19ed6b9d1ed36ec5e6e5da180c539ff1a79c87c8d0bee67",
+        "route_quote_ref": "quote-1",
+        "schema_version": "launch_effect_input.v1",
+        "spend_envelope_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "spend_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "teardown_authority_mode": "FRESH_DUAL_CONTROL_REQUIRED",
+        "tenant_id": "tenant-1",
+        "workload_graph_hash": "sha256:7938f84388d3ec7f77767605e1a9765a9011000d03e5473801991e8ac62267a9",
+        "workload_graph_ref": "workload-graph-http",
+        "workspace_id": "workspace-1"
+      },
+      "input_hash": "sha256:56fd50b82d67288a2e259ef9dd9b672b93551cf062ce5b968b97f5c10827ea18",
+      "idempotency_key": "sha256:56fd50b82d67288a2e259ef9dd9b672b93551cf062ce5b968b97f5c10827ea18",
+      "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "approval_artifact_ref": "launch-grant-PROVIDER_PROVISION",
+      "approval_artifact_hash": "sha256:bde0e445afe2875af6d2fbbde04522fff5e5212d53ec0daca67164637a93c7d8",
+      "approval_consumption_ref": "approval-consumption:launch-grant-PROVIDER_PROVISION",
+      "approval_consumption_hash": "sha256:8e4ce0b4cdb161fc5c122852e27b817649631ac28efab3ed98563bfec6559517",
+      "dependency_set_ref": "dependency-set-1",
+      "dependency_set_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "policy_epoch": "epoch-1",
+      "emergency_fence_epoch": 4,
+      "verdict": "ALLOW",
+      "kernel_verdict_ref": "verdict-1",
+      "kernel_verdict_issued_at": "2026-07-19T00:59:00Z",
+      "kernel_verdict_expiry": "2026-07-19T01:06:00Z",
+      "kernel_verdict_signer_key_id": "kernel-key-1",
+      "kernel_verdict_hash": "sha256:14a0b6f99aed33c55cf8e9dea4cff6cefba950c9c55ed578f8fba065e78ecd99",
+      "kernel_verdict_signature": "ed25519:fd9d50809fbf74537ab216ef41ea99db605e7bdb5e1e3aff78ca1ed84b482c8f8375cdacf29bcef9cf73cc3e76f231996916458e19f8d5ca320819b35dfe0504",
+      "effect_permit_ref": "permit-1",
+      "effect_permit_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "permit_nonce": "0123456789abcdefABCDEF",
+      "permit_issued_at": "2026-07-19T01:00:00Z",
+      "permit_expiry": "2026-07-19T01:05:00Z",
+      "proof_session_ref": "proof-session-1",
+      "evidence_reservation_ref": "evidence-reservation-1",
+      "connector_id": "helm-provider-route",
+      "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "action_urn": "urn:helm:provider-route:provision",
+      "request_body_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "args_c14n_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "dispatch_deadline": "2026-07-19T01:04:00Z",
+      "replay_hint": "single_use_permit"
+    },
+    "verdict_public_key": "ed25519:23bc54912c1e6e92c4a86825c867e27ffdc555bffbd4244f17a26abfffee965d"
+  },
+  "canonicalization": "RFC8785_JCS_SAFE_INTEGER_INPUTS",
+  "certification_public_key": "ed25519:8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+  "contract_version": "1.1.0-alpha.1",
+  "effect_inputs": [
+    {
+      "effect_id": "PROVIDER_PROVISION",
+      "idempotency_key": "sha256:f921f17d52f89b73f421fe1e0e916ac7f60ee9c658c5cca9c580f8643cbf6f9e",
+      "input": {
+        "billing_cadence": "MONTHLY",
+        "budget_reservation_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "budget_reservation_ref": "budget-reservation-1",
+        "budget_verdict_receipt_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "commitment_term": "MONTH_TO_MONTH",
+        "compensation_graph_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "constraint_set_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "effect_id": "PROVIDER_PROVISION",
+        "effect_ordinal": 1,
+        "failure_teardown_policy_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generated_spec_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "gross_cap_currency": "EUR",
+        "gross_cap_minor": 1200,
+        "gross_exposure_minor": 1200,
+        "jurisdiction": "EU",
+        "mission_id": "mission-1",
+        "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "provider": "digitalocean",
+        "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "provider_account_ref": "provider-account-1",
+        "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
+        "provider_capability_profile_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "provider_capability_profile_ref": "do-profile-1",
+        "provider_certification_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "provider_certification_ref": "do-certification-1",
+        "provider_connector_contract_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "provider_connector_id": "digitalocean-app-platform",
+        "provider_payload_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "provider_terms_profile_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "region": "fra",
+        "repository_analysis_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "repository_analysis_ref": "analysis-1",
+        "resource_graph_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "route_binding_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "route_binding_ref": "route-1",
+        "route_placement_id": "placement-1",
+        "route_quote_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "route_quote_ref": "route-quote-1",
+        "schema_version": "launch_effect_input.v1",
+        "spend_envelope_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "spend_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "teardown_authority_mode": "FRESH_DUAL_CONTROL_REQUIRED",
+        "tenant_id": "tenant-1",
+        "workload_graph_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "workload_graph_ref": "workload-graph-1",
+        "workspace_id": "workspace-1"
+      }
+    },
+    {
+      "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+      "idempotency_key": "sha256:ede0de2921f564f59eea19913fc8f1eb2dc9e2a199ccf0ed55067306e5c6715c",
+      "input": {
+        "activation_class": "RELEASE_CUTOVER",
+        "activation_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "compensation_class": "RELEASE_ROLLBACK",
+        "compensation_plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "compensation_target_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "compensation_target_ref": "deployment-state-1",
+        "connector_contract_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "deployment_id": "deployment-2",
+        "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+        "effect_ordinal": 2,
+        "endpoint_set_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "exposure_kind": "ENDPOINT",
+        "health_evidence_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "immutable_artifact_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "jurisdiction": "EU",
+        "mission_id": "mission-1",
+        "plan_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "primary_endpoint": "https://mission-1.ondigitalocean.app",
+        "promotion_permit_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "promotion_permit_ref": "promotion-permit-1",
+        "provenance_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "provenance_ref": "provenance-1",
+        "provider": "digitalocean",
+        "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "provider_account_ref": "provider-account-1",
+        "provider_action_urn": "urn:helm:connector:digitalocean:apps:activate",
+        "provider_capability_profile_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "provider_capability_profile_ref": "do-profile-1",
+        "provider_certification_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "provider_certification_ref": "do-certification-1",
+        "provider_connector_contract_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "provider_connector_id": "digitalocean-app-platform",
+        "provider_payload_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "provision_receipt_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "provision_receipt_ref": "provision-receipt-1",
+        "region": "fra",
+        "release_manifest_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "release_manifest_ref": "release-manifest-1",
+        "resource_graph_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "resource_graph_ref": "resource-graph-1",
+        "rollback_authorization_mode": "PREAUTHORIZED_EXACT_TARGET",
+        "rollback_permit_expiry": "2026-07-19T01:05:00Z",
+        "rollback_permit_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "rollback_permit_ref": "rollback-permit-1",
+        "route_binding_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "route_binding_ref": "route-1",
+        "route_placement_id": "placement-1",
+        "schema_version": "launch_effect_input.v1",
+        "source_commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_state_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "source_state_ref": "deployment-state-1",
+        "target_state_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "target_state_ref": "deployment-state-2",
+        "tenant_id": "tenant-1",
+        "tls_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "transition_plan_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "transition_plan_ref": "transition-plan-1",
+        "verification_plan_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "workload_graph_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "workload_graph_ref": "workload-graph-1",
+        "workspace_id": "workspace-1"
+      }
+    },
+    {
+      "effect_id": "SPEND_AUTHORIZE",
+      "idempotency_key": "sha256:47472ae4fc905eb20b1fbb3858b6fef6d189aee269bc43d8cfaf66d0d4113553",
+      "input": {
+        "authorization_horizon_months": 1,
+        "authorized_at": "2026-07-19T01:00:00Z",
+        "base_provider_cost_minor": 1050,
+        "billing_cadence": "MONTHLY",
+        "budget_reservation_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "budget_reservation_ref": "budget-reservation-1",
+        "budget_verdict_receipt_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "commitment_term": "MONTH_TO_MONTH",
+        "connector_contract_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "constraint_set_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "credit_snapshot_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "credit_status": "ACTIVE_CREDIT_VERIFIED",
+        "currency": "EUR",
+        "effect_id": "SPEND_AUTHORIZE",
+        "effect_ordinal": 0,
+        "expected_cash_minor": 950,
+        "expires_at": "2026-07-19T01:05:00Z",
+        "fx_snapshot_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "gross_cap_minor": 1200,
+        "gross_exposure_minor": 1200,
+        "helm_auto_renews_authority": false,
+        "mission_id": "mission-1",
+        "plan_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "price_snapshot_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "provider": "digitalocean",
+        "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "provider_account_ref": "provider-account-1",
+        "provider_capability_profile_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "provider_capability_profile_ref": "do-profile-1",
+        "provider_certification_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "provider_certification_ref": "do-certification-1",
+        "provider_service_renews": true,
+        "provider_terms_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "quote_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "recurring_exposure": true,
+        "route_binding_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "route_binding_ref": "route-1",
+        "route_placement_id": "placement-1",
+        "schema_version": "launch_effect_input.v1",
+        "spend_envelope_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "spend_intent_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "tax_fx_reserve_minor": 150,
+        "tax_snapshot_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "tenant_id": "tenant-1",
+        "verified_credit_minor": 250,
+        "workload_graph_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "workload_graph_ref": "workload-graph-1",
+        "workspace_id": "workspace-1"
+      }
+    },
+    {
+      "effect_id": "PROVIDER_ROLLBACK",
+      "idempotency_key": "sha256:82defc4ae5cc59802de3bd2d5825fc23b5641196ea330ffae0c1bc03f7b5aa84",
+      "input": {
+        "compensation_class": "RELEASE_ROLLBACK",
+        "compensation_plan_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "compensation_plan_ref": "compensation-plan-1",
+        "connector_contract_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "effect_id": "PROVIDER_ROLLBACK",
+        "effect_ordinal": 3,
+        "jurisdiction": "EU",
+        "mission_id": "mission-1",
+        "origin_activation_receipt_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "origin_activation_receipt_ref": "activation-receipt-1",
+        "plan_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "provider": "digitalocean",
+        "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "provider_account_ref": "provider-account-1",
+        "provider_action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
+        "provider_capability_profile_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "provider_capability_profile_ref": "do-profile-1",
+        "provider_certification_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "provider_certification_ref": "do-certification-1",
+        "provider_connector_contract_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "provider_connector_id": "digitalocean-app-platform",
+        "provider_payload_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "provision_receipt_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "provision_receipt_ref": "provision-receipt-1",
+        "reason": "health_check_failure",
+        "region": "fra",
+        "resource_graph_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "resource_graph_ref": "resource-graph-1",
+        "resource_ownership_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "rollback_authorization_mode": "PREAUTHORIZED_EXACT_TARGET",
+        "rollback_permit_expiry": "2026-07-19T01:05:00Z",
+        "rollback_permit_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "rollback_permit_ref": "rollback-permit-1",
+        "route_binding_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "route_binding_ref": "route-1",
+        "route_placement_id": "placement-1",
+        "schema_version": "launch_effect_input.v1",
+        "source_artifact_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "source_deployment_id": "deployment-2",
+        "source_state_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "source_state_ref": "deployment-state-2",
+        "target_artifact_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "target_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "target_deployment_id": "deployment-1",
+        "target_health_evidence_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "target_state_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "target_state_ref": "deployment-state-1",
+        "tenant_id": "tenant-1",
+        "verification_plan_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "workload_graph_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "workload_graph_ref": "workload-graph-1",
+        "workspace_id": "workspace-1"
+      }
+    },
+    {
+      "effect_id": "PROVIDER_TEARDOWN",
+      "idempotency_key": "sha256:e69036f831cbb2cf2b5886a84001b1c743de1ea42a0b35b2d16b482d1f755040",
+      "input": {
+        "backup_clearance_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "billing_exposure_snapshot_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "dependency_snapshot_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "effect_id": "PROVIDER_TEARDOWN",
+        "effect_ordinal": 4,
+        "expected_deleted_state_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "fresh_teardown_approval_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "fresh_teardown_approval_ref": "teardown-approval-1",
+        "jurisdiction": "EU",
+        "mission_id": "mission-1",
+        "observed_state_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "provider": "digitalocean",
+        "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "provider_account_ref": "provider-account-1",
+        "provider_action_urn": "urn:helm:connector:digitalocean:apps:delete",
+        "provider_capability_profile_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "provider_capability_profile_ref": "do-profile-1",
+        "provider_certification_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "provider_certification_ref": "do-certification-1",
+        "provider_connector_contract_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "provider_connector_id": "digitalocean-app-platform",
+        "provider_payload_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "provision_receipt_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "provision_receipt_ref": "provision-receipt-1",
+        "region": "fra",
+        "resource_empty_evidence_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "resource_graph_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "resource_graph_ref": "resource-graph-1",
+        "resource_ownership_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "retention_clearance_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "route_binding_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "route_binding_ref": "route-1",
+        "route_placement_id": "placement-1",
+        "schema_version": "launch_effect_input.v1",
+        "teardown_plan_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tenant_id": "tenant-1",
+        "workload_graph_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "workload_graph_ref": "workload-graph-1",
+        "workspace_id": "workspace-1"
+      }
+    },
+    {
+      "effect_id": "COMPANY_ARTIFACT_UPDATE",
+      "idempotency_key": "sha256:96a29180140e798be4adb5d6f219fa4a466ee0aca01a12135afc601ea375d591",
+      "input": {
+        "artifact_id": "company-artifact-1",
+        "company_state_version": 7,
+        "connector_contract_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "effect_id": "COMPANY_ARTIFACT_UPDATE",
+        "effect_ordinal": 5,
+        "evidence_pack_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "evidence_pack_ref": "evidencepack-1",
+        "generated_spec_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "launch_result_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "mission_id": "mission-1",
+        "new_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "plan_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "previous_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "reconciliation_receipt_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "schema_version": "launch_effect_input.v1",
+        "source_receipt_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "source_receipt_ref": "receipt-1",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1"
+      }
+    }
+  ],
+  "integer_equivalence": [
+    "1",
+    "1.0",
+    "1e0"
+  ],
+  "negative_vectors": [
+    {
+      "expected_error": "hash_mismatch",
+      "id": "route_hash_tamper"
+    },
+    {
+      "expected_error": "signature_rejected",
+      "id": "verdict_signature_tamper"
+    },
+    {
+      "expected_error": "receipt_id_mismatch",
+      "id": "receipt_result_tamper"
+    },
+    {
+      "expected_error": "unsafe_integer",
+      "id": "unsafe_integer"
+    }
+  ],
+  "quantum_posture": "classical_ed25519_only",
+  "receipt": {
+    "public_key": "ed25519:23bc54912c1e6e92c4a86825c867e27ffdc555bffbd4244f17a26abfffee965d",
+    "value": {
+      "schema_version": "launch_effect_receipt.v1",
+      "receipt_version": "1.0",
+      "kind": "helm_native_receipt",
+      "receipt_id": "675002022f4ed03642308fc4520508e488f0368b26d91c9b717d825138ef8bc7",
+      "receipt_chain_id": "sha256:eef556ae91a6199d34a0c513a17dac94ce4673759eaed65ef966b8aeeb2c6cdb",
+      "receipt_revision": 1,
+      "reconciliation_revision": 0,
+      "decision_id": "verdict-1",
+      "effect_id": "PROVIDER_PROVISION",
+      "verdict": "ALLOW",
+      "principal": "spiffe://helm/data-plane-1",
+      "audience": "launch.dispatch",
+      "kernel_trust_root_id": "kernel-root-1",
+      "tool": "helm-provider-route",
+      "action": "urn:helm:provider-route:provision",
+      "timestamp": "2026-07-18T12:03:00Z",
+      "lamport": 1,
+      "proofgraph_node": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "signer_key_id": "kernel-key-1",
+      "payload_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "metadata": {
+        "profile": "launch_effect_receipt.v1",
+        "redaction_profile_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      "tenant_id": "tenant-1",
+      "workspace_id": "workspace-1",
+      "mission_id": "mission-1",
+      "effect_ordinal": 1,
+      "input_schema_hash": "sha256:366126ae4e96bf9b3d76c7e68a921e51bb449eea2aa225555e2bbe5c01465d91",
+      "input_hash": "sha256:56fd50b82d67288a2e259ef9dd9b672b93551cf062ce5b968b97f5c10827ea18",
+      "idempotency_key": "sha256:56fd50b82d67288a2e259ef9dd9b672b93551cf062ce5b968b97f5c10827ea18",
+      "request_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "result_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "kernel_verdict_ref": "verdict-1",
+      "kernel_verdict_hash": "sha256:14a0b6f99aed33c55cf8e9dea4cff6cefba950c9c55ed578f8fba065e78ecd99",
+      "approval_artifact_ref": "launch-grant-PROVIDER_PROVISION",
+      "approval_artifact_hash": "sha256:bde0e445afe2875af6d2fbbde04522fff5e5212d53ec0daca67164637a93c7d8",
+      "approval_consumption_ref": "approval-consumption:launch-grant-PROVIDER_PROVISION",
+      "approval_consumption_hash": "sha256:8e4ce0b4cdb161fc5c122852e27b817649631ac28efab3ed98563bfec6559517",
+      "effect_permit_ref": "permit-1",
+      "effect_permit_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "permit_nonce": "0123456789abcdefABCDEF",
+      "permit_consumption_ref": "permit-consumption-1",
+      "permit_consumption_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_epoch": "epoch-1",
+      "emergency_fence_epoch": 4,
+      "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "reconciliation_locator_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "outcome": "UNKNOWN",
+      "reconciliation_status": "PENDING",
+      "dependency_state": "FROZEN",
+      "dependency_set_ref": "dependency-set-1",
+      "dependency_set_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "dependency_state_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "route_binding_ref": "route-1",
+      "route_binding_hash": "sha256:0cf3a2c9f6731668ac3ba6de82b45e5894d5e7049f95ae508e961b0dc795440a",
+      "route_placement_id": "placement-1",
+      "provider_capability_profile_ref": "digitalocean-candidate",
+      "provider_capability_profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+      "provider_certification_ref": "certification-1",
+      "provider_certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+      "offer_snapshot_ref": "offer-snapshot-1",
+      "offer_snapshot_hash": "sha256:042ca6a9fc9ba1619bcab69e0b201d0d3cee2dc610e4ee8ed3c91458775c8ada",
+      "price_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "signature": "Dvx1Wfior8qqHk2602Ryhrr74KNKbHTNqRybSTN98aZXxSQTR0X13aAY5VxNZevkh7ZiVmQW1LySIqFKw+WhAw=="
+    }
+  },
+  "schema_version": "launch-mission-reference-v1",
+  "universal_route": {
+    "artifact_hashes": {
+      "constraint_set": "sha256:ef0ee0df2951ac7719cf2db431a995ec636cc349cb1dbe6cb39397baa54baac9",
+      "offer_snapshots": {
+        "offer-data": "sha256:3c48fd4fbb8f5844f29667decbdb9c2acef8df705ad270c3dfe1e332a770318b",
+        "offer-edge": "sha256:35338ab02bd9409dc31b52ae731a615898d2e2ce13662ac90a03d729143d3f3f"
+      },
+      "provider_capability_profiles": {
+        "data-cloud-candidate": "sha256:ff581f570e0c10c585ed91ab3000073d01720c1cb61e71b55de264282dd68339",
+        "edge-cloud-candidate": "sha256:2cb87cf20c3ecb61dd4be3ffa1fe704281b51bbd882020f3a801521b39b89b8a"
+      },
+      "provider_payload_set": "sha256:5730f1a725245935e84770d8cd6083796fd8d0a0f6253261b967c16e913d1bba",
+      "repository_analysis": "sha256:07e87c754013eebf32409057b32d5e3baa809b964fb2953d71603bc3e0d8fa6c",
+      "resource_graph": "sha256:737a8077765eae261e4d8ded96aa44a991c2e66517d649193e0cac9ffff34c8d",
+      "route_binding": "sha256:d781ad5dc676ca7e8f7ff6e41065bac019104fd45aa4474d44e7dfc63fc306f2",
+      "route_quote": "sha256:cf916e662d553f339208a78dedb480d4832095c22257ded3921dfc220bce6dab",
+      "workload_graph": "sha256:bde688c74edfbb4c2d24619379c231ff227667039fc0b28fe3fa6ee9723d342d"
+    },
+    "artifacts": {
+      "constraint_set": {
+        "schema_version": "launch_constraint_set.v1",
+        "constraint_set_id": "constraints-1",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "mission_id": "mission-1",
+        "maximum_gross_currency": "EUR",
+        "maximum_gross_minor": 5000,
+        "allowed_providers": [],
+        "allowed_jurisdictions": [
+          "EU"
+        ],
+        "required_residency_tags": [
+          "eu"
+        ],
+        "allowed_commitment_terms": [
+          "monthly"
+        ],
+        "required_route_capabilities": [],
+        "policy_expression_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "offer_snapshots": {
+        "offer-data": {
+          "schema_version": "launch_offer_snapshot.v1",
+          "snapshot_id": "offer-data",
+          "tenant_id": "tenant-1",
+          "workspace_id": "workspace-1",
+          "provider_id": "data-cloud",
+          "provider_account_ref": "account:data",
+          "provider_account_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "official_source_url": "https://example.invalid/data-cloud/official-offers",
+          "content_version_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "terms_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "exclusions_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "status": "NONE",
+          "currency": "EUR",
+          "verified_credit_minor": 0,
+          "evidence_refs": [
+            "evidence:offer-data"
+          ],
+          "retrieved_at": "2026-07-19T00:00:00Z",
+          "expires_at": "2026-07-19T13:00:00Z"
+        },
+        "offer-edge": {
+          "schema_version": "launch_offer_snapshot.v1",
+          "snapshot_id": "offer-edge",
+          "tenant_id": "tenant-1",
+          "workspace_id": "workspace-1",
+          "provider_id": "edge-cloud",
+          "provider_account_ref": "account:web",
+          "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "official_source_url": "https://example.invalid/edge-cloud/official-offers",
+          "content_version_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "terms_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "exclusions_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "status": "NONE",
+          "currency": "EUR",
+          "verified_credit_minor": 0,
+          "evidence_refs": [
+            "evidence:offer-edge"
+          ],
+          "retrieved_at": "2026-07-19T00:00:00Z",
+          "expires_at": "2026-07-19T13:00:00Z"
+        }
+      },
+      "provider_capability_profiles": {
+        "data-cloud-candidate": {
+          "schema_version": "launch_provider_capability_profile.v1",
+          "profile_id": "data-cloud-candidate",
+          "provider_id": "data-cloud",
+          "connector_id": "data-connector",
+          "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "profile_version": "candidate-1",
+          "profile_status": "CANDIDATE",
+          "regions": [
+            {
+              "region_id": "eu-data",
+              "jurisdiction": "EU",
+              "residency_tags": [
+                "eu"
+              ],
+              "offerings": [
+                {
+                  "offering_id": "postgres",
+                  "supported_workload_kinds": [
+                    "database"
+                  ],
+                  "supported_capabilities": [
+                    "managed-postgresql",
+                    "persistent-storage"
+                  ],
+                  "supported_lifecycle_classes": [
+                    "STATEFUL_DATA"
+                  ]
+                }
+              ]
+            }
+          ],
+          "actions": [
+            {
+              "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+              "action_urn": "urn:test:data:activate",
+              "reconciliation_mode": "OPERATION_POLL",
+              "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+              "supported_transition_classes": [
+                "RELEASE_CUTOVER",
+                "RESOURCE_STATE_TRANSITION"
+              ],
+              "supported_compensation_classes": []
+            },
+            {
+              "effect_id": "PROVIDER_PROVISION",
+              "action_urn": "urn:test:data:provision",
+              "reconciliation_mode": "OPERATION_POLL",
+              "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+              "supported_transition_classes": [],
+              "supported_compensation_classes": []
+            },
+            {
+              "effect_id": "PROVIDER_ROLLBACK",
+              "action_urn": "urn:test:data:rollback",
+              "reconciliation_mode": "OPERATION_POLL",
+              "idempotency_mode": "COMPARE_AND_SET",
+              "supported_transition_classes": [],
+              "supported_compensation_classes": [
+                "RELEASE_ROLLBACK",
+                "RESOURCE_STATE_RESTORE"
+              ]
+            },
+            {
+              "effect_id": "PROVIDER_TEARDOWN",
+              "action_urn": "urn:test:data:teardown",
+              "reconciliation_mode": "READ_AFTER_WRITE",
+              "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+              "supported_transition_classes": [],
+              "supported_compensation_classes": []
+            }
+          ],
+          "pricing_evidence_ref": "fixture://data-cloud/pricing",
+          "pricing_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "terms_evidence_ref": "fixture://data-cloud/terms",
+          "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "retrieved_at": "2026-07-19T00:00:00Z",
+          "expires_at": "2026-07-20T00:00:00Z"
+        },
+        "edge-cloud-candidate": {
+          "schema_version": "launch_provider_capability_profile.v1",
+          "profile_id": "edge-cloud-candidate",
+          "provider_id": "edge-cloud",
+          "connector_id": "edge-connector",
+          "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "profile_version": "candidate-1",
+          "profile_status": "CANDIDATE",
+          "regions": [
+            {
+              "region_id": "eu-edge",
+              "jurisdiction": "EU",
+              "residency_tags": [
+                "eu"
+              ],
+              "offerings": [
+                {
+                  "offering_id": "app",
+                  "supported_workload_kinds": [
+                    "http_service"
+                  ],
+                  "supported_capabilities": [
+                    "https-endpoint",
+                    "stateless-runtime"
+                  ],
+                  "supported_lifecycle_classes": [
+                    "EPHEMERAL"
+                  ]
+                }
+              ]
+            }
+          ],
+          "actions": [
+            {
+              "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+              "action_urn": "urn:test:edge:activate",
+              "reconciliation_mode": "OPERATION_POLL",
+              "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+              "supported_transition_classes": [
+                "RELEASE_CUTOVER",
+                "RESOURCE_STATE_TRANSITION"
+              ],
+              "supported_compensation_classes": []
+            },
+            {
+              "effect_id": "PROVIDER_PROVISION",
+              "action_urn": "urn:test:edge:provision",
+              "reconciliation_mode": "OPERATION_POLL",
+              "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+              "supported_transition_classes": [],
+              "supported_compensation_classes": []
+            },
+            {
+              "effect_id": "PROVIDER_ROLLBACK",
+              "action_urn": "urn:test:edge:rollback",
+              "reconciliation_mode": "OPERATION_POLL",
+              "idempotency_mode": "COMPARE_AND_SET",
+              "supported_transition_classes": [],
+              "supported_compensation_classes": [
+                "RELEASE_ROLLBACK",
+                "RESOURCE_STATE_RESTORE"
+              ]
+            },
+            {
+              "effect_id": "PROVIDER_TEARDOWN",
+              "action_urn": "urn:test:edge:teardown",
+              "reconciliation_mode": "READ_AFTER_WRITE",
+              "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+              "supported_transition_classes": [],
+              "supported_compensation_classes": []
+            }
+          ],
+          "pricing_evidence_ref": "fixture://edge-cloud/pricing",
+          "pricing_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "terms_evidence_ref": "fixture://edge-cloud/terms",
+          "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "retrieved_at": "2026-07-19T00:00:00Z",
+          "expires_at": "2026-07-20T00:00:00Z"
+        }
+      },
+      "provider_payload_set": {
+        "schema_version": "launch_provider_payload_set.v1",
+        "payload_set_id": "payloads-multi",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "mission_id": "mission-1",
+        "entries": [
+          {
+            "placement_id": "placement-a",
+            "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+            "provider_action_urn": "urn:test:edge:activate",
+            "payload_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "placement_id": "placement-a",
+            "effect_id": "PROVIDER_PROVISION",
+            "provider_action_urn": "urn:test:edge:provision",
+            "payload_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          {
+            "placement_id": "placement-b",
+            "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+            "provider_action_urn": "urn:test:data:activate",
+            "payload_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          },
+          {
+            "placement_id": "placement-b",
+            "effect_id": "PROVIDER_PROVISION",
+            "provider_action_urn": "urn:test:data:provision",
+            "payload_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          }
+        ]
+      },
+      "repository_analysis": {
+        "schema_version": "launch_repository_analysis.v1",
+        "analysis_id": "analysis-1",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "source_connection_ref": "source:repo-1",
+        "source_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_tree_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "analyzer_contract_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "status": "SUPPORTED",
+        "workload_graph_ref": "graph-multi",
+        "workload_graph_hash": "sha256:bde688c74edfbb4c2d24619379c231ff227667039fc0b28fe3fa6ee9723d342d",
+        "finding_set_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "analyzed_at": "2026-07-19T01:00:00Z"
+      },
+      "resource_graph": {
+        "schema_version": "launch_resource_graph.v1",
+        "resource_graph_id": "resources-multi",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "mission_id": "mission-1",
+        "nodes": [
+          {
+            "resource_id": "resource-api",
+            "placement_id": "placement-a",
+            "workload_node_id": "api",
+            "resource_kind": "service",
+            "lifecycle_class": "EPHEMERAL",
+            "desired_state_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+            "ownership_tag_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+          },
+          {
+            "resource_id": "resource-db",
+            "placement_id": "placement-b",
+            "workload_node_id": "database",
+            "resource_kind": "managed-database",
+            "lifecycle_class": "STATEFUL_DATA",
+            "desired_state_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "ownership_tag_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "edges": [
+          {
+            "from_resource_id": "resource-api",
+            "to_resource_id": "resource-db",
+            "relationship": "writes_to"
+          }
+        ]
+      },
+      "route_binding": {
+        "schema_version": "launch_route_binding.v1",
+        "route_id": "route-multi",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "mission_id": "mission-1",
+        "repository_analysis_ref": "analysis-1",
+        "repository_analysis_hash": "sha256:07e87c754013eebf32409057b32d5e3baa809b964fb2953d71603bc3e0d8fa6c",
+        "workload_graph_ref": "graph-multi",
+        "workload_graph_hash": "sha256:bde688c74edfbb4c2d24619379c231ff227667039fc0b28fe3fa6ee9723d342d",
+        "constraint_set_ref": "constraints-1",
+        "constraint_set_hash": "sha256:ef0ee0df2951ac7719cf2db431a995ec636cc349cb1dbe6cb39397baa54baac9",
+        "route_quote_ref": "quote-multi",
+        "route_quote_hash": "sha256:cf916e662d553f339208a78dedb480d4832095c22257ded3921dfc220bce6dab",
+        "resource_graph_ref": "resources-multi",
+        "resource_graph_hash": "sha256:737a8077765eae261e4d8ded96aa44a991c2e66517d649193e0cac9ffff34c8d",
+        "provider_payload_set_ref": "payloads-multi",
+        "provider_payload_set_hash": "sha256:5730f1a725245935e84770d8cd6083796fd8d0a0f6253261b967c16e913d1bba",
+        "generated_spec_ref": "generated-spec-multi",
+        "generated_spec_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "placements": [
+          {
+            "placement_id": "placement-a",
+            "workload_node_ids": [
+              "api"
+            ],
+            "provider_profile_ref": "edge-cloud-candidate",
+            "provider_profile_hash": "sha256:2cb87cf20c3ecb61dd4be3ffa1fe704281b51bbd882020f3a801521b39b89b8a",
+            "provider_id": "edge-cloud",
+            "provider_account_ref": "account:web",
+            "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "region_id": "eu-edge",
+            "jurisdiction": "EU",
+            "offering_id": "app",
+            "provider_connector_id": "edge-connector",
+            "provider_connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "action_bindings": [
+              {
+                "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+                "provider_action_urn": "urn:test:edge:activate",
+                "provider_payload_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              {
+                "effect_id": "PROVIDER_PROVISION",
+                "provider_action_urn": "urn:test:edge:provision",
+                "provider_payload_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            ],
+            "resource_subset_hash": "sha256:c2923dbe96130f57f515ef4d84f1dfb8b0b15ed285780aa6e5ff1c007cdd665c",
+            "provider_payload_subset_hash": "sha256:077426d91f5a810cd27a3810dc11395844fe2fa5492efe65a35100eca1910903"
+          },
+          {
+            "placement_id": "placement-b",
+            "workload_node_ids": [
+              "database"
+            ],
+            "provider_profile_ref": "data-cloud-candidate",
+            "provider_profile_hash": "sha256:ff581f570e0c10c585ed91ab3000073d01720c1cb61e71b55de264282dd68339",
+            "provider_id": "data-cloud",
+            "provider_account_ref": "account:data",
+            "provider_account_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "region_id": "eu-data",
+            "jurisdiction": "EU",
+            "offering_id": "postgres",
+            "provider_connector_id": "data-connector",
+            "provider_connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "action_bindings": [
+              {
+                "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+                "provider_action_urn": "urn:test:data:activate",
+                "provider_payload_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+              },
+              {
+                "effect_id": "PROVIDER_PROVISION",
+                "provider_action_urn": "urn:test:data:provision",
+                "provider_payload_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              }
+            ],
+            "resource_subset_hash": "sha256:6637fc4de7d0ffb3c6b7c555c812f188cd495a697a160f994aedeb648d87c57e",
+            "provider_payload_subset_hash": "sha256:58185691d48b87d97408e54702a25c1946a32d81c43bb1708a19252a6c889c0a"
+          }
+        ],
+        "placement_dependencies": [
+          {
+            "from_placement_id": "placement-a",
+            "to_placement_id": "placement-b",
+            "relationship": "writes_to",
+            "workload_edge_hash": "sha256:77263580f59db3b5f36883f831af9af669604312ba780b460afe62cfe9251756"
+          }
+        ],
+        "expires_at": "2026-07-19T11:00:00Z"
+      },
+      "route_quote": {
+        "schema_version": "launch_route_quote.v1",
+        "quote_id": "quote-multi",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "mission_id": "mission-1",
+        "workload_graph_hash": "sha256:bde688c74edfbb4c2d24619379c231ff227667039fc0b28fe3fa6ee9723d342d",
+        "constraint_set_hash": "sha256:ef0ee0df2951ac7719cf2db431a995ec636cc349cb1dbe6cb39397baa54baac9",
+        "currency": "EUR",
+        "placement_costs": [
+          {
+            "placement_id": "placement-a",
+            "provider_id": "edge-cloud",
+            "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "region_id": "eu-edge",
+            "offering_id": "app",
+            "billing_cadence": "monthly",
+            "commitment_term": "monthly",
+            "base_cost_minor": 1000,
+            "tax_fx_reserve_minor": 100,
+            "gross_exposure_minor": 1100,
+            "verified_credit_minor": 0,
+            "expected_cash_minor": 1100,
+            "credit_status": "NONE",
+            "offer_snapshot_ref": "offer-edge",
+            "offer_snapshot_hash": "sha256:35338ab02bd9409dc31b52ae731a615898d2e2ce13662ac90a03d729143d3f3f",
+            "price_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "placement_id": "placement-b",
+            "provider_id": "data-cloud",
+            "provider_account_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "region_id": "eu-data",
+            "offering_id": "postgres",
+            "billing_cadence": "monthly",
+            "commitment_term": "monthly",
+            "base_cost_minor": 2000,
+            "tax_fx_reserve_minor": 200,
+            "gross_exposure_minor": 2200,
+            "verified_credit_minor": 0,
+            "expected_cash_minor": 2200,
+            "credit_status": "NONE",
+            "offer_snapshot_ref": "offer-data",
+            "offer_snapshot_hash": "sha256:3c48fd4fbb8f5844f29667decbdb9c2acef8df705ad270c3dfe1e332a770318b",
+            "price_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "base_provider_cost_minor": 3000,
+        "tax_fx_reserve_minor": 300,
+        "gross_exposure_minor": 3300,
+        "verified_credit_minor": 0,
+        "expected_cash_minor": 3300,
+        "credit_status": "NONE",
+        "credit_snapshot_hash": "sha256:6ef65422e98115669a2226340c2c59d0bb88d1f0765086eef7b1dcd17664ffa0",
+        "fx_snapshot_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "tax_snapshot_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "commercial_evidence_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "retrieved_at": "2026-07-19T00:00:00Z",
+        "expires_at": "2026-07-19T12:00:00Z"
+      },
+      "workload_graph": {
+        "schema_version": "launch_workload_graph.v1",
+        "graph_id": "graph-multi",
+        "tenant_id": "tenant-1",
+        "workspace_id": "workspace-1",
+        "source_commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_tree_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "nodes": [
+          {
+            "node_id": "api",
+            "kind": "http_service",
+            "lifecycle_class": "EPHEMERAL",
+            "definition_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "requirements_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+            "required_capabilities": [
+              "https-endpoint",
+              "stateless-runtime"
+            ],
+            "deployability": "SUPPORTED"
+          },
+          {
+            "node_id": "database",
+            "kind": "database",
+            "lifecycle_class": "STATEFUL_DATA",
+            "definition_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "requirements_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+            "required_capabilities": [
+              "managed-postgresql",
+              "persistent-storage"
+            ],
+            "deployability": "SUPPORTED"
+          }
+        ],
+        "edges": [
+          {
+            "from_node_id": "api",
+            "to_node_id": "database",
+            "relationship": "writes_to"
+          }
+        ],
+        "unknown_set_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    },
+    "purpose": "provider-neutral multi-placement route for an ephemeral API and stateful database"
+  }
+}

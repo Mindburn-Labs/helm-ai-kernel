@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/route_quote.v1.json",
+  "version": "1.1.0-alpha.1",
+  "title": "Launch Route Quote (Preview)",
+  "description": "Exact multi-provider cost quote. Gross exposure is independent from verified credit; unverified credit can never reduce expected cash.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "quote_id", "tenant_id", "workspace_id", "mission_id", "workload_graph_hash", "constraint_set_hash", "currency", "placement_costs", "base_provider_cost_minor", "tax_fx_reserve_minor", "gross_exposure_minor", "verified_credit_minor", "expected_cash_minor", "credit_status", "credit_snapshot_hash", "fx_snapshot_hash", "tax_snapshot_hash", "commercial_evidence_hash", "retrieved_at", "expires_at"],
+  "properties": {
+    "schema_version": { "const": "launch_route_quote.v1" },
+    "quote_id": { "$ref": "#/$defs/non_empty" },
+    "tenant_id": { "$ref": "#/$defs/non_empty" },
+    "workspace_id": { "$ref": "#/$defs/non_empty" },
+    "mission_id": { "$ref": "#/$defs/non_empty" },
+    "workload_graph_hash": { "$ref": "#/$defs/hash" },
+    "constraint_set_hash": { "$ref": "#/$defs/hash" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "placement_costs": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["placement_id", "provider_id", "provider_account_hash", "region_id", "offering_id", "billing_cadence", "commitment_term", "base_cost_minor", "tax_fx_reserve_minor", "gross_exposure_minor", "verified_credit_minor", "expected_cash_minor", "credit_status", "offer_snapshot_ref", "offer_snapshot_hash", "price_evidence_hash", "terms_evidence_hash"],
+        "properties": {
+          "placement_id": { "$ref": "#/$defs/non_empty" },
+          "provider_id": { "$ref": "#/$defs/non_empty" },
+          "provider_account_hash": { "$ref": "#/$defs/hash" },
+          "region_id": { "$ref": "#/$defs/non_empty" },
+          "offering_id": { "$ref": "#/$defs/non_empty" },
+          "billing_cadence": { "$ref": "#/$defs/non_empty" },
+          "commitment_term": { "$ref": "#/$defs/non_empty" },
+          "base_cost_minor": { "$ref": "#/$defs/minor" },
+          "tax_fx_reserve_minor": { "$ref": "#/$defs/minor" },
+          "gross_exposure_minor": { "$ref": "#/$defs/minor" },
+          "verified_credit_minor": { "$ref": "#/$defs/minor" },
+          "expected_cash_minor": { "$ref": "#/$defs/minor" },
+          "credit_status": { "$ref": "#/$defs/credit_status" },
+          "offer_snapshot_ref": { "$ref": "#/$defs/non_empty" },
+          "offer_snapshot_hash": { "$ref": "#/$defs/hash" },
+          "price_evidence_hash": { "$ref": "#/$defs/hash" },
+          "terms_evidence_hash": { "$ref": "#/$defs/hash" }
+        }
+      }
+    },
+    "base_provider_cost_minor": { "$ref": "#/$defs/minor" },
+    "tax_fx_reserve_minor": { "$ref": "#/$defs/minor" },
+    "gross_exposure_minor": { "$ref": "#/$defs/minor" },
+    "verified_credit_minor": { "$ref": "#/$defs/minor" },
+    "expected_cash_minor": { "$ref": "#/$defs/minor" },
+    "credit_status": { "$ref": "#/$defs/credit_status" },
+    "credit_snapshot_hash": { "$ref": "#/$defs/hash" },
+    "fx_snapshot_hash": { "$ref": "#/$defs/hash" },
+    "tax_snapshot_hash": { "$ref": "#/$defs/hash" },
+    "commercial_evidence_hash": { "$ref": "#/$defs/hash" },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 },
+    "minor": { "type": "integer", "minimum": 0 },
+    "credit_status": { "enum": ["ACTIVE_CREDIT_VERIFIED", "MAY_QUALIFY", "NONE", "UNKNOWN"] }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "credits_reduce_cash_not_cap": true }
+}

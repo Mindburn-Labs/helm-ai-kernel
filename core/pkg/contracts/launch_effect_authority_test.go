@@ -1,13 +1,20 @@
 package contracts_test
 
 import (
+	"bytes"
 	"crypto/ed25519"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
@@ -19,10 +26,10 @@ func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryAuthorityBinding(t *testi
 	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		t.Fatalf("signed launch authorization envelope rejected: %v", err)
 	}
-	if envelope.KernelVerdictHash != "sha256:4963424fab50a1087ddc5a079c0113193d338a2661bc8d038fd7853af0ce1c45" {
+	if envelope.KernelVerdictHash != "sha256:14a0b6f99aed33c55cf8e9dea4cff6cefba950c9c55ed578f8fba065e78ecd99" {
 		t.Fatalf("launch verdict hash = %s, want committed golden", envelope.KernelVerdictHash)
 	}
-	if envelope.KernelVerdictSignature != "ed25519:c5552cd0e67af119612469a38aa6d4638ecdd1dca0ad8de743edd53a76fe6adf80cd7ce300689e8a3ce5c63854c388a48342dfce7cfa85cb6b9f8eb9cc392804" {
+	if envelope.KernelVerdictSignature != "ed25519:fd9d50809fbf74537ab216ef41ea99db605e7bdb5e1e3aff78ca1ed84b482c8f8375cdacf29bcef9cf73cc3e76f231996916458e19f8d5ca320819b35dfe0504" {
 		t.Fatalf("launch verdict signature = %s, want committed golden", envelope.KernelVerdictSignature)
 	}
 	if len(publicKey) != ed25519.PublicKeySize {
@@ -31,7 +38,6 @@ func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryAuthorityBinding(t *testi
 }
 
 func TestLaunchEffectAuthorizationEnvelopeFailsClosed(t *testing.T) {
-	base, baseContext, privateKey, _ := launchAuthorizationFixture(t)
 	tests := []struct {
 		name   string
 		mutate func(*contracts.LaunchEffectAuthorizationEnvelope, *contracts.LaunchEffectEnvelopeVerificationContext)
@@ -39,6 +45,18 @@ func TestLaunchEffectAuthorizationEnvelopeFailsClosed(t *testing.T) {
 	}{
 		{name: "outer input identity", resign: true, mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, _ *contracts.LaunchEffectEnvelopeVerificationContext) {
 			envelope.TenantID = "tenant-cross-boundary"
+		}},
+		{name: "principal absent from consumed approval", resign: true, mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			envelope.Principal = "spiffe://helm/data-plane-other"
+			ctx.Permit.Principal = envelope.Principal
+		}},
+		{name: "audience absent from approval", resign: true, mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			envelope.Audience = "launch.observe"
+			ctx.Permit.Audience = envelope.Audience
+		}},
+		{name: "approval trust root", resign: true, mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			envelope.KernelTrustRootID = "kernel-root-other"
+			ctx.Permit.KernelTrustRootID = envelope.KernelTrustRootID
 		}},
 		{name: "input schema hash", resign: true, mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, _ *contracts.LaunchEffectEnvelopeVerificationContext) {
 			envelope.InputSchemaHash = launchHash("0")
@@ -49,8 +67,28 @@ func TestLaunchEffectAuthorizationEnvelopeFailsClosed(t *testing.T) {
 		{name: "missing schema validator", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
 			ctx.ValidateInput = nil
 		}},
-		{name: "missing provider route validator", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
-			ctx.ValidateProviderRoute = nil
+		{name: "missing schema resolver", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.ResolveInputSchema = nil
+		}},
+		{name: "missing provider route resolver", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.ResolveRouteBinding = nil
+		}},
+		{name: "missing canonical approval resolver", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.ResolveApprovalAuthority = nil
+		}},
+		{name: "missing canonical approval verifier", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.VerifyApprovalAuthority = nil
+		}},
+		{name: "invalid canonical approval signature", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			original := ctx.ResolveApprovalAuthority
+			ctx.ResolveApprovalAuthority = func(grantRef, grantHash, consumptionRef, consumptionHash string) (contracts.LaunchEffectApprovalAuthority, error) {
+				authority, err := original(grantRef, grantHash, consumptionRef, consumptionHash)
+				authority.GrantSignature = strings.Repeat("0", 128)
+				return authority, err
+			}
+		}},
+		{name: "dependency state", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.VerifyDependencyState = func(string, string) error { return fmt.Errorf("predecessor unresolved") }
 		}},
 		{name: "canonical input hash", resign: true, mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, _ *contracts.LaunchEffectEnvelopeVerificationContext) {
 			envelope.InputHash = launchHash("0")
@@ -86,13 +124,16 @@ func TestLaunchEffectAuthorizationEnvelopeFailsClosed(t *testing.T) {
 			ctx.MaximumPermitTTL = 4 * time.Minute
 		}},
 		{name: "expired verdict", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
-			ctx.Now = time.Date(2026, 7, 18, 12, 7, 0, 0, time.UTC)
+			ctx.Now = launchRoutingNow.Add(7 * time.Minute)
 		}},
 		{name: "untrusted verdict signer", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
 			ctx.ResolveVerdictKey = func(string) (ed25519.PublicKey, error) { return nil, fmt.Errorf("key absent from trust root") }
 		}},
-		{name: "missing atomic permit consumer", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
-			ctx.ConsumePermit = nil
+		{name: "missing atomic dispatch finalizer", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.FinalizeDispatch = nil
+		}},
+		{name: "active scoped stop at dispatch", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.FinalizeDispatch = func(contracts.LaunchEffectPermitBinding) error { return fmt.Errorf("scoped stop active") }
 		}},
 		{name: "signature", mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, _ *contracts.LaunchEffectEnvelopeVerificationContext) {
 			envelope.KernelVerdictSignature = "ed25519:" + strings.Repeat("0", 128)
@@ -103,9 +144,7 @@ func TestLaunchEffectAuthorizationEnvelopeFailsClosed(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			envelope := base
-			envelope.Input = cloneLaunchInput(t, base.Input)
-			ctx := baseContext
+			envelope, ctx, privateKey, _ := launchAuthorizationFixture(t)
 			test.mutate(&envelope, &ctx)
 			if test.resign {
 				var err error
@@ -118,6 +157,23 @@ func TestLaunchEffectAuthorizationEnvelopeFailsClosed(t *testing.T) {
 				t.Fatal("authority-binding mutation was accepted")
 			}
 		})
+	}
+}
+
+func TestLaunchEffectAuthorizationRejectsUnsignedRouteProbes(t *testing.T) {
+	envelope, ctx, _, _ := launchAuthorizationFixture(t)
+	var routeReads atomic.Int32
+	originalResolver := ctx.ResolveRouteBinding
+	ctx.ResolveRouteBinding = func(routeRef string) (contracts.LaunchRouteBinding, error) {
+		routeReads.Add(1)
+		return originalResolver(routeRef)
+	}
+	envelope.KernelVerdictSignature = "ed25519:" + strings.Repeat("0", 128)
+	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil {
+		t.Fatal("tampered Kernel verdict unexpectedly verified")
+	}
+	if routeReads.Load() != 0 {
+		t.Fatal("source-owned route registry was queried before Kernel signature verification")
 	}
 }
 
@@ -211,10 +267,10 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	if err := contracts.VerifyLaunchEffectReceipt(signed, verifyContext); err != nil {
 		t.Fatalf("signed receipt rejected: %v", err)
 	}
-	if signed.ReceiptID != "9ce2cc4a1f1b25c6fba4b27ec2f30bb453dd2cbaade396d00a455a3258ec5a5c" {
+	if signed.ReceiptID != "e27da0e06b57066f53cbb91c8eae77328be36e88608f57482890e21c43df146e" {
 		t.Fatalf("launch receipt ID = %s, want committed golden", signed.ReceiptID)
 	}
-	if signed.Signature != "lEShye5+nx8cmOZaU+C4vLqm9NWdt3Ahl5HxwxJfAms8t0iiOiMq0QWDrt994eWmWiCqecCRjk7afegLQjaLAw==" {
+	if signed.Signature != "wyXkAlrFXVon56zedsDZ2k2gp6V9TWKYD4HqhVhpdPW/3cosENMwSVdUO0TJ0OX3Lb98iMTDjz+8EDtE4RSHCA==" {
 		t.Fatalf("launch receipt signature = %s, want committed golden", signed.Signature)
 	}
 
@@ -245,6 +301,45 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	}
 	if err := contracts.VerifyLaunchEffectReceiptRevision(reconciledSigned, signed, verifyContext); err != nil {
 		t.Fatalf("receipt revision chain rejected: %v", err)
+	}
+
+	conflict := signed
+	conflict.ReceiptID = ""
+	conflict.Signature = ""
+	conflict.ReceiptRevision = 2
+	conflict.ReconciliationRevision = 1
+	conflict.PreviousReceiptID = signed.ReceiptID
+	conflict.Outcome = "UNKNOWN"
+	conflict.ReconciliationStatus = "CONFLICT"
+	conflict.ResultHash = launchHash("c")
+	conflict.Timestamp = "2026-07-18T12:04:00Z"
+	conflict.Lamport = 2
+	conflictSigned, err := contracts.SignLaunchEffectReceipt(conflict, privateKey)
+	if err != nil {
+		t.Fatalf("non-terminal provider conflict was rejected: %v", err)
+	}
+	if err := contracts.VerifyLaunchEffectReceiptRevision(conflictSigned, signed, verifyContext); err != nil {
+		t.Fatalf("provider conflict revision was rejected: %v", err)
+	}
+	resolvedConflict := conflictSigned
+	resolvedConflict.ReceiptID = ""
+	resolvedConflict.Signature = ""
+	resolvedConflict.ReceiptRevision = 3
+	resolvedConflict.ReconciliationRevision = 2
+	resolvedConflict.PreviousReceiptID = conflictSigned.ReceiptID
+	resolvedConflict.Outcome = "FAILED"
+	resolvedConflict.ReconciliationStatus = "PROVEN_NOT_APPLIED"
+	resolvedConflict.ResultHash = launchHash("d")
+	resolvedConflict.EvidencePackRef = "evidencepack:conflict-resolved"
+	resolvedConflict.EvidencePackHash = launchHash("e")
+	resolvedConflict.Timestamp = "2026-07-18T12:05:00Z"
+	resolvedConflict.Lamport = 3
+	resolvedConflictSigned, err := contracts.SignLaunchEffectReceipt(resolvedConflict, privateKey)
+	if err != nil {
+		t.Fatalf("provider conflict could not later reconcile: %v", err)
+	}
+	if err := contracts.VerifyLaunchEffectReceiptRevision(resolvedConflictSigned, conflictSigned, verifyContext); err != nil {
+		t.Fatalf("resolved provider conflict revision was rejected: %v", err)
 	}
 
 	tampered := reconciledSigned
@@ -369,65 +464,88 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 	if contract == nil {
 		t.Fatalf("missing launch effect contract for %s", fixture.effectID)
 	}
+	var routeFixture launchRouteFixture
+	if launchTestEffectRequiresProviderRoute(fixture.effectID) {
+		profile := launchProviderProfile(
+			"digitalocean",
+			contracts.LaunchConnectorDigitalOcean,
+			"fra",
+			"app-platform",
+			[]string{"http_service", "static_site"},
+			[]string{"health-check", "https-endpoint", "stateless-runtime"},
+			[]string{contracts.LaunchLifecycleEphemeral},
+			"digitalocean",
+		)
+		profile.Actions[0].ActionURN = contracts.LaunchProviderActionDigitalOceanActivate
+		profile.Actions[1].ActionURN = contracts.LaunchProviderActionDigitalOceanProvision
+		profile.Actions[2].ActionURN = contracts.LaunchProviderActionDigitalOceanRollback
+		profile.Actions[3].ActionURN = contracts.LaunchProviderActionDigitalOceanTeardown
+		routeFixture = singleLaunchRouteFixture(t, profile, true)
+		bindLaunchInputToRoute(t, input, fixture.effectID, routeFixture)
+	}
 	key, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	approvalRef := "commercial-approval-1"
-	approvalHash := launchHash("f")
-	switch fixture.effectID {
-	case contracts.EffectTypeDeployProductionActivate:
-		approvalRef = input["promotion_permit_ref"].(string)
-		approvalHash = input["promotion_permit_hash"].(string)
-	case contracts.EffectTypeProviderRollback:
-		approvalRef = input["rollback_permit_ref"].(string)
-		approvalHash = input["rollback_permit_hash"].(string)
-	case contracts.EffectTypeProviderTeardown:
-		approvalRef = input["fresh_teardown_approval_ref"].(string)
-		approvalHash = input["fresh_teardown_approval_hash"].(string)
-	}
-	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+	now := launchRoutingNow
 	verdictIssuedAt := now.Add(-time.Minute)
 	verdictExpiry := now.Add(6 * time.Minute)
 	permitIssuedAt := now
 	expiry := now.Add(5 * time.Minute)
 	deadline := now.Add(4 * time.Minute)
+
+	schemaBytes, err := os.ReadFile(filepath.Join(repoRoot(t), "protocols", "json-schemas", filepath.FromSlash(fixture.schema)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemaHash := canonicalize.ComputeArtifactHash(schemaBytes)
+	principal := "spiffe://helm/data-plane-1"
+	audience := "launch.dispatch"
+	trustRootID := "kernel-root-1"
+	authority, approvalConsumptionRef := launchCanonicalApprovalAuthority(t, fixture.effectID, input["plan_hash"].(string), key, now, principal, audience, trustRootID)
 	envelope := contracts.LaunchEffectAuthorizationEnvelope{
-		SchemaVersion:          contracts.LaunchEffectEnvelopeSchemaVersion,
-		EffectID:               fixture.effectID,
-		TenantID:               "tenant-1",
-		WorkspaceID:            "workspace-1",
-		MissionID:              "mission-1",
-		EffectOrdinal:          input["effect_ordinal"].(int),
-		InputSchemaRef:         fixture.schema,
-		InputSchemaHash:        launchHash("e"),
-		Input:                  input,
-		InputHash:              key,
-		IdempotencyKey:         key,
-		PlanHash:               input["plan_hash"].(string),
-		ApprovalArtifactRef:    approvalRef,
-		ApprovalArtifactHash:   approvalHash,
-		PolicyEpoch:            "epoch-1",
-		EmergencyFenceEpoch:    4,
-		Verdict:                "ALLOW",
-		KernelVerdictRef:       "verdict-1",
-		KernelVerdictIssuedAt:  verdictIssuedAt.Format(time.RFC3339Nano),
-		KernelVerdictExpiry:    verdictExpiry.Format(time.RFC3339Nano),
-		KernelVerdictSignerKey: "kernel-key-1",
-		EffectPermitRef:        "permit-1",
-		EffectPermitHash:       launchHash("0"),
-		PermitNonce:            "0123456789abcdefABCDEF",
-		PermitIssuedAt:         permitIssuedAt.Format(time.RFC3339Nano),
-		PermitExpiry:           expiry.Format(time.RFC3339Nano),
-		ProofSessionRef:        "proof-session-1",
-		EvidenceReservationRef: "evidence-reservation-1",
-		ConnectorID:            contract.ConnectorID,
-		ConnectorContractHash:  input["connector_contract_hash"].(string),
-		ActionURN:              contract.ActionURN,
-		RequestBodyHash:        launchHash("1"),
-		ArgsC14NHash:           launchHash("2"),
-		DispatchDeadline:       deadline.Format(time.RFC3339Nano),
-		ReplayHint:             "single_use_permit",
+		SchemaVersion:           contracts.LaunchEffectEnvelopeSchemaVersion,
+		EffectID:                fixture.effectID,
+		TenantID:                "tenant-1",
+		WorkspaceID:             "workspace-1",
+		MissionID:               "mission-1",
+		Principal:               principal,
+		Audience:                audience,
+		KernelTrustRootID:       trustRootID,
+		EffectOrdinal:           input["effect_ordinal"].(int),
+		InputSchemaRef:          fixture.schema,
+		InputSchemaHash:         schemaHash,
+		Input:                   input,
+		InputHash:               key,
+		IdempotencyKey:          key,
+		PlanHash:                input["plan_hash"].(string),
+		ApprovalArtifactRef:     authority.Grant.GrantID,
+		ApprovalArtifactHash:    authority.Grant.GrantHash,
+		ApprovalConsumptionRef:  approvalConsumptionRef,
+		ApprovalConsumptionHash: authority.Consumption.ConsumptionHash,
+		DependencySetRef:        fmt.Sprintf("dependency-set-%d", input["effect_ordinal"].(int)),
+		DependencySetHash:       launchHash("7"),
+		PolicyEpoch:             "epoch-1",
+		EmergencyFenceEpoch:     4,
+		Verdict:                 "ALLOW",
+		KernelVerdictRef:        "verdict-1",
+		KernelVerdictIssuedAt:   verdictIssuedAt.Format(time.RFC3339Nano),
+		KernelVerdictExpiry:     verdictExpiry.Format(time.RFC3339Nano),
+		KernelVerdictSignerKey:  "kernel-key-1",
+		EffectPermitRef:         "permit-1",
+		EffectPermitHash:        launchHash("0"),
+		PermitNonce:             "0123456789abcdefABCDEF",
+		PermitIssuedAt:          permitIssuedAt.Format(time.RFC3339Nano),
+		PermitExpiry:            expiry.Format(time.RFC3339Nano),
+		ProofSessionRef:         "proof-session-1",
+		EvidenceReservationRef:  "evidence-reservation-1",
+		ConnectorID:             contract.ConnectorID,
+		ConnectorContractHash:   input["connector_contract_hash"].(string),
+		ActionURN:               contract.ActionURN,
+		RequestBodyHash:         launchHash("1"),
+		ArgsC14NHash:            launchHash("2"),
+		DispatchDeadline:        deadline.Format(time.RFC3339Nano),
+		ReplayHint:              "single_use_permit",
 	}
 	privateKey := launchFixturePrivateKey()
 	publicKey := privateKey.Public().(ed25519.PublicKey)
@@ -436,51 +554,85 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 		t.Fatal(err)
 	}
 	permit := contracts.LaunchEffectPermitBinding{
-		EffectPermitRef:       envelope.EffectPermitRef,
-		EffectPermitHash:      envelope.EffectPermitHash,
-		PermitNonce:           envelope.PermitNonce,
-		PermitIssuedAt:        permitIssuedAt,
-		PermitExpiry:          expiry,
-		KernelVerdictRef:      envelope.KernelVerdictRef,
-		KernelVerdictHash:     envelope.KernelVerdictHash,
-		KernelVerdictIssuedAt: verdictIssuedAt,
-		KernelVerdictExpiry:   verdictExpiry,
-		EffectID:              envelope.EffectID,
-		TenantID:              envelope.TenantID,
-		WorkspaceID:           envelope.WorkspaceID,
-		MissionID:             envelope.MissionID,
-		EffectOrdinal:         envelope.EffectOrdinal,
-		InputSchemaHash:       envelope.InputSchemaHash,
-		InputHash:             envelope.InputHash,
-		IdempotencyKey:        envelope.IdempotencyKey,
-		PlanHash:              envelope.PlanHash,
-		ApprovalArtifactRef:   envelope.ApprovalArtifactRef,
-		ApprovalArtifactHash:  envelope.ApprovalArtifactHash,
-		ConnectorID:           envelope.ConnectorID,
-		ConnectorContractHash: envelope.ConnectorContractHash,
-		ActionURN:             envelope.ActionURN,
-		RequestBodyHash:       envelope.RequestBodyHash,
-		ArgsC14NHash:          envelope.ArgsC14NHash,
-		PolicyEpoch:           envelope.PolicyEpoch,
-		EmergencyFenceEpoch:   envelope.EmergencyFenceEpoch,
-		DispatchDeadline:      deadline,
-		SingleUse:             true,
+		EffectPermitRef:         envelope.EffectPermitRef,
+		EffectPermitHash:        envelope.EffectPermitHash,
+		PermitNonce:             envelope.PermitNonce,
+		PermitIssuedAt:          permitIssuedAt,
+		PermitExpiry:            expiry,
+		KernelVerdictRef:        envelope.KernelVerdictRef,
+		KernelVerdictHash:       envelope.KernelVerdictHash,
+		KernelVerdictIssuedAt:   verdictIssuedAt,
+		KernelVerdictExpiry:     verdictExpiry,
+		EffectID:                envelope.EffectID,
+		TenantID:                envelope.TenantID,
+		WorkspaceID:             envelope.WorkspaceID,
+		MissionID:               envelope.MissionID,
+		Principal:               envelope.Principal,
+		Audience:                envelope.Audience,
+		KernelTrustRootID:       envelope.KernelTrustRootID,
+		EffectOrdinal:           envelope.EffectOrdinal,
+		InputSchemaHash:         envelope.InputSchemaHash,
+		InputHash:               envelope.InputHash,
+		IdempotencyKey:          envelope.IdempotencyKey,
+		PlanHash:                envelope.PlanHash,
+		ApprovalArtifactRef:     envelope.ApprovalArtifactRef,
+		ApprovalArtifactHash:    envelope.ApprovalArtifactHash,
+		ApprovalConsumptionRef:  envelope.ApprovalConsumptionRef,
+		ApprovalConsumptionHash: envelope.ApprovalConsumptionHash,
+		DependencySetRef:        envelope.DependencySetRef,
+		DependencySetHash:       envelope.DependencySetHash,
+		ConnectorID:             envelope.ConnectorID,
+		ConnectorContractHash:   envelope.ConnectorContractHash,
+		ActionURN:               envelope.ActionURN,
+		RequestBodyHash:         envelope.RequestBodyHash,
+		ArgsC14NHash:            envelope.ArgsC14NHash,
+		PolicyEpoch:             envelope.PolicyEpoch,
+		EmergencyFenceEpoch:     envelope.EmergencyFenceEpoch,
+		DispatchDeadline:        deadline,
+		SingleUse:               true,
 	}
 	var consumed atomic.Bool
+	approvalPrivateKey := launchApprovalPrivateKey()
+	approvalPublicKey := approvalPrivateKey.Public().(ed25519.PublicKey)
+	approvalVerifier, err := approvalceremony.NewEd25519GrantSignatureVerifier(approvalPublicKey, "approval-key-1", trustRootID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := contracts.LaunchEffectEnvelopeVerificationContext{
 		Now: now,
+		ResolveInputSchema: func(schemaRef string) ([]byte, error) {
+			if schemaRef != envelope.InputSchemaRef {
+				return nil, fmt.Errorf("unknown schema reference")
+			}
+			return append([]byte(nil), schemaBytes...), nil
+		},
 		ValidateInput: func(schemaRef, schemaHash string, candidate map[string]any) error {
 			if schemaRef != envelope.InputSchemaRef || schemaHash != envelope.InputSchemaHash {
 				return fmt.Errorf("unexpected schema identity")
 			}
 			return compileSchema(t, schemaRef).Validate(candidate)
 		},
-		ValidateProviderRoute:   validateDigitalOceanEU50Route,
-		ExpectedInputSchemaHash: envelope.InputSchemaHash,
+		ResolveApprovalAuthority: func(grantRef, grantHash, consumptionRef, consumptionHash string) (contracts.LaunchEffectApprovalAuthority, error) {
+			if grantRef != authority.Grant.GrantID || grantHash != authority.Grant.GrantHash || consumptionRef != approvalConsumptionRef || consumptionHash != authority.Consumption.ConsumptionHash {
+				return contracts.LaunchEffectApprovalAuthority{}, fmt.Errorf("approval authority not found")
+			}
+			return authority, nil
+		},
+		VerifyApprovalAuthority: func(candidate contracts.LaunchEffectApprovalAuthority) error {
+			if err := approvalVerifier.VerifyGrantSignature(candidate.Grant, candidate.GrantSignatureAlgorithm, candidate.GrantSignature); err != nil {
+				return err
+			}
+			return approvalVerifier.VerifyGrantConsumptionSignature(candidate.Consumption, candidate.ConsumptionSignatureAlgorithm, candidate.ConsumptionSignature)
+		},
+		VerifyDependencyState: func(ref, hash string) error {
+			if ref != envelope.DependencySetRef || hash != envelope.DependencySetHash {
+				return fmt.Errorf("dependency set mismatch")
+			}
+			return nil
+		},
 		ExpectedRequestBodyHash: envelope.RequestBodyHash,
 		ExpectedArgsC14NHash:    envelope.ArgsC14NHash,
 		ExpectedPolicyEpoch:     envelope.PolicyEpoch,
-		CurrentEmergencyFence:   envelope.EmergencyFenceEpoch,
 		MaximumPermitTTL:        5 * time.Minute,
 		ResolveVerdictKey: func(signerKeyID string) (ed25519.PublicKey, error) {
 			if signerKeyID != envelope.KernelVerdictSignerKey {
@@ -488,8 +640,8 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 			}
 			return publicKey, nil
 		},
-		ConsumePermit: func(expected contracts.LaunchEffectPermitBinding) error {
-			if expected.EffectPermitRef != permit.EffectPermitRef || expected.PermitNonce != permit.PermitNonce {
+		FinalizeDispatch: func(expected contracts.LaunchEffectPermitBinding) error {
+			if expected != permit {
 				return fmt.Errorf("permit compare-and-swap binding mismatch")
 			}
 			if !consumed.CompareAndSwap(false, true) {
@@ -499,7 +651,330 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 		},
 		Permit: permit,
 	}
+	if launchTestEffectRequiresProviderRoute(fixture.effectID) {
+		ctx.ResolveRouteBinding = func(routeRef string) (contracts.LaunchRouteBinding, error) {
+			if routeRef != routeFixture.route.RouteID {
+				return contracts.LaunchRouteBinding{}, fmt.Errorf("route not found")
+			}
+			return routeFixture.route, nil
+		}
+		ctx.RouteArtifacts = routeFixture.resolver
+	}
 	return envelope, ctx, privateKey, publicKey
+}
+
+func launchCanonicalApprovalAuthority(t *testing.T, effectID, planHash, effectHash string, now time.Time, principal, audience, trustRootID string) (contracts.LaunchEffectApprovalAuthority, string) {
+	t.Helper()
+	action := launchTestApprovalAction(effectID)
+	grant, err := (contracts.ApprovalGrant{
+		SchemaVersion: contracts.ApprovalGrantSchemaV1, ContractVersion: contracts.ApprovalGrantContractV1,
+		GrantID: "launch-grant-" + effectID, TenantID: "tenant-1", WorkspaceID: "workspace-1", Audience: audience,
+		PackID: "mission-1", PackVersion: contracts.LaunchEffectCatalogVersion, PackManifestHash: planHash, Action: action,
+		IntentHash: planHash, EffectHash: effectHash, PlanHash: planHash, Decision: contracts.ApprovalGrantDecisionAllow,
+		PolicyVersion: "policy-v1", PolicyEpoch: "epoch-1", PolicyHash: launchHash("6"),
+		ApprovalID: "launch-approval-" + effectID, CeremonyHash: launchHash("5"), SignerSetHash: launchHash("4"),
+		ServerIdentity: "spiffe://helm/control-plane-1", KernelTrustRootID: trustRootID, SigningKeyRef: "approval-key-1",
+		IssuedAt: now.Add(-2 * time.Minute), ExpiresAt: now.Add(6 * time.Minute), Nonce: strings.Repeat("1", 64),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumption, err := (contracts.ApprovalGrantConsumption{
+		SchemaVersion: contracts.ApprovalGrantConsumptionSchemaV1, ContractVersion: contracts.ApprovalGrantConsumptionContractV1,
+		ApprovalID: grant.ApprovalID, GrantID: grant.GrantID, GrantHash: grant.GrantHash,
+		TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, Audience: grant.Audience, ConsumedBy: principal,
+		PackID: grant.PackID, PackVersion: grant.PackVersion, PackManifestHash: grant.PackManifestHash, Action: grant.Action,
+		IntentHash: grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
+		PolicyVersion: grant.PolicyVersion, PolicyEpoch: grant.PolicyEpoch, PolicyHash: grant.PolicyHash,
+		ServerIdentity: grant.ServerIdentity, KernelTrustRootID: grant.KernelTrustRootID, SigningKeyRef: grant.SigningKeyRef,
+		GrantIssuedAt: grant.IssuedAt, GrantExpiresAt: grant.ExpiresAt, ConsumedAt: now.Add(-30 * time.Second),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateKey := launchApprovalPrivateKey()
+	grantPayload, err := approvalceremony.ApprovalGrantSigningPayload(grant, approvalceremony.GrantSignatureEd25519)
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumptionPayload, err := approvalceremony.ApprovalGrantConsumptionSigningPayload(consumption, approvalceremony.GrantSignatureEd25519)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return contracts.LaunchEffectApprovalAuthority{
+		Grant: grant, GrantSignatureAlgorithm: approvalceremony.GrantSignatureEd25519, GrantSignature: hex.EncodeToString(ed25519.Sign(privateKey, grantPayload)),
+		Consumption: consumption, ConsumptionSignatureAlgorithm: approvalceremony.GrantSignatureEd25519, ConsumptionSignature: hex.EncodeToString(ed25519.Sign(privateKey, consumptionPayload)),
+	}, "approval-consumption:" + grant.GrantID
+}
+
+func bindLaunchInputToRoute(t *testing.T, input map[string]any, effectID string, fixture launchRouteFixture) {
+	t.Helper()
+	placement := fixture.route.Placements[0]
+	placementCost := fixture.quote.PlacementCosts[0]
+	routeHash, err := contracts.DeriveLaunchRouteBindingHash(fixture.route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setLaunchInputIfPresent(input, "provider", placement.ProviderID)
+	setLaunchInputIfPresent(input, "provider_account_ref", placement.ProviderAccountRef)
+	setLaunchInputIfPresent(input, "provider_account_hash", placement.ProviderAccountHash)
+	setLaunchInputIfPresent(input, "region", placement.RegionID)
+	setLaunchInputIfPresent(input, "jurisdiction", placement.Jurisdiction)
+	setLaunchInputIfPresent(input, "route_binding_ref", fixture.route.RouteID)
+	setLaunchInputIfPresent(input, "route_binding_hash", routeHash)
+	setLaunchInputIfPresent(input, "route_placement_id", placement.PlacementID)
+	setLaunchInputIfPresent(input, "provider_capability_profile_ref", placement.ProviderProfileRef)
+	setLaunchInputIfPresent(input, "provider_capability_profile_hash", placement.ProviderProfileHash)
+	setLaunchInputIfPresent(input, "provider_certification_ref", placement.ProviderCertificationRef)
+	setLaunchInputIfPresent(input, "provider_certification_hash", placement.ProviderCertificationHash)
+	setLaunchInputIfPresent(input, "provider_connector_id", placement.ProviderConnectorID)
+	setLaunchInputIfPresent(input, "provider_connector_contract_hash", placement.ProviderConnectorContractHash)
+	setLaunchInputIfPresent(input, "repository_analysis_ref", fixture.route.RepositoryAnalysisRef)
+	setLaunchInputIfPresent(input, "repository_analysis_hash", fixture.route.RepositoryAnalysisHash)
+	setLaunchInputIfPresent(input, "workload_graph_ref", fixture.route.WorkloadGraphRef)
+	setLaunchInputIfPresent(input, "workload_graph_hash", fixture.route.WorkloadGraphHash)
+	setLaunchInputIfPresent(input, "resource_graph_ref", fixture.route.ResourceGraphRef)
+	setLaunchInputIfPresent(input, "resource_graph_hash", fixture.route.ResourceGraphHash)
+	setLaunchInputIfPresent(input, "route_quote_ref", fixture.route.RouteQuoteRef)
+	setLaunchInputIfPresent(input, "route_quote_hash", fixture.route.RouteQuoteHash)
+	setLaunchInputIfPresent(input, "quote_hash", fixture.route.RouteQuoteHash)
+	setLaunchInputIfPresent(input, "constraint_set_hash", fixture.route.ConstraintSetHash)
+	setLaunchInputIfPresent(input, "generated_spec_hash", fixture.route.GeneratedSpecHash)
+	setLaunchInputIfPresent(input, "gross_cap_minor", fixture.constraints.MaximumGrossMinor)
+	setLaunchInputIfPresent(input, "base_provider_cost_minor", placementCost.BaseCostMinor)
+	setLaunchInputIfPresent(input, "tax_fx_reserve_minor", placementCost.TaxFXReserveMinor)
+	setLaunchInputIfPresent(input, "gross_exposure_minor", placementCost.GrossExposureMinor)
+	setLaunchInputIfPresent(input, "verified_credit_minor", placementCost.VerifiedCreditMinor)
+	setLaunchInputIfPresent(input, "expected_cash_minor", placementCost.ExpectedCashMinor)
+	setLaunchInputIfPresent(input, "currency", fixture.quote.Currency)
+	setLaunchInputIfPresent(input, "credit_status", placementCost.CreditStatus)
+	setLaunchInputIfPresent(input, "price_snapshot_hash", placementCost.PriceEvidenceHash)
+	setLaunchInputIfPresent(input, "provider_terms_profile_hash", placementCost.TermsEvidenceHash)
+	setLaunchInputIfPresent(input, "credit_snapshot_hash", placementCost.OfferSnapshotHash)
+	setLaunchInputIfPresent(input, "fx_snapshot_hash", fixture.quote.FXSnapshotHash)
+	setLaunchInputIfPresent(input, "tax_snapshot_hash", fixture.quote.TaxSnapshotHash)
+	if effectID == contracts.EffectTypeSpendAuthorize {
+		return
+	}
+	for _, action := range placement.ActionBindings {
+		if action.EffectID == effectID {
+			setLaunchInputIfPresent(input, "provider_action_urn", action.ProviderActionURN)
+			setLaunchInputIfPresent(input, "provider_payload_hash", action.ProviderPayloadHash)
+			return
+		}
+	}
+	t.Fatalf("route placement has no action binding for %s", effectID)
+}
+
+func setLaunchInputIfPresent(input map[string]any, field string, value any) {
+	if _, ok := input[field]; ok {
+		input[field] = value
+	}
+}
+
+func launchTestEffectRequiresProviderRoute(effectID string) bool {
+	return effectID != contracts.EffectTypeCompanyArtifactUpdate
+}
+
+func launchTestApprovalAction(effectID string) string {
+	switch effectID {
+	case contracts.EffectTypeProviderProvision, contracts.EffectTypeSpendAuthorize:
+		return contracts.ApprovalGrantActionInstall
+	case contracts.EffectTypeDeployProductionActivate, contracts.EffectTypeCompanyArtifactUpdate:
+		return contracts.ApprovalGrantActionUpgrade
+	case contracts.EffectTypeProviderRollback:
+		return contracts.ApprovalGrantActionRollback
+	case contracts.EffectTypeProviderTeardown:
+		return contracts.ApprovalGrantActionUninstall
+	default:
+		panic("unregistered launch effect")
+	}
+}
+
+func launchApprovalPrivateKey() ed25519.PrivateKey {
+	return ed25519.NewKeyFromSeed([]byte("abcdef0123456789abcdef0123456789"))
+}
+
+func TestLaunchMissionReferencePackMatchesGoImplementation(t *testing.T) {
+	want := launchMissionReferencePackBytes(t)
+	path := filepath.Join(repoRoot(t), "reference_packs", "launch-mission-v1", "vectors.json")
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("Launch Mission reference pack drifted from the Go contracts; regenerate the committed vectors")
+	}
+}
+
+func TestDumpLaunchMissionReferencePack(t *testing.T) {
+	if os.Getenv("HELM_DUMP_LAUNCH_REFERENCE_PACK") != "1" {
+		t.Skip("reference-pack generator is opt-in")
+	}
+	output := os.Getenv("HELM_LAUNCH_REFERENCE_PACK_OUTPUT")
+	if output == "" {
+		t.Fatal("HELM_LAUNCH_REFERENCE_PACK_OUTPUT is required")
+	}
+	if err := os.WriteFile(output, launchMissionReferencePackBytes(t), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func launchMissionReferencePackBytes(t *testing.T) []byte {
+	t.Helper()
+	profile := launchProviderProfile("digitalocean", contracts.LaunchConnectorDigitalOcean, "fra", "app-platform", []string{"http_service", "static_site"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "digitalocean")
+	profile.Actions[0].ActionURN = contracts.LaunchProviderActionDigitalOceanActivate
+	profile.Actions[1].ActionURN = contracts.LaunchProviderActionDigitalOceanProvision
+	profile.Actions[2].ActionURN = contracts.LaunchProviderActionDigitalOceanRollback
+	profile.Actions[3].ActionURN = contracts.LaunchProviderActionDigitalOceanTeardown
+	routeFixture := singleLaunchRouteFixture(t, profile, true)
+	routeHash, err := contracts.DeriveLaunchRouteBindingHash(routeFixture.route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	universalFixture := multiLaunchRouteFixture(t)
+	if err := contracts.ValidateLaunchRouteBinding(universalFixture.route, universalFixture.resolver, launchRoutingNow, false); err != nil {
+		t.Fatalf("build universal multi-provider reference vector: %v", err)
+	}
+	universalRouteHash, err := contracts.DeriveLaunchRouteBindingHash(universalFixture.route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	universalProfiles := map[string]any{}
+	universalProfileHashes := map[string]string{}
+	for _, placement := range universalFixture.route.Placements {
+		profile := universalFixture.resolver.profiles[placement.ProviderProfileRef]
+		profileHash, hashErr := contracts.DeriveLaunchProviderCapabilityProfileHash(profile)
+		if hashErr != nil {
+			t.Fatal(hashErr)
+		}
+		universalProfiles[profile.ProfileID] = profile
+		universalProfileHashes[profile.ProfileID] = profileHash
+	}
+	universalOffers := map[string]any{}
+	universalOfferHashes := map[string]string{}
+	for _, line := range universalFixture.quote.PlacementCosts {
+		offer := universalFixture.resolver.offers[line.OfferSnapshotRef]
+		offerHash, hashErr := contracts.DeriveLaunchOfferSnapshotHash(offer)
+		if hashErr != nil {
+			t.Fatal(hashErr)
+		}
+		universalOffers[offer.SnapshotID] = offer
+		universalOfferHashes[offer.SnapshotID] = offerHash
+	}
+	envelope, ctx, _, verdictPublicKey := launchAuthorizationFixture(t)
+	authority, err := ctx.ResolveApprovalAuthority(envelope.ApprovalArtifactRef, envelope.ApprovalArtifactHash, envelope.ApprovalConsumptionRef, envelope.ApprovalConsumptionHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptInput := launchUnknownReceiptFixture()
+	receiptInput.DecisionID = envelope.KernelVerdictRef
+	receiptInput.Principal = envelope.Principal
+	receiptInput.Audience = envelope.Audience
+	receiptInput.KernelTrustRootID = envelope.KernelTrustRootID
+	receiptInput.EffectOrdinal = envelope.EffectOrdinal
+	receiptInput.InputSchemaHash = envelope.InputSchemaHash
+	receiptInput.InputHash = envelope.InputHash
+	receiptInput.IdempotencyKey = envelope.IdempotencyKey
+	receiptInput.RequestHash = envelope.RequestBodyHash
+	receiptInput.PayloadHash = envelope.RequestBodyHash
+	receiptInput.KernelVerdictRef = envelope.KernelVerdictRef
+	receiptInput.KernelVerdictHash = envelope.KernelVerdictHash
+	receiptInput.ApprovalArtifactRef = envelope.ApprovalArtifactRef
+	receiptInput.ApprovalArtifactHash = envelope.ApprovalArtifactHash
+	receiptInput.ApprovalConsumptionRef = envelope.ApprovalConsumptionRef
+	receiptInput.ApprovalConsumptionHash = envelope.ApprovalConsumptionHash
+	receiptInput.EffectPermitRef = envelope.EffectPermitRef
+	receiptInput.EffectPermitHash = envelope.EffectPermitHash
+	receiptInput.PermitNonce = envelope.PermitNonce
+	receiptInput.PolicyEpoch = envelope.PolicyEpoch
+	receiptInput.EmergencyFenceEpoch = envelope.EmergencyFenceEpoch
+	receiptInput.ConnectorContractHash = envelope.ConnectorContractHash
+	receiptInput.DependencySetRef = envelope.DependencySetRef
+	receiptInput.DependencySetHash = envelope.DependencySetHash
+	receiptInput.RouteBindingRef = routeFixture.route.RouteID
+	receiptInput.RouteBindingHash = routeHash
+	receiptInput.RoutePlacementID = routeFixture.route.Placements[0].PlacementID
+	receiptInput.ProviderProfileRef = routeFixture.route.Placements[0].ProviderProfileRef
+	receiptInput.ProviderProfileHash = routeFixture.route.Placements[0].ProviderProfileHash
+	receiptInput.ProviderCertificationRef = routeFixture.route.Placements[0].ProviderCertificationRef
+	receiptInput.ProviderCertificationHash = routeFixture.route.Placements[0].ProviderCertificationHash
+	receiptInput.OfferSnapshotRef = routeFixture.quote.PlacementCosts[0].OfferSnapshotRef
+	receiptInput.OfferSnapshotHash = routeFixture.quote.PlacementCosts[0].OfferSnapshotHash
+	receiptInput.PriceEvidenceHash = routeFixture.quote.PlacementCosts[0].PriceEvidenceHash
+	receiptInput.TermsEvidenceHash = routeFixture.quote.PlacementCosts[0].TermsEvidenceHash
+	receipt, err := contracts.SignLaunchEffectReceipt(receiptInput, launchFixturePrivateKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	effects := make([]map[string]any, 0, len(launchInputFixtures()))
+	for _, fixture := range launchInputFixtures() {
+		effects = append(effects, map[string]any{"effect_id": fixture.effectID, "input": fixture.input, "idempotency_key": fixture.goldenKey})
+	}
+	pack := map[string]any{
+		"schema_version": "launch-mission-reference-v1", "contract_version": contracts.LaunchEffectCatalogVersion,
+		"canonicalization": "RFC8785_JCS_SAFE_INTEGER_INPUTS", "quantum_posture": "classical_ed25519_only",
+		"certification_public_key": "ed25519:" + hex.EncodeToString(routeFixture.resolver.keys[routeFixture.certification.SignerKeyID]),
+		"artifact_hashes": map[string]string{
+			"repository_analysis": routeFixture.route.RepositoryAnalysisHash, "workload_graph": routeFixture.route.WorkloadGraphHash,
+			"provider_capability_profile": routeFixture.route.Placements[0].ProviderProfileHash, "provider_certification": routeFixture.certification.RecordHash,
+			"offer_snapshot": routeFixture.quote.PlacementCosts[0].OfferSnapshotHash,
+			"constraint_set": routeFixture.route.ConstraintSetHash, "route_quote": routeFixture.route.RouteQuoteHash,
+			"resource_graph": routeFixture.route.ResourceGraphHash, "provider_payload_set": routeFixture.route.ProviderPayloadSetHash, "route_binding": routeHash,
+		},
+		"artifacts": map[string]any{
+			"repository_analysis": routeFixture.analysis, "workload_graph": routeFixture.graph, "provider_capability_profile": profile,
+			"provider_certification": routeFixture.certification, "constraint_set": routeFixture.constraints, "route_quote": routeFixture.quote,
+			"offer_snapshot": routeFixture.offer,
+			"resource_graph": routeFixture.resources, "provider_payload_set": routeFixture.payloads, "route_binding": routeFixture.route,
+		},
+		"universal_route": map[string]any{
+			"purpose": "provider-neutral multi-placement route for an ephemeral API and stateful database",
+			"artifact_hashes": map[string]any{
+				"repository_analysis":          universalFixture.route.RepositoryAnalysisHash,
+				"workload_graph":               universalFixture.route.WorkloadGraphHash,
+				"provider_capability_profiles": universalProfileHashes,
+				"offer_snapshots":              universalOfferHashes,
+				"constraint_set":               universalFixture.route.ConstraintSetHash,
+				"route_quote":                  universalFixture.route.RouteQuoteHash,
+				"resource_graph":               universalFixture.route.ResourceGraphHash,
+				"provider_payload_set":         universalFixture.route.ProviderPayloadSetHash,
+				"route_binding":                universalRouteHash,
+			},
+			"artifacts": map[string]any{
+				"repository_analysis":          universalFixture.analysis,
+				"workload_graph":               universalFixture.graph,
+				"provider_capability_profiles": universalProfiles,
+				"offer_snapshots":              universalOffers,
+				"constraint_set":               universalFixture.constraints,
+				"route_quote":                  universalFixture.quote,
+				"resource_graph":               universalFixture.resources,
+				"provider_payload_set":         universalFixture.payloads,
+				"route_binding":                universalFixture.route,
+			},
+		},
+		"effect_inputs": effects,
+		"authorization": map[string]any{
+			"envelope": envelope, "verdict_public_key": "ed25519:" + hex.EncodeToString(verdictPublicKey),
+			"approval_authority": authority, "approval_public_key": "ed25519:" + hex.EncodeToString(launchApprovalPrivateKey().Public().(ed25519.PublicKey)),
+		},
+		"receipt": map[string]any{
+			"value": receipt, "public_key": "ed25519:" + hex.EncodeToString(launchFixturePrivateKey().Public().(ed25519.PublicKey)),
+		},
+		"integer_equivalence": []string{"1", "1.0", "1e0"},
+		"negative_vectors": []map[string]string{
+			{"id": "route_hash_tamper", "expected_error": "hash_mismatch"},
+			{"id": "verdict_signature_tamper", "expected_error": "signature_rejected"},
+			{"id": "receipt_result_tamper", "expected_error": "receipt_id_mismatch"},
+			{"id": "unsafe_integer", "expected_error": "unsafe_integer"},
+		},
+	}
+	data, err := json.MarshalIndent(pack, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, '\n')
+	return data
 }
 
 func launchUnknownReceiptFixture() contracts.LaunchEffectReceipt {
@@ -512,7 +987,9 @@ func launchUnknownReceiptFixture() contracts.LaunchEffectReceipt {
 		DecisionID:             "verdict-1",
 		EffectID:               contracts.EffectTypeProviderProvision,
 		Verdict:                "ALLOW",
-		Principal:              "workspace:workspace-1",
+		Principal:              "spiffe://helm/data-plane-1",
+		Audience:               "launch.dispatch",
+		KernelTrustRootID:      "kernel-root-1",
 		Tool:                   contracts.LaunchConnectorProviderRoute,
 		Action:                 contracts.LaunchActionProviderProvision,
 		Timestamp:              "2026-07-18T12:03:00Z",
@@ -524,33 +1001,47 @@ func launchUnknownReceiptFixture() contracts.LaunchEffectReceipt {
 			Profile:              contracts.LaunchEffectReceiptProfile,
 			RedactionProfileHash: launchHash("7"),
 		},
-		TenantID:              "tenant-1",
-		WorkspaceID:           "workspace-1",
-		MissionID:             "mission-1",
-		EffectOrdinal:         1,
-		InputSchemaHash:       launchHash("d"),
-		InputHash:             launchHash("1"),
-		IdempotencyKey:        launchHash("2"),
-		RequestHash:           launchHash("3"),
-		ResultHash:            launchHash("4"),
-		KernelVerdictRef:      "verdict-1",
-		KernelVerdictHash:     launchHash("5"),
-		ApprovalArtifactRef:   "commercial-approval-1",
-		ApprovalArtifactHash:  launchHash("f"),
-		EffectPermitRef:       "permit-1",
-		EffectPermitHash:      launchHash("c"),
-		PermitNonce:           "0123456789abcdefABCDEF",
-		PermitConsumptionRef:  "permit-consumption-1",
-		PermitConsumptionHash: launchHash("b"),
-		PolicyEpoch:           "epoch-1",
-		EmergencyFenceEpoch:   4,
-		ConnectorContractHash: launchHash("6"),
-		ReconciliationLocator: launchHash("e"),
-		Outcome:               "UNKNOWN",
-		ReconciliationStatus:  "PENDING",
-		DependencyState:       "FROZEN",
-		DependencySetHash:     launchHash("8"),
-		DependencyStateHash:   launchHash("9"),
+		TenantID:                  "tenant-1",
+		WorkspaceID:               "workspace-1",
+		MissionID:                 "mission-1",
+		EffectOrdinal:             1,
+		InputSchemaHash:           launchHash("d"),
+		InputHash:                 launchHash("1"),
+		IdempotencyKey:            launchHash("2"),
+		RequestHash:               launchHash("3"),
+		ResultHash:                launchHash("4"),
+		KernelVerdictRef:          "verdict-1",
+		KernelVerdictHash:         launchHash("5"),
+		ApprovalArtifactRef:       "commercial-approval-1",
+		ApprovalArtifactHash:      launchHash("f"),
+		ApprovalConsumptionRef:    "approval-consumption-1",
+		ApprovalConsumptionHash:   launchHash("a"),
+		EffectPermitRef:           "permit-1",
+		EffectPermitHash:          launchHash("c"),
+		PermitNonce:               "0123456789abcdefABCDEF",
+		PermitConsumptionRef:      "permit-consumption-1",
+		PermitConsumptionHash:     launchHash("b"),
+		PolicyEpoch:               "epoch-1",
+		EmergencyFenceEpoch:       4,
+		ConnectorContractHash:     launchHash("6"),
+		ReconciliationLocator:     launchHash("e"),
+		Outcome:                   "UNKNOWN",
+		ReconciliationStatus:      "PENDING",
+		DependencyState:           "FROZEN",
+		DependencySetRef:          "dependency-set-1",
+		DependencySetHash:         launchHash("8"),
+		DependencyStateHash:       launchHash("9"),
+		RouteBindingRef:           "route-1",
+		RouteBindingHash:          launchHash("2"),
+		RoutePlacementID:          "placement-1",
+		ProviderProfileRef:        "digitalocean-candidate",
+		ProviderProfileHash:       launchHash("3"),
+		ProviderCertificationRef:  "certification-1",
+		ProviderCertificationHash: launchHash("4"),
+		OfferSnapshotRef:          "offer-snapshot-1",
+		OfferSnapshotHash:         launchHash("7"),
+		PriceEvidenceHash:         launchHash("5"),
+		TermsEvidenceHash:         launchHash("6"),
 	}
 }
 

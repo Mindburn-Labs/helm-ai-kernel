@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/effects/launch/launch_effect_envelope.v1.json",
-  "version": "1.1.0-alpha.1",
+  "version": "1.2.0-alpha.1",
   "title": "Launch Effect Authorization Envelope (Preview)",
-  "description": "Non-executable preview envelope binding one schema-validated launch input to an Authority Court verdict, single-use effect permit, emergency-fence epoch, and exact connector request.",
+  "description": "Non-executable preview envelope binding one schema-validated launch input to the canonical ApprovalGrant consumption, exact workload principal/audience, dependency state, Kernel trust root, single-use dispatch CAS, scoped-stop epoch, and connector request.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -12,6 +12,9 @@
     "tenant_id",
     "workspace_id",
     "mission_id",
+    "principal",
+    "audience",
+    "kernel_trust_root_id",
     "effect_ordinal",
     "input_schema_ref",
     "input_schema_hash",
@@ -21,6 +24,10 @@
     "plan_hash",
     "approval_artifact_ref",
     "approval_artifact_hash",
+    "approval_consumption_ref",
+    "approval_consumption_hash",
+    "dependency_set_ref",
+    "dependency_set_hash",
     "policy_epoch",
     "emergency_fence_epoch",
     "verdict",
@@ -64,6 +71,18 @@
       "type": "string",
       "minLength": 1
     },
+    "principal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "audience": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kernel_trust_root_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "effect_ordinal": {
       "type": "integer",
       "minimum": 0
@@ -92,6 +111,20 @@
       "minLength": 1
     },
     "approval_artifact_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "approval_consumption_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approval_consumption_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "dependency_set_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dependency_set_hash": {
       "$ref": "#/$defs/hash"
     },
     "policy_epoch": {

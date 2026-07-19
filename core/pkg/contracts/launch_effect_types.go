@@ -2,8 +2,11 @@ package contracts
 
 import (
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -242,11 +245,104 @@ func DeriveLaunchEffectIdempotencyKey(typeID string, input map[string]any) (stri
 	if got, ok := input["schema_version"].(string); !ok || got != LaunchEffectInputSchemaVersion {
 		return "", fmt.Errorf("launch effect input schema_version must equal %q", LaunchEffectInputSchemaVersion)
 	}
-	hash, err := canonicalize.CanonicalHash(input)
+	normalized, err := normalizeLaunchEffectCanonicalValue(input)
+	if err != nil {
+		return "", fmt.Errorf("derive launch effect idempotency key: %w", err)
+	}
+	hash, err := canonicalize.CanonicalHash(normalized)
 	if err != nil {
 		return "", fmt.Errorf("derive launch effect idempotency key: %w", err)
 	}
 	return "sha256:" + hash, nil
+}
+
+// normalizeLaunchEffectCanonicalValue removes language- and decoder-specific
+// integer spellings before JCS. Launch effect schemas intentionally admit only
+// integer JSON numbers, so 1, 1.0, json.Number("1e0"), int64(1), and
+// float64(1) must all bind the same bytes. Values outside the interoperable
+// IEEE-754 safe-integer range fail closed instead of producing hashes that a
+// JavaScript or another RFC 8785 implementation cannot reproduce exactly.
+func normalizeLaunchEffectCanonicalValue(value any) (any, error) {
+	const maxSafeInteger = int64(9007199254740991)
+	switch typed := value.(type) {
+	case map[string]any:
+		normalized := make(map[string]any, len(typed))
+		for key, item := range typed {
+			canonicalItem, err := normalizeLaunchEffectCanonicalValue(item)
+			if err != nil {
+				return nil, fmt.Errorf("field %q: %w", key, err)
+			}
+			normalized[key] = canonicalItem
+		}
+		return normalized, nil
+	case []any:
+		normalized := make([]any, len(typed))
+		for index, item := range typed {
+			canonicalItem, err := normalizeLaunchEffectCanonicalValue(item)
+			if err != nil {
+				return nil, fmt.Errorf("index %d: %w", index, err)
+			}
+			normalized[index] = canonicalItem
+		}
+		return normalized, nil
+	case json.Number:
+		return normalizeLaunchEffectJSONNumber(typed, maxSafeInteger)
+	case float64:
+		return normalizeLaunchEffectFloat(typed, maxSafeInteger)
+	case float32:
+		return normalizeLaunchEffectFloat(float64(typed), maxSafeInteger)
+	case int:
+		return normalizeLaunchEffectSignedInteger(int64(typed), maxSafeInteger)
+	case int8:
+		return int64(typed), nil
+	case int16:
+		return int64(typed), nil
+	case int32:
+		return int64(typed), nil
+	case int64:
+		return normalizeLaunchEffectSignedInteger(typed, maxSafeInteger)
+	case uint:
+		return normalizeLaunchEffectUnsignedInteger(uint64(typed), uint64(maxSafeInteger))
+	case uint8:
+		return int64(typed), nil
+	case uint16:
+		return int64(typed), nil
+	case uint32:
+		return int64(typed), nil
+	case uint64:
+		return normalizeLaunchEffectUnsignedInteger(typed, uint64(maxSafeInteger))
+	default:
+		return value, nil
+	}
+}
+
+func normalizeLaunchEffectFloat(value float64, maxSafeInteger int64) (int64, error) {
+	if math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value || math.Abs(value) > float64(maxSafeInteger) {
+		return 0, errors.New("number must be an interoperable safe integer")
+	}
+	return int64(value), nil
+}
+
+func normalizeLaunchEffectJSONNumber(value json.Number, maxSafeInteger int64) (int64, error) {
+	rational, ok := new(big.Rat).SetString(value.String())
+	if !ok || !rational.IsInt() || !rational.Num().IsInt64() {
+		return 0, errors.New("JSON number must be an interoperable integer")
+	}
+	return normalizeLaunchEffectSignedInteger(rational.Num().Int64(), maxSafeInteger)
+}
+
+func normalizeLaunchEffectSignedInteger(value, maxSafeInteger int64) (int64, error) {
+	if value < -maxSafeInteger || value > maxSafeInteger {
+		return 0, errors.New("integer exceeds the interoperable safe-integer range")
+	}
+	return value, nil
+}
+
+func normalizeLaunchEffectUnsignedInteger(value, maxSafeInteger uint64) (int64, error) {
+	if value > maxSafeInteger {
+		return 0, errors.New("integer exceeds the interoperable safe-integer range")
+	}
+	return int64(value), nil
 }
 
 // ValidateLaunchEffectIdempotencyKey rejects arbitrary caller-provided keys.
@@ -360,14 +456,31 @@ func appendHooks(base []string, hooks ...string) []string {
 func launchInteger(input map[string]any, field string) (int64, error) {
 	switch value := input[field].(type) {
 	case int:
+		return normalizeLaunchEffectSignedInteger(int64(value), 9007199254740991)
+	case int8:
+		return int64(value), nil
+	case int16:
+		return int64(value), nil
+	case int32:
 		return int64(value), nil
 	case int64:
-		return value, nil
-	case float64:
-		if value != float64(int64(value)) {
-			return 0, fmt.Errorf("launch effect input %s must be an integer", field)
-		}
+		return normalizeLaunchEffectSignedInteger(value, 9007199254740991)
+	case uint:
+		return normalizeLaunchEffectUnsignedInteger(uint64(value), 9007199254740991)
+	case uint8:
 		return int64(value), nil
+	case uint16:
+		return int64(value), nil
+	case uint32:
+		return int64(value), nil
+	case uint64:
+		return normalizeLaunchEffectUnsignedInteger(value, 9007199254740991)
+	case json.Number:
+		return normalizeLaunchEffectJSONNumber(value, 9007199254740991)
+	case float32:
+		return normalizeLaunchEffectFloat(float64(value), 9007199254740991)
+	case float64:
+		return normalizeLaunchEffectFloat(value, 9007199254740991)
 	default:
 		return 0, fmt.Errorf("launch effect input %s must be an integer", field)
 	}

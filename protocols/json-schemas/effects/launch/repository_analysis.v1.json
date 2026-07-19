@@ -1,22 +1,22 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/effects/launch/repository_analysis.v1.json",
-  "version": "1.1.0-alpha.1",
+  "version": "1.2.0-alpha.1",
   "title": "Launch Repository Analysis (Preview)",
-  "description": "Immutable evidence of what repository commit was analyzed and whether its workload graph is supported, incomplete, unsupported, or unknown.",
+  "description": "Provider-neutral analysis of one immutable repository source. source_connection_ref is an opaque server-side reference, never a URL or credential.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "analysis_id", "tenant_id", "workspace_id", "repository_ref", "source_commit_sha", "source_tree_hash", "analyzer_contract_hash", "status", "finding_set_hash", "analyzed_at"],
+  "required": ["schema_version", "analysis_id", "tenant_id", "workspace_id", "source_connection_ref", "source_commit_sha", "source_tree_hash", "analyzer_contract_hash", "status", "finding_set_hash", "analyzed_at"],
   "properties": {
     "schema_version": { "const": "launch_repository_analysis.v1" },
     "analysis_id": { "$ref": "#/$defs/non_empty" },
     "tenant_id": { "$ref": "#/$defs/non_empty" },
     "workspace_id": { "$ref": "#/$defs/non_empty" },
-    "repository_ref": { "$ref": "#/$defs/non_empty" },
+    "source_connection_ref": { "type": "string", "pattern": "^source:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$" },
     "source_commit_sha": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
     "source_tree_hash": { "$ref": "#/$defs/hash" },
     "analyzer_contract_hash": { "$ref": "#/$defs/hash" },
-    "status": { "$ref": "#/$defs/status" },
+    "status": { "enum": ["SUPPORTED", "NEEDS_INPUT", "UNSUPPORTED", "UNKNOWN"] },
     "workload_graph_ref": { "$ref": "#/$defs/non_empty" },
     "workload_graph_hash": { "$ref": "#/$defs/hash" },
     "finding_set_hash": { "$ref": "#/$defs/hash" },
@@ -24,22 +24,14 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "status": { "enum": ["SUPPORTED", "NEEDS_INPUT", "UNSUPPORTED"] } }, "required": ["status"] },
-      "then": { "required": ["workload_graph_ref", "workload_graph_hash"] },
-      "else": {
-        "not": {
-          "anyOf": [
-            { "required": ["workload_graph_ref"] },
-            { "required": ["workload_graph_hash"] }
-          ]
-        }
-      }
+      "if": { "properties": { "status": { "const": "UNKNOWN" } }, "required": ["status"] },
+      "then": { "not": { "anyOf": [{ "required": ["workload_graph_ref"] }, { "required": ["workload_graph_hash"] }] } },
+      "else": { "required": ["workload_graph_ref", "workload_graph_hash"] }
     }
   ],
   "$defs": {
     "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
-    "non_empty": { "type": "string", "minLength": 1 },
-    "status": { "enum": ["SUPPORTED", "NEEDS_INPUT", "UNSUPPORTED", "UNKNOWN"] }
+    "non_empty": { "type": "string", "minLength": 1 }
   },
-  "x-helm": { "status": "preview", "execution_enabled": false, "provider_neutral": true, "arbitrary_repository_analysis": true }
+  "x-helm": { "status": "preview", "execution_enabled": false, "opaque_source_refs": true }
 }

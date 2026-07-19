@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/offer_snapshot.v1.json",
+  "version": "1.0.0-alpha.1",
+  "title": "Launch Offer Snapshot (Preview)",
+  "description": "Official, versioned provider offer and connected-account credit evidence. Only ACTIVE_CREDIT_VERIFIED may reduce expected cash; no offer increases the gross authorization cap.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "tenant_id", "workspace_id", "provider_id", "official_source_url", "content_version_hash", "terms_hash", "exclusions_hash", "status", "currency", "verified_credit_minor", "evidence_refs", "retrieved_at", "expires_at"],
+  "properties": {
+    "schema_version": { "const": "launch_offer_snapshot.v1" },
+    "snapshot_id": { "$ref": "#/$defs/non_empty" },
+    "tenant_id": { "$ref": "#/$defs/non_empty" },
+    "workspace_id": { "$ref": "#/$defs/non_empty" },
+    "provider_id": { "$ref": "#/$defs/non_empty" },
+    "provider_account_ref": { "$ref": "#/$defs/non_empty" },
+    "provider_account_hash": { "$ref": "#/$defs/hash" },
+    "official_source_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "content_version_hash": { "$ref": "#/$defs/hash" },
+    "terms_hash": { "$ref": "#/$defs/hash" },
+    "exclusions_hash": { "$ref": "#/$defs/hash" },
+    "status": { "enum": ["ACTIVE_CREDIT_VERIFIED", "MAY_QUALIFY", "NONE", "UNKNOWN"] },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "verified_credit_minor": { "$ref": "#/$defs/minor" },
+    "evidence_refs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/non_empty" } },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  },
+  "dependentRequired": {
+    "provider_account_ref": ["provider_account_hash"],
+    "provider_account_hash": ["provider_account_ref"]
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "ACTIVE_CREDIT_VERIFIED" } }, "required": ["status"] },
+      "then": {
+        "required": ["provider_account_ref", "provider_account_hash"],
+        "properties": { "verified_credit_minor": { "minimum": 1 } }
+      },
+      "else": { "properties": { "verified_credit_minor": { "const": 0 } } }
+    }
+  ],
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 },
+    "minor": { "type": "integer", "minimum": 0 }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "official_evidence_required": true, "verified_credit_never_increases_gross_cap": true }
+}

@@ -208,6 +208,42 @@ func TestLaunchEffectPreviewInputsAndDerivedIdempotencyVectors(t *testing.T) {
 	}
 }
 
+func TestLaunchEffectIdempotencyNormalizesCrossLanguageIntegerSpellings(t *testing.T) {
+	fixture := launchInputFixtures()[0]
+	baseline, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, fixture.input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equivalent := cloneLaunchInput(t, fixture.input)
+	equivalent["effect_ordinal"] = json.Number("1.0")
+	got, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, equivalent)
+	if err != nil {
+		t.Fatalf("equivalent JSON integer spelling was rejected: %v", err)
+	}
+	if got != baseline {
+		t.Fatalf("equivalent integer spellings produced different keys: %s != %s", got, baseline)
+	}
+	if err := contracts.ValidateLaunchEffectInputSemantics(fixture.effectID, equivalent); err != nil {
+		t.Fatalf("equivalent JSON integer spelling failed semantic validation: %v", err)
+	}
+
+	fractional := cloneLaunchInput(t, fixture.input)
+	fractional["effect_ordinal"] = json.Number("1.5")
+	if _, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, fractional); err == nil {
+		t.Fatal("fractional launch input number was hashed as an integer contract")
+	}
+	unsafe := cloneLaunchInput(t, fixture.input)
+	unsafe["effect_ordinal"] = json.Number("9007199254740992")
+	if _, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, unsafe); err == nil {
+		t.Fatal("cross-language unsafe integer was accepted into an authority hash")
+	}
+	precisionLoss := cloneLaunchInput(t, fixture.input)
+	precisionLoss["effect_ordinal"] = json.Number("9007199254740991.1")
+	if _, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, precisionLoss); err == nil {
+		t.Fatal("fractional JSON number was rounded into a safe authority integer")
+	}
+}
+
 func TestLaunchEffectPreviewRejectsStandingAuthorityAndUnverifiedCredit(t *testing.T) {
 	fixtures := launchInputFixtures()
 	activation := cloneLaunchInput(t, fixtures[1].input)
@@ -307,7 +343,7 @@ func TestLaunchEffectPreviewRejectsStandingAuthorityAndUnverifiedCredit(t *testi
 		t.Fatal("expected cash not equal to exposure minus verified credit was accepted")
 	}
 	overlongSpend := cloneLaunchInput(t, fixtures[2].input)
-	overlongSpend["expires_at"] = "2026-08-19T12:00:00Z"
+	overlongSpend["expires_at"] = "2026-08-19T01:00:01Z"
 	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeSpendAuthorize, overlongSpend); err == nil {
 		t.Fatal("spend authority longer than one calendar month was accepted")
 	}
@@ -333,6 +369,40 @@ func TestLaunchEffectPreviewRejectsStandingAuthorityAndUnverifiedCredit(t *testi
 	}
 }
 
+func TestLaunchActivationAndCompensationRepresentStatefulResourcesWithoutDeploymentFields(t *testing.T) {
+	fixtures := launchInputFixtures()
+	activation := cloneLaunchInput(t, fixtures[1].input)
+	activation["activation_class"] = contracts.LaunchTransitionResourceState
+	activation["exposure_kind"] = "DATA"
+	activation["compensation_class"] = contracts.LaunchCompensationResourceRestore
+	for _, field := range []string{"primary_endpoint", "tls_evidence_hash", "deployment_id", "source_commit_sha", "immutable_artifact_digest", "release_manifest_ref", "release_manifest_hash", "provenance_ref", "provenance_hash"} {
+		delete(activation, field)
+	}
+	if err := compileSchema(t, fixtures[1].schema).Validate(activation); err != nil {
+		t.Fatalf("stateful resource activation still requires deployment artifacts: %v", err)
+	}
+	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeDeployProductionActivate, activation); err != nil {
+		t.Fatalf("stateful resource activation failed semantic validation: %v", err)
+	}
+	activation["deployment_id"] = "forbidden-release-field"
+	if err := compileSchema(t, fixtures[1].schema).Validate(activation); err == nil {
+		t.Fatal("stateful resource activation accepted a release-only deployment field")
+	}
+
+	rollback := cloneLaunchInput(t, fixtures[3].input)
+	rollback["compensation_class"] = contracts.LaunchCompensationDataRestore
+	rollback["reason"] = "data_integrity_failure"
+	for _, field := range []string{"source_deployment_id", "source_artifact_digest", "target_deployment_id", "target_commit_sha", "target_artifact_digest"} {
+		delete(rollback, field)
+	}
+	if err := compileSchema(t, fixtures[3].schema).Validate(rollback); err != nil {
+		t.Fatalf("data restore still requires deployment rollback fields: %v", err)
+	}
+	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeProviderRollback, rollback); err != nil {
+		t.Fatalf("data restore failed semantic validation: %v", err)
+	}
+}
+
 func TestLaunchEffectPreviewEnvelopeAndReceiptSchemas(t *testing.T) {
 	fixture := launchInputFixtures()[0]
 	key, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, fixture.input)
@@ -346,6 +416,9 @@ func TestLaunchEffectPreviewEnvelopeAndReceiptSchemas(t *testing.T) {
 		"tenant_id":                    "tenant-1",
 		"workspace_id":                 "workspace-1",
 		"mission_id":                   "mission-1",
+		"principal":                    "spiffe://helm/data-plane-1",
+		"audience":                     "launch.dispatch",
+		"kernel_trust_root_id":         "kernel-root-1",
 		"effect_ordinal":               1,
 		"input_schema_ref":             fixture.schema,
 		"input_schema_hash":            h,
@@ -355,6 +428,10 @@ func TestLaunchEffectPreviewEnvelopeAndReceiptSchemas(t *testing.T) {
 		"plan_hash":                    launchHash("a"),
 		"approval_artifact_ref":        "approval-1",
 		"approval_artifact_hash":       launchHash("b"),
+		"approval_consumption_ref":     "approval-consumption-1",
+		"approval_consumption_hash":    launchHash("e"),
+		"dependency_set_ref":           "dependency-set-1",
+		"dependency_set_hash":          launchHash("f"),
 		"policy_epoch":                 "epoch-1",
 		"emergency_fence_epoch":        4,
 		"verdict":                      "ALLOW",
@@ -450,14 +527,15 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeProviderProvision,
 			schema:    "effects/launch/provider_provision.v1.json",
-			goldenKey: "sha256:5d737a92d7f592100a6358eae214c2258b0eb86ae720d42d5ff647b166f3b889",
+			goldenKey: "sha256:f921f17d52f89b73f421fe1e0e916ac7f60ee9c658c5cca9c580f8643cbf6f9e",
 			input: map[string]any{
 				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeProviderProvision,
 				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 1,
 				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
 				"region": "fra", "jurisdiction": "EU",
 				"repository_analysis_ref": "analysis-1", "repository_analysis_hash": h("0"), "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("1"),
-				"route_binding_ref": "route-1", "route_binding_hash": h("2"), "provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("3"),
+				"route_binding_ref": "route-1", "route_binding_hash": h("2"), "route_placement_id": "placement-1", "provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("3"),
+				"provider_certification_ref": "do-certification-1", "provider_certification_hash": h("4"),
 				"provider_connector_id": contracts.LaunchConnectorDigitalOcean, "provider_connector_contract_hash": h("4"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanProvision, "provider_payload_hash": h("5"),
 				"resource_graph_hash": h("6"),
 				"billing_cadence":     "MONTHLY", "commitment_term": "MONTH_TO_MONTH", "gross_cap_currency": "EUR", "gross_cap_minor": 1200, "gross_exposure_minor": 1200,
@@ -471,36 +549,38 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeDeployProductionActivate,
 			schema:    "effects/launch/deploy_production_activate.v1.json",
-			goldenKey: "sha256:712dc91d57292fa47cf543c0cefbf634c138cebc8f63b90058dc45a6c0626623",
+			goldenKey: "sha256:ede0de2921f564f59eea19913fc8f1eb2dc9e2a199ccf0ed55067306e5c6715c",
 			input: map[string]any{
 				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeDeployProductionActivate,
 				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 2,
 				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
-				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"),
-				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
+				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"), "route_placement_id": "placement-1",
+				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_certification_ref": "do-certification-1", "provider_certification_hash": h("5"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
 				"provider_connector_contract_hash": h("5"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanActivate, "provider_payload_hash": h("6"),
 				"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": h("0"), "resource_graph_ref": "resource-graph-1", "resource_graph_hash": h("7"),
-				"deployment_id": "deployment-2", "activation_target_kind": "ENDPOINT", "source_commit_sha": strings.Repeat("a", 40),
-				"immutable_artifact_digest": h("2"), "source_deployment_state_hash": h("3"), "target_deployment_state_hash": h("4"), "deployment_spec_hash": h("5"),
+				"activation_class": contracts.LaunchTransitionReleaseCutover, "exposure_kind": "ENDPOINT",
+				"source_state_ref": "deployment-state-1", "source_state_hash": h("3"), "target_state_ref": "deployment-state-2", "target_state_hash": h("4"),
+				"transition_plan_ref": "transition-plan-1", "transition_plan_hash": h("5"), "verification_plan_hash": h("6"), "activation_evidence_hash": h("b"),
+				"compensation_class": contracts.LaunchCompensationReleaseRollback, "compensation_target_ref": "deployment-state-1", "compensation_target_hash": h("d"), "compensation_plan_hash": h("c"),
+				"promotion_permit_ref": "promotion-permit-1", "promotion_permit_hash": h("8"),
+				"endpoint_set_hash": h("8"), "primary_endpoint": "https://mission-1.ondigitalocean.app", "health_evidence_hash": h("9"), "tls_evidence_hash": h("a"),
+				"deployment_id": "deployment-2", "source_commit_sha": strings.Repeat("a", 40), "immutable_artifact_digest": h("2"),
 				"release_manifest_ref": "release-manifest-1", "release_manifest_hash": h("6"), "provenance_ref": "provenance-1", "provenance_hash": h("7"),
-				"desired_state_revision": "gitops-revision-1", "promotion_permit_ref": "promotion-permit-1", "promotion_permit_hash": h("8"),
-				"endpoint_set_hash": h("8"), "primary_endpoint": "https://mission-1.ondigitalocean.app", "health_evidence_hash": h("9"), "tls_evidence_hash": h("a"), "activation_evidence_hash": h("b"), "activation_plan_hash": h("c"),
-				"rollback_target_ref": "rollback-target-1", "rollback_deployment_id": "deployment-1", "rollback_artifact_digest": h("c"), "rollback_state_hash": h("d"),
 				"rollback_authorization_mode": "PREAUTHORIZED_EXACT_TARGET", "rollback_permit_ref": "rollback-permit-1", "rollback_permit_hash": h("e"),
-				"rollback_permit_expiry": "2026-07-18T12:05:00Z",
+				"rollback_permit_expiry": "2026-07-19T01:05:00Z",
 				"plan_hash":              h("f"), "connector_contract_hash": h("1"),
 			},
 		},
 		{
 			effectID:  contracts.EffectTypeSpendAuthorize,
 			schema:    "effects/launch/spend_authorize.v1.json",
-			goldenKey: "sha256:74b5fac1b09b7374f82ccfb9071903b30aa99237c071c231f1ce26ac45394057",
+			goldenKey: "sha256:47472ae4fc905eb20b1fbb3858b6fef6d189aee269bc43d8cfaf66d0d4113553",
 			input: map[string]any{
 				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeSpendAuthorize,
 				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 0,
 				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
-				"workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("0"), "route_binding_ref": "route-1", "route_binding_hash": h("1"),
-				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("2"),
+				"workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("0"), "route_binding_ref": "route-1", "route_binding_hash": h("1"), "route_placement_id": "placement-1",
+				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("2"), "provider_certification_ref": "do-certification-1", "provider_certification_hash": h("3"),
 				"currency": "EUR", "gross_cap_minor": 1200, "base_provider_cost_minor": 1050, "gross_exposure_minor": 1200,
 				"expected_cash_minor": 950, "verified_credit_minor": 250,
 				"credit_status": "ACTIVE_CREDIT_VERIFIED", "tax_fx_reserve_minor": 150, "billing_cadence": "MONTHLY", "commitment_term": "MONTH_TO_MONTH",
@@ -508,40 +588,40 @@ func launchInputFixtures() []launchInputFixture {
 				"quote_hash": h("2"), "price_snapshot_hash": h("3"), "credit_snapshot_hash": h("4"), "fx_snapshot_hash": h("5"), "tax_snapshot_hash": h("6"),
 				"spend_intent_hash": h("7"), "spend_envelope_hash": h("8"), "budget_verdict_receipt_hash": h("9"),
 				"budget_reservation_ref": "budget-reservation-1", "budget_reservation_hash": h("a"), "provider_terms_profile_hash": h("b"),
-				"constraint_set_hash": h("c"), "plan_hash": h("d"), "connector_contract_hash": h("e"), "authorized_at": "2026-07-18T12:00:00Z", "expires_at": "2026-07-18T12:05:00Z",
+				"constraint_set_hash": h("c"), "plan_hash": h("d"), "connector_contract_hash": h("e"), "authorized_at": "2026-07-19T01:00:00Z", "expires_at": "2026-07-19T01:05:00Z",
 			},
 		},
 		{
 			effectID:  contracts.EffectTypeProviderRollback,
 			schema:    "effects/launch/provider_rollback.v1.json",
-			goldenKey: "sha256:11d34bf4af2dd717786d996119b30460d48fcb7e87fd42b4f3e67fe9127fd51f",
+			goldenKey: "sha256:82defc4ae5cc59802de3bd2d5825fc23b5641196ea330ffae0c1bc03f7b5aa84",
 			input: map[string]any{
 				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeProviderRollback,
 				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 3,
 				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
-				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"),
-				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
+				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"), "route_placement_id": "placement-1",
+				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_certification_ref": "do-certification-1", "provider_certification_hash": h("5"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
 				"provider_connector_contract_hash": h("5"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanRollback, "provider_payload_hash": h("6"),
 				"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": h("0"),
 				"origin_activation_receipt_ref": "activation-receipt-1", "origin_activation_receipt_hash": h("f"),
-				"resource_graph_ref": "resource-graph-1", "resource_graph_hash": h("7"), "resource_ownership_hash": h("2"), "source_deployment_id": "deployment-2", "source_artifact_digest": h("3"), "source_state_hash": h("4"),
-				"target_deployment_id": "deployment-1", "target_commit_sha": strings.Repeat("b", 40), "target_artifact_digest": h("5"), "target_state_hash": h("6"),
-				"target_health_evidence_hash": h("7"), "rollback_plan_hash": h("8"),
-				"rollback_authorization_mode": "PREAUTHORIZED_EXACT_TARGET", "rollback_permit_ref": "rollback-permit-1", "rollback_permit_hash": h("e"), "rollback_permit_expiry": "2026-07-18T12:05:00Z",
-				"connector_capability_certification_hash": h("9"),
+				"resource_graph_ref": "resource-graph-1", "resource_graph_hash": h("7"), "resource_ownership_hash": h("2"),
+				"compensation_class": contracts.LaunchCompensationReleaseRollback, "source_state_ref": "deployment-state-2", "source_state_hash": h("4"), "target_state_ref": "deployment-state-1", "target_state_hash": h("6"),
+				"compensation_plan_ref": "compensation-plan-1", "compensation_plan_hash": h("8"), "verification_plan_hash": h("9"), "target_health_evidence_hash": h("7"),
+				"source_deployment_id": "deployment-2", "source_artifact_digest": h("3"), "target_deployment_id": "deployment-1", "target_commit_sha": strings.Repeat("b", 40), "target_artifact_digest": h("5"),
+				"rollback_authorization_mode": "PREAUTHORIZED_EXACT_TARGET", "rollback_permit_ref": "rollback-permit-1", "rollback_permit_hash": h("e"), "rollback_permit_expiry": "2026-07-19T01:05:00Z",
 				"plan_hash": h("a"), "connector_contract_hash": h("b"), "reason": "health_check_failure",
 			},
 		},
 		{
 			effectID:  contracts.EffectTypeProviderTeardown,
 			schema:    "effects/launch/provider_teardown.v1.json",
-			goldenKey: "sha256:df46c178fac16f57c96a5f7746915440a85c45486dd5c981224c00d071792e2a",
+			goldenKey: "sha256:e69036f831cbb2cf2b5886a84001b1c743de1ea42a0b35b2d16b482d1f755040",
 			input: map[string]any{
 				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeProviderTeardown,
 				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 4,
 				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
-				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"),
-				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
+				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"), "route_placement_id": "placement-1",
+				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_certification_ref": "do-certification-1", "provider_certification_hash": h("5"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
 				"provider_connector_contract_hash": h("5"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanTeardown, "provider_payload_hash": h("6"),
 				"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": h("0"),
 				"resource_graph_ref": "resource-graph-1", "resource_graph_hash": h("7"), "resource_ownership_hash": h("2"), "observed_state_hash": h("3"), "dependency_snapshot_hash": h("4"),

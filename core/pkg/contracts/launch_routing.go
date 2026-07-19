@@ -464,8 +464,10 @@ func ValidateLaunchProviderCapabilityProfile(profile LaunchProviderCapabilityPro
 }
 
 // ValidateLaunchRouteBinding resolves and verifies every approval-bound
-// artifact. requireDispatchAuthority additionally requires a signed, current,
-// non-revoked connector certification for every placement.
+// artifact. requireDispatchAuthority additionally requires every effect to be
+// registered in the canonical dispatch catalog and every placement to carry a
+// signed, current, non-revoked connector certification. Preview-only effects
+// therefore remain non-executable until their atomic promotion release.
 func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteArtifactResolver, now time.Time, requireDispatchAuthority bool) error {
 	if resolver == nil {
 		return errors.New("launch route validation requires a source-owned artifact resolver")
@@ -658,7 +660,7 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 			}
 			nodePlacement[nodeID] = placement.PlacementID
 		}
-		if err := validateLaunchPlacementActions(placement, profile, payloads); err != nil {
+		if err := validateLaunchPlacementActions(placement, profile, payloads, requireDispatchAuthority); err != nil {
 			return err
 		}
 		resourceSubsetHash, err := DeriveLaunchResourceSubsetHash(resources, placement.PlacementID)
@@ -741,7 +743,7 @@ func validateLaunchPlacementCertification(placement LaunchRoutePlacement, profil
 	return nil
 }
 
-func validateLaunchPlacementActions(placement LaunchRoutePlacement, profile LaunchProviderCapabilityProfile, payloads LaunchProviderPayloadSet) error {
+func validateLaunchPlacementActions(placement LaunchRoutePlacement, profile LaunchProviderCapabilityProfile, payloads LaunchProviderPayloadSet, requireDispatchAuthority bool) error {
 	profileActions := make(map[string]LaunchProviderAction, len(profile.Actions))
 	for _, action := range profile.Actions {
 		profileActions[action.EffectID] = action
@@ -758,6 +760,9 @@ func validateLaunchPlacementActions(placement LaunchRoutePlacement, profile Laun
 			return fmt.Errorf("launch route placement %s actions must be complete, unique, and sorted", placement.PlacementID)
 		}
 		previous = binding.EffectID
+		if requireDispatchAuthority && LookupEffectType(binding.EffectID) == nil {
+			return fmt.Errorf("launch effect %s is not registered in the canonical dispatch catalog", binding.EffectID)
+		}
 		action, ok := profileActions[binding.EffectID]
 		if !ok || action.ActionURN != binding.ProviderActionURN {
 			return fmt.Errorf("launch route action %s is absent from provider profile", binding.EffectID)

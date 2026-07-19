@@ -55,22 +55,6 @@ func LaunchProviderCertificationSigningBytes(record LaunchProviderCertificationR
 	return canonicalize.JCS(record)
 }
 
-// SignLaunchProviderCertificationRecord exists for source-owned fixtures and
-// certification tooling. Production signing remains certification-service
-// owned and does not live in a provider connector.
-func SignLaunchProviderCertificationRecord(record LaunchProviderCertificationRecord, privateKey ed25519.PrivateKey) (LaunchProviderCertificationRecord, error) {
-	if len(privateKey) != ed25519.PrivateKeySize {
-		return record, errors.New("launch provider certification private key has invalid size")
-	}
-	payload, err := LaunchProviderCertificationSigningBytes(record)
-	if err != nil {
-		return record, err
-	}
-	record.RecordHash = canonicalize.ComputeArtifactHash(payload)
-	record.Signature = "ed25519:" + hex.EncodeToString(ed25519.Sign(privateKey, payload))
-	return record, nil
-}
-
 // VerifyLaunchProviderCertificationRecord proves content integrity, trust-root
 // signature, active status, and the certification validity window. Callers
 // must additionally prove this is the current non-revoked registry record.

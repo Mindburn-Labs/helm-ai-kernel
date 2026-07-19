@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-19T17:55:04Z
-# Commit: e7c0d65a3bc49b08cc0d4830ecc68a1863c27ec3
+# Generated: 2026-07-19T18:07:10Z
+# Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -197,8 +197,8 @@ c1910943db1064a742523422c0827c5aa12a1b865fe715249b9e27121444bb82  core/pkg/contr
 911679cd806c40d59d08e9ce7f7193b02bb33131af59a7f960a0b461fc68f89b  core/pkg/contracts/effect_close_test.go
 b64fa3d70e9a5e4807012d3b4ccb3e9e6b49d87df8c5bfbaeabfddd59726c363  core/pkg/contracts/effect_receipt.go
 66a65be48773e628408d72baf907076559261eb108bf33ec73e5f06b61a68894  core/pkg/contracts/effect_schema_link_test.go
-b21cdf9d5dddee4ab2ce734df0ef5b45e92522cc105ceb247fea1cfc5fb0d0f3  core/pkg/contracts/effect_types.go
-e0ae0eb682c07e6b3930c057a22a476292ab270ef7f88d7ab24f095d83396451  core/pkg/contracts/effect_types_test.go
+f22ab0e1fee120194a5b029e2ed322532dc9eec1d7f98db57ff25516e171d982  core/pkg/contracts/effect_types.go
+40bb8a083a3349f8ba559fae95d4a4dbac1aeb3b1d6793cf6d7d7ca39a96b920  core/pkg/contracts/effect_types_test.go
 04789aa50c575ea248b48a67c809e4033fdf7dd593032f3951632ad8373fcad4  core/pkg/contracts/envelope.go
 83733b8d1e6ee7b36057fab206040881034b5c93269ad1ee7badb322e02f18be  core/pkg/contracts/environment.go
 29fb8357a183f42b696f621244d0da1caff47c8394f50229bb622f32f1fe9189  core/pkg/contracts/escalation.go
@@ -222,10 +222,10 @@ bcfd4bc7c3f9463be26db2922ad02336c8f987812e7efe442b879359cd652bf6  core/pkg/contr
 98833e4bc7dfc694f1815fd5a7c6592457f9c4c96db337dae8f39fb4b860d293  core/pkg/contracts/lane.go
 63be4c54fb0ab500f0a6b3f0c00d0e5ae708136936edc94e78219e6e80f6d061  core/pkg/contracts/launch_contract_helpers.go
 071f7ecf81895c32094cdf167bf57c030f79b8960c5cbd3cbd95b4907b1bc83c  core/pkg/contracts/launch_offer_snapshot.go
-915cf7b668a98cb90fb86960f7c7c19051d3e81d6477a4536c7acfd8d6f96c78  core/pkg/contracts/launch_provider_certification.go
-91d92f3e462f5aefba91c1a6577f3660975dc1ec8ce2283be2fc2560fb6ff3db  core/pkg/contracts/launch_route_artifacts.go
-b680a0e16bc68a506c93576f2fbb883047ad3c5e5421ad924b7e7d4626126001  core/pkg/contracts/launch_routing.go
-8ed646eb7c3478a0eea1e0d03fd80020f0200d7867b15c61192fd1fc25f1f154  core/pkg/contracts/launch_routing_test.go
+d9e5f1ff0d4a17b49c019ffd187e94308e91a79582fac8a7c171807cd52d3f58  core/pkg/contracts/launch_provider_certification.go
+684d71a464864b6ffbdc0e9313ff568c8611f902d3c0e53be3f1f42bd832091c  core/pkg/contracts/launch_route_artifacts.go
+3980c4bbbbd599f45c3fc6857d2ebb3fa94cd3ce442d502efa8f8e27051e1242  core/pkg/contracts/launch_routing.go
+b3be0608f6e9359c32ec6b4f2ea6c0fa1b01067cd656acfa63c08f0fc21a7080  core/pkg/contracts/launch_routing_test.go
 6942aa79152e00619823bfbd9ce6fba5e004deff66c4137f4cba3842bfb4dff2  core/pkg/contracts/migration.go
 7073aecde8cbabaf1736a69f45570ccfc31eeedf80fe75b344777baa393df16d  core/pkg/contracts/model_catalog.go
 7341c7e71cc60b56057805fec95cdcd50325905f7a1a64c5c6f3e0d20e3ac708  core/pkg/contracts/model_catalog_test.go

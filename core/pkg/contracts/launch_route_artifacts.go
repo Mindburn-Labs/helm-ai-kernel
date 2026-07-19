@@ -301,6 +301,8 @@ func ValidateLaunchRouteQuote(value LaunchRouteQuote) error {
 	}
 	var baseTotal, reserveTotal, grossTotal, creditTotal, expectedCashTotal int64
 	lineStatuses := make([]string, 0, len(value.PlacementCosts))
+	creditedAccounts := make(map[string]string)
+	creditedSnapshots := make(map[string]string)
 	previous := ""
 	for _, line := range value.PlacementCosts {
 		if line.PlacementID == "" || line.PlacementID <= previous || line.ProviderID == "" || line.RegionID == "" || line.OfferingID == "" || line.BillingCadence == "" || line.CommitmentTerm == "" {
@@ -322,6 +324,16 @@ func ValidateLaunchRouteQuote(value LaunchRouteQuote) error {
 			if line.VerifiedCreditMinor <= 0 {
 				return fmt.Errorf("launch route quote placement %s verified status has no active credit", line.PlacementID)
 			}
+			accountKey := launchTupleKey(line.ProviderID, line.ProviderAccountHash)
+			if prior, exists := creditedAccounts[accountKey]; exists {
+				return fmt.Errorf("launch route quote placements %s and %s apply verified credit more than once to one provider account", prior, line.PlacementID)
+			}
+			creditedAccounts[accountKey] = line.PlacementID
+			snapshotKey := launchTupleKey(line.OfferSnapshotRef, line.OfferSnapshotHash)
+			if prior, exists := creditedSnapshots[snapshotKey]; exists {
+				return fmt.Errorf("launch route quote placements %s and %s apply one verified credit snapshot more than once", prior, line.PlacementID)
+			}
+			creditedSnapshots[snapshotKey] = line.PlacementID
 		case LaunchCreditAdvisory, LaunchCreditNone, LaunchCreditUnknown:
 			if line.VerifiedCreditMinor != 0 {
 				return fmt.Errorf("launch route quote placement %s unverified status reduced expected cash", line.PlacementID)

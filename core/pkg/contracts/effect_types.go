@@ -4,8 +4,9 @@ package contracts
 // These are the stable identifiers for effects that require specific
 // enforcement behavior, risk classification, and approval semantics.
 //
-// Per the HELM Canonical Implementation Plan: every high-risk effect
-// MUST be named, classified, and registered in DefaultEffectCatalog().
+// Per the HELM Canonical Implementation Plan: every executable high-risk effect
+// MUST be named, classified, and registered in DefaultEffectCatalog(). Reserved
+// preview identifiers must remain rejected at dispatch until registration.
 const (
 	// Infrastructure effects
 	EffectTypeInfraDestroy        = "INFRA_DESTROY"             // Destroy infrastructure (e.g., terraform destroy)
@@ -30,7 +31,8 @@ const (
 	// Governed company launch effect identifiers are reserved by the
 	// provider-neutral route contracts. They remain intentionally absent from
 	// DefaultEffectCatalog until the preview effect, authority, connector, and
-	// conformance layers are promoted together.
+	// conformance layers are promoted together. Route validation explicitly
+	// rejects them whenever dispatch authority is requested.
 	EffectTypeProviderProvision        = "PROVIDER_PROVISION"
 	EffectTypeDeployProductionActivate = "DEPLOY_PRODUCTION_ACTIVATE"
 	EffectTypeSpendAuthorize           = "SPEND_AUTHORIZE"
@@ -337,12 +339,14 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 func EffectRiskClass(effectTypeID string) string {
 	switch effectTypeID {
 	case EffectTypeInfraDestroy, EffectTypeCICredentialAccess,
-		EffectTypeSoftwarePublish, EffectTypeDataEgress:
+		EffectTypeSoftwarePublish, EffectTypeDataEgress, EffectTypeProviderTeardown:
 		return "E4" // Critical / Irreversible
 	case EffectTypeProtectedInfraWrite, EffectTypeEnvRecreate,
-		EffectTypeAgentInvokePrivileged, EffectTypeTunnelStart:
+		EffectTypeAgentInvokePrivileged, EffectTypeTunnelStart,
+		EffectTypeProviderProvision, EffectTypeDeployProductionActivate,
+		EffectTypeSpendAuthorize, EffectTypeProviderRollback:
 		return "E3" // High Risk
-	case EffectTypeCloudComputeBudget:
+	case EffectTypeCloudComputeBudget, EffectTypeCompanyArtifactUpdate:
 		return "E2" // Medium Risk (budget-gated)
 	case EffectTypeAgentIdentityIsolation:
 		return "E1" // Low Risk (validation check)

@@ -5,6 +5,7 @@ package contracts_test
 import (
 	"bytes"
 	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
@@ -247,6 +249,29 @@ func TestRouteRejectsPayloadForUnknownPlacement(t *testing.T) {
 	}
 }
 
+func TestRouteQuoteRejectsVerifiedCreditReuseAcrossPlacements(t *testing.T) {
+	fixture := multiLaunchRouteFixture(t)
+	quote := fixture.quote
+	quote.PlacementCosts = append([]contracts.LaunchPlacementCost(nil), quote.PlacementCosts...)
+	for index := range quote.PlacementCosts {
+		line := &quote.PlacementCosts[index]
+		line.ProviderID = "shared-cloud"
+		line.ProviderAccountHash = launchRoutingHash("1")
+		line.OfferSnapshotRef = "offer-shared"
+		line.OfferSnapshotHash = launchRoutingHash("2")
+		line.CreditStatus = contracts.LaunchCreditVerified
+		line.VerifiedCreditMinor = 100
+		line.ExpectedCashMinor = line.GrossExposureMinor - line.VerifiedCreditMinor
+	}
+	quote.VerifiedCreditMinor = 200
+	quote.ExpectedCashMinor = quote.GrossExposureMinor - quote.VerifiedCreditMinor
+	quote.CreditStatus = contracts.LaunchCreditVerified
+	quote.CreditSnapshotHash, _ = contracts.DeriveLaunchOfferSnapshotSetHash(quote.PlacementCosts)
+	if err := contracts.ValidateLaunchRouteQuote(quote); err == nil || !strings.Contains(err.Error(), "more than once") {
+		t.Fatalf("one connected-account credit balance was deducted twice: %v", err)
+	}
+}
+
 func TestRouteRejectsFutureDatedCommercialEvidence(t *testing.T) {
 	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
 	base := singleLaunchRouteFixture(t, profile, false)
@@ -361,19 +386,22 @@ func TestOfferSnapshotNeverPromotesAdvisoryCreditToCashReduction(t *testing.T) {
 func TestProviderCertificationRequiresSignatureTrustAndCurrentRegistryState(t *testing.T) {
 	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
 	fixture := singleLaunchRouteFixture(t, profile, true)
-	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, true); err != nil {
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err != nil {
 		t.Fatalf("signed current certification was rejected: %v", err)
+	}
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, true); err == nil || !strings.Contains(err.Error(), "not registered") {
+		t.Fatalf("preview effect crossed the production dispatch catalog boundary: %v", err)
 	}
 
 	fixture.resolver.current[fixture.certification.CertificationID] = launchRoutingHash("9")
-	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, true); err == nil || !strings.Contains(err.Error(), "not current") {
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "not current") {
 		t.Fatalf("revoked/superseded certification remained authoritative: %v", err)
 	}
 
 	fixture = singleLaunchRouteFixture(t, profile, true)
 	_, wrongPrivate, _ := ed25519.GenerateKey(bytes.NewReader(bytes.Repeat([]byte{9}, 64)))
 	fixture.resolver.keys[fixture.certification.SignerKeyID] = wrongPrivate.Public().(ed25519.PublicKey)
-	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, true); err == nil || !strings.Contains(err.Error(), "signature") {
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "signature") {
 		t.Fatalf("untrusted certification key was accepted: %v", err)
 	}
 }
@@ -636,7 +664,7 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 	if certified {
 		seed := bytes.Repeat([]byte{1}, ed25519.SeedSize)
 		privateKey := ed25519.NewKeyFromSeed(seed)
-		certification, _ = contracts.SignLaunchProviderCertificationRecord(contracts.LaunchProviderCertificationRecord{
+		certification = signLaunchProviderCertificationRecord(t, contracts.LaunchProviderCertificationRecord{
 			SchemaVersion: contracts.LaunchProviderCertificationSchemaVersion, CertificationID: "certification-1", ProfileRef: profile.ProfileID, ProfileHash: profileHash,
 			ProviderID: profile.ProviderID, ConnectorID: profile.ConnectorID, ConnectorContractHash: profile.ConnectorContractHash,
 			CertificationTier: "provider-mutation-tier-1", CertificationSuiteHash: launchRoutingHash("b"), CertificationEvidenceHash: launchRoutingHash("c"), AdmissionStatus: contracts.LaunchProviderCertificationActive,
@@ -849,4 +877,15 @@ func cloneLaunchRouteFixture(value launchRouteFixture) launchRouteFixture {
 
 func launchRoutingHash(char string) string {
 	return "sha256:" + strings.Repeat(char, 64)
+}
+
+func signLaunchProviderCertificationRecord(t *testing.T, record contracts.LaunchProviderCertificationRecord, privateKey ed25519.PrivateKey) contracts.LaunchProviderCertificationRecord {
+	t.Helper()
+	payload, err := contracts.LaunchProviderCertificationSigningBytes(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.RecordHash = canonicalize.ComputeArtifactHash(payload)
+	record.Signature = "ed25519:" + hex.EncodeToString(ed25519.Sign(privateKey, payload))
+	return record
 }

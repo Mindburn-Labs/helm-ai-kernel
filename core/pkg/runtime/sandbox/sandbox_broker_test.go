@@ -130,6 +130,73 @@ func TestPrepareExecutionRejectsPrivilegedDeniedBeforeLeaseCredentialsOrRunner(t
 	}
 }
 
+func TestExecuteRejectsCallerConstructedPreparedExecution(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	prepared := &sandbox_runtime.PreparedExecution{
+		Lease:      execLease,
+		Spec:       &pkg_sandbox.SandboxSpec{WorkDir: execLease.WorkspacePath},
+		Verdict:    testVerdict(),
+		PreparedAt: clock(),
+	}
+
+	if _, _, err := broker.Execute(ctx, prepared); err == nil {
+		t.Fatal("caller-constructed prepared execution reached dispatch")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("caller-constructed prepared execution reached sandbox runner")
+	}
+	got, err := leaseManager.Get(ctx, execLease.LeaseID)
+	if err != nil || got.Status != lease.LeaseStatusPending {
+		t.Fatalf("unrecognized execution changed lease state: lease=%+v err=%v", got, err)
+	}
+}
+
+func TestExecuteRejectsMutatedPreparedExecutionAndConsumesAuthorization(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	prepared, err := broker.PrepareExecution(ctx, execLease, testVerdict())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared.Verdict.Decision.Verdict = string(contracts.VerdictDeny)
+
+	if _, _, err := broker.Execute(ctx, prepared); err == nil {
+		t.Fatal("mutated prepared execution reached dispatch")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("mutated prepared execution reached sandbox runner")
+	}
+	got, err := leaseManager.Get(ctx, execLease.LeaseID)
+	if err != nil || got.Status != lease.LeaseStatusCompleted {
+		t.Fatalf("rejected prepared execution was not cleaned up: lease=%+v err=%v", got, err)
+	}
+	prepared.Verdict.Decision.Verdict = string(contracts.VerdictAllow)
+	if _, _, err := broker.Execute(ctx, prepared); err == nil {
+		t.Fatal("rejected prepared execution authorization was reusable")
+	}
+}
+
+func TestExecuteRejectsCopiedPreparedExecution(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	prepared, err := broker.PrepareExecution(ctx, execLease, testVerdict())
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := *prepared
+
+	if _, _, err := broker.Execute(ctx, &copied); err == nil {
+		t.Fatal("copied prepared execution reached dispatch")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("copied prepared execution reached sandbox runner")
+	}
+	if _, _, err := broker.Execute(ctx, prepared); err != nil {
+		t.Fatalf("copy attempt consumed the original broker authorization: %v", err)
+	}
+}
+
 func TestPrepareExecution(t *testing.T) {
 	broker, lm, _ := setupBroker()
 	l := acquireLease(t, lm)
@@ -239,27 +306,50 @@ func TestPrepareExecution_NilVerdict(t *testing.T) {
 	}
 }
 
-func TestExecute_RevocationFailureIsRecorded(t *testing.T) {
-	broker, lm, _ := setupBroker()
-	l := acquireLease(t, lm)
+func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).WithClock(clock)
+	broker.RegisterRunner("docker", &mockRunner{})
+	sandboxID := fmt.Sprintf("sbx-docker-%d", clock().UnixNano())
+	credBroker.SetScopeAllowlist(sandboxID, []string{"repo:read"})
+	l, err := lm.Acquire(ctx, lease.LeaseRequest{
+		RunID:         "run-1",
+		WorkspacePath: "/workspace",
+		Backend:       "docker",
+		ProfileName:   "net-limited",
+		TTL:           time.Hour,
+		SecretBindings: []lease.SecretBinding{{
+			SecretRef: "repo-token",
+			Scopes:    []string{"repo:read"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	prepared, err := broker.PrepareExecution(ctx, l, testVerdict())
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared.TokenIDs = append(prepared.TokenIDs, "missing-token")
+	if len(prepared.TokenIDs) != 1 {
+		t.Fatalf("issued token IDs = %d, want 1", len(prepared.TokenIDs))
+	}
+	prepared.TokenIDs = append(prepared.TokenIDs, "caller-injected-token")
 
 	result, receipt, err := broker.Execute(ctx, prepared)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("mutated credential list reached sandbox execution")
 	}
-	if result.Cleanup.Status != "degraded" {
-		t.Fatalf("cleanup status = %#v, want degraded", result.Cleanup)
+	if result != nil || receipt != nil {
+		t.Fatalf("rejected execution returned result=%+v receipt=%+v", result, receipt)
 	}
-	if result.Success() {
-		t.Fatal("cleanup degradation must make the result non-success")
+	if valid, reason := credBroker.ValidateToken(prepared.Tokens[0]); valid || reason != "token revoked" {
+		t.Fatalf("prepared credential was not revoked after mutation: valid=%v reason=%q", valid, reason)
 	}
-	if receipt == nil || receipt.Result.Cleanup.Status != "degraded" {
-		t.Fatalf("receipt cleanup = %#v, want degraded", receipt)
+	got, getErr := lm.Get(ctx, l.LeaseID)
+	if getErr != nil || got.Status != lease.LeaseStatusCompleted {
+		t.Fatalf("rejected execution lease was not completed: lease=%+v err=%v", got, getErr)
 	}
 }
 

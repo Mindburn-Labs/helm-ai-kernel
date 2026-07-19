@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectgraph"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/intentcompiler"
@@ -42,6 +43,18 @@ type PreparedExecution struct {
 	PreparedAt time.Time
 }
 
+// preparedExecutionRecord is broker-owned execution state. Execute uses this
+// immutable snapshot rather than caller-mutable PreparedExecution fields after
+// it has proved the exact returned pointer and fingerprint are still current.
+type preparedExecutionRecord struct {
+	fingerprint string
+	backend     string
+	leaseID     string
+	runner      SandboxRunner
+	spec        pkg_sandbox.SandboxSpec
+	tokenIDs    []string
+}
+
 // SandboxBroker mediates between approved effect graphs and execution backends.
 // It manages lease activation, credential issuance, sandbox specification
 // construction, and execution orchestration.
@@ -50,6 +63,7 @@ type SandboxBroker struct {
 	credBroker *CredentialBroker
 	leases     lease.LeaseManager
 	runners    map[string]SandboxRunner // backend name → runner
+	prepared   map[*PreparedExecution]preparedExecutionRecord
 	clock      func() time.Time
 }
 
@@ -62,6 +76,7 @@ func NewSandboxBroker(
 		credBroker: credBroker,
 		leases:     leases,
 		runners:    make(map[string]SandboxRunner),
+		prepared:   make(map[*PreparedExecution]preparedExecutionRecord),
 		clock:      time.Now,
 	}
 }
@@ -101,9 +116,9 @@ func (b *SandboxBroker) PrepareExecution(
 
 	// Verify runner exists.
 	b.mu.RLock()
-	_, hasRunner := b.runners[execLease.Backend]
+	runner, hasRunner := b.runners[execLease.Backend]
 	b.mu.RUnlock()
-	if !hasRunner {
+	if !hasRunner || runner == nil {
 		return nil, fmt.Errorf("no runner registered for backend %q", execLease.Backend)
 	}
 
@@ -152,14 +167,33 @@ func (b *SandboxBroker) PrepareExecution(
 		spec.Image = execLease.TemplateRef
 	}
 
-	return &PreparedExecution{
+	prepared := &PreparedExecution{
 		Lease:      execLease,
 		Spec:       spec,
 		Verdict:    verdict,
 		TokenIDs:   tokenIDs,
 		Tokens:     bearerTokens,
 		PreparedAt: b.clock(),
-	}, nil
+	}
+	fingerprint, err := preparedExecutionFingerprint(prepared)
+	if err != nil {
+		for _, tokenID := range tokenIDs {
+			_ = b.credBroker.RevokeToken(tokenID)
+		}
+		_ = b.leases.Revoke(ctx, execLease.LeaseID, fmt.Sprintf("seal prepared execution: %v", err))
+		return nil, fmt.Errorf("seal prepared execution: %w", err)
+	}
+	b.mu.Lock()
+	b.prepared[prepared] = preparedExecutionRecord{
+		fingerprint: fingerprint,
+		backend:     execLease.Backend,
+		leaseID:     execLease.LeaseID,
+		runner:      runner,
+		spec:        cloneSandboxSpec(spec),
+		tokenIDs:    append([]string(nil), tokenIDs...),
+	}
+	b.mu.Unlock()
+	return prepared, nil
 }
 
 func executableSandboxProfile(profile string) bool {
@@ -180,24 +214,28 @@ func (b *SandboxBroker) Execute(
 	ctx context.Context,
 	prepared *PreparedExecution,
 ) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {
-	b.mu.RLock()
-	runner, ok := b.runners[prepared.Lease.Backend]
-	b.mu.RUnlock()
-	if !ok {
-		return nil, nil, fmt.Errorf("no runner for backend %q", prepared.Lease.Backend)
+	record, err := b.claimPreparedExecution(ctx, prepared)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	runner := record.runner
+	if runner == nil {
+		cleanup := b.cleanupRecord(ctx, record)
+		return nil, nil, fmt.Errorf("no runner for backend %q (cleanup=%s)", record.backend, cleanup.Status)
 	}
 
 	// Validate spec before execution.
-	if err := runner.Validate(prepared.Spec); err != nil {
-		b.cleanup(ctx, prepared)
+	if err := runner.Validate(&record.spec); err != nil {
+		b.cleanupRecord(ctx, record)
 		return nil, nil, fmt.Errorf("validate sandbox spec: %w", err)
 	}
 
 	// Execute.
-	result, receipt, err := runner.Run(prepared.Spec)
+	result, receipt, err := runner.Run(&record.spec)
 
 	// Always clean up regardless of outcome.
-	cleanup := b.cleanup(ctx, prepared)
+	cleanup := b.cleanupRecord(ctx, record)
 	applyCleanupStatus(result, receipt, cleanup)
 
 	if err != nil {
@@ -206,27 +244,107 @@ func (b *SandboxBroker) Execute(
 	return result, receipt, nil
 }
 
+// claimPreparedExecution atomically consumes one exact broker-prepared object.
+// A caller-constructed value, a copied value, a mutated value, or a replay is
+// rejected before runner lookup or validation.
+func (b *SandboxBroker) claimPreparedExecution(ctx context.Context, prepared *PreparedExecution) (preparedExecutionRecord, error) {
+	if prepared == nil {
+		return preparedExecutionRecord{}, fmt.Errorf("prepared execution is incomplete")
+	}
+	b.mu.Lock()
+	record, ok := b.prepared[prepared]
+	if ok {
+		delete(b.prepared, prepared)
+	}
+	b.mu.Unlock()
+	if !ok {
+		return preparedExecutionRecord{}, fmt.Errorf("execution was not prepared by this broker or was already consumed")
+	}
+	if err := validatePreparedExecutionAuthority(prepared); err != nil {
+		cleanup := b.cleanupRecord(ctx, record)
+		return preparedExecutionRecord{}, fmt.Errorf("%w (cleanup=%s)", err, cleanup.Status)
+	}
+
+	fingerprint, err := preparedExecutionFingerprint(prepared)
+	if err != nil || fingerprint != record.fingerprint {
+		cleanup := b.cleanupRecord(ctx, record)
+		if err != nil {
+			return preparedExecutionRecord{}, fmt.Errorf("canonicalize prepared execution for dispatch: %w (cleanup=%s)", err, cleanup.Status)
+		}
+		return preparedExecutionRecord{}, fmt.Errorf("prepared execution changed after authorization (cleanup=%s)", cleanup.Status)
+	}
+	return record, nil
+}
+
+func validatePreparedExecutionAuthority(prepared *PreparedExecution) error {
+	if prepared == nil || prepared.Lease == nil || prepared.Spec == nil || prepared.Verdict == nil || prepared.Verdict.Profile == nil {
+		return fmt.Errorf("prepared execution is incomplete")
+	}
+	if prepared.Verdict.Decision == nil || prepared.Verdict.Decision.Verdict != string(contracts.VerdictAllow) || prepared.Verdict.Intent == nil {
+		return fmt.Errorf("prepared execution is not backed by an ALLOW decision and execution intent")
+	}
+	if !executableSandboxProfile(prepared.Verdict.Profile.ProfileName) {
+		return fmt.Errorf("sandbox profile %q is not executable", prepared.Verdict.Profile.ProfileName)
+	}
+	if prepared.Verdict.Profile.Backend != prepared.Lease.Backend {
+		return fmt.Errorf("backend mismatch: lease=%q verdict=%q", prepared.Lease.Backend, prepared.Verdict.Profile.Backend)
+	}
+	if prepared.Verdict.Profile.ProfileName != prepared.Lease.ProfileName {
+		return fmt.Errorf("profile mismatch: lease=%q verdict=%q", prepared.Lease.ProfileName, prepared.Verdict.Profile.ProfileName)
+	}
+	return nil
+}
+
+func preparedExecutionFingerprint(prepared *PreparedExecution) (string, error) {
+	return canonicalize.CanonicalHash(prepared)
+}
+
+func cloneSandboxSpec(spec *pkg_sandbox.SandboxSpec) pkg_sandbox.SandboxSpec {
+	cloned := *spec
+	cloned.Command = append([]string(nil), spec.Command...)
+	cloned.Args = append([]string(nil), spec.Args...)
+	cloned.Mounts = append([]pkg_sandbox.Mount(nil), spec.Mounts...)
+	cloned.Network.EgressAllowlist = append([]string(nil), spec.Network.EgressAllowlist...)
+	if spec.Env != nil {
+		cloned.Env = make(map[string]string, len(spec.Env))
+		for key, value := range spec.Env {
+			cloned.Env[key] = value
+		}
+	}
+	if spec.Labels != nil {
+		cloned.Labels = make(map[string]string, len(spec.Labels))
+		for key, value := range spec.Labels {
+			cloned.Labels[key] = value
+		}
+	}
+	if spec.WarmLeaseConfig != nil {
+		warmLease := *spec.WarmLeaseConfig
+		cloned.WarmLeaseConfig = &warmLease
+	}
+	return cloned
+}
+
 // cleanup revokes tokens and completes the lease.
-func (b *SandboxBroker) cleanup(ctx context.Context, prepared *PreparedExecution) pkg_sandbox.CleanupStatus {
+func (b *SandboxBroker) cleanupRecord(ctx context.Context, prepared preparedExecutionRecord) pkg_sandbox.CleanupStatus {
 	var revokeErrors []string
 
 	// Revoke all issued tokens.
-	for _, tokenID := range prepared.TokenIDs {
+	for _, tokenID := range prepared.tokenIDs {
 		if err := b.credBroker.RevokeToken(tokenID); err != nil {
 			revokeErrors = append(revokeErrors, fmt.Sprintf("revoke token %s: %v", tokenID, err))
 			slog.Warn("failed to revoke scoped token during cleanup",
 				"token_id", tokenID,
-				"lease_id", prepared.Lease.LeaseID,
+				"lease_id", prepared.leaseID,
 				"error", err,
 			)
 		}
 	}
 
 	// Complete the lease.
-	completeErr := b.leases.Complete(ctx, prepared.Lease.LeaseID)
+	completeErr := b.leases.Complete(ctx, prepared.leaseID)
 	if completeErr != nil {
 		slog.Warn("failed to complete lease during cleanup",
-			"lease_id", prepared.Lease.LeaseID,
+			"lease_id", prepared.leaseID,
 			"error", completeErr,
 		)
 	}
@@ -235,12 +353,12 @@ func (b *SandboxBroker) cleanup(ctx context.Context, prepared *PreparedExecution
 	case completeErr != nil && len(revokeErrors) > 0:
 		return pkg_sandbox.CleanupStatus{
 			Status: "error",
-			Errors: append(revokeErrors, fmt.Sprintf("complete lease %s: %v", prepared.Lease.LeaseID, completeErr)),
+			Errors: append(revokeErrors, fmt.Sprintf("complete lease %s: %v", prepared.leaseID, completeErr)),
 		}
 	case completeErr != nil:
 		return pkg_sandbox.CleanupStatus{
 			Status: "unknown",
-			Errors: []string{fmt.Sprintf("complete lease %s: %v", prepared.Lease.LeaseID, completeErr)},
+			Errors: []string{fmt.Sprintf("complete lease %s: %v", prepared.leaseID, completeErr)},
 		}
 	case len(revokeErrors) > 0:
 		return pkg_sandbox.CleanupStatus{

@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-19T20:20:52Z
+# Generated: 2026-07-19T20:54:01Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -739,7 +739,7 @@ d453422c668b05b05d2462f1e85ce521c95a6b76cb26397df168ac2b507663ea  protocols/json
 af171c88ad93651b50eabd6c18e40aceb84058ebac3ec24a1486c6e45fbee061  protocols/json-schemas/effects/comment_ticket_effect.v1.json
 c73a92649260a0a631d3813cb508bebaea5556fd1641a50b08d00a4150589b72  protocols/json-schemas/effects/create_calendar_event_effect.v1.json
 dde3af0afeb8373276fa5ec5d3d059223ba8d3d14b3ab683d0a3c7abfc21d1e9  protocols/json-schemas/effects/create_task_effect.v1.json
-7e6e50318df5f66e792108737176de258b475df1097c68014392f63c93b1ec4d  protocols/json-schemas/effects/effect_type_catalog.schema.json
+1e76d1f30ff15bbf6f271cdd91ecc4db9daa256eb6a071840f89fdcc27878b5c  protocols/json-schemas/effects/effect_type_catalog.schema.json
 24768dd068f7b6b3bf52789546a78c397d375aaac8bd2187b7edd32c71fd8b60  protocols/json-schemas/effects/execute_payment_effect.v1.json
 22d5719c6040d4dac3340dd58aeded4a1db8840c6a464dd867e638d2c5db0439  protocols/json-schemas/effects/infra/chaos_kill_node.json
 9b499ddb78d4d26a9e997c3664b095e5672f3df5192133cab40b2b336fdf0608  protocols/json-schemas/effects/infra/chaos_network_delay.json

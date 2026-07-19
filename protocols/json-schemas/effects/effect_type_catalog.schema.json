@@ -113,7 +113,8 @@
           "idempotency": {
             "type": "object",
             "required": [
-              "strategy"
+              "strategy",
+              "key_composition"
             ],
             "properties": {
               "strategy": {

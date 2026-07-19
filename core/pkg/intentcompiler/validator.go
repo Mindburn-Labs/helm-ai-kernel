@@ -77,19 +77,6 @@ func (v *GraphValidator) Validate(plan *contracts.PlanSpec) []error {
 		}
 	}
 
-	if v.catalog != nil {
-		knownTypes := make(map[string]bool, len(v.catalog.EffectTypes))
-		for _, et := range v.catalog.EffectTypes {
-			knownTypes[et.TypeID] = true
-		}
-		for _, node := range dag.Nodes {
-			if node.EffectType != "" && !knownTypes[node.EffectType] {
-				// Legacy unknown types retain their E3 fail-closed profile. Reserved
-				// preview types are rejected above rather than treated as warnings.
-			}
-		}
-	}
-
 	// Check for blocking questions.
 	for _, node := range dag.Nodes {
 		if len(node.BlockingQuestions) > 0 {

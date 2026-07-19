@@ -301,7 +301,7 @@ func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {
 	operations := readOpenAPIOperationSecurity(t)
 	for _, spec := range PublicRuntimeRouteSpecs() {
-		if spec.Auth != RouteAuthAdmin && spec.Auth != RouteAuthAuthenticated && spec.Auth != RouteAuthTenant && spec.Auth != RouteAuthService {
+		if spec.Auth != RouteAuthAdmin && spec.Auth != RouteAuthAuthenticated && spec.Auth != RouteAuthTenant && spec.Auth != RouteAuthService && spec.Auth != RouteAuthWorkload {
 			continue
 		}
 		key := spec.Method + " " + spec.Path

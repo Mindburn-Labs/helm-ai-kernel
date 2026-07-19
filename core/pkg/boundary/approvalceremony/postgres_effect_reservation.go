@@ -20,7 +20,9 @@ connector_id, connector_version, release_scope_kind, release_authority_id,
 release_registry_revision, release_authority_hash, release_observed_at,
 admission_json, release_authority_json,
 admitted_at, started_at, resolved_at, occurred_at, reason_code,
-connector_execution_ref, proof_session_ref, intent_ref, effect_ref
+connector_execution_ref, proof_session_ref, intent_ref, effect_ref,
+close_prior_state, acknowledgement_hash, close_receipt_hash, outcome,
+evidence_pack_ref, evidence_pack_hash, reconciliation_ref
 `
 
 // EffectReservationAdmitter owns the durable near-effect lifecycle. It keeps
@@ -283,7 +285,8 @@ func (s *PostgresStore) transitionEffectReservation(
 		}
 		return EffectReservationEvent{}, ErrEffectReservationConflict
 	}
-	if current.State == EffectReservationStateNotStarted || current.State == EffectReservationStateUncertain {
+	if current.State == EffectReservationStateNotStarted || current.State == EffectReservationStateUncertain ||
+		current.State == EffectReservationStateCompleted {
 		return EffectReservationEvent{}, ErrEffectReservationTerminal
 	}
 	if current.State == EffectReservationStateStarted && state != EffectReservationStateUncertain {
@@ -472,10 +475,12 @@ func insertEffectReservationEvent(ctx context.Context, tx *sql.Tx, event EffectR
 		release_registry_revision, release_authority_hash, release_observed_at,
 		admission_json, release_authority_json,
 		admitted_at, started_at, resolved_at, occurred_at, reason_code,
-		connector_execution_ref, proof_session_ref, intent_ref, effect_ref
+		connector_execution_ref, proof_session_ref, intent_ref, effect_ref,
+		close_prior_state, acknowledgement_hash, close_receipt_hash, outcome,
+		evidence_pack_ref, evidence_pack_hash, reconciliation_ref
 	) VALUES (
 		$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
-		$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34
+		$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41
 	) RETURNING `+effectReservationColumns,
 		a.TenantID, a.WorkspaceID, a.AdmissionID, event.Sequence, event.State,
 		a.AttemptID, a.ApprovalID, a.GrantID, a.GrantHash, a.ConsumptionHash,
@@ -484,7 +489,10 @@ func insertEffectReservationEvent(ctx context.Context, tx *sql.Tx, event EffectR
 		ra.RegistryRevision, ra.AuthorityHash, event.ReleaseObservedAt,
 		admissionJSON, releaseJSON, event.AdmittedAt, event.StartedAt, event.ResolvedAt,
 		event.OccurredAt, nullableToken(event.ReasonCode), nullableToken(event.ConnectorExecutionRef),
-		nullableToken(event.ProofSessionRef), nullableToken(event.IntentRef), nullableToken(event.EffectRef)))
+		nullableToken(event.ProofSessionRef), nullableToken(event.IntentRef), nullableToken(event.EffectRef),
+		nullableToken(event.ClosePriorState), nullableToken(event.AcknowledgementHash), nullableToken(event.CloseReceiptHash),
+		nullableToken(event.Outcome), nullableToken(event.EvidencePackRef), nullableToken(event.EvidencePackHash),
+		nullableToken(event.ReconciliationRef)))
 }
 
 func queryCurrentEffectReservation(ctx context.Context, tx *sql.Tx, tenantID, workspaceID, admissionID string) (EffectReservationEvent, error) {
@@ -504,6 +512,8 @@ func scanEffectReservationEvent(row rowScanner) (EffectReservationEvent, error) 
 	var admissionJSON, releaseJSON []byte
 	var startedAt, resolvedAt sql.NullTime
 	var reasonCode, connectorExecutionRef, proofSessionRef, intentRef, effectRef sql.NullString
+	var closePriorState, acknowledgementHash, closeReceiptHash, outcome sql.NullString
+	var evidencePackRef, evidencePackHash, reconciliationRef sql.NullString
 	if err := row.Scan(
 		&tenantID, &workspaceID, &admissionID, &event.Sequence, &state,
 		&attemptID, &approvalID, &grantID, &grantHash, &consumptionHash,
@@ -512,6 +522,8 @@ func scanEffectReservationEvent(row rowScanner) (EffectReservationEvent, error) 
 		&releaseRegistryRevision, &releaseAuthorityHash, &event.ReleaseObservedAt,
 		&admissionJSON, &releaseJSON, &event.AdmittedAt, &startedAt, &resolvedAt, &event.OccurredAt,
 		&reasonCode, &connectorExecutionRef, &proofSessionRef, &intentRef, &effectRef,
+		&closePriorState, &acknowledgementHash, &closeReceiptHash, &outcome,
+		&evidencePackRef, &evidencePackHash, &reconciliationRef,
 	); err != nil {
 		return EffectReservationEvent{}, err
 	}
@@ -536,6 +548,13 @@ func scanEffectReservationEvent(row rowScanner) (EffectReservationEvent, error) 
 	event.ProofSessionRef = proofSessionRef.String
 	event.IntentRef = intentRef.String
 	event.EffectRef = effectRef.String
+	event.ClosePriorState = closePriorState.String
+	event.AcknowledgementHash = acknowledgementHash.String
+	event.CloseReceiptHash = closeReceiptHash.String
+	event.Outcome = outcome.String
+	event.EvidencePackRef = evidencePackRef.String
+	event.EvidencePackHash = evidencePackHash.String
+	event.ReconciliationRef = reconciliationRef.String
 	a := event.Admission.Admission
 	ra := event.ReleaseAuthority.Authority
 	if tenantID != a.TenantID || workspaceID != a.WorkspaceID || admissionID != a.AdmissionID ||

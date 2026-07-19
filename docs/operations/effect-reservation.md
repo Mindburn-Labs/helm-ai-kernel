@@ -92,14 +92,21 @@ The current states mean:
 - `NOT_STARTED`: a bounded local failure proves the connector did not cross its
   start seam. This is terminal for the admission.
 - `UNCERTAIN`: the process cannot prove non-start or lacks a reliable connector
-  acknowledgement/evidence result. This is terminal pending reconciliation and
-  must never be retried optimistically.
+  acknowledgement/evidence result. It must never be retried optimistically. A
+  later verified signed close may reconcile it to `COMPLETED`.
+- `COMPLETED`: the Kernel atomically persisted a verified connector
+  acknowledgement, verified EvidencePack identity, Kernel-signed close receipt,
+  and matching terminal event. Its explicit outcome is `APPLIED` or
+  `NOT_APPLIED`; completion alone must not be interpreted as a successful
+  external mutation.
 
 `ListActive` returns the latest `ADMITTED`, `STARTED`, and `UNCERTAIN` events in
-the authenticated scope. `Recover` remains available after later FENCE or
-revocation and creates no authority. This slice deliberately has no
-`COMPLETED` state: a successful GitHub request remains `STARTED` until a later
-source-acknowledged close contract exists.
+the authenticated scope. Reservation and signed-close recovery remain available
+after later FENCE or revocation and create no authority. See
+`docs/operations/effect-close.md` for the separate connector acknowledgement,
+Kernel receipt, EvidencePack, and recovery contract. No deployed adapter invokes
+that close boundary yet, so the current GitHub integration still leaves a
+successful request at `STARTED`.
 
 ## MCP and GitHub enforcement
 
@@ -163,6 +170,7 @@ deployed Data Plane proof.
 | `STARTED` | The outbound seam was crossed. | Query the source system by the original idempotency key/execution reference; do not replay. |
 | `NOT_STARTED` | Proven local pre-dispatch stop. | Close the attempt; a new attempt requires new approval authority. |
 | `UNCERTAIN` | Start or outcome cannot be disproved. | Quarantine automatic retry and obtain connector/source acknowledgement evidence. |
+| `COMPLETED` | A verified connector acknowledgement and EvidencePack were atomically bound to a Kernel-signed close receipt. | Verify the signed closure through `EffectCloser`; inspect its explicit `APPLIED` or `NOT_APPLIED` outcome. |
 
 ## Verification
 
@@ -172,6 +180,7 @@ Run unit and real database proofs:
 (cd core && GOWORK=off go test ./pkg/boundary/approvalceremony ./pkg/runtimeadapters/mcp ./pkg/connectors/github -count=1)
 HELM_TEST_POSTGRES_URL='postgres://...' make test-effect-reservation-postgres
 make verify-approval-ceremony-vectors
+make verify-effect-close-vectors
 make docs-coverage
 make docs-truth
 ```
@@ -185,7 +194,11 @@ denial after that authority committed; denial is then durably closed as
 `NOT_STARTED`. Separate checks prove single-winner concurrent `STARTED`, bridge
 and connector denial without HTTP, and read-only recovery of active work. They
 also prove that `STARTED` correlation references cannot be rewritten and that
-mutating HTTP 307/308 redirects do not reach their target.
+mutating HTTP 307/308 redirects do not reach their target. Signed-close checks
+cover direct and reconciled `COMPLETED`, exact/conflicting replay, concurrent
+single-winner close, signature recovery, forced-RLS closure isolation,
+append-only closure history, and refusal of a terminal event without its exact
+closure.
 
 ## Remaining production gates
 
@@ -195,8 +208,9 @@ mutating HTTP 307/308 redirects do not reach their target.
   connector snapshot only from the verified current release;
 - wire `EffectReservationAdmitter` and signed dispatch admission retrieval into
   the deployed Kernel/Data Plane configuration; the code path is opt-in today;
-- add source-system idempotency-key query and connector acknowledgement
-  contracts, then close `STARTED` into signed outcome/receipt evidence;
+- wire the source-owned connector acknowledgement and signed close contracts
+  into real connectors, sealed EvidencePack production, and the deployed Data
+  Plane; the internal close boundary exists but no deployed adapter invokes it;
 - add FENCE/revocation active-work disposition commands and cross-plane
   acknowledgement reconciliation rather than listing alone;
 - add Data Plane deployment, restart/crash recovery, load, failover, and live

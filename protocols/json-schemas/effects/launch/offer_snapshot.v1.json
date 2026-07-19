@@ -13,7 +13,7 @@
     "tenant_id": { "$ref": "#/$defs/non_empty" },
     "workspace_id": { "$ref": "#/$defs/non_empty" },
     "provider_id": { "$ref": "#/$defs/non_empty" },
-    "provider_account_ref": { "$ref": "#/$defs/non_empty" },
+    "provider_account_ref": { "$ref": "#/$defs/provider_account_ref" },
     "provider_account_hash": { "$ref": "#/$defs/hash" },
     "official_source_url": { "type": "string", "format": "uri", "pattern": "^https://[^/?#@]+(/[^?#]*)?$" },
     "content_version_hash": { "$ref": "#/$defs/hash" },
@@ -43,6 +43,7 @@
   "$defs": {
     "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "non_empty": { "type": "string", "minLength": 1 },
+    "provider_account_ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,31}:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$" },
     "minor": { "type": "integer", "minimum": 0 }
   },
   "x-helm": { "status": "preview", "execution_enabled": false, "official_evidence_required": true, "verified_credit_never_increases_gross_cap": true }

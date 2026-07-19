@@ -61,7 +61,7 @@ func ValidateLaunchOfferSnapshot(value LaunchOfferSnapshot) error {
 		return err
 	}
 	accountBound := value.ProviderAccountRef != "" || value.ProviderAccountHash != ""
-	if accountBound && (value.ProviderAccountRef == "" || !validLaunchSHA256(value.ProviderAccountHash)) {
+	if accountBound && (!launchProviderAccountRefPattern.MatchString(value.ProviderAccountRef) || !validLaunchSHA256(value.ProviderAccountHash)) {
 		return errors.New("launch offer snapshot provider account binding is incomplete")
 	}
 	switch value.Status {

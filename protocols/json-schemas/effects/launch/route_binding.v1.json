@@ -40,7 +40,7 @@
           "provider_certification_ref": { "$ref": "#/$defs/non_empty" },
           "provider_certification_hash": { "$ref": "#/$defs/hash" },
           "provider_id": { "$ref": "#/$defs/non_empty" },
-          "provider_account_ref": { "$ref": "#/$defs/non_empty" },
+          "provider_account_ref": { "$ref": "#/$defs/provider_account_ref" },
           "provider_account_hash": { "$ref": "#/$defs/hash" },
           "region_id": { "$ref": "#/$defs/non_empty" },
           "jurisdiction": { "$ref": "#/$defs/non_empty" },
@@ -86,6 +86,7 @@
   "$defs": {
     "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "non_empty": { "type": "string", "minLength": 1 },
+    "provider_account_ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,31}:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$" },
     "provider_effect_id": { "enum": ["PROVIDER_PROVISION", "DEPLOY_PRODUCTION_ACTIVATE", "PROVIDER_ROLLBACK", "PROVIDER_TEARDOWN"] }
   },
   "x-helm": { "status": "preview", "execution_enabled": false, "multi_provider": true, "independent_resolution_required": true }

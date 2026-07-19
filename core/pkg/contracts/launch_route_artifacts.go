@@ -138,6 +138,7 @@ type LaunchRouteQuote struct {
 type LaunchPlacementCost struct {
 	PlacementID         string `json:"placement_id"`
 	ProviderID          string `json:"provider_id"`
+	ProviderAccountRef  string `json:"provider_account_ref"`
 	ProviderAccountHash string `json:"provider_account_hash"`
 	RegionID            string `json:"region_id"`
 	OfferingID          string `json:"offering_id"`
@@ -328,11 +329,14 @@ func ValidateLaunchRouteQuote(value LaunchRouteQuote) error {
 	}
 	var baseTotal, reserveTotal, grossTotal, creditTotal, expectedCashTotal int64
 	lineStatuses := make([]string, 0, len(value.PlacementCosts))
-	creditedAccounts := make(map[string]string)
+	accountHashesByRef := make(map[string]string)
+	accountRefsByHash := make(map[string]string)
+	creditedAccountRefs := make(map[string]string)
+	creditedAccountHashes := make(map[string]string)
 	creditedSnapshots := make(map[string]string)
 	previous := ""
 	for _, line := range value.PlacementCosts {
-		if line.PlacementID == "" || line.PlacementID <= previous || line.ProviderID == "" || line.RegionID == "" || line.OfferingID == "" || line.BillingCadence == "" || line.CommitmentTerm == "" {
+		if line.PlacementID == "" || line.PlacementID <= previous || line.ProviderID == "" || !launchProviderAccountRefPattern.MatchString(line.ProviderAccountRef) || line.RegionID == "" || line.OfferingID == "" || line.BillingCadence == "" || line.CommitmentTerm == "" {
 			return errors.New("launch route quote placement costs must be complete, unique, and sorted")
 		}
 		previous = line.PlacementID
@@ -346,16 +350,29 @@ func ValidateLaunchRouteQuote(value LaunchRouteQuote) error {
 		if line.VerifiedCreditMinor > line.BaseCostMinor {
 			return fmt.Errorf("launch route quote placement %s verified credit exceeds provider cost", line.PlacementID)
 		}
+		accountRefKey := launchTupleKey(line.ProviderID, line.ProviderAccountRef)
+		if priorHash, exists := accountHashesByRef[accountRefKey]; exists && !launchConstantEqual(priorHash, line.ProviderAccountHash) {
+			return errors.New("launch route quote provider account reference maps to multiple identity hashes")
+		}
+		accountHashesByRef[accountRefKey] = line.ProviderAccountHash
+		accountHashKey := launchTupleKey(line.ProviderID, line.ProviderAccountHash)
+		if priorRef, exists := accountRefsByHash[accountHashKey]; exists && priorRef != line.ProviderAccountRef {
+			return fmt.Errorf("launch route quote provider account hash maps to multiple account references")
+		}
+		accountRefsByHash[accountHashKey] = line.ProviderAccountRef
 		switch line.CreditStatus {
 		case LaunchCreditVerified:
 			if line.VerifiedCreditMinor <= 0 {
 				return fmt.Errorf("launch route quote placement %s verified status has no active credit", line.PlacementID)
 			}
-			accountKey := launchTupleKey(line.ProviderID, line.ProviderAccountHash)
-			if prior, exists := creditedAccounts[accountKey]; exists {
+			if prior, exists := creditedAccountRefs[accountRefKey]; exists {
 				return fmt.Errorf("launch route quote placements %s and %s apply verified credit more than once to one provider account", prior, line.PlacementID)
 			}
-			creditedAccounts[accountKey] = line.PlacementID
+			creditedAccountRefs[accountRefKey] = line.PlacementID
+			if prior, exists := creditedAccountHashes[accountHashKey]; exists {
+				return fmt.Errorf("launch route quote placements %s and %s apply verified credit more than once to one provider account hash", prior, line.PlacementID)
+			}
+			creditedAccountHashes[accountHashKey] = line.PlacementID
 			snapshotKey := launchTupleKey(line.OfferSnapshotRef, line.OfferSnapshotHash)
 			if prior, exists := creditedSnapshots[snapshotKey]; exists {
 				return fmt.Errorf("launch route quote placements %s and %s apply one verified credit snapshot more than once", prior, line.PlacementID)

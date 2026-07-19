@@ -20,10 +20,11 @@
       "type": "array", "minItems": 1,
       "items": {
         "type": "object", "additionalProperties": false,
-        "required": ["placement_id", "provider_id", "provider_account_hash", "region_id", "offering_id", "billing_cadence", "commitment_term", "base_cost_minor", "tax_fx_reserve_minor", "gross_exposure_minor", "verified_credit_minor", "expected_cash_minor", "credit_status", "offer_snapshot_ref", "offer_snapshot_hash", "price_evidence_hash", "terms_evidence_hash"],
+        "required": ["placement_id", "provider_id", "provider_account_ref", "provider_account_hash", "region_id", "offering_id", "billing_cadence", "commitment_term", "base_cost_minor", "tax_fx_reserve_minor", "gross_exposure_minor", "verified_credit_minor", "expected_cash_minor", "credit_status", "offer_snapshot_ref", "offer_snapshot_hash", "price_evidence_hash", "terms_evidence_hash"],
         "properties": {
           "placement_id": { "$ref": "#/$defs/non_empty" },
           "provider_id": { "$ref": "#/$defs/non_empty" },
+          "provider_account_ref": { "$ref": "#/$defs/provider_account_ref" },
           "provider_account_hash": { "$ref": "#/$defs/hash" },
           "region_id": { "$ref": "#/$defs/non_empty" },
           "offering_id": { "$ref": "#/$defs/non_empty" },
@@ -58,6 +59,7 @@
   "$defs": {
     "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "non_empty": { "type": "string", "minLength": 1 },
+    "provider_account_ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,31}:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$" },
     "minor": { "type": "integer", "minimum": 0 },
     "credit_status": { "enum": ["ACTIVE_CREDIT_VERIFIED", "MAY_QUALIFY", "NONE", "UNKNOWN"] }
   },

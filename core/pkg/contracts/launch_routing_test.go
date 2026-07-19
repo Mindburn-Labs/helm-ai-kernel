@@ -249,26 +249,92 @@ func TestRouteRejectsPayloadForUnknownPlacement(t *testing.T) {
 	}
 }
 
-func TestRouteQuoteRejectsVerifiedCreditReuseAcrossPlacements(t *testing.T) {
-	fixture := multiLaunchRouteFixture(t)
+func TestRouteQuoteRejectsVerifiedCreditAccountAliasesAcrossPlacements(t *testing.T) {
+	base := multiLaunchRouteFixture(t).quote
+	for name, testCase := range map[string]struct {
+		mutate func([]contracts.LaunchPlacementCost)
+		error  string
+	}{
+		"exact account reuse": {
+			mutate: func(lines []contracts.LaunchPlacementCost) {
+				for index := range lines {
+					lines[index].ProviderAccountRef = "account:shared"
+					lines[index].ProviderAccountHash = launchRoutingHash("1")
+				}
+			},
+			error: "more than once",
+		},
+		"one account reference with multiple hashes": {
+			mutate: func(lines []contracts.LaunchPlacementCost) {
+				for index := range lines {
+					lines[index].ProviderAccountRef = "account:shared"
+				}
+			},
+			error: "multiple identity hashes",
+		},
+		"one account hash with multiple references": {
+			mutate: func(lines []contracts.LaunchPlacementCost) {
+				for index := range lines {
+					lines[index].ProviderAccountHash = launchRoutingHash("1")
+				}
+			},
+			error: "multiple account references",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			quote := base
+			quote.PlacementCosts = append([]contracts.LaunchPlacementCost(nil), base.PlacementCosts...)
+			for index := range quote.PlacementCosts {
+				line := &quote.PlacementCosts[index]
+				line.ProviderID = "shared-cloud"
+				line.CreditStatus = contracts.LaunchCreditVerified
+				line.VerifiedCreditMinor = 100
+				line.ExpectedCashMinor = line.GrossExposureMinor - line.VerifiedCreditMinor
+			}
+			testCase.mutate(quote.PlacementCosts)
+			quote.VerifiedCreditMinor = 200
+			quote.ExpectedCashMinor = quote.GrossExposureMinor - quote.VerifiedCreditMinor
+			quote.CreditStatus = contracts.LaunchCreditVerified
+			quote.CreditSnapshotHash, _ = contracts.DeriveLaunchOfferSnapshotSetHash(quote.PlacementCosts)
+			if err := contracts.ValidateLaunchRouteQuote(quote); err == nil || !strings.Contains(err.Error(), testCase.error) {
+				t.Fatalf("provider account alias reused one credit balance: %v", err)
+			}
+		})
+	}
+}
+
+func TestProviderAccountRefsAreCanonicalAcrossLaunchArtifacts(t *testing.T) {
+	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
+	fixture := singleLaunchRouteFixture(t, profile, false)
+	const invalidAccountRef = " account:1"
+
+	offer := fixture.offer
+	offer.ProviderAccountRef = invalidAccountRef
+	if err := contracts.ValidateLaunchOfferSnapshot(offer); err == nil {
+		t.Fatal("offer snapshot admitted a non-canonical provider account reference")
+	}
+	if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/offer_snapshot.v1.json"), offer); err == nil {
+		t.Fatal("offer snapshot schema admitted a non-canonical provider account reference")
+	}
+
 	quote := fixture.quote
 	quote.PlacementCosts = append([]contracts.LaunchPlacementCost(nil), quote.PlacementCosts...)
-	for index := range quote.PlacementCosts {
-		line := &quote.PlacementCosts[index]
-		line.ProviderID = "shared-cloud"
-		line.ProviderAccountHash = launchRoutingHash("1")
-		line.OfferSnapshotRef = "offer-shared"
-		line.OfferSnapshotHash = launchRoutingHash("2")
-		line.CreditStatus = contracts.LaunchCreditVerified
-		line.VerifiedCreditMinor = 100
-		line.ExpectedCashMinor = line.GrossExposureMinor - line.VerifiedCreditMinor
+	quote.PlacementCosts[0].ProviderAccountRef = invalidAccountRef
+	if err := contracts.ValidateLaunchRouteQuote(quote); err == nil {
+		t.Fatal("route quote admitted a non-canonical provider account reference")
 	}
-	quote.VerifiedCreditMinor = 200
-	quote.ExpectedCashMinor = quote.GrossExposureMinor - quote.VerifiedCreditMinor
-	quote.CreditStatus = contracts.LaunchCreditVerified
-	quote.CreditSnapshotHash, _ = contracts.DeriveLaunchOfferSnapshotSetHash(quote.PlacementCosts)
-	if err := contracts.ValidateLaunchRouteQuote(quote); err == nil || !strings.Contains(err.Error(), "more than once") {
-		t.Fatalf("one connected-account credit balance was deducted twice: %v", err)
+	if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/route_quote.v1.json"), quote); err == nil {
+		t.Fatal("route quote schema admitted a non-canonical provider account reference")
+	}
+
+	route := fixture.route
+	route.Placements = append([]contracts.LaunchRoutePlacement(nil), route.Placements...)
+	route.Placements[0].ProviderAccountRef = invalidAccountRef
+	if err := contracts.ValidateLaunchRouteBinding(route, fixture.resolver, launchRoutingNow, false); err == nil {
+		t.Fatal("route binding admitted a non-canonical provider account reference")
+	}
+	if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/route_binding.v1.json"), route); err == nil {
+		t.Fatal("route binding schema admitted a non-canonical provider account reference")
 	}
 }
 
@@ -680,7 +746,7 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 	quote := contracts.LaunchRouteQuote{
 		SchemaVersion: contracts.LaunchRouteQuoteSchemaVersion, QuoteID: "quote-1", TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1",
 		WorkloadGraphHash: graphHash, ConstraintSetHash: constraintHash, Currency: "EUR",
-		PlacementCosts:        []contracts.LaunchPlacementCost{{PlacementID: "placement-1", ProviderID: profile.ProviderID, ProviderAccountHash: launchRoutingHash("1"), RegionID: region.RegionID, OfferingID: offering.OfferingID, BillingCadence: "monthly", CommitmentTerm: "monthly", BaseCostMinor: 1000, TaxFXReserveMinor: 200, GrossExposureMinor: 1200, VerifiedCreditMinor: 200, ExpectedCashMinor: 1000, CreditStatus: contracts.LaunchCreditVerified, OfferSnapshotRef: offer.SnapshotID, OfferSnapshotHash: offerHash, PriceEvidenceHash: profile.PricingEvidenceHash, TermsEvidenceHash: profile.TermsEvidenceHash}},
+		PlacementCosts:        []contracts.LaunchPlacementCost{{PlacementID: "placement-1", ProviderID: profile.ProviderID, ProviderAccountRef: "account:1", ProviderAccountHash: launchRoutingHash("1"), RegionID: region.RegionID, OfferingID: offering.OfferingID, BillingCadence: "monthly", CommitmentTerm: "monthly", BaseCostMinor: 1000, TaxFXReserveMinor: 200, GrossExposureMinor: 1200, VerifiedCreditMinor: 200, ExpectedCashMinor: 1000, CreditStatus: contracts.LaunchCreditVerified, OfferSnapshotRef: offer.SnapshotID, OfferSnapshotHash: offerHash, PriceEvidenceHash: profile.PricingEvidenceHash, TermsEvidenceHash: profile.TermsEvidenceHash}},
 		BaseProviderCostMinor: 1000, TaxFXReserveMinor: 200, GrossExposureMinor: 1200, VerifiedCreditMinor: 200, ExpectedCashMinor: 1000,
 		CreditStatus: contracts.LaunchCreditVerified, FXSnapshotHash: launchRoutingHash("5"), TaxSnapshotHash: launchRoutingHash("6"), CommercialEvidenceHash: launchRoutingHash("a"),
 		RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T12:00:00Z",
@@ -793,8 +859,8 @@ func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {
 	quote := contracts.LaunchRouteQuote{
 		SchemaVersion: contracts.LaunchRouteQuoteSchemaVersion, QuoteID: "quote-multi", TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1", WorkloadGraphHash: graphHash, ConstraintSetHash: constraintHash, Currency: "EUR",
 		PlacementCosts: []contracts.LaunchPlacementCost{
-			{PlacementID: "placement-a", ProviderID: webProfile.ProviderID, ProviderAccountHash: launchRoutingHash("1"), RegionID: "eu-edge", OfferingID: "app", BillingCadence: "monthly", CommitmentTerm: "monthly", BaseCostMinor: 1000, TaxFXReserveMinor: 100, GrossExposureMinor: 1100, VerifiedCreditMinor: 0, ExpectedCashMinor: 1100, CreditStatus: contracts.LaunchCreditNone, OfferSnapshotRef: webOffer.SnapshotID, OfferSnapshotHash: webOfferHash, PriceEvidenceHash: webProfile.PricingEvidenceHash, TermsEvidenceHash: webProfile.TermsEvidenceHash},
-			{PlacementID: "placement-b", ProviderID: dbProfile.ProviderID, ProviderAccountHash: launchRoutingHash("2"), RegionID: "eu-data", OfferingID: "postgres", BillingCadence: "monthly", CommitmentTerm: "monthly", BaseCostMinor: 2000, TaxFXReserveMinor: 200, GrossExposureMinor: 2200, VerifiedCreditMinor: 0, ExpectedCashMinor: 2200, CreditStatus: contracts.LaunchCreditNone, OfferSnapshotRef: dbOffer.SnapshotID, OfferSnapshotHash: dbOfferHash, PriceEvidenceHash: dbProfile.PricingEvidenceHash, TermsEvidenceHash: dbProfile.TermsEvidenceHash},
+			{PlacementID: "placement-a", ProviderID: webProfile.ProviderID, ProviderAccountRef: "account:web", ProviderAccountHash: launchRoutingHash("1"), RegionID: "eu-edge", OfferingID: "app", BillingCadence: "monthly", CommitmentTerm: "monthly", BaseCostMinor: 1000, TaxFXReserveMinor: 100, GrossExposureMinor: 1100, VerifiedCreditMinor: 0, ExpectedCashMinor: 1100, CreditStatus: contracts.LaunchCreditNone, OfferSnapshotRef: webOffer.SnapshotID, OfferSnapshotHash: webOfferHash, PriceEvidenceHash: webProfile.PricingEvidenceHash, TermsEvidenceHash: webProfile.TermsEvidenceHash},
+			{PlacementID: "placement-b", ProviderID: dbProfile.ProviderID, ProviderAccountRef: "account:data", ProviderAccountHash: launchRoutingHash("2"), RegionID: "eu-data", OfferingID: "postgres", BillingCadence: "monthly", CommitmentTerm: "monthly", BaseCostMinor: 2000, TaxFXReserveMinor: 200, GrossExposureMinor: 2200, VerifiedCreditMinor: 0, ExpectedCashMinor: 2200, CreditStatus: contracts.LaunchCreditNone, OfferSnapshotRef: dbOffer.SnapshotID, OfferSnapshotHash: dbOfferHash, PriceEvidenceHash: dbProfile.PricingEvidenceHash, TermsEvidenceHash: dbProfile.TermsEvidenceHash},
 		},
 		BaseProviderCostMinor: 3000, TaxFXReserveMinor: 300, GrossExposureMinor: 3300, VerifiedCreditMinor: 0, ExpectedCashMinor: 3300, CreditStatus: contracts.LaunchCreditNone,
 		FXSnapshotHash: launchRoutingHash("4"), TaxSnapshotHash: launchRoutingHash("5"), CommercialEvidenceHash: launchRoutingHash("6"), RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T12:00:00Z",

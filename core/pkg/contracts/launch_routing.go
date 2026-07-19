@@ -46,8 +46,9 @@ const (
 )
 
 var (
-	launchCommitPattern    = regexp.MustCompile(`^(?:[a-f0-9]{40}|[a-f0-9]{64})$`)
-	launchSourceRefPattern = regexp.MustCompile(`^source:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
+	launchCommitPattern             = regexp.MustCompile(`^(?:[a-f0-9]{40}|[a-f0-9]{64})$`)
+	launchSourceRefPattern          = regexp.MustCompile(`^source:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
+	launchProviderAccountRefPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9._-]{0,31}:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
 )
 
 // LaunchRepositoryAnalysis records what was actually inspected. SourceConnectionRef
@@ -612,7 +613,7 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 	profileExpiry := expiresAt
 	previousPlacement := ""
 	for _, placement := range route.Placements {
-		if placement.PlacementID == "" || placement.PlacementID <= previousPlacement || placement.ProviderProfileRef == "" || placement.ProviderID == "" || placement.ProviderAccountRef == "" || placement.RegionID == "" || placement.Jurisdiction == "" || placement.OfferingID == "" || placement.ProviderConnectorID == "" || len(placement.ActionBindings) == 0 {
+		if placement.PlacementID == "" || placement.PlacementID <= previousPlacement || placement.ProviderProfileRef == "" || placement.ProviderID == "" || !launchProviderAccountRefPattern.MatchString(placement.ProviderAccountRef) || placement.RegionID == "" || placement.Jurisdiction == "" || placement.OfferingID == "" || placement.ProviderConnectorID == "" || len(placement.ActionBindings) == 0 {
 			return errors.New("launch route placements must be complete, unique, and sorted")
 		}
 		previousPlacement = placement.PlacementID
@@ -871,7 +872,7 @@ func validateLaunchQuotePlacements(quote LaunchRouteQuote, placements []LaunchRo
 		if !ok {
 			return fmt.Errorf("launch route quote placement %s has no verified provider profile", line.PlacementID)
 		}
-		if line.ProviderID != placement.ProviderID || !launchConstantEqual(line.ProviderAccountHash, placement.ProviderAccountHash) || line.RegionID != placement.RegionID || line.OfferingID != placement.OfferingID {
+		if line.ProviderID != placement.ProviderID || line.ProviderAccountRef != placement.ProviderAccountRef || !launchConstantEqual(line.ProviderAccountHash, placement.ProviderAccountHash) || line.RegionID != placement.RegionID || line.OfferingID != placement.OfferingID {
 			return fmt.Errorf("launch route quote placement %s does not match route", line.PlacementID)
 		}
 		if !launchConstantEqual(line.PriceEvidenceHash, profile.PricingEvidenceHash) || !launchConstantEqual(line.TermsEvidenceHash, profile.TermsEvidenceHash) {

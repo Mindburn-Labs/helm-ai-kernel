@@ -339,14 +339,12 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 func EffectRiskClass(effectTypeID string) string {
 	switch effectTypeID {
 	case EffectTypeInfraDestroy, EffectTypeCICredentialAccess,
-		EffectTypeSoftwarePublish, EffectTypeDataEgress, EffectTypeProviderTeardown:
+		EffectTypeSoftwarePublish, EffectTypeDataEgress:
 		return "E4" // Critical / Irreversible
 	case EffectTypeProtectedInfraWrite, EffectTypeEnvRecreate,
-		EffectTypeAgentInvokePrivileged, EffectTypeTunnelStart,
-		EffectTypeProviderProvision, EffectTypeDeployProductionActivate,
-		EffectTypeSpendAuthorize, EffectTypeProviderRollback:
+		EffectTypeAgentInvokePrivileged, EffectTypeTunnelStart:
 		return "E3" // High Risk
-	case EffectTypeCloudComputeBudget, EffectTypeCompanyArtifactUpdate:
+	case EffectTypeCloudComputeBudget:
 		return "E2" // Medium Risk (budget-gated)
 	case EffectTypeAgentIdentityIsolation:
 		return "E1" // Low Risk (validation check)

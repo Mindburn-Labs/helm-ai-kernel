@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/resource_graph.v1.json",
+  "version": "1.0.0-alpha.1",
+  "title": "Launch Resource Graph (Preview)",
+  "description": "Approval-bound desired provider resources and ownership edges across all route placements.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "resource_graph_id", "tenant_id", "workspace_id", "mission_id", "nodes", "edges"],
+  "properties": {
+    "schema_version": { "const": "launch_resource_graph.v1" },
+    "resource_graph_id": { "$ref": "#/$defs/non_empty" },
+    "tenant_id": { "$ref": "#/$defs/non_empty" },
+    "workspace_id": { "$ref": "#/$defs/non_empty" },
+    "mission_id": { "$ref": "#/$defs/non_empty" },
+    "nodes": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["resource_id", "placement_id", "workload_node_id", "resource_kind", "lifecycle_class", "desired_state_hash", "ownership_tag_hash"],
+        "properties": {
+          "resource_id": { "$ref": "#/$defs/non_empty" },
+          "placement_id": { "$ref": "#/$defs/non_empty" },
+          "workload_node_id": { "$ref": "#/$defs/non_empty" },
+          "resource_kind": { "$ref": "#/$defs/non_empty" },
+          "lifecycle_class": { "$ref": "#/$defs/lifecycle_class" },
+          "desired_state_hash": { "$ref": "#/$defs/hash" },
+          "ownership_tag_hash": { "$ref": "#/$defs/hash" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["from_resource_id", "to_resource_id", "relationship"],
+        "properties": {
+          "from_resource_id": { "$ref": "#/$defs/non_empty" },
+          "to_resource_id": { "$ref": "#/$defs/non_empty" },
+          "relationship": { "$ref": "#/$defs/non_empty" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 },
+    "lifecycle_class": { "enum": ["EPHEMERAL", "STATEFUL_DATA", "STATEFUL_RESOURCE", "COMPOSITE"] }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "ownership_bound": true }
+}

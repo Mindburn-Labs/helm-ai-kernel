@@ -1,0 +1,18 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/launch-mission-v1",
+  "pinning_authority": "reference_packs/launch-mission-v1/vectors.json",
+  "verifier": "reference_packs/launch-mission-v1/verify_vectors.py",
+  "immutable_payloads": [
+    {
+      "file": "vectors.json",
+      "sha256": "2dc5d4391be488c27fa23105a7e4972efc954adab72abe39a395a92ad133a9cb"
+    },
+    {
+      "file": "verify_vectors.py",
+      "sha256": "8d5a26903456c65518206e3715fcdf11e7b3af5d50130ebe582748eaccb2232c"
+    }
+  ],
+  "quantum_posture": "classical_ed25519_only",
+  "purpose": "Cross-language hash, authority, provider-certification, multi-provider stateful routing, and receipt parity for the non-executable provider-neutral Launch Mission preview contracts."
+}

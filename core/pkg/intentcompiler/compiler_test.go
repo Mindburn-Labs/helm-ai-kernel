@@ -382,6 +382,17 @@ func TestValidator_NilDAG(t *testing.T) {
 	}
 }
 
+func TestValidator_RejectsEveryLaunchPreviewEffect(t *testing.T) {
+	v := intentcompiler.NewGraphValidator(contracts.DefaultEffectCatalog())
+	for _, preview := range contracts.LaunchMissionEffectCatalogPreview().EffectTypes {
+		plan := &contracts.PlanSpec{DAG: &contracts.DAG{Nodes: []contracts.PlanStep{{ID: "preview", EffectType: preview.TypeID}}}}
+		errs := v.Validate(plan)
+		if len(errs) == 0 {
+			t.Errorf("preview effect %s passed intent validation", preview.TypeID)
+		}
+	}
+}
+
 // ──────────────────────────────────────────────────────────────
 // Profiler tests
 // ──────────────────────────────────────────────────────────────
@@ -431,5 +442,15 @@ func TestProfiler_UnknownEffect_FailClosed(t *testing.T) {
 	}
 	if profile != "net-limited" {
 		t.Fatalf("expected net-limited for unknown (fail-closed), got %s", profile)
+	}
+}
+
+func TestProfiler_LaunchPreviewEffectsAreDenied(t *testing.T) {
+	p := intentcompiler.NewSandboxProfiler()
+	for _, preview := range contracts.LaunchMissionEffectCatalogPreview().EffectTypes {
+		backend, profile := p.AssignProfile(&contracts.PlanStep{EffectType: preview.TypeID})
+		if backend != intentcompiler.BackendDocker || profile != intentcompiler.ProfilePrivileged {
+			t.Errorf("preview effect %s received executable profile %s/%s", preview.TypeID, backend, profile)
+		}
 	}
 }

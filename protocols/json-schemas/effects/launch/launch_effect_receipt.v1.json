@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/launch_effect_receipt.v1.json",
+  "version": "1.4.0-alpha.1",
+  "title": "Launch Effect Native Receipt (Preview)",
+  "description": "Non-executable Receipt Format v1 profile binding one launch effect to its principal, audience, canonical approval consumption, signed dispatch admission, certified connector release and provider route, commercial evidence, consumed permit, exact request/result hashes, reconciliation proof, ProofGraph node, and EvidencePack closure.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_version",
+    "kind",
+    "receipt_id",
+    "receipt_chain_id",
+    "receipt_revision",
+    "reconciliation_revision",
+    "decision_id",
+    "effect_id",
+    "verdict",
+    "principal",
+    "audience",
+    "kernel_trust_root_id",
+    "tool",
+    "action",
+    "timestamp",
+    "lamport",
+    "proofgraph_node",
+    "signer_key_id",
+    "payload_hash",
+    "metadata",
+    "tenant_id",
+    "workspace_id",
+    "mission_id",
+    "effect_ordinal",
+    "input_schema_hash",
+    "input_hash",
+    "idempotency_key",
+    "request_hash",
+    "result_hash",
+    "kernel_verdict_ref",
+    "kernel_verdict_hash",
+    "approval_artifact_ref",
+    "approval_artifact_hash",
+    "approval_consumption_ref",
+    "approval_consumption_hash",
+    "dispatch_admission_ref",
+    "dispatch_admission_hash",
+    "effect_permit_ref",
+    "effect_permit_hash",
+    "permit_nonce",
+    "permit_consumption_ref",
+    "permit_consumption_hash",
+    "policy_epoch",
+    "emergency_fence_epoch",
+    "connector_contract_hash",
+    "connector_authority_ref",
+    "connector_authority_hash",
+    "reconciliation_locator_hash",
+    "outcome",
+    "reconciliation_status",
+    "dependency_state",
+    "dependency_set_ref",
+    "dependency_set_hash",
+    "dependency_state_hash",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": { "const": "launch_effect_receipt.v1" },
+    "receipt_version": { "const": "1.0" },
+    "kind": { "const": "helm_native_receipt" },
+    "receipt_id": { "$ref": "#/$defs/receipt_id" },
+    "receipt_chain_id": { "$ref": "#/$defs/hash" },
+    "receipt_revision": { "type": "integer", "minimum": 1 },
+    "reconciliation_revision": { "type": "integer", "minimum": 0 },
+    "decision_id": { "type": "string", "minLength": 1 },
+    "effect_id": { "$ref": "#/$defs/effect_id" },
+    "verdict": { "const": "ALLOW" },
+    "principal": { "type": "string", "minLength": 1 },
+    "audience": { "type": "string", "minLength": 1 },
+    "kernel_trust_root_id": { "type": "string", "minLength": 1 },
+    "tool": { "type": "string", "minLength": 1 },
+    "action": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "lamport": { "type": "integer", "minimum": 1 },
+    "proofgraph_node": { "$ref": "#/$defs/hash" },
+    "signer_key_id": { "type": "string", "minLength": 1 },
+    "payload_hash": { "$ref": "#/$defs/hash" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "redaction_profile_hash"],
+      "properties": {
+        "profile": { "const": "launch_effect_receipt.v1" },
+        "redaction_profile_hash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "workspace_id": { "type": "string", "minLength": 1 },
+    "mission_id": { "type": "string", "minLength": 1 },
+    "effect_ordinal": { "type": "integer", "minimum": 0 },
+    "input_schema_hash": { "$ref": "#/$defs/hash" },
+    "input_hash": { "$ref": "#/$defs/hash" },
+    "idempotency_key": { "$ref": "#/$defs/hash" },
+    "request_hash": { "$ref": "#/$defs/hash" },
+    "result_hash": { "$ref": "#/$defs/hash" },
+    "kernel_verdict_ref": { "type": "string", "minLength": 1 },
+    "kernel_verdict_hash": { "$ref": "#/$defs/hash" },
+    "approval_artifact_ref": { "type": "string", "minLength": 1 },
+    "approval_artifact_hash": { "$ref": "#/$defs/hash" },
+    "approval_consumption_ref": { "type": "string", "minLength": 1 },
+    "approval_consumption_hash": { "$ref": "#/$defs/hash" },
+    "dispatch_admission_ref": { "type": "string", "minLength": 1 },
+    "dispatch_admission_hash": { "$ref": "#/$defs/hash" },
+    "effect_permit_ref": { "type": "string", "minLength": 1 },
+    "effect_permit_hash": { "$ref": "#/$defs/hash" },
+    "permit_nonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22,}$" },
+    "permit_consumption_ref": { "type": "string", "minLength": 1 },
+    "permit_consumption_hash": { "$ref": "#/$defs/hash" },
+    "policy_epoch": { "type": "string", "minLength": 1 },
+    "emergency_fence_epoch": { "type": "integer", "minimum": 0 },
+    "connector_contract_hash": { "$ref": "#/$defs/hash" },
+    "connector_authority_ref": { "type": "string", "minLength": 1 },
+    "connector_authority_hash": { "$ref": "#/$defs/hash" },
+    "reconciliation_locator_hash": { "$ref": "#/$defs/hash" },
+    "provider_operation_ref": { "type": "string", "minLength": 1 },
+    "provider_resource_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "outcome": { "enum": ["SUCCEEDED", "FAILED", "UNKNOWN"] },
+    "reconciliation_status": { "enum": ["PENDING", "PROVEN_APPLIED", "PROVEN_NOT_APPLIED", "CONFLICT"] },
+    "dependency_state": { "enum": ["FROZEN", "RELEASED"] },
+    "dependency_set_ref": { "type": "string", "minLength": 1 },
+    "dependency_set_hash": { "$ref": "#/$defs/hash" },
+    "dependency_state_hash": { "$ref": "#/$defs/hash" },
+    "route_binding_ref": { "type": "string", "minLength": 1 },
+    "route_binding_hash": { "$ref": "#/$defs/hash" },
+    "route_placement_id": { "type": "string", "minLength": 1 },
+    "provider_capability_profile_ref": { "type": "string", "minLength": 1 },
+    "provider_capability_profile_hash": { "$ref": "#/$defs/hash" },
+    "provider_certification_ref": { "type": "string", "minLength": 1 },
+    "provider_certification_hash": { "$ref": "#/$defs/hash" },
+    "offer_snapshot_ref": { "type": "string", "minLength": 1 },
+    "offer_snapshot_hash": { "$ref": "#/$defs/hash" },
+    "price_evidence_hash": { "$ref": "#/$defs/hash" },
+    "terms_evidence_hash": { "$ref": "#/$defs/hash" },
+    "evidence_pack_ref": { "type": "string", "minLength": 1 },
+    "evidence_pack_hash": { "$ref": "#/$defs/hash" },
+    "previous_receipt_id": { "$ref": "#/$defs/receipt_id" },
+    "signature": { "$ref": "#/$defs/signature" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "const": "UNKNOWN" } }, "required": ["outcome"] },
+      "then": {
+        "properties": {
+          "reconciliation_status": { "enum": ["PENDING", "CONFLICT"] },
+          "dependency_state": { "const": "FROZEN" }
+        },
+        "not": {
+          "anyOf": [
+            { "required": ["evidence_pack_ref"] },
+            { "required": ["evidence_pack_hash"] }
+          ]
+        }
+      }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "SUCCEEDED" } }, "required": ["outcome"] },
+      "then": {
+        "required": ["evidence_pack_ref", "evidence_pack_hash"],
+        "properties": {
+          "reconciliation_status": { "const": "PROVEN_APPLIED" },
+          "dependency_state": { "const": "RELEASED" },
+          "reconciliation_revision": { "minimum": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "FAILED" } }, "required": ["outcome"] },
+      "then": {
+        "required": ["evidence_pack_ref", "evidence_pack_hash"],
+        "properties": {
+          "reconciliation_status": { "enum": ["PROVEN_APPLIED", "PROVEN_NOT_APPLIED"] },
+          "dependency_state": { "const": "FROZEN" },
+          "reconciliation_revision": { "minimum": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "receipt_revision": { "minimum": 2 } }, "required": ["receipt_revision"] },
+      "then": { "required": ["previous_receipt_id"] }
+    },
+    {
+      "if": {
+        "properties": {
+          "effect_id": {
+            "enum": ["PROVIDER_PROVISION", "DEPLOY_PRODUCTION_ACTIVATE", "SPEND_AUTHORIZE", "PROVIDER_ROLLBACK", "PROVIDER_TEARDOWN"]
+          }
+        },
+        "required": ["effect_id"]
+      },
+      "then": {
+        "required": [
+          "route_binding_ref",
+          "route_binding_hash",
+          "route_placement_id",
+          "provider_capability_profile_ref",
+          "provider_capability_profile_hash",
+          "provider_certification_ref",
+          "provider_certification_hash",
+          "offer_snapshot_ref",
+          "offer_snapshot_hash",
+          "price_evidence_hash",
+          "terms_evidence_hash"
+        ]
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "properties": {
+              "effect_id": {
+                "enum": ["PROVIDER_PROVISION", "DEPLOY_PRODUCTION_ACTIVATE", "PROVIDER_ROLLBACK", "PROVIDER_TEARDOWN"]
+              }
+            },
+            "required": ["effect_id"]
+          },
+          {
+            "properties": { "reconciliation_status": { "const": "PROVEN_APPLIED" } },
+            "required": ["reconciliation_status"]
+          }
+        ]
+      },
+      "then": {
+        "required": ["provider_operation_ref", "provider_resource_refs"],
+        "properties": {
+          "provider_resource_refs": { "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "receipt_id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "signature": { "type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$" },
+    "effect_id": {
+      "enum": [
+        "PROVIDER_PROVISION",
+        "DEPLOY_PRODUCTION_ACTIVATE",
+        "SPEND_AUTHORIZE",
+        "PROVIDER_ROLLBACK",
+        "PROVIDER_TEARDOWN",
+        "COMPANY_ARTIFACT_UPDATE"
+      ]
+    }
+  },
+  "x-helm": {
+    "status": "preview",
+    "execution_enabled": false,
+    "receipt_format": "receipt-format-v1",
+    "proof_level": "execution_proof_target",
+    "raw_provider_transcript_forbidden": true,
+    "recursive_redaction_required": true,
+    "receipt_id_projection": "RFC8785 JCS with receipt_id and signature cleared",
+    "signature_projection": "base64 Ed25519 over lowercase hexadecimal receipt_id",
+    "revision_semantics": "append_only_content_addressed_chain"
+  }
+}

@@ -107,6 +107,15 @@
 | `effect_digest/v1.json`           | L1          | normative     | Effect digest for hashing                                 |
 | Infrastructure effects            | L3          | normative     | `create_droplet`, `scale_cluster`, `deploy_release`, etc. |
 | Chaos effects                     | L3          | informational | `chaos_kill_node`, `chaos_network_delay`                  |
+| `launch/*.v1.json`                | L2          | preview       | Provider-neutral arbitrary-workload and multi-placement routing, canonical approval consumption, certified-provider dispatch, generic state transitions, and Receipt Format v1 lineage |
+
+Launch Mission schemas remain preview-only until their identifiers are promoted
+atomically into every policy and Kernel boundary consumer, base-effect expansion
+is enforced, the connector is certified, and the committed conformance vectors
+pass. Provider-specific regions, SKUs, hostnames, workload support, and actions
+live in versioned capability profiles; workload kinds and graph relationships
+are extensible contract tokens rather than a website-only Kernel enum. Schema
+presence or a candidate profile alone grants no execution authority.
 
 ### Evidence (`evidence/`)
 

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // TestInMemoryEffectBoundaryConcurrentSameKey exercises the idempotency
@@ -56,10 +58,43 @@ type mockPDPEvaluator struct {
 	decision   string
 	decisionID string
 	err        error
+	calls      int
 }
 
 func (m *mockPDPEvaluator) Evaluate(ctx context.Context, req *EffectRequest) (string, string, error) {
+	m.calls++
 	return m.decision, m.decisionID, m.err
+}
+
+func TestInMemoryEffectBoundaryRejectsLaunchPreviewBeforeStorageOrPDP(t *testing.T) {
+	pdp := &mockPDPEvaluator{decision: "ALLOW", decisionID: "must-not-run"}
+	boundary := NewInMemoryEffectBoundary(pdp, nil)
+
+	for _, preview := range contracts.LaunchMissionEffectCatalogPreview().EffectTypes {
+		req := &EffectRequest{
+			EffectType: EffectType(preview.TypeID),
+			Subject:    EffectSubject{SubjectID: "user-1", SubjectType: "human"},
+			Payload:    EffectPayload{Data: map[string]interface{}{"mission_id": "mission-1"}},
+		}
+		if _, err := boundary.Submit(context.Background(), req); err == nil {
+			t.Errorf("preview effect %s reached the production boundary", preview.TypeID)
+		}
+	}
+	if pdp.calls != 0 {
+		t.Fatalf("PDP evaluated %d rejected preview effects", pdp.calls)
+	}
+	if len(boundary.effects) != 0 || len(boundary.lifecycles) != 0 {
+		t.Fatalf("rejected preview effects were stored: effects=%d lifecycles=%d", len(boundary.effects), len(boundary.lifecycles))
+	}
+}
+
+func TestExecutableEffectTypeAllowlistRejectsUnknown(t *testing.T) {
+	if !IsExecutableEffectType(EffectTypeDataWrite) {
+		t.Fatal("known runtime effect was removed from the executable allowlist")
+	}
+	if IsExecutableEffectType(EffectType("UNKNOWN_EFFECT")) {
+		t.Fatal("unknown effect entered the executable allowlist")
+	}
 }
 
 //nolint:gocognit,gocyclo // test complexity is acceptable

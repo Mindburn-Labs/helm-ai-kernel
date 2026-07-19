@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/launch_effect_envelope.v1.json",
+  "version": "1.3.0-alpha.1",
+  "title": "Launch Effect Authorization Envelope (Preview)",
+  "description": "Non-executable preview envelope binding one schema-validated launch input to the canonical ApprovalGrant consumption, signed dispatch admission, exact certified connector release, workload principal/audience, dependency state, Kernel trust root, single-use dispatch CAS, scoped-stop epoch, and connector request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "effect_id",
+    "tenant_id",
+    "workspace_id",
+    "mission_id",
+    "principal",
+    "audience",
+    "kernel_trust_root_id",
+    "effect_ordinal",
+    "input_schema_ref",
+    "input_schema_hash",
+    "input",
+    "input_hash",
+    "idempotency_key",
+    "plan_hash",
+    "approval_artifact_ref",
+    "approval_artifact_hash",
+    "approval_consumption_ref",
+    "approval_consumption_hash",
+    "dispatch_admission_ref",
+    "dispatch_admission_hash",
+    "dependency_set_ref",
+    "dependency_set_hash",
+    "policy_epoch",
+    "emergency_fence_epoch",
+    "verdict",
+    "kernel_verdict_ref",
+    "kernel_verdict_issued_at",
+    "kernel_verdict_expiry",
+    "kernel_verdict_signer_key_id",
+    "kernel_verdict_hash",
+    "kernel_verdict_signature",
+    "effect_permit_ref",
+    "effect_permit_hash",
+    "permit_nonce",
+    "permit_issued_at",
+    "permit_expiry",
+    "proof_session_ref",
+    "evidence_reservation_ref",
+    "connector_id",
+    "connector_contract_hash",
+    "connector_authority_ref",
+    "connector_authority_hash",
+    "action_urn",
+    "request_body_hash",
+    "args_c14n_hash",
+    "dispatch_deadline",
+    "replay_hint"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "launch_effect_envelope.v1"
+    },
+    "effect_id": {
+      "$ref": "#/$defs/effect_id"
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mission_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "principal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "audience": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kernel_trust_root_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "effect_ordinal": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "input_schema_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input_schema_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "input": {
+      "type": "object"
+    },
+    "input_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "idempotency_key": {
+      "$ref": "#/$defs/hash"
+    },
+    "plan_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "approval_artifact_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approval_artifact_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "approval_consumption_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approval_consumption_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "dispatch_admission_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dispatch_admission_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "dependency_set_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dependency_set_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "policy_epoch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "emergency_fence_epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "verdict": {
+      "const": "ALLOW"
+    },
+    "kernel_verdict_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kernel_verdict_issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kernel_verdict_expiry": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kernel_verdict_signer_key_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kernel_verdict_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "kernel_verdict_signature": {
+      "$ref": "#/$defs/signature"
+    },
+    "effect_permit_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "effect_permit_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "permit_nonce": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22,}$"
+    },
+    "permit_issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "permit_expiry": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "proof_session_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_reservation_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "connector_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "connector_contract_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "connector_authority_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "connector_authority_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "action_urn": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_body_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "args_c14n_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "dispatch_deadline": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "replay_hint": {
+      "const": "single_use_permit"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "effect_id": {
+            "const": "PROVIDER_PROVISION"
+          }
+        },
+        "required": [
+          "effect_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input_schema_ref": {
+            "const": "effects/launch/provider_provision.v1.json"
+          },
+          "connector_id": {
+            "const": "helm-provider-route"
+          },
+          "action_urn": {
+            "const": "urn:helm:provider-route:provision"
+          },
+          "input": {
+            "$ref": "provider_provision.v1.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "effect_id": {
+            "const": "DEPLOY_PRODUCTION_ACTIVATE"
+          }
+        },
+        "required": [
+          "effect_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input_schema_ref": {
+            "const": "effects/launch/deploy_production_activate.v1.json"
+          },
+          "connector_id": {
+            "const": "helm-provider-route"
+          },
+          "action_urn": {
+            "const": "urn:helm:provider-route:activate"
+          },
+          "input": {
+            "$ref": "deploy_production_activate.v1.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "effect_id": {
+            "const": "SPEND_AUTHORIZE"
+          }
+        },
+        "required": [
+          "effect_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input_schema_ref": {
+            "const": "effects/launch/spend_authorize.v1.json"
+          },
+          "connector_id": {
+            "const": "helm-spend-authority"
+          },
+          "action_urn": {
+            "const": "urn:helm:spend:authorize"
+          },
+          "input": {
+            "$ref": "spend_authorize.v1.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "effect_id": {
+            "const": "PROVIDER_ROLLBACK"
+          }
+        },
+        "required": [
+          "effect_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input_schema_ref": {
+            "const": "effects/launch/provider_rollback.v1.json"
+          },
+          "connector_id": {
+            "const": "helm-provider-route"
+          },
+          "action_urn": {
+            "const": "urn:helm:provider-route:rollback"
+          },
+          "input": {
+            "$ref": "provider_rollback.v1.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "effect_id": {
+            "const": "PROVIDER_TEARDOWN"
+          }
+        },
+        "required": [
+          "effect_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input_schema_ref": {
+            "const": "effects/launch/provider_teardown.v1.json"
+          },
+          "connector_id": {
+            "const": "helm-provider-route"
+          },
+          "action_urn": {
+            "const": "urn:helm:provider-route:teardown"
+          },
+          "input": {
+            "$ref": "provider_teardown.v1.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "effect_id": {
+            "const": "COMPANY_ARTIFACT_UPDATE"
+          }
+        },
+        "required": [
+          "effect_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input_schema_ref": {
+            "const": "effects/launch/company_artifact_update.v1.json"
+          },
+          "connector_id": {
+            "const": "helm-company-state"
+          },
+          "action_urn": {
+            "const": "urn:helm:company-artifact:update"
+          },
+          "input": {
+            "$ref": "company_artifact_update.v1.json"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^ed25519:[a-f0-9]{128}$"
+    },
+    "effect_id": {
+      "enum": [
+        "PROVIDER_PROVISION",
+        "DEPLOY_PRODUCTION_ACTIVATE",
+        "SPEND_AUTHORIZE",
+        "PROVIDER_ROLLBACK",
+        "PROVIDER_TEARDOWN",
+        "COMPANY_ARTIFACT_UPDATE"
+      ]
+    }
+  },
+  "x-helm": {
+    "status": "preview",
+    "execution_enabled": false,
+    "permit_semantics": "atomic_compare_and_swap_single_use_after_full_verification",
+    "emergency_fence_semantics": "exact_current_epoch",
+    "secret_fields_forbidden": true
+  }
+}

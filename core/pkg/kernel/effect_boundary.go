@@ -29,6 +29,25 @@ const (
 	EffectTypeExternalAPICall  EffectType = "EXTERNAL_API_CALL"
 )
 
+// IsExecutableEffectType is the explicit production allowlist for this
+// boundary. A catalog or schema registration never grants execution authority.
+func IsExecutableEffectType(effectType EffectType) bool {
+	switch effectType {
+	case EffectTypeDataWrite,
+		EffectTypeFundsTransfer,
+		EffectTypePermissionChange,
+		EffectTypeDeploy,
+		EffectTypeNotify,
+		EffectTypeModuleInstall,
+		EffectTypeConfigChange,
+		EffectTypeAuditLog,
+		EffectTypeExternalAPICall:
+		return true
+	default:
+		return false
+	}
+}
+
 // EffectSubject represents the actor submitting an effect.
 type EffectSubject struct {
 	SubjectID      string `json:"subject_id"`
@@ -138,6 +157,9 @@ func (b *InMemoryEffectBoundary) Submit(ctx context.Context, req *EffectRequest)
 	// Validate required fields
 	if req.EffectType == "" {
 		return nil, fmt.Errorf("effect_type is required")
+	}
+	if !IsExecutableEffectType(req.EffectType) {
+		return nil, fmt.Errorf("effect_type %q is not executable at this boundary", req.EffectType)
 	}
 	if req.Subject.SubjectID == "" {
 		return nil, fmt.Errorf("subject.subject_id is required")

@@ -89,7 +89,7 @@ func buildEffectCloseReferencePack(t *testing.T) map[string][]byte {
 		Outcome: contracts.ConnectorEffectOutcomeApplied, ResponseHash: effectCloseVectorSHA("response"),
 		EffectRef: "github-issue-42", ReconciliationRef: "reconciliation-vector-a",
 		DispositionReceiptHash: effectCloseVectorSHA("disposition-receipt"),
-		IssuerID: "publisher-a", SigningKeyRef: "kms://helm/connector-ack/key-a",
+		IssuerID:               "publisher-a", SigningKeyRef: "kms://helm/connector-ack/key-a",
 		Algorithm: contracts.ConnectorEffectAcknowledgementAlgorithm, ObservedAt: observedAt,
 	}).Seal()
 	if err != nil {
@@ -124,7 +124,7 @@ func buildEffectCloseReferencePack(t *testing.T) map[string][]byte {
 		ProofSessionRef: acknowledgement.ProofSessionRef, IntentRef: acknowledgement.IntentRef,
 		EffectRef: acknowledgement.EffectRef, ReconciliationRef: acknowledgement.ReconciliationRef,
 		DispositionReceiptHash: acknowledgement.DispositionReceiptHash,
-		EvidencePackRef: "evidence-pack-vector-a", EvidencePackHash: effectCloseVectorSHA("evidence-pack"),
+		EvidencePackRef:        "evidence-pack-vector-a", EvidencePackHash: effectCloseVectorSHA("evidence-pack"),
 		KernelTrustRootID: "kernel-root-a", SigningKeyRef: "kms://helm/approval/key-a",
 		ClosedBy: "spiffe://helm/data-plane-a", ClosedAt: observedAt.Add(time.Second),
 	}).Seal()

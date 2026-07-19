@@ -122,20 +122,27 @@ type PolicyRef struct {
 // VerdictPending is a transient verdict state with no canonical constant equivalent.
 const VerdictPending = "PENDING"
 
+// AuthorizedExecutionIntentSignatureV2 binds the full authority window and
+// portable effect semantics. Empty version identifies the legacy signature
+// preimage and is retained only for non-sandbox compatibility verification.
+const AuthorizedExecutionIntentSignatureV2 = "authorized_execution_intent.v2"
+
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)
 type AuthorizedExecutionIntent struct {
-	ID               string    `json:"id"`                 // Derived Hash
-	DecisionID       string    `json:"decision_id"`        // Link to permission
-	EffectDigestHash string    `json:"effect_digest_hash"` // Bind to specific effect parameters
-	IdempotencyKey   string    `json:"idempotency_key"`
-	IssuedAt         time.Time `json:"issued_at"`
-	ExpiresAt        time.Time `json:"expires_at"`
-	Signer           string    `json:"signer"`         // Kernel Identity
-	Signature        string    `json:"signature"`      // Sig of the Intent
-	SignatureType    string    `json:"signature_type"` // Algorithm binding (e.g. "ed25519:key-id")
-	AllowedTool      string    `json:"allowed_tool"`   // Constraint
-	Taint            []string  `json:"taint,omitempty"`
+	ID               string               `json:"id"`                 // Derived Hash
+	DecisionID       string               `json:"decision_id"`        // Link to permission
+	EffectDigestHash string               `json:"effect_digest_hash"` // Bind to specific effect parameters
+	EffectBinding    *EffectDigestBinding `json:"effect_binding,omitempty"`
+	IdempotencyKey   string               `json:"idempotency_key"`
+	IssuedAt         time.Time            `json:"issued_at"`
+	ExpiresAt        time.Time            `json:"expires_at"`
+	Signer           string               `json:"signer"`                      // Kernel Identity
+	Signature        string               `json:"signature"`                   // Sig of the Intent
+	SignatureType    string               `json:"signature_type"`              // Algorithm binding (e.g. "ed25519:key-id")
+	SignatureVersion string               `json:"signature_version,omitempty"` // Signing-preimage contract
+	AllowedTool      string               `json:"allowed_tool"`                // Constraint
+	Taint            []string             `json:"taint,omitempty"`
 
 	// Safe Deprecation Mode emergency authority bindings. These are populated
 	// only after a prebuilt emergency capsule has passed continuity, hardware

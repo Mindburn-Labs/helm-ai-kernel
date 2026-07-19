@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -76,6 +77,11 @@ type PreparedExecution struct {
 	// every caller-visible prepared value and is retained only for API
 	// compatibility and mutation detection.
 	TokenIDs []string
+
+	// Tokens is retained for source compatibility only. Credential material is
+	// never caller-visible and this field is always nil. Deprecated: trusted
+	// runners receive ephemeral material through SandboxCredentialRunner.
+	Tokens []string `json:"-"`
 
 	// PreparedAt is when the execution was prepared.
 	PreparedAt time.Time
@@ -414,6 +420,9 @@ func (b *SandboxBroker) verifySandboxAuthority(verdict *effectgraph.NodeVerdict)
 	if decision.EffectDigest == "" || intent.EffectDigestHash != decision.EffectDigest {
 		return fmt.Errorf("sandbox execution intent does not bind the decision effect digest")
 	}
+	if intent.SignatureVersion != contracts.AuthorizedExecutionIntentSignatureV2 {
+		return fmt.Errorf("sandbox execution intent requires the full V2 signature binding")
+	}
 	if intent.AllowedTool != contracts.EffectTypeRunSandboxedCode {
 		return fmt.Errorf("sandbox execution intent does not authorize sandboxed code")
 	}
@@ -445,6 +454,36 @@ func verifySandboxExecutionDecisionBinding(decision *contracts.DecisionRecord, i
 	if decision == nil || intent == nil {
 		return fmt.Errorf("sandbox decision and execution intent are required")
 	}
+	if intent.EffectBinding == nil {
+		return fmt.Errorf("sandbox execution intent does not carry portable effect semantics")
+	}
+	if intent.EffectBinding.EffectType != intent.AllowedTool {
+		return fmt.Errorf("sandbox execution effect binding does not match the allowed tool")
+	}
+	if intent.EffectBinding.IdempotencyKey != intent.IdempotencyKey {
+		return fmt.Errorf("sandbox execution effect binding does not match intent idempotency")
+	}
+	if !slices.Equal(contracts.NormalizeTaintLabels(intent.EffectBinding.Taint), contracts.NormalizeTaintLabels(intent.Taint)) {
+		return fmt.Errorf("sandbox execution effect binding does not match intent taint")
+	}
+	effectDigest, err := contracts.CanonicalEffectDigestFromBinding(intent.EffectBinding)
+	if err != nil {
+		return fmt.Errorf("derive signed sandbox effect digest: %w", err)
+	}
+	if decision.EffectDigest != effectDigest || intent.EffectDigestHash != effectDigest {
+		return fmt.Errorf("sandbox execution authorization is not bound by the signed effect digest")
+	}
+	decisionContextHash, err := canonicalize.CanonicalHash(decision.InputContext)
+	if err != nil {
+		return fmt.Errorf("canonicalize sandbox decision context: %w", err)
+	}
+	bindingContextHash, err := canonicalize.CanonicalHash(intent.EffectBinding.Params)
+	if err != nil {
+		return fmt.Errorf("canonicalize sandbox effect binding context: %w", err)
+	}
+	if decisionContextHash != bindingContextHash {
+		return fmt.Errorf("sandbox decision context does not match the signed effect binding")
+	}
 	authorizedExecution, ok := decision.InputContext[SandboxExecutionDecisionContextKey]
 	if !ok || authorizedExecution == nil {
 		return fmt.Errorf("sandbox decision does not contain a complete execution authorization")
@@ -459,21 +498,6 @@ func verifySandboxExecutionDecisionBinding(decision *contracts.DecisionRecord, i
 	}
 	if authorizedHash != expectedHash {
 		return fmt.Errorf("sandbox execution spec or lease does not match the signed decision context")
-	}
-	// Decision signatures do not directly cover InputContext. Guardian instead
-	// signs EffectDigest, so recompute the canonical effect from the complete
-	// context and the Intent-signed tool. This closes the cryptographic chain:
-	// authorization -> effect digest -> Decision signature and Intent signature.
-	effectDigest, err := contracts.CanonicalEffectDigest(&contracts.Effect{
-		EffectType: intent.AllowedTool,
-		Params:     decision.InputContext,
-		Taint:      contracts.TaintLabelsFromContext(decision.InputContext),
-	})
-	if err != nil {
-		return fmt.Errorf("derive signed sandbox effect digest: %w", err)
-	}
-	if decision.EffectDigest != effectDigest || intent.EffectDigestHash != effectDigest {
-		return fmt.Errorf("sandbox execution authorization is not bound by the signed effect digest")
 	}
 	return nil
 }
@@ -518,6 +542,9 @@ func validateSandboxWorkload(workload *SandboxWorkload) error {
 			return fmt.Errorf("sandbox workload command cannot contain empty elements")
 		}
 	}
+	// Empty argument values are intentionally valid. Unlike an empty command
+	// element, they can be meaningful application input and remain covered by
+	// the exact signed workload binding.
 	for key := range workload.Env {
 		if key == "" {
 			return fmt.Errorf("sandbox workload environment variable name is empty")

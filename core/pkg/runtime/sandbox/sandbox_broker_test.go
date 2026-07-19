@@ -11,6 +11,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	kernelcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/lease"
 	sandbox_runtime "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
 	pkg_sandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
@@ -25,6 +26,10 @@ var (
 func clock() time.Time { return clockTime }
 
 func resetClock() { clockTime = baseTime }
+
+type sandboxAuthorityClock struct{}
+
+func (sandboxAuthorityClock) Now() time.Time { return clock() }
 
 // mockRunner implements SandboxRunner for testing.
 type mockRunner struct {
@@ -198,16 +203,24 @@ func authorizedVerdictWithTimeout(t *testing.T, execLease *lease.ExecutionLease,
 func bindSandboxAuthorization(t *testing.T, verdict *effectgraph.NodeVerdict, authorization sandbox_runtime.SandboxExecutionAuthorization) {
 	t.Helper()
 	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
-	digest, err := contracts.CanonicalEffectDigest(&contracts.Effect{
+	effect := &contracts.Effect{
 		EffectType: verdict.Intent.AllowedTool,
 		Params:     verdict.Decision.InputContext,
 		Taint:      contracts.TaintLabelsFromContext(verdict.Decision.InputContext),
-	})
+	}
+	binding, err := contracts.NewEffectDigestBinding(effect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, err := contracts.CanonicalEffectDigestFromBinding(binding)
 	if err != nil {
 		t.Fatal(err)
 	}
 	verdict.Decision.EffectDigest = digest
 	verdict.Intent.EffectDigestHash = digest
+	verdict.Intent.EffectBinding = binding
+	verdict.Intent.IdempotencyKey = binding.IdempotencyKey
+	verdict.Intent.SignatureVersion = contracts.AuthorizedExecutionIntentSignatureV2
 }
 
 func sandboxAuthorization(t *testing.T, execLease *lease.ExecutionLease, profile *effectgraph.ExecutionProfile, workload *sandbox_runtime.SandboxWorkload) sandbox_runtime.SandboxExecutionAuthorization {
@@ -640,6 +653,125 @@ func TestSignedEffectDigestCryptographicallyBindsFullSandboxAuthorization(t *tes
 		t.Fatal("post-signature sandbox authorization substitution was accepted")
 	}
 	assertLeasePendingAndRunnerUnused(t, lm, tamperedLease, runner)
+
+	inconsistentTaintLease := acquireLease(t, lm)
+	inconsistentTaintVerdict := authorizedVerdict(t, inconsistentTaintLease, testWorkload())
+	inconsistentTaintVerdict.Intent.Taint = []string{contracts.TaintSecret}
+	if err := signer.SignDecision(inconsistentTaintVerdict.Decision); err != nil {
+		t.Fatal(err)
+	}
+	if err := signer.SignIntent(inconsistentTaintVerdict.Intent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, inconsistentTaintLease, inconsistentTaintVerdict, testWorkload()); err == nil {
+		t.Fatal("internally inconsistent signed sandbox taint was accepted")
+	}
+	assertLeasePendingAndRunnerUnused(t, lm, inconsistentTaintLease, runner)
+}
+
+func TestPortableEffectBindingPreservesCompleteSandboxSemantics(t *testing.T) {
+	resetClock()
+	signer, err := kernelcrypto.NewEd25519Signer("sandbox-complete-effect-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(sandbox_runtime.NewCredentialBroker(3600).WithClock(clock), lm).
+		WithAuthorizationVerifier(signer).
+		WithClock(clock)
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+
+	execLease := acquireLease(t, lm)
+	verdict := authorizedVerdict(t, execLease, testWorkload())
+	verdict.Intent.IdempotencyKey = "mission:step:1"
+	verdict.Intent.EffectBinding.IdempotencyKey = verdict.Intent.IdempotencyKey
+	verdict.Intent.EffectBinding.Irreversible = true
+	verdict.Intent.EffectBinding.ArgsHash = "sha256:args"
+	verdict.Intent.EffectBinding.OutputHash = "sha256:output"
+	verdict.Intent.EffectBinding.Compensation = &contracts.EffectDigestBinding{
+		EffectType: contracts.EffectTypeGeneric,
+		Params:     map[string]any{"action": "compensate"},
+	}
+	digest, err := contracts.CanonicalEffectDigestFromBinding(verdict.Intent.EffectBinding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verdict.Decision.EffectDigest = digest
+	verdict.Intent.EffectDigestHash = digest
+	if err := signer.SignDecision(verdict.Decision); err != nil {
+		t.Fatal(err)
+	}
+	if err := signer.SignIntent(verdict.Intent); err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, execLease, verdict, testWorkload())
+	if err != nil {
+		t.Fatalf("complete portable effect binding was rejected: %v", err)
+	}
+	if _, _, err := broker.Execute(ctx, prepared); err != nil {
+		t.Fatalf("complete portable effect binding failed at dispatch: %v", err)
+	}
+}
+
+func TestGuardianIssuedDefaultSandboxIntentExecutesWithinSignedWindow(t *testing.T) {
+	resetClock()
+	signer, err := kernelcrypto.NewEd25519Signer("guardian-sandbox-window-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	execLease := acquireLease(t, lm)
+	profile := testVerdict().Profile
+	workload := testWorkload()
+	authorization := sandboxAuthorization(t, execLease, profile, workload)
+	inputContext := map[string]any{sandbox_runtime.SandboxExecutionDecisionContextKey: authorization}
+	effect := &contracts.Effect{
+		EffectType: contracts.EffectTypeRunSandboxedCode,
+		Params:     inputContext,
+	}
+	digest, err := contracts.CanonicalEffectDigest(effect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := &contracts.DecisionRecord{
+		ID:           "decision-default-sandbox-window",
+		Timestamp:    baseTime,
+		Verdict:      string(contracts.VerdictAllow),
+		EffectDigest: digest,
+		InputContext: inputContext,
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	guard := guardian.NewGuardian(signer, nil, nil, guardian.WithClock(sandboxAuthorityClock{}))
+	intent, err := guard.IssueExecutionIntent(ctx, decision, effect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !intent.ExpiresAt.Equal(baseTime.Add(35 * time.Minute)) {
+		t.Fatalf("default 30-minute sandbox received intent expiry %s", intent.ExpiresAt)
+	}
+
+	broker := sandbox_runtime.NewSandboxBroker(sandbox_runtime.NewCredentialBroker(3600).WithClock(clock), lm).
+		WithAuthorizationVerifier(signer).
+		WithClock(clock)
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+	verdict := &effectgraph.NodeVerdict{
+		StepID:   "step-default-sandbox-window",
+		Decision: decision,
+		Intent:   intent,
+		Profile:  profile,
+	}
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, execLease, verdict, workload)
+	if err != nil {
+		t.Fatalf("Guardian-issued default sandbox intent was rejected: %v", err)
+	}
+	if _, _, err := broker.Execute(ctx, prepared); err != nil {
+		t.Fatalf("Guardian-issued default sandbox intent failed dispatch: %v", err)
+	}
 }
 
 func TestPrepareExecutionRequiresSignedFullRuntimeAndExactLeaseIdentity(t *testing.T) {

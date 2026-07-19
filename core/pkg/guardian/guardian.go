@@ -580,16 +580,26 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	} else {
 		allowedTool = effect.EffectType
 	}
+	effectBinding, err := contracts.NewEffectDigestBinding(effect)
+	if err != nil {
+		return nil, fmt.Errorf("bind execution intent effect: %w", err)
+	}
 
 	// 3. Create Intent
 	now := g.clock.Now()
+	expiresAt, err := executionIntentExpiresAt(effect, allowedTool, now)
+	if err != nil {
+		return nil, err
+	}
 
 	intent := &contracts.AuthorizedExecutionIntent{
 		ID:               "intent-" + decision.ID, // Deterministic ID
 		DecisionID:       decision.ID,
 		EffectDigestHash: effectDigest,
+		EffectBinding:    effectBinding,
+		IdempotencyKey:   effect.IdempotencyKey,
 		IssuedAt:         now,
-		ExpiresAt:        now.Add(5 * time.Minute),
+		ExpiresAt:        expiresAt,
 		Signer:           "kernel",
 		AllowedTool:      allowedTool,
 		Taint:            contracts.NormalizeTaintLabels(effect.Taint),
@@ -616,6 +626,58 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 
 func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
 	return contracts.CanonicalEffectDigest(effect)
+}
+
+const (
+	defaultExecutionIntentTTL        = 5 * time.Minute
+	sandboxIntentDispatchWindow      = 5 * time.Minute
+	sandboxIntentMinimumDispatchTime = time.Second
+)
+
+// executionIntentExpiresAt keeps the default short dispatch authority for
+// ordinary effects. A sandbox intent must also cover its signed runtime so the
+// default 5-30 minute profiles can execute; it receives at most five minutes
+// of dispatch slack and can never outlive the exact signed lease.
+func executionIntentExpiresAt(effect *contracts.Effect, allowedTool string, now time.Time) (time.Time, error) {
+	if allowedTool != contracts.EffectTypeRunSandboxedCode {
+		return now.Add(defaultExecutionIntentTTL), nil
+	}
+	if effect == nil || effect.Params == nil {
+		return time.Time{}, fmt.Errorf("sandbox execution intent requires complete authorization parameters")
+	}
+	value, ok := effect.Params["param.sandbox_execution"]
+	if !ok || value == nil {
+		return time.Time{}, fmt.Errorf("sandbox execution intent requires complete runtime and lease authorization")
+	}
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("encode sandbox execution authority window: %w", err)
+	}
+	var authorization struct {
+		Lease struct {
+			ExpiresAt time.Time `json:"expires_at"`
+		} `json:"lease"`
+		Spec sandbox.SandboxSpec `json:"spec"`
+	}
+	if err := json.Unmarshal(payload, &authorization); err != nil {
+		return time.Time{}, fmt.Errorf("decode sandbox execution authority window: %w", err)
+	}
+	runtimeTimeout := authorization.Spec.Limits.Timeout
+	leaseRemaining := authorization.Lease.ExpiresAt.Sub(now)
+	if runtimeTimeout <= 0 || authorization.Lease.ExpiresAt.IsZero() {
+		return time.Time{}, fmt.Errorf("sandbox execution intent requires a positive signed runtime and lease expiry")
+	}
+	if leaseRemaining <= runtimeTimeout {
+		return time.Time{}, fmt.Errorf("sandbox execution lease does not leave enough authority for runtime and dispatch")
+	}
+	dispatchWindow := leaseRemaining - runtimeTimeout
+	if dispatchWindow < sandboxIntentMinimumDispatchTime {
+		return time.Time{}, fmt.Errorf("sandbox execution lease does not leave enough authority for runtime and dispatch")
+	}
+	if dispatchWindow > sandboxIntentDispatchWindow {
+		dispatchWindow = sandboxIntentDispatchWindow
+	}
+	return now.Add(runtimeTimeout + dispatchWindow), nil
 }
 
 // recordBehavioralEvent records a trust score event if the behavioral scorer is configured.

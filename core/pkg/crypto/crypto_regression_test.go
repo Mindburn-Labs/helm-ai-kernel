@@ -730,8 +730,7 @@ func TestClosing_SigPrefix_MLDSA_DecisionFormat(t *testing.T) {
 }
 
 func TestClosing_SigPrefix_IntentFormat(t *testing.T) {
-	// Note: Ed25519Signer.SignIntent does not populate SignatureType (only Signature);
-	// ML-DSA signer does populate SignatureType. Assert only the latter.
+	// V2 intent signatures bind their algorithm and key-selection metadata.
 	t.Run("ml-dsa-65", func(t *testing.T) {
 		s, err := NewMLDSASigner("intent-ml-dsa-65")
 		if err != nil {

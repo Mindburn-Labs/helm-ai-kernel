@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // CanonicalMarshal marshals v into canonical JSON format (RFC 8785).
@@ -68,6 +72,81 @@ func CanonicalizeIntent(id, decisionID, allowedTool string, effectDigestHash ...
 		return fmt.Sprintf("%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool)
 	}
 	return fmt.Sprintf("%s%s%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool, SigSeparator, effectDigestHash[0])
+}
+
+// CanonicalizeAuthorizedExecutionIntent returns the versioned signing
+// preimage for an execution intent. V2 binds the authority window, signer and
+// algorithm identity, taint, emergency authority, idempotency, and complete
+// portable effect semantics. Empty version preserves verification of legacy
+// non-sandbox intents that used the compact colon-delimited preimage.
+func CanonicalizeAuthorizedExecutionIntent(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
+	if intent == nil {
+		return nil, fmt.Errorf("execution intent is nil")
+	}
+	if intent.SignatureVersion == "" {
+		return []byte(CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)), nil
+	}
+	if intent.SignatureVersion != contracts.AuthorizedExecutionIntentSignatureV2 {
+		return nil, fmt.Errorf("unsupported execution intent signature version %q", intent.SignatureVersion)
+	}
+
+	var effectBinding *contracts.EffectDigestBinding
+	if intent.EffectBinding != nil {
+		var err error
+		effectBinding, err = contracts.NormalizeEffectDigestBinding(intent.EffectBinding)
+		if err != nil {
+			return nil, fmt.Errorf("normalize execution intent effect binding: %w", err)
+		}
+	}
+
+	return canonicalize.JCS(authorizedExecutionIntentSigningEnvelope{
+		SignatureVersion:             intent.SignatureVersion,
+		ID:                           intent.ID,
+		DecisionID:                   intent.DecisionID,
+		EffectDigestHash:             intent.EffectDigestHash,
+		EffectBinding:                effectBinding,
+		IdempotencyKey:               intent.IdempotencyKey,
+		IssuedAt:                     intent.IssuedAt,
+		ExpiresAt:                    intent.ExpiresAt,
+		Signer:                       intent.Signer,
+		SignatureType:                intent.SignatureType,
+		AllowedTool:                  intent.AllowedTool,
+		Taint:                        contracts.NormalizeTaintLabels(intent.Taint),
+		EmergencyActivationID:        intent.EmergencyActivationID,
+		EmergencyDelegationSessionID: intent.EmergencyDelegationSessionID,
+		EmergencyScopeHash:           intent.EmergencyScopeHash,
+	})
+}
+
+// prepareAuthorizedExecutionIntent marks a newly signed intent as V2 before
+// deriving the preimage. SignatureType is included so algorithm/key-selection
+// metadata cannot be changed after signing.
+func prepareAuthorizedExecutionIntent(intent *contracts.AuthorizedExecutionIntent, signatureType string) ([]byte, error) {
+	if intent == nil {
+		return nil, fmt.Errorf("execution intent is nil")
+	}
+	intent.SignatureVersion = contracts.AuthorizedExecutionIntentSignatureV2
+	intent.SignatureType = signatureType
+	return CanonicalizeAuthorizedExecutionIntent(intent)
+}
+
+//nolint:govet // field order mirrors the public authority contract.
+type authorizedExecutionIntentSigningEnvelope struct {
+	SignatureVersion             string                         `json:"signature_version"`
+	ID                           string                         `json:"id"`
+	DecisionID                   string                         `json:"decision_id"`
+	EffectDigestHash             string                         `json:"effect_digest_hash"`
+	EffectBinding                *contracts.EffectDigestBinding `json:"effect_binding,omitempty"`
+	IdempotencyKey               string                         `json:"idempotency_key,omitempty"`
+	IssuedAt                     time.Time                      `json:"issued_at"`
+	ExpiresAt                    time.Time                      `json:"expires_at"`
+	Signer                       string                         `json:"signer"`
+	SignatureType                string                         `json:"signature_type"`
+	AllowedTool                  string                         `json:"allowed_tool"`
+	Taint                        []string                       `json:"taint,omitempty"`
+	EmergencyActivationID        string                         `json:"emergency_activation_id,omitempty"`
+	EmergencyDelegationSessionID string                         `json:"emergency_delegation_session_id,omitempty"`
+	EmergencyScopeHash           string                         `json:"emergency_scope_hash,omitempty"`
 }
 
 // CanonicalizeReceipt creates a canonical string representation of a receipt for signing.

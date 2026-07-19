@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: tests the classical Ed25519 effect-disposition command and
+// receipt signing; no post-quantum claim.
+
 import (
 	"bytes"
 	"crypto/ed25519"
@@ -46,6 +49,12 @@ func TestEffectDispositionSignaturesUsePinnedIndependentAuthorities(t *testing.T
 	}
 	if err := disabledVerifier.VerifyEnvelope(envelope); !errors.Is(err, ErrEffectDispositionCommandRejected) {
 		t.Fatalf("disabled key error = %v", err)
+	}
+	if err := disabledVerifier.VerifyStoredEnvelope(envelope); err != nil {
+		t.Fatalf("VerifyStoredEnvelope() with a disabled-after-issue key = %v, want nil", err)
+	}
+	if err := disabledVerifier.VerifyStoredEnvelope(mutated); !errors.Is(err, ErrEffectDispositionCommandRejected) {
+		t.Fatalf("VerifyStoredEnvelope() with a tampered command = %v, want rejected", err)
 	}
 	futureKey := trustedKey
 	futureKey.NotBefore = now.Add(time.Second)

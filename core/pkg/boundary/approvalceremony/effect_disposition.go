@@ -90,7 +90,10 @@ func (s *EffectDispositionService) Record(
 	if s == nil || s.store == nil || s.commandVerifier == nil || s.signer == nil {
 		return EffectDispositionRecord{}, errors.New("effect disposition service is not initialized")
 	}
-	if err := s.commandVerifier.VerifyEnvelope(command); err != nil {
+	// Lenient preflight only: the store enforces an enabled key for a genuinely
+	// new disposition and tolerates a since-disabled key when replaying an
+	// already-recorded command, so idempotent retries survive a key rotation.
+	if err := s.commandVerifier.VerifyStoredEnvelope(command); err != nil {
 		return EffectDispositionRecord{}, err
 	}
 	identity, err := verifiedConsumerIdentity(ctx, s.consumer)

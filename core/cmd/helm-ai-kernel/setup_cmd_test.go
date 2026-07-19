@@ -325,6 +325,8 @@ func TestSetupInstallJSONReportsOccupiedQuickstartPortTruthfully(t *testing.T) {
 
 func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
 	workspace := filepath.Join(tmp, "workspace")
 	if err := os.MkdirAll(filepath.Join(workspace, ".codex"), 0o750); err != nil {
 		t.Fatal(err)
@@ -333,6 +335,7 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve workspace: %v", err)
 	}
+	markCodexProjectTrusted(t, home, workspace)
 	configPath := filepath.Join(workspace, ".codex", "config.toml")
 	if err := os.WriteFile(configPath, []byte("model = \"gpt-5\"\n\n[mcp_servers.other]\ncommand = \"other-mcp\"\nargs = [\"serve\"]\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -575,10 +578,16 @@ func TestSetupStatusRejectsStaleMCPDataDir(t *testing.T) {
 	} {
 		t.Run(test.target+"_"+test.scope, func(t *testing.T) {
 			tmp := t.TempDir()
-			t.Setenv("HOME", filepath.Join(tmp, "home"))
+			home := filepath.Join(tmp, "home")
+			t.Setenv("HOME", home)
 			workspace := filepath.Join(tmp, "workspace")
 			if err := os.MkdirAll(workspace, 0o750); err != nil {
 				t.Fatal(err)
+			}
+			if test.target == "codex" && test.scope == "project" {
+				// Record the workspace as trusted so status reflects an
+				// effective (Codex-loadable) install rather than trust-pending.
+				markCodexProjectTrusted(t, home, workspace)
 			}
 			dataDir := filepath.Join(tmp, "helm-data")
 			opts := setupOptions{Operation: "status", Target: test.target, Scope: test.scope, Workspace: workspace, DataDir: dataDir}
@@ -1190,5 +1199,73 @@ func assertNoSetupTempFiles(t *testing.T, dirs ...string) {
 		if len(matches) != 0 {
 			t.Fatalf("setup temp files were not cleaned from %s: %#v", dir, matches)
 		}
+	}
+}
+
+func TestSetupCodexProjectTrustPending(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(filepath.Join(workspace, ".codex"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, ".codex", "config.toml"),
+		[]byte("model = \"gpt-5\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Untrusted: no ~/.codex/config.toml projects entry → pending.
+	home := filepath.Join(tmp, "home")
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	if !codexProjectTrustPending(workspace) {
+		t.Fatal("expected trust pending when no projects entry exists")
+	}
+
+	// Trusted: matching projects entry with trust_level=trusted → not pending.
+	markCodexProjectTrusted(t, home, workspace)
+	if codexProjectTrustPending(workspace) {
+		t.Fatal("expected trust NOT pending once workspace is recorded trusted")
+	}
+
+	// setup status must fail-closed (exit 1) while trust is pending.
+	if err := os.Remove(filepath.Join(home, ".codex", "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+	restore := stubSetupSideEffects(t)
+	_ = restore
+	var so, se bytes.Buffer
+	dataDir := filepath.Join(tmp, "helm")
+	// Install first (writes the project config), then status.
+	if code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--no-quickstart", "--json", "--data-dir", dataDir}, &so, &se); code != 0 {
+		t.Fatalf("install exit = %d stderr=%s", code, se.String())
+	}
+	var installed setupSummary
+	if err := json.Unmarshal(so.Bytes(), &installed); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !installed.CodexTrustPending {
+		t.Fatal("install summary should report CodexTrustPending=true for an untrusted project")
+	}
+}
+
+// markCodexProjectTrusted records the workspace as trusted in
+// $home/.codex/config.toml so setup/status treats a project-scoped Codex
+// config as an effective (Codex-loadable) install.
+func markCodexProjectTrusted(t *testing.T, home, workspace string) {
+	t.Helper()
+	abs, err := filepath.Abs(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	body := "[projects.\"" + abs + "\"]\ntrust_level = \"trusted\"\n"
+	if err := os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }

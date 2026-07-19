@@ -44,20 +44,26 @@ type setupOptions struct {
 }
 
 type setupSummary struct {
-	Operation         string   `json:"operation"`
-	Target            string   `json:"target"`
-	Workspace         string   `json:"workspace"`
-	BinaryPath        string   `json:"binary_path"`
-	ClientConfigPath  string   `json:"client_config_path"`
-	HookConfigPath    string   `json:"hook_config_path"`
-	DataDir           string   `json:"data_dir"`
-	KernelURL         string   `json:"kernel_url"`
-	ScanGrade         string   `json:"scan_grade"`
-	DraftPolicyPath   string   `json:"draft_policy_path"`
-	UninstallCommand  string   `json:"uninstall_command"`
-	Scope             string   `json:"scope,omitempty"`
-	MCPInstalled      bool     `json:"mcp_installed,omitempty"`
-	HookInstalled     bool     `json:"hook_installed,omitempty"`
+	Operation        string `json:"operation"`
+	Target           string `json:"target"`
+	Workspace        string `json:"workspace"`
+	BinaryPath       string `json:"binary_path"`
+	ClientConfigPath string `json:"client_config_path"`
+	HookConfigPath   string `json:"hook_config_path"`
+	DataDir          string `json:"data_dir"`
+	KernelURL        string `json:"kernel_url"`
+	ScanGrade        string `json:"scan_grade"`
+	DraftPolicyPath  string `json:"draft_policy_path"`
+	UninstallCommand string `json:"uninstall_command"`
+	Scope            string `json:"scope,omitempty"`
+	MCPInstalled     bool   `json:"mcp_installed,omitempty"`
+	HookInstalled    bool   `json:"hook_installed,omitempty"`
+	// CodexTrustPending is true when a project-scoped Codex config is written
+	// but the workspace is not recorded as trusted in ~/.codex/config.toml.
+	// Codex ignores project-scoped config until trust is granted, so the
+	// integration is written-but-not-yet-loaded; reporting it as installed
+	// without this flag would be a false positive.
+	CodexTrustPending bool     `json:"codex_trust_pending,omitempty"`
 	QuickstartStarted bool     `json:"quickstart_started"`
 	PlannedActions    []string `json:"planned_actions"`
 }
@@ -162,6 +168,9 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	summary.MCPInstalled = true
 	summary.HookInstalled = true
+	if opts.Target == "codex" && opts.Scope == "project" {
+		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
+	}
 	if opts.NoQuickstart {
 		printSetupSummary(stdout, summary, opts.JSON)
 		return 0
@@ -204,11 +213,16 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
+	if opts.Target == "codex" && opts.Scope == "project" && (summary.MCPInstalled || summary.HookInstalled) {
+		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
+	}
 	if grade := readSetupScanGrade(filepath.Join(opts.DataDir, "autoconfigure", "inventory.json")); grade != "" {
 		summary.ScanGrade = grade
 	}
 	printSetupSummary(stdout, summary, opts.JSON)
-	if summary.MCPInstalled && summary.HookInstalled {
+	// A project-scoped Codex config that Codex will not load until the
+	// project is trusted is not an effective install; do not report success.
+	if summary.MCPInstalled && summary.HookInstalled && !summary.CodexTrustPending {
 		return 0
 	}
 	return 1
@@ -473,6 +487,9 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	}
 	if summary.MCPInstalled || summary.HookInstalled {
 		fmt.Fprintf(stdout, "  Installed:     mcp=%v hook=%v\n", summary.MCPInstalled, summary.HookInstalled)
+	}
+	if summary.CodexTrustPending {
+		fmt.Fprintf(stdout, "  Codex trust:   PENDING — Codex will ignore this project config until you trust the workspace (run `codex` in %s and approve it, or set trust_level=\"trusted\" in ~/.codex/config.toml). Governance is not active until then.\n", summary.Workspace)
 	}
 }
 
@@ -858,6 +875,39 @@ func validateCodexProjectTOML(raw string) error {
 	var config map[string]any
 	_, err := toml.Decode(raw, &config)
 	return err
+}
+
+// codexProjectTrustPending reports whether a project-scoped Codex workspace
+// has NOT been recorded as trusted in ~/.codex/config.toml. Codex only loads a
+// project-scoped .codex/config.toml (and its MCP server + hook) once the
+// project's trust_level is "trusted"; until then a written config is inert, so
+// setup/status must not report it as an effective install.
+func codexProjectTrustPending(workspace string) bool {
+	abs, err := filepath.Abs(workspace)
+	if err != nil {
+		abs = workspace
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	userConfig := filepath.Join(homeDirOrDot(), ".codex", "config.toml")
+	raw, err := os.ReadFile(userConfig)
+	if err != nil {
+		// No user-level Codex config means no recorded trust for this project.
+		return true
+	}
+	var config struct {
+		Projects map[string]struct {
+			TrustLevel string `toml:"trust_level"`
+		} `toml:"projects"`
+	}
+	if _, err := toml.Decode(string(raw), &config); err != nil {
+		return true
+	}
+	if entry, ok := config.Projects[abs]; ok && strings.EqualFold(entry.TrustLevel, "trusted") {
+		return false
+	}
+	return true
 }
 
 func claudeMCPInstalled(path, bin, dataDir string) bool {

@@ -51,6 +51,14 @@ func TestEffectCloseSignaturesUseIndependentDomainsAndPinnedKeys(t *testing.T) {
 	if err := disabledVerifier.VerifyEnvelope(envelope); !errors.Is(err, ErrEffectAcknowledgementRejected) {
 		t.Fatalf("disabled acknowledgement key error = %v", err)
 	}
+	// A key disabled after observation must still verify an already-stored
+	// acknowledgement so recovery/idempotency of an existing closure works.
+	if err := disabledVerifier.VerifyStoredEnvelope(envelope); err != nil {
+		t.Fatalf("VerifyStoredEnvelope() with a disabled-after-observation key = %v, want nil", err)
+	}
+	if err := disabledVerifier.VerifyStoredEnvelope(mutated); !errors.Is(err, ErrEffectAcknowledgementRejected) {
+		t.Fatalf("VerifyStoredEnvelope() with a tampered acknowledgement = %v, want rejected", err)
+	}
 	futureKey := trustedKey
 	futureKey.NotBefore = now.Add(time.Second)
 	futureKey.NotAfter = now.Add(time.Hour)

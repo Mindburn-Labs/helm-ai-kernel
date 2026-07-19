@@ -17,6 +17,7 @@ var (
 
 type EffectAcknowledgementVerifier interface {
 	VerifyEnvelope(contracts.ConnectorEffectAcknowledgementEnvelope) error
+	VerifyStoredEnvelope(contracts.ConnectorEffectAcknowledgementEnvelope) error
 }
 
 // EffectEvidencePackVerifier proves that the close request references a

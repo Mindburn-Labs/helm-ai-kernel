@@ -303,7 +303,10 @@ func verifyEffectClosureSignatures(
 	if err := record.Validate(); err != nil {
 		return err
 	}
-	if err := acknowledgementVerifier.VerifyEnvelope(record.Acknowledgement); err != nil {
+	// A persisted closure record is historical evidence (recovery + idempotency
+	// re-checks), so tolerate a signing key disabled/rotated after the
+	// acknowledgement was observed; signature + pinned lifetime still enforced.
+	if err := acknowledgementVerifier.VerifyStoredEnvelope(record.Acknowledgement); err != nil {
 		return err
 	}
 	return store.grantVerifier.VerifyEffectCloseReceiptSignature(

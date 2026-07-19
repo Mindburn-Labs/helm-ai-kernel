@@ -111,7 +111,24 @@ func SignConnectorEffectAcknowledgement(
 	return envelope, nil
 }
 
+// VerifyEnvelope proves a connector effect acknowledgement is signed by a
+// currently trusted key; used when closing (submitting) a new acknowledgement,
+// so it rejects a disabled key.
 func (v *Ed25519EffectAcknowledgementVerifier) VerifyEnvelope(envelope contracts.ConnectorEffectAcknowledgementEnvelope) error {
+	return v.verifyEnvelope(envelope, true)
+}
+
+// VerifyStoredEnvelope proves an already-persisted acknowledgement's signature
+// and pinned-lifetime binding without requiring the signing key to still be
+// enabled. Disabling a key stops NEW acknowledgements from it; it must not make
+// an existing stored effect-closure record unrecoverable, or recovery and
+// idempotency re-checks would break after a key rotation. Signature validity
+// and the NotBefore/NotAfter window still enforce authenticity.
+func (v *Ed25519EffectAcknowledgementVerifier) VerifyStoredEnvelope(envelope contracts.ConnectorEffectAcknowledgementEnvelope) error {
+	return v.verifyEnvelope(envelope, false)
+}
+
+func (v *Ed25519EffectAcknowledgementVerifier) verifyEnvelope(envelope contracts.ConnectorEffectAcknowledgementEnvelope, requireEnabled bool) error {
 	if v == nil || len(v.keys) == 0 {
 		return effectAcknowledgementRejected("verifier is not configured")
 	}
@@ -121,7 +138,10 @@ func (v *Ed25519EffectAcknowledgementVerifier) VerifyEnvelope(envelope contracts
 	a := envelope.Acknowledgement
 	identity := effectAcknowledgementKeyIdentity(a.IssuerID, a.SigningKeyRef, a.ConnectorID, a.ConnectorVersion)
 	key, ok := v.keys[identity]
-	if !ok || !key.Enabled {
+	if !ok {
+		return effectAcknowledgementRejected("signing key is not currently trusted for this connector release")
+	}
+	if requireEnabled && !key.Enabled {
 		return effectAcknowledgementRejected("signing key is not currently trusted for this connector release")
 	}
 	if a.ObservedAt.Before(key.NotBefore) || !a.ObservedAt.Before(key.NotAfter) {

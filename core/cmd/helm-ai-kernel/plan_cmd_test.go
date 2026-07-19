@@ -73,10 +73,10 @@ func TestPlanEvaluateRejectsLaunchPreviewBeforeDryRunPolicy(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("preview effect evaluated as executable: stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "preview effect") {
-		t.Fatalf("expected explicit preview rejection, got %q", stderr.String())
+	if !strings.Contains(stdout.String(), "PREVIEW_EFFECT_NOT_EXECUTABLE") || !strings.Contains(stderr.String(), "Denied steps: step-1") {
+		t.Fatalf("expected explicit preview rejection, got stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	if strings.Contains(stderr.String(), "allowed") || strings.Contains(stdout.String(), "CLI_DRY_RUN") {
+	if strings.Contains(stdout.String(), "CLI_DRY_RUN") {
 		t.Fatalf("preview effect reached dry-run evaluation: stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }

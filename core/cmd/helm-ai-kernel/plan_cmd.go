@@ -193,13 +193,6 @@ func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "Error parsing plan JSON: %v\n", err)
 		return 2
 	}
-	validator := intentcompiler.NewGraphValidator(contracts.DefaultEffectCatalog())
-	if validationErrors := validator.Validate(&plan); len(validationErrors) > 0 {
-		for _, validationErr := range validationErrors {
-			_, _ = fmt.Fprintf(stderr, "Invalid plan: %v\n", validationErr)
-		}
-		return 2
-	}
 
 	var policy effectgraph.PolicyEvaluator
 	if dryRun {

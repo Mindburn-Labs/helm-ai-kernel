@@ -1,5 +1,3 @@
-// quantum_posture: these tests cover existing classical and hybrid/PQ paths;
-// test coverage itself makes no post-quantum protection claim.
 package crypto
 
 import (
@@ -732,7 +730,8 @@ func TestClosing_SigPrefix_MLDSA_DecisionFormat(t *testing.T) {
 }
 
 func TestClosing_SigPrefix_IntentFormat(t *testing.T) {
-	// V2 intent signatures bind their algorithm and key-selection metadata.
+	// Note: Ed25519Signer.SignIntent does not populate SignatureType (only Signature);
+	// ML-DSA signer does populate SignatureType. Assert only the latter.
 	t.Run("ml-dsa-65", func(t *testing.T) {
 		s, err := NewMLDSASigner("intent-ml-dsa-65")
 		if err != nil {

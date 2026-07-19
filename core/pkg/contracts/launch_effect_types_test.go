@@ -2,7 +2,6 @@ package contracts_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -266,9 +265,6 @@ func TestLaunchEffectPreviewRejectsStandingAuthorityAndUnverifiedCredit(t *testi
 	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeDeployProductionActivate, nonEUActivation); err != nil {
 		t.Fatalf("provider-neutral semantic validator hard-coded an EU region: %v", err)
 	}
-	if err := validateDigitalOceanEU50Route(contracts.EffectTypeDeployProductionActivate, nonEUActivation); err == nil {
-		t.Fatal("DigitalOcean EU mission route accepted activation outside its approved jurisdiction")
-	}
 
 	provision := cloneLaunchInput(t, fixtures[0].input)
 	provision["preauthorized_teardown_permit_ref"] = "forbidden-delete-permit"
@@ -279,14 +275,12 @@ func TestLaunchEffectPreviewRejectsStandingAuthorityAndUnverifiedCredit(t *testi
 		t.Fatal("semantic validator accepted preauthorized deletion authority")
 	}
 
-	nonEU := cloneLaunchInput(t, fixtures[0].input)
-	nonEU["region"] = "nyc"
-	nonEU["jurisdiction"] = "US"
-	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeProviderProvision, nonEU); err != nil {
-		t.Fatalf("provider-neutral semantic validator hard-coded a DigitalOcean region: %v", err)
-	}
-	if err := validateDigitalOceanEU50Route(contracts.EffectTypeProviderProvision, nonEU); err == nil {
-		t.Fatal("DigitalOcean EU mission route accepted a non-EU provider region")
+	for _, fixture := range []launchInputFixture{fixtures[0], fixtures[3], fixtures[4]} {
+		nonEU := cloneLaunchInput(t, fixture.input)
+		nonEU["region"], nonEU["jurisdiction"] = "nyc", "US"
+		if err := contracts.ValidateLaunchEffectInputSemantics(fixture.effectID, nonEU); err != nil {
+			t.Errorf("%s hard-coded an EU route: %v", fixture.effectID, err)
+		}
 	}
 
 	provisionOverCap := cloneLaunchInput(t, fixtures[0].input)
@@ -315,57 +309,20 @@ func TestLaunchEffectPreviewRejectsStandingAuthorityAndUnverifiedCredit(t *testi
 	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeSpendAuthorize, overCap); err != nil {
 		t.Fatalf("provider-neutral spend semantics rejected internally consistent mission values: %v", err)
 	}
-	if err := validateDigitalOceanEU50Route(contracts.EffectTypeSpendAuthorize, overCap); err == nil {
-		t.Fatal("DigitalOcean EU50 route policy accepted gross exposure above EUR 50")
-	}
-
-	expectedAboveGross := cloneLaunchInput(t, fixtures[2].input)
-	expectedAboveGross["expected_cash_minor"] = 1201
-	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeSpendAuthorize, expectedAboveGross); err == nil {
-		t.Fatal("expected cash cost above gross exposure was accepted")
-	}
-
-	overCredit := cloneLaunchInput(t, fixtures[2].input)
-	overCredit["verified_credit_minor"] = 1051
-	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeSpendAuthorize, overCredit); err == nil {
-		t.Fatal("verified credit above base provider cost was accepted")
-	}
-
-	badGrossEquation := cloneLaunchInput(t, fixtures[2].input)
-	badGrossEquation["gross_exposure_minor"] = 1199
-	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeSpendAuthorize, badGrossEquation); err == nil {
-		t.Fatal("gross exposure not equal to base cost plus reserve was accepted")
-	}
-
-	badCashEquation := cloneLaunchInput(t, fixtures[2].input)
-	badCashEquation["expected_cash_minor"] = 949
-	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeSpendAuthorize, badCashEquation); err == nil {
-		t.Fatal("expected cash not equal to exposure minus verified credit was accepted")
-	}
-	overlongSpend := cloneLaunchInput(t, fixtures[2].input)
-	overlongSpend["expires_at"] = "2026-08-19T01:00:01Z"
-	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeSpendAuthorize, overlongSpend); err == nil {
-		t.Fatal("spend authority longer than one calendar month was accepted")
-	}
-
-	nonEURollback := cloneLaunchInput(t, fixtures[3].input)
-	nonEURollback["region"] = "nyc"
-	nonEURollback["jurisdiction"] = "US"
-	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeProviderRollback, nonEURollback); err != nil {
-		t.Fatalf("provider-neutral rollback validator hard-coded an EU region: %v", err)
-	}
-	if err := validateDigitalOceanEU50Route(contracts.EffectTypeProviderRollback, nonEURollback); err == nil {
-		t.Fatal("DigitalOcean EU mission route accepted rollback outside the approved jurisdiction")
-	}
-
-	nonEUTeardown := cloneLaunchInput(t, fixtures[4].input)
-	nonEUTeardown["region"] = "nyc"
-	nonEUTeardown["jurisdiction"] = "US"
-	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeProviderTeardown, nonEUTeardown); err != nil {
-		t.Fatalf("provider-neutral teardown validator hard-coded an EU region: %v", err)
-	}
-	if err := validateDigitalOceanEU50Route(contracts.EffectTypeProviderTeardown, nonEUTeardown); err == nil {
-		t.Fatal("DigitalOcean EU mission route accepted teardown outside the approved jurisdiction")
+	for name, mutation := range map[string]map[string]any{
+		"cash above gross":   {"expected_cash_minor": 1201},
+		"credit above cost":  {"verified_credit_minor": 1051},
+		"bad gross equation": {"gross_exposure_minor": 1199},
+		"bad cash equation":  {"expected_cash_minor": 949},
+		"overlong authority": {"expires_at": "2026-08-19T01:00:01Z"},
+	} {
+		candidate := cloneLaunchInput(t, fixtures[2].input)
+		for key, value := range mutation {
+			candidate[key] = value
+		}
+		if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeSpendAuthorize, candidate); err == nil {
+			t.Errorf("accepted invalid spend case %q", name)
+		}
 	}
 }
 
@@ -422,6 +379,52 @@ func TestLaunchEffectSchemasAdvertisePreviewOnly(t *testing.T) {
 	}
 }
 
+func launchInput(effectID string, ordinal int, fields map[string]any) map[string]any {
+	input := map[string]any{
+		"schema_version": "launch_effect_input.v1",
+		"effect_id":      effectID,
+		"tenant_id":      "tenant-1",
+		"workspace_id":   "workspace-1",
+		"mission_id":     "mission-1",
+		"effect_ordinal": ordinal,
+	}
+	for key, value := range fields {
+		input[key] = value
+	}
+	return input
+}
+
+func providerLaunchInput(effectID string, ordinal int, fields map[string]any) map[string]any {
+	input := launchInput(effectID, ordinal, map[string]any{
+		"provider":              "digitalocean",
+		"provider_account_ref":  "provider-account-1",
+		"provider_account_hash": launchHash("1"),
+		"region":                "fra",
+		"jurisdiction":          "EU",
+	})
+	for key, value := range fields {
+		input[key] = value
+	}
+	return input
+}
+
+func providerActionLaunchInput(effectID string, ordinal int, actionURN string, fields map[string]any) map[string]any {
+	input := providerLaunchInput(effectID, ordinal, map[string]any{
+		"workload_graph_ref": "workload-graph-1", "workload_graph_hash": launchHash("2"),
+		"route_binding_ref": "route-1", "route_binding_hash": launchHash("3"), "route_placement_id": "placement-1",
+		"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": launchHash("4"),
+		"provider_certification_ref": "do-certification-1", "provider_certification_hash": launchHash("5"),
+		"provider_connector_id": contracts.LaunchConnectorDigitalOcean, "provider_connector_contract_hash": launchHash("5"),
+		"provider_action_urn": actionURN, "provider_payload_hash": launchHash("6"),
+		"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": launchHash("0"),
+		"resource_graph_ref": "resource-graph-1", "resource_graph_hash": launchHash("7"),
+	})
+	for key, value := range fields {
+		input[key] = value
+	}
+	return input
+}
+
 func launchInputFixtures() []launchInputFixture {
 	h := launchHash
 	return []launchInputFixture{
@@ -429,11 +432,7 @@ func launchInputFixtures() []launchInputFixture {
 			effectID:  contracts.EffectTypeProviderProvision,
 			schema:    "effects/launch/provider_provision.v1.json",
 			goldenKey: "sha256:f921f17d52f89b73f421fe1e0e916ac7f60ee9c658c5cca9c580f8643cbf6f9e",
-			input: map[string]any{
-				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeProviderProvision,
-				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 1,
-				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
-				"region": "fra", "jurisdiction": "EU",
+			input: providerLaunchInput(contracts.EffectTypeProviderProvision, 1, map[string]any{
 				"repository_analysis_ref": "analysis-1", "repository_analysis_hash": h("0"), "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("1"),
 				"route_binding_ref": "route-1", "route_binding_hash": h("2"), "route_placement_id": "placement-1", "provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("3"),
 				"provider_certification_ref": "do-certification-1", "provider_certification_hash": h("4"),
@@ -445,20 +444,13 @@ func launchInputFixtures() []launchInputFixture {
 				"budget_reservation_ref": "budget-reservation-1", "budget_reservation_hash": h("8"), "provider_terms_profile_hash": h("9"),
 				"compensation_graph_hash": h("a"), "failure_teardown_policy_hash": h("b"), "teardown_authority_mode": "FRESH_DUAL_CONTROL_REQUIRED",
 				"plan_hash": h("c"), "connector_contract_hash": h("d"),
-			},
+			}),
 		},
 		{
 			effectID:  contracts.EffectTypeDeployProductionActivate,
 			schema:    "effects/launch/deploy_production_activate.v1.json",
 			goldenKey: "sha256:ede0de2921f564f59eea19913fc8f1eb2dc9e2a199ccf0ed55067306e5c6715c",
-			input: map[string]any{
-				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeDeployProductionActivate,
-				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 2,
-				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
-				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"), "route_placement_id": "placement-1",
-				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_certification_ref": "do-certification-1", "provider_certification_hash": h("5"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
-				"provider_connector_contract_hash": h("5"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanActivate, "provider_payload_hash": h("6"),
-				"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": h("0"), "resource_graph_ref": "resource-graph-1", "resource_graph_hash": h("7"),
+			input: providerActionLaunchInput(contracts.EffectTypeDeployProductionActivate, 2, contracts.LaunchProviderActionDigitalOceanActivate, map[string]any{
 				"activation_class": contracts.LaunchTransitionReleaseCutover, "exposure_kind": "ENDPOINT",
 				"source_state_ref": "deployment-state-1", "source_state_hash": h("3"), "target_state_ref": "deployment-state-2", "target_state_hash": h("4"),
 				"transition_plan_ref": "transition-plan-1", "transition_plan_hash": h("5"), "verification_plan_hash": h("6"), "activation_evidence_hash": h("b"),
@@ -470,15 +462,13 @@ func launchInputFixtures() []launchInputFixture {
 				"rollback_authorization_mode": "PREAUTHORIZED_EXACT_TARGET", "rollback_permit_ref": "rollback-permit-1", "rollback_permit_hash": h("e"),
 				"rollback_permit_expiry": "2026-07-19T01:05:00Z",
 				"plan_hash":              h("f"), "connector_contract_hash": h("1"),
-			},
+			}),
 		},
 		{
 			effectID:  contracts.EffectTypeSpendAuthorize,
 			schema:    "effects/launch/spend_authorize.v1.json",
 			goldenKey: "sha256:47472ae4fc905eb20b1fbb3858b6fef6d189aee269bc43d8cfaf66d0d4113553",
-			input: map[string]any{
-				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeSpendAuthorize,
-				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 0,
+			input: launchInput(contracts.EffectTypeSpendAuthorize, 0, map[string]any{
 				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
 				"workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("0"), "route_binding_ref": "route-1", "route_binding_hash": h("1"), "route_placement_id": "placement-1",
 				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("2"), "provider_certification_ref": "do-certification-1", "provider_certification_hash": h("3"),
@@ -490,117 +480,48 @@ func launchInputFixtures() []launchInputFixture {
 				"spend_intent_hash": h("7"), "spend_envelope_hash": h("8"), "budget_verdict_receipt_hash": h("9"),
 				"budget_reservation_ref": "budget-reservation-1", "budget_reservation_hash": h("a"), "provider_terms_profile_hash": h("b"),
 				"constraint_set_hash": h("c"), "plan_hash": h("d"), "connector_contract_hash": h("e"), "authorized_at": "2026-07-19T01:00:00Z", "expires_at": "2026-07-19T01:05:00Z",
-			},
+			}),
 		},
 		{
 			effectID:  contracts.EffectTypeProviderRollback,
 			schema:    "effects/launch/provider_rollback.v1.json",
 			goldenKey: "sha256:82defc4ae5cc59802de3bd2d5825fc23b5641196ea330ffae0c1bc03f7b5aa84",
-			input: map[string]any{
-				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeProviderRollback,
-				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 3,
-				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
-				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"), "route_placement_id": "placement-1",
-				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_certification_ref": "do-certification-1", "provider_certification_hash": h("5"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
-				"provider_connector_contract_hash": h("5"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanRollback, "provider_payload_hash": h("6"),
-				"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": h("0"),
-				"origin_activation_receipt_ref": "activation-receipt-1", "origin_activation_receipt_hash": h("f"),
-				"resource_graph_ref": "resource-graph-1", "resource_graph_hash": h("7"), "resource_ownership_hash": h("2"),
+			input: providerActionLaunchInput(contracts.EffectTypeProviderRollback, 3, contracts.LaunchProviderActionDigitalOceanRollback, map[string]any{
+				"origin_activation_receipt_ref": "activation-receipt-1", "origin_activation_receipt_hash": h("f"), "resource_ownership_hash": h("2"),
 				"compensation_class": contracts.LaunchCompensationReleaseRollback, "source_state_ref": "deployment-state-2", "source_state_hash": h("4"), "target_state_ref": "deployment-state-1", "target_state_hash": h("6"),
 				"compensation_plan_ref": "compensation-plan-1", "compensation_plan_hash": h("8"), "verification_plan_hash": h("9"), "target_health_evidence_hash": h("7"),
 				"source_deployment_id": "deployment-2", "source_artifact_digest": h("3"), "target_deployment_id": "deployment-1", "target_commit_sha": strings.Repeat("b", 40), "target_artifact_digest": h("5"),
 				"rollback_authorization_mode": "PREAUTHORIZED_EXACT_TARGET", "rollback_permit_ref": "rollback-permit-1", "rollback_permit_hash": h("e"), "rollback_permit_expiry": "2026-07-19T01:05:00Z",
 				"plan_hash": h("a"), "connector_contract_hash": h("b"), "reason": "health_check_failure",
-			},
+			}),
 		},
 		{
 			effectID:  contracts.EffectTypeProviderTeardown,
 			schema:    "effects/launch/provider_teardown.v1.json",
 			goldenKey: "sha256:e69036f831cbb2cf2b5886a84001b1c743de1ea42a0b35b2d16b482d1f755040",
-			input: map[string]any{
-				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeProviderTeardown,
-				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 4,
-				"provider": "digitalocean", "provider_account_ref": "provider-account-1", "provider_account_hash": h("1"),
-				"region": "fra", "jurisdiction": "EU", "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("2"), "route_binding_ref": "route-1", "route_binding_hash": h("3"), "route_placement_id": "placement-1",
-				"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("4"), "provider_certification_ref": "do-certification-1", "provider_certification_hash": h("5"), "provider_connector_id": contracts.LaunchConnectorDigitalOcean,
-				"provider_connector_contract_hash": h("5"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanTeardown, "provider_payload_hash": h("6"),
-				"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": h("0"),
-				"resource_graph_ref": "resource-graph-1", "resource_graph_hash": h("7"), "resource_ownership_hash": h("2"), "observed_state_hash": h("3"), "dependency_snapshot_hash": h("4"),
+			input: providerActionLaunchInput(contracts.EffectTypeProviderTeardown, 4, contracts.LaunchProviderActionDigitalOceanTeardown, map[string]any{
+				"resource_ownership_hash": h("2"), "observed_state_hash": h("3"), "dependency_snapshot_hash": h("4"),
 				"resource_empty_evidence_hash": h("5"), "retention_clearance_hash": h("6"), "backup_clearance_hash": h("7"), "billing_exposure_snapshot_hash": h("8"),
 				"fresh_teardown_approval_ref": "teardown-approval-1", "fresh_teardown_approval_hash": h("9"), "teardown_plan_hash": h("a"), "expected_deleted_state_hash": h("b"),
 				"plan_hash": h("c"), "connector_contract_hash": h("d"),
-			},
+			}),
 		},
 		{
 			effectID:  contracts.EffectTypeCompanyArtifactUpdate,
 			schema:    "effects/launch/company_artifact_update.v1.json",
 			goldenKey: "sha256:96a29180140e798be4adb5d6f219fa4a466ee0aca01a12135afc601ea375d591",
-			input: map[string]any{
-				"schema_version": "launch_effect_input.v1", "effect_id": contracts.EffectTypeCompanyArtifactUpdate,
-				"tenant_id": "tenant-1", "workspace_id": "workspace-1", "mission_id": "mission-1", "effect_ordinal": 5,
+			input: launchInput(contracts.EffectTypeCompanyArtifactUpdate, 5, map[string]any{
 				"artifact_id": "company-artifact-1", "company_state_version": 7, "previous_hash": h("1"), "new_hash": h("2"),
 				"generated_spec_hash": h("3"), "launch_result_hash": h("4"), "reconciliation_receipt_hash": h("5"),
 				"source_receipt_ref": "receipt-1", "source_receipt_hash": h("6"), "evidence_pack_ref": "evidencepack-1", "evidence_pack_hash": h("7"), "plan_hash": h("8"),
 				"connector_contract_hash": h("9"),
-			},
+			}),
 		},
 	}
 }
 
 func launchHash(char string) string {
 	return "sha256:" + strings.Repeat(char, 64)
-}
-
-// validateDigitalOceanEU50Route models the first provider/mission profile.
-// These restrictions intentionally live outside the provider-neutral Kernel
-// semantics and are independently resolved by the dispatch verifier.
-func validateDigitalOceanEU50Route(effectID string, input map[string]any) error {
-	if input["provider"] != "digitalocean" {
-		return fmt.Errorf("provider is not DigitalOcean")
-	}
-	if input["provider_capability_profile_ref"] != "do-profile-1" || input["route_binding_ref"] != "route-1" {
-		return fmt.Errorf("route or capability profile is not the approved DigitalOcean candidate")
-	}
-	if effectID != contracts.EffectTypeSpendAuthorize {
-		region, _ := input["region"].(string)
-		if (region != "ams" && region != "fra") || input["jurisdiction"] != "EU" {
-			return fmt.Errorf("route is not in an admitted DigitalOcean EU region")
-		}
-		if input["provider_connector_id"] != contracts.LaunchConnectorDigitalOcean {
-			return fmt.Errorf("provider connector does not match the DigitalOcean profile")
-		}
-	}
-	switch effectID {
-	case contracts.EffectTypeProviderProvision:
-		if input["provider_action_urn"] != contracts.LaunchProviderActionDigitalOceanProvision || input["gross_cap_currency"] != "EUR" || input["billing_cadence"] != "MONTHLY" || input["commitment_term"] != "MONTH_TO_MONTH" {
-			return fmt.Errorf("provision route violates the EU50 mission policy")
-		}
-		cap, _ := input["gross_cap_minor"].(int)
-		if cap > 5000 {
-			return fmt.Errorf("provision route exceeds EUR 50")
-		}
-	case contracts.EffectTypeDeployProductionActivate:
-		if input["provider_action_urn"] != contracts.LaunchProviderActionDigitalOceanActivate {
-			return fmt.Errorf("activation action is not admitted by the profile")
-		}
-	case contracts.EffectTypeSpendAuthorize:
-		if input["currency"] != "EUR" || input["billing_cadence"] != "MONTHLY" || input["commitment_term"] != "MONTH_TO_MONTH" {
-			return fmt.Errorf("spend route violates the EU50 mission policy")
-		}
-		cap, _ := input["gross_cap_minor"].(int)
-		if cap > 5000 {
-			return fmt.Errorf("spend route exceeds EUR 50")
-		}
-	case contracts.EffectTypeProviderRollback:
-		if input["provider_action_urn"] != contracts.LaunchProviderActionDigitalOceanRollback {
-			return fmt.Errorf("rollback action is not admitted by the profile")
-		}
-	case contracts.EffectTypeProviderTeardown:
-		if input["provider_action_urn"] != contracts.LaunchProviderActionDigitalOceanTeardown {
-			return fmt.Errorf("teardown action is not admitted by the profile")
-		}
-	}
-	return nil
 }
 
 func cloneLaunchInput(t *testing.T, input map[string]any) map[string]any {

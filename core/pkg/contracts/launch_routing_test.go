@@ -205,6 +205,68 @@ func TestRouteRecomputesEveryApprovalBoundArtifact(t *testing.T) {
 	}
 }
 
+func TestRouteRejectsFutureDatedCommercialEvidence(t *testing.T) {
+	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
+	base := singleLaunchRouteFixture(t, profile, false)
+	future := launchRoutingNow.Add(time.Minute).Format(time.RFC3339Nano)
+
+	for name, mutate := range map[string]func(*launchRouteFixture){
+		"provider profile": func(f *launchRouteFixture) {
+			updated := f.resolver.profiles[f.route.Placements[0].ProviderProfileRef]
+			updated.RetrievedAt = future
+			updatedHash, err := contracts.DeriveLaunchProviderCapabilityProfileHash(updated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.resolver.profiles[updated.ProfileID] = updated
+			f.route.Placements[0].ProviderProfileHash = updatedHash
+		},
+		"route quote": func(f *launchRouteFixture) {
+			updated := f.quote
+			updated.RetrievedAt = future
+			updatedHash, err := contracts.DeriveLaunchRouteQuoteHash(updated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.quote = updated
+			f.resolver.quotes[updated.QuoteID] = updated
+			f.route.RouteQuoteHash = updatedHash
+		},
+		"offer snapshot": func(f *launchRouteFixture) {
+			updatedOffer := f.offer
+			updatedOffer.RetrievedAt = future
+			updatedOfferHash, err := contracts.DeriveLaunchOfferSnapshotHash(updatedOffer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.offer = updatedOffer
+			f.resolver.offers[updatedOffer.SnapshotID] = updatedOffer
+			updatedQuote := f.quote
+			updatedQuote.PlacementCosts = append([]contracts.LaunchPlacementCost(nil), updatedQuote.PlacementCosts...)
+			updatedQuote.PlacementCosts[0].OfferSnapshotHash = updatedOfferHash
+			updatedQuote.CreditSnapshotHash, err = contracts.DeriveLaunchOfferSnapshotSetHash(updatedQuote.PlacementCosts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updatedQuoteHash, err := contracts.DeriveLaunchRouteQuoteHash(updatedQuote)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.quote = updatedQuote
+			f.resolver.quotes[updatedQuote.QuoteID] = updatedQuote
+			f.route.RouteQuoteHash = updatedQuoteHash
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := cloneLaunchRouteFixture(base)
+			mutate(&fixture)
+			if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "future") {
+				t.Fatalf("future-dated %s was not rejected precisely: %v", name, err)
+			}
+		})
+	}
+}
+
 func TestOfferSnapshotNeverPromotesAdvisoryCreditToCashReduction(t *testing.T) {
 	active := launchOfferSnapshot("cloud", "offer-active", "account:1", launchRoutingHash("1"), launchRoutingHash("2"), contracts.LaunchCreditVerified, 500)
 	if err := contracts.ValidateLaunchOfferSnapshot(active); err != nil {

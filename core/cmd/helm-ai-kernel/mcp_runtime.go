@@ -42,7 +42,11 @@ type mcpRPCError struct {
 }
 
 func newLocalMCPRuntime() (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
-	signer, err := loadOrGenerateSigner()
+	return newLocalMCPRuntimeWithDataDir("data")
+}
+
+func newLocalMCPRuntimeWithDataDir(dataDir string) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -199,7 +203,11 @@ func resolveLocalMCPPath(rawPath string) (string, error) {
 }
 
 func serveLocalMCPStdio(stdin io.Reader, stdout io.Writer) error {
-	catalog, executor, err := newLocalMCPRuntime()
+	return serveLocalMCPStdioWithDataDir(stdin, stdout, "data")
+}
+
+func serveLocalMCPStdioWithDataDir(stdin io.Reader, stdout io.Writer, dataDir string) error {
+	catalog, executor, err := newLocalMCPRuntimeWithDataDir(dataDir)
 	if err != nil {
 		return err
 	}
@@ -401,19 +409,24 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 }
 
 func newLocalMCPHTTPServer(port int, authMode string) (*http.Server, error) {
+	return newLocalMCPHTTPServerWithDataDir(port, authMode, "data")
+}
+
+func newLocalMCPHTTPServerWithDataDir(port int, authMode, dataDir string) (*http.Server, error) {
 	// SEC: Default to localhost to prevent accidental network exposure.
 	mcpBind := "127.0.0.1"
 	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {
 		mcpBind = envBind
 	}
 	baseURL := fmt.Sprintf("http://%s:%d", mcpBind, port)
-	gateway, err := newConfiguredLocalMCPGateway(mcppkg.GatewayConfig{
-		BaseURL:  baseURL,
-		AuthMode: authMode,
-	})
+	catalog, executor, err := newLocalMCPRuntimeWithDataDir(dataDir)
 	if err != nil {
 		return nil, err
 	}
+	gateway := mcppkg.NewGateway(catalog, mcppkg.GatewayConfig{
+		BaseURL:  baseURL,
+		AuthMode: authMode,
+	}, mcppkg.WithExecutor(executor))
 
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)

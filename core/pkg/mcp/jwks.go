@@ -1,5 +1,8 @@
 package mcp
 
+// quantum_posture: classical RSA (RS256) JWT signature verification via JWKS;
+// no hybrid or post-quantum path.
+
 import (
 	"context"
 	"crypto/rsa"

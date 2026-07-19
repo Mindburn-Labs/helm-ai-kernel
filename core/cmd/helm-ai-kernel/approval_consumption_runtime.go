@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: wires classical Ed25519 grant-consumption signature
+// verification and RSA-JWKS (RS256) OAuth token checks; no post-quantum path.
+
 import (
 	"context"
 	"database/sql"

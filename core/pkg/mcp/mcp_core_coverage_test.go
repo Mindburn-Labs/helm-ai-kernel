@@ -1,5 +1,8 @@
 package mcp
 
+// quantum_posture: tests classical RSA (RS256) JWKS/JWT bearer-token
+// validation; no post-quantum claim.
+
 import (
 	"context"
 	"crypto/rand"

@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-19T13:37:14Z
-# Commit: b361eb0b1c0e8669d1f853a0d3cfeb407d9bf077
+# Generated: 2026-07-19T13:42:09Z
+# Commit: e4870678d23ae12795d9d3a45ed21fecc339062c
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -105,7 +105,7 @@ aa584d8a4c9e1a54d30bba5356977c6eb9359adaf1cfdfefb4eb9ff54a2a4e32  core/pkg/kerne
 e868b050de38c5e66bac05e9fd5ff59618d83b0672059e2b1ff8e5e8b52e3329  core/pkg/kernel/retry/retry_test.go
 b9f2e3d11d536db8973b9f5b99a79f2aded4a7ce88b553ea34a3bffc8a36fcdd  core/pkg/kernel/scheduler.go
 65ed2f0e5adeb85221f9917143ad93a9a609557b350d6a8c32b5bf3292cf239f  core/pkg/kernel/scheduler_additional_test.go
-1e1571608de9cccf5e54d2cd59f64c1f2b5848085dbe586075e654cdb4f069ca  core/pkg/kernel/scoped_stop.go
+56156292b698de38988e109ae16ae36fa6a1570002db82177eb1142ae90889b0  core/pkg/kernel/scoped_stop.go
 945af2d9c71c4d9240b6276f9e62b67483c1f2777c881ea140fae7e78005bade  core/pkg/kernel/scoped_stop_catalog_vector_test.go
 cde2c7974c678e5e154217e8ed5aa8217221adb48164691ea53e9ad12af5e9e4  core/pkg/kernel/scoped_stop_test.go
 3fdfb2ec3980fb3f499d48f62ae2959f603f451ec27d1890303fe7f43efb3a27  core/pkg/kernel/secret_ref.go

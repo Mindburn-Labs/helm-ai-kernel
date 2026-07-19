@@ -13,6 +13,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -32,6 +33,20 @@ type fakeApprovalGrantConsumer struct {
 	consumeCalls int
 	recoverCalls int
 	identity     approvalceremony.ConsumerIdentity
+}
+
+type fakeApprovalScopedStopReader struct {
+	state  kernel.FenceState
+	fenced bool
+	err    error
+	calls  int
+	scope  kernel.StopScope
+}
+
+func (r *fakeApprovalScopedStopReader) IsFenced(_ context.Context, scope kernel.StopScope) (kernel.FenceState, bool, error) {
+	r.calls++
+	r.scope = scope
+	return r.state, r.fenced, r.err
 }
 
 func (c *fakeApprovalGrantConsumer) ConsumeGrant(ctx context.Context, _, _, _, _ string) (approvalceremony.Record, error) {
@@ -96,23 +111,23 @@ func TestApprovalGrantConsumptionRoutesFailClosedOnWorkloadAuthentication(t *tes
 		"runtime unavailable": {runtime: &approvalConsumptionRuntime{}, token: "token", status: http.StatusServiceUnavailable},
 		"bearer missing":      {runtime: approvalConsumptionRouteRuntime(validConsumer), status: http.StatusUnauthorized},
 		"signature rejected": {
-			runtime: &approvalConsumptionRuntime{consumer: validConsumer, validator: fakeApprovalConsumerTokenValidator{err: errors.New("bad signature")}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute},
+			runtime: &approvalConsumptionRuntime{consumer: validConsumer, validator: fakeApprovalConsumerTokenValidator{err: errors.New("bad signature")}, stops: &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute},
 			token:   "token", status: http.StatusUnauthorized,
 		},
 		"scope missing": {
-			runtime: &approvalConsumptionRuntime{consumer: validConsumer, validator: fakeApprovalConsumerTokenValidator{err: &mcppkg.JWKSValidationError{Kind: mcppkg.JWKSErrMissingScope}}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute},
+			runtime: &approvalConsumptionRuntime{consumer: validConsumer, validator: fakeApprovalConsumerTokenValidator{err: &mcppkg.JWKSValidationError{Kind: mcppkg.JWKSErrMissingScope}}, stops: &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute},
 			token:   "token", status: http.StatusForbidden,
 		},
 		"workspace claim missing": {
 			runtime: &approvalConsumptionRuntime{consumer: validConsumer, validator: fakeApprovalConsumerTokenValidator{claims: &mcppkg.OAuthTokenClaims{
 				RegisteredClaims: jwt.RegisteredClaims{Subject: "spiffe://helm/data-plane-a"}, TenantID: "tenant-a",
-			}}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute},
+			}}, stops: &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute},
 			token: "token", status: http.StatusUnauthorized,
 		},
 		"token lifetime too long": {
 			runtime: &approvalConsumptionRuntime{
 				consumer: validConsumer, validator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(time.Hour)},
-				audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+				stops: &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute,
 			},
 			token: "token", status: http.StatusUnauthorized,
 		},
@@ -126,6 +141,61 @@ func TestApprovalGrantConsumptionRoutesFailClosedOnWorkloadAuthentication(t *tes
 				t.Fatalf("status=%d want=%d body=%s", response.Code, test.status, response.Body.String())
 			}
 		})
+	}
+}
+
+func TestApprovalGrantConsumptionConsumeEnforcesVerifiedScopedFence(t *testing.T) {
+	tests := map[string]struct {
+		reader *fakeApprovalScopedStopReader
+		status int
+		reason string
+	}{
+		"active fence": {
+			reader: &fakeApprovalScopedStopReader{fenced: true, state: kernel.FenceState{Epoch: 7}},
+			status: http.StatusConflict, reason: approvalConsumptionFencedReason,
+		},
+		"unverified fence": {
+			reader: &fakeApprovalScopedStopReader{err: errors.New("database unavailable")},
+			status: http.StatusServiceUnavailable, reason: approvalConsumptionUnverifiedReason,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			consumer := &fakeApprovalGrantConsumer{record: approvalConsumptionRouteRecord()}
+			runtime := approvalConsumptionRouteRuntime(consumer)
+			runtime.stops = test.reader
+			mux := http.NewServeMux()
+			registerApprovalGrantConsumptionRoutes(mux, runtime)
+
+			response := postApprovalConsumptionRoute(t, mux, approvalGrantConsumePath, validApprovalConsumptionRequest(), "workload-token")
+			if response.Code != test.status || response.Header().Get(approvalConsumptionReasonHeader) != test.reason {
+				t.Fatalf("status=%d reason=%q body=%s", response.Code, response.Header().Get(approvalConsumptionReasonHeader), response.Body.String())
+			}
+			if consumer.consumeCalls != 0 || consumer.recoverCalls != 0 {
+				t.Fatalf("fenced request reached consumer: consume=%d recover=%d", consumer.consumeCalls, consumer.recoverCalls)
+			}
+			wantScope := kernel.StopScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}
+			if test.reader.calls != 1 || test.reader.scope != wantScope {
+				t.Fatalf("stop checks=%d scope=%+v want=%+v", test.reader.calls, test.reader.scope, wantScope)
+			}
+		})
+	}
+}
+
+func TestApprovalGrantConsumptionRecoveryRemainsReadOnlyWhileFenced(t *testing.T) {
+	consumer := &fakeApprovalGrantConsumer{record: approvalConsumptionRouteRecord()}
+	reader := &fakeApprovalScopedStopReader{fenced: true, state: kernel.FenceState{Epoch: 7}}
+	runtime := approvalConsumptionRouteRuntime(consumer)
+	runtime.stops = reader
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, runtime)
+
+	response := postApprovalConsumptionRoute(t, mux, approvalGrantConsumptionRecoverPath, validApprovalConsumptionRequest(), "workload-token")
+	if response.Code != http.StatusOK || consumer.recoverCalls != 1 || consumer.consumeCalls != 0 {
+		t.Fatalf("status=%d consume=%d recover=%d body=%s", response.Code, consumer.consumeCalls, consumer.recoverCalls, response.Body.String())
+	}
+	if reader.calls != 0 {
+		t.Fatalf("read-only recovery was treated as new dispatch authority: stop checks=%d", reader.calls)
 	}
 }
 
@@ -174,19 +244,29 @@ func TestApprovalConsumptionErrorMappingDoesNotLeakAuthorityErrors(t *testing.T)
 	tests := map[string]struct {
 		err    error
 		status int
+		reason string
 	}{
 		"invalid":   {err: approvalceremony.ErrInvalidRecord, status: http.StatusBadRequest},
 		"not found": {err: approvalceremony.ErrNotFound, status: http.StatusNotFound},
 		"conflict":  {err: approvalceremony.ErrTransitionConflict, status: http.StatusConflict},
 		"identity":  {err: approvalceremony.ErrConsumerUnavailable, status: http.StatusForbidden},
-		"internal":  {err: errors.New("database password secret"), status: http.StatusServiceUnavailable},
+		"fenced": {
+			err: approvalceremony.ErrEmergencyStopFenced, status: http.StatusConflict,
+			reason: approvalConsumptionFencedReason,
+		},
+		"stop unverified": {
+			err: errApprovalConsumptionStopUnverified, status: http.StatusServiceUnavailable,
+			reason: approvalConsumptionUnverifiedReason,
+		},
+		"internal": {err: errors.New("database password secret"), status: http.StatusServiceUnavailable},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			writeApprovalConsumptionError(response, test.err)
-			if response.Code != test.status || strings.Contains(response.Body.String(), "database password secret") {
-				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			if response.Code != test.status || response.Header().Get(approvalConsumptionReasonHeader) != test.reason ||
+				strings.Contains(response.Body.String(), "database password secret") {
+				t.Fatalf("status=%d reason=%q body=%s", response.Code, response.Header().Get(approvalConsumptionReasonHeader), response.Body.String())
 			}
 		})
 	}
@@ -195,7 +275,7 @@ func TestApprovalConsumptionErrorMappingDoesNotLeakAuthorityErrors(t *testing.T)
 func approvalConsumptionRouteRuntime(consumer approvalGrantConsumer) *approvalConsumptionRuntime {
 	return &approvalConsumptionRuntime{
 		consumer: consumer, validator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(5 * time.Minute)},
-		audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+		stops: &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute,
 	}
 }
 

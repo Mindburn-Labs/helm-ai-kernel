@@ -59,6 +59,11 @@ type ConsumerIdentity struct {
 	Audience    string
 }
 
+type grantConsumptionSealer func(
+	contracts.ApprovalGrant,
+	time.Time,
+) (contracts.ApprovalGrantConsumption, string, string, error)
+
 type ServiceConfig struct {
 	MinHoldDuration      time.Duration
 	ChallengeTTL         time.Duration
@@ -76,7 +81,7 @@ type ceremonyStore interface {
 	issueChallenge(context.Context, string, string, string, contracts.ApprovalChallenge, time.Time) (Record, error)
 	recordQuorum(context.Context, string, string, string, approvalverify.VerifiedApprovalRef, time.Time) (Record, error)
 	issueGrant(context.Context, string, string, string, contracts.ApprovalGrant, string, string, time.Time) (Record, error)
-	consumeGrant(context.Context, string, string, string, string, string, string, contracts.ApprovalGrantConsumption, string, string, time.Time) (Record, error)
+	consumeGrant(context.Context, string, string, string, string, string, string, grantConsumptionSealer, time.Time) (Record, error)
 	deny(context.Context, string, string, string, time.Time) (Record, error)
 	expire(context.Context, string, string, string, time.Time) (Record, error)
 }

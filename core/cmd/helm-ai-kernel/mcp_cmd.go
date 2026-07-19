@@ -26,10 +26,11 @@ import (
 //	2 = config error
 func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|proof|list|get|pending|receipts|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp <serve|bridge|install|pack|print-config|scan|wrap|proof|list|get|pending|receipts|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
+		fmt.Fprintln(stderr, "  bridge        Forward stdio MCP to the cloud edge using the connect credential")
 		fmt.Fprintln(stderr, "  install       Install HELM MCP server for a client")
 		fmt.Fprintln(stderr, "  pack          Generate a .mcpb bundle for desktop clients")
 		fmt.Fprintln(stderr, "  print-config  Print MCP config for a specific client")
@@ -51,6 +52,8 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "serve":
 		return runMCPServe(args[1:], stdout, stderr)
+	case "bridge":
+		return runMCPBridge(args[1:], stdout, stderr)
 	case "install":
 		return runMCPInstall(args[1:], stdout, stderr)
 	case "pack":
@@ -82,10 +85,11 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	case "authorize-call":
 		return runMCPAuthorizeCall(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|proof|list|get|pending|receipts|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel mcp <serve|bridge|install|pack|print-config|scan|wrap|proof|list|get|pending|receipts|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
+		fmt.Fprintln(stdout, "  bridge        Forward stdio MCP to the cloud edge using the connect credential")
 		fmt.Fprintln(stdout, "  install       Install HELM MCP server for a client")
 		fmt.Fprintln(stdout, "  pack          Generate a .mcpb bundle for desktop clients")
 		fmt.Fprintln(stdout, "  print-config  Print MCP config for a specific client")

@@ -346,8 +346,12 @@ func (*serviceTestStore) issueGrant(context.Context, string, string, string, con
 	return Record{}, errors.New("unexpected issueGrant call")
 }
 
-func (s *serviceTestStore) consumeGrant(_ context.Context, _, _, _, _, _, _ string, consumption contracts.ApprovalGrantConsumption, algorithm, signature string, now time.Time) (Record, error) {
+func (s *serviceTestStore) consumeGrant(_ context.Context, _, _, _, _, _, _ string, sealConsumption grantConsumptionSealer, now time.Time) (Record, error) {
 	s.consumeCalls++
+	consumption, algorithm, signature, err := sealConsumption(*s.record.Grant, now)
+	if err != nil {
+		return Record{}, err
+	}
 	s.consumption = consumption
 	s.record.State = StateConsumed
 	s.record.UpdatedAt = now

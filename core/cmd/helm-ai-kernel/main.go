@@ -277,7 +277,7 @@ func runServerWithOptions(opts serverOptions) error {
 	artRegistry := artifacts.NewRegistry(artStore, verifier)
 
 	// === SUBSYSTEM WIRING ===
-	services, svcErr := NewServices(ctx, db, artStore, logger, dataDir)
+	services, svcErr := NewServices(ctx, db, artStore, logger, dataDir, databaseMode)
 	if svcErr != nil {
 		// In production we refuse to start in a degraded state. Subsystems are
 		// allowed to fail in dev (e.g. observability without an OTLP endpoint),
@@ -403,7 +403,7 @@ func runServerWithOptions(opts serverOptions) error {
 		services.PolicyReconciler = policyReconciler
 		services.PolicySnapshotStore = policyStore
 		services.PolicyScope = policyScope
-		services.ApprovalConsumption, err = newApprovalConsumptionRuntime(ctx, db, databaseMode, signer)
+		services.ApprovalConsumption, err = newApprovalConsumptionRuntime(ctx, db, databaseMode, signer, services.EmergencyStops)
 		if err != nil {
 			log.Fatalf("Failed to initialize approval grant consumption runtime: %v", err)
 		}

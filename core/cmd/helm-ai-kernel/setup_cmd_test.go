@@ -619,6 +619,7 @@ func TestSetupStatusRejectsStaleMCPDataDir(t *testing.T) {
 	} {
 		t.Run(test.target+"_"+test.scope, func(t *testing.T) {
 			tmp := t.TempDir()
+			t.Setenv("HOME", filepath.Join(tmp, "home"))
 			home := filepath.Join(tmp, "home")
 			t.Setenv("HOME", home)
 			workspace := filepath.Join(tmp, "workspace")

@@ -658,7 +658,10 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 		if profileRetrievedAt.After(now) {
 			return fmt.Errorf("launch route placement %s provider profile was retrieved in the future", placement.PlacementID)
 		}
-		profileHash, _ := DeriveLaunchProviderCapabilityProfileHash(profile)
+		profileHash, err := DeriveLaunchProviderCapabilityProfileHash(profile)
+		if err != nil {
+			return fmt.Errorf("derive launch provider profile %s hash: %w", placement.ProviderProfileRef, err)
+		}
 		if placement.ProviderProfileRef != profile.ProfileID || !launchConstantEqual(placement.ProviderProfileHash, profileHash) || placement.ProviderID != profile.ProviderID || placement.ProviderConnectorID != profile.ConnectorID || !launchConstantEqual(placement.ProviderConnectorContractHash, profile.ConnectorContractHash) {
 			return fmt.Errorf("launch route placement %s does not match provider profile", placement.PlacementID)
 		}

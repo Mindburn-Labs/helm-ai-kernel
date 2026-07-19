@@ -3,7 +3,7 @@
   "$id": "https://helm.mindburn.run/schemas/effects/launch/launch_blueprint.v1.json",
   "version": "1.0.0-alpha.1",
   "title": "Launch Blueprint (Preview)",
-  "description": "Clean-room fork template containing only workload shape and portable constraints. Source, tenant, provider, account, approval, receipt, and EvidencePack identity are excluded by schema.",
+  "description": "Clean-room fork template containing only workload shape and portable constraints. Source, tenant, provider, account, approval, receipt, and EvidencePack identity are excluded; semantic validation requires contiguous node-0001 through node-N ordinals.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "portable_vocabulary_version", "blueprint_id", "source_reconnect_required", "provider_selection_required", "nodes", "edges", "constraints"],
@@ -14,7 +14,7 @@
     "source_reconnect_required": { "const": true },
     "provider_selection_required": { "const": true },
     "nodes": {
-      "type": "array", "minItems": 1,
+      "type": "array", "minItems": 1, "maxItems": 9999,
       "items": {
         "type": "object", "additionalProperties": false,
         "required": ["node_id", "kind", "lifecycle_class", "required_capabilities"],
@@ -69,5 +69,5 @@
       ]
     }
   },
-  "x-helm": { "status": "preview", "execution_enabled": false, "clean_room": true, "fresh_analysis_and_approval_required": true }
+  "x-helm": { "status": "preview", "execution_enabled": false, "clean_room": true, "contiguous_deterministic_node_ordinals": true, "fresh_analysis_and_approval_required": true }
 }

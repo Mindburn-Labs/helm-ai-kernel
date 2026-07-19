@@ -511,14 +511,15 @@ func ValidateLaunchProviderPayloadSet(value LaunchProviderPayloadSet) error {
 }
 
 func ValidateLaunchBlueprint(value LaunchBlueprint) error {
-	if value.SchemaVersion != LaunchBlueprintSchemaVersion || value.PortableVocabularyVersion != LaunchPortableVocabularyVersion || !launchBlueprintIDPattern.MatchString(value.BlueprintID) || !value.SourceReconnectRequired || !value.ProviderSelectionRequired || len(value.Nodes) == 0 {
+	if value.SchemaVersion != LaunchBlueprintSchemaVersion || value.PortableVocabularyVersion != LaunchPortableVocabularyVersion || !launchBlueprintIDPattern.MatchString(value.BlueprintID) || !value.SourceReconnectRequired || !value.ProviderSelectionRequired || len(value.Nodes) == 0 || len(value.Nodes) > 9999 {
 		return errors.New("launch blueprint identity or clean-room reconnect flags are invalid")
 	}
 	nodes := make(map[string]struct{}, len(value.Nodes))
 	previous := ""
-	for _, node := range value.Nodes {
-		if !launchBlueprintNodeIDPattern.MatchString(node.NodeID) || node.NodeID <= previous || !launchLifecycleClassKnown(node.LifecycleClass) {
-			return errors.New("launch blueprint nodes must be complete, unique, and sorted")
+	for index, node := range value.Nodes {
+		expectedNodeID := fmt.Sprintf("node-%04d", index+1)
+		if !launchBlueprintNodeIDPattern.MatchString(node.NodeID) || node.NodeID != expectedNodeID || node.NodeID <= previous || !launchLifecycleClassKnown(node.LifecycleClass) {
+			return errors.New("launch blueprint nodes must use contiguous deterministic ordinals and be complete, unique, and sorted")
 		}
 		if _, ok := launchPortableWorkloadKinds[node.Kind]; !ok {
 			return errors.New("launch blueprint has a non-portable workload kind")

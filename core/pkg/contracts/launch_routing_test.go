@@ -635,6 +635,16 @@ func TestLaunchBlueprintIsCleanRoomAndProviderNeutral(t *testing.T) {
 	if err := contracts.ValidateLaunchBlueprint(identityBearing); err == nil || !strings.Contains(err.Error(), "nodes") {
 		t.Fatalf("correctly rehashed blueprint retained a private node identity: %v", err)
 	}
+	gapped := blueprint
+	gapped.Nodes = append([]contracts.LaunchBlueprintNode(nil), blueprint.Nodes...)
+	gapped.Nodes[0].NodeID = "node-0042"
+	gapped.BlueprintID, err = contracts.DeriveLaunchBlueprintID(gapped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := contracts.ValidateLaunchBlueprint(gapped); err == nil || !strings.Contains(err.Error(), "contiguous deterministic ordinals") {
+		t.Fatalf("correctly rehashed blueprint encoded private data in ordinal gaps: %v", err)
+	}
 
 	blueprintSchema := compileSchema(t, "effects/launch/launch_blueprint.v1.json")
 	for name, mutate := range map[string]func(*contracts.LaunchBlueprint){

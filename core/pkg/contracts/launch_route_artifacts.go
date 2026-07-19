@@ -28,6 +28,8 @@ var launchCurrencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
 
 var launchBlueprintIDPattern = regexp.MustCompile(`^blueprint:sha256:[a-f0-9]{64}$`)
 
+var launchBlueprintNodeIDPattern = regexp.MustCompile(`^node-[0-9]{4}$`)
+
 // Clean-room blueprints deliberately use a small, versioned public vocabulary.
 // Repository analysis and certified provider profiles remain extensible, but an
 // unregistered vendor or tenant token must never be copied into a shareable
@@ -239,6 +241,18 @@ func DeriveLaunchBlueprintHash(value LaunchBlueprint) (string, error) {
 	return deriveLaunchCanonicalHash(value, "blueprint")
 }
 
+// DeriveLaunchBlueprintID returns the clean-room identity bound to sanitized
+// blueprint content. The identifier field itself is excluded from the digest.
+func DeriveLaunchBlueprintID(value LaunchBlueprint) (string, error) {
+	projection := value
+	projection.BlueprintID = ""
+	hash, err := canonicalize.CanonicalHash(projection)
+	if err != nil {
+		return "", fmt.Errorf("derive sanitized launch blueprint identity: %w", err)
+	}
+	return "blueprint:sha256:" + hash, nil
+}
+
 func deriveLaunchCanonicalHash(value any, label string) (string, error) {
 	hash, err := canonicalize.CanonicalHash(value)
 	if err != nil {
@@ -403,7 +417,7 @@ func ValidateLaunchResourceGraph(value LaunchResourceGraph) error {
 	}
 	previous = ""
 	for _, edge := range value.Edges {
-		key := edge.FromResourceID + "\x00" + edge.ToResourceID + "\x00" + edge.Relationship
+		key := launchTupleKey(edge.FromResourceID, edge.ToResourceID, edge.Relationship)
 		if key <= previous || edge.Relationship == "" {
 			return errors.New("launch resource graph edges must be complete, unique, and sorted")
 		}
@@ -424,7 +438,7 @@ func ValidateLaunchProviderPayloadSet(value LaunchProviderPayloadSet) error {
 	}
 	previous := ""
 	for _, entry := range value.Entries {
-		key := entry.PlacementID + "\x00" + entry.EffectID + "\x00" + entry.ProviderActionURN
+		key := launchTupleKey(entry.PlacementID, entry.EffectID, entry.ProviderActionURN)
 		if entry.PlacementID == "" || entry.EffectID == "" || entry.ProviderActionURN == "" || key <= previous || !validLaunchSHA256(entry.PayloadHash) {
 			return errors.New("launch provider payload entries must be complete, unique, and sorted")
 		}
@@ -443,7 +457,7 @@ func ValidateLaunchBlueprint(value LaunchBlueprint) error {
 	nodes := make(map[string]struct{}, len(value.Nodes))
 	previous := ""
 	for _, node := range value.Nodes {
-		if node.NodeID == "" || node.NodeID <= previous || !launchLifecycleClassKnown(node.LifecycleClass) {
+		if !launchBlueprintNodeIDPattern.MatchString(node.NodeID) || node.NodeID <= previous || !launchLifecycleClassKnown(node.LifecycleClass) {
 			return errors.New("launch blueprint nodes must be complete, unique, and sorted")
 		}
 		if _, ok := launchPortableWorkloadKinds[node.Kind]; !ok {
@@ -457,7 +471,7 @@ func ValidateLaunchBlueprint(value LaunchBlueprint) error {
 	}
 	previous = ""
 	for _, edge := range value.Edges {
-		key := edge.FromNodeID + "\x00" + edge.ToNodeID + "\x00" + edge.Relationship
+		key := launchTupleKey(edge.FromNodeID, edge.ToNodeID, edge.Relationship)
 		if key <= previous {
 			return errors.New("launch blueprint edges must be unique and sorted")
 		}
@@ -495,10 +509,8 @@ func ValidateLaunchBlueprint(value LaunchBlueprint) error {
 			return err
 		}
 	}
-	identityProjection := value
-	identityProjection.BlueprintID = ""
-	identityHash, err := canonicalize.CanonicalHash(identityProjection)
-	if err != nil || !launchConstantEqual(value.BlueprintID, "blueprint:sha256:"+identityHash) {
+	identity, err := DeriveLaunchBlueprintID(value)
+	if err != nil || !launchConstantEqual(value.BlueprintID, identity) {
 		return errors.New("launch blueprint identity does not bind its sanitized content")
 	}
 	return nil
@@ -545,11 +557,11 @@ func ProjectLaunchBlueprint(graph LaunchWorkloadGraph, constraints LaunchConstra
 			FromNodeID: remap[edge.FromNodeID], ToNodeID: remap[edge.ToNodeID], Relationship: edge.Relationship,
 		})
 	}
-	identityHash, err := canonicalize.CanonicalHash(blueprint)
+	identity, err := DeriveLaunchBlueprintID(blueprint)
 	if err != nil {
-		return LaunchBlueprint{}, fmt.Errorf("derive sanitized launch blueprint identity: %w", err)
+		return LaunchBlueprint{}, err
 	}
-	blueprint.BlueprintID = "blueprint:sha256:" + identityHash
+	blueprint.BlueprintID = identity
 	if err := ValidateLaunchBlueprint(blueprint); err != nil {
 		return LaunchBlueprint{}, err
 	}

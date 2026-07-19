@@ -364,7 +364,7 @@ func ValidateLaunchWorkloadGraph(graph LaunchWorkloadGraph) error {
 	}
 	previous = ""
 	for _, edge := range graph.Edges {
-		key := edge.FromNodeID + "\x00" + edge.ToNodeID + "\x00" + edge.Relationship
+		key := launchTupleKey(edge.FromNodeID, edge.ToNodeID, edge.Relationship)
 		if key <= previous {
 			return errors.New("launch workload graph edges must be unique and canonically sorted")
 		}
@@ -678,6 +678,11 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 	if expiresAt.After(profileExpiry) {
 		return errors.New("launch route outlives a provider profile")
 	}
+	for _, entry := range payloads.Entries {
+		if _, ok := placements[entry.PlacementID]; !ok {
+			return fmt.Errorf("launch provider payload references unknown route placement %s", entry.PlacementID)
+		}
+	}
 	for _, node := range graph.Nodes {
 		if _, ok := nodePlacement[node.NodeID]; !ok {
 			return fmt.Errorf("launch workload node %s is not assigned to a placement", node.NodeID)
@@ -744,7 +749,7 @@ func validateLaunchPlacementActions(placement LaunchRoutePlacement, profile Laun
 	payloadEntries := make(map[string]LaunchProviderPayloadEntry)
 	for _, entry := range payloads.Entries {
 		if entry.PlacementID == placement.PlacementID {
-			payloadEntries[entry.EffectID+"\x00"+entry.ProviderActionURN] = entry
+			payloadEntries[launchTupleKey(entry.EffectID, entry.ProviderActionURN)] = entry
 		}
 	}
 	previous := ""
@@ -757,7 +762,7 @@ func validateLaunchPlacementActions(placement LaunchRoutePlacement, profile Laun
 		if !ok || action.ActionURN != binding.ProviderActionURN {
 			return fmt.Errorf("launch route action %s is absent from provider profile", binding.EffectID)
 		}
-		entry, ok := payloadEntries[binding.EffectID+"\x00"+binding.ProviderActionURN]
+		entry, ok := payloadEntries[launchTupleKey(binding.EffectID, binding.ProviderActionURN)]
 		if !ok || !launchConstantEqual(entry.PayloadHash, binding.ProviderPayloadHash) {
 			return fmt.Errorf("launch route action %s does not bind the provider payload set", binding.EffectID)
 		}
@@ -889,7 +894,7 @@ func findLaunchWorkloadNode(graph LaunchWorkloadGraph, nodeID string) (LaunchWor
 }
 
 func launchRouteDependencyKey(value LaunchRouteDependency) string {
-	return value.FromPlacementID + "\x00" + value.ToPlacementID + "\x00" + value.Relationship + "\x00" + value.WorkloadEdgeHash
+	return launchTupleKey(value.FromPlacementID, value.ToPlacementID, value.Relationship, value.WorkloadEdgeHash)
 }
 
 func launchLifecycleClassKnown(value string) bool {

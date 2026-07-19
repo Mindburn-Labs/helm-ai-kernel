@@ -109,6 +109,33 @@ func TestWorkloadKindsAndRelationshipsAreProviderExtensible(t *testing.T) {
 	}
 }
 
+func TestWorkloadEdgeCanonicalKeysDoNotCollideOnControlCharacters(t *testing.T) {
+	node := func(id, hash string) contracts.LaunchWorkloadNode {
+		return contracts.LaunchWorkloadNode{
+			NodeID: id, Kind: "http_service", LifecycleClass: contracts.LaunchLifecycleEphemeral,
+			DefinitionHash: launchRoutingHash(hash), RequirementsHash: launchRoutingHash(hash),
+			RequiredCapabilities: []string{"https-endpoint"}, Deployability: contracts.LaunchAnalysisSupported,
+		}
+	}
+	graph := contracts.LaunchWorkloadGraph{
+		SchemaVersion: contracts.LaunchWorkloadGraphSchemaVersion, GraphID: "graph-control-characters", TenantID: "tenant-1", WorkspaceID: "workspace-1",
+		SourceCommitSHA: strings.Repeat("d", 40), SourceTreeHash: launchRoutingHash("1"), UnknownSetHash: launchRoutingHash("2"),
+		Nodes: []contracts.LaunchWorkloadNode{
+			node("a", "3"),
+			node("a\x00b", "4"),
+			node("b\x00c", "5"),
+			node("c", "6"),
+		},
+		Edges: []contracts.LaunchWorkloadEdge{
+			{FromNodeID: "a", ToNodeID: "b\x00c", Relationship: "depends_on"},
+			{FromNodeID: "a\x00b", ToNodeID: "c", Relationship: "depends_on"},
+		},
+	}
+	if err := contracts.ValidateLaunchWorkloadGraph(graph); err != nil {
+		t.Fatalf("distinct workload edges collided in canonical tuple encoding: %v", err)
+	}
+}
+
 func TestRequiredCapabilitiesAndLifecycleAreMatched(t *testing.T) {
 	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
 	fixture := singleLaunchRouteFixture(t, profile, false)
@@ -144,8 +171,7 @@ func TestMultiProviderRoutePartitionsOneArbitraryRepositoryGraph(t *testing.T) {
 		t.Fatalf("valid multi-provider route was rejected: %v", err)
 	}
 
-	duplicate := fixture.route
-	duplicate = cloneLaunchRouteFixture(fixture).route
+	duplicate := cloneLaunchRouteFixture(fixture).route
 	duplicate.Placements[1].WorkloadNodeIDs = []string{"api", "database"}
 	if err := contracts.ValidateLaunchRouteBinding(duplicate, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "multiple placements") {
 		t.Fatalf("duplicate cross-cloud workload assignment was not rejected: %v", err)
@@ -198,6 +224,26 @@ func TestRouteRecomputesEveryApprovalBoundArtifact(t *testing.T) {
 				t.Fatal("tampered approval-bound artifact was accepted")
 			}
 		})
+	}
+}
+
+func TestRouteRejectsPayloadForUnknownPlacement(t *testing.T) {
+	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
+	fixture := singleLaunchRouteFixture(t, profile, false)
+	fixture.payloads.Entries = append(fixture.payloads.Entries, contracts.LaunchProviderPayloadEntry{
+		PlacementID:       "placement-z",
+		EffectID:          contracts.EffectTypeProviderProvision,
+		ProviderActionURN: profile.Actions[1].ActionURN,
+		PayloadHash:       launchRoutingHash("9"),
+	})
+	payloadHash, err := contracts.DeriveLaunchProviderPayloadSetHash(fixture.payloads)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.route.ProviderPayloadSetHash = payloadHash
+	fixture.resolver.payloads[fixture.payloads.PayloadSetID] = fixture.payloads
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "unknown route placement") {
+		t.Fatalf("payload for an unapproved placement was not rejected: %v", err)
 	}
 }
 
@@ -292,6 +338,24 @@ func TestOfferSnapshotNeverPromotesAdvisoryCreditToCashReduction(t *testing.T) {
 	if err := contracts.ValidateLaunchOfferSnapshot(credentialURL); err == nil {
 		t.Fatal("credential-bearing official offer URL was admitted")
 	}
+	if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/offer_snapshot.v1.json"), credentialURL); err == nil {
+		t.Fatal("offer snapshot schema admitted a credential-bearing official URL")
+	}
+	for name, officialURL := range map[string]string{
+		"query":    "https://example.invalid/offers?token=secret",
+		"fragment": "https://example.invalid/offers#private",
+	} {
+		t.Run(name, func(t *testing.T) {
+			mutated := active
+			mutated.OfficialSourceURL = officialURL
+			if err := contracts.ValidateLaunchOfferSnapshot(mutated); err == nil {
+				t.Fatal("semantic validator admitted an authority-unsafe official URL")
+			}
+			if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/offer_snapshot.v1.json"), mutated); err == nil {
+				t.Fatal("offer snapshot schema admitted an authority-unsafe official URL")
+			}
+		})
+	}
 }
 
 func TestProviderCertificationRequiresSignatureTrustAndCurrentRegistryState(t *testing.T) {
@@ -365,6 +429,16 @@ func TestLaunchBlueprintIsCleanRoomAndProviderNeutral(t *testing.T) {
 	tampered.Constraints.MaximumGrossMinor++
 	if err := contracts.ValidateLaunchBlueprint(tampered); err == nil {
 		t.Fatal("content-addressed clean-room blueprint accepted tampered content")
+	}
+	identityBearing := blueprint
+	identityBearing.Nodes = append([]contracts.LaunchBlueprintNode(nil), blueprint.Nodes...)
+	identityBearing.Nodes[0].NodeID = "tenant-private-service"
+	identityBearing.BlueprintID, err = contracts.DeriveLaunchBlueprintID(identityBearing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := contracts.ValidateLaunchBlueprint(identityBearing); err == nil || !strings.Contains(err.Error(), "nodes") {
+		t.Fatalf("correctly rehashed blueprint retained a private node identity: %v", err)
 	}
 }
 

@@ -15,7 +15,7 @@
     "provider_id": { "$ref": "#/$defs/non_empty" },
     "provider_account_ref": { "$ref": "#/$defs/non_empty" },
     "provider_account_hash": { "$ref": "#/$defs/hash" },
-    "official_source_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "official_source_url": { "type": "string", "format": "uri", "pattern": "^https://[^/?#@]+(/[^?#]*)?$" },
     "content_version_hash": { "$ref": "#/$defs/hash" },
     "terms_hash": { "$ref": "#/$defs/hash" },
     "exclusions_hash": { "$ref": "#/$defs/hash" },

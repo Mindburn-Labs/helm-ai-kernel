@@ -30,6 +30,18 @@ func validLaunchSHA256(value string) bool {
 	return err == nil
 }
 
+// launchTupleKey hex-encodes each authority-relevant component before adding a
+// sentinel. The encoded values cannot contain the sentinel, so arbitrary input
+// remains unambiguous while component-wise lexical ordering is preserved.
+func launchTupleKey(values ...string) string {
+	var key strings.Builder
+	for _, value := range values {
+		key.WriteString(hex.EncodeToString([]byte(value)))
+		key.WriteByte(0)
+	}
+	return key.String()
+}
+
 func launchEffectIsProviderMutation(effectID string) bool {
 	switch effectID {
 	case EffectTypeProviderProvision, EffectTypeDeployProductionActivate, EffectTypeProviderRollback, EffectTypeProviderTeardown:

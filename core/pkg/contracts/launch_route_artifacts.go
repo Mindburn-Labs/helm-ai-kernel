@@ -6,6 +6,7 @@ import (
 	"math"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -63,6 +64,32 @@ var launchPortableResidencyTags = map[string]struct{}{
 var launchPortableCommitmentTerms = map[string]struct{}{
 	"annual": {}, "hourly": {}, "monthly": {}, "prepaid": {}, "spot": {},
 }
+
+// Public blueprint jurisdictions are the ISO 3166-1 alpha-2 assignment set,
+// plus the EU supranational policy scope used by HELM. Pattern-shaped private
+// tokens such as ZZ remain valid in private analysis only and cannot be shared.
+var launchPortableJurisdictions = launchPortableTokenSet(`
+AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ
+CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET EU FI FJ FK FM
+FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT
+JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN
+MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT
+PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL
+TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW
+`)
+
+// Currency tokens mirror the ISO 4217 Maintenance Agency List One published
+// 2026-01-01. XTS (testing) and XXX (no currency) are deliberately excluded
+// from gross-exposure constraints. Updates require a vocabulary version bump.
+var launchPortableCurrencies = launchPortableTokenSet(`
+AED AFN ALL AMD AOA ARS AUD AWG AZN BAM BBD BDT BHD BIF BMD BND BOB BOV BRL BSD BTN BWP BYN BZD CAD CDF CHE CHF
+CHW CLF CLP CNY COP COU CRC CUP CVE CZK DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD
+HKD HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD KZT LAK LBP LKR LRD LSL
+LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MXV MYR MZN NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP
+PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP SZL THB TJS TMT TND
+TOP TRY TTD TWD TZS UAH UGX USD USN UYI UYU UYW UZS VED VES VND VUV WST XAD XAF XAG XAU XBA XBB XBC XBD XCD
+XCG XDR XOF XPD XPF XPT XSU XUA YER ZAR ZMW ZWG
+`)
 
 // LaunchConstraintSet is the versioned, approval-bound policy input to route
 // selection. The Kernel stays provider-neutral: individual missions can bind
@@ -501,11 +528,14 @@ func ValidateLaunchBlueprint(value LaunchBlueprint) error {
 	if !launchCurrencyPattern.MatchString(value.Constraints.MaximumGrossCurrency) || value.Constraints.MaximumGrossMinor < 0 {
 		return errors.New("launch blueprint gross constraint is invalid")
 	}
+	if _, ok := launchPortableCurrencies[value.Constraints.MaximumGrossCurrency]; !ok {
+		return errors.New("launch blueprint contains a non-portable currency")
+	}
 	if err := validateSortedUniqueOptional(value.Constraints.AllowedJurisdictions, "blueprint allowed jurisdictions"); err != nil {
 		return err
 	}
 	for _, jurisdiction := range value.Constraints.AllowedJurisdictions {
-		if len(jurisdiction) != 2 || jurisdiction[0] < 'A' || jurisdiction[0] > 'Z' || jurisdiction[1] < 'A' || jurisdiction[1] > 'Z' {
+		if _, ok := launchPortableJurisdictions[jurisdiction]; !ok {
 			return errors.New("launch blueprint contains a non-portable jurisdiction")
 		}
 	}
@@ -644,6 +674,15 @@ func validateLaunchPortableValues(values []string, name string, vocabulary map[s
 		}
 	}
 	return nil
+}
+
+func launchPortableTokenSet(values string) map[string]struct{} {
+	tokens := strings.Fields(values)
+	set := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		set[token] = struct{}{}
+	}
+	return set
 }
 
 func addLaunchMinor(left, right int64) (int64, bool) {

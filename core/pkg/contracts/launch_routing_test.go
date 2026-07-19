@@ -468,6 +468,31 @@ func TestLaunchBlueprintIsCleanRoomAndProviderNeutral(t *testing.T) {
 	if err := contracts.ValidateLaunchBlueprint(identityBearing); err == nil || !strings.Contains(err.Error(), "nodes") {
 		t.Fatalf("correctly rehashed blueprint retained a private node identity: %v", err)
 	}
+
+	blueprintSchema := compileSchema(t, "effects/launch/launch_blueprint.v1.json")
+	for name, mutate := range map[string]func(*contracts.LaunchBlueprint){
+		"unregistered currency": func(value *contracts.LaunchBlueprint) {
+			value.Constraints.MaximumGrossCurrency = "ABC"
+		},
+		"unregistered jurisdiction": func(value *contracts.LaunchBlueprint) {
+			value.Constraints.AllowedJurisdictions = []string{"ZZ"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mutated := blueprint
+			mutate(&mutated)
+			mutated.BlueprintID, err = contracts.DeriveLaunchBlueprintID(mutated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := contracts.ValidateLaunchBlueprint(mutated); err == nil {
+				t.Fatal("correctly rehashed blueprint retained an unregistered commercial token")
+			}
+			if err := validateAgainstSchema(t, blueprintSchema, mutated); err == nil {
+				t.Fatal("blueprint schema retained an unregistered commercial token")
+			}
+		})
+	}
 }
 
 func TestLaunchBlueprintRejectsIdentityBearingPortableFields(t *testing.T) {
@@ -483,6 +508,12 @@ func TestLaunchBlueprintRejectsIdentityBearingPortableFields(t *testing.T) {
 		},
 		"jurisdiction": func(_ *contracts.LaunchWorkloadGraph, constraints *contracts.LaunchConstraintSet) {
 			constraints.AllowedJurisdictions = []string{"tenant-private-jurisdiction"}
+		},
+		"pattern-shaped jurisdiction": func(_ *contracts.LaunchWorkloadGraph, constraints *contracts.LaunchConstraintSet) {
+			constraints.AllowedJurisdictions = []string{"ZZ"}
+		},
+		"pattern-shaped currency": func(_ *contracts.LaunchWorkloadGraph, constraints *contracts.LaunchConstraintSet) {
+			constraints.MaximumGrossCurrency = "ABC"
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

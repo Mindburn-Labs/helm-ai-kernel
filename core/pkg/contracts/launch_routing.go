@@ -547,12 +547,30 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 		return err
 	}
 
-	analysisHash, _ := DeriveLaunchRepositoryAnalysisHash(analysis)
-	graphHash, _ := DeriveLaunchWorkloadGraphHash(graph)
-	constraintHash, _ := DeriveLaunchConstraintSetHash(constraints)
-	quoteHash, _ := DeriveLaunchRouteQuoteHash(quote)
-	resourceHash, _ := DeriveLaunchResourceGraphHash(resources)
-	payloadHash, _ := DeriveLaunchProviderPayloadSetHash(payloads)
+	analysisHash, err := DeriveLaunchRepositoryAnalysisHash(analysis)
+	if err != nil {
+		return fmt.Errorf("derive launch repository analysis hash: %w", err)
+	}
+	graphHash, err := DeriveLaunchWorkloadGraphHash(graph)
+	if err != nil {
+		return fmt.Errorf("derive launch workload graph hash: %w", err)
+	}
+	constraintHash, err := DeriveLaunchConstraintSetHash(constraints)
+	if err != nil {
+		return fmt.Errorf("derive launch constraint set hash: %w", err)
+	}
+	quoteHash, err := DeriveLaunchRouteQuoteHash(quote)
+	if err != nil {
+		return fmt.Errorf("derive launch route quote hash: %w", err)
+	}
+	resourceHash, err := DeriveLaunchResourceGraphHash(resources)
+	if err != nil {
+		return fmt.Errorf("derive launch resource graph hash: %w", err)
+	}
+	payloadHash, err := DeriveLaunchProviderPayloadSetHash(payloads)
+	if err != nil {
+		return fmt.Errorf("derive launch provider payload set hash: %w", err)
+	}
 	for name, pair := range map[string][2]string{
 		"repository analysis":  {route.RepositoryAnalysisHash, analysisHash},
 		"workload graph":       {route.WorkloadGraphHash, graphHash},

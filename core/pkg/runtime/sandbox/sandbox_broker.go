@@ -22,6 +22,26 @@ type SandboxRunner interface {
 	Validate(spec *pkg_sandbox.SandboxSpec) error
 }
 
+// SandboxCredentialMaterial is ephemeral broker-to-runner material. It must
+// never be serialized, logged, returned through PreparedExecution, or retained
+// after the run. The binding metadata is signed through the lease; only the
+// short-lived bearer value is minted after authorization.
+type SandboxCredentialMaterial struct {
+	SecretRef   string   `json:"-"`
+	MountPath   string   `json:"-"`
+	EnvVar      string   `json:"-"`
+	Scopes      []string `json:"-"`
+	BearerToken string   `json:"-"`
+}
+
+// SandboxCredentialRunner is required for leases with secret bindings. It
+// keeps bearer material inside the broker-to-runner boundary instead of
+// exposing it to the caller that holds PreparedExecution.
+type SandboxCredentialRunner interface {
+	SandboxRunner
+	RunWithCredentials(spec *pkg_sandbox.SandboxSpec, credentials []SandboxCredentialMaterial) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error)
+}
+
 // AuthorizationVerifier verifies the source-owned Kernel decision and the
 // derived execution intent before any sandbox lease or credential side effect.
 type AuthorizationVerifier interface {
@@ -52,9 +72,6 @@ type PreparedExecution struct {
 
 	// TokenIDs lists scoped token IDs issued for cleanup and audit.
 	TokenIDs []string
-
-	// Tokens lists one-time bearer token values to inject into the sandbox.
-	Tokens []string
 
 	// PreparedAt is when the execution was prepared.
 	PreparedAt time.Time
@@ -113,6 +130,7 @@ type preparedExecutionRecord struct {
 	authorization SandboxExecutionAuthorization
 	spec          pkg_sandbox.SandboxSpec
 	tokenIDs      []string
+	credentials   []SandboxCredentialMaterial
 }
 
 // SandboxBroker mediates between approved effect graphs and execution backends.
@@ -221,6 +239,11 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 	if !hasRunner || runner == nil {
 		return nil, fmt.Errorf("no runner registered for backend %q", sourceLease.Backend)
 	}
+	if len(sourceLease.SecretBindings) > 0 {
+		if _, ok := runner.(SandboxCredentialRunner); !ok {
+			return nil, fmt.Errorf("runner for backend %q cannot receive broker-sealed credentials", sourceLease.Backend)
+		}
+	}
 
 	// Activate lease.
 	sandboxID := fmt.Sprintf("sbx-%s-%d", sourceLease.Backend, b.clock().UnixNano())
@@ -230,7 +253,7 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 
 	// Issue scoped credentials.
 	var tokenIDs []string
-	var bearerTokens []string
+	var credentials []SandboxCredentialMaterial
 	for _, binding := range sourceLease.SecretBindings {
 		token, err := b.credBroker.IssueToken(TokenRequest{
 			SandboxID:       sandboxID,
@@ -246,7 +269,13 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 			return nil, fmt.Errorf("issue credential for %s: %w", binding.SecretRef, err)
 		}
 		tokenIDs = append(tokenIDs, token.TokenID)
-		bearerTokens = append(bearerTokens, token.BearerToken)
+		credentials = append(credentials, SandboxCredentialMaterial{
+			SecretRef:   binding.SecretRef,
+			MountPath:   binding.MountPath,
+			EnvVar:      binding.EnvVar,
+			Scopes:      append([]string(nil), binding.Scopes...),
+			BearerToken: token.BearerToken,
+		})
 	}
 
 	// Use the byte-equivalent spec that was already bound by the signed
@@ -258,7 +287,6 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 		Spec:       &spec,
 		Verdict:    verdict,
 		TokenIDs:   tokenIDs,
-		Tokens:     bearerTokens,
 		PreparedAt: b.clock(),
 	}
 	fingerprint, err := preparedExecutionFingerprint(prepared)
@@ -279,6 +307,7 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 		authorization: cloneSandboxExecutionAuthorization(authorization),
 		spec:          cloneSandboxSpec(&spec),
 		tokenIDs:      append([]string(nil), tokenIDs...),
+		credentials:   cloneSandboxCredentialMaterial(credentials),
 	}
 	b.mu.Unlock()
 	return prepared, nil
@@ -474,8 +503,21 @@ func (b *SandboxBroker) Execute(
 		return nil, nil, fmt.Errorf("validate sandbox spec: %w", err)
 	}
 
-	// Execute.
-	result, receipt, err := runner.Run(&record.spec)
+	// Execute. Bearer material crosses only the broker-to-runner interface and
+	// is never present in the caller-visible PreparedExecution or signed spec.
+	var result *pkg_sandbox.Result
+	var receipt *pkg_sandbox.ExecutionReceipt
+	if len(record.credentials) > 0 {
+		credentialRunner, ok := runner.(SandboxCredentialRunner)
+		if !ok {
+			cleanup := b.cleanupRecord(ctx, record)
+			return nil, nil, fmt.Errorf("runner for backend %q lost credential capability (cleanup=%s)", record.backend, cleanup.Status)
+		}
+		result, receipt, err = credentialRunner.RunWithCredentials(&record.spec, cloneSandboxCredentialMaterial(record.credentials))
+	} else {
+		result, receipt, err = runner.Run(&record.spec)
+	}
+	clearSandboxCredentialMaterial(record.credentials)
 
 	// Always clean up regardless of outcome.
 	cleanup := b.cleanupRecord(ctx, record)
@@ -627,6 +669,22 @@ func cloneSandboxExecutionAuthorization(authorization SandboxExecutionAuthorizat
 	return cloned
 }
 
+func cloneSandboxCredentialMaterial(credentials []SandboxCredentialMaterial) []SandboxCredentialMaterial {
+	cloned := make([]SandboxCredentialMaterial, len(credentials))
+	for index, credential := range credentials {
+		cloned[index] = credential
+		cloned[index].Scopes = append([]string(nil), credential.Scopes...)
+	}
+	return cloned
+}
+
+func clearSandboxCredentialMaterial(credentials []SandboxCredentialMaterial) {
+	for index := range credentials {
+		credentials[index].BearerToken = ""
+		credentials[index].Scopes = nil
+	}
+}
+
 func cloneSandboxSpec(spec *pkg_sandbox.SandboxSpec) pkg_sandbox.SandboxSpec {
 	cloned := *spec
 	cloned.Command = append([]string(nil), spec.Command...)
@@ -654,6 +712,7 @@ func cloneSandboxSpec(spec *pkg_sandbox.SandboxSpec) pkg_sandbox.SandboxSpec {
 
 // cleanup revokes tokens and completes the lease.
 func (b *SandboxBroker) cleanupRecord(ctx context.Context, prepared preparedExecutionRecord) pkg_sandbox.CleanupStatus {
+	defer clearSandboxCredentialMaterial(prepared.credentials)
 	var revokeErrors []string
 
 	// Revoke all issued tokens.

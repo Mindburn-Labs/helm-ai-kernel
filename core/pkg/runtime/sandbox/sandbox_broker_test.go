@@ -2,7 +2,9 @@ package sandbox_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,11 +27,13 @@ func resetClock() { clockTime = baseTime }
 
 // mockRunner implements SandboxRunner for testing.
 type mockRunner struct {
-	runCalled      bool
-	validateCalled bool
-	failValidate   bool
-	failRun        bool
-	lastSpec       *pkg_sandbox.SandboxSpec
+	runCalled       bool
+	validateCalled  bool
+	failValidate    bool
+	failRun         bool
+	lastSpec        *pkg_sandbox.SandboxSpec
+	lastCredentials []sandbox_runtime.SandboxCredentialMaterial
+	credentialCheck func([]sandbox_runtime.SandboxCredentialMaterial) error
 }
 
 func (m *mockRunner) Run(spec *pkg_sandbox.SandboxSpec) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {
@@ -52,6 +56,28 @@ func (m *mockRunner) Validate(spec *pkg_sandbox.SandboxSpec) error {
 		return errMock("validation failed")
 	}
 	return nil
+}
+
+func (m *mockRunner) RunWithCredentials(spec *pkg_sandbox.SandboxSpec, credentials []sandbox_runtime.SandboxCredentialMaterial) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {
+	m.lastCredentials = append([]sandbox_runtime.SandboxCredentialMaterial(nil), credentials...)
+	if m.credentialCheck != nil {
+		if err := m.credentialCheck(credentials); err != nil {
+			return nil, nil, err
+		}
+	}
+	return m.Run(spec)
+}
+
+type specOnlyRunner struct {
+	inner *mockRunner
+}
+
+func (r specOnlyRunner) Run(spec *pkg_sandbox.SandboxSpec) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {
+	return r.inner.Run(spec)
+}
+
+func (r specOnlyRunner) Validate(spec *pkg_sandbox.SandboxSpec) error {
+	return r.inner.Validate(spec)
 }
 
 type errMock string
@@ -658,7 +684,8 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).
 		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
 		WithClock(clock)
-	broker.RegisterRunner("docker", &mockRunner{})
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
 	sandboxID := fmt.Sprintf("sbx-docker-%d", clock().UnixNano())
 	credBroker.SetScopeAllowlist(sandboxID, []string{"repo:read"})
 	l, err := lm.Acquire(ctx, lease.LeaseRequest{
@@ -692,12 +719,110 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 	if result != nil || receipt != nil {
 		t.Fatalf("rejected execution returned result=%+v receipt=%+v", result, receipt)
 	}
-	if valid, reason := credBroker.ValidateToken(prepared.Tokens[0]); valid || reason != "token revoked" {
-		t.Fatalf("prepared credential was not revoked after mutation: valid=%v reason=%q", valid, reason)
+	if len(runner.lastCredentials) != 0 {
+		t.Fatal("rejected execution released broker credentials to the runner")
+	}
+	if len(credBroker.GetIssuances()) != 1 {
+		t.Fatal("expected one auditable credential issuance")
 	}
 	got, getErr := lm.Get(ctx, l.LeaseID)
 	if getErr != nil || got.Status != lease.LeaseStatusCompleted {
 		t.Fatalf("rejected execution lease was not completed: lease=%+v err=%v", got, getErr)
+	}
+}
+
+func TestExecuteCredentialsStayInsideBrokerRunnerBoundary(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
+	runner := &mockRunner{}
+	runner.credentialCheck = func(credentials []sandbox_runtime.SandboxCredentialMaterial) error {
+		if len(credentials) != 1 || credentials[0].SecretRef != "repo-token" || len(credentials[0].Scopes) != 1 || credentials[0].Scopes[0] != "repo:read" {
+			return fmt.Errorf("unexpected credential binding")
+		}
+		if valid, reason := credBroker.ValidateToken(credentials[0].BearerToken); !valid {
+			return fmt.Errorf("runner received invalid credential: %s", reason)
+		}
+		return nil
+	}
+	broker.RegisterRunner("docker", runner)
+	sandboxID := fmt.Sprintf("sbx-docker-%d", clock().UnixNano())
+	credBroker.SetScopeAllowlist(sandboxID, []string{"repo:read"})
+	l, err := lm.Acquire(ctx, lease.LeaseRequest{
+		RunID:         "run-credential-boundary",
+		WorkspacePath: "/workspace",
+		Backend:       "docker",
+		ProfileName:   "net-limited",
+		TemplateRef:   "example.invalid/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TTL:           time.Hour,
+		SecretBindings: []lease.SecretBinding{{
+			SecretRef: "repo-token",
+			EnvVar:    "REPO_TOKEN",
+			Scopes:    []string{"repo:read"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, authorizedVerdict(t, l, testWorkload()), testWorkload())
+	if err != nil {
+		t.Fatal(err)
+	}
+	serialized, err := json.Marshal(prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(serialized), "hsk_") || strings.Contains(string(serialized), "bearer_token") {
+		t.Fatal("caller-visible prepared execution serialized broker credential material")
+	}
+	if _, _, err := broker.Execute(ctx, prepared); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.lastCredentials) != 1 {
+		t.Fatal("trusted runner did not receive the broker-sealed credential")
+	}
+	if valid, reason := credBroker.ValidateToken(runner.lastCredentials[0].BearerToken); valid || reason != "token revoked" {
+		t.Fatalf("credential remained valid after execution cleanup: valid=%v reason=%q", valid, reason)
+	}
+}
+
+func TestPrepareExecutionRejectsCredentialsForSpecOnlyRunnerBeforeSideEffects(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
+	inner := &mockRunner{}
+	broker.RegisterRunner("docker", specOnlyRunner{inner: inner})
+	l, err := lm.Acquire(ctx, lease.LeaseRequest{
+		RunID:         "run-unsupported-credential-runner",
+		WorkspacePath: "/workspace",
+		Backend:       "docker",
+		ProfileName:   "net-limited",
+		TemplateRef:   "example.invalid/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TTL:           time.Hour,
+		SecretBindings: []lease.SecretBinding{{
+			SecretRef: "repo-token",
+			EnvVar:    "REPO_TOKEN",
+			Scopes:    []string{"repo:read"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, l, authorizedVerdict(t, l, testWorkload()), testWorkload()); err == nil {
+		t.Fatal("spec-only runner accepted a lease containing credentials")
+	}
+	got, getErr := lm.Get(ctx, l.LeaseID)
+	if getErr != nil || got.Status != lease.LeaseStatusPending {
+		t.Fatalf("unsupported credential runner changed lease state: lease=%+v err=%v", got, getErr)
+	}
+	if len(credBroker.GetIssuances()) != 0 || inner.validateCalled || inner.runCalled {
+		t.Fatal("unsupported credential runner triggered a credential or runner side effect")
 	}
 }
 

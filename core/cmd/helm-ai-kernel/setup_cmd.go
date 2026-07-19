@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
 )
 
@@ -430,9 +431,27 @@ func setupPlannedActions(opts setupOptions) []string {
 	}
 }
 
+// setupPersistedKernelURL returns a persisted cloud endpoint from a `connect`
+// machine credential or a `control-plane pair` pairing, or "" if none. It is a
+// package var so tests can control it deterministically.
+var setupPersistedKernelURL = loadPersistedKernelURL
+
+func loadPersistedKernelURL() string {
+	if mc, err := lpcmd.LoadMachineCredential(); err == nil && strings.TrimSpace(mc.APIURL) != "" {
+		return strings.TrimRight(mc.APIURL, "/")
+	}
+	if p, err := lpcmd.LoadPairing(); err == nil && strings.TrimSpace(p.APIURL) != "" {
+		return strings.TrimRight(p.APIURL, "/")
+	}
+	return ""
+}
+
 func setupKernelURL(opts setupOptions) string {
 	if opts.NoQuickstart || (opts.Operation != "preview" && opts.Operation != "install") {
 		return ""
+	}
+	if url := setupPersistedKernelURL(); url != "" {
+		return url
 	}
 	return "http://127.0.0.1:7714"
 }
@@ -838,8 +857,13 @@ type codexProjectConfig struct {
 }
 
 type codexMCPServer struct {
-	Command string   `toml:"command"`
-	Args    []string `toml:"args"`
+	Command string   `toml:"command,omitempty"`
+	Args    []string `toml:"args,omitempty"`
+	// Remote HTTP transport fields (used by `connect`). BearerTokenEnvVar names
+	// the environment variable holding the bearer; the literal token is never
+	// written into a client config.
+	URL               string `toml:"url,omitempty"`
+	BearerTokenEnvVar string `toml:"bearer_token_env_var,omitempty"`
 }
 
 type claudeMCPConfig struct {
@@ -847,8 +871,14 @@ type claudeMCPConfig struct {
 }
 
 type claudeMCPServer struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
+	Command string   `json:"command,omitempty"`
+	Args    []string `json:"args,omitempty"`
+	// Remote HTTP transport fields (used by `connect`). Headers reference a
+	// bearer via env-var expansion (e.g. Bearer ${HELM_MACHINE_TOKEN}); the
+	// literal token is never written into a client config.
+	Type    string            `json:"type,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 func validateCodexProjectTOML(raw string) error {
@@ -891,6 +921,90 @@ func codexMCPInstalled(path, bin, dataDir string) bool {
 
 func setupMCPArgs(dataDir string) []string {
 	return []string{"mcp", "serve", "--transport", "stdio", "--data-dir", dataDir}
+}
+
+// connectAtomicWrite is the atomic file writer used by the remote MCP config
+// writers. It is a package var so tests can exercise fail-closed rollback by
+// injecting a write error.
+var connectAtomicWrite = writePrivateFileAtomic
+
+// remoteClaudeServer builds a Claude remote HTTP MCP server entry whose bearer
+// is supplied at runtime via env-var expansion; the literal token is never
+// embedded in the config.
+func remoteClaudeServer(mcpURL, tokenEnvVar string) claudeMCPServer {
+	return claudeMCPServer{
+		Type: "http",
+		URL:  mcpURL,
+		Headers: map[string]string{
+			"Authorization": "Bearer ${" + tokenEnvVar + "}",
+		},
+	}
+}
+
+// writeRemoteClaudeMCP merges a remote HTTP HELM MCP server into a Claude client
+// config, preserving any other servers, and writes it atomically. The bearer is
+// referenced by env var only.
+func writeRemoteClaudeMCP(path, mcpURL, tokenEnvVar, allowedRoot string) error {
+	if _, err := privateFileWritePath(path, allowedRoot); err != nil {
+		return err
+	}
+	root, err := readJSONObject(path)
+	if err != nil {
+		return err
+	}
+	entry, err := structToObject(remoteClaudeServer(mcpURL, tokenEnvVar))
+	if err != nil {
+		return err
+	}
+	servers := objectValue(root, "mcpServers")
+	servers[setupMCPServerName] = entry
+	root["mcpServers"] = servers
+	data, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	return connectAtomicWrite(path, append(data, '\n'), allowedRoot)
+}
+
+// writeRemoteCodexMCP upserts a remote HTTP HELM MCP server into a Codex config,
+// preserving any other tables, and writes it atomically. The bearer is
+// referenced by env var only.
+func writeRemoteCodexMCP(path, mcpURL, tokenEnvVar, allowedRoot string) error {
+	if _, err := privateFileWritePath(path, allowedRoot); err != nil {
+		return err
+	}
+	current := ""
+	if raw, err := os.ReadFile(path); err == nil {
+		current = string(raw)
+		if err := validateCodexProjectTOML(current); err != nil {
+			return fmt.Errorf("parse existing Codex config: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	current = removeTOMLTable(current, "[mcp_servers."+setupMCPServerName+"]")
+	block := fmt.Sprintf("[mcp_servers.%s]\nurl = %q\nbearer_token_env_var = %q\n", setupMCPServerName, mcpURL, tokenEnvVar)
+	next := strings.TrimRight(current, "\n")
+	if next != "" {
+		next += "\n\n"
+	}
+	next += block
+	if err := validateCodexProjectTOML(next); err != nil {
+		return fmt.Errorf("validate updated Codex config: %w", err)
+	}
+	return connectAtomicWrite(path, []byte(next), allowedRoot)
+}
+
+func structToObject(v any) (map[string]any, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func equalSetupStrings(left, right []string) bool {

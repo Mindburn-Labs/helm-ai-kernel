@@ -187,6 +187,26 @@ func TestMultiProviderRoutePartitionsOneArbitraryRepositoryGraph(t *testing.T) {
 	if err := contracts.ValidateLaunchRouteBinding(missingDependency, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "dependency set") {
 		t.Fatalf("missing cross-cloud dependency was not rejected: %v", err)
 	}
+
+	hiddenResourceDependency := cloneLaunchRouteFixture(fixture)
+	hiddenResourceDependency.resources.Edges = append([]contracts.LaunchResourceEdge(nil), hiddenResourceDependency.resources.Edges...)
+	hiddenResourceDependency.resources.Edges[0].Relationship = "depends_on"
+	resourceHash, err := contracts.DeriveLaunchResourceGraphHash(hiddenResourceDependency.resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hiddenResourceDependency.route.ResourceGraphHash = resourceHash
+	for index := range hiddenResourceDependency.route.Placements {
+		subsetHash, subsetErr := contracts.DeriveLaunchResourceSubsetHash(hiddenResourceDependency.resources, hiddenResourceDependency.route.Placements[index].PlacementID)
+		if subsetErr != nil {
+			t.Fatal(subsetErr)
+		}
+		hiddenResourceDependency.route.Placements[index].ResourceSubsetHash = subsetHash
+	}
+	hiddenResourceDependency.resolver.resources[hiddenResourceDependency.resources.ResourceGraphID] = hiddenResourceDependency.resources
+	if err := contracts.ValidateLaunchRouteBinding(hiddenResourceDependency.route, hiddenResourceDependency.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "without a matching workload dependency") {
+		t.Fatalf("hidden cross-cloud resource dependency was not rejected: %v", err)
+	}
 }
 
 func TestRouteRecomputesEveryApprovalBoundArtifact(t *testing.T) {

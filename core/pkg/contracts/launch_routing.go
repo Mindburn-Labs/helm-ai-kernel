@@ -859,6 +859,7 @@ func validateLaunchRouteDependencies(actual []LaunchRouteDependency, graph Launc
 
 func validateLaunchResourceAssignments(resources LaunchResourceGraph, graph LaunchWorkloadGraph, placements map[string]LaunchRoutePlacement, nodePlacement map[string]string) error {
 	covered := make(map[string]bool, len(graph.Nodes))
+	resourceNodes := make(map[string]LaunchResourceNode, len(resources.Nodes))
 	for _, resource := range resources.Nodes {
 		if _, ok := placements[resource.PlacementID]; !ok || nodePlacement[resource.WorkloadNodeID] != resource.PlacementID {
 			return fmt.Errorf("launch resource %s crosses its approved workload placement", resource.ResourceID)
@@ -868,10 +869,26 @@ func validateLaunchResourceAssignments(resources LaunchResourceGraph, graph Laun
 			return fmt.Errorf("launch resource %s lifecycle does not match workload", resource.ResourceID)
 		}
 		covered[resource.WorkloadNodeID] = true
+		resourceNodes[resource.ResourceID] = resource
 	}
 	for _, node := range graph.Nodes {
 		if !covered[node.NodeID] {
 			return fmt.Errorf("launch workload node %s has no resource plan", node.NodeID)
+		}
+	}
+	workloadEdges := make(map[string]struct{}, len(graph.Edges))
+	for _, edge := range graph.Edges {
+		workloadEdges[launchTupleKey(edge.FromNodeID, edge.ToNodeID, edge.Relationship)] = struct{}{}
+	}
+	for _, edge := range resources.Edges {
+		from := resourceNodes[edge.FromResourceID]
+		to := resourceNodes[edge.ToResourceID]
+		if from.PlacementID == to.PlacementID {
+			continue
+		}
+		key := launchTupleKey(from.WorkloadNodeID, to.WorkloadNodeID, edge.Relationship)
+		if _, ok := workloadEdges[key]; !ok {
+			return fmt.Errorf("launch resource edge %s to %s crosses placements without a matching workload dependency", edge.FromResourceID, edge.ToResourceID)
 		}
 	}
 	return nil

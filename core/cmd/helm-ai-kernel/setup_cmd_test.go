@@ -218,6 +218,47 @@ func TestSetupJSONSummaryMatchesOperation(t *testing.T) {
 	}
 }
 
+func TestSetupRequiresExplicitDataDirWithoutHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "claude-code", "--dry-run"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "--data-dir is required") {
+		t.Fatalf("HOME-less setup = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestSetupUserScopeRequiresAbsoluteHomeEvenWithDataDir(t *testing.T) {
+	commands := [][]string{
+		{"helm-ai-kernel", "setup", "codex", "--yes"},
+		{"helm-ai-kernel", "setup", "status", "codex"},
+		{"helm-ai-kernel", "setup", "remove", "codex", "--yes"},
+	}
+	for _, home := range []string{"", "relative-home"} {
+		for _, command := range commands {
+			name := strings.Join(command[1:3], "-")
+			t.Run(home+"/"+name, func(t *testing.T) {
+				t.Setenv("HOME", home)
+				for _, target := range []string{"claude-code", "codex"} {
+					opts := setupOptions{Target: target, Scope: "user"}
+					if path := setupClientConfigPath(opts); path != "" {
+						t.Fatalf("HOME=%q %s client path = %q, want empty", home, target, path)
+					}
+					if path := setupHookConfigPath(opts); path != "" {
+						t.Fatalf("HOME=%q %s hook path = %q, want empty", home, target, path)
+					}
+				}
+				args := append([]string{}, command...)
+				args = append(args, "--data-dir", t.TempDir())
+				var stdout, stderr bytes.Buffer
+				code := Run(args, &stdout, &stderr)
+				if code != 2 || !strings.Contains(stderr.String(), "user scope requires an absolute home directory") {
+					t.Fatalf("HOME=%q args=%q setup = %d stdout=%s stderr=%s", home, args, code, stdout.String(), stderr.String())
+				}
+			})
+		}
+	}
+}
+
 func TestSetupInstallClaudeWritesHookAndRunsQuickstart(t *testing.T) {
 	tmp := t.TempDir()
 	home := filepath.Join(tmp, "home")
@@ -1078,6 +1119,82 @@ func TestLocalMCPRuntimeUsesExplicitDataDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dataDir, "root.key")); err != nil {
 		t.Fatalf("custom MCP data dir did not receive the signer root key: %v", err)
+	}
+}
+
+func TestSetupMigratesLegacyHookWithoutDuplicationAndProvisionsSigningKey(t *testing.T) {
+	tmp := t.TempDir()
+	oldWD, _ := os.Getwd()
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+	stubSetupSideEffects(t)
+
+	dataDir := filepath.Join(tmp, "helm")
+	opts := setupOptions{Target: "codex", Scope: "project", DataDir: dataDir}
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if abs, err := filepath.Abs(bin); err == nil {
+		bin = abs
+	}
+	legacy := setupHookCommand(opts, bin)
+	legacyConfig := map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{map[string]any{
+				"matcher": "^(Bash|apply_patch|mcp__.*)$",
+				"hooks": []any{map[string]any{
+					"type":    "command",
+					"command": legacy,
+				}},
+			}},
+		},
+	}
+	raw, err := json.Marshal(legacyConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hookPath := filepath.Join(tmp, ".codex", "hooks.json")
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hookPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("setup upgrade exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
+	}
+	raw, err = os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(raw), legacy); got != 1 {
+		t.Fatalf("legacy hook command count = %d, want 1: %s", got, raw)
+	}
+	if info, err := os.Stat(workstationSigningSeedPath(dataDir)); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("setup signing seed permissions = %v/%v, want 0600", info, err)
+	}
+	if _, err := os.Stat(workstationSigningPublicKeyPath(dataDir)); err != nil {
+		t.Fatalf("setup signing public key missing: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "setup", "remove", "codex", "--scope", "project", "--yes", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("setup remove exit = %d stderr = %s", code, stderr.String())
+	}
+	raw, err = os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), legacy) {
+		t.Fatalf("legacy hook remains after remove: %s", raw)
 	}
 }
 

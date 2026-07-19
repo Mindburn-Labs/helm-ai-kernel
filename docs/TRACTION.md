@@ -107,15 +107,16 @@ Canonical demo ladder:
 
 Current assets:
 
-- Real-use setup, DENY hook, and offline verification GIF:
-  [helm-real-use-deny-verify.gif](assets/helm-real-use-deny-verify.gif).
-  Generate it with `make real-use-assets`. Expected verdict: `DENY`; receipt
+- Real-use setup, DENY hook, and offline verification source record:
+  [helm-real-use-deny-verify.transcript.txt](assets/helm-real-use-deny-verify.transcript.txt);
+  reproduce it with `make real-use-assets`. Expected verdict: `DENY`; receipt
   path: `~/.helm-ai-kernel/receipts/hooks/<decision>.json`; offline verifier:
   `helm-ai-kernel workstation verify-decision --receipt <receipt>`; expected
-  output: `signature: true`. Source transcript:
-  [helm-real-use-deny-verify.transcript.txt](assets/helm-real-use-deny-verify.transcript.txt);
-  provenance:
+  output: `integrity: true` and `trusted: true`. Machine-readable provenance:
   [helm-real-use-deny-verify.provenance.json](assets/helm-real-use-deny-verify.provenance.json).
+  An optional rendered GIF can be generated locally with
+  `HELM_RENDER_REAL_USE_GIF=1 make real-use-assets`; the transcript is the
+  canonical review record.
 - MCP quarantine proof board source: [helm-mcp-quarantine-demo.svg](assets/helm-mcp-quarantine-demo.svg)
 - Sanitized transcripts: [examples/launch/assets](../examples/launch/assets)
 

@@ -1,6 +1,10 @@
+// quantum_posture: workstation conformance uses classical Ed25519 receipt
+// material only; it adds no post-quantum control.
 package workstation
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,6 +36,16 @@ type AdapterCertificationResult struct {
 	FixtureRoot  string               `json:"fixture_root"`
 	FixtureRefs  []string             `json:"fixture_refs"`
 	ObservedOnly bool                 `json:"observed_only"`
+}
+
+// mamaFixtureDecisionSigner is the public half of the offline-only signer for
+// the checked-in MAMA decision receipt fixture. It is limited to conformance
+// data and is never a runtime or production trust anchor.
+var mamaFixtureDecisionSigner = ed25519.PublicKey{
+	0xff, 0xc8, 0xd9, 0x4c, 0xa1, 0x62, 0xc1, 0x08,
+	0x5d, 0xf2, 0x0d, 0xfb, 0x05, 0xac, 0xd1, 0x2b,
+	0x15, 0x79, 0xb9, 0xfa, 0xaa, 0xd0, 0x51, 0xf4,
+	0x20, 0xd9, 0xc5, 0x00, 0xc4, 0x87, 0x08, 0x12,
 }
 
 func CertifyAdapterFixtures(adapterID, fixtureRoot, requested string) AdapterCertificationResult {
@@ -71,8 +85,14 @@ func CertifyAdapterFixtures(adapterID, fixtureRoot, requested string) AdapterCer
 		result.Checks = append(result.Checks, CertificationCheck{ID: id, Status: status, Message: msg})
 	}
 	result.Passed = true
+	seed, err := certificationSigningSeed()
+	if err != nil {
+		add("signing.ephemeral_fixture_key", false, err.Error())
+		result.CertifiedAs = requested
+		return result
+	}
 
-	observeOK, observeMsg := certifyObserveOnly(fixtureRoot)
+	observeOK, observeMsg := certifyObserveOnly(fixtureRoot, seed)
 	add("observe.deterministic_receipt_replay", observeOK, observeMsg)
 	add("observe.schema_artifacts_present", requiredFixtureFilesExist(fixtureRoot, "allowed-observe"), "allowed observe fixture has required artifact set")
 	if requested == CertificationObserveOnly {
@@ -81,29 +101,37 @@ func CertifyAdapterFixtures(adapterID, fixtureRoot, requested string) AdapterCer
 		return result
 	}
 
-	enforceOK, enforceMsg := certifyEnforceable()
+	enforceOK, enforceMsg := certifyEnforceable(seed)
 	add("enforce.denies_forbidden_network_and_memory", enforceOK, enforceMsg)
-	add("enforce.allows_draft_edit", certifyDraftDecision(), "draft edit decision is permitted and signed")
+	add("enforce.allows_draft_edit", certifyDraftDecision(seed), "draft edit decision is permitted and signed")
 	if requested == CertificationEnforceable {
 		result.CertifiedAs = CertificationEnforceable
 		result.Passed = allChecksPass(result.Checks)
 		return result
 	}
 
-	highRiskOK, highRiskMsg := certifyHighRiskFixtures(fixtureRoot)
+	highRiskOK, highRiskMsg := certifyHighRiskFixtures(fixtureRoot, seed)
 	add("high_risk.memory_loop_and_taint_fixtures", highRiskOK, highRiskMsg)
 	result.CertifiedAs = CertificationHighRiskEffectCapable
 	result.Passed = allChecksPass(result.Checks)
 	return result
 }
 
-func certifyObserveOnly(root string) (bool, string) {
+func certificationSigningSeed() ([]byte, error) {
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		return nil, fmt.Errorf("generate ephemeral certification signing seed: %w", err)
+	}
+	return seed, nil
+}
+
+func certifyObserveOnly(root string, seed []byte) (bool, string) {
 	fixture := filepath.Join(root, "allowed-draft")
-	first, err := ImportArtifactDir(fixture, ImportOptions{})
+	first, err := ImportArtifactDir(fixture, ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	second, err := ImportArtifactDir(fixture, ImportOptions{})
+	second, err := ImportArtifactDir(fixture, ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
@@ -115,79 +143,82 @@ func certifyObserveOnly(root string) (bool, string) {
 			return false, fmt.Sprintf("proofgraph node %d hash changed", i)
 		}
 	}
-	ok, err := VerifyReceiptSignature(first.Receipt)
+	trusted := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	ok, err := VerifyReceiptWithTrustedKey(first.Receipt, trusted)
 	if err != nil || !ok {
 		return false, fmt.Sprintf("receipt signature invalid: %v", err)
 	}
 	return true, "same artifact set produces identical receipt, ProofGraph hashes, and replay root"
 }
 
-func certifyEnforceable() (bool, string) {
+func certifyEnforceable(seed []byte) (bool, string) {
 	profile := DefaultObserveDraftProfile()
-	network, err := Decide(profile, decisionRequest("network", "https://forbidden.example"), DecisionOptions{})
+	network, err := Decide(profile, decisionRequest("network", "https://forbidden.example"), DecisionOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	memory, err := Decide(profile, decisionRequest("memory", "memory://repo-rule"), DecisionOptions{})
+	memory, err := Decide(profile, decisionRequest("memory", "memory://repo-rule"), DecisionOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
 	if network.Verdict != contracts.WorkstationVerdictDeny || memory.Verdict != contracts.WorkstationVerdictDeny {
 		return false, "network and memory operate effects must deny under default profile"
 	}
-	if ok, _ := VerifyDecisionReceiptSignature(network); !ok {
+	trusted := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	if ok, _ := VerifyDecisionReceiptWithTrustedKey(network, trusted); !ok {
 		return false, "network deny receipt signature did not verify"
 	}
-	if ok, _ := VerifyDecisionReceiptSignature(memory); !ok {
+	if ok, _ := VerifyDecisionReceiptWithTrustedKey(memory, trusted); !ok {
 		return false, "memory deny receipt signature did not verify"
 	}
 	return true, "selected network and memory operate effects deny with signed receipts"
 }
 
-func certifyDraftDecision() bool {
+func certifyDraftDecision(seed []byte) bool {
 	profile := DefaultObserveDraftProfile()
-	receipt, err := Decide(profile, decisionRequest("file", "src/example.go"), DecisionOptions{})
+	receipt, err := Decide(profile, decisionRequest("file", "src/example.go"), DecisionOptions{SigningSeed: seed})
 	if err != nil {
 		return false
 	}
-	ok, _ := VerifyDecisionReceiptSignature(receipt)
+	trusted := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	ok, _ := VerifyDecisionReceiptWithTrustedKey(receipt, trusted)
 	return receipt.Verdict == contracts.WorkstationVerdictAllow && ok
 }
 
-func certifyHighRiskFixtures(root string) (bool, string) {
-	memory, err := ImportArtifactDir(filepath.Join(root, "denied-memory"), ImportOptions{})
+func certifyHighRiskFixtures(root string, seed []byte) (bool, string) {
+	memory, err := ImportArtifactDir(filepath.Join(root, "denied-memory"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	loop, err := ImportArtifactDir(filepath.Join(root, "denied-recurring-loop"), ImportOptions{})
+	loop, err := ImportArtifactDir(filepath.Join(root, "denied-recurring-loop"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	tainted, err := ImportArtifactDir(filepath.Join(root, "prompt-injection-tainted"), ImportOptions{})
+	tainted, err := ImportArtifactDir(filepath.Join(root, "prompt-injection-tainted"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	rawMCP, err := ImportArtifactDir(filepath.Join(root, "raw-mcp-tunnel-bypass"), ImportOptions{})
+	rawMCP, err := ImportArtifactDir(filepath.Join(root, "raw-mcp-tunnel-bypass"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	resume, err := ImportArtifactDir(filepath.Join(root, "ambiguous-resume"), ImportOptions{})
+	resume, err := ImportArtifactDir(filepath.Join(root, "ambiguous-resume"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	sidechain, err := ImportArtifactDir(filepath.Join(root, "subagent-sidechain-summary"), ImportOptions{})
+	sidechain, err := ImportArtifactDir(filepath.Join(root, "subagent-sidechain-summary"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	taintedDoc, err := ImportArtifactDir(filepath.Join(root, "tainted-browser-pdf-authorization"), ImportOptions{})
+	taintedDoc, err := ImportArtifactDir(filepath.Join(root, "tainted-browser-pdf-authorization"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	mama, err := ImportArtifactDir(filepath.Join(root, "mama-receipt-bound-execution"), ImportOptions{})
+	mama, err := ImportArtifactDir(filepath.Join(root, "mama-receipt-bound-execution"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
-	demo, err := ImportArtifactDir(filepath.Join(root, "demo"), ImportOptions{})
+	demo, err := ImportArtifactDir(filepath.Join(root, "demo"), ImportOptions{SigningSeed: seed})
 	if err != nil {
 		return false, err.Error()
 	}
@@ -219,7 +250,7 @@ func certifyHighRiskFixtures(root string) (bool, string) {
 	if mama.Receipt.AgentSurface != "mama" || len(mama.Receipt.ToolActions) == 0 || len(mama.Receipt.DeniedEffects) != 0 {
 		return false, "MAMA fixture must import as a receipt-bound allowed run with no denied effects"
 	}
-	decision, err := loadReferencedDecisionReceipt(filepath.Join(root, "mama-receipt-bound-execution"), mama.Receipt, "evt_mama_deploy_publish")
+	decision, err := loadReferencedDecisionReceipt(filepath.Join(root, "mama-receipt-bound-execution"), mama.Receipt, "evt_mama_deploy_publish", mamaFixtureDecisionSigner)
 	if err != nil {
 		return false, err.Error()
 	}
@@ -295,7 +326,7 @@ func receiptActionHasMetadata(receipt *contracts.AgentRunReceipt, actionID, key 
 	return false
 }
 
-func loadReferencedDecisionReceipt(dir string, receipt *contracts.AgentRunReceipt, actionID string) (*contracts.WorkstationPolicyDecisionReceipt, error) {
+func loadReferencedDecisionReceipt(dir string, receipt *contracts.AgentRunReceipt, actionID string, trusted ed25519.PublicKey) (*contracts.WorkstationPolicyDecisionReceipt, error) {
 	ref := receiptActionMetadata(receipt, actionID, "policy_decision_ref")
 	if ref == "" {
 		return nil, fmt.Errorf("%s missing policy_decision_ref metadata", actionID)
@@ -304,8 +335,10 @@ func loadReferencedDecisionReceipt(dir string, receipt *contracts.AgentRunReceip
 	if err != nil {
 		return nil, fmt.Errorf("load MAMA policy decision receipt: %w", err)
 	}
-	if ok, err := VerifyDecisionReceiptSignature(decision); err != nil || !ok {
-		return nil, fmt.Errorf("verify MAMA policy decision receipt: %v", err)
+	if ok, err := VerifyDecisionReceiptWithTrustedKey(decision, trusted); err != nil {
+		return nil, fmt.Errorf("verify MAMA policy decision receipt against fixture trust anchor: %w", err)
+	} else if !ok {
+		return nil, fmt.Errorf("MAMA policy decision receipt signer is not the fixture trust anchor")
 	}
 	if decision.DecisionID != ref || decision.Verdict != contracts.WorkstationVerdictAllow {
 		return nil, fmt.Errorf("MAMA policy decision receipt must be an ALLOW receipt for %s", ref)

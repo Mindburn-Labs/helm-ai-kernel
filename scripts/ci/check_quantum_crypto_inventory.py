@@ -7,9 +7,10 @@ quantum_posture: this checker is a guardrail, not a cryptographic control.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import pathlib
 import re
-import os
 import subprocess
 import sys
 
@@ -120,12 +121,39 @@ def should_skip(path: pathlib.Path) -> bool:
     return False
 
 
+def is_signed_fixture_receipt(path: pathlib.Path, text: str) -> bool:
+    """Return true only for signed, checked-in workstation receipt fixtures.
+
+    These receipts are canonicalized and signed test inputs.  Adding a textual
+    ``quantum_posture`` annotation to the JSON would change the payload and
+    invalidate the fixture signature; the fixture itself is not a
+    cryptographic control implementation.  Keep the exception deliberately
+    narrow so source code and ordinary JSON crypto configuration remain gated.
+    """
+    if (
+        path.suffix != ".json"
+        or "fixtures" not in path.parts
+        or "receipts" not in path.parts
+    ):
+        return False
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return payload.get("receipt_version") == "agent_run_receipt.v1" and all(
+        isinstance(payload.get(field), str) and payload[field]
+        for field in ("decision_id", "receipt_hash", "signature", "signer_key_id")
+    )
+
+
 def needs_annotation(path: pathlib.Path) -> bool:
     if should_skip(path) or not path.is_file():
         return False
     try:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
+        return False
+    if is_signed_fixture_receipt(path, text):
         return False
     if not CRYPTO_RE.search(text):
         return False

@@ -1,3 +1,5 @@
+# quantum_posture: this sanitized capture references a classical Ed25519 local receipt signer; it is not a post-quantum or hybrid cryptographic claim.
+
 $ helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel
 {"target":"codex","binary_path":"<repo>/bin/helm-ai-kernel","client_config_path":"~/.codex/config.toml","hook_config_path":"~/.codex/hooks.json","data_dir":"~/.helm-ai-kernel","kernel_url":"http://127.0.0.1:7714","scan_grade":"not_run","draft_policy_path":"~/.helm-ai-kernel/autoconfigure/policy.draft.json","uninstall_command":"helm-ai-kernel setup remove codex --scope user --yes --data-dir '~/.helm-ai-kernel'","scope":"user"}
 
@@ -13,4 +15,6 @@ Workstation Policy Decision Verification
   effect:    WORKSTATION_SHELL_COMMAND
   target:    rm -rf /tmp/helm-risky-cleanup
   hash:      <sha256>
-  signature: true
+  integrity: true
+  trusted:   true
+  anchor:    ~/.helm-ai-kernel/keys/workstation-ed25519.pub

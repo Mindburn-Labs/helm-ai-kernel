@@ -8,7 +8,7 @@ Typed Rust client for the retained HELM kernel API.
 cargo add helm-sdk
 ```
 
-Package metadata declares crate version `0.7.2` in `Cargo.toml`; verify registry
+Package metadata declares crate version `0.7.3` in `Cargo.toml`; verify registry
 state before publishing a pinned install claim.
 
 ## Local Development
@@ -54,4 +54,4 @@ runtime query is provided.
 
 ## Release Notes
 
-`0.7.2` is the release-hardening patch with the retained OpenAPI client surface and optional protobuf codegen.
+`0.7.3` is the release-hardening patch with the retained OpenAPI client surface and optional protobuf codegen.

@@ -1,3 +1,5 @@
+// quantum_posture: this workstation command surface references classical
+// Ed25519 receipt signing only; it adds no post-quantum control.
 package main
 
 import (
@@ -76,10 +78,12 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("workstation verify-decision", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var receiptPath string
+	var receiptPath, dataDir, trustedPublicKeyFile string
 	var jsonOut bool
 	cmd.StringVar(&receiptPath, "receipt", "", "Workstation policy decision receipt JSON")
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
+	cmd.StringVar(&trustedPublicKeyFile, "trusted-public-key-file", "", "Path to caller-owned Ed25519 public key file")
 	if err := cmd.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
@@ -98,10 +102,23 @@ func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) in
 		_, _ = fmt.Fprintf(stderr, "Error: cannot load decision receipt: %v\n", err)
 		return 1
 	}
-	ok, err := workstation.VerifyDecisionReceiptSignature(receipt)
+	integrityValid, err := workstation.VerifyDecisionReceiptSignature(receipt)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: decision receipt signature check failed: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "Error: decision receipt integrity check failed: %v\n", err)
 		return 1
+	}
+	trustedKey, trustAnchor, trustAnchorAvailable, err := resolveTrustedWorkstationPublicKey(dataDir, trustedPublicKeyFile)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: load trusted public key: %v\n", err)
+		return 1
+	}
+	signerTrusted := false
+	if trustAnchorAvailable {
+		signerTrusted, err = workstation.VerifyDecisionReceiptWithTrustedKey(receipt, trustedKey)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: trusted decision receipt verification failed: %v\n", err)
+			return 1
+		}
 	}
 	result := map[string]any{
 		"receipt":         receiptPath,
@@ -111,7 +128,9 @@ func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) in
 		"effect_type":     receipt.Request.EffectType,
 		"target":          receipt.Request.Target,
 		"receipt_hash":    receipt.ReceiptHash,
-		"signature_valid": ok,
+		"integrity_valid": integrityValid,
+		"signer_trusted":  signerTrusted,
+		"trust_anchor":    trustAnchor,
 	}
 	if jsonOut {
 		data, _ := json.MarshalIndent(result, "", "  ")
@@ -125,9 +144,11 @@ func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) in
 		_, _ = fmt.Fprintf(stdout, "  effect:    %s\n", receipt.Request.EffectType)
 		_, _ = fmt.Fprintf(stdout, "  target:    %s\n", receipt.Request.Target)
 		_, _ = fmt.Fprintf(stdout, "  hash:      %s\n", receipt.ReceiptHash)
-		_, _ = fmt.Fprintf(stdout, "  signature: %v\n", ok)
+		_, _ = fmt.Fprintf(stdout, "  integrity: %v\n", integrityValid)
+		_, _ = fmt.Fprintf(stdout, "  trusted:   %v\n", signerTrusted)
+		_, _ = fmt.Fprintf(stdout, "  anchor:    %s\n", trustAnchor)
 	}
-	if !ok {
+	if !integrityValid || !signerTrusted {
 		return 1
 	}
 	return 0
@@ -235,7 +256,7 @@ func runWorkstationCertifyCmd(args []string, stdout, stderr io.Writer) int {
 func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*contracts.WorkstationPolicyDecisionReceipt, string, string, bool, error) {
 	cmd := flag.NewFlagSet(name, flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var class, effectType, effectMode, action, toolID, target, policyPath, runID, workspaceID, actorID, out, receiptDir, seedHex, seedFile string
+	var class, effectType, effectMode, action, toolID, target, policyPath, runID, workspaceID, actorID, out, receiptDir, seedHex, seedFile, dataDir string
 	var jsonOut bool
 	cmd.StringVar(&class, "class", "shell", "Effect class: shell, network, mcp, memory, loop, file")
 	cmd.StringVar(&effectType, "effect-type", "", "Explicit workstation effect type")
@@ -251,6 +272,7 @@ func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*cont
 	cmd.StringVar(&receiptDir, "receipt-dir", "", "Write decision receipt JSON as <decision_id>.json in this directory")
 	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
 	cmd.StringVar(&seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
 	if err := cmd.Parse(args); err != nil {
 		return nil, "", "", false, err
@@ -272,7 +294,7 @@ func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*cont
 	if err != nil {
 		return nil, "", "", false, err
 	}
-	seed, err := loadSigningSeed(seedHex, seedFile)
+	seed, err := resolveWorkstationSigningSeed(dataDir, seedHex, seedFile)
 	if err != nil {
 		return nil, "", "", false, err
 	}
@@ -298,19 +320,28 @@ func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*cont
 func buildEnforceFromFlags(args []string, stderr io.Writer) (*contracts.WorkstationPolicyDecisionReceipt, string, bool, []string, error) {
 	cmd := flag.NewFlagSet("workstation enforce", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var class, target, out, receiptDir, policyPath string
+	var class, target, out, receiptDir, policyPath, seedHex, seedFile, dataDir string
 	var jsonOut bool
 	cmd.StringVar(&class, "class", "shell", "Effect class: shell, network, mcp, memory, loop, file")
 	cmd.StringVar(&target, "target", "", "Effect target")
 	cmd.StringVar(&policyPath, "policy-profile", "", "Policy profile JSON path")
 	cmd.StringVar(&out, "out", "", "Write decision receipt JSON")
 	cmd.StringVar(&receiptDir, "receipt-dir", "", "Write decision receipt JSON as <decision_id>.json in this directory")
+	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
+	cmd.StringVar(&seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
 	if err := cmd.Parse(args); err != nil {
 		return nil, "", false, nil, err
 	}
 	remaining := cmd.Args()
-	decisionArgs := []string{"--class", class, "--target", firstNonEmptyString(target, strings.Join(remaining, " ")), "--policy-profile", policyPath, "--out", out, "--receipt-dir", receiptDir}
+	decisionArgs := []string{"--class", class, "--target", firstNonEmptyString(target, strings.Join(remaining, " ")), "--policy-profile", policyPath, "--out", out, "--receipt-dir", receiptDir, "--data-dir", dataDir}
+	if seedHex != "" {
+		decisionArgs = append(decisionArgs, "--signing-seed-hex", seedHex)
+	}
+	if seedFile != "" {
+		decisionArgs = append(decisionArgs, "--signing-seed-file", seedFile)
+	}
 	if jsonOut {
 		decisionArgs = append(decisionArgs, "--json")
 	}

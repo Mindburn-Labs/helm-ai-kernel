@@ -902,7 +902,12 @@ func codexProjectTrustPending(workspace string) bool {
 	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
 		abs = resolved
 	}
-	userConfig := filepath.Join(homeDirOrDot(), ".codex", "config.toml")
+	home := homeDirOrEmpty()
+	if home == "" {
+		// Without an absolute home we cannot read recorded trust; fail closed.
+		return true
+	}
+	userConfig := filepath.Join(home, ".codex", "config.toml")
 	raw, err := os.ReadFile(userConfig)
 	if err != nil {
 		// No user-level Codex config means no recorded trust for this project.

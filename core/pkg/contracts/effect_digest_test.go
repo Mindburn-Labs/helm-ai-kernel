@@ -45,3 +45,12 @@ func TestCanonicalEffectDigestRejectsNilEffect(t *testing.T) {
 		t.Fatal("nil effect received a digest")
 	}
 }
+
+func TestCanonicalEffectDigestRejectsCompensationCycle(t *testing.T) {
+	effect := &contracts.Effect{EffectType: contracts.EffectTypeRunSandboxedCode}
+	effect.Compensation = effect
+
+	if _, err := contracts.CanonicalEffectDigest(effect); err == nil {
+		t.Fatal("cyclic compensation graph received a digest")
+	}
+}

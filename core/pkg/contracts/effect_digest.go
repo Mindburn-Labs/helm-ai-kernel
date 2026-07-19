@@ -14,7 +14,11 @@ func CanonicalEffectDigest(effect *Effect) (string, error) {
 	if effect == nil {
 		return "", fmt.Errorf("effect is nil")
 	}
-	effectBytes, err := canonicalize.JCS(canonicalEffectDigestEnvelopeFrom(effect))
+	envelope, err := canonicalEffectDigestEnvelopeFrom(effect, make(map[*Effect]struct{}))
+	if err != nil {
+		return "", err
+	}
+	effectBytes, err := canonicalize.JCS(envelope)
 	if err != nil {
 		return "", err
 	}
@@ -32,9 +36,19 @@ type canonicalEffectDigestEnvelope struct {
 	Compensation   *canonicalEffectDigestEnvelope `json:"compensation,omitempty"`
 }
 
-func canonicalEffectDigestEnvelopeFrom(effect *Effect) *canonicalEffectDigestEnvelope {
+func canonicalEffectDigestEnvelopeFrom(effect *Effect, ancestors map[*Effect]struct{}) (*canonicalEffectDigestEnvelope, error) {
 	if effect == nil {
-		return nil
+		return nil, nil
+	}
+	if _, exists := ancestors[effect]; exists {
+		return nil, fmt.Errorf("effect compensation graph contains a cycle")
+	}
+	ancestors[effect] = struct{}{}
+	defer delete(ancestors, effect)
+
+	compensation, err := canonicalEffectDigestEnvelopeFrom(effect.Compensation, ancestors)
+	if err != nil {
+		return nil, err
 	}
 	return &canonicalEffectDigestEnvelope{
 		EffectType:     effect.EffectType,
@@ -44,6 +58,6 @@ func canonicalEffectDigestEnvelopeFrom(effect *Effect) *canonicalEffectDigestEnv
 		ArgsHash:       effect.ArgsHash,
 		OutputHash:     effect.OutputHash,
 		Taint:          NormalizeTaintLabels(effect.Taint),
-		Compensation:   canonicalEffectDigestEnvelopeFrom(effect.Compensation),
-	}
+		Compensation:   compensation,
+	}, nil
 }

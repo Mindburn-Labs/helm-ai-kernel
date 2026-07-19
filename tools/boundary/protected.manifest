@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-19T22:28:45Z
+# Generated: 2026-07-19T22:36:19Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -195,8 +195,8 @@ c1910943db1064a742523422c0827c5aa12a1b865fe715249b9e27121444bb82  core/pkg/contr
 3429340fb57e94e0576861987d327a1ed1f0e615ee048011b51b627f3f77b7b5  core/pkg/contracts/effect_catalog.go
 3988397fb51017932b675de6b5d17e0525ffbaf107f7bb7e51aa8dbbab90b338  core/pkg/contracts/effect_close.go
 911679cd806c40d59d08e9ce7f7193b02bb33131af59a7f960a0b461fc68f89b  core/pkg/contracts/effect_close_test.go
-91bd786f8aa095eef37e878fd29334c09ea7b7edbbe5e8781e2d48045c2bdd14  core/pkg/contracts/effect_digest.go
-4d1f37d3c9020899a13c94d9bc3a82ce032f402cc248b12e87f855308b35af6c  core/pkg/contracts/effect_digest_test.go
+62147661b18cdb97594859a5ea0573256c86eb4d2a10c6483cdb2b815d380af2  core/pkg/contracts/effect_digest.go
+a89a259d26fecfff17db3536ca54ee69daf6042d31810d2e6e00b117f1c039cd  core/pkg/contracts/effect_digest_test.go
 1c7c5ef7a4e2701fc614d24568b5e20e530b441ba9f8faf4852436dee63270e9  core/pkg/contracts/effect_disposition.go
 ece0a93751bbda6880f444534fe99c4c17e381b1fe0d74a650defcf51bf59882  core/pkg/contracts/effect_disposition_test.go
 b64fa3d70e9a5e4807012d3b4ccb3e9e6b49d87df8c5bfbaeabfddd59726c363  core/pkg/contracts/effect_receipt.go

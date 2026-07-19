@@ -1,7 +1,9 @@
 ---
 title: Signed Receipts
-last_reviewed: 2026-06-29
+last_reviewed: 2026-07-16
 ---
+
+<!-- quantum_posture: this page documents classical Ed25519 receipt signing and does not claim post-quantum or hybrid cryptographic protection. -->
 
 # Signed Receipts
 
@@ -15,12 +17,23 @@ check what the boundary decided without trusting a chat transcript or dashboard.
 - The receipt hash and signature material.
 - The link between the request, output, and governed boundary.
 
+For workstation receipts, integrity and signer identity are deliberately
+separate checks. An integrity check shows that receipt contents match the
+public key named by the receipt. A trusted-signer check compares that key with
+an expected local or caller-supplied public key. A receipt is not trusted just
+because its self-declared signature verifies.
+
 ## Verify A Local Hook Receipt
 
 ```bash
 helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
+
+The command succeeds only when both `integrity` and `trusted` are true. To
+verify a copied receipt, pass `--trusted-public-key-file <path>` for the
+expected Ed25519 public key; do not accept a public key bundled by the receipt
+itself as the trust decision.
 
 ## Inspect Runtime Receipts
 

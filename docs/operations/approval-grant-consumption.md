@@ -1,5 +1,7 @@
 # Approval grant consumption runtime
 
+<!-- quantum_posture: documents classical Ed25519 grant/consumption signatures and RSA-JWKS (RS256) OAuth token verification; no post-quantum control is added or claimed. -->
+
 Status: internal, source-owned, pre-production.
 
 This runtime lets one authenticated workload consume one live, signed

@@ -95,8 +95,10 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		return 2
 	}
 	opts.Client = client
-	if abs, err := filepath.Abs(opts.DataDir); err == nil {
-		opts.DataDir = abs
+	if strings.TrimSpace(opts.DataDir) != "" {
+		if abs, err := filepath.Abs(opts.DataDir); err == nil {
+			opts.DataDir = abs
+		}
 	}
 	payload, err := decodePreToolPayload(stdin)
 	if err != nil {
@@ -110,7 +112,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-		return 1
+		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: local receipt signer is unavailable")
 	}
 	if receipt.Verdict != contracts.WorkstationVerdictDeny {
 		return 0
@@ -118,16 +120,26 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
-		return 1
+		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: receipt persistence is unavailable")
 	}
-	reason := fmt.Sprintf("HELM denied %s: %s (receipt: %s)", classification.Reason, receipt.ReasonCode, receiptPath)
+	return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s)", classification.Reason, receipt.ReasonCode, receiptPath))
+}
+
+func emitHookDenyOrFail(stdout, stderr io.Writer, reason string) int {
+	if err := writeHookDeny(stdout, reason); err != nil {
+		fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
+		return 2
+	}
+	return 0
+}
+
+func writeHookDeny(stdout io.Writer, reason string) error {
 	out := hookDecisionOutput{HookSpecificOutput: hookSpecificOutput{
 		HookEventName:            "PreToolUse",
 		PermissionDecision:       "deny",
 		PermissionDecisionReason: reason,
 	}}
-	_ = json.NewEncoder(stdout).Encode(out)
-	return 0
+	return json.NewEncoder(stdout).Encode(out)
 }
 
 func printHookUsage(w io.Writer) {
@@ -226,7 +238,11 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 			"tool":   payload.ToolName,
 		},
 	}
-	return workstation.Decide(profile, req, workstation.DecisionOptions{})
+	seed, err := ensureLocalWorkstationSigningSeed(opts.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("load local workstation signing key: %w", err)
+	}
+	return workstation.Decide(profile, req, workstation.DecisionOptions{SigningSeed: seed})
 }
 
 func inputString(input map[string]any, keys ...string) string {

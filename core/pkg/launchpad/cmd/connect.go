@@ -18,10 +18,10 @@ import (
 	"time"
 )
 
-// requireSecureBaseURL refuses a cloud base URL that would transmit the
+// RequireSecureBaseURL refuses a cloud base URL that would transmit the
 // device-token exchange (and the resulting bearer) in cleartext. https is
 // always allowed; http is allowed only for loopback so local/dev flows work.
-func requireSecureBaseURL(base string) error {
+func RequireSecureBaseURL(base string) error {
 	parsed, err := url.Parse(base)
 	if err != nil {
 		return fmt.Errorf("invalid cloud base URL %q: %w", base, err)
@@ -173,7 +173,7 @@ func RunConnect(opts ConnectOptions) (ConnectResult, error) {
 	}
 
 	base := resolveControlPlaneURL(opts.CloudBaseURL)
-	if err := requireSecureBaseURL(base); err != nil {
+	if err := RequireSecureBaseURL(base); err != nil {
 		return ConnectResult{}, err
 	}
 
@@ -422,6 +422,65 @@ func SaveMachineCredential(mc MachineCredential) error {
 	}
 	path := filepath.Join(dir, MachineCredentialFile)
 	return os.WriteFile(path, append(data, '\n'), 0o600)
+}
+
+// RefreshMachineCredential exchanges the stored refresh token for a rotated
+// access/refresh pair via POST {api}/api/v1/auth/device/refresh and persists
+// the rotated credential through the standard save path. It never prints or
+// logs token material; failures return an error so callers can fail closed.
+func RefreshMachineCredential(client *http.Client, mc MachineCredential) (MachineCredential, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	base := strings.TrimRight(mc.APIURL, "/")
+	if err := RequireSecureBaseURL(base); err != nil {
+		return MachineCredential{}, err
+	}
+	if strings.TrimSpace(mc.RefreshToken) == "" {
+		return MachineCredential{}, errors.New("no refresh token stored; run 'helm-ai-kernel connect' again")
+	}
+	body, err := json.Marshal(map[string]string{
+		"grant_type":    "refresh_token",
+		"refresh_token": mc.RefreshToken,
+	})
+	if err != nil {
+		return MachineCredential{}, fmt.Errorf("marshal refresh request: %w", err)
+	}
+	resp, err := postJSON(client, base+"/api/v1/auth/device/refresh", body)
+	if err != nil {
+		return MachineCredential{}, fmt.Errorf("refresh machine credential: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return MachineCredential{}, fmt.Errorf("machine credential refresh rejected (HTTP %d): %s; run 'helm-ai-kernel connect' again", resp.StatusCode, oauthMessage(raw))
+	}
+	var token machineTokenResponse
+	if err := json.Unmarshal(raw, &token); err != nil {
+		return MachineCredential{}, fmt.Errorf("parse refresh response: %w", err)
+	}
+	if token.AccessToken == "" {
+		return MachineCredential{}, errors.New("refresh response was incomplete")
+	}
+
+	now := time.Now().UTC()
+	next := mc
+	next.AccessToken = token.AccessToken
+	next.AccessExpiresAt = now.Add(time.Duration(token.ExpiresIn) * time.Second).Format(time.RFC3339)
+	if token.TokenType != "" {
+		next.TokenType = token.TokenType
+	}
+	if token.RefreshToken != "" {
+		next.RefreshToken = token.RefreshToken
+		next.RefreshExpiresAt = now.Add(time.Duration(token.RefreshExpiresIn) * time.Second).Format(time.RFC3339)
+	}
+	if token.Scope != "" {
+		next.Scope = token.Scope
+	}
+	if err := SaveMachineCredential(next); err != nil {
+		return MachineCredential{}, fmt.Errorf("persist rotated machine credential: %w", err)
+	}
+	return next, nil
 }
 
 // LoadMachineCredential reads the persisted machine credential from disk.

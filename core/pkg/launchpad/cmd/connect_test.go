@@ -269,8 +269,8 @@ func TestRequireSecureBaseURL(t *testing.T) {
 		"http://[::1]:9000",
 	}
 	for _, u := range ok {
-		if err := requireSecureBaseURL(u); err != nil {
-			t.Errorf("requireSecureBaseURL(%q) = %v, want nil", u, err)
+		if err := RequireSecureBaseURL(u); err != nil {
+			t.Errorf("RequireSecureBaseURL(%q) = %v, want nil", u, err)
 		}
 	}
 	bad := []string{
@@ -280,8 +280,8 @@ func TestRequireSecureBaseURL(t *testing.T) {
 		"ws://example.com",
 	}
 	for _, u := range bad {
-		if err := requireSecureBaseURL(u); err == nil {
-			t.Errorf("requireSecureBaseURL(%q) = nil, want rejection", u)
+		if err := RequireSecureBaseURL(u); err == nil {
+			t.Errorf("RequireSecureBaseURL(%q) = nil, want rejection", u)
 		}
 	}
 }

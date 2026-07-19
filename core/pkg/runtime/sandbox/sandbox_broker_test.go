@@ -96,10 +96,37 @@ func testVerdict() *effectgraph.NodeVerdict {
 		Decision: &contracts.DecisionRecord{
 			Verdict: string(contracts.VerdictAllow),
 		},
+		Intent: &contracts.AuthorizedExecutionIntent{ID: "intent-step-1"},
 		Profile: &effectgraph.ExecutionProfile{
 			Backend:     "docker",
 			ProfileName: "net-limited",
 		},
+	}
+}
+
+func TestPrepareExecutionRejectsPrivilegedDeniedBeforeLeaseCredentialsOrRunner(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	leaseManager := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, leaseManager).WithClock(clock)
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+	l := acquireLease(t, leaseManager)
+	verdict := testVerdict()
+	verdict.Profile.ProfileName = "privileged-denied"
+
+	if _, err := broker.PrepareExecution(ctx, l, verdict); err == nil {
+		t.Fatal("privileged-denied profile reached sandbox preparation")
+	}
+	got, err := leaseManager.Get(ctx, l.LeaseID)
+	if err != nil || got.Status != lease.LeaseStatusPending {
+		t.Fatalf("rejected profile changed lease state: lease=%+v err=%v", got, err)
+	}
+	if len(credBroker.GetIssuances()) != 0 {
+		t.Fatal("rejected profile received scoped credentials")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("rejected profile reached sandbox runner")
 	}
 }
 

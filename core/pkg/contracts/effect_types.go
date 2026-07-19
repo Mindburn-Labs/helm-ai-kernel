@@ -27,6 +27,16 @@ const (
 	// Resource effects
 	EffectTypeCloudComputeBudget = "CLOUD_COMPUTE_BUDGET" // Consume cloud compute resources against budget
 
+	// Governed company launch effect identifiers. These identifiers are reserved
+	// by the preview contract in launch_effect_types.go, but are intentionally not
+	// executable through DefaultEffectCatalog until policy/boundary promotion.
+	EffectTypeProviderProvision        = "PROVIDER_PROVISION"         // Create one exact provider resource set under an approved launch plan
+	EffectTypeDeployProductionActivate = "DEPLOY_PRODUCTION_ACTIVATE" // Activate one exact verified deployment without standing authority
+	EffectTypeSpendAuthorize           = "SPEND_AUTHORIZE"            // Authorize bounded monthly exposure without moving or holding funds
+	EffectTypeProviderRollback         = "PROVIDER_ROLLBACK"          // Restore an exact previously verified provider deployment
+	EffectTypeProviderTeardown         = "PROVIDER_TEARDOWN"          // Delete the exact provider resource set owned by a mission
+	EffectTypeCompanyArtifactUpdate    = "COMPANY_ARTIFACT_UPDATE"    // Promote a receipt-backed company artifact revision
+
 	// Business communication effects
 	EffectTypeSendEmail       = "SEND_EMAIL"        // Send email through governed connector
 	EffectTypeSendChatMessage = "SEND_CHAT_MESSAGE" // Send chat message (Slack, Teams, etc.)
@@ -326,12 +336,14 @@ func DefaultEffectCatalog() *EffectTypeCatalog {
 func EffectRiskClass(effectTypeID string) string {
 	switch effectTypeID {
 	case EffectTypeInfraDestroy, EffectTypeCICredentialAccess,
-		EffectTypeSoftwarePublish, EffectTypeDataEgress:
+		EffectTypeSoftwarePublish, EffectTypeDataEgress, EffectTypeProviderTeardown:
 		return "E4" // Critical / Irreversible
 	case EffectTypeProtectedInfraWrite, EffectTypeEnvRecreate,
-		EffectTypeAgentInvokePrivileged, EffectTypeTunnelStart:
+		EffectTypeAgentInvokePrivileged, EffectTypeTunnelStart,
+		EffectTypeProviderProvision, EffectTypeDeployProductionActivate,
+		EffectTypeSpendAuthorize, EffectTypeProviderRollback:
 		return "E3" // High Risk
-	case EffectTypeCloudComputeBudget:
+	case EffectTypeCloudComputeBudget, EffectTypeCompanyArtifactUpdate:
 		return "E2" // Medium Risk (budget-gated)
 	case EffectTypeAgentIdentityIsolation:
 		return "E1" // Low Risk (validation check)

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/workload_graph.v1.json",
+  "version": "1.1.0-alpha.1",
+  "title": "Launch Workload Graph (Preview)",
+  "description": "Provider-neutral graph of workloads and dependencies detected in one immutable repository commit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "graph_id", "tenant_id", "workspace_id", "source_commit_sha", "source_tree_hash", "nodes", "edges", "unknown_set_hash"],
+  "properties": {
+    "schema_version": { "const": "launch_workload_graph.v1" },
+    "graph_id": { "$ref": "#/$defs/non_empty" },
+    "tenant_id": { "$ref": "#/$defs/non_empty" },
+    "workspace_id": { "$ref": "#/$defs/non_empty" },
+    "source_commit_sha": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "source_tree_hash": { "$ref": "#/$defs/hash" },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["node_id", "kind", "definition_hash", "requirements_hash", "required_capabilities", "deployability"],
+        "properties": {
+          "node_id": { "$ref": "#/$defs/non_empty" },
+          "kind": { "$ref": "#/$defs/workload_kind" },
+          "definition_hash": { "$ref": "#/$defs/hash" },
+          "requirements_hash": { "$ref": "#/$defs/hash" },
+          "required_capabilities": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/non_empty" } },
+          "deployability": { "$ref": "#/$defs/status" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from_node_id", "to_node_id", "relationship"],
+        "properties": {
+          "from_node_id": { "$ref": "#/$defs/non_empty" },
+          "to_node_id": { "$ref": "#/$defs/non_empty" },
+          "relationship": { "enum": ["consumes_from", "depends_on", "publishes_to", "reads_from", "routes_to", "writes_to"] }
+        }
+      }
+    },
+    "unknown_set_hash": { "$ref": "#/$defs/hash" }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["SUPPORTED", "NEEDS_INPUT", "UNSUPPORTED", "UNKNOWN"] },
+    "workload_kind": { "enum": ["cache", "database", "function", "gpu_service", "http_service", "kubernetes", "object_storage", "queue", "scheduled_job", "static_site", "unknown", "virtual_machine", "worker"] }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "provider_neutral": true, "canonical_ordering_required": true }
+}

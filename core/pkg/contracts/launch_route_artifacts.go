@@ -170,7 +170,8 @@ type LaunchProviderPayloadEntry struct {
 
 // LaunchBlueprint is intentionally clean-room: it contains only a workload
 // shape and portable constraints. It has no source/account/provider identity,
-// approvals, payloads, receipts, or EvidencePack references.
+// approvals, payloads, receipts, or EvidencePack references. Provider-specific
+// semantics remain private until an explicit portable-vocabulary mapping ships.
 type LaunchBlueprint struct {
 	SchemaVersion             string                    `json:"schema_version"`
 	PortableVocabularyVersion string                    `json:"portable_vocabulary_version"`

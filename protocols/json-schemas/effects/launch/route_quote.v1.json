@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/effects/launch/route_quote.v1.json",
-  "version": "1.1.0-alpha.1",
+  "version": "1.2.0-alpha.1",
   "title": "Launch Route Quote (Preview)",
   "description": "Exact multi-provider cost quote. Gross exposure is independent from verified credit; unverified credit can never reduce expected cash.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "quote_id", "tenant_id", "workspace_id", "mission_id", "workload_graph_hash", "constraint_set_hash", "currency", "placement_costs", "base_provider_cost_minor", "tax_fx_reserve_minor", "gross_exposure_minor", "verified_credit_minor", "expected_cash_minor", "credit_status", "credit_snapshot_hash", "fx_snapshot_hash", "tax_snapshot_hash", "commercial_evidence_hash", "retrieved_at", "expires_at"],
+  "required": ["schema_version", "quote_id", "tenant_id", "workspace_id", "mission_id", "workload_graph_hash", "constraint_set_hash", "currency", "placement_costs", "base_provider_cost_minor", "tax_fx_reserve_minor", "gross_exposure_minor", "verified_credit_minor", "expected_cash_minor", "credit_status", "credit_snapshot_hash", "fx_snapshot_hash", "tax_snapshot_hash", "commercial_evidence_ref", "commercial_evidence_hash", "retrieved_at", "expires_at"],
   "properties": {
     "schema_version": { "const": "launch_route_quote.v1" },
     "quote_id": { "$ref": "#/$defs/non_empty" },
@@ -52,6 +52,7 @@
     "credit_snapshot_hash": { "$ref": "#/$defs/hash" },
     "fx_snapshot_hash": { "$ref": "#/$defs/hash" },
     "tax_snapshot_hash": { "$ref": "#/$defs/hash" },
+    "commercial_evidence_ref": { "$ref": "#/$defs/non_empty" },
     "commercial_evidence_hash": { "$ref": "#/$defs/hash" },
     "retrieved_at": { "type": "string", "format": "date-time" },
     "expires_at": { "type": "string", "format": "date-time" }

@@ -215,6 +215,9 @@ type LaunchRouteArtifactResolver interface {
 	ResolveLaunchProviderCertification(ref string) (LaunchProviderCertificationRecord, error)
 	ResolveLaunchConstraintSet(ref string) (LaunchConstraintSet, error)
 	ResolveLaunchRouteQuote(ref string) (LaunchRouteQuote, error)
+	ResolveLaunchCommercialEvidence(ref string) (LaunchCommercialEvidence, error)
+	ResolveLaunchFXSnapshot(ref string) (LaunchFXSnapshot, error)
+	ResolveLaunchTaxSnapshot(ref string) (LaunchTaxSnapshot, error)
 	ResolveLaunchOfferSnapshot(ref string) (LaunchOfferSnapshot, error)
 	ResolveLaunchResourceGraph(ref string) (LaunchResourceGraph, error)
 	ResolveLaunchProviderPayloadSet(ref string) (LaunchProviderPayloadSet, error)
@@ -513,6 +516,10 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 	if err != nil {
 		return fmt.Errorf("resolve launch route quote: %w", err)
 	}
+	commercialEvidence, err := resolver.ResolveLaunchCommercialEvidence(quote.CommercialEvidenceRef)
+	if err != nil {
+		return fmt.Errorf("resolve launch commercial evidence: %w", err)
+	}
 	resources, err := resolver.ResolveLaunchResourceGraph(route.ResourceGraphRef)
 	if err != nil {
 		return fmt.Errorf("resolve launch resource graph: %w", err)
@@ -544,9 +551,18 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 	if err := ValidateLaunchRouteQuote(quote); err != nil {
 		return err
 	}
+	if err := ValidateLaunchCommercialEvidence(commercialEvidence); err != nil {
+		return err
+	}
 	quoteRetrievedAt, _ := time.Parse(time.RFC3339Nano, quote.RetrievedAt)
 	if quoteRetrievedAt.After(now) {
 		return errors.New("launch route quote was retrieved in the future")
+	}
+	commercialRetrievedAt, _ := time.Parse(time.RFC3339Nano, commercialEvidence.RetrievedAt)
+	commercialExpiresAt, _ := time.Parse(time.RFC3339Nano, commercialEvidence.ExpiresAt)
+	quoteExpiresAt, _ := time.Parse(time.RFC3339Nano, quote.ExpiresAt)
+	if commercialRetrievedAt.After(now) || quoteRetrievedAt.Before(commercialRetrievedAt) || quoteExpiresAt.After(commercialExpiresAt) {
+		return errors.New("launch route quote uses future, newer, or expired commercial evidence")
 	}
 	if err := ValidateLaunchResourceGraph(resources); err != nil {
 		return err
@@ -599,7 +615,7 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 		route.TenantID != payloads.TenantID || route.WorkspaceID != payloads.WorkspaceID || route.MissionID != payloads.MissionID {
 		return errors.New("launch route artifacts cross tenant, workspace, or mission identity")
 	}
-	if quote.WorkloadGraphHash != graphHash || quote.ConstraintSetHash != constraintHash || quote.Currency != constraints.MaximumGrossCurrency || quote.GrossExposureMinor > constraints.MaximumGrossMinor {
+	if !launchConstantEqual(quote.WorkloadGraphHash, graphHash) || !launchConstantEqual(quote.ConstraintSetHash, constraintHash) || quote.Currency != constraints.MaximumGrossCurrency || quote.GrossExposureMinor > constraints.MaximumGrossMinor {
 		return errors.New("launch route quote violates the exact workload, constraints, currency, or gross cap")
 	}
 	quoteExpiry, _ := time.Parse(time.RFC3339Nano, quote.ExpiresAt)
@@ -737,6 +753,9 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 		return err
 	}
 	if err := validateLaunchQuotePlacements(quote, route.Placements, profilesByPlacement, constraints, resolver, route.TenantID, route.WorkspaceID, now); err != nil {
+		return err
+	}
+	if err := validateLaunchCommercialCostEvidence(quote, commercialEvidence, route.Placements, profilesByPlacement, resolver, now); err != nil {
 		return err
 	}
 	return nil
@@ -904,6 +923,122 @@ func validateLaunchQuotePlacements(quote LaunchRouteQuote, placements []LaunchRo
 		}
 		if quoteRetrieved.Before(snapshotRetrieved) || quoteExpiry.After(snapshotExpiry) {
 			return fmt.Errorf("launch route quote placement %s outlives or predates its offer evidence", line.PlacementID)
+		}
+	}
+	return nil
+}
+
+func validateLaunchCommercialCostEvidence(quote LaunchRouteQuote, evidence LaunchCommercialEvidence, placements []LaunchRoutePlacement, profilesByPlacement map[string]LaunchProviderCapabilityProfile, resolver LaunchRouteArtifactResolver, now time.Time) error {
+	if evidence.EvidenceID != quote.CommercialEvidenceRef || evidence.TenantID != quote.TenantID || evidence.WorkspaceID != quote.WorkspaceID || evidence.MissionID != quote.MissionID || evidence.QuoteCurrency != quote.Currency || len(evidence.PlacementCosts) != len(quote.PlacementCosts) || len(evidence.PlacementCosts) != len(placements) {
+		return errors.New("launch commercial evidence does not bind the exact quote identity, currency, or placements")
+	}
+	evidenceHash, err := DeriveLaunchCommercialEvidenceHash(evidence)
+	if err != nil || !launchConstantEqual(evidenceHash, quote.CommercialEvidenceHash) {
+		return errors.New("launch commercial evidence hash does not match source-owned content")
+	}
+	fxSetHash, err := DeriveLaunchFXSnapshotSetHash(evidence.PlacementCosts)
+	if err != nil || !launchConstantEqual(fxSetHash, quote.FXSnapshotHash) {
+		return errors.New("launch route quote FX snapshot hash does not bind its commercial evidence set")
+	}
+	taxSetHash, err := DeriveLaunchTaxSnapshotSetHash(evidence.PlacementCosts)
+	if err != nil || !launchConstantEqual(taxSetHash, quote.TaxSnapshotHash) {
+		return errors.New("launch route quote tax snapshot hash does not bind its commercial evidence set")
+	}
+
+	placementsByID := make(map[string]LaunchRoutePlacement, len(placements))
+	quoteCostsByID := make(map[string]LaunchPlacementCost, len(quote.PlacementCosts))
+	for _, placement := range placements {
+		placementsByID[placement.PlacementID] = placement
+	}
+	for _, line := range quote.PlacementCosts {
+		quoteCostsByID[line.PlacementID] = line
+	}
+	quoteRetrievedAt, _ := time.Parse(time.RFC3339Nano, quote.RetrievedAt)
+	quoteExpiresAt, _ := time.Parse(time.RFC3339Nano, quote.ExpiresAt)
+	commercialRetrievedAt, _ := time.Parse(time.RFC3339Nano, evidence.RetrievedAt)
+	commercialExpiresAt, _ := time.Parse(time.RFC3339Nano, evidence.ExpiresAt)
+
+	for _, commercialLine := range evidence.PlacementCosts {
+		placement, placementOK := placementsByID[commercialLine.PlacementID]
+		quoteLine, quoteOK := quoteCostsByID[commercialLine.PlacementID]
+		profile, profileOK := profilesByPlacement[commercialLine.PlacementID]
+		if !placementOK || !quoteOK || !profileOK {
+			return fmt.Errorf("launch commercial placement %s is absent from the exact route or quote", commercialLine.PlacementID)
+		}
+		if commercialLine.ProviderID != placement.ProviderID || commercialLine.ProviderAccountRef != placement.ProviderAccountRef || !launchConstantEqual(commercialLine.ProviderAccountHash, placement.ProviderAccountHash) || commercialLine.RegionID != placement.RegionID || commercialLine.OfferingID != placement.OfferingID || commercialLine.BillingCadence != quoteLine.BillingCadence || commercialLine.CommitmentTerm != quoteLine.CommitmentTerm {
+			return fmt.Errorf("launch commercial placement %s does not bind the exact provider route", commercialLine.PlacementID)
+		}
+		if commercialLine.PriceEvidenceRef != profile.PricingEvidenceRef || !launchConstantEqual(commercialLine.PriceEvidenceHash, profile.PricingEvidenceHash) || commercialLine.TermsEvidenceRef != profile.TermsEvidenceRef || !launchConstantEqual(commercialLine.TermsEvidenceHash, profile.TermsEvidenceHash) || !launchConstantEqual(quoteLine.PriceEvidenceHash, commercialLine.PriceEvidenceHash) || !launchConstantEqual(quoteLine.TermsEvidenceHash, commercialLine.TermsEvidenceHash) {
+			return fmt.Errorf("launch commercial placement %s does not bind certified price and terms evidence", commercialLine.PlacementID)
+		}
+
+		fxSnapshot, err := resolver.ResolveLaunchFXSnapshot(commercialLine.FXSnapshotRef)
+		if err != nil {
+			return fmt.Errorf("resolve launch FX snapshot %s: %w", commercialLine.FXSnapshotRef, err)
+		}
+		if err := ValidateLaunchFXSnapshot(fxSnapshot); err != nil {
+			return err
+		}
+		fxHash, err := DeriveLaunchFXSnapshotHash(fxSnapshot)
+		if err != nil || fxSnapshot.SnapshotID != commercialLine.FXSnapshotRef || !launchConstantEqual(fxHash, commercialLine.FXSnapshotHash) || fxSnapshot.SourceCurrency != commercialLine.ProviderCurrency || fxSnapshot.QuoteCurrency != quote.Currency {
+			return fmt.Errorf("launch commercial placement %s FX snapshot does not bind the exact currencies", commercialLine.PlacementID)
+		}
+		if commercialLine.ProviderCurrency != quote.Currency && commercialLine.FXReserveBPS == 0 {
+			return fmt.Errorf("launch commercial placement %s cross-currency quote has no conservative FX reserve", commercialLine.PlacementID)
+		}
+
+		taxSnapshot, err := resolver.ResolveLaunchTaxSnapshot(commercialLine.TaxSnapshotRef)
+		if err != nil {
+			return fmt.Errorf("resolve launch tax snapshot %s: %w", commercialLine.TaxSnapshotRef, err)
+		}
+		if err := ValidateLaunchTaxSnapshot(taxSnapshot); err != nil {
+			return err
+		}
+		taxHash, err := DeriveLaunchTaxSnapshotHash(taxSnapshot)
+		if err != nil || taxSnapshot.SnapshotID != commercialLine.TaxSnapshotRef || !launchConstantEqual(taxHash, commercialLine.TaxSnapshotHash) || taxSnapshot.TenantID != quote.TenantID || taxSnapshot.WorkspaceID != quote.WorkspaceID || taxSnapshot.ProviderID != placement.ProviderID || taxSnapshot.ProviderAccountRef != placement.ProviderAccountRef || !launchConstantEqual(taxSnapshot.ProviderAccountHash, placement.ProviderAccountHash) || taxSnapshot.Jurisdiction != placement.Jurisdiction {
+			return fmt.Errorf("launch commercial placement %s tax snapshot does not bind the exact account and jurisdiction", commercialLine.PlacementID)
+		}
+		if taxSnapshot.Status == LaunchTaxConservativeMaximum && taxSnapshot.TaxRateBPS == 0 {
+			return fmt.Errorf("launch commercial placement %s unknown tax used a zero conservative maximum", commercialLine.PlacementID)
+		}
+
+		for label, window := range map[string][2]string{
+			"FX":  {fxSnapshot.RetrievedAt, fxSnapshot.ExpiresAt},
+			"tax": {taxSnapshot.RetrievedAt, taxSnapshot.ExpiresAt},
+		} {
+			retrievedAt, _ := time.Parse(time.RFC3339Nano, window[0])
+			expiresAt, _ := time.Parse(time.RFC3339Nano, window[1])
+			if retrievedAt.After(now) || commercialRetrievedAt.Before(retrievedAt) || commercialExpiresAt.After(expiresAt) || quoteRetrievedAt.Before(commercialRetrievedAt) || quoteExpiresAt.After(commercialExpiresAt) {
+				return fmt.Errorf("launch commercial placement %s uses future, newer, or expired %s evidence", commercialLine.PlacementID, label)
+			}
+		}
+
+		baseCost, ok := launchCeilMulDiv(commercialLine.ProviderBaseCostMinor, fxSnapshot.RateNumerator, fxSnapshot.RateDenominator)
+		if !ok || baseCost != commercialLine.BaseCostMinor {
+			return fmt.Errorf("launch commercial placement %s base cost does not equal its conservative FX conversion", commercialLine.PlacementID)
+		}
+		taxReserve, ok := launchCeilMulDiv(baseCost, taxSnapshot.TaxRateBPS, 10_000)
+		if !ok || taxReserve != commercialLine.TaxReserveMinor {
+			return fmt.Errorf("launch commercial placement %s tax reserve does not equal its source-owned rate", commercialLine.PlacementID)
+		}
+		baseWithTax, ok := addLaunchMinor(baseCost, taxReserve)
+		if !ok {
+			return fmt.Errorf("launch commercial placement %s base and tax reserve overflow int64", commercialLine.PlacementID)
+		}
+		fxReserve, ok := launchCeilMulDiv(baseWithTax, commercialLine.FXReserveBPS, 10_000)
+		if !ok || fxReserve != commercialLine.FXReserveMinor {
+			return fmt.Errorf("launch commercial placement %s FX reserve is inconsistent", commercialLine.PlacementID)
+		}
+		reserve, ok := addLaunchMinor(taxReserve, fxReserve)
+		if !ok || reserve != commercialLine.TaxFXReserveMinor {
+			return fmt.Errorf("launch commercial placement %s aggregate reserve is inconsistent", commercialLine.PlacementID)
+		}
+		gross, ok := addLaunchMinor(baseCost, reserve)
+		if !ok || gross != commercialLine.GrossExposureMinor {
+			return fmt.Errorf("launch commercial placement %s gross exposure is inconsistent", commercialLine.PlacementID)
+		}
+		if quoteLine.BaseCostMinor != baseCost || quoteLine.TaxFXReserveMinor != reserve || quoteLine.GrossExposureMinor != gross {
+			return fmt.Errorf("launch route quote placement %s understates source-owned commercial evidence", commercialLine.PlacementID)
 		}
 	}
 	return nil

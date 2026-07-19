@@ -130,6 +130,7 @@ type LaunchRouteQuote struct {
 	CreditSnapshotHash     string                `json:"credit_snapshot_hash"`
 	FXSnapshotHash         string                `json:"fx_snapshot_hash"`
 	TaxSnapshotHash        string                `json:"tax_snapshot_hash"`
+	CommercialEvidenceRef  string                `json:"commercial_evidence_ref"`
 	CommercialEvidenceHash string                `json:"commercial_evidence_hash"`
 	RetrievedAt            string                `json:"retrieved_at"`
 	ExpiresAt              string                `json:"expires_at"`
@@ -316,6 +317,9 @@ func ValidateLaunchRouteQuote(value LaunchRouteQuote) error {
 	}
 	if !validLaunchSHA256(value.WorkloadGraphHash) || !validLaunchSHA256(value.ConstraintSetHash) || !launchCurrencyPattern.MatchString(value.Currency) || len(value.PlacementCosts) == 0 {
 		return errors.New("launch route quote graph, constraints, currency, or placements are invalid")
+	}
+	if value.CommercialEvidenceRef == "" {
+		return errors.New("launch route quote commercial evidence reference is missing")
 	}
 	for field, hash := range map[string]string{
 		"credit_snapshot_hash":     value.CreditSnapshotHash,

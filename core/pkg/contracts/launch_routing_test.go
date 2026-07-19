@@ -50,6 +50,9 @@ func TestLaunchRoutingSchemasAndDigitalOceanCandidateProfile(t *testing.T) {
 		"effects/launch/repository_analysis.v1.json":  fixture.analysis,
 		"effects/launch/constraint_set.v1.json":       fixture.constraints,
 		"effects/launch/offer_snapshot.v1.json":       fixture.offer,
+		"effects/launch/commercial_evidence.v1.json":  fixture.commercial,
+		"effects/launch/fx_snapshot.v1.json":          fixture.fxSnapshot,
+		"effects/launch/tax_snapshot.v1.json":         fixture.taxSnapshot,
 		"effects/launch/route_quote.v1.json":          fixture.quote,
 		"effects/launch/resource_graph.v1.json":       fixture.resources,
 		"effects/launch/provider_payload_set.v1.json": fixture.payloads,
@@ -224,6 +227,90 @@ func TestRouteRecomputesEveryApprovalBoundArtifact(t *testing.T) {
 			mutate(&fixture)
 			if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil {
 				t.Fatal("tampered approval-bound artifact was accepted")
+			}
+		})
+	}
+}
+
+func TestRouteRejectsCommercialEvidenceUnderstatement(t *testing.T) {
+	fixture := cloneLaunchRouteFixture(multiLaunchRouteFixture(t))
+	quote := fixture.quote
+	quote.PlacementCosts = append([]contracts.LaunchPlacementCost(nil), quote.PlacementCosts...)
+	quote.PlacementCosts[0].BaseCostMinor = 1
+	quote.PlacementCosts[0].TaxFXReserveMinor = 0
+	quote.PlacementCosts[0].GrossExposureMinor = 1
+	quote.PlacementCosts[0].ExpectedCashMinor = 1
+	quote.BaseProviderCostMinor = 2001
+	quote.TaxFXReserveMinor = 200
+	quote.GrossExposureMinor = 2201
+	quote.ExpectedCashMinor = 2201
+	if err := contracts.ValidateLaunchRouteQuote(quote); err != nil {
+		t.Fatalf("understated quote must remain internally consistent for this adversarial test: %v", err)
+	}
+	quoteHash, err := contracts.DeriveLaunchRouteQuoteHash(quote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.resolver.quotes[quote.QuoteID] = quote
+	fixture.route.RouteQuoteHash = quoteHash
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "understates") {
+		t.Fatalf("internally consistent quote understated resolved commercial evidence: %v", err)
+	}
+}
+
+func TestCommercialEvidenceUsesConservativeIntegerCeilings(t *testing.T) {
+	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
+	fixture := cloneLaunchRouteFixture(singleLaunchRouteFixture(t, profile, false))
+	fixture.fxSnapshot.SourceCurrency = "USD"
+	fixture.fxSnapshot.RateNumerator = 2
+	fixture.fxSnapshot.RateDenominator = 3
+	line := &fixture.commercial.PlacementCosts[0]
+	line.ProviderCurrency = "USD"
+	line.ProviderBaseCostMinor = 1001
+	line.FXReserveBPS = 100
+	line.BaseCostMinor = 668
+	line.TaxReserveMinor = 134
+	line.FXReserveMinor = 9
+	line.TaxFXReserveMinor = 143
+	line.GrossExposureMinor = 811
+	quoteLine := &fixture.quote.PlacementCosts[0]
+	quoteLine.BaseCostMinor = 668
+	quoteLine.TaxFXReserveMinor = 143
+	quoteLine.GrossExposureMinor = 811
+	quoteLine.ExpectedCashMinor = 611
+	fixture.quote.BaseProviderCostMinor = 668
+	fixture.quote.TaxFXReserveMinor = 143
+	fixture.quote.GrossExposureMinor = 811
+	fixture.quote.ExpectedCashMinor = 611
+	rebindLaunchCommercialFixture(t, &fixture)
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err != nil {
+		t.Fatalf("conservative rational FX, tax, and reserve ceilings were rejected: %v", err)
+	}
+}
+
+func TestRouteRejectsUnsafeFXAndTaxEvidence(t *testing.T) {
+	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
+	base := singleLaunchRouteFixture(t, profile, false)
+	for name, mutate := range map[string]func(*launchRouteFixture){
+		"future FX snapshot": func(f *launchRouteFixture) {
+			f.fxSnapshot.RetrievedAt = "2026-07-19T02:00:00Z"
+		},
+		"zero unknown-tax maximum": func(f *launchRouteFixture) {
+			f.taxSnapshot.Status = contracts.LaunchTaxConservativeMaximum
+			f.taxSnapshot.TaxRateBPS = 0
+		},
+		"cross-currency without reserve": func(f *launchRouteFixture) {
+			f.fxSnapshot.SourceCurrency = "USD"
+			f.commercial.PlacementCosts[0].ProviderCurrency = "USD"
+			f.commercial.PlacementCosts[0].FXReserveBPS = 0
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := cloneLaunchRouteFixture(base)
+			mutate(&fixture)
+			rebindLaunchCommercialFixture(t, &fixture)
+			if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil {
+				t.Fatal("unsafe commercial evidence was accepted")
 			}
 		})
 	}
@@ -610,6 +697,9 @@ type launchRouteFixture struct {
 	graph         contracts.LaunchWorkloadGraph
 	constraints   contracts.LaunchConstraintSet
 	quote         contracts.LaunchRouteQuote
+	commercial    contracts.LaunchCommercialEvidence
+	fxSnapshot    contracts.LaunchFXSnapshot
+	taxSnapshot   contracts.LaunchTaxSnapshot
 	offer         contracts.LaunchOfferSnapshot
 	resources     contracts.LaunchResourceGraph
 	payloads      contracts.LaunchProviderPayloadSet
@@ -623,6 +713,9 @@ type launchTestResolver struct {
 	certifications map[string]contracts.LaunchProviderCertificationRecord
 	constraints    map[string]contracts.LaunchConstraintSet
 	quotes         map[string]contracts.LaunchRouteQuote
+	commercial     map[string]contracts.LaunchCommercialEvidence
+	fxSnapshots    map[string]contracts.LaunchFXSnapshot
+	taxSnapshots   map[string]contracts.LaunchTaxSnapshot
 	offers         map[string]contracts.LaunchOfferSnapshot
 	resources      map[string]contracts.LaunchResourceGraph
 	payloads       map[string]contracts.LaunchProviderPayloadSet
@@ -670,6 +763,27 @@ func (r *launchTestResolver) ResolveLaunchRouteQuote(ref string) (contracts.Laun
 	value, ok := r.quotes[ref]
 	if !ok {
 		return value, errors.New("quote not found")
+	}
+	return value, nil
+}
+func (r *launchTestResolver) ResolveLaunchCommercialEvidence(ref string) (contracts.LaunchCommercialEvidence, error) {
+	value, ok := r.commercial[ref]
+	if !ok {
+		return value, errors.New("commercial evidence not found")
+	}
+	return value, nil
+}
+func (r *launchTestResolver) ResolveLaunchFXSnapshot(ref string) (contracts.LaunchFXSnapshot, error) {
+	value, ok := r.fxSnapshots[ref]
+	if !ok {
+		return value, errors.New("FX snapshot not found")
+	}
+	return value, nil
+}
+func (r *launchTestResolver) ResolveLaunchTaxSnapshot(ref string) (contracts.LaunchTaxSnapshot, error) {
+	value, ok := r.taxSnapshots[ref]
+	if !ok {
+		return value, errors.New("tax snapshot not found")
 	}
 	return value, nil
 }
@@ -743,12 +857,24 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, PayloadHash: launchRoutingHash("a")},
 		},
 	}
+	fxSnapshot := launchFXSnapshot("fx-1", "EUR", "EUR")
+	fxHash, _ := contracts.DeriveLaunchFXSnapshotHash(fxSnapshot)
+	taxSnapshot := launchTaxSnapshot("tax-1", profile.ProviderID, "account:1", launchRoutingHash("1"), region.Jurisdiction, 2000)
+	taxHash, _ := contracts.DeriveLaunchTaxSnapshotHash(taxSnapshot)
+	commercial := contracts.LaunchCommercialEvidence{
+		SchemaVersion: contracts.LaunchCommercialEvidenceSchemaVersion, EvidenceID: "commercial-1", TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1", QuoteCurrency: "EUR",
+		PlacementCosts: []contracts.LaunchCommercialPlacementEvidence{{PlacementID: "placement-1", ProviderID: profile.ProviderID, ProviderAccountRef: "account:1", ProviderAccountHash: launchRoutingHash("1"), RegionID: region.RegionID, OfferingID: offering.OfferingID, BillingCadence: "monthly", CommitmentTerm: "monthly", ProviderCurrency: "EUR", ProviderBaseCostMinor: 1000, PriceEvidenceRef: profile.PricingEvidenceRef, PriceEvidenceHash: profile.PricingEvidenceHash, TermsEvidenceRef: profile.TermsEvidenceRef, TermsEvidenceHash: profile.TermsEvidenceHash, FXSnapshotRef: fxSnapshot.SnapshotID, FXSnapshotHash: fxHash, TaxSnapshotRef: taxSnapshot.SnapshotID, TaxSnapshotHash: taxHash, FXReserveBPS: 0, BaseCostMinor: 1000, TaxReserveMinor: 200, FXReserveMinor: 0, TaxFXReserveMinor: 200, GrossExposureMinor: 1200}},
+		RetrievedAt:    "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T12:00:00Z",
+	}
+	commercialHash, _ := contracts.DeriveLaunchCommercialEvidenceHash(commercial)
+	fxSetHash, _ := contracts.DeriveLaunchFXSnapshotSetHash(commercial.PlacementCosts)
+	taxSetHash, _ := contracts.DeriveLaunchTaxSnapshotSetHash(commercial.PlacementCosts)
 	quote := contracts.LaunchRouteQuote{
 		SchemaVersion: contracts.LaunchRouteQuoteSchemaVersion, QuoteID: "quote-1", TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1",
 		WorkloadGraphHash: graphHash, ConstraintSetHash: constraintHash, Currency: "EUR",
 		PlacementCosts:        []contracts.LaunchPlacementCost{{PlacementID: "placement-1", ProviderID: profile.ProviderID, ProviderAccountRef: "account:1", ProviderAccountHash: launchRoutingHash("1"), RegionID: region.RegionID, OfferingID: offering.OfferingID, BillingCadence: "monthly", CommitmentTerm: "monthly", BaseCostMinor: 1000, TaxFXReserveMinor: 200, GrossExposureMinor: 1200, VerifiedCreditMinor: 200, ExpectedCashMinor: 1000, CreditStatus: contracts.LaunchCreditVerified, OfferSnapshotRef: offer.SnapshotID, OfferSnapshotHash: offerHash, PriceEvidenceHash: profile.PricingEvidenceHash, TermsEvidenceHash: profile.TermsEvidenceHash}},
 		BaseProviderCostMinor: 1000, TaxFXReserveMinor: 200, GrossExposureMinor: 1200, VerifiedCreditMinor: 200, ExpectedCashMinor: 1000,
-		CreditStatus: contracts.LaunchCreditVerified, FXSnapshotHash: launchRoutingHash("5"), TaxSnapshotHash: launchRoutingHash("6"), CommercialEvidenceHash: launchRoutingHash("a"),
+		CreditStatus: contracts.LaunchCreditVerified, FXSnapshotHash: fxSetHash, TaxSnapshotHash: taxSetHash, CommercialEvidenceRef: commercial.EvidenceID, CommercialEvidenceHash: commercialHash,
 		RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T12:00:00Z",
 	}
 	quote.CreditSnapshotHash, _ = contracts.DeriveLaunchOfferSnapshotSetHash(quote.PlacementCosts)
@@ -800,11 +926,14 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 	resolver.profiles[profile.ProfileID] = profile
 	resolver.constraints[constraints.ConstraintSetID] = constraints
 	resolver.quotes[quote.QuoteID] = quote
+	resolver.commercial[commercial.EvidenceID] = commercial
+	resolver.fxSnapshots[fxSnapshot.SnapshotID] = fxSnapshot
+	resolver.taxSnapshots[taxSnapshot.SnapshotID] = taxSnapshot
 	resolver.offers[offer.SnapshotID] = offer
 	resolver.resources[resources.ResourceGraphID] = resources
 	resolver.payloads[payloads.PayloadSetID] = payloads
 	resolver.generated[route.GeneratedSpecRef] = route.GeneratedSpecHash
-	return launchRouteFixture{route: route, resolver: resolver, analysis: analysis, graph: graph, constraints: constraints, quote: quote, offer: offer, resources: resources, payloads: payloads, certification: certification}
+	return launchRouteFixture{route: route, resolver: resolver, analysis: analysis, graph: graph, constraints: constraints, quote: quote, commercial: commercial, fxSnapshot: fxSnapshot, taxSnapshot: taxSnapshot, offer: offer, resources: resources, payloads: payloads, certification: certification}
 }
 
 func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {
@@ -856,6 +985,25 @@ func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {
 	dbOffer := launchOfferSnapshot(dbProfile.ProviderID, "offer-data", "account:data", launchRoutingHash("2"), dbProfile.TermsEvidenceHash, contracts.LaunchCreditNone, 0)
 	webOfferHash, _ := contracts.DeriveLaunchOfferSnapshotHash(webOffer)
 	dbOfferHash, _ := contracts.DeriveLaunchOfferSnapshotHash(dbOffer)
+	webFX := launchFXSnapshot("fx-edge", "EUR", "EUR")
+	dbFX := launchFXSnapshot("fx-data", "EUR", "EUR")
+	webFXHash, _ := contracts.DeriveLaunchFXSnapshotHash(webFX)
+	dbFXHash, _ := contracts.DeriveLaunchFXSnapshotHash(dbFX)
+	webTax := launchTaxSnapshot("tax-edge", webProfile.ProviderID, "account:web", launchRoutingHash("1"), "EU", 1000)
+	dbTax := launchTaxSnapshot("tax-data", dbProfile.ProviderID, "account:data", launchRoutingHash("2"), "EU", 1000)
+	webTaxHash, _ := contracts.DeriveLaunchTaxSnapshotHash(webTax)
+	dbTaxHash, _ := contracts.DeriveLaunchTaxSnapshotHash(dbTax)
+	commercial := contracts.LaunchCommercialEvidence{
+		SchemaVersion: contracts.LaunchCommercialEvidenceSchemaVersion, EvidenceID: "commercial-multi", TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1", QuoteCurrency: "EUR",
+		PlacementCosts: []contracts.LaunchCommercialPlacementEvidence{
+			{PlacementID: "placement-a", ProviderID: webProfile.ProviderID, ProviderAccountRef: "account:web", ProviderAccountHash: launchRoutingHash("1"), RegionID: "eu-edge", OfferingID: "app", BillingCadence: "monthly", CommitmentTerm: "monthly", ProviderCurrency: "EUR", ProviderBaseCostMinor: 1000, PriceEvidenceRef: webProfile.PricingEvidenceRef, PriceEvidenceHash: webProfile.PricingEvidenceHash, TermsEvidenceRef: webProfile.TermsEvidenceRef, TermsEvidenceHash: webProfile.TermsEvidenceHash, FXSnapshotRef: webFX.SnapshotID, FXSnapshotHash: webFXHash, TaxSnapshotRef: webTax.SnapshotID, TaxSnapshotHash: webTaxHash, FXReserveBPS: 0, BaseCostMinor: 1000, TaxReserveMinor: 100, FXReserveMinor: 0, TaxFXReserveMinor: 100, GrossExposureMinor: 1100},
+			{PlacementID: "placement-b", ProviderID: dbProfile.ProviderID, ProviderAccountRef: "account:data", ProviderAccountHash: launchRoutingHash("2"), RegionID: "eu-data", OfferingID: "postgres", BillingCadence: "monthly", CommitmentTerm: "monthly", ProviderCurrency: "EUR", ProviderBaseCostMinor: 2000, PriceEvidenceRef: dbProfile.PricingEvidenceRef, PriceEvidenceHash: dbProfile.PricingEvidenceHash, TermsEvidenceRef: dbProfile.TermsEvidenceRef, TermsEvidenceHash: dbProfile.TermsEvidenceHash, FXSnapshotRef: dbFX.SnapshotID, FXSnapshotHash: dbFXHash, TaxSnapshotRef: dbTax.SnapshotID, TaxSnapshotHash: dbTaxHash, FXReserveBPS: 0, BaseCostMinor: 2000, TaxReserveMinor: 200, FXReserveMinor: 0, TaxFXReserveMinor: 200, GrossExposureMinor: 2200},
+		},
+		RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T12:00:00Z",
+	}
+	commercialHash, _ := contracts.DeriveLaunchCommercialEvidenceHash(commercial)
+	fxSetHash, _ := contracts.DeriveLaunchFXSnapshotSetHash(commercial.PlacementCosts)
+	taxSetHash, _ := contracts.DeriveLaunchTaxSnapshotSetHash(commercial.PlacementCosts)
 	quote := contracts.LaunchRouteQuote{
 		SchemaVersion: contracts.LaunchRouteQuoteSchemaVersion, QuoteID: "quote-multi", TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1", WorkloadGraphHash: graphHash, ConstraintSetHash: constraintHash, Currency: "EUR",
 		PlacementCosts: []contracts.LaunchPlacementCost{
@@ -863,7 +1011,7 @@ func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {
 			{PlacementID: "placement-b", ProviderID: dbProfile.ProviderID, ProviderAccountRef: "account:data", ProviderAccountHash: launchRoutingHash("2"), RegionID: "eu-data", OfferingID: "postgres", BillingCadence: "monthly", CommitmentTerm: "monthly", BaseCostMinor: 2000, TaxFXReserveMinor: 200, GrossExposureMinor: 2200, VerifiedCreditMinor: 0, ExpectedCashMinor: 2200, CreditStatus: contracts.LaunchCreditNone, OfferSnapshotRef: dbOffer.SnapshotID, OfferSnapshotHash: dbOfferHash, PriceEvidenceHash: dbProfile.PricingEvidenceHash, TermsEvidenceHash: dbProfile.TermsEvidenceHash},
 		},
 		BaseProviderCostMinor: 3000, TaxFXReserveMinor: 300, GrossExposureMinor: 3300, VerifiedCreditMinor: 0, ExpectedCashMinor: 3300, CreditStatus: contracts.LaunchCreditNone,
-		FXSnapshotHash: launchRoutingHash("4"), TaxSnapshotHash: launchRoutingHash("5"), CommercialEvidenceHash: launchRoutingHash("6"), RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T12:00:00Z",
+		FXSnapshotHash: fxSetHash, TaxSnapshotHash: taxSetHash, CommercialEvidenceRef: commercial.EvidenceID, CommercialEvidenceHash: commercialHash, RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T12:00:00Z",
 	}
 	quote.CreditSnapshotHash, _ = contracts.DeriveLaunchOfferSnapshotSetHash(quote.PlacementCosts)
 	analysisHash, _ := contracts.DeriveLaunchRepositoryAnalysisHash(analysis)
@@ -878,12 +1026,17 @@ func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {
 	resolver.profiles[dbProfile.ProfileID] = dbProfile
 	resolver.constraints[constraints.ConstraintSetID] = constraints
 	resolver.quotes[quote.QuoteID] = quote
+	resolver.commercial[commercial.EvidenceID] = commercial
+	resolver.fxSnapshots[webFX.SnapshotID] = webFX
+	resolver.fxSnapshots[dbFX.SnapshotID] = dbFX
+	resolver.taxSnapshots[webTax.SnapshotID] = webTax
+	resolver.taxSnapshots[dbTax.SnapshotID] = dbTax
 	resolver.offers[webOffer.SnapshotID] = webOffer
 	resolver.offers[dbOffer.SnapshotID] = dbOffer
 	resolver.resources[resources.ResourceGraphID] = resources
 	resolver.payloads[payloads.PayloadSetID] = payloads
 	resolver.generated[route.GeneratedSpecRef] = route.GeneratedSpecHash
-	return launchRouteFixture{route: route, resolver: resolver, analysis: analysis, graph: graph, constraints: constraints, quote: quote, resources: resources, payloads: payloads}
+	return launchRouteFixture{route: route, resolver: resolver, analysis: analysis, graph: graph, constraints: constraints, quote: quote, commercial: commercial, fxSnapshot: webFX, taxSnapshot: webTax, resources: resources, payloads: payloads}
 }
 
 func launchHTTPWorkloadGraph() contracts.LaunchWorkloadGraph {
@@ -918,6 +1071,23 @@ func launchOfferSnapshot(providerID, snapshotID, accountRef, accountHash, termsH
 	}
 }
 
+func launchFXSnapshot(snapshotID, sourceCurrency, quoteCurrency string) contracts.LaunchFXSnapshot {
+	return contracts.LaunchFXSnapshot{
+		SchemaVersion: contracts.LaunchFXSnapshotSchemaVersion, SnapshotID: snapshotID, SourceCurrency: sourceCurrency, QuoteCurrency: quoteCurrency,
+		RateNumerator: 1, RateDenominator: 1, OfficialSourceURL: "https://example.invalid/fx/" + snapshotID, ContentHash: launchRoutingHash("e"),
+		RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T13:00:00Z",
+	}
+}
+
+func launchTaxSnapshot(snapshotID, providerID, accountRef, accountHash, jurisdiction string, taxRateBPS int64) contracts.LaunchTaxSnapshot {
+	return contracts.LaunchTaxSnapshot{
+		SchemaVersion: contracts.LaunchTaxSnapshotSchemaVersion, SnapshotID: snapshotID, TenantID: "tenant-1", WorkspaceID: "workspace-1",
+		ProviderID: providerID, ProviderAccountRef: accountRef, ProviderAccountHash: accountHash, Jurisdiction: jurisdiction,
+		Status: contracts.LaunchTaxProviderEstimate, TaxRateBPS: taxRateBPS, OfficialSourceURL: "https://example.invalid/tax/" + snapshotID, ContentHash: launchRoutingHash("f"),
+		RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-19T13:00:00Z",
+	}
+}
+
 func launchProviderProfile(provider, connector, region, offering string, workloads, capabilities, lifecycles []string, urnPrefix string) contracts.LaunchProviderCapabilityProfile {
 	return contracts.LaunchProviderCapabilityProfile{
 		SchemaVersion: contracts.LaunchProviderProfileSchemaVersion, ProfileID: provider + "-candidate", ProviderID: provider, ConnectorID: connector, ConnectorContractHash: launchRoutingHash("d"), ProfileVersion: "candidate-1", ProfileStatus: contracts.LaunchProviderProfileCandidate,
@@ -933,13 +1103,15 @@ func launchProviderProfile(provider, connector, region, offering string, workloa
 }
 
 func newLaunchResolver() *launchTestResolver {
-	return &launchTestResolver{analyses: map[string]contracts.LaunchRepositoryAnalysis{}, graphs: map[string]contracts.LaunchWorkloadGraph{}, profiles: map[string]contracts.LaunchProviderCapabilityProfile{}, certifications: map[string]contracts.LaunchProviderCertificationRecord{}, constraints: map[string]contracts.LaunchConstraintSet{}, quotes: map[string]contracts.LaunchRouteQuote{}, offers: map[string]contracts.LaunchOfferSnapshot{}, resources: map[string]contracts.LaunchResourceGraph{}, payloads: map[string]contracts.LaunchProviderPayloadSet{}, generated: map[string]string{}, keys: map[string]ed25519.PublicKey{}, current: map[string]string{}}
+	return &launchTestResolver{analyses: map[string]contracts.LaunchRepositoryAnalysis{}, graphs: map[string]contracts.LaunchWorkloadGraph{}, profiles: map[string]contracts.LaunchProviderCapabilityProfile{}, certifications: map[string]contracts.LaunchProviderCertificationRecord{}, constraints: map[string]contracts.LaunchConstraintSet{}, quotes: map[string]contracts.LaunchRouteQuote{}, commercial: map[string]contracts.LaunchCommercialEvidence{}, fxSnapshots: map[string]contracts.LaunchFXSnapshot{}, taxSnapshots: map[string]contracts.LaunchTaxSnapshot{}, offers: map[string]contracts.LaunchOfferSnapshot{}, resources: map[string]contracts.LaunchResourceGraph{}, payloads: map[string]contracts.LaunchProviderPayloadSet{}, generated: map[string]string{}, keys: map[string]ed25519.PublicKey{}, current: map[string]string{}}
 }
 
 func cloneLaunchRouteFixture(value launchRouteFixture) launchRouteFixture {
 	data, _ := json.Marshal(value.route)
 	var route contracts.LaunchRouteBinding
 	_ = json.Unmarshal(data, &route)
+	value.quote.PlacementCosts = append([]contracts.LaunchPlacementCost(nil), value.quote.PlacementCosts...)
+	value.commercial.PlacementCosts = append([]contracts.LaunchCommercialPlacementEvidence(nil), value.commercial.PlacementCosts...)
 	resolver := newLaunchResolver()
 	for key, item := range value.resolver.analyses {
 		resolver.analyses[key] = item
@@ -958,6 +1130,15 @@ func cloneLaunchRouteFixture(value launchRouteFixture) launchRouteFixture {
 	}
 	for key, item := range value.resolver.quotes {
 		resolver.quotes[key] = item
+	}
+	for key, item := range value.resolver.commercial {
+		resolver.commercial[key] = item
+	}
+	for key, item := range value.resolver.fxSnapshots {
+		resolver.fxSnapshots[key] = item
+	}
+	for key, item := range value.resolver.taxSnapshots {
+		resolver.taxSnapshots[key] = item
 	}
 	for key, item := range value.resolver.offers {
 		resolver.offers[key] = item
@@ -980,6 +1161,47 @@ func cloneLaunchRouteFixture(value launchRouteFixture) launchRouteFixture {
 	value.route = route
 	value.resolver = resolver
 	return value
+}
+
+func rebindLaunchCommercialFixture(t *testing.T, fixture *launchRouteFixture) {
+	t.Helper()
+	fxHash, err := contracts.DeriveLaunchFXSnapshotHash(fixture.fxSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taxHash, err := contracts.DeriveLaunchTaxSnapshotHash(fixture.taxSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.commercial.PlacementCosts[0].FXSnapshotRef = fixture.fxSnapshot.SnapshotID
+	fixture.commercial.PlacementCosts[0].FXSnapshotHash = fxHash
+	fixture.commercial.PlacementCosts[0].TaxSnapshotRef = fixture.taxSnapshot.SnapshotID
+	fixture.commercial.PlacementCosts[0].TaxSnapshotHash = taxHash
+	commercialHash, err := contracts.DeriveLaunchCommercialEvidenceHash(fixture.commercial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fxSetHash, err := contracts.DeriveLaunchFXSnapshotSetHash(fixture.commercial.PlacementCosts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taxSetHash, err := contracts.DeriveLaunchTaxSnapshotSetHash(fixture.commercial.PlacementCosts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.quote.CommercialEvidenceRef = fixture.commercial.EvidenceID
+	fixture.quote.CommercialEvidenceHash = commercialHash
+	fixture.quote.FXSnapshotHash = fxSetHash
+	fixture.quote.TaxSnapshotHash = taxSetHash
+	quoteHash, err := contracts.DeriveLaunchRouteQuoteHash(fixture.quote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.route.RouteQuoteHash = quoteHash
+	fixture.resolver.quotes[fixture.quote.QuoteID] = fixture.quote
+	fixture.resolver.commercial[fixture.commercial.EvidenceID] = fixture.commercial
+	fixture.resolver.fxSnapshots[fixture.fxSnapshot.SnapshotID] = fixture.fxSnapshot
+	fixture.resolver.taxSnapshots[fixture.taxSnapshot.SnapshotID] = fixture.taxSnapshot
 }
 
 func launchRoutingHash(char string) string {

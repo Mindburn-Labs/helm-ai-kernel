@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/tax_snapshot.v1.json",
+  "version": "1.0.0-alpha.1",
+  "title": "Launch Tax Snapshot (Preview)",
+  "description": "Account- and jurisdiction-bound provider tax estimate or conservative maximum.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "tenant_id", "workspace_id", "provider_id", "provider_account_ref", "provider_account_hash", "jurisdiction", "status", "tax_rate_bps", "official_source_url", "content_hash", "retrieved_at", "expires_at"],
+  "properties": {
+    "schema_version": { "const": "launch_tax_snapshot.v1" },
+    "snapshot_id": { "$ref": "#/$defs/non_empty" },
+    "tenant_id": { "$ref": "#/$defs/non_empty" },
+    "workspace_id": { "$ref": "#/$defs/non_empty" },
+    "provider_id": { "$ref": "#/$defs/non_empty" },
+    "provider_account_ref": { "$ref": "#/$defs/provider_account_ref" },
+    "provider_account_hash": { "$ref": "#/$defs/hash" },
+    "jurisdiction": { "$ref": "#/$defs/non_empty" },
+    "status": { "enum": ["PROVIDER_ESTIMATE", "CONSERVATIVE_MAXIMUM"] },
+    "tax_rate_bps": { "type": "integer", "minimum": 0, "maximum": 100000 },
+    "official_source_url": { "type": "string", "format": "uri", "pattern": "^https://[^/?#@]+(/[^?#]*)?$" },
+    "content_hash": { "$ref": "#/$defs/hash" },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 },
+    "provider_account_ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,31}:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$" }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "source_owned_resolution_required": true, "unknown_tax_requires_conservative_maximum": true }
+}

@@ -111,9 +111,11 @@
 
 Launch routing schemas are preview-only. Provider-specific regions, SKUs,
 hostnames, supported workload shapes, pricing evidence, and actions live in
-versioned capability profiles; workload kinds and graph relationships remain
-extensible tokens rather than a website-only Kernel enum. Schema presence or a
-candidate provider profile grants no execution authority.
+versioned capability profiles. Route quotes resolve source-owned commercial,
+FX, tax, and credit evidence and recompute gross exposure using conservative
+integer arithmetic. Workload kinds and graph relationships remain extensible
+tokens rather than a website-only Kernel enum. Schema presence or a candidate
+provider profile grants no execution authority.
 
 ### Evidence (`evidence/`)
 

@@ -131,10 +131,12 @@ def needs_annotation(path: pathlib.Path) -> bool:
         return False
     if "quantum_posture:" in text:
         return False
-    # Reference-pack vectors are copied byte-for-byte from an external source
-    # authority and are hash-pinned by their consumer.  Keep that payload
-    # immutable; require its local SOURCE-MANIFEST to carry the posture note.
-    if path.name == "vectors.json":
+    # Byte-exact reference-pack payloads -- the pinned `vectors.json` index and
+    # the canonical `*.c14n.json` signing inputs it hash-pins -- carry live
+    # Ed25519 signatures and are consumed as fixed bytes.  An inline annotation
+    # would break the signature/digest, so keep them immutable and require the
+    # local SOURCE-MANIFEST to carry the posture note instead.
+    if path.name == "vectors.json" or path.name.endswith(".c14n.json"):
         manifest = path.with_name("SOURCE-MANIFEST.json")
         if manifest.is_file():
             try:

@@ -63,6 +63,7 @@ You get:  a signed receipt you can verify offline
 | CLI commands | [CLI reference](docs/reference/cli.md) |
 | Security model | [Execution security model](docs/EXECUTION_SECURITY_MODEL.md) |
 | MCP tool quarantine | [MCP integration](docs/INTEGRATIONS/mcp.md) |
+| Client implementation handoff | [Implementation partner handoff](docs/guides/implementation-partner.md) |
 | Evidence verification | [Verification](docs/VERIFICATION.md) |
 | AI security category map | [AI Security Categories](docs/AI_SECURITY_CATEGORIES.md) |
 
@@ -70,6 +71,12 @@ You get:  a signed receipt you can verify offline
 
 - Not Kubernetes Helm.
 - Not the hosted HELM Enterprise product.
+- Not HELM Company Builder, Company OS, or HELM Network. Those are target
+  commercial experiences around this boundary, not Kernel features or evidence
+  that they are generally available.
+- Not an app generator, foundation model, social network, bank, escrow service,
+  payment rail, or general ledger. Users may build with any compatible external
+  tool and route consequential actions through this boundary.
 - Not a vague AI-safety claim.
 
 It is the open-source execution boundary: policy in, action checked, receipt out.
@@ -101,8 +108,8 @@ bin/helm-ai-kernel setup claude-code --yes
 
 | Release target | SDK pointers after publication |
 | --- | --- |
-| `v0.7.2` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.2` |
-| `v0.7.2` | `io.github.mindburnlabs:helm-sdk:0.7.2` |
+| `v0.7.3` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.3` |
+| `v0.7.3` | `io.github.mindburnlabs:helm-sdk:0.7.3` |
 
 Apache-2.0. See [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), and
 [CONTRIBUTING.md](CONTRIBUTING.md).

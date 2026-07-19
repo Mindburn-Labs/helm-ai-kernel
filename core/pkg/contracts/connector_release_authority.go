@@ -1,3 +1,5 @@
+// quantum_posture: connector release authority is signed and verified with
+// classical Ed25519; this contract makes no hybrid or post-quantum claim.
 package contracts
 
 import (

@@ -1,5 +1,7 @@
 package approvalceremony
 
+// quantum_posture: integration test exercises classical Ed25519 signatures and SHA-256 hashing for connector effect reservation; it makes no post-quantum or hybrid claim.
+
 import (
 	"bytes"
 	"context"

@@ -6,6 +6,15 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # HELM-129: publish an image for an arbitrary commit (e.g. a PR head) so
+  # qa-deploy can pull a registry image instead of side-loading. Mirrors the
+  # source_sha dispatch path of svc-helm-control-plane's release-oci.yml.
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full commit SHA to publish after green CI
+        required: true
+        type: string
 
 permissions: read-all
 
@@ -17,6 +26,10 @@ env:
 jobs:
   version-contract:
     runs-on: ubuntu-latest
+    # Root of the tag-release pipeline: every other release job needs-chains
+    # from this one, so skipping it on workflow_dispatch skips the whole v*
+    # pipeline and only container-sha (below) runs.
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Check tag and lockstep source versions
@@ -295,6 +308,105 @@ jobs:
           COSIGN_EXPERIMENTAL: "1"
         run: |
           cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.container.outputs.slim-digest }}"
+
+  container-sha:
+    # HELM-129: dispatch-only publisher for an arbitrary commit sha. Guards on
+    # a green CI (ci.yml) run for the sha, then builds, pushes, and
+    # cosign-signs ghcr.io/mindburn-labs/helm-ai-kernel:sha-<sha>. The v* tag
+    # pipeline above is untouched; it skips on dispatch (version-contract
+    # gate) and this job skips on tag pushes.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    # One publish in flight per sha: the tag is deterministic, so two
+    # concurrent dispatches would race the same ghcr tag to different digests.
+    concurrency:
+      group: container-sha-${{ inputs.source_sha }}
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Validate source SHA format
+        run: |
+          set -euo pipefail
+          if ! [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be a full 40-character lowercase commit sha, got '${SOURCE_SHA}'"
+            exit 1
+          fi
+      - name: Verify source SHA has green CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Only count runs whose head repository is THIS repo. A pull_request
+          # run from a fork also lands in this workflow's run list with the
+          # fork's head_sha, so an unfiltered total_count would let a dispatch
+          # publish a signed image built from untrusted, never-merged fork code.
+          matching="$(gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&status=success&per_page=100" \
+            | jq --arg repo "${GITHUB_REPOSITORY}" \
+                '[.workflow_runs[] | select(.head_repository.full_name == $repo)] | length')"
+          if [[ "${matching}" -lt 1 ]]; then
+            echo "::error::No successful CI (ci.yml) run for ${SOURCE_SHA} originating in ${GITHUB_REPOSITORY}; refusing to publish an unverified commit"
+            exit 1
+          fi
+          echo "Found ${matching} successful in-repo CI run(s) for ${SOURCE_SHA}"
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ inputs.source_sha }}
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - id: build-meta
+        name: Compute build metadata
+        run: |
+          # Not a tag build: keep main.version semver with an explicit
+          # prerelease marker carrying the short commit.
+          short="$(git rev-parse --short=12 HEAD)"
+          {
+            echo "version=0.0.0-sha.${short}"
+            echo "commit=${short}"
+            echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "${GITHUB_OUTPUT}"
+      - id: push
+        name: Build and push sha image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          provenance: true
+          sbom: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BUILD_VERSION=${{ steps.build-meta.outputs.version }}
+            BUILD_COMMIT=${{ steps.build-meta.outputs.commit }}
+            BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ inputs.source_sha }}
+          # The cosign identity of a dispatch build is the same release.yml as
+          # a v* release, so the image itself must state that it is dev-grade:
+          # never a released version, only a preview of one commit.
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ inputs.source_sha }}
+            org.opencontainers.image.version=${{ steps.build-meta.outputs.version }}
+            org.opencontainers.image.created=${{ steps.build-meta.outputs.build_time }}
+            dev.mindburn.build-grade=dev
+            dev.mindburn.build-origin=release.yml/container-sha(workflow_dispatch)
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Sign sha image keyless
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
 
   benchmark-pin:
     runs-on: ubuntu-latest

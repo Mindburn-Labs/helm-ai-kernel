@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: integration tests over classical Ed25519 approval
+// signatures; no post-quantum claim.
+
 import (
 	"bytes"
 	"context"

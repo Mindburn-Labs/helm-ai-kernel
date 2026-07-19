@@ -5,20 +5,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="$ROOT/docs/assets"
 BIN="${HELM_AI_KERNEL_BIN:-$ROOT/bin/helm-ai-kernel}"
 FONT="${HELM_REAL_USE_FONT:-/System/Library/Fonts/SFNSMono.ttf}"
+RENDER_GIF="${HELM_RENDER_REAL_USE_GIF:-0}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-if ! command -v magick >/dev/null 2>&1; then
-  echo "record-real-use-assets: ImageMagick 'magick' is required to render GIF assets" >&2
-  exit 1
-fi
+case "$RENDER_GIF" in
+  0|1) ;;
+  *)
+    echo "record-real-use-assets: HELM_RENDER_REAL_USE_GIF must be 0 or 1" >&2
+    exit 1
+    ;;
+esac
 
 if [[ ! -x "$BIN" ]]; then
   make -C "$ROOT" build >/dev/null
-fi
-
-if [[ ! -f "$FONT" ]]; then
-  FONT="/System/Library/Fonts/Menlo.ttc"
 fi
 
 mkdir -p "$OUT_DIR"
@@ -69,21 +69,24 @@ sanitize() {
 }
 
 run_capture
-sanitize <"$RAW" >"$TRANSCRIPT"
+{
+  printf '%s\n\n' '# quantum_posture: this sanitized capture references a classical Ed25519 local receipt signer; it is not a post-quantum or hybrid cryptographic claim.'
+  sanitize <"$RAW"
+} >"$TRANSCRIPT"
 
 if ! grep -q "permissionDecision\":\"deny" "$TRANSCRIPT"; then
   echo "record-real-use-assets: capture did not include a hook DENY" >&2
   exit 1
 fi
 
-if ! grep -q "signature: true" "$TRANSCRIPT"; then
-  echo "record-real-use-assets: capture did not include offline signature verification" >&2
+if ! grep -q "integrity: true" "$TRANSCRIPT" || ! grep -q "trusted:   true" "$TRANSCRIPT"; then
+  echo "record-real-use-assets: capture did not include trusted offline receipt verification" >&2
   exit 1
 fi
 
 cat >"$PROVENANCE" <<JSON
 {
-  "asset": "docs/assets/helm-real-use-deny-verify.gif",
+  "asset": "docs/assets/helm-real-use-deny-verify.transcript.txt",
   "kind": "real_cli_capture",
   "demo_script": false,
   "generated_by": "scripts/record-real-use-assets.sh",
@@ -93,10 +96,20 @@ cat >"$PROVENANCE" <<JSON
     "helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json"
   ],
   "expected_verdict": "DENY",
-  "expected_verification": "signature: true",
+  "expected_verification": "integrity: true; trusted: true",
   "transcript": "docs/assets/helm-real-use-deny-verify.transcript.txt"
 }
 JSON
+
+if [[ "$RENDER_GIF" == "1" ]]; then
+  if ! command -v magick >/dev/null 2>&1; then
+    echo "record-real-use-assets: ImageMagick 'magick' is required when HELM_RENDER_REAL_USE_GIF=1" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "$FONT" ]]; then
+    FONT="/System/Library/Fonts/Menlo.ttc"
+  fi
 
 write_frame() {
   local frame="$1"
@@ -150,7 +163,8 @@ Workstation Policy Decision Verification
   effect:    WORKSTATION_SHELL_COMMAND
   target:    rm -rf /tmp/helm-risky-cleanup
   hash:      <sha256>
-  signature: true
+  integrity: true
+  trusted:   true
 FRAME
 
 write_frame 4 <<'FRAME'
@@ -160,7 +174,7 @@ What this real-use capture proves:
 2. The Codex-style PreToolUse hook denies a risky Bash call.
 3. HELM writes a decision receipt under ~/.helm-ai-kernel.
 4. The tiny CLI verifier checks the receipt offline.
-5. The captured verifier output ends with signature: true.
+5. The captured verifier output proves both receipt integrity and the expected signer.
 
 No cloud account. No model key. No Docker. No production credentials.
 FRAME
@@ -176,5 +190,9 @@ done
 magick -delay 180 "$TMP/frame-1.png" "$TMP/frame-2.png" "$TMP/frame-3.png" -delay 240 "$TMP/frame-4.png" -loop 0 "$GIF"
 
 echo "Recorded real-use GIF: $GIF"
+else
+  echo "Rendered GIF skipped; set HELM_RENDER_REAL_USE_GIF=1 to create the optional visual aid."
+fi
+
 echo "Transcript: $TRANSCRIPT"
 echo "Provenance: $PROVENANCE"

@@ -129,8 +129,8 @@ type BridgeConfig struct {
 	// Profile is the workstation policy profile. Zero value uses the default
 	// observe/draft profile (which denies all operate-class MCP calls).
 	Profile contracts.WorkstationPolicyProfile
-	// SigningSeed is the ed25519 seed used to sign decision receipts. Zero value
-	// uses the workstation observe-only seed (non-production).
+	// SigningSeed is the Ed25519 seed used to sign decision receipts. It is
+	// required; a zero value fails closed through the governed decision path.
 	SigningSeed []byte
 	// Nonces prevents permit replay. Zero value uses an in-process store.
 	Nonces effects.NonceStore

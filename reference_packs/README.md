@@ -1,5 +1,6 @@
 # Reference Packs
 <!-- docs-generated: surface-readme -->
+<!-- quantum_posture: reference packs pin classical Ed25519 signing vectors; no post-quantum cryptographic control is added or claimed. -->
 
 ## Purpose
 

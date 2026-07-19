@@ -1,7 +1,9 @@
 ---
 title: CLI
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-16
 ---
+
+<!-- quantum_posture: this page documents CLI use of classical Ed25519 receipt checks and adds no post-quantum cryptographic control. -->
 
 # CLI
 
@@ -61,10 +63,15 @@ helm-ai-kernel boundary verify --record-id <record-id> --json
 ```bash
 helm-ai-kernel receipts tail --agent <agent-id>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json>
+helm-ai-kernel workstation verify-decision --receipt <receipt.json> --trusted-public-key-file <expected-ed25519-public-key>
 ```
 
 `ALLOW`, `DENY`, and `ESCALATE` records include a reason code. `DENY` and
 `ESCALATE` do not dispatch in enforce mode.
+
+Workstation verification exits successfully only when receipt integrity and
+the signer trust anchor both verify. A signature that validates against the
+key embedded in a receipt is not, by itself, proof of an expected signer.
 
 ## OpenAI-Compatible Proxy
 

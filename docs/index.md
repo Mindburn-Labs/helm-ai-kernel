@@ -1,6 +1,6 @@
 ---
 title: HELM documentation
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-15
 ---
 
 # HELM documentation
@@ -45,3 +45,4 @@ Then choose one path.
 - [CLI](reference/cli.md)
 - [HTTP API](reference/http-api.md)
 - [SDKs](sdks/00_INDEX.md)
+- [Implementation partner handoff](guides/implementation-partner.md)

@@ -26,6 +26,8 @@ const (
 	approvalGrantConsumptionRecoverPath  = "/internal/v1/approval-grants/recover"
 	approvalDispatchAdmissionPath        = "/internal/v1/approval-grants/admit-dispatch"
 	approvalDispatchAdmissionRecoverPath = "/internal/v1/approval-grants/recover-dispatch-admission"
+	effectDispositionPath                = "/internal/v1/effect-dispositions"
+	effectDispositionRecoverPath         = "/internal/v1/effect-dispositions/recover"
 	approvalGrantConsumptionMaxBody      = 32 << 10
 	approvalConsumptionReasonHeader      = "X-Helm-Reason-Code"
 	approvalConsumptionFencedReason      = "EMERGENCY_STOP_FENCED"
@@ -44,18 +46,25 @@ type approvalDispatchAdmitter interface {
 	Recover(context.Context, approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error)
 }
 
+type effectDispositionRecorder interface {
+	Record(context.Context, contracts.EffectDispositionCommandEnvelope) (approvalceremony.EffectDispositionRecord, error)
+	Recover(context.Context, string) (approvalceremony.EffectDispositionRecord, error)
+}
+
 type approvalConsumerTokenValidator interface {
 	ValidateAuthorization(string) (*mcppkg.OAuthTokenClaims, error)
 }
 
 type approvalConsumptionRuntime struct {
-	consumer          approvalGrantConsumer
-	admitter          approvalDispatchAdmitter
-	validator         approvalConsumerTokenValidator
-	dispatchValidator approvalConsumerTokenValidator
-	stops             kernel.ScopedStopReader
-	audience          string
-	maxTokenTTL       time.Duration
+	consumer             approvalGrantConsumer
+	admitter             approvalDispatchAdmitter
+	validator            approvalConsumerTokenValidator
+	dispatchValidator    approvalConsumerTokenValidator
+	disposition          effectDispositionRecorder
+	dispositionValidator approvalConsumerTokenValidator
+	stops                kernel.ScopedStopReader
+	audience             string
+	maxTokenTTL          time.Duration
 }
 
 type approvalGrantConsumptionRequest struct {
@@ -94,6 +103,10 @@ func registerApprovalGrantConsumptionRoutes(mux *http.ServeMux, runtime *approva
 	mux.HandleFunc(approvalGrantConsumptionRecoverPath, runtime.protect(runtime.handle(true)))
 	mux.HandleFunc(approvalDispatchAdmissionPath, runtime.protectDispatch(runtime.handleDispatch(false)))
 	mux.HandleFunc(approvalDispatchAdmissionRecoverPath, runtime.protectDispatch(runtime.handleDispatch(true)))
+	if runtime.disposition != nil {
+		mux.HandleFunc(effectDispositionPath, runtime.protectDisposition(runtime.handleEffectDispositionRecord))
+		mux.HandleFunc(effectDispositionRecoverPath, runtime.protectDisposition(runtime.handleEffectDispositionRecover))
+	}
 }
 
 func (runtime *approvalConsumptionRuntime) protect(next http.HandlerFunc) http.HandlerFunc {
@@ -108,6 +121,99 @@ func (runtime *approvalConsumptionRuntime) protectDispatch(next http.HandlerFunc
 		runtime.dispatchValidator, runtime != nil && runtime.admitter != nil && runtime.stops != nil,
 		"helm-approval-dispatch", "approval-dispatcher", "approval dispatch", next,
 	)
+}
+
+func (runtime *approvalConsumptionRuntime) protectDisposition(next http.HandlerFunc) http.HandlerFunc {
+	protected := runtime.protectWorkload(
+		runtime.dispositionValidator, runtime != nil && runtime.disposition != nil,
+		"helm-effect-disposition", "effect-disposition-recorder", "effect disposition", next,
+	)
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Helm-Contract-Status", "internal_non_production")
+		protected(w, r)
+	}
+}
+
+func (runtime *approvalConsumptionRuntime) handleEffectDispositionRecord(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		api.WriteMethodNotAllowed(w)
+		return
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		api.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported media type", "Content-Type must be application/json")
+		return
+	}
+	var envelope contracts.EffectDispositionCommandEnvelope
+	r.Body = http.MaxBytesReader(w, r.Body, approvalGrantConsumptionMaxBody)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&envelope) != nil || decoder.Decode(&struct{}{}) != io.EOF || envelope.Validate() != nil {
+		api.WriteBadRequest(w, "Invalid effect disposition command")
+		return
+	}
+	record, err := runtime.disposition.Record(r.Context(), envelope)
+	if err != nil {
+		writeEffectDispositionError(w, err)
+		return
+	}
+	writeEffectDispositionRecord(w, record)
+}
+
+func (runtime *approvalConsumptionRuntime) handleEffectDispositionRecover(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		api.WriteMethodNotAllowed(w)
+		return
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		api.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported media type", "Content-Type must be application/json")
+		return
+	}
+	var request struct {
+		CommandID string `json:"command_id"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, approvalGrantConsumptionMaxBody)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&request) != nil || decoder.Decode(&struct{}{}) != io.EOF || !validWorkloadClaim(request.CommandID) {
+		api.WriteBadRequest(w, "Invalid effect disposition command id")
+		return
+	}
+	record, err := runtime.disposition.Recover(r.Context(), request.CommandID)
+	if err != nil {
+		writeEffectDispositionError(w, err)
+		return
+	}
+	writeEffectDispositionRecord(w, record)
+}
+
+func writeEffectDispositionRecord(w http.ResponseWriter, record approvalceremony.EffectDispositionRecord) {
+	if record.Validate() != nil {
+		api.WriteError(w, http.StatusServiceUnavailable, "Effect disposition unavailable", "signed disposition record is incomplete")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Helm-Contract-Status", "internal_non_production")
+	_ = json.NewEncoder(w).Encode(record)
+}
+
+func writeEffectDispositionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, approvalceremony.ErrInvalidRecord):
+		api.WriteBadRequest(w, "Invalid effect disposition command")
+	case errors.Is(err, approvalceremony.ErrConsumerUnavailable), errors.Is(err, approvalceremony.ErrEffectDispositionCommandRejected):
+		api.WriteForbidden(w, "Effect disposition authority rejected the request")
+	case errors.Is(err, approvalceremony.ErrNotFound):
+		api.WriteError(w, http.StatusNotFound, "Effect disposition not found", "no signed disposition exists for this workload scope")
+	case errors.Is(err, approvalceremony.ErrEffectDispositionConflict), errors.Is(err, approvalceremony.ErrEffectDispositionTerminal),
+		errors.Is(err, approvalceremony.ErrEffectDispositionRequiresFence), errors.Is(err, approvalceremony.ErrTransitionConflict):
+		api.WriteConflict(w, "Effect disposition conflicts with current authority state")
+	default:
+		api.WriteError(w, http.StatusServiceUnavailable, "Effect disposition unavailable", "durable disposition authority rejected the operation")
+	}
 }
 
 func (runtime *approvalConsumptionRuntime) protectWorkload(validator approvalConsumerTokenValidator, ready bool, realm, role, capability string, next http.HandlerFunc) http.HandlerFunc {

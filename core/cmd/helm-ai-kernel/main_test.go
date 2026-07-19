@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -40,8 +41,9 @@ func TestRun_Help(t *testing.T) {
 	// Overwrite runServer logic to avoid starting the actual server
 	originalRunServer := startServer
 	defer func() { startServer = originalRunServer }()
-	startServer = func() {
+	startServer = func() error {
 		// No-op for testing
+		return nil
 	}
 
 	exitCode := Run(args, &stdout, &stderr)
@@ -75,7 +77,7 @@ func TestRun_HelpOmitsRemovedUICommands(t *testing.T) {
 
 	originalRunServer := startServer
 	defer func() { startServer = originalRunServer }()
-	startServer = func() {}
+	startServer = func() error { return nil }
 
 	exitCode := Run(args, &stdout, &stderr)
 
@@ -101,12 +103,36 @@ func TestRun_Unknown(t *testing.T) {
 	// Overwrite runServer logic to avoid crash due to missing env vars
 	originalRunServer := startServer
 	defer func() { startServer = originalRunServer }()
-	startServer = func() {}
+	startServer = func() error { return nil }
 
 	exitCode := Run(args, &stdout, &stderr)
 
 	assert.Equal(t, 2, exitCode)
 	assert.Contains(t, stderr.String(), "Unknown command")
+}
+
+func TestRunServerCommandReportsStartupFailure(t *testing.T) {
+	originalRunServer := startServer
+	defer func() { startServer = originalRunServer }()
+	startServer = func() error { return errors.New("bind failed") }
+
+	var stdout, stderr bytes.Buffer
+	exitCode := runServerCommand("server", nil, &stdout, &stderr)
+
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, stderr.String(), "bind failed")
+}
+
+func TestRunLegacyServerFlagsReportStartupFailure(t *testing.T) {
+	originalRunServer := startServer
+	defer func() { startServer = originalRunServer }()
+	startServer = func() error { return errors.New("legacy bind failed") }
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Run([]string{"helm", "--legacy-server-flag"}, &stdout, &stderr)
+
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, stderr.String(), "legacy bind failed")
 }
 
 // TestRun_Health_Fail verifies availability of the health subcommand logic.

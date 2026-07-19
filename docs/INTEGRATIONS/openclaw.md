@@ -1,59 +1,42 @@
 ---
 title: OpenClaw
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-15
 ---
 
 # OpenClaw
 
-Use HELM as a pre-dispatch boundary for OpenClaw-style skill calls.
+The integration source includes a mapping for OpenClaw-style skill calls. It is
+a source adapter, not a published registry install surface and not evidence of
+upstream endorsement.
 
 ```text
-OpenClaw skill call
--> fromOpenClawSkillCall(...)
--> HELM evaluate
--> ALLOW: dispatch
--> DENY or ESCALATE: block and write a receipt
+OpenClaw-style skill call
+-> source adapter maps the action
+-> documented local HELM HTTP or SDK contract
+-> ALLOW: the owning wrapper may dispatch
+-> DENY or ESCALATE: the owning wrapper stays blocked
+-> source read-back and receipt verification
 ```
 
-## Adapter
+## Use Today
 
-The supported adapter lives in `helm-agent-integrations`:
+Use one of the verified clients on [SDKs](/sdks), or generate a client from the
+[public OpenAPI](/openapi.yaml). Keep the call in your own wrapper until HELM
+returns its verdict. Do not install an unpublished adapter package.
 
-```ts
-import { fromOpenClawSkillCall, preflightAction } from "@mindburn/helm-tool-wrapper";
+## Evidence Required Before Dispatch
 
-const intent = fromOpenClawSkillCall({
-  skill: "gmail-send",
-  input: {
-    to: "ops@example.invalid",
-    subject: "Draft follow-up",
-  },
-  conversation_id: "local-session",
-});
-
-const decision = await preflightAction({
-  helmUrl: "http://127.0.0.1:7714",
-  actionUrn: intent.actionUrn,
-  input: intent.input,
-  metadata: intent.metadata,
-});
-```
-
-Dispatch the OpenClaw skill only when HELM returns `ALLOW`. For `DENY` or
-`ESCALATE`, show the decision and receipt path to the developer.
-
-## Receipt Sample
-
-The integration repository includes a local sample for an external send that
-escalates before dispatch:
-
-```bash
-python3 scripts/generate_samples.py --check
-python3 scripts/verify_samples.py
-cat receipts/samples/openclaw-email-escalate.json
-```
+- exact skill and action mapping;
+- bounded credential and resource scope;
+- local HELM base URL and route authentication;
+- blocked `DENY` and `ESCALATE` cases;
+- explicit `ALLOW` executor owned by the wrapper;
+- source-system result read-back;
+- receipt or EvidencePack verification; and
+- rollback, revocation, and support ownership.
 
 ## Scope
 
-This page covers the OpenClaw skill-call boundary only. It does not claim
-upstream endorsement or a hosted OpenClaw runtime.
+This page covers the source mapping and required boundary contract only. It does
+not claim a hosted OpenClaw runtime, automatic interception, or a released
+adapter package.

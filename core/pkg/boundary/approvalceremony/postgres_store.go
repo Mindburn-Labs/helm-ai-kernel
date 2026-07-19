@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: persists classical Ed25519 grant/consumption signatures as
+// opaque hex; storage layer, not a cryptographic control.
+
 import (
 	"context"
 	"database/sql"

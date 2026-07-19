@@ -1,3 +1,5 @@
+// quantum_posture: workstation receipt verification references classical
+// Ed25519 keys only; this command layer adds no post-quantum control.
 package main
 
 import (
@@ -62,12 +64,14 @@ func runWorkstationImportCmd(args []string, stdout, stderr io.Writer) int {
 		jsonOut   bool
 		seedHex   string
 		seedFile  string
+		dataDir   string
 	)
 	cmd.StringVar(&artifacts, "artifacts", "", "Artifact directory containing run.manifest.json")
 	cmd.StringVar(&out, "out", "", "Write canonical import result JSON to this path")
 	cmd.BoolVar(&jsonOut, "json", false, "Print canonical import result JSON")
 	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
 	cmd.StringVar(&seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -76,7 +80,7 @@ func runWorkstationImportCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "Error: --artifacts is required")
 		return 2
 	}
-	seed, err := loadSigningSeed(seedHex, seedFile)
+	seed, err := resolveWorkstationSigningSeed(dataDir, seedHex, seedFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
@@ -114,11 +118,15 @@ func runWorkstationViewCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.SetOutput(stderr)
 
 	var (
-		receiptPath string
-		jsonOut     bool
+		receiptPath          string
+		jsonOut              bool
+		dataDir              string
+		trustedPublicKeyFile string
 	)
 	cmd.StringVar(&receiptPath, "receipt", "", "Agent Run Receipt or workstation import result JSON")
 	cmd.BoolVar(&jsonOut, "json", false, "Print summary JSON")
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
+	cmd.StringVar(&trustedPublicKeyFile, "trusted-public-key-file", "", "Path to caller-owned Ed25519 public key file")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -132,22 +140,40 @@ func runWorkstationViewCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "Error: cannot read receipt: %v\n", err)
 		return 1
 	}
-	ok, err := workstation.VerifyReceiptSignature(result.Receipt)
+	integrityValid, err := workstation.VerifyReceiptSignature(result.Receipt)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: receipt signature check failed: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "Error: receipt integrity check failed: %v\n", err)
 		return 1
 	}
+	trustedKey, trustAnchor, trustAnchorAvailable, err := resolveTrustedWorkstationPublicKey(dataDir, trustedPublicKeyFile)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: load trusted public key: %v\n", err)
+		return 1
+	}
+	signerTrusted := false
+	if trustAnchorAvailable {
+		signerTrusted, err = workstation.VerifyReceiptWithTrustedKey(result.Receipt, trustedKey)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: trusted receipt verification failed: %v\n", err)
+			return 1
+		}
+	}
 	summary := workstation.Summary(result.Receipt)
-	summary["signature_valid"] = ok
+	summary["integrity_valid"] = integrityValid
+	summary["signer_trusted"] = signerTrusted
+	summary["trust_anchor"] = trustAnchor
 	if result.ReplayRootHash != "" {
 		summary["replay_root_hash"] = result.ReplayRootHash
 	}
 	if jsonOut {
 		data, _ := json.MarshalIndent(summary, "", "  ")
 		_, _ = fmt.Fprintln(stdout, string(data))
-		return 0
+	} else {
+		printWorkstationSummary(stdout, summary)
 	}
-	printWorkstationSummary(stdout, summary)
+	if !integrityValid || !signerTrusted {
+		return 1
+	}
 	return 0
 }
 
@@ -158,9 +184,12 @@ func loadSigningSeed(seedHex, seedFile string) ([]byte, error) {
 	if strings.TrimSpace(seedFile) == "" {
 		return nil, nil
 	}
-	info, err := os.Stat(seedFile)
+	info, err := os.Lstat(seedFile)
 	if err != nil {
 		return nil, fmt.Errorf("stat --signing-seed-file: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("--signing-seed-file must be a regular file, not a symlink or special file")
 	}
 	if info.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("--signing-seed-file must not be readable by group or others")
@@ -197,8 +226,14 @@ func printWorkstationSummary(stdout io.Writer, summary map[string]any) {
 	_, _ = fmt.Fprintf(stdout, "  loops:         %v\n", summary["recurring_loops"])
 	_, _ = fmt.Fprintf(stdout, "  denied:        %v\n", summary["denied_effects"])
 	_, _ = fmt.Fprintf(stdout, "  receipt hash:  %v\n", summary["receipt_hash"])
-	if signatureValid, ok := summary["signature_valid"]; ok {
-		_, _ = fmt.Fprintf(stdout, "  signature:     %v\n", signatureValid)
+	if integrityValid, ok := summary["integrity_valid"]; ok {
+		_, _ = fmt.Fprintf(stdout, "  integrity:     %v\n", integrityValid)
+	}
+	if signerTrusted, ok := summary["signer_trusted"]; ok {
+		_, _ = fmt.Fprintf(stdout, "  signer trusted: %v\n", signerTrusted)
+	}
+	if trustAnchor, ok := summary["trust_anchor"]; ok {
+		_, _ = fmt.Fprintf(stdout, "  trust anchor:  %v\n", trustAnchor)
 	}
 }
 

@@ -1,5 +1,6 @@
 # Schemas
 <!-- docs-generated: surface-readme -->
+<!-- quantum_posture: schemas document classical Ed25519/RSA signing shapes; no post-quantum cryptographic control is added or claimed. -->
 
 ## Purpose
 

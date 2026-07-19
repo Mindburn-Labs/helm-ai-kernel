@@ -1,5 +1,7 @@
 # Connector release authority contract
 
+<!-- quantum_posture: documents classical Ed25519 connector release authority signing and offline verification; no post-quantum control is added or claimed. -->
+
 Status: source-owned contract, offline verifier, and durable PostgreSQL
 projection; internal, pre-production.
 

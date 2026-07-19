@@ -1,3 +1,5 @@
+// quantum_posture: these tests exercise classical Ed25519 connector release
+// authority signing and verification; no hybrid or post-quantum claim.
 package connectors
 
 import (
@@ -136,4 +138,33 @@ func releaseAuthorityVerifierFixture(t *testing.T, authority contracts.Connector
 		t.Fatalf("NewEd25519ReleaseAuthorityVerifier(): %v", err)
 	}
 	return verifier
+}
+
+// TestReleaseAuthorityVerifierStoredEnvelopeToleratesDisabledKey proves a key
+// disabled after signing still verifies an already-stored head (so a rotation
+// can read and revoke it) while a new import from the same disabled key is
+// still rejected.
+func TestReleaseAuthorityVerifierStoredEnvelopeToleratesDisabledKey(t *testing.T) {
+	authority := signedReleaseAuthorityFixture(t)
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{21}, ed25519.SeedSize))
+	signer := crypto.NewEd25519SignerFromKey(privateKey, authority.SigningKeyRef)
+	envelope, err := SignConnectorReleaseAuthority(authority, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled := releaseAuthorityVerifierFixture(t, authority, privateKey.Public().(ed25519.PublicKey), false)
+
+	if err := disabled.VerifyStoredEnvelope(envelope); err != nil {
+		t.Fatalf("VerifyStoredEnvelope() with a disabled-after-signing key = %v, want nil", err)
+	}
+	if err := disabled.VerifyEnvelope(envelope); !errors.Is(err, ErrReleaseAuthorityRejected) {
+		t.Fatalf("VerifyEnvelope() with a disabled key = %v, want rejected", err)
+	}
+
+	// A stored head whose signature is tampered must still fail stored verify.
+	tampered := envelope
+	tampered.Signature = strings.Repeat("0", len(envelope.Signature))
+	if err := disabled.VerifyStoredEnvelope(tampered); !errors.Is(err, ErrReleaseAuthorityRejected) {
+		t.Fatalf("VerifyStoredEnvelope() with a tampered signature = %v, want rejected", err)
+	}
 }

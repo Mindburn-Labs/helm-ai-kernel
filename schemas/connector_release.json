@@ -1,4 +1,5 @@
 {
+  "$comment": "quantum_posture: connector release authority is signed with classical Ed25519; this schema documents that signing shape and makes no hybrid or post-quantum claim.",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.org/schemas/connector_release.json",
   "title": "Connector Release Authority",

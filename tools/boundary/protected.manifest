@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-19T18:24:46Z
+# Generated: 2026-07-19T18:35:47Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -225,8 +225,8 @@ bcfd4bc7c3f9463be26db2922ad02336c8f987812e7efe442b879359cd652bf6  core/pkg/contr
 c8b1ed40ba2990d4448d729b4b29c2be46e5dc5f802d619d109669dde3d3c9cf  core/pkg/contracts/launch_portable_vocabulary_test.go
 d9e5f1ff0d4a17b49c019ffd187e94308e91a79582fac8a7c171807cd52d3f58  core/pkg/contracts/launch_provider_certification.go
 8ee65a8cb5ffc24f3ac034ec0a8b39045d36d510a5cf9e3b0c69a5ed77997a40  core/pkg/contracts/launch_route_artifacts.go
-6022973b74ad950961e85a3b91c11bdc11af9d293c9d977763e4a5a0e43d8869  core/pkg/contracts/launch_routing.go
-cb3eb55a5450ce5be11a47444f797b91f3062eb3172ec7280e58f9464a79b15f  core/pkg/contracts/launch_routing_test.go
+82c399e3e246880f70eee06f967f5e6b176586103c9edb97da7456fac3595796  core/pkg/contracts/launch_routing.go
+48f5deea1411deeb2159696fc796ad1d03107c1f5b9c1dbdfb3a0b2ae9ee830d  core/pkg/contracts/launch_routing_test.go
 6942aa79152e00619823bfbd9ce6fba5e004deff66c4137f4cba3842bfb4dff2  core/pkg/contracts/migration.go
 7073aecde8cbabaf1736a69f45570ccfc31eeedf80fe75b344777baa393df16d  core/pkg/contracts/model_catalog.go
 7341c7e71cc60b56057805fec95cdcd50325905f7a1a64c5c6f3e0d20e3ac708  core/pkg/contracts/model_catalog_test.go

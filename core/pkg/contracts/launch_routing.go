@@ -530,6 +530,13 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 	if analysis.Status != LaunchAnalysisSupported {
 		return fmt.Errorf("launch route requires SUPPORTED repository analysis, got %s", analysis.Status)
 	}
+	analysisCompletedAt, err := time.Parse(time.RFC3339Nano, analysis.AnalyzedAt)
+	if err != nil {
+		return errors.New("launch repository analysis timestamp is invalid")
+	}
+	if analysisCompletedAt.After(now) {
+		return errors.New("launch repository analysis was completed in the future")
+	}
 	if err := ValidateLaunchConstraintSet(constraints); err != nil {
 		return err
 	}
@@ -851,13 +858,20 @@ func validateLaunchQuotePlacements(quote LaunchRouteQuote, placements []LaunchRo
 	if len(quote.PlacementCosts) != len(placements) {
 		return errors.New("launch route quote placement count does not match route")
 	}
-	for index, line := range quote.PlacementCosts {
-		placement := placements[index]
+	placementsByID := make(map[string]LaunchRoutePlacement, len(placements))
+	for _, placement := range placements {
+		placementsByID[placement.PlacementID] = placement
+	}
+	for _, line := range quote.PlacementCosts {
+		placement, ok := placementsByID[line.PlacementID]
+		if !ok {
+			return fmt.Errorf("launch route quote placement %s does not exist in route", line.PlacementID)
+		}
 		profile, ok := profilesByPlacement[placement.PlacementID]
 		if !ok {
 			return fmt.Errorf("launch route quote placement %s has no verified provider profile", line.PlacementID)
 		}
-		if line.PlacementID != placement.PlacementID || line.ProviderID != placement.ProviderID || !launchConstantEqual(line.ProviderAccountHash, placement.ProviderAccountHash) || line.RegionID != placement.RegionID || line.OfferingID != placement.OfferingID {
+		if line.ProviderID != placement.ProviderID || !launchConstantEqual(line.ProviderAccountHash, placement.ProviderAccountHash) || line.RegionID != placement.RegionID || line.OfferingID != placement.OfferingID {
 			return fmt.Errorf("launch route quote placement %s does not match route", line.PlacementID)
 		}
 		if !launchConstantEqual(line.PriceEvidenceHash, profile.PricingEvidenceHash) || !launchConstantEqual(line.TermsEvidenceHash, profile.TermsEvidenceHash) {

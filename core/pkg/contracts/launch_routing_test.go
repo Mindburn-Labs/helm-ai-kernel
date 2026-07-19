@@ -278,6 +278,16 @@ func TestRouteRejectsFutureDatedCommercialEvidence(t *testing.T) {
 	future := launchRoutingNow.Add(time.Minute).Format(time.RFC3339Nano)
 
 	for name, mutate := range map[string]func(*launchRouteFixture){
+		"repository analysis": func(f *launchRouteFixture) {
+			updated := f.resolver.analyses[f.route.RepositoryAnalysisRef]
+			updated.AnalyzedAt = future
+			updatedHash, err := contracts.DeriveLaunchRepositoryAnalysisHash(updated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.resolver.analyses[updated.AnalysisID] = updated
+			f.route.RepositoryAnalysisHash = updatedHash
+		},
 		"provider profile": func(f *launchRouteFixture) {
 			updated := f.resolver.profiles[f.route.Placements[0].ProviderProfileRef]
 			updated.RetrievedAt = future

@@ -82,11 +82,14 @@ type PreparedExecution struct {
 // sealing. Policy-owned image, work directory, network, limits, runtime class,
 // mounts, and warm-lease fields are deliberately not caller-configurable here.
 type SandboxWorkload struct {
-	Command  []string          `json:"command"`
-	Args     []string          `json:"args,omitempty"`
-	Env      map[string]string `json:"env,omitempty"`
-	Labels   map[string]string `json:"labels,omitempty"`
-	Detached bool              `json:"detached,omitempty"`
+	Command []string          `json:"command"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Labels  map[string]string `json:"labels,omitempty"`
+	// Detached is reserved for a future durable supervisor that can retain the
+	// lease and credentials until the background process is proven stopped.
+	// PrepareExecutionWithWorkload currently rejects true fail-closed.
+	Detached bool `json:"detached,omitempty"`
 }
 
 // SandboxLeaseAuthorization is the immutable, secret-free identity of one
@@ -446,6 +449,9 @@ func verifySandboxExecutionDecisionBinding(decision *contracts.DecisionRecord, e
 func validateSandboxWorkload(workload *SandboxWorkload) error {
 	if workload == nil || len(workload.Command) == 0 || workload.Command[0] == "" {
 		return fmt.Errorf("sandbox workload requires an explicit command")
+	}
+	if workload.Detached {
+		return fmt.Errorf("detached sandbox execution requires a durable lifecycle supervisor and is not supported")
 	}
 	for _, part := range workload.Command {
 		if part == "" {

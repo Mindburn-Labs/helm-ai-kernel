@@ -451,6 +451,18 @@ func TestPrepareExecutionWithWorkloadRejectsIncompleteWorkloadBeforeLeaseActivat
 	}
 }
 
+func TestPrepareExecutionRejectsDetachedWorkloadBeforeLeaseActivation(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	workload := testWorkload()
+	workload.Detached = true
+
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, execLease, testVerdict(), workload); err == nil {
+		t.Fatal("detached workload escaped the supervised lease lifecycle")
+	}
+	assertLeasePendingAndRunnerUnused(t, leaseManager, execLease, runner)
+}
+
 func TestPrepareExecutionWithWorkloadRequiresVerifiedAuthorizationAndExactSignedWorkload(t *testing.T) {
 	resetClock()
 	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)

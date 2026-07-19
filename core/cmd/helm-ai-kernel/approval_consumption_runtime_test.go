@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: tests cover classical Ed25519 disposition-command and
+// grant-consumption signature verification with RSA-JWKS (RS256) OAuth tokens;
+// no post-quantum path is exercised or claimed.
+
 import (
 	"context"
 	"crypto/ed25519"

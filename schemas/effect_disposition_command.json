@@ -1,4 +1,5 @@
 {
+  "$comment": "quantum_posture: describes a Control Plane-signed effect-disposition command carrying a detached classical Ed25519 signature; this schema documents that signing shape and makes no hybrid or post-quantum claim.",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.org/schemas/effect_disposition_command.json",
   "title": "Effect Disposition Command",

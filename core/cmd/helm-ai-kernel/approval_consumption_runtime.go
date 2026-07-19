@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: wires classical Ed25519 grant-consumption, effect-disposition
+// command signature verification and RSA-JWKS (RS256) OAuth token checks; no
+// post-quantum path.
+
 import (
 	"context"
 	"crypto/ed25519"

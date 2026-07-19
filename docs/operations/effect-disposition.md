@@ -6,6 +6,8 @@ last_reviewed: 2026-07-18
 
 # Signed active-work disposition
 
+<!-- quantum_posture: documents classical Ed25519 command and receipt signatures and the RSA-JWKS (RS256) workload token boundary; no post-quantum control is added or claimed. -->
+
 The Kernel can durably accept a Control Plane instruction about connector work
 that is already `STARTED` or `UNCERTAIN`. Every command is bound to one active
 tenant/workspace FENCE, one exact reservation head, and one position in an

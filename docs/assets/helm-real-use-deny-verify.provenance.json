@@ -1,5 +1,5 @@
 {
-  "asset": "docs/assets/helm-real-use-deny-verify.gif",
+  "asset": "docs/assets/helm-real-use-deny-verify.transcript.txt",
   "kind": "real_cli_capture",
   "demo_script": false,
   "generated_by": "scripts/record-real-use-assets.sh",
@@ -9,6 +9,6 @@
     "helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json"
   ],
   "expected_verdict": "DENY",
-  "expected_verification": "signature: true",
+  "expected_verification": "integrity: true; trusted: true",
   "transcript": "docs/assets/helm-real-use-deny-verify.transcript.txt"
 }

@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: integration test over classical Ed25519 effect-reservation
+// and connector release-authority evidence; no post-quantum claim.
+
 import (
 	"bytes"
 	"context"

@@ -1,5 +1,8 @@
 package contracts
 
+// quantum_posture: classical Ed25519 effect-disposition command and receipt
+// contract types and integrity checks only; no hybrid or post-quantum claim.
+
 import (
 	"encoding/hex"
 	"errors"

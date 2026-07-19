@@ -36,7 +36,11 @@ func (s *PostgresStore) recordEffectDisposition(
 		commandVerifier == nil || signer == nil {
 		return EffectDispositionRecord{}, errors.New("effect disposition store is not configured")
 	}
-	if err := commandVerifier.VerifyEnvelope(envelope); err != nil {
+	// The command signature is verified per record state below: a genuinely new
+	// disposition requires an enabled key (VerifyEnvelope), while an idempotent
+	// replay of an already-recorded command tolerates a since-disabled key
+	// (VerifyStoredEnvelope), so retries survive a key rotation.
+	if err := commandVerifier.VerifyStoredEnvelope(envelope); err != nil {
 		return EffectDispositionRecord{}, err
 	}
 	command := envelope.Command
@@ -68,6 +72,11 @@ func (s *PostgresStore) recordEffectDisposition(
 		return existing, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
+		return EffectDispositionRecord{}, err
+	}
+
+	// A genuinely new disposition must be signed by a currently enabled key.
+	if err := commandVerifier.VerifyEnvelope(envelope); err != nil {
 		return EffectDispositionRecord{}, err
 	}
 
@@ -291,7 +300,9 @@ func verifyEffectDispositionSignatures(
 	if err := record.Validate(); err != nil {
 		return err
 	}
-	if err := commandVerifier.VerifyEnvelope(record.Command); err != nil {
+	// Stored/historical evidence (recover, replay, list, chain re-check): tolerate
+	// a since-disabled signing key so records stay recoverable after a rotation.
+	if err := commandVerifier.VerifyStoredEnvelope(record.Command); err != nil {
 		return err
 	}
 	return store.grantVerifier.VerifyEffectDispositionReceiptSignature(

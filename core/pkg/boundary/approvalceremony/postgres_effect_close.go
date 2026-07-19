@@ -39,7 +39,11 @@ func (s *PostgresStore) closeEffectReservation(
 	if err := request.Validate(); err != nil {
 		return EffectClosureRecord{}, err
 	}
-	if err := acknowledgementVerifier.VerifyEnvelope(request.Acknowledgement); err != nil {
+	// The acknowledgement signature is verified per reservation state below:
+	// a genuinely new close requires an enabled key (VerifyEnvelope), while an
+	// already-COMPLETED replay tolerates a since-disabled key
+	// (VerifyStoredEnvelope), so idempotent retries survive a key rotation.
+	if err := acknowledgementVerifier.VerifyStoredEnvelope(request.Acknowledgement); err != nil {
 		return EffectClosureRecord{}, err
 	}
 	tx, err := s.beginScopeTx(ctx, identity.TenantID, identity.WorkspaceID)
@@ -86,12 +90,17 @@ func (s *PostgresStore) closeEffectReservation(
 		return EffectClosureRecord{}, ErrEffectCloseTerminal
 	}
 
+	// A genuinely new close must be signed by a currently enabled key.
+	if err := acknowledgementVerifier.VerifyEnvelope(request.Acknowledgement); err != nil {
+		return EffectClosureRecord{}, err
+	}
+
 	acknowledgement := request.Acknowledgement.Acknowledgement
 	if err := effectAcknowledgementMatchesReservation(acknowledgement, current, identity); err != nil {
 		return EffectClosureRecord{}, err
 	}
 	if err := s.effectAcknowledgementMatchesDisposition(
-		ctx, tx, identity, acknowledgement, releaseAuthorities, dispositionVerifier, true,
+		ctx, tx, identity, acknowledgement, current, releaseAuthorities, dispositionVerifier, true,
 	); err != nil {
 		return EffectClosureRecord{}, err
 	}
@@ -291,7 +300,7 @@ func (s *PostgresStore) verifyEffectClosureRecord(
 		return err
 	}
 	if err := s.effectAcknowledgementMatchesDisposition(
-		ctx, tx, priorIdentity, record.Acknowledgement.Acknowledgement, releaseAuthorities, dispositionVerifier, false,
+		ctx, tx, priorIdentity, record.Acknowledgement.Acknowledgement, prior, releaseAuthorities, dispositionVerifier, false,
 	); err != nil {
 		return err
 	}
@@ -319,6 +328,7 @@ func (s *PostgresStore) effectAcknowledgementMatchesDisposition(
 	tx *sql.Tx,
 	identity ConsumerIdentity,
 	acknowledgement contracts.ConnectorEffectAcknowledgement,
+	reservation EffectReservationEvent,
 	releaseAuthorities *connectorregistry.PostgresReleaseAuthorityStore,
 	dispositionVerifier EffectDispositionCommandVerifier,
 	requireCurrentFence bool,
@@ -351,6 +361,19 @@ func (s *PostgresStore) effectAcknowledgementMatchesDisposition(
 	if err := s.verifyEffectDispositionRecord(ctx, tx, identity, record, releaseAuthorities, dispositionVerifier); err != nil {
 		return err
 	}
+	// The disposition must be bound to the exact reservation head being closed,
+	// not just any historical head under the same fence: without this a
+	// disposition recorded while STARTED could bind an old receipt and close a
+	// different active head after a STARTED->UNCERTAIN transition.
+	reservationHeadHash, err := effectReservationHeadHash(reservation)
+	if err != nil {
+		return err
+	}
+	if record.Command.Command.ReservationSequence != reservation.Sequence ||
+		record.Command.Command.ReservationHeadHash != reservationHeadHash ||
+		record.Command.Command.ReservationState != string(reservation.State) {
+		return ErrEffectCloseConflict
+	}
 	if record.Command.Command.Action == contracts.EffectDispositionActionHold ||
 		(requireCurrentFence && (errors.Is(fenceErr, sql.ErrNoRows) ||
 			effectDispositionCommandMatchesFence(record.Command.Command, currentFence) != nil)) {
@@ -374,7 +397,10 @@ func verifyEffectClosureSignatures(
 	if err := record.Validate(); err != nil {
 		return err
 	}
-	if err := acknowledgementVerifier.VerifyEnvelope(record.Acknowledgement); err != nil {
+	// A persisted closure record is historical evidence (recovery + idempotency
+	// re-checks), so tolerate a signing key disabled/rotated after the
+	// acknowledgement was observed; signature + pinned lifetime still enforced.
+	if err := acknowledgementVerifier.VerifyStoredEnvelope(record.Acknowledgement); err != nil {
 		return err
 	}
 	return store.grantVerifier.VerifyEffectCloseReceiptSignature(

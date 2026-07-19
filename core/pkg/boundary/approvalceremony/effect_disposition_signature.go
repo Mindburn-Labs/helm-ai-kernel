@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: classical Ed25519 effect-disposition command and receipt
+// signing/verification only; no hybrid or post-quantum claim.
+
 import (
 	"crypto/ed25519"
 	"encoding/hex"
@@ -31,6 +34,7 @@ type TrustedEffectDispositionCommandKey struct {
 
 type EffectDispositionCommandVerifier interface {
 	VerifyEnvelope(contracts.EffectDispositionCommandEnvelope) error
+	VerifyStoredEnvelope(contracts.EffectDispositionCommandEnvelope) error
 }
 
 type Ed25519EffectDispositionCommandVerifier struct {
@@ -103,7 +107,25 @@ func SignEffectDispositionCommand(
 	return envelope, nil
 }
 
+// VerifyEnvelope proves an effect-disposition command is signed by a currently
+// trusted key; used when recording (submitting) a new disposition, so it
+// rejects a disabled key.
 func (v *Ed25519EffectDispositionCommandVerifier) VerifyEnvelope(envelope contracts.EffectDispositionCommandEnvelope) error {
+	return v.verifyEnvelope(envelope, true)
+}
+
+// VerifyStoredEnvelope proves an already-persisted disposition command's
+// signature and pinned-lifetime binding without requiring the signing key to
+// still be enabled. Disabling a key stops NEW dispositions from it; it must not
+// make an existing stored disposition record unrecoverable, or recovery,
+// listing, replay, and chain re-checks would break after a key rotation.
+// Signature validity and the NotBefore/NotAfter window still enforce
+// authenticity.
+func (v *Ed25519EffectDispositionCommandVerifier) VerifyStoredEnvelope(envelope contracts.EffectDispositionCommandEnvelope) error {
+	return v.verifyEnvelope(envelope, false)
+}
+
+func (v *Ed25519EffectDispositionCommandVerifier) verifyEnvelope(envelope contracts.EffectDispositionCommandEnvelope, requireEnabled bool) error {
 	if v == nil || len(v.keys) == 0 {
 		return effectDispositionCommandRejected("verifier is not configured")
 	}
@@ -113,7 +135,10 @@ func (v *Ed25519EffectDispositionCommandVerifier) VerifyEnvelope(envelope contra
 	command := envelope.Command
 	identity := effectDispositionCommandKeyIdentity(command.AuthorityID, command.SigningKeyRef, command.Audience)
 	key, ok := v.keys[identity]
-	if !ok || !key.Enabled {
+	if !ok {
+		return effectDispositionCommandRejected("command key is not currently trusted for this authority and audience")
+	}
+	if requireEnabled && !key.Enabled {
 		return effectDispositionCommandRejected("command key is not currently trusted for this authority and audience")
 	}
 	if command.IssuedAt.Before(key.NotBefore) || !command.IssuedAt.Before(key.NotAfter) {

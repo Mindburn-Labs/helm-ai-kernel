@@ -137,10 +137,21 @@ func fixedClock() func() time.Time {
 	return func() time.Time { return t }
 }
 
+func bridgeTestSigningSeed() []byte {
+	return []byte("0123456789abcdef0123456789abcdef")
+}
+
+func withTestSigningSeed(cfg BridgeConfig) BridgeConfig {
+	if len(cfg.SigningSeed) == 0 {
+		cfg.SigningSeed = bridgeTestSigningSeed()
+	}
+	return cfg
+}
+
 func newAdapter(t *testing.T, cfg BridgeConfig) (*MCPAdapter, *proofgraph.Graph) {
 	t.Helper()
 	graph := proofgraph.NewGraph()
-	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: NewGovernedBridge(cfg)})
+	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: NewGovernedBridge(withTestSigningSeed(cfg))})
 	if err != nil {
 		t.Fatalf("new adapter: %v", err)
 	}
@@ -187,6 +198,25 @@ func TestGovernedBridgeDeniesUnpermittedWrite(t *testing.T) {
 	}
 	if resp.DenyReason == nil || resp.DenyReason.Code == "" {
 		t.Errorf("expected a deny reason code, got %+v", resp.DenyReason)
+	}
+}
+
+func TestGovernedBridgeWithoutSigningSeedFailsClosed(t *testing.T) {
+	// newAdapter intentionally supplies a test seed for ordinary tests, so build
+	// this one directly to exercise the production zero-value path.
+	graph := proofgraph.NewGraph()
+	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: NewGovernedBridge(BridgeConfig{Profile: operateProfile(), Now: fixedClock()})})
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+	resp, err := adapter.Intercept(context.Background(), &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "linear.get_issue", PrincipalID: "ve-assistant",
+	})
+	if err != nil {
+		t.Fatalf("intercept: %v", err)
+	}
+	if resp.Allowed || resp.DenyReason == nil || resp.DenyReason.Code != string(contracts.ReasonPDPError) {
+		t.Fatalf("expected zero signing seed to fail closed as PDP_ERROR, got %+v", resp)
 	}
 }
 
@@ -245,7 +275,7 @@ func TestGovernedBridgeWriteIsSingleUse(t *testing.T) {
 	}
 	approvals := NewMemoryApprovalStore()
 	approvals.Grant(inputHash, ApprovalEvidence{ApproverID: "ivan"})
-	bridge := NewGovernedBridge(BridgeConfig{Profile: operateProfile(), Approvals: approvals, Now: fixedClock()})
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{Profile: operateProfile(), Approvals: approvals, Now: fixedClock()}))
 	graph := proofgraph.NewGraph()
 	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: bridge})
 	if err != nil {
@@ -270,7 +300,7 @@ func TestGovernedBridgeWriteIsSingleUse(t *testing.T) {
 // Reads are idempotent: the same read may be retried and is allowed each time
 // (reads do not consume the single-use nonce).
 func TestGovernedBridgeAllowsReadRetry(t *testing.T) {
-	bridge := NewGovernedBridge(BridgeConfig{Profile: operateProfile(), Now: fixedClock()})
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{Profile: operateProfile(), Now: fixedClock()}))
 	graph := proofgraph.NewGraph()
 	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: bridge})
 	if err != nil {
@@ -415,7 +445,7 @@ func (e errTest) Error() string { return string(e) }
 // connector's output is canonicalized into the effect record.
 func TestGovernedBridgeDispatchesThroughConnector(t *testing.T) {
 	conn := &fakeConnector{id: "linear"}
-	bridge := NewGovernedBridge(BridgeConfig{Profile: operateProfile(), Connector: conn, Now: fixedClock()})
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{Profile: operateProfile(), Connector: conn, Now: fixedClock()}))
 	graph := proofgraph.NewGraph()
 	adapter, _ := NewMCPAdapter(Config{Graph: graph, Bridge: bridge})
 	resp, err := adapter.Intercept(context.Background(), &runtimeadapters.AdaptedRequest{
@@ -437,7 +467,7 @@ func TestGovernedBridgeDispatchesThroughConnector(t *testing.T) {
 // a clean allow-with-output (Result stays nil, truth lives in the effect node).
 func TestGovernedBridgeRecordsDispatchFailure(t *testing.T) {
 	conn := &fakeConnector{id: "linear", fail: true}
-	bridge := NewGovernedBridge(BridgeConfig{Profile: operateProfile(), Connector: conn, Now: fixedClock()})
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{Profile: operateProfile(), Connector: conn, Now: fixedClock()}))
 	graph := proofgraph.NewGraph()
 	adapter, _ := NewMCPAdapter(Config{Graph: graph, Bridge: bridge})
 	resp, err := adapter.Intercept(context.Background(), &runtimeadapters.AdaptedRequest{

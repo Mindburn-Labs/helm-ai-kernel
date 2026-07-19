@@ -136,6 +136,68 @@ def parse_time(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def verify_connector_authority(authority, outer):
+    if (
+        authority.get("schema_version") != "approval-connector-authority.v1"
+        or authority.get("contract_version") != "2026-07-17"
+        or authority.get("state") != "certified"
+    ):
+        raise VectorError("connector_authority_rejected", "unsupported connector authority contract")
+
+    required_tokens = (
+        "binding_ref",
+        "tenant_id",
+        "workspace_id",
+        "pack_id",
+        "pack_version",
+        "connector_id",
+        "connector_version",
+        "connector_executor_kind",
+        "connector_signature_ref",
+        "connector_signer_id",
+        "connector_sandbox_profile",
+        "connector_drift_policy_ref",
+        "certification_ref",
+        "certification_authority",
+    )
+    for field in required_tokens:
+        value = authority.get(field)
+        if not isinstance(value, str) or not value or len(value) > 512 or any(character.isspace() for character in value):
+            raise VectorError("connector_authority_rejected", f"invalid connector authority {field}")
+    if authority["connector_executor_kind"] not in ("digital", "analog"):
+        raise VectorError("connector_authority_rejected", "invalid connector executor kind")
+
+    for field in (
+        "pack_manifest_hash",
+        "effect_hash",
+        "policy_hash",
+        "connector_binary_hash",
+        "certification_hash",
+    ):
+        prefixed_bytes(authority.get(field), "sha256:", 32)
+
+    for field in (
+        "tenant_id",
+        "workspace_id",
+        "pack_id",
+        "pack_version",
+        "pack_manifest_hash",
+        "action",
+        "effect_hash",
+        "policy_hash",
+    ):
+        if authority[field] != outer[field]:
+            raise VectorError("connector_authority_rejected", f"connector authority {field} binding mismatch")
+
+    claimed_hash = authority.get("authority_hash")
+    prefixed_bytes(claimed_hash, "sha256:", 32)
+    unsigned = dict(authority)
+    unsigned.pop("authority_hash")
+    actual_hash = sha256_ref(canonical_json(unsigned).encode("utf-8"))
+    if actual_hash != claimed_hash:
+        raise VectorError("connector_authority_rejected", "connector authority hash mismatch")
+
+
 def verify_authority_scope(authority_key, challenge, verified_at):
     required = {
         "tenant_id": challenge["tenant_id"],
@@ -263,6 +325,7 @@ def verify_case(index, case, vectors_by_key, authority_keys, challenge, root):
         "pack_version",
         "pack_manifest_hash",
         "action",
+        "connector_authority",
         "intent_hash",
         "effect_hash",
         "plan_hash",
@@ -323,6 +386,11 @@ def run_negative(vector, index, cases_by_id, vectors_by_key, authority_keys, cha
         if sha256_ref(canonical_json(mutated).encode("utf-8")) != index["challenge"]["sha256"]:
             raise VectorError("challenge_hash_mismatch", "challenge tenant substitution changed hash")
         return
+    if mutation == "set_connector_authority_connector_id_to_connector-b":
+        mutated = copy.deepcopy(challenge)
+        mutated["connector_authority"]["connector_id"] = "connector-b"
+        verify_connector_authority(mutated["connector_authority"], mutated)
+        return
     if mutation == "set_key-a_assertion_key_id_to_key-b":
         mutated = copy.deepcopy(vectors_by_key["key-a"])
         mutated["assertion"]["key_id"] = "key-b"
@@ -343,7 +411,7 @@ def run_negative(vector, index, cases_by_id, vectors_by_key, authority_keys, cha
 def main():
     root = Path(__file__).resolve().parent
     index = json.loads((root / "vectors.json").read_text(encoding="utf-8"))
-    if index["schema_version"] != "approval-vectors.v1" or index["contract_version"] != "2026-07-15":
+    if index["schema_version"] != "approval-vectors.v1" or index["contract_version"] != "2026-07-17":
         raise SystemExit("unsupported approval vector contract")
     if index["quantum_posture"] != "classical_ed25519_only":
         raise SystemExit("unexpected approval vector quantum posture")
@@ -353,6 +421,9 @@ def main():
     try:
         authority, _ = load_canonical(root, index["authority_snapshot"])
         challenge, _ = load_canonical(root, index["challenge"])
+        if challenge.get("schema_version") != "approval-challenge.v1" or challenge.get("contract_version") != "2026-07-17":
+            raise VectorError("contract_mismatch", "unsupported approval challenge contract")
+        verify_connector_authority(challenge["connector_authority"], challenge)
         if challenge["authority_snapshot_hash"] != index["authority_snapshot"]["sha256"]:
             raise VectorError("authority_rejected", "challenge does not bind authority snapshot")
         if challenge["authority_source"] != authority["authority_source"] or challenge["authority_version"] != authority["authority_version"]:

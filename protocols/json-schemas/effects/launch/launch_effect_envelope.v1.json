@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/effects/launch/launch_effect_envelope.v1.json",
-  "version": "1.2.0-alpha.1",
+  "version": "1.3.0-alpha.1",
   "title": "Launch Effect Authorization Envelope (Preview)",
-  "description": "Non-executable preview envelope binding one schema-validated launch input to the canonical ApprovalGrant consumption, exact workload principal/audience, dependency state, Kernel trust root, single-use dispatch CAS, scoped-stop epoch, and connector request.",
+  "description": "Non-executable preview envelope binding one schema-validated launch input to the canonical ApprovalGrant consumption, signed dispatch admission, exact certified connector release, workload principal/audience, dependency state, Kernel trust root, single-use dispatch CAS, scoped-stop epoch, and connector request.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -26,6 +26,8 @@
     "approval_artifact_hash",
     "approval_consumption_ref",
     "approval_consumption_hash",
+    "dispatch_admission_ref",
+    "dispatch_admission_hash",
     "dependency_set_ref",
     "dependency_set_hash",
     "policy_epoch",
@@ -46,6 +48,8 @@
     "evidence_reservation_ref",
     "connector_id",
     "connector_contract_hash",
+    "connector_authority_ref",
+    "connector_authority_hash",
     "action_urn",
     "request_body_hash",
     "args_c14n_hash",
@@ -120,6 +124,13 @@
     "approval_consumption_hash": {
       "$ref": "#/$defs/hash"
     },
+    "dispatch_admission_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dispatch_admission_hash": {
+      "$ref": "#/$defs/hash"
+    },
     "dependency_set_ref": {
       "type": "string",
       "minLength": 1
@@ -192,6 +203,13 @@
       "minLength": 1
     },
     "connector_contract_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "connector_authority_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "connector_authority_hash": {
       "$ref": "#/$defs/hash"
     },
     "action_urn": {

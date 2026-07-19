@@ -163,7 +163,7 @@ func (s *PostgresStore) Init(ctx context.Context) error {
 	if s.grantVerifier == nil {
 		return fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
 	}
-	if _, err := s.db.ExecContext(ctx, postgresSchema); err != nil {
+	if _, err := s.db.ExecContext(ctx, postgresSchema+dispatchAdmissionPostgresSchema); err != nil {
 		return fmt.Errorf("initialize approval ceremony schema: %w", err)
 	}
 	return nil
@@ -448,23 +448,40 @@ func requireUnfencedScope(ctx context.Context, tx *sql.Tx, tenantID, workspaceID
 	if tx == nil {
 		return errors.New("approval ceremony scope transaction is unavailable")
 	}
-	if _, err := tx.ExecContext(ctx,
-		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
-		tenantID, workspaceID,
-	); err != nil {
-		return fmt.Errorf("coordinate approval consumption with emergency stop: %w", err)
+	if err := lockApprovalScope(ctx, tx, tenantID, workspaceID); err != nil {
+		return err
 	}
-	var fenced bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
-		SELECT 1 FROM emergency_stop_fences
-		WHERE tenant_id = $1 AND workspace_id = $2
-	)`, tenantID, workspaceID).Scan(&fenced); err != nil {
-		return fmt.Errorf("verify approval consumption emergency-stop scope: %w", err)
+	fenced, err := approvalScopeFenced(ctx, tx, tenantID, workspaceID)
+	if err != nil {
+		return err
 	}
 	if fenced {
 		return ErrEmergencyStopFenced
 	}
 	return nil
+}
+
+func lockApprovalScope(ctx context.Context, tx *sql.Tx, tenantID, workspaceID string) error {
+	if tx == nil {
+		return errors.New("approval ceremony scope transaction is unavailable")
+	}
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`, tenantID, workspaceID,
+	); err != nil {
+		return fmt.Errorf("coordinate approval authority with emergency stop: %w", err)
+	}
+	return nil
+}
+
+func approvalScopeFenced(ctx context.Context, tx *sql.Tx, tenantID, workspaceID string) (bool, error) {
+	var fenced bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM emergency_stop_fences
+		WHERE tenant_id = $1 AND workspace_id = $2
+	)`, tenantID, workspaceID).Scan(&fenced); err != nil {
+		return false, fmt.Errorf("verify approval authority emergency-stop scope: %w", err)
+	}
+	return fenced, nil
 }
 
 func (s *PostgresStore) deny(ctx context.Context, tenantID, workspaceID, approvalID string, now time.Time) (Record, error) {

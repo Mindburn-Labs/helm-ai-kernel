@@ -68,27 +68,28 @@ type Record struct {
 // starts. Challenge IDs, nonce, timestamps, and hashes are intentionally absent
 // because the Kernel creates them after the hold has elapsed.
 type ChallengeSpec struct {
-	BindingRef            string `json:"binding_ref"`
-	TenantID              string `json:"tenant_id"`
-	WorkspaceID           string `json:"workspace_id"`
-	Audience              string `json:"audience"`
-	PackID                string `json:"pack_id"`
-	PackVersion           string `json:"pack_version"`
-	PackManifestHash      string `json:"pack_manifest_hash"`
-	Action                string `json:"action"`
-	IntentHash            string `json:"intent_hash"`
-	EffectHash            string `json:"effect_hash"`
-	PlanHash              string `json:"plan_hash"`
-	Decision              string `json:"decision"`
-	PolicyVersion         string `json:"policy_version"`
-	PolicyEpoch           string `json:"policy_epoch"`
-	PolicyHash            string `json:"policy_hash"`
-	AuthoritySource       string `json:"authority_source"`
-	AuthorityVersion      string `json:"authority_version"`
-	AuthoritySnapshotHash string `json:"authority_snapshot_hash"`
-	RequiredRole          string `json:"required_role"`
-	Quorum                int    `json:"quorum"`
-	ServerIdentity        string `json:"server_identity"`
+	BindingRef            string                               `json:"binding_ref"`
+	TenantID              string                               `json:"tenant_id"`
+	WorkspaceID           string                               `json:"workspace_id"`
+	Audience              string                               `json:"audience"`
+	PackID                string                               `json:"pack_id"`
+	PackVersion           string                               `json:"pack_version"`
+	PackManifestHash      string                               `json:"pack_manifest_hash"`
+	Action                string                               `json:"action"`
+	ConnectorAuthority    contracts.ApprovalConnectorAuthority `json:"connector_authority"`
+	IntentHash            string                               `json:"intent_hash"`
+	EffectHash            string                               `json:"effect_hash"`
+	PlanHash              string                               `json:"plan_hash"`
+	Decision              string                               `json:"decision"`
+	PolicyVersion         string                               `json:"policy_version"`
+	PolicyEpoch           string                               `json:"policy_epoch"`
+	PolicyHash            string                               `json:"policy_hash"`
+	AuthoritySource       string                               `json:"authority_source"`
+	AuthorityVersion      string                               `json:"authority_version"`
+	AuthoritySnapshotHash string                               `json:"authority_snapshot_hash"`
+	RequiredRole          string                               `json:"required_role"`
+	Quorum                int                                  `json:"quorum"`
+	ServerIdentity        string                               `json:"server_identity"`
 }
 
 func (s ChallengeSpec) Validate() error {
@@ -121,6 +122,15 @@ func (s ChallengeSpec) Validate() error {
 		contracts.ApprovalGrantActionUninstall, contracts.ApprovalGrantActionRollback:
 	default:
 		return invalidRecord("challenge_spec action is unsupported")
+	}
+	if s.ConnectorAuthority.BindingRef != s.BindingRef {
+		return invalidRecord("challenge_spec connector authority binding_ref mismatch")
+	}
+	if err := s.ConnectorAuthority.ValidateEffectBinding(
+		s.TenantID, s.WorkspaceID, s.PackID, s.PackVersion, s.PackManifestHash,
+		s.Action, s.EffectHash, s.PolicyHash,
+	); err != nil {
+		return invalidRecord("challenge_spec connector authority: " + err.Error())
 	}
 	return nil
 }
@@ -322,7 +332,8 @@ func validateChallenge(record Record, challenge contracts.ApprovalChallenge) err
 	if challenge.TenantID != spec.TenantID || challenge.WorkspaceID != spec.WorkspaceID ||
 		challenge.Audience != spec.Audience || challenge.PackID != spec.PackID ||
 		challenge.PackVersion != spec.PackVersion || challenge.PackManifestHash != spec.PackManifestHash ||
-		challenge.Action != spec.Action || challenge.IntentHash != spec.IntentHash ||
+		challenge.Action != spec.Action || challenge.ConnectorAuthority != spec.ConnectorAuthority ||
+		challenge.IntentHash != spec.IntentHash ||
 		challenge.EffectHash != spec.EffectHash || challenge.PlanHash != spec.PlanHash ||
 		challenge.Decision != spec.Decision || challenge.PolicyVersion != spec.PolicyVersion ||
 		challenge.PolicyEpoch != spec.PolicyEpoch || challenge.PolicyHash != spec.PolicyHash ||
@@ -340,6 +351,7 @@ func validateVerifiedRef(challenge contracts.ApprovalChallenge, verified approva
 		verified.WorkspaceID != challenge.WorkspaceID || verified.Audience != challenge.Audience ||
 		verified.PackID != challenge.PackID || verified.PackVersion != challenge.PackVersion ||
 		verified.PackManifestHash != challenge.PackManifestHash || verified.Action != challenge.Action ||
+		verified.ConnectorAuthority != challenge.ConnectorAuthority ||
 		verified.IntentHash != challenge.IntentHash || verified.EffectHash != challenge.EffectHash ||
 		verified.PlanHash != challenge.PlanHash || verified.Decision != challenge.Decision ||
 		verified.PolicyVersion != challenge.PolicyVersion || verified.PolicyEpoch != challenge.PolicyEpoch ||
@@ -373,6 +385,7 @@ func validateGrant(challenge contracts.ApprovalChallenge, verified approvalverif
 		grant.WorkspaceID != verified.WorkspaceID || grant.Audience != verified.Audience ||
 		grant.PackID != verified.PackID || grant.PackVersion != verified.PackVersion ||
 		grant.PackManifestHash != verified.PackManifestHash || grant.Action != verified.Action ||
+		grant.ConnectorAuthority != verified.ConnectorAuthority ||
 		grant.IntentHash != verified.IntentHash || grant.EffectHash != verified.EffectHash ||
 		grant.PlanHash != verified.PlanHash || grant.Decision != verified.Decision ||
 		grant.PolicyVersion != verified.PolicyVersion || grant.PolicyEpoch != verified.PolicyEpoch ||

@@ -21,6 +21,7 @@ from verify_approval_vectors import (  # noqa: E402
     parse_time,
     prefixed_bytes,
     sha256_ref,
+    verify_connector_authority,
     verify_ed25519,
 )
 
@@ -33,6 +34,8 @@ def verify_vector(index, root, mutation=None):
 
     if mutation == "set_consumed_by_to_data-plane-b":
         consumption["consumed_by"] = "spiffe://helm/data-plane-b"
+    elif mutation == "set_connector_authority_certification_hash_to_tampered":
+        consumption["connector_authority"]["certification_hash"] = "sha256:" + "9" * 64
     elif mutation == "set_consumed_at_to_grant_expiry":
         consumption["consumed_at"] = consumption["grant_expires_at"]
     elif mutation == "flip_signature_last_bit":
@@ -40,10 +43,11 @@ def verify_vector(index, root, mutation=None):
     elif mutation is not None:
         raise VectorError("unknown_mutation", mutation)
 
-    if consumption["schema_version"] != "approval-grant-consumption.v1" or consumption["contract_version"] != "2026-07-16":
+    if consumption["schema_version"] != "approval-grant-consumption.v1" or consumption["contract_version"] != "2026-07-17":
         raise VectorError("contract_mismatch", "unsupported grant consumption contract")
     if consumption["action"] not in ("install", "upgrade", "uninstall", "rollback"):
         raise VectorError("contract_mismatch", "unsupported pack lifecycle action")
+    verify_connector_authority(consumption["connector_authority"], consumption)
     issued_at = parse_time(consumption["grant_issued_at"])
     expires_at = parse_time(consumption["grant_expires_at"])
     consumed_at = parse_time(consumption["consumed_at"])
@@ -75,7 +79,7 @@ def verify_vector(index, root, mutation=None):
 def main():
     root = Path(__file__).resolve().parent
     index = json.loads((root / "vectors.json").read_text(encoding="utf-8"))
-    if index["schema_version"] != "approval-grant-consumption-vectors.v1" or index["contract_version"] != "2026-07-16":
+    if index["schema_version"] != "approval-grant-consumption-vectors.v1" or index["contract_version"] != "2026-07-17":
         raise SystemExit("unsupported approval grant consumption vector contract")
     if index["quantum_posture"] != "classical_ed25519_only" or not index["negative_vectors"]:
         raise SystemExit("unexpected vector posture or missing negative vectors")

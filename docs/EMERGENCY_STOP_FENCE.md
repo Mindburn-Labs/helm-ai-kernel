@@ -10,8 +10,10 @@ acknowledgement profile binding fails closed and this foundation makes no PQ gua
 # Scoped Emergency-Stop Fence
 
 The Kernel has an internal, opt-in fence for a specific tenant/workspace. When
-active, the Guardian denies new governed dispatches for that scope. It is not
-an operator-ready Emergency Stop yet.
+active, the Kernel-owned guarded evaluation, approval-consumption, and
+dispatch-admission paths deny their covered new transitions for that scope.
+This is not end-to-end connector enforcement or an operator-ready Emergency
+Stop yet.
 
 ## Activation boundary
 
@@ -62,18 +64,36 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
 - The unauthenticated OpenAI-compatible proxy is unavailable while the fence
   is enabled, because it cannot establish a tenant/workspace binding. It may
   only return after an authenticated adapter contract binds that scope.
-- The fence covers new governed dispatches only.
+- The intended fence coverage is new governed dispatches only. Current proven
+  coverage is limited to the Kernel-owned gates listed here; connector-boundary
+  coverage still depends on the Data Plane integration below.
 - When approval-grant consumption is enabled on PostgreSQL, FENCE and
   `GRANT_ISSUED -> CONSUMED` share one tenant/workspace advisory transaction
   lock. FENCE-first rejects consumption; consumption-first only establishes
   that the signed consumption record committed before the later FENCE. The
-  separate connector dispatch may not have begun and still needs a final
-  data-plane near-effect fence check.
+  separate connector dispatch may not have begun.
 - Approval consumption response-loss recovery remains a read-only evidence
   operation after FENCE: it returns the existing record and creates no new
-  authority. The current internal Data Plane can still use any valid persisted
-  consumption record as dispatch input, so this Kernel change is merge/deploy
-  blocked on a final same-scope near-effect Data Plane fence gate.
+  authority.
+- Kernel dispatch admission is the near-effect ordering gate for new governed
+  pack dispatches. It shares the same tenant/workspace advisory lock with
+  FENCE and persists a short-lived signed admission bound to the exact
+  consumption, attempt, idempotency-key hash, effect, connector, and action.
+  FENCE-first denies new admission; admission-first creates a pre-FENCE
+  admitted record even when its signed state is still `NOT_STARTED`. Exact
+  replay returns the original record without extending expiry; changed
+  bindings conflict. The current slice has no close transitions, active-work
+  listing/disposition API, or renewal after expiry.
+- This Kernel gate does not by itself enforce the connector boundary. Merge,
+  deploy, and production claims remain blocked until the Data Plane requires
+  and atomically persists the signed admission before every
+  `CONSUMED -> DISPATCHING` transition, including cached and recovered
+  consumption records. That is necessary but not sufficient: active-admission
+  listing/disposition, close and uncertainty transitions, connector-boundary
+  acknowledgement evidence, and a current durable source-owned revocation
+  check for the policy-bound connector release/certification snapshot are also
+  required. The dispatch workload cannot select `connector_id`; the Kernel
+  derives it from the signed approval chain.
 - It does not revoke existing permits, cancel in-flight work, stop unmanaged
   adapters, or implement release/unfence. Those remain separate contracts.
 

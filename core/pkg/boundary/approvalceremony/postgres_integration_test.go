@@ -86,6 +86,9 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `GRANT SELECT, INSERT, UPDATE ON approval_ceremonies TO `+quotedRole); err != nil {
 		t.Fatalf("grant runtime table privileges: %v", err)
 	}
+	if _, err := db.ExecContext(ctx, `GRANT SELECT, INSERT ON approval_dispatch_admissions TO `+quotedRole); err != nil {
+		t.Fatalf("grant runtime dispatch admission privileges: %v", err)
+	}
 	if _, err := db.ExecContext(ctx, `GRANT SELECT ON emergency_stop_fences TO `+quotedRole); err != nil {
 		t.Fatalf("grant runtime emergency-stop read privilege: %v", err)
 	}
@@ -212,6 +215,52 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 		final.GrantConsumption == nil || final.GrantConsumption.ConsumptionHash == "" || final.ConsumptionSignature == "" {
 		t.Fatalf("final record = %+v", final)
 	}
+	admitter, err := NewDispatchAdmitter(store, consumer, signer, 30*time.Second)
+	if err != nil {
+		t.Fatalf("NewDispatchAdmitter(): %v", err)
+	}
+	dispatchRequest := dispatchAdmissionRequestForConsumption(*final.GrantConsumption)
+	admitted, err := admitter.Claim(ctx, dispatchRequest)
+	if err != nil {
+		t.Fatalf("Claim dispatch admission: %v", err)
+	}
+	if err := admitted.Admission.ValidateConsumption(*final.GrantConsumption); err != nil {
+		t.Fatalf("validate persisted dispatch admission: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE approval_dispatch_admissions
+		SET connector_id = 'connector-shadow-tampered'
+		WHERE tenant_id = $1 AND workspace_id = $2 AND attempt_id = $3`,
+		final.TenantID, final.WorkspaceID, dispatchRequest.AttemptID,
+	); err != nil {
+		t.Fatalf("tamper dispatch admission storage shadow: %v", err)
+	}
+	if _, err := admitter.Recover(ctx, dispatchRequest); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("tampered dispatch storage shadow error = %v, want ErrInvalidRecord", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE approval_dispatch_admissions
+		SET connector_id = $1
+		WHERE tenant_id = $2 AND workspace_id = $3 AND attempt_id = $4`,
+		admitted.Admission.ConnectorAuthority.ConnectorID, final.TenantID, final.WorkspaceID, dispatchRequest.AttemptID,
+	); err != nil {
+		t.Fatalf("restore dispatch admission storage shadow: %v", err)
+	}
+	exactRetry, err := admitter.Claim(ctx, dispatchRequest)
+	if err != nil || !reflect.DeepEqual(exactRetry, admitted) {
+		t.Fatalf("exact dispatch retry = %+v, error = %v", exactRetry, err)
+	}
+	changedDispatch := dispatchRequest
+	changedDispatch.IdempotencyKeyHash = shaRef("d")
+	if _, err := admitter.Claim(ctx, changedDispatch); !errors.Is(err, ErrTransitionConflict) {
+		t.Fatalf("changed dispatch retry error = %v, want ErrTransitionConflict", err)
+	}
+	secondAttempt := dispatchRequest
+	secondAttempt.AttemptID = "attempt-b"
+	if _, err := admitter.Claim(ctx, secondAttempt); !errors.Is(err, ErrTransitionConflict) {
+		t.Fatalf("second attempt for consumed grant error = %v, want ErrTransitionConflict", err)
+	}
+	assertDispatchAdmissionRLSVisibility(t, ctx, runtimeDB, "tenant-b", final.WorkspaceID, dispatchRequest.AttemptID, 0)
+	assertDispatchAdmissionRLSVisibility(t, ctx, runtimeDB, final.TenantID, "workspace-b", dispatchRequest.AttemptID, 0)
+	assertDispatchAdmissionRLSVisibility(t, ctx, runtimeDB, final.TenantID, final.WorkspaceID, dispatchRequest.AttemptID, 1)
 	recovered, err := service.RecoverGrantConsumption(
 		ctx, hold.ApprovalID, winner.Grant.GrantID, winner.Grant.GrantHash, winner.Grant.Nonce,
 	)
@@ -351,13 +400,45 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	store.clock = func() time.Time { return time.UnixMicro(transitionClock.Load()).UTC() }
 	assertApprovalConsumeExpiresWhileWaitingForScopeLock(t, ctx, db, service, expiryLockedGrant, &transitionClock)
 	store.clock = func() time.Time { return clockNow }
+	expiryLockedDispatchGrant := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
+	expiryLockedDispatch, err := service.ConsumeGrant(
+		ctx, expiryLockedDispatchGrant.ApprovalID, expiryLockedDispatchGrant.Grant.GrantID,
+		expiryLockedDispatchGrant.Grant.GrantHash, expiryLockedDispatchGrant.Grant.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("consume grant for dispatch expiry lock proof: %v", err)
+	}
+	transitionClock.Store(clockNow.UnixMicro())
+	store.clock = func() time.Time { return time.UnixMicro(transitionClock.Load()).UTC() }
+	assertDispatchAdmissionExpiresWhileWaitingForScopeLock(t, ctx, db, admitter, expiryLockedDispatch, &transitionClock)
+	store.clock = func() time.Time { return clockNow }
+	concurrentDispatchGrant := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
+	concurrentDispatch, err := service.ConsumeGrant(
+		ctx, concurrentDispatchGrant.ApprovalID, concurrentDispatchGrant.Grant.GrantID,
+		concurrentDispatchGrant.Grant.GrantHash, concurrentDispatchGrant.Grant.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("consume grant for concurrent dispatch attempts: %v", err)
+	}
+	assertConcurrentDispatchAttemptsSingleWinner(t, ctx, admitter, concurrentDispatch)
 
 	fencedGrant := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
 	recoveryGrant := issueApprovalTestGrant(t, ctx, service, fixtureHold.Spec, approverKeys, &clockNow, config)
 	recoveryFinal := consumeApprovalTestGrantAfterLockProof(t, ctx, db, service, recoveryGrant)
-	fenceApprovalTestScopeAfterLockProof(t, ctx, db, stopStore, kernel.StopScope{
+	raceRequest := dispatchAdmissionRequestForConsumption(*recoveryFinal.GrantConsumption)
+	raceRequest.AttemptID = "attempt-fence-race"
+	raceAdmission, raceErr := raceDispatchAdmissionAndFence(t, ctx, admitter, stopStore, kernel.StopScope{
 		TenantID: fencedGrant.TenantID, WorkspaceID: fencedGrant.WorkspaceID,
-	}, "approval-same-workspace-fence")
+	}, raceRequest, "approval-same-workspace-fence")
+	if raceErr != nil && !errors.Is(raceErr, ErrEmergencyStopFenced) {
+		t.Fatalf("concurrent admission/FENCE error = %v", raceErr)
+	}
+	if raceErr == nil {
+		raceReplay, err := admitter.Claim(ctx, raceRequest)
+		if err != nil || !reflect.DeepEqual(raceReplay, raceAdmission) {
+			t.Fatalf("admission-first race replay = %+v, error = %v", raceReplay, err)
+		}
+	}
 	assertEmergencyStopRLSVisibility(t, ctx, runtimeDB, fencedGrant.TenantID, fencedGrant.WorkspaceID, 1)
 	if _, err := service.ConsumeGrant(
 		ctx, fencedGrant.ApprovalID, fencedGrant.Grant.GrantID,
@@ -372,6 +453,22 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	)
 	if err != nil || !reflect.DeepEqual(recoveredAfterFence, recoveryFinal) {
 		t.Fatalf("recovery after FENCE = %+v, error = %v", recoveredAfterFence, err)
+	}
+	if !clockNow.After(admitted.Admission.ExpiresAt) {
+		clockNow = admitted.Admission.ExpiresAt.Add(time.Second)
+	}
+	admittedAfterFence, err := admitter.Claim(ctx, dispatchRequest)
+	if err != nil || !reflect.DeepEqual(admittedAfterFence, admitted) {
+		t.Fatalf("expired admission-first exact retry after FENCE = %+v, error = %v", admittedAfterFence, err)
+	}
+	recoveredAdmissionAfterFence, err := admitter.Recover(ctx, dispatchRequest)
+	if err != nil || !reflect.DeepEqual(recoveredAdmissionAfterFence, admitted) {
+		t.Fatalf("dispatch admission recovery after FENCE = %+v, error = %v", recoveredAdmissionAfterFence, err)
+	}
+	fencedDispatch := dispatchAdmissionRequestForConsumption(*recoveryFinal.GrantConsumption)
+	fencedDispatch.AttemptID = "attempt-fenced"
+	if _, err := admitter.Claim(ctx, fencedDispatch); !errors.Is(err, ErrEmergencyStopFenced) {
+		t.Fatalf("FENCE-first dispatch error = %v, want ErrEmergencyStopFenced", err)
 	}
 
 	expiringHold, err := service.BeginHold(ctx, fixtureHold.Spec.BindingRef)
@@ -393,6 +490,112 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 type approvalConsumeResult struct {
 	record Record
 	err    error
+}
+
+type dispatchAdmissionResult struct {
+	record DispatchAdmissionRecord
+	err    error
+}
+
+func assertConcurrentDispatchAttemptsSingleWinner(t *testing.T, ctx context.Context, admitter *DispatchAdmitter, consumed Record) {
+	t.Helper()
+	if consumed.GrantConsumption == nil {
+		t.Fatal("concurrent dispatch proof requires a consumed grant")
+	}
+	requestA := dispatchAdmissionRequestForConsumption(*consumed.GrantConsumption)
+	requestA.AttemptID = "attempt-concurrent-a"
+	requestB := requestA
+	requestB.AttemptID = "attempt-concurrent-b"
+	start := make(chan struct{})
+	results := make(chan dispatchAdmissionResult, 2)
+	for _, request := range []DispatchAdmissionRequest{requestA, requestB} {
+		request := request
+		go func() {
+			<-start
+			record, err := admitter.Claim(ctx, request)
+			results <- dispatchAdmissionResult{record: record, err: err}
+		}()
+	}
+	close(start)
+	var successes, conflicts int
+	for range 2 {
+		select {
+		case result := <-results:
+			switch {
+			case result.err == nil:
+				successes++
+			case errors.Is(result.err, ErrTransitionConflict):
+				conflicts++
+			default:
+				t.Fatalf("concurrent dispatch attempt error = %v", result.err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("concurrent dispatch attempt did not finish")
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("concurrent dispatch attempts successes=%d conflicts=%d", successes, conflicts)
+	}
+}
+
+func assertDispatchAdmissionExpiresWhileWaitingForScopeLock(
+	t *testing.T,
+	ctx context.Context,
+	lockDB *sql.DB,
+	admitter *DispatchAdmitter,
+	consumed Record,
+	transitionClock *atomic.Int64,
+) {
+	t.Helper()
+	if consumed.GrantConsumption == nil {
+		t.Fatal("dispatch expiry proof requires a consumed grant")
+	}
+	request := dispatchAdmissionRequestForConsumption(*consumed.GrantConsumption)
+	request.AttemptID = "attempt-expiry-lock"
+	tx, err := lockDB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+		consumed.TenantID, consumed.WorkspaceID,
+	); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	result := make(chan dispatchAdmissionResult, 1)
+	go func() {
+		record, claimErr := admitter.Claim(ctx, request)
+		result <- dispatchAdmissionResult{record: record, err: claimErr}
+	}()
+	select {
+	case early := <-result:
+		_ = tx.Rollback()
+		t.Fatalf("dispatch admission bypassed held scope lock: %+v", early)
+	case <-time.After(100 * time.Millisecond):
+	}
+	transitionClock.Store(consumed.GrantConsumption.GrantExpiresAt.Add(time.Second).UnixMicro())
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case outcome := <-result:
+		if !errors.Is(outcome.err, ErrTransitionConflict) {
+			t.Fatalf("dispatch admission after grant expiry = %+v, error = %v", outcome.record, outcome.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("dispatch admission did not resume after releasing scope lock")
+	}
+	var count int
+	if err := lockDB.QueryRowContext(ctx, `SELECT count(*) FROM approval_dispatch_admissions
+		WHERE tenant_id = $1 AND workspace_id = $2 AND attempt_id = $3`,
+		consumed.TenantID, consumed.WorkspaceID, request.AttemptID,
+	).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expired queued dispatch admission persisted %d rows", count)
+	}
 }
 
 func consumeApprovalTestGrantAfterLockProof(
@@ -495,6 +698,49 @@ type approvalFenceResult struct {
 	err      error
 }
 
+func raceDispatchAdmissionAndFence(
+	t *testing.T,
+	ctx context.Context,
+	admitter *DispatchAdmitter,
+	store *kernel.ScopedStopStore,
+	scope kernel.StopScope,
+	request DispatchAdmissionRequest,
+	commandID string,
+) (DispatchAdmissionRecord, error) {
+	t.Helper()
+	start := make(chan struct{})
+	admissionResult := make(chan dispatchAdmissionResult, 1)
+	fenceResult := make(chan approvalFenceResult, 1)
+	go func() {
+		<-start
+		record, err := admitter.Claim(ctx, request)
+		admissionResult <- dispatchAdmissionResult{record: record, err: err}
+	}()
+	go func() {
+		<-start
+		_, replayed, err := store.Fence(
+			ctx, approvalTestFenceCommand(scope, commandID), approvalTestFenceAcknowledgement(),
+		)
+		fenceResult <- approvalFenceResult{replayed: replayed, err: err}
+	}()
+	close(start)
+	var admitted dispatchAdmissionResult
+	select {
+	case admitted = <-admissionResult:
+	case <-time.After(5 * time.Second):
+		t.Fatal("concurrent dispatch admission did not finish")
+	}
+	select {
+	case fenced := <-fenceResult:
+		if fenced.err != nil || fenced.replayed {
+			t.Fatalf("concurrent FENCE replayed=%t error=%v", fenced.replayed, fenced.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("concurrent FENCE did not finish")
+	}
+	return admitted.record, admitted.err
+}
+
 func fenceApprovalTestScopeAfterLockProof(
 	t *testing.T,
 	ctx context.Context,
@@ -594,6 +840,28 @@ func assertApprovalRLSVisibility(t *testing.T, ctx context.Context, db *sql.DB, 
 	}
 	if count != want {
 		t.Fatalf("RLS visibility for tenant %q workspace %q = %d, want %d", tenantID, workspaceID, count, want)
+	}
+}
+
+func assertDispatchAdmissionRLSVisibility(t *testing.T, ctx context.Context, db *sql.DB, tenantID, workspaceID, attemptID string, want int) {
+	t.Helper()
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_workspace', $1, true)`, workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM approval_dispatch_admissions WHERE attempt_id = $1`, attemptID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != want {
+		t.Fatalf("dispatch admission RLS visibility for tenant %q workspace %q = %d, want %d", tenantID, workspaceID, count, want)
 	}
 }
 

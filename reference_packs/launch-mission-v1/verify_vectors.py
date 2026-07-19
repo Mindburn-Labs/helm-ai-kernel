@@ -248,9 +248,49 @@ def verify_approval_authority(index):
     if not verify_ed25519(public_key, canonical_bytes(consumption_payload), consumption_signature):
         raise VectorError("signature_rejected", "canonical approval consumption signature rejected")
 
+    connector_authority = copy.deepcopy(grant["connector_authority"])
+    claimed_connector_authority_hash = connector_authority.pop("authority_hash")
+    actual_connector_authority_hash = sha256_ref(canonical_bytes(connector_authority))
+    if actual_connector_authority_hash != claimed_connector_authority_hash:
+        raise VectorError("hash_mismatch", "canonical connector authority hash mismatch")
+    if authority["consumption"]["connector_authority"] != grant["connector_authority"]:
+        raise VectorError("binding_mismatch", "approval consumption changed connector authority")
+
+    dispatch = copy.deepcopy(authority["dispatch_admission"])
+    claimed_dispatch_hash = dispatch.pop("admission_hash")
+    actual_dispatch_hash = sha256_ref(canonical_bytes(dispatch))
+    if actual_dispatch_hash != claimed_dispatch_hash:
+        raise VectorError("hash_mismatch", "canonical dispatch admission hash mismatch")
+    dispatch_payload = {
+        "algorithm": authority["dispatch_signature_algorithm"],
+        "contract_version": dispatch["contract_version"],
+        "domain": "HELM/ApprovalDispatchAdmissionSignature/v1",
+        "admission_hash": claimed_dispatch_hash,
+        "kernel_trust_root_id": dispatch["kernel_trust_root_id"],
+        "signing_key_ref": dispatch["signing_key_ref"],
+    }
+    dispatch_signature = raw_hex(authority["dispatch_signature"], 64)
+    if not verify_ed25519(public_key, canonical_bytes(dispatch_payload), dispatch_signature):
+        raise VectorError("signature_rejected", "canonical dispatch admission signature rejected")
+    if (
+        dispatch["consumption_hash"] != claimed_consumption_hash
+        or dispatch["connector_authority"] != grant["connector_authority"]
+    ):
+        raise VectorError(
+            "binding_mismatch",
+            "dispatch admission changed approval consumption or connector authority",
+        )
+
     envelope = descriptor["envelope"]
     if envelope["approval_artifact_hash"] != claimed_grant_hash or envelope["approval_consumption_hash"] != claimed_consumption_hash:
         raise VectorError("binding_mismatch", "dispatch envelope does not bind canonical approval consumption")
+    if envelope["dispatch_admission_hash"] != claimed_dispatch_hash:
+        raise VectorError("binding_mismatch", "dispatch envelope does not bind canonical dispatch admission")
+    if (
+        envelope["connector_authority_ref"] != grant["connector_authority"]["binding_ref"]
+        or envelope["connector_authority_hash"] != claimed_connector_authority_hash
+    ):
+        raise VectorError("binding_mismatch", "dispatch envelope does not bind canonical connector authority")
 
 
 def verify_authorization(index, signature_override=None):
@@ -287,6 +327,10 @@ def verify_receipt(index, receipt_override=None):
         raise VectorError("signature_rejected", "receipt signature rejected")
     if receipt["approval_consumption_hash"] != index["authorization"]["envelope"]["approval_consumption_hash"]:
         raise VectorError("binding_mismatch", "receipt approval lineage differs from dispatch envelope")
+    if receipt["dispatch_admission_hash"] != index["authorization"]["envelope"]["dispatch_admission_hash"]:
+        raise VectorError("binding_mismatch", "receipt dispatch-admission lineage differs from dispatch envelope")
+    if receipt["connector_authority_hash"] != index["authorization"]["envelope"]["connector_authority_hash"]:
+        raise VectorError("binding_mismatch", "receipt connector-release lineage differs from dispatch envelope")
     quote_line = index["artifacts"]["route_quote"]["placement_costs"][0]
     if receipt["offer_snapshot_ref"] != quote_line["offer_snapshot_ref"] or receipt["offer_snapshot_hash"] != quote_line["offer_snapshot_hash"]:
         raise VectorError("binding_mismatch", "receipt offer evidence differs from its approved route quote")

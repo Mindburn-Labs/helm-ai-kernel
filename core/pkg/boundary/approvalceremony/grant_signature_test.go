@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
@@ -98,5 +99,83 @@ func TestGrantConsumptionSignatureBindsGrantConsumerAndTrustRoot(t *testing.T) {
 	}
 	if err := verifier.VerifyGrantConsumptionSignature(mutated, GrantSignatureEd25519, signature); !errors.Is(err, ErrGrantSignatureRejected) {
 		t.Fatalf("consumer substitution error = %v, want ErrGrantSignatureRejected", err)
+	}
+}
+
+func TestDispatchAdmissionSignatureBindsAttemptConnectorAndTrustRoot(t *testing.T) {
+	_, _, _, grant := ceremonyFixtures(t)
+	consumption := consumptionForGrant(t, grant, "spiffe://helm/data-plane-a", grant.IssuedAt.Add(time.Minute))
+	issuedAt := consumption.ConsumedAt.Add(time.Second)
+	admission, err := (contracts.ApprovalDispatchAdmission{
+		SchemaVersion:   contracts.ApprovalDispatchAdmissionSchemaV1,
+		ContractVersion: contracts.ApprovalDispatchAdmissionContractV1,
+		Coverage:        contracts.ApprovalDispatchAdmissionCoverageV1,
+		AdmissionID:     "dispatch-admission-a", AttemptID: "attempt-a", State: contracts.ApprovalDispatchAdmissionStateV1,
+		ApprovalID: consumption.ApprovalID, GrantID: consumption.GrantID,
+		GrantHash: consumption.GrantHash, ConsumptionHash: consumption.ConsumptionHash,
+		TenantID: consumption.TenantID, WorkspaceID: consumption.WorkspaceID,
+		Audience: consumption.Audience, AdmittedBy: consumption.ConsumedBy,
+		IdempotencyKeyHash: "sha256:" + strings.Repeat("a", 64), EffectHash: consumption.EffectHash,
+		Action: consumption.Action, ConnectorAuthority: consumption.ConnectorAuthority,
+		KernelTrustRootID: consumption.KernelTrustRootID, SigningKeyRef: consumption.SigningKeyRef,
+		IssuedAt: issuedAt, ExpiresAt: issuedAt.Add(30 * time.Second),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{13}, ed25519.SeedSize))
+	signer := crypto.NewEd25519SignerFromKey(privateKey, "dispatch-signature-test")
+	verifier, err := NewEd25519GrantSignatureVerifier(
+		signer.PublicKeyBytes(), admission.SigningKeyRef, admission.KernelTrustRootID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature, err := SignApprovalDispatchAdmission(admission, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifier.VerifyDispatchAdmissionSignature(admission, GrantSignatureEd25519, signature); err != nil {
+		t.Fatalf("VerifyDispatchAdmissionSignature(): %v", err)
+	}
+	payloadA, err := ApprovalDispatchAdmissionSigningPayload(admission, GrantSignatureEd25519)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloadB, err := ApprovalDispatchAdmissionSigningPayload(admission, GrantSignatureEd25519)
+	if err != nil || !bytes.Equal(payloadA, payloadB) {
+		t.Fatalf("dispatch admission signing payload is not deterministic: %v", err)
+	}
+	mutated := admission
+	mutated.ConnectorAuthority.ConnectorID = "connector-b"
+	mutated.ConnectorAuthority.AuthorityHash = ""
+	mutated.ConnectorAuthority, err = mutated.ConnectorAuthority.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutated.AdmissionHash = ""
+	mutated, err = mutated.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifier.VerifyDispatchAdmissionSignature(mutated, GrantSignatureEd25519, signature); !errors.Is(err, ErrGrantSignatureRejected) {
+		t.Fatalf("connector substitution error = %v, want ErrGrantSignatureRejected", err)
+	}
+	mutated = admission
+	mutated.SigningKeyRef = "kernel-key-other"
+	mutated.AdmissionHash = ""
+	mutated, err = mutated.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifier.VerifyDispatchAdmissionSignature(mutated, GrantSignatureEd25519, signature); !errors.Is(err, ErrGrantSignatureRejected) {
+		t.Fatalf("trust-root metadata substitution error = %v, want ErrGrantSignatureRejected", err)
+	}
+	consumptionSignature, err := SignApprovalGrantConsumption(consumption, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifier.VerifyDispatchAdmissionSignature(admission, GrantSignatureEd25519, consumptionSignature); !errors.Is(err, ErrGrantSignatureRejected) {
+		t.Fatalf("cross-domain signature error = %v, want ErrGrantSignatureRejected", err)
 	}
 }

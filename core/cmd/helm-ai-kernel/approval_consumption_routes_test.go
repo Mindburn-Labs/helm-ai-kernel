@@ -35,6 +35,32 @@ type fakeApprovalGrantConsumer struct {
 	identity     approvalceremony.ConsumerIdentity
 }
 
+type fakeApprovalDispatchAdmitter struct {
+	record       approvalceremony.DispatchAdmissionRecord
+	err          error
+	claimCalls   int
+	recoverCalls int
+	identity     approvalceremony.ConsumerIdentity
+	request      approvalceremony.DispatchAdmissionRequest
+}
+
+func (a *fakeApprovalDispatchAdmitter) Claim(ctx context.Context, request approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error) {
+	a.claimCalls++
+	a.capture(ctx, request)
+	return a.record, a.err
+}
+
+func (a *fakeApprovalDispatchAdmitter) Recover(ctx context.Context, request approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error) {
+	a.recoverCalls++
+	a.capture(ctx, request)
+	return a.record, a.err
+}
+
+func (a *fakeApprovalDispatchAdmitter) capture(ctx context.Context, request approvalceremony.DispatchAdmissionRequest) {
+	a.identity, _ = (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+	a.request = request
+}
+
 type fakeApprovalScopedStopReader struct {
 	state  kernel.FenceState
 	fenced bool
@@ -98,6 +124,99 @@ func TestApprovalGrantConsumptionRoutesUseVerifiedWorkloadIdentity(t *testing.T)
 	recover := postApprovalConsumptionRoute(t, mux, approvalGrantConsumptionRecoverPath, validApprovalConsumptionRequest(), "workload-token")
 	if recover.Code != http.StatusOK || consumer.recoverCalls != 1 {
 		t.Fatalf("recover status=%d calls=%d body=%s", recover.Code, consumer.recoverCalls, recover.Body.String())
+	}
+}
+
+func TestApprovalDispatchAdmissionRoutesUseSeparateVerifiedCapability(t *testing.T) {
+	admitter := &fakeApprovalDispatchAdmitter{record: approvalDispatchAdmissionRouteRecord(t)}
+	runtime := approvalDispatchRouteRuntime(admitter)
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, runtime)
+
+	claim := postApprovalConsumptionRoute(t, mux, approvalDispatchAdmissionPath, validApprovalDispatchAdmissionRequest(), "dispatch-token")
+	if claim.Code != http.StatusOK {
+		t.Fatalf("claim status=%d body=%s", claim.Code, claim.Body.String())
+	}
+	wantIdentity := approvalceremony.ConsumerIdentity{
+		Subject: "spiffe://helm/data-plane-a", TenantID: "tenant-a",
+		WorkspaceID: "workspace-a", Audience: "helm-data-plane",
+	}
+	if admitter.claimCalls != 1 || admitter.recoverCalls != 0 || admitter.identity != wantIdentity {
+		t.Fatalf("claim calls=%d recover=%d identity=%+v", admitter.claimCalls, admitter.recoverCalls, admitter.identity)
+	}
+	var response approvalDispatchAdmissionResponse
+	if err := json.NewDecoder(claim.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Admission.AttemptID != "attempt-a" ||
+		response.Admission.ConnectorAuthority.ConnectorID != "connector-a" || response.AdmissionSignature == "" ||
+		claim.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("response=%+v headers=%v", response, claim.Header())
+	}
+
+	recover := postApprovalConsumptionRoute(t, mux, approvalDispatchAdmissionRecoverPath, validApprovalDispatchAdmissionRequest(), "dispatch-token")
+	if recover.Code != http.StatusOK || admitter.recoverCalls != 1 {
+		t.Fatalf("recover status=%d calls=%d body=%s", recover.Code, admitter.recoverCalls, recover.Body.String())
+	}
+}
+
+func TestApprovalDispatchAdmissionRoutesFailClosedBeforeAuthority(t *testing.T) {
+	admitter := &fakeApprovalDispatchAdmitter{record: approvalDispatchAdmissionRouteRecord(t)}
+	tests := map[string]struct {
+		runtime *approvalConsumptionRuntime
+		body    string
+		status  int
+	}{
+		"dispatch verifier missing": {
+			runtime: &approvalConsumptionRuntime{admitter: admitter, stops: &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute},
+			body:    validApprovalDispatchAdmissionRequest(), status: http.StatusServiceUnavailable,
+		},
+		"dispatch scope missing": {
+			runtime: &approvalConsumptionRuntime{
+				admitter: admitter, dispatchValidator: fakeApprovalConsumerTokenValidator{err: &mcppkg.JWKSValidationError{Kind: mcppkg.JWKSErrMissingScope}},
+				stops: &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+			},
+			body: validApprovalDispatchAdmissionRequest(), status: http.StatusForbidden,
+		},
+		"unknown authority field": {
+			runtime: approvalDispatchRouteRuntime(admitter),
+			body:    strings.TrimSuffix(validApprovalDispatchAdmissionRequest(), "}") + `,"tenant_id":"attacker"}`,
+			status:  http.StatusBadRequest,
+		},
+		"caller connector selection": {
+			runtime: approvalDispatchRouteRuntime(admitter),
+			body:    strings.TrimSuffix(validApprovalDispatchAdmissionRequest(), "}") + `,"connector_id":"attacker-connector"}`,
+			status:  http.StatusBadRequest,
+		},
+		"bad idempotency hash": {
+			runtime: approvalDispatchRouteRuntime(admitter),
+			body:    strings.Replace(validApprovalDispatchAdmissionRequest(), strings.Repeat("a", 64), "bad", 1),
+			status:  http.StatusBadRequest,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			registerApprovalGrantConsumptionRoutes(mux, test.runtime)
+			response := postApprovalConsumptionRoute(t, mux, approvalDispatchAdmissionPath, test.body, "dispatch-token")
+			if response.Code != test.status {
+				t.Fatalf("status=%d want=%d body=%s", response.Code, test.status, response.Body.String())
+			}
+		})
+	}
+	if admitter.claimCalls != 0 {
+		t.Fatalf("rejected dispatch requests reached authority %d times", admitter.claimCalls)
+	}
+}
+
+func TestApprovalDispatchAdmissionFenceDenialIsBounded(t *testing.T) {
+	admitter := &fakeApprovalDispatchAdmitter{err: approvalceremony.ErrEmergencyStopFenced}
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, approvalDispatchRouteRuntime(admitter))
+	response := postApprovalConsumptionRoute(t, mux, approvalDispatchAdmissionPath, validApprovalDispatchAdmissionRequest(), "dispatch-token")
+	if response.Code != http.StatusConflict || response.Header().Get(approvalConsumptionReasonHeader) != approvalConsumptionFencedReason ||
+		!strings.Contains(response.Body.String(), approvalConsumptionFencedReason) {
+		t.Fatalf("status=%d reason=%q body=%s", response.Code, response.Header().Get(approvalConsumptionReasonHeader), response.Body.String())
 	}
 }
 
@@ -279,6 +398,13 @@ func approvalConsumptionRouteRuntime(consumer approvalGrantConsumer) *approvalCo
 	}
 }
 
+func approvalDispatchRouteRuntime(admitter approvalDispatchAdmitter) *approvalConsumptionRuntime {
+	return &approvalConsumptionRuntime{
+		admitter: admitter, dispatchValidator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(5 * time.Minute)},
+		stops: &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+	}
+}
+
 func approvalConsumerRouteClaims(ttl time.Duration) *mcppkg.OAuthTokenClaims {
 	now := time.Date(2026, 7, 16, 17, 0, 0, 0, time.UTC)
 	return &mcppkg.OAuthTokenClaims{
@@ -299,7 +425,8 @@ func approvalConsumptionRouteRecord() approvalceremony.Record {
 		TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "helm-data-plane",
 		ConsumedBy: "spiffe://helm/data-plane-a", PackID: "pack-a", PackVersion: "1.0.0",
 		PackManifestHash: "sha256:" + strings.Repeat("c", 64), Action: contracts.ApprovalGrantActionInstall,
-		IntentHash: "sha256:" + strings.Repeat("d", 64), EffectHash: "sha256:" + strings.Repeat("e", 64),
+		ConnectorAuthority: approvalRouteConnectorAuthority(),
+		IntentHash:         "sha256:" + strings.Repeat("d", 64), EffectHash: "sha256:" + strings.Repeat("e", 64),
 		PlanHash: "sha256:" + strings.Repeat("f", 64), PolicyVersion: "policy-v1", PolicyEpoch: "epoch-1",
 		PolicyHash: "sha256:" + strings.Repeat("1", 64), ServerIdentity: "kernel-a",
 		KernelTrustRootID: "root-a", SigningKeyRef: "key-a", GrantIssuedAt: now.Add(-time.Minute),
@@ -319,6 +446,65 @@ func validApprovalConsumptionRequest() string {
 		GrantHash: "sha256:" + strings.Repeat("a", 64), Nonce: strings.Repeat("b", 64),
 	})
 	return string(body)
+}
+
+func approvalDispatchAdmissionRouteRecord(t *testing.T) approvalceremony.DispatchAdmissionRecord {
+	t.Helper()
+	consumption := *approvalConsumptionRouteRecord().GrantConsumption
+	admission, err := (contracts.ApprovalDispatchAdmission{
+		SchemaVersion:   contracts.ApprovalDispatchAdmissionSchemaV1,
+		ContractVersion: contracts.ApprovalDispatchAdmissionContractV1,
+		Coverage:        contracts.ApprovalDispatchAdmissionCoverageV1,
+		AdmissionID:     "dispatch-admission-a", AttemptID: "attempt-a", State: contracts.ApprovalDispatchAdmissionStateV1,
+		ApprovalID: consumption.ApprovalID, GrantID: consumption.GrantID,
+		GrantHash: consumption.GrantHash, ConsumptionHash: consumption.ConsumptionHash,
+		TenantID: consumption.TenantID, WorkspaceID: consumption.WorkspaceID,
+		Audience: consumption.Audience, AdmittedBy: consumption.ConsumedBy,
+		IdempotencyKeyHash: "sha256:" + strings.Repeat("a", 64), EffectHash: consumption.EffectHash,
+		Action: consumption.Action, ConnectorAuthority: consumption.ConnectorAuthority,
+		KernelTrustRootID: consumption.KernelTrustRootID, SigningKeyRef: consumption.SigningKeyRef,
+		IssuedAt: consumption.ConsumedAt.Add(time.Second), ExpiresAt: consumption.ConsumedAt.Add(30 * time.Second),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return approvalceremony.DispatchAdmissionRecord{
+		Admission: admission, SignatureAlgorithm: approvalceremony.GrantSignatureEd25519,
+		Signature: strings.Repeat("a", 128), CreatedAt: admission.IssuedAt, UpdatedAt: admission.IssuedAt,
+	}
+}
+
+func validApprovalDispatchAdmissionRequest() string {
+	body, _ := json.Marshal(approvalceremony.DispatchAdmissionRequest{
+		ApprovalID: "approval-a", AttemptID: "attempt-a",
+		ConsumptionHash:    "sha256:" + strings.Repeat("2", 64),
+		IdempotencyKeyHash: "sha256:" + strings.Repeat("a", 64),
+		EffectHash:         "sha256:" + strings.Repeat("e", 64),
+		Action:             contracts.ApprovalGrantActionInstall,
+	})
+	return string(body)
+}
+
+func approvalRouteConnectorAuthority() contracts.ApprovalConnectorAuthority {
+	authority, err := (contracts.ApprovalConnectorAuthority{
+		SchemaVersion:   contracts.ApprovalConnectorAuthoritySchemaV1,
+		ContractVersion: contracts.ApprovalConnectorAuthorityContractV1,
+		State:           contracts.ApprovalConnectorAuthorityStateV1,
+		BindingRef:      "decision://helm/policy/approval-a", TenantID: "tenant-a", WorkspaceID: "workspace-a",
+		PackID: "pack-a", PackVersion: "1.0.0", PackManifestHash: "sha256:" + strings.Repeat("c", 64),
+		Action: contracts.ApprovalGrantActionInstall, EffectHash: "sha256:" + strings.Repeat("e", 64),
+		PolicyHash: "sha256:" + strings.Repeat("1", 64), ConnectorID: "connector-a",
+		ConnectorVersion: "1.0.0", ConnectorExecutorKind: "digital",
+		ConnectorBinaryHash:   "sha256:" + strings.Repeat("7", 64),
+		ConnectorSignatureRef: "sigstore://connector-a/1.0.0", ConnectorSignerID: "publisher-a",
+		ConnectorSandboxProfile: "sandbox-pack-lifecycle-v1", ConnectorDriftPolicyRef: "policy://connector-drift/v1",
+		CertificationRef: "cert://connector-a/1.0.0", CertificationHash: "sha256:" + strings.Repeat("8", 64),
+		CertificationAuthority: "spiffe://helm/certification-authority",
+	}).Seal()
+	if err != nil {
+		panic(err)
+	}
+	return authority
 }
 
 func postApprovalConsumptionRoute(t *testing.T, mux *http.ServeMux, path, body, token string) *httptest.ResponseRecorder {

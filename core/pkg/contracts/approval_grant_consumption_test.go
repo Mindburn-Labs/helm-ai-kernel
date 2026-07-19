@@ -39,6 +39,10 @@ func TestApprovalGrantConsumptionSealsExactGrantAndWorkload(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			candidate := base
 			test.mutate(&candidate)
+			candidate.ConnectorAuthority = approvalConnectorAuthorityFor(
+				candidate.TenantID, candidate.WorkspaceID, candidate.PackID, candidate.PackVersion,
+				candidate.PackManifestHash, candidate.Action, candidate.EffectHash, candidate.PolicyHash,
+			)
 			candidate, err = candidate.Seal()
 			if err != nil {
 				t.Fatalf("Seal() error = %v", err)
@@ -90,7 +94,8 @@ func validApprovalGrantConsumption(grant ApprovalGrant) ApprovalGrantConsumption
 		TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, Audience: grant.Audience,
 		ConsumedBy: "spiffe://helm/data-plane-a", PackID: grant.PackID, PackVersion: grant.PackVersion,
 		PackManifestHash: grant.PackManifestHash, Action: grant.Action,
-		IntentHash: grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
+		ConnectorAuthority: grant.ConnectorAuthority,
+		IntentHash:         grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
 		PolicyVersion: grant.PolicyVersion, PolicyEpoch: grant.PolicyEpoch, PolicyHash: grant.PolicyHash,
 		ServerIdentity: grant.ServerIdentity, KernelTrustRootID: grant.KernelTrustRootID, SigningKeyRef: grant.SigningKeyRef,
 		GrantIssuedAt: grant.IssuedAt, GrantExpiresAt: grant.ExpiresAt, ConsumedAt: grant.IssuedAt.Add(time.Minute),

@@ -66,6 +66,8 @@ type LaunchEffectReceipt struct {
 	ApprovalArtifactHash      string                      `json:"approval_artifact_hash"`
 	ApprovalConsumptionRef    string                      `json:"approval_consumption_ref"`
 	ApprovalConsumptionHash   string                      `json:"approval_consumption_hash"`
+	DispatchAdmissionRef      string                      `json:"dispatch_admission_ref"`
+	DispatchAdmissionHash     string                      `json:"dispatch_admission_hash"`
 	EffectPermitRef           string                      `json:"effect_permit_ref"`
 	EffectPermitHash          string                      `json:"effect_permit_hash"`
 	PermitNonce               string                      `json:"permit_nonce"`
@@ -74,6 +76,8 @@ type LaunchEffectReceipt struct {
 	PolicyEpoch               string                      `json:"policy_epoch"`
 	EmergencyFenceEpoch       int64                       `json:"emergency_fence_epoch"`
 	ConnectorContractHash     string                      `json:"connector_contract_hash"`
+	ConnectorAuthorityRef     string                      `json:"connector_authority_ref"`
+	ConnectorAuthorityHash    string                      `json:"connector_authority_hash"`
 	ReconciliationLocator     string                      `json:"reconciliation_locator_hash"`
 	ProviderOperationRef      string                      `json:"provider_operation_ref,omitempty"`
 	ProviderResourceRefs      []string                    `json:"provider_resource_refs,omitempty"`
@@ -139,6 +143,8 @@ func DeriveLaunchEffectReceiptChainID(receipt LaunchEffectReceipt) (string, erro
 		ApprovalArtifactHash      string `json:"approval_artifact_hash"`
 		ApprovalConsumptionRef    string `json:"approval_consumption_ref"`
 		ApprovalConsumptionHash   string `json:"approval_consumption_hash"`
+		DispatchAdmissionRef      string `json:"dispatch_admission_ref"`
+		DispatchAdmissionHash     string `json:"dispatch_admission_hash"`
 		EffectPermitRef           string `json:"effect_permit_ref"`
 		EffectPermitHash          string `json:"effect_permit_hash"`
 		PermitNonce               string `json:"permit_nonce"`
@@ -147,6 +153,8 @@ func DeriveLaunchEffectReceiptChainID(receipt LaunchEffectReceipt) (string, erro
 		PolicyEpoch               string `json:"policy_epoch"`
 		EmergencyFenceEpoch       int64  `json:"emergency_fence_epoch"`
 		ConnectorContractHash     string `json:"connector_contract_hash"`
+		ConnectorAuthorityRef     string `json:"connector_authority_ref"`
+		ConnectorAuthorityHash    string `json:"connector_authority_hash"`
 		DependencySetRef          string `json:"dependency_set_ref"`
 		DependencySetHash         string `json:"dependency_set_hash"`
 		RouteBindingRef           string `json:"route_binding_ref,omitempty"`
@@ -168,10 +176,12 @@ func DeriveLaunchEffectReceiptChainID(receipt LaunchEffectReceipt) (string, erro
 		Principal: receipt.Principal, Audience: receipt.Audience, KernelTrustRootID: receipt.KernelTrustRootID,
 		ApprovalArtifactRef: receipt.ApprovalArtifactRef, ApprovalArtifactHash: receipt.ApprovalArtifactHash,
 		ApprovalConsumptionRef: receipt.ApprovalConsumptionRef, ApprovalConsumptionHash: receipt.ApprovalConsumptionHash,
+		DispatchAdmissionRef: receipt.DispatchAdmissionRef, DispatchAdmissionHash: receipt.DispatchAdmissionHash,
 		EffectPermitRef: receipt.EffectPermitRef, EffectPermitHash: receipt.EffectPermitHash, PermitNonce: receipt.PermitNonce,
 		PermitConsumptionRef: receipt.PermitConsumptionRef, PermitConsumptionHash: receipt.PermitConsumptionHash,
 		PolicyEpoch: receipt.PolicyEpoch, EmergencyFenceEpoch: receipt.EmergencyFenceEpoch,
-		ConnectorContractHash: receipt.ConnectorContractHash, DependencySetRef: receipt.DependencySetRef, DependencySetHash: receipt.DependencySetHash,
+		ConnectorContractHash: receipt.ConnectorContractHash, ConnectorAuthorityRef: receipt.ConnectorAuthorityRef, ConnectorAuthorityHash: receipt.ConnectorAuthorityHash,
+		DependencySetRef: receipt.DependencySetRef, DependencySetHash: receipt.DependencySetHash,
 		RouteBindingRef: receipt.RouteBindingRef, RouteBindingHash: receipt.RouteBindingHash, RoutePlacementID: receipt.RoutePlacementID,
 		ProviderProfileRef: receipt.ProviderProfileRef, ProviderProfileHash: receipt.ProviderProfileHash,
 		ProviderCertificationRef: receipt.ProviderCertificationRef, ProviderCertificationHash: receipt.ProviderCertificationHash,
@@ -303,6 +313,8 @@ func VerifyLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, ct
 		{"approval_artifact_hash", current.ApprovalArtifactHash, previous.ApprovalArtifactHash},
 		{"approval_consumption_ref", current.ApprovalConsumptionRef, previous.ApprovalConsumptionRef},
 		{"approval_consumption_hash", current.ApprovalConsumptionHash, previous.ApprovalConsumptionHash},
+		{"dispatch_admission_ref", current.DispatchAdmissionRef, previous.DispatchAdmissionRef},
+		{"dispatch_admission_hash", current.DispatchAdmissionHash, previous.DispatchAdmissionHash},
 		{"effect_permit_ref", current.EffectPermitRef, previous.EffectPermitRef},
 		{"effect_permit_hash", current.EffectPermitHash, previous.EffectPermitHash},
 		{"permit_nonce", current.PermitNonce, previous.PermitNonce},
@@ -310,6 +322,8 @@ func VerifyLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, ct
 		{"permit_consumption_hash", current.PermitConsumptionHash, previous.PermitConsumptionHash},
 		{"policy_epoch", current.PolicyEpoch, previous.PolicyEpoch},
 		{"connector_contract_hash", current.ConnectorContractHash, previous.ConnectorContractHash},
+		{"connector_authority_ref", current.ConnectorAuthorityRef, previous.ConnectorAuthorityRef},
+		{"connector_authority_hash", current.ConnectorAuthorityHash, previous.ConnectorAuthorityHash},
 		{"reconciliation_locator_hash", current.ReconciliationLocator, previous.ReconciliationLocator},
 		{"dependency_set_hash", current.DependencySetHash, previous.DependencySetHash},
 		{"dependency_set_ref", current.DependencySetRef, previous.DependencySetRef},
@@ -364,7 +378,8 @@ func ValidateLaunchEffectReceiptSemantics(receipt LaunchEffectReceipt) error {
 		return errors.New("launch effect receipt effect is not registered")
 	}
 	if receipt.DecisionID == "" || receipt.Principal == "" || receipt.Audience == "" || receipt.KernelTrustRootID == "" || receipt.TenantID == "" || receipt.WorkspaceID == "" || receipt.MissionID == "" ||
-		receipt.KernelVerdictRef == "" || receipt.ApprovalArtifactRef == "" || receipt.ApprovalConsumptionRef == "" || receipt.EffectPermitRef == "" || receipt.PermitConsumptionRef == "" || receipt.DependencySetRef == "" ||
+		receipt.KernelVerdictRef == "" || receipt.ApprovalArtifactRef == "" || receipt.ApprovalConsumptionRef == "" || receipt.DispatchAdmissionRef == "" || receipt.EffectPermitRef == "" || receipt.PermitConsumptionRef == "" || receipt.DependencySetRef == "" ||
+		receipt.ConnectorAuthorityRef == "" ||
 		receipt.PolicyEpoch == "" || receipt.SignerKeyID == "" {
 		return errors.New("launch effect receipt is missing an identity, authority, or signer reference")
 	}
@@ -410,9 +425,11 @@ func ValidateLaunchEffectReceiptSemantics(receipt LaunchEffectReceipt) error {
 		"kernel_verdict_hash":         receipt.KernelVerdictHash,
 		"approval_artifact_hash":      receipt.ApprovalArtifactHash,
 		"approval_consumption_hash":   receipt.ApprovalConsumptionHash,
+		"dispatch_admission_hash":     receipt.DispatchAdmissionHash,
 		"effect_permit_hash":          receipt.EffectPermitHash,
 		"permit_consumption_hash":     receipt.PermitConsumptionHash,
 		"connector_contract_hash":     receipt.ConnectorContractHash,
+		"connector_authority_hash":    receipt.ConnectorAuthorityHash,
 		"reconciliation_locator_hash": receipt.ReconciliationLocator,
 		"proofgraph_node":             receipt.ProofGraphNode,
 		"payload_hash":                receipt.PayloadHash,

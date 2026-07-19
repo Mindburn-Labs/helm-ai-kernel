@@ -39,6 +39,8 @@ type LaunchEffectAuthorizationEnvelope struct {
 	ApprovalArtifactHash    string         `json:"approval_artifact_hash"`
 	ApprovalConsumptionRef  string         `json:"approval_consumption_ref"`
 	ApprovalConsumptionHash string         `json:"approval_consumption_hash"`
+	DispatchAdmissionRef    string         `json:"dispatch_admission_ref"`
+	DispatchAdmissionHash   string         `json:"dispatch_admission_hash"`
 	DependencySetRef        string         `json:"dependency_set_ref"`
 	DependencySetHash       string         `json:"dependency_set_hash"`
 	PolicyEpoch             string         `json:"policy_epoch"`
@@ -59,6 +61,8 @@ type LaunchEffectAuthorizationEnvelope struct {
 	EvidenceReservationRef  string         `json:"evidence_reservation_ref"`
 	ConnectorID             string         `json:"connector_id"`
 	ConnectorContractHash   string         `json:"connector_contract_hash"`
+	ConnectorAuthorityRef   string         `json:"connector_authority_ref"`
+	ConnectorAuthorityHash  string         `json:"connector_authority_hash"`
 	ActionURN               string         `json:"action_urn"`
 	RequestBodyHash         string         `json:"request_body_hash"`
 	ArgsC14NHash            string         `json:"args_c14n_hash"`
@@ -95,10 +99,14 @@ type LaunchEffectPermitBinding struct {
 	ApprovalArtifactHash    string
 	ApprovalConsumptionRef  string
 	ApprovalConsumptionHash string
+	DispatchAdmissionRef    string
+	DispatchAdmissionHash   string
 	DependencySetRef        string
 	DependencySetHash       string
 	ConnectorID             string
 	ConnectorContractHash   string
+	ConnectorAuthorityRef   string
+	ConnectorAuthorityHash  string
 	ActionURN               string
 	RequestBodyHash         string
 	ArgsC14NHash            string
@@ -113,12 +121,15 @@ type LaunchEffectPermitBinding struct {
 // Grant and Consumption records because those portable contracts deliberately
 // exclude transport/storage signature envelopes.
 type LaunchEffectApprovalAuthority struct {
-	Grant                         ApprovalGrant            `json:"grant"`
-	GrantSignatureAlgorithm       string                   `json:"grant_signature_algorithm"`
-	GrantSignature                string                   `json:"grant_signature"`
-	Consumption                   ApprovalGrantConsumption `json:"consumption"`
-	ConsumptionSignatureAlgorithm string                   `json:"consumption_signature_algorithm"`
-	ConsumptionSignature          string                   `json:"consumption_signature"`
+	Grant                         ApprovalGrant             `json:"grant"`
+	GrantSignatureAlgorithm       string                    `json:"grant_signature_algorithm"`
+	GrantSignature                string                    `json:"grant_signature"`
+	Consumption                   ApprovalGrantConsumption  `json:"consumption"`
+	ConsumptionSignatureAlgorithm string                    `json:"consumption_signature_algorithm"`
+	ConsumptionSignature          string                    `json:"consumption_signature"`
+	DispatchAdmission             ApprovalDispatchAdmission `json:"dispatch_admission"`
+	DispatchSignatureAlgorithm    string                    `json:"dispatch_signature_algorithm"`
+	DispatchSignature             string                    `json:"dispatch_signature"`
 }
 
 // LaunchEffectEnvelopeVerificationContext supplies independently resolved
@@ -139,8 +150,9 @@ type LaunchEffectEnvelopeVerificationContext struct {
 	ResolveVerdictKey        func(signerKeyID string) (ed25519.PublicKey, error)
 	// FinalizeDispatch MUST atomically: re-read the canonical scoped-stop state,
 	// deny an active or unavailable fence, re-check predecessor receipt state,
-	// compare the canonical approval consumption, and CAS this single-use
-	// dispatch permit. A separate pre-read is insufficient.
+	// compare the canonical approval consumption and dispatch admission, verify
+	// that the exact connector release remains current and non-revoked, and CAS
+	// this single-use dispatch permit. A separate pre-read is insufficient.
 	FinalizeDispatch func(expected LaunchEffectPermitBinding) error
 	Permit           LaunchEffectPermitBinding
 }
@@ -315,8 +327,14 @@ func verifyLaunchCanonicalApproval(envelope LaunchEffectAuthorizationEnvelope, c
 	if err := authority.Consumption.ValidateGrant(authority.Grant); err != nil {
 		return fmt.Errorf("canonical launch approval consumption is invalid: %w", err)
 	}
+	if err := authority.DispatchAdmission.ValidateAt(ctx.Now); err != nil {
+		return fmt.Errorf("canonical launch dispatch admission is invalid: %w", err)
+	}
+	if err := authority.DispatchAdmission.ValidateConsumption(authority.Consumption); err != nil {
+		return fmt.Errorf("canonical launch dispatch admission does not bind its consumption: %w", err)
+	}
 	if err := ctx.VerifyApprovalAuthority(authority); err != nil {
-		return fmt.Errorf("canonical launch approval signatures are invalid: %w", err)
+		return fmt.Errorf("canonical launch approval or dispatch signatures are invalid: %w", err)
 	}
 	expectedAction, err := launchApprovalActionForEffect(envelope.EffectID)
 	if err != nil {
@@ -324,16 +342,46 @@ func verifyLaunchCanonicalApproval(envelope LaunchEffectAuthorizationEnvelope, c
 	}
 	grant := authority.Grant
 	consumption := authority.Consumption
+	admission := authority.DispatchAdmission
 	if grant.GrantID != envelope.ApprovalArtifactRef || !launchConstantEqual(grant.GrantHash, envelope.ApprovalArtifactHash) ||
 		!launchConstantEqual(consumption.ConsumptionHash, envelope.ApprovalConsumptionHash) ||
+		admission.AdmissionID != envelope.DispatchAdmissionRef || !launchConstantEqual(admission.AdmissionHash, envelope.DispatchAdmissionHash) ||
 		grant.TenantID != envelope.TenantID || grant.WorkspaceID != envelope.WorkspaceID || grant.Audience != envelope.Audience ||
 		consumption.TenantID != envelope.TenantID || consumption.WorkspaceID != envelope.WorkspaceID || consumption.Audience != envelope.Audience || consumption.ConsumedBy != envelope.Principal ||
+		admission.TenantID != envelope.TenantID || admission.WorkspaceID != envelope.WorkspaceID || admission.Audience != envelope.Audience || admission.AdmittedBy != envelope.Principal ||
 		grant.KernelTrustRootID != envelope.KernelTrustRootID || consumption.KernelTrustRootID != envelope.KernelTrustRootID ||
+		admission.KernelTrustRootID != envelope.KernelTrustRootID || admission.AttemptID != envelope.EffectPermitRef ||
+		!launchConstantEqual(admission.IdempotencyKeyHash, envelope.IdempotencyKey) || !launchConstantEqual(admission.EffectHash, envelope.InputHash) ||
 		grant.PackID != envelope.MissionID || grant.PackVersion != LaunchEffectCatalogVersion ||
 		!launchConstantEqual(grant.PackManifestHash, envelope.PlanHash) || !launchConstantEqual(grant.IntentHash, envelope.PlanHash) ||
 		!launchConstantEqual(grant.EffectHash, envelope.InputHash) || !launchConstantEqual(grant.PlanHash, envelope.PlanHash) ||
 		grant.PolicyEpoch != envelope.PolicyEpoch || grant.Action != expectedAction {
-		return errors.New("canonical launch approval grant or consumption does not bind the exact dispatch")
+		return errors.New("canonical launch approval grant, consumption, or dispatch admission does not bind the exact dispatch")
+	}
+	connectorAuthority := grant.ConnectorAuthority
+	if connectorAuthority.BindingRef != envelope.ConnectorAuthorityRef || !launchConstantEqual(connectorAuthority.AuthorityHash, envelope.ConnectorAuthorityHash) {
+		return errors.New("canonical launch approval connector authority does not match the dispatch envelope")
+	}
+	expectedConnectorID := envelope.ConnectorID
+	if launchEffectIsProviderMutation(envelope.EffectID) {
+		providerConnectorID, ok := envelope.Input["provider_connector_id"].(string)
+		if !ok || providerConnectorID == "" {
+			return errors.New("launch provider mutation has no approval-bound provider connector")
+		}
+		expectedConnectorID = providerConnectorID
+		certificationRef, refOK := envelope.Input["provider_certification_ref"].(string)
+		certificationHash, hashOK := envelope.Input["provider_certification_hash"].(string)
+		if !refOK || !hashOK || connectorAuthority.CertificationRef != certificationRef || !launchConstantEqual(connectorAuthority.CertificationHash, certificationHash) {
+			return errors.New("canonical launch approval connector authority does not match provider certification")
+		}
+	}
+	if connectorAuthority.ConnectorID != expectedConnectorID {
+		return errors.New("canonical launch approval connector release does not match the dispatched connector")
+	}
+	permitIssuedAt, _ := time.Parse(time.RFC3339Nano, envelope.PermitIssuedAt)
+	permitExpiry, _ := time.Parse(time.RFC3339Nano, envelope.PermitExpiry)
+	if permitIssuedAt.Before(admission.IssuedAt) || permitExpiry.After(admission.ExpiresAt) {
+		return errors.New("launch effect permit escapes its canonical dispatch admission window")
 	}
 	if consumption.ConsumedAt.After(ctx.Now) {
 		return errors.New("canonical launch approval consumption is in the future")
@@ -524,6 +572,7 @@ func validateLaunchEnvelopeShape(envelope LaunchEffectAuthorizationEnvelope) err
 		"kernel_trust_root_id":      envelope.KernelTrustRootID,
 		"approval_artifact_ref":     envelope.ApprovalArtifactRef,
 		"approval_consumption_ref":  envelope.ApprovalConsumptionRef,
+		"dispatch_admission_ref":    envelope.DispatchAdmissionRef,
 		"dependency_set_ref":        envelope.DependencySetRef,
 		"kernel_verdict_ref":        envelope.KernelVerdictRef,
 		"kernel_verdict_signer_key": envelope.KernelVerdictSignerKey,
@@ -531,6 +580,7 @@ func validateLaunchEnvelopeShape(envelope LaunchEffectAuthorizationEnvelope) err
 		"permit_nonce":              envelope.PermitNonce,
 		"proof_session_ref":         envelope.ProofSessionRef,
 		"evidence_reservation_ref":  envelope.EvidenceReservationRef,
+		"connector_authority_ref":   envelope.ConnectorAuthorityRef,
 	}
 	for field, value := range required {
 		if value == "" {
@@ -547,10 +597,12 @@ func validateLaunchEnvelopeShape(envelope LaunchEffectAuthorizationEnvelope) err
 		"plan_hash":                 envelope.PlanHash,
 		"approval_artifact_hash":    envelope.ApprovalArtifactHash,
 		"approval_consumption_hash": envelope.ApprovalConsumptionHash,
+		"dispatch_admission_hash":   envelope.DispatchAdmissionHash,
 		"dependency_set_hash":       envelope.DependencySetHash,
 		"kernel_verdict_hash":       envelope.KernelVerdictHash,
 		"effect_permit_hash":        envelope.EffectPermitHash,
 		"connector_contract_hash":   envelope.ConnectorContractHash,
+		"connector_authority_hash":  envelope.ConnectorAuthorityHash,
 		"request_body_hash":         envelope.RequestBodyHash,
 		"args_c14n_hash":            envelope.ArgsC14NHash,
 	}
@@ -670,12 +722,16 @@ func verifyLaunchPermitBinding(envelope LaunchEffectAuthorizationEnvelope, permi
 		{"approval_artifact_hash", envelope.ApprovalArtifactHash, permit.ApprovalArtifactHash},
 		{"approval_consumption_ref", envelope.ApprovalConsumptionRef, permit.ApprovalConsumptionRef},
 		{"approval_consumption_hash", envelope.ApprovalConsumptionHash, permit.ApprovalConsumptionHash},
+		{"dispatch_admission_ref", envelope.DispatchAdmissionRef, permit.DispatchAdmissionRef},
+		{"dispatch_admission_hash", envelope.DispatchAdmissionHash, permit.DispatchAdmissionHash},
 		{"dependency_set_ref", envelope.DependencySetRef, permit.DependencySetRef},
 		{"dependency_set_hash", envelope.DependencySetHash, permit.DependencySetHash},
 		{"kernel_verdict_ref", envelope.KernelVerdictRef, permit.KernelVerdictRef},
 		{"kernel_verdict_hash", envelope.KernelVerdictHash, permit.KernelVerdictHash},
 		{"connector_id", envelope.ConnectorID, permit.ConnectorID},
 		{"connector_contract_hash", envelope.ConnectorContractHash, permit.ConnectorContractHash},
+		{"connector_authority_ref", envelope.ConnectorAuthorityRef, permit.ConnectorAuthorityRef},
+		{"connector_authority_hash", envelope.ConnectorAuthorityHash, permit.ConnectorAuthorityHash},
 		{"action_urn", envelope.ActionURN, permit.ActionURN},
 		{"request_body_hash", envelope.RequestBodyHash, permit.RequestBodyHash},
 		{"args_c14n_hash", envelope.ArgsC14NHash, permit.ArgsC14NHash},

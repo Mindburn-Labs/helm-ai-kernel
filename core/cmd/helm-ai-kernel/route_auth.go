@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/subtle"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -9,7 +10,24 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
+
+// principalBindingStore is the package-level registry consulted by
+// requireRuntimeTenant to accept (tenant, principal) pairs beyond the single
+// env-configured pair. It is nil unless SetPrincipalBindingStore is called
+// during server startup (see main.go registration), matching
+// requireRuntimeTenant's existing pattern of reading global os.Getenv state.
+// nil => env-pair-only behavior (current behavior, no panic).
+var principalBindingStore store.PrincipalBindingStore
+
+// SetPrincipalBindingStore injects the registry consulted by the tenant gate.
+// Call once during server registration (guarded by services != nil); tests
+// may call it with a fake/in-memory store and must reset it via
+// SetPrincipalBindingStore(nil) in t.Cleanup.
+func SetPrincipalBindingStore(s store.PrincipalBindingStore) {
+	principalBindingStore = s
+}
 
 const (
 	tenantHeader           = "X-Helm-Tenant-ID"
@@ -74,28 +92,38 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 			api.WriteForbidden(w, "Tenant-scoped route requires explicit tenant binding")
 			return
 		}
-		if requestedTenantID != tenantID {
-			api.WriteForbidden(w, "Tenant-scoped route tenant mismatch")
-			return
-		}
 
 		principalID := configuredRuntimePrincipalID(adminPrincipal)
-		if principalID == "" {
-			api.WriteForbidden(w, "Tenant-scoped route principal could not be resolved")
-			return
-		}
 		requestedPrincipalID := strings.TrimSpace(r.Header.Get(principalHeader))
 		if requestedPrincipalID == "" {
 			api.WriteForbidden(w, "Tenant-scoped route requires explicit principal binding")
 			return
 		}
-		if requestedPrincipalID != principalID {
+
+		// env path first: no DB hit for the common single-tenant/quickstart case.
+		envMatch := requestedTenantID == tenantID && principalID != "" && requestedPrincipalID == principalID
+		registered := false
+		if !envMatch && principalBindingStore != nil {
+			ok, err := principalBindingStore.Exists(r.Context(), requestedTenantID, requestedPrincipalID)
+			if err != nil {
+				// Fail closed: a store error must not be treated as a match.
+				log.Printf("[helm] principal binding lookup failed, denying tenant-scoped request: %v", err)
+			} else {
+				registered = ok
+			}
+		}
+		if !envMatch && !registered {
+			if requestedTenantID != tenantID {
+				api.WriteForbidden(w, "Tenant-scoped route tenant mismatch")
+				return
+			}
 			api.WriteForbidden(w, "Tenant-scoped route principal mismatch")
 			return
 		}
+
 		principal := &helmauth.BasePrincipal{
-			ID:       principalID,
-			TenantID: tenantID,
+			ID:       requestedPrincipalID,
+			TenantID: requestedTenantID,
 			Roles:    append([]string(nil), adminPrincipal.GetRoles()...),
 		}
 		handler(w, r.WithContext(helmauth.WithPrincipal(r.Context(), principal)))

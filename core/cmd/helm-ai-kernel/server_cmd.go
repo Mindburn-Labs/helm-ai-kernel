@@ -10,7 +10,10 @@ import (
 
 func runServerCommand(name string, args []string, stdout, stderr io.Writer) int {
 	if name == "server" && len(args) == 0 {
-		startServer()
+		if err := startServer(); err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: start server: %v\n", err)
+			return 1
+		}
 		return 0
 	}
 
@@ -79,6 +82,9 @@ func runServerCommand(name string, args []string, stdout, stderr io.Writer) int 
 		}
 	}
 
-	runServerWithOptions(opts)
+	if err := runServerWithOptions(opts); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: start server: %v\n", err)
+		return 1
+	}
 	return 0
 }

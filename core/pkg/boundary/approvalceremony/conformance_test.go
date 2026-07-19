@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: conformance tests over classical Ed25519 approval-ceremony
+// signatures; no post-quantum claim.
+
 import (
 	"bytes"
 	"crypto/ed25519"

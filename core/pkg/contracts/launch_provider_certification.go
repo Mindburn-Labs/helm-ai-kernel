@@ -1,3 +1,5 @@
+// quantum_posture: provider certification uses classical Ed25519 signatures;
+// this preview contract makes no hybrid or post-quantum certification claim.
 package contracts
 
 import (

@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/effects/launch/provider_certification.v1.json",
+  "$comment": "quantum_posture: this preview schema describes classical Ed25519 certification signatures only and makes no hybrid or post-quantum claim.",
   "version": "1.0.0-alpha.1",
   "title": "Launch Provider Certification Record (Preview)",
   "description": "Source-owned signed admission record for one exact provider capability profile and connector contract.",

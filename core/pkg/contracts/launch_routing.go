@@ -1,3 +1,5 @@
+// quantum_posture: route validation verifies classical Ed25519 provider
+// certification records and makes no hybrid or post-quantum protection claim.
 package contracts
 
 import (

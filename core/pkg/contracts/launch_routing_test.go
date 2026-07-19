@@ -1,3 +1,5 @@
+// quantum_posture: these tests exercise classical Ed25519 certification
+// fixtures only; they do not claim hybrid or post-quantum protection.
 package contracts_test
 
 import (

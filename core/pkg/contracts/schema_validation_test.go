@@ -1,3 +1,5 @@
+// quantum_posture: schema tests validate classical Ed25519 wire fields only;
+// they do not implement or claim a post-quantum cryptographic control.
 package contracts_test
 
 import (

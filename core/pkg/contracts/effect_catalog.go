@@ -1,5 +1,7 @@
 package contracts
 
+import "encoding/json"
+
 // EffectTypeCatalog represents the canonical list of effect types.
 type EffectTypeCatalog struct {
 	CatalogVersion string       `json:"catalog_version"`
@@ -34,9 +36,28 @@ type EffectType struct {
 
 type IdempotencyRef struct {
 	Strategy           string   `json:"strategy"` // client_provided, content_hash, effect_id, none
-	KeyComposition     []string `json:"key_composition,omitempty"`
+	KeyComposition     []string `json:"key_composition"`
 	DedupWindowSeconds int      `json:"dedup_window_seconds,omitempty"`
 	OnDuplicate        string   `json:"on_duplicate,omitempty"` // reject, return_existing, log_and_skip
+}
+
+// MarshalJSON keeps the schema-required key composition explicit on the wire.
+// Strategies without component fields serialize an empty array rather than
+// omitting the field or emitting null.
+func (ref IdempotencyRef) MarshalJSON() ([]byte, error) {
+	type idempotencyWire struct {
+		Strategy           string   `json:"strategy"`
+		KeyComposition     []string `json:"key_composition"`
+		DedupWindowSeconds int      `json:"dedup_window_seconds,omitempty"`
+		OnDuplicate        string   `json:"on_duplicate,omitempty"`
+	}
+	keyComposition := append([]string{}, ref.KeyComposition...)
+	return json.Marshal(idempotencyWire{
+		Strategy:           ref.Strategy,
+		KeyComposition:     keyComposition,
+		DedupWindowSeconds: ref.DedupWindowSeconds,
+		OnDuplicate:        ref.OnDuplicate,
+	})
 }
 
 type Classification struct {

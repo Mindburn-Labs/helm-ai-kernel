@@ -1,3 +1,5 @@
+// quantum_posture: this is a classical Ed25519 verifier; no post-quantum
+// protection is provided or claimed by this implementation.
 package crypto
 
 import (

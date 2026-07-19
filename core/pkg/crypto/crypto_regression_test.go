@@ -1,3 +1,5 @@
+// quantum_posture: these tests cover existing classical and hybrid/PQ paths;
+// test coverage itself makes no post-quantum protection claim.
 package crypto
 
 import (

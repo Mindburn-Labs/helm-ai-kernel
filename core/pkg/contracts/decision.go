@@ -1,3 +1,5 @@
+// quantum_posture: execution-intent signature metadata is algorithm-neutral;
+// protection depends on the configured classical, ML-DSA, or hybrid verifier.
 package contracts
 
 import (

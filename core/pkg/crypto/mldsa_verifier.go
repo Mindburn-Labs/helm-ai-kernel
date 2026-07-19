@@ -1,3 +1,5 @@
+// quantum_posture: ML-DSA-65 verification is post-quantum when explicitly
+// configured; it does not upgrade classical identities or external edges.
 package crypto
 
 import (

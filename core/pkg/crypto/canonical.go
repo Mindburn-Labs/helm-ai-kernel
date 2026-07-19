@@ -1,3 +1,5 @@
+// quantum_posture: canonical signing preimages are algorithm-neutral; they do
+// not upgrade the posture of the configured signer or external trust edges.
 package crypto
 
 import (

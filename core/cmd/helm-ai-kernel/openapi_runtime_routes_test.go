@@ -261,6 +261,31 @@ func TestRuntimeRouteRegistryHasExplicitSecurityMetadata(t *testing.T) {
 	}
 }
 
+func TestApprovalConsumptionRoutesHaveExactRegistryMetadata(t *testing.T) {
+	expected := []RuntimeRouteSpec{
+		{Method: http.MethodPost, Path: approvalGrantConsumePath, MuxPattern: approvalGrantConsumePath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "consumeApprovalGrant", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: approvalGrantConsumptionRecoverPath, MuxPattern: approvalGrantConsumptionRecoverPath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "recoverApprovalGrantConsumption", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: approvalDispatchAdmissionPath, MuxPattern: approvalDispatchAdmissionPath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "admitApprovalDispatch", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: approvalDispatchAdmissionRecoverPath, MuxPattern: approvalDispatchAdmissionRecoverPath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "recoverApprovalDispatchAdmission", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: effectDispositionPath, MuxPattern: effectDispositionPath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "recordEffectDisposition", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: effectDispositionRecoverPath, MuxPattern: effectDispositionRecoverPath, Auth: RouteAuthWorkload, RateLimit: RouteRateEvidence, ContractStatus: RouteContractInternal, OperationID: "recoverEffectDisposition", Owner: "core/cmd/helm-ai-kernel"},
+	}
+	registered := make(map[string]RuntimeRouteSpec, len(RuntimeRouteSpecs()))
+	for _, spec := range RuntimeRouteSpecs() {
+		registered[spec.Method+" "+spec.Path] = spec
+	}
+	for _, want := range expected {
+		key := want.Method + " " + want.Path
+		got, ok := registered[key]
+		if !ok {
+			t.Fatalf("approval workload route %s is missing from the runtime registry", key)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("approval workload route %s metadata = %+v, want %+v", key, got, want)
+		}
+	}
+}
+
 func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 	registered := map[string]RuntimeRouteSpec{}
 	for _, spec := range RuntimeRouteSpecs() {

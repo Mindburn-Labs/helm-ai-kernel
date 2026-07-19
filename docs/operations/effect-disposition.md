@@ -6,15 +6,18 @@ last_reviewed: 2026-07-18
 
 # Signed active-work disposition
 
+<!-- quantum_posture: documents classical Ed25519 command and receipt signatures and the RSA-JWKS (RS256) workload token boundary; no post-quantum control is added or claimed. -->
+
 The Kernel can durably accept a Control Plane instruction about connector work
 that is already `STARTED` or `UNCERTAIN`. Every command is bound to one active
 tenant/workspace FENCE, one exact reservation head, and one position in an
 append-only disposition chain. The Kernel returns a separately signed receipt.
 
-This is source-owned contract, persistence, and real-PostgreSQL evidence. It is
-internal and pre-production. There is no deployed Control Plane outbox,
-authenticated Data Plane retrieval route, connector disposition adapter, or
-controlled-live cancellation, compensation, or reconciliation proof.
+This is source-owned contract, persistence, internal workload-authenticated
+Kernel transport, and real-PostgreSQL evidence. It is internal and
+pre-production. There is no deployed cross-plane path, connector disposition
+adapter, or controlled-live cancellation, compensation, or reconciliation
+proof.
 
 ## No execution authority
 
@@ -32,6 +35,73 @@ Acceptance is not permission to perform any of those external effects. Every
 Plane that cancels or compensates still needs a separate, current, governed
 effect authority and source-specific connector path. Neither the command nor
 its receipt may be presented as an EffectPermit.
+
+## Internal workload transport
+
+When both `HELM_APPROVAL_CONSUMPTION_ENABLED=1` and
+`HELM_EFFECT_DISPOSITION_ENABLED=1`, the Kernel exposes:
+
+- `POST /internal/v1/effect-dispositions` for one strict signed command
+  envelope; and
+- `POST /internal/v1/effect-dispositions/recover` with a strict `command_id`
+  JSON body for tenant/workspace scoped recovery of the committed signed
+  record.
+
+Both routes use the existing JWKS workload boundary and require the distinct
+`HELM_EFFECT_DISPOSITION_SCOPE` capability (default
+`helm.effect.disposition`). The authenticated token supplies subject, tenant,
+workspace, and the configured workload audience; caller-controlled headers do
+not. Responses are `no-store` and marked `internal_non_production`.
+
+Startup fails closed unless PostgreSQL, the approval signing identity, JWKS
+configuration, and both deployment-pinned public keyrings are present. The
+strict JSON keyrings are supplied in
+`HELM_EFFECT_DISPOSITION_COMMAND_KEYRING` with version
+`effect-disposition-command-keyring.v1` and
+`HELM_CONNECTOR_RELEASE_AUTHORITY_KEYRING` with version
+`connector-release-authority-keyring.v1`. Entries bind authority ID, signing
+key ref, canonical Ed25519 public key, enabled state, and UTC key lifetime;
+command keys additionally bind the exact workload audience. Multiple entries
+support explicit overlapping key rotation. HTTP error bodies are sanitized and
+unsigned statuses remain transport evidence only, never disposition authority.
+
+The environment values are compact JSON. Replace the example keys, identities,
+and lifetimes with deployment-owned values; keep historical verification keys
+until every dependent disposition and close artifact has passed its retention
+window.
+
+```json
+{"keyring_version":"effect-disposition-command-keyring.v1","keys":[{"authority_id":"spiffe://helm/control-plane","signing_key_ref":"kms://helm/control-plane/disposition-2026-07","audience":"helm-data-plane","public_key":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","enabled":true,"not_before":"2026-07-18T00:00:00Z","not_after":"2026-10-18T00:00:00Z"}]}
+```
+
+```json
+{"keyring_version":"connector-release-authority-keyring.v1","keys":[{"authority_id":"connector-registry-prod","signing_key_ref":"kms://helm/connector-registry-2026-07","public_key":"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789","enabled":true,"not_before":"2026-07-18T00:00:00Z","not_after":"2026-10-18T00:00:00Z"}]}
+```
+
+### Response and recovery contract
+
+Every route response, including authentication and validation failures, sets
+`Cache-Control: no-store` and
+`X-Helm-Contract-Status: internal_non_production`. Only a valid signed record
+is durable disposition evidence; HTTP status alone is unsigned transport
+evidence.
+
+| Status | Meaning | Caller action |
+| --- | --- | --- |
+| `400` | Malformed, non-canonical, unknown-field, trailing, or invalid signed-command input. | Do not retry unchanged input. |
+| `401` | Missing, invalid, expired, or overlong workload token. | Obtain a fresh resource-bound token. |
+| `403` | Required scope or verified workload identity is absent, or the pinned command authority rejects the envelope. | Treat as a security denial; do not substitute caller-controlled scope. |
+| `404` | Recovery found no committed record in the authenticated tenant/workspace scope. | The outbox may retry the exact same signed command; never synthesize a receipt. |
+| `409` | Current FENCE, reservation head/state, command sequence, predecessor, or immutable replay binding rejects the command. | Stop automatic mutation and reconcile source-owned state. |
+| `415` | Request is not `application/json`. | Correct the client contract. |
+| `503` | Durable authority, signing, release verification, or runtime wiring is unavailable. | Keep the operation uncertain and retry recovery after repair. |
+
+After a timeout, connection loss, or any other ambiguous record response, the
+caller must first `POST /internal/v1/effect-dispositions/recover` with the exact
+`command_id`. A valid signed record closes the ambiguity. Authenticated `404`
+permits replay of only the exact original signed envelope; `503`, timeout, or
+an unsigned/malformed body remains uncertain and never permits a new command
+or external connector action.
 
 ## Exact authority binding
 
@@ -105,10 +175,15 @@ parity, immutable rows, active reservation binding, active exact FENCE binding,
 and monotonic chain order. The application layer additionally verifies both
 signatures and all historical authorities during record, recovery, and list.
 
-Runtime roles need only `SELECT, INSERT`. Production must use a dedicated
-least-privilege writer without DDL, superuser, or `BYPASSRLS`. Signing inside a
-database transaction also requires bounded KMS/HSM latency and explicit
-failure telemetry before deployment.
+The steady-state disposition data path needs `SELECT, INSERT`, but the current
+process still calls the approval store's idempotent `Init` at startup. The
+configured role therefore currently must own the source-owned schema objects;
+a separate owner-applied migration and DML-only runtime credential split is
+not implemented in this slice. It must remain non-superuser and must not have
+`BYPASSRLS`. Production promotion is blocked until that split and an explicit
+startup/readiness check for `connector_release_authorities` are source-owned
+and live-proven. Signing inside a database transaction also requires bounded
+KMS/HSM latency and explicit failure telemetry before deployment.
 
 ## Portable and database verification
 
@@ -124,6 +199,7 @@ Run:
 make verify-effect-disposition-vectors
 make verify-effect-close-vectors
 HELM_TEST_POSTGRES_URL='postgres://...' make test-effect-reservation-postgres
+go -C core test ./cmd/helm-ai-kernel -run 'Test(EffectDisposition|ApprovalConsumption|RuntimeRoute)' -count=1
 make docs-coverage
 make docs-truth
 ```
@@ -139,10 +215,10 @@ controlled-live evidence.
 
 ## Remaining production gates
 
-- implement the Control Plane's durable signed-command ledger, leased outbox,
+- deploy the Control Plane durable signed-command ledger, leased outbox,
   retry/reconciliation state, and pinned Kernel receipt verification;
-- expose workload-authenticated Data Plane record/recover/list boundaries with
-  least-privilege credentials and replay-safe worker semantics;
+- expose and deploy the workload-authenticated Data Plane record/recover
+  adapter with least-privilege credentials and replay-safe worker semantics;
 - implement certified connector adapters for source reconciliation and keep
   cancel/compensate behind separate current governed effect authority;
 - bind real connector acknowledgements and sealed EvidencePacks to disposition

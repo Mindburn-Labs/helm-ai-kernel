@@ -1,0 +1,19 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/approval",
+  "pinning_authority": "reference_packs/approval/vectors.json",
+  "verifier": "reference_packs/approval/verify_approval_vectors.py",
+  "immutable_payloads": [
+    {"file": "authority_snapshot.c14n.json", "sha256": "7430b9edbe8479a4c7a74114aedf1ef48cda94237d6d989efe76ba03282e7d1b"},
+    {"file": "challenge.c14n.json", "sha256": "dfc2af06e1fc96f68f1a90f483d67cb4c969068dbde61f9e79fd858e74533bb3"},
+    {"file": "key-a_signing_payload.c14n.json", "sha256": "a6cfacba6a1e4100f5e41a471811d4cbaba9667ececfa341220b28b1da101c11"},
+    {"file": "key-b_signing_payload.c14n.json", "sha256": "c2186b14bc1019e274bf6636d0a2ff6d269adb65ff744b652dc7811a0f3626b6"},
+    {"file": "key-c_signing_payload.c14n.json", "sha256": "57af1baed8e81029586c73685a6e7d660e1ce05ff153300ff300ff73cbd73b02"},
+    {"file": "over_quorum_signer_set.c14n.json", "sha256": "70c3aae1e74b77f07bae20752f7c3838981df39c5dc50d416fda1702ad4f49f8"},
+    {"file": "over_quorum_verified_projection.c14n.json", "sha256": "9b6419ffd7eeb1cc0e851b74faeebf62aac9c8b2771267a03ad27babc7bb1d41"},
+    {"file": "signer_set.c14n.json", "sha256": "db1854f4f67ec89ee375dba2aa701b96cfecca8bffe48245a0a454228314807b"},
+    {"file": "verified_projection.c14n.json", "sha256": "306a57e5941049d4a8402d39ec5629cc576a5b1d549ad849c56d6bd612f380a7"}
+  ],
+  "$comment": "quantum_posture: classical_ed25519_only. These `*.c14n.json` files are byte-exact canonical (RFC 8785) approval-ceremony signing payloads and projections whose SHA-256 digests are hash-pinned in vectors.json and covered by live classical Ed25519 signatures. They cannot host an inline annotation without invalidating those signatures/digests, so this manifest carries the posture note. This is not a post-quantum claim and does not alter any payload bytes.",
+  "purpose": "Local immutable-payload posture record for the approval-ceremony reference pack. vectors.json remains the verified hash-pinning authority."
+}

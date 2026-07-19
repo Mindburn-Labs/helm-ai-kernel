@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: classical Ed25519 grant and consumption signature signing and
+// verification; no hybrid or post-quantum path.
+
 import (
 	"crypto/ed25519"
 	"encoding/hex"

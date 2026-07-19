@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: tests the classical Ed25519 grant-consumption service; no
+// post-quantum claim.
+
 import (
 	"bytes"
 	"context"

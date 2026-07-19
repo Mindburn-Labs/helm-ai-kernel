@@ -21,6 +21,9 @@ Active surface for the `helm-ai-kernel` project.
   then verifies cross-statement semantics in Go and independent Python.
 - `make verify-effect-close-vectors` verifies connector acknowledgement and
   Kernel close-receipt hashing/signatures in Go and independent Python.
+- `make verify-effect-disposition-vectors` verifies disposition command,
+  detached signature, and Kernel receipt contracts in Go and independent
+  Python.
 
 ## Connector release authority
 
@@ -37,6 +40,14 @@ define connector evidence about `APPLIED` versus `NOT_APPLIED`.
 `effect_close_receipt.json` is the separate Kernel-signed terminal statement
 that binds that evidence to an exact reservation head and sealed EvidencePack.
 The connector acknowledgement alone never authorizes `COMPLETED`.
+
+## Effect disposition
+
+`effect_disposition_command.json` and its detached-signature envelope bind one
+operator instruction to an exact current FENCE, active reservation head, and
+append-only predecessor. `effect_disposition_receipt.json` is the separately
+signed Kernel acknowledgement and fixes `execution_authority` to `NONE`.
+Neither artifact authorizes an external cancellation or compensation.
 
 ## Documentation Contract
 

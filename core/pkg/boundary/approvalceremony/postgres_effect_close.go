@@ -11,6 +11,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	connectorregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
 )
 
@@ -28,10 +29,11 @@ func (s *PostgresStore) closeEffectReservation(
 	request EffectCloseRequest,
 	releaseAuthorities *connectorregistry.PostgresReleaseAuthorityStore,
 	acknowledgementVerifier EffectAcknowledgementVerifier,
+	dispositionVerifier EffectDispositionCommandVerifier,
 	signer crypto.Signer,
 ) (EffectClosureRecord, error) {
 	if s == nil || s.db == nil || s.grantVerifier == nil || releaseAuthorities == nil ||
-		acknowledgementVerifier == nil || signer == nil {
+		acknowledgementVerifier == nil || dispositionVerifier == nil || signer == nil {
 		return EffectClosureRecord{}, errors.New("effect close store is not configured")
 	}
 	if err := request.Validate(); err != nil {
@@ -71,7 +73,9 @@ func (s *PostgresStore) closeEffectReservation(
 		if err != nil {
 			return EffectClosureRecord{}, err
 		}
-		if err := s.verifyEffectClosureRecord(ctx, tx, current, existing, acknowledgementVerifier); err != nil {
+		if err := s.verifyEffectClosureRecord(
+			ctx, tx, current, existing, releaseAuthorities, acknowledgementVerifier, dispositionVerifier,
+		); err != nil {
 			return EffectClosureRecord{}, err
 		}
 		if !effectCloseRequestMatchesRecord(request, existing) {
@@ -93,6 +97,11 @@ func (s *PostgresStore) closeEffectReservation(
 
 	acknowledgement := request.Acknowledgement.Acknowledgement
 	if err := effectAcknowledgementMatchesReservation(acknowledgement, current, identity); err != nil {
+		return EffectClosureRecord{}, err
+	}
+	if err := s.effectAcknowledgementMatchesDisposition(
+		ctx, tx, identity, acknowledgement, current, releaseAuthorities, dispositionVerifier, true,
+	); err != nil {
 		return EffectClosureRecord{}, err
 	}
 	var now time.Time
@@ -134,7 +143,8 @@ func (s *PostgresStore) closeEffectReservation(
 		ConnectorExecutionRef: acknowledgement.ConnectorExecutionRef,
 		ProofSessionRef:       acknowledgement.ProofSessionRef, IntentRef: acknowledgement.IntentRef,
 		EffectRef: acknowledgement.EffectRef, ReconciliationRef: acknowledgement.ReconciliationRef,
-		EvidencePackRef: request.EvidencePackRef, EvidencePackHash: request.EvidencePackHash,
+		DispositionReceiptHash: acknowledgement.DispositionReceiptHash,
+		EvidencePackRef:        request.EvidencePackRef, EvidencePackHash: request.EvidencePackHash,
 		KernelTrustRootID: admission.KernelTrustRootID, SigningKeyRef: admission.SigningKeyRef,
 		ClosedBy: identity.Subject, ClosedAt: now,
 	}).Seal()
@@ -190,9 +200,12 @@ func (s *PostgresStore) recoverEffectClosure(
 	ctx context.Context,
 	identity ConsumerIdentity,
 	admissionID string,
+	releaseAuthorities *connectorregistry.PostgresReleaseAuthorityStore,
 	acknowledgementVerifier EffectAcknowledgementVerifier,
+	dispositionVerifier EffectDispositionCommandVerifier,
 ) (EffectClosureRecord, error) {
-	if s == nil || s.db == nil || s.grantVerifier == nil || acknowledgementVerifier == nil {
+	if s == nil || s.db == nil || s.grantVerifier == nil || releaseAuthorities == nil ||
+		acknowledgementVerifier == nil || dispositionVerifier == nil {
 		return EffectClosureRecord{}, errors.New("effect close store is not configured")
 	}
 	tx, err := s.beginScopeTx(ctx, identity.TenantID, identity.WorkspaceID)
@@ -217,7 +230,9 @@ func (s *PostgresStore) recoverEffectClosure(
 	if err != nil {
 		return EffectClosureRecord{}, err
 	}
-	if err := s.verifyEffectClosureRecord(ctx, tx, current, record, acknowledgementVerifier); err != nil {
+	if err := s.verifyEffectClosureRecord(
+		ctx, tx, current, record, releaseAuthorities, acknowledgementVerifier, dispositionVerifier,
+	); err != nil {
 		return EffectClosureRecord{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -259,7 +274,9 @@ func (s *PostgresStore) verifyEffectClosureRecord(
 	tx *sql.Tx,
 	completed EffectReservationEvent,
 	record EffectClosureRecord,
+	releaseAuthorities *connectorregistry.PostgresReleaseAuthorityStore,
 	acknowledgementVerifier EffectAcknowledgementVerifier,
+	dispositionVerifier EffectDispositionCommandVerifier,
 ) error {
 	if completed.State != EffectReservationStateCompleted || completed.Sequence < 3 {
 		return ErrEffectCloseConflict
@@ -282,6 +299,11 @@ func (s *PostgresStore) verifyEffectClosureRecord(
 	if err := effectAcknowledgementMatchesReservation(record.Acknowledgement.Acknowledgement, prior, priorIdentity); err != nil {
 		return err
 	}
+	if err := s.effectAcknowledgementMatchesDisposition(
+		ctx, tx, priorIdentity, record.Acknowledgement.Acknowledgement, prior, releaseAuthorities, dispositionVerifier, false,
+	); err != nil {
+		return err
+	}
 	headHash, err := effectReservationHeadHash(prior)
 	if err != nil {
 		return err
@@ -296,6 +318,69 @@ func (s *PostgresStore) verifyEffectClosureRecord(
 		receipt.ConnectorExecutionRef != completed.ConnectorExecutionRef || receipt.ProofSessionRef != completed.ProofSessionRef ||
 		receipt.IntentRef != completed.IntentRef || receipt.EffectRef != completed.EffectRef ||
 		!receipt.ClosedAt.Equal(completed.OccurredAt) {
+		return ErrEffectCloseConflict
+	}
+	return nil
+}
+
+func (s *PostgresStore) effectAcknowledgementMatchesDisposition(
+	ctx context.Context,
+	tx *sql.Tx,
+	identity ConsumerIdentity,
+	acknowledgement contracts.ConnectorEffectAcknowledgement,
+	reservation EffectReservationEvent,
+	releaseAuthorities *connectorregistry.PostgresReleaseAuthorityStore,
+	dispositionVerifier EffectDispositionCommandVerifier,
+	requireCurrentFence bool,
+) error {
+	if s == nil || releaseAuthorities == nil || dispositionVerifier == nil {
+		return errors.New("effect disposition verification is not configured for close")
+	}
+	var currentFence kernel.FenceState
+	fenceErr := sql.ErrNoRows
+	if requireCurrentFence {
+		currentFence, fenceErr = queryEffectDispositionFence(
+			ctx, tx, acknowledgement.TenantID, acknowledgement.WorkspaceID,
+		)
+		if fenceErr != nil && !errors.Is(fenceErr, sql.ErrNoRows) {
+			return fenceErr
+		}
+	}
+	record, err := queryLatestEffectDispositionForEffect(
+		ctx, tx, acknowledgement.TenantID, acknowledgement.WorkspaceID, acknowledgement.AdmissionID,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		if fenceErr == nil || acknowledgement.DispositionReceiptHash != "" {
+			return ErrEffectCloseConflict
+		}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := s.verifyEffectDispositionRecord(ctx, tx, identity, record, releaseAuthorities, dispositionVerifier); err != nil {
+		return err
+	}
+	// The disposition must be bound to the exact reservation head being closed,
+	// not just any historical head under the same fence: without this a
+	// disposition recorded while STARTED could bind an old receipt and close a
+	// different active head after a STARTED->UNCERTAIN transition.
+	reservationHeadHash, err := effectReservationHeadHash(reservation)
+	if err != nil {
+		return err
+	}
+	if record.Command.Command.ReservationSequence != reservation.Sequence ||
+		record.Command.Command.ReservationHeadHash != reservationHeadHash ||
+		record.Command.Command.ReservationState != string(reservation.State) {
+		return ErrEffectCloseConflict
+	}
+	if record.Command.Command.Action == contracts.EffectDispositionActionHold ||
+		(requireCurrentFence && (errors.Is(fenceErr, sql.ErrNoRows) ||
+			effectDispositionCommandMatchesFence(record.Command.Command, currentFence) != nil)) {
+		return ErrEffectCloseConflict
+	}
+	if acknowledgement.DispositionReceiptHash != record.Receipt.ReceiptHash ||
+		acknowledgement.ReconciliationRef != record.Command.Command.DispositionRef {
 		return ErrEffectCloseConflict
 	}
 	return nil

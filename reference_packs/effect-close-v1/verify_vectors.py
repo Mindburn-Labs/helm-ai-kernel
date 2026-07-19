@@ -85,6 +85,8 @@ def validate_acknowledgement(acknowledgement):
         require_token(acknowledgement["reconciliation_ref"], "reconciliation_ref")
     for field in ("idempotency_key_hash", "effect_hash", "response_hash", "acknowledgement_hash"):
         require_sha(acknowledgement.get(field), field)
+    if "disposition_receipt_hash" in acknowledgement:
+        require_sha(acknowledgement["disposition_receipt_hash"], "disposition_receipt_hash")
     outcome = acknowledgement.get("outcome")
     if outcome == "APPLIED":
         require_token(acknowledgement.get("effect_ref"), "effect_ref")
@@ -179,6 +181,8 @@ def validate_receipt(receipt):
         "receipt_hash",
     ):
         require_sha(receipt.get(field), field)
+    if "disposition_receipt_hash" in receipt:
+        require_sha(receipt["disposition_receipt_hash"], "disposition_receipt_hash")
     if receipt.get("outcome") == "APPLIED":
         require_token(receipt.get("effect_ref"), "effect_ref")
     elif receipt.get("outcome") == "NOT_APPLIED":
@@ -209,6 +213,7 @@ def verify_receipt_binding(receipt, acknowledgement):
         "intent_ref",
         "effect_ref",
         "reconciliation_ref",
+        "disposition_receipt_hash",
     )
     for field in exact_fields:
         if receipt.get(field) != acknowledgement.get(field):
@@ -274,6 +279,9 @@ def verify_vector(index, root, mutation=None):
         reseal(receipt, "receipt_hash")
     elif mutation == "flip_receipt_signature_last_bit":
         receipt_signature = flipped_signature(receipt_signature)
+    elif mutation == "set_receipt_disposition_hash_to_other_and_reseal":
+        receipt["disposition_receipt_hash"] = "sha256:" + "7" * 64
+        reseal(receipt, "receipt_hash")
     elif mutation == "remove_receipt_reconciliation_ref_and_reseal":
         receipt.pop("reconciliation_ref")
         reseal(receipt, "receipt_hash")

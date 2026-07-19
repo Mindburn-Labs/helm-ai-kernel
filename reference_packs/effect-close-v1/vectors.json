@@ -6,25 +6,25 @@
   "acknowledgement": {
     "artifact": {
       "canonical": "acknowledgement.c14n.json",
-      "sha256": "sha256:86d05934a96fa4ac5cc5095fb8d638b1003e5732857c0e2af44ef36ab8ce5043"
+      "sha256": "sha256:3afad64dfd914fe20aa4d5251fef2f51e1e09d14b346412258d9da992a70d63e"
     },
     "envelope": {
       "canonical": "acknowledgement_envelope.c14n.json",
-      "sha256": "sha256:5e61de90137f2b0ce924a4af58df8e62ad6772a110b0935c8c9c278c3030af6a"
+      "sha256": "sha256:308728a3a160dfe7f27b557971ee53940ae9f7d60846b7f0009b6ce17c8ade50"
     },
     "signing_payload": {
       "canonical": "acknowledgement_signing_payload.c14n.json",
-      "sha256": "sha256:50ec1fbcf68aa0b26f20146a6b0a907c9b0f8b845a6160cf29efb32eef74a55d"
+      "sha256": "sha256:83a01af0885601145befd193332fa4fab50ebd8490d093d1a9316229547f342b"
     },
     "public_key": "ed25519:e28a8970753332bd72fef413e6b0b2ef1b4aadda7aa2c141f233712a6876b351",
-    "signature": "ed25519:f67de1b55c09a97a5724d2528c0da6d0c7458801db6f306196e7a7574b8c9d147872fc2022bd167d1084a362d9442467e31f7d8210d6e207812f7cbe4800370a",
+    "signature": "ed25519:4107c061ac1ee0e51b098da697c2ee8d59f2629531f15863f7d1a62846f912b2002e4be9f7995d3a5c6c85c6e435b9ac44e11e08382f3538d5d53f353b6df105",
     "key_not_before": "2026-07-18T11:00:00.123456Z",
     "key_not_after": "2026-07-18T13:00:00.123456Z"
   },
   "receipt": {
     "artifact": {
       "canonical": "receipt.c14n.json",
-      "sha256": "sha256:b897e2414a5849dc8b9bfbc762a2bfa04ad1bf57517501d81c4b34a76a4b8de6"
+      "sha256": "sha256:db55068eb4cecbdac7841fc11ae718b585c7fb250ae2e5075b348493403b8ce5"
     },
     "envelope": {
       "canonical": "",
@@ -32,10 +32,10 @@
     },
     "signing_payload": {
       "canonical": "receipt_signing_payload.c14n.json",
-      "sha256": "sha256:b6e25d29f5fb9a52f3c4583dfc34eeab3fcc6f0717614cedd7b27706a1754ec7"
+      "sha256": "sha256:f6faf0e884bf30425c3a556f45d3fa069c02c6dd264a7b22d92d6df71b2ec363"
     },
     "public_key": "ed25519:d4eec1869fb1b8a4e817516ad5a931557cb56805c3eb16e8f3a803d647df7869",
-    "signature": "ed25519:66ccf683d39336697c55c605436b7edb11baa84d229246100c3ae607251580909c7ff838841ec9a06dda633109ecd5e54aa1aa0c18033e4cb52ca1a92fc08c09",
+    "signature": "ed25519:3ce50fd51db5feb3f6ce5035a8e508260116d3dc5dfcf0dace99986c31e4ca5ef32139cf1463e6a4c1888db89395fd45da9f6a4bcc43a099035b76b45b7a000a",
     "key_not_before": "2026-07-18T11:00:00.123456Z",
     "key_not_after": "2026-07-18T13:00:00.123456Z"
   },
@@ -69,6 +69,11 @@
       "id": "receipt_signature_tamper",
       "mutation": "flip_receipt_signature_last_bit",
       "expected_error": "receipt_signature_rejected"
+    },
+    {
+      "id": "receipt_disposition_substitution",
+      "mutation": "set_receipt_disposition_hash_to_other_and_reseal",
+      "expected_error": "acknowledgement_binding_rejected"
     },
     {
       "id": "uncertain_without_reconciliation",

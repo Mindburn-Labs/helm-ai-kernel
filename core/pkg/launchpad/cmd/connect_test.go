@@ -259,3 +259,29 @@ func TestRunConnectDeadlineExceeded(t *testing.T) {
 		t.Fatalf("expected client-side deadline error, got %v", err)
 	}
 }
+
+func TestRequireSecureBaseURL(t *testing.T) {
+	ok := []string{
+		"https://api.helm.mindburn.org",
+		"https://cloud.example.com/base",
+		"http://localhost:7714",
+		"http://127.0.0.1:8080",
+		"http://[::1]:9000",
+	}
+	for _, u := range ok {
+		if err := requireSecureBaseURL(u); err != nil {
+			t.Errorf("requireSecureBaseURL(%q) = %v, want nil", u, err)
+		}
+	}
+	bad := []string{
+		"http://api.helm.mindburn.org",
+		"http://evil.example.com",
+		"ftp://example.com",
+		"ws://example.com",
+	}
+	for _, u := range bad {
+		if err := requireSecureBaseURL(u); err == nil {
+			t.Errorf("requireSecureBaseURL(%q) = nil, want rejection", u)
+		}
+	}
+}

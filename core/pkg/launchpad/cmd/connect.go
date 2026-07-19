@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +17,31 @@ import (
 	"strings"
 	"time"
 )
+
+// requireSecureBaseURL refuses a cloud base URL that would transmit the
+// device-token exchange (and the resulting bearer) in cleartext. https is
+// always allowed; http is allowed only for loopback so local/dev flows work.
+func requireSecureBaseURL(base string) error {
+	parsed, err := url.Parse(base)
+	if err != nil {
+		return fmt.Errorf("invalid cloud base URL %q: %w", base, err)
+	}
+	switch parsed.Scheme {
+	case "https":
+		return nil
+	case "http":
+		host := parsed.Hostname()
+		if host == "localhost" {
+			return nil
+		}
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return nil
+		}
+		return fmt.Errorf("refusing http cloud base URL %q: use https (http is allowed only for loopback)", base)
+	default:
+		return fmt.Errorf("cloud base URL %q must use https", base)
+	}
+}
 
 // MachineCredentialFile is the canonical filename for a persisted cloud machine
 // credential obtained via `helm-ai-kernel connect`.
@@ -146,6 +173,9 @@ func RunConnect(opts ConnectOptions) (ConnectResult, error) {
 	}
 
 	base := resolveControlPlaneURL(opts.CloudBaseURL)
+	if err := requireSecureBaseURL(base); err != nil {
+		return ConnectResult{}, err
+	}
 
 	code, err := requestDeviceCode(opts.HTTPClient, base, opts.ClientName, opts.ClientType)
 	if err != nil {

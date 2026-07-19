@@ -1,7 +1,12 @@
+// quantum_posture: these command tests exercise classical Ed25519 receipt
+// paths only and do not claim post-quantum protection.
 package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -16,9 +21,10 @@ func TestWorkstationImportAndView(t *testing.T) {
 	root := kernelRepoRoot(t)
 	fixture := filepath.Join(root, "fixtures", "workstation", "denied-network")
 	outFile := filepath.Join(t.TempDir(), "workstation-receipt.json")
+	dataDir := filepath.Join(t.TempDir(), "helm")
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"helm-ai-kernel", "workstation", "import", "--artifacts", fixture, "--out", outFile}, &stdout, &stderr)
+	code := Run([]string{"helm-ai-kernel", "workstation", "import", "--artifacts", fixture, "--out", outFile, "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("import exit = %d stderr = %s", code, stderr.String())
 	}
@@ -28,12 +34,12 @@ func TestWorkstationImportAndView(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	code = Run([]string{"helm-ai-kernel", "workstation", "view", "--receipt", outFile}, &stdout, &stderr)
+	code = Run([]string{"helm-ai-kernel", "workstation", "view", "--receipt", outFile, "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("view exit = %d stderr = %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "signature:     true") {
-		t.Fatalf("view summary missing valid signature: %s", stdout.String())
+	if !strings.Contains(stdout.String(), "integrity:     true") || !strings.Contains(stdout.String(), "signer trusted: true") {
+		t.Fatalf("view summary missing trusted integrity: %s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "denied:        1") {
 		t.Fatalf("view summary missing denied count: %s", stdout.String())
@@ -44,6 +50,7 @@ func TestWorkstationRemainingPhaseCommands(t *testing.T) {
 	root := kernelRepoRoot(t)
 	fixtureRoot := filepath.Join(root, "fixtures", "workstation")
 	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "helm")
 
 	var stdout, stderr bytes.Buffer
 	networkReceipt := filepath.Join(tmp, "network-deny.json")
@@ -52,6 +59,7 @@ func TestWorkstationRemainingPhaseCommands(t *testing.T) {
 		"--class", "network",
 		"--target", "https://forbidden.example",
 		"--out", networkReceipt,
+		"--data-dir", dataDir,
 	}, &stdout, &stderr)
 	if code != 126 {
 		t.Fatalf("network enforce exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
@@ -70,6 +78,7 @@ func TestWorkstationRemainingPhaseCommands(t *testing.T) {
 		"--target", "https://api.github.com/repos/Mindburn-Labs/helm",
 		"--policy-profile", filepath.Join(fixtureRoot, "policies", "observe_draft.v1.allow.json"),
 		"--receipt-dir", receiptDir,
+		"--data-dir", dataDir,
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("allowed network decide exit = %d stderr = %s", code, stderr.String())
@@ -91,6 +100,7 @@ func TestWorkstationRemainingPhaseCommands(t *testing.T) {
 		"--class", "memory",
 		"--target", "memory://repo-rule",
 		"--out", memoryReceipt,
+		"--data-dir", dataDir,
 	}, &stdout, &stderr)
 	if code != 126 {
 		t.Fatalf("memory enforce exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
@@ -108,6 +118,7 @@ func TestWorkstationRemainingPhaseCommands(t *testing.T) {
 		"--class", "file",
 		"--target", "docs/example.md",
 		"--out", draftReceipt,
+		"--data-dir", dataDir,
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("draft decide exit = %d stderr = %s", code, stderr.String())
@@ -124,6 +135,7 @@ func TestWorkstationRemainingPhaseCommands(t *testing.T) {
 		"helm-ai-kernel", "workstation", "import",
 		"--artifacts", filepath.Join(fixtureRoot, "denied-memory"),
 		"--out", importOut,
+		"--data-dir", dataDir,
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("import exit = %d stderr = %s", code, stderr.String())
@@ -203,12 +215,87 @@ func TestWorkstationCLIAcceptsSigningSeedFile(t *testing.T) {
 	}
 }
 
+func TestWorkstationViewSeparatesIntegrityFromTrustedSigner(t *testing.T) {
+	root := kernelRepoRoot(t)
+	fixture := filepath.Join(root, "fixtures", "workstation", "denied-network")
+	tmp := t.TempDir()
+	seedHex := strings.Repeat("1", 64)
+	seedFile := filepath.Join(tmp, "receipt.seed")
+	if err := os.WriteFile(seedFile, []byte(seedHex+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	receiptPath := filepath.Join(tmp, "receipt.json")
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "workstation", "import", "--artifacts", fixture, "--out", receiptPath, "--signing-seed-file", seedFile}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("import exit = %d stderr = %s", code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "workstation", "view", "--receipt", receiptPath, "--data-dir", filepath.Join(tmp, "unrelated")}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("unanchored view exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "integrity:     true") || !strings.Contains(stdout.String(), "signer trusted: false") {
+		t.Fatalf("unanchored view wording = %s", stdout.String())
+	}
+
+	seed, err := hex.DecodeString(seedHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	trustedKeyFile := filepath.Join(tmp, "trusted.pub")
+	if err := os.WriteFile(trustedKeyFile, []byte(hex.EncodeToString(publicKey)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "workstation", "view", "--receipt", receiptPath, "--trusted-public-key-file", trustedKeyFile}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("trusted view exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestWorkstationViewRejectsRetiredSignerEvenWithExplicitKey(t *testing.T) {
+	root := kernelRepoRoot(t)
+	fixture := filepath.Join(root, "fixtures", "workstation", "denied-network")
+	tmp := t.TempDir()
+	legacySeed := sha256.Sum256([]byte("helm-workstation-observe-only-agent-run-receipt-v1"))
+	seedFile := filepath.Join(tmp, "legacy.seed")
+	if err := os.WriteFile(seedFile, []byte(hex.EncodeToString(legacySeed[:])+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	receiptPath := filepath.Join(tmp, "legacy-receipt.json")
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "workstation", "import", "--artifacts", fixture, "--out", receiptPath, "--signing-seed-file", seedFile}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("legacy import exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	legacyPublicKey := ed25519.NewKeyFromSeed(legacySeed[:]).Public().(ed25519.PublicKey)
+	trustedKeyFile := filepath.Join(tmp, "legacy.pub")
+	if err := os.WriteFile(trustedKeyFile, []byte(hex.EncodeToString(legacyPublicKey)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "workstation", "view", "--receipt", receiptPath, "--trusted-public-key-file", trustedKeyFile}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("legacy view exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "integrity:     true") || !strings.Contains(stdout.String(), "signer trusted: false") {
+		t.Fatalf("legacy view must separate integrity from trust: %s", stdout.String())
+	}
+}
+
 func TestWorkstationEnforceRefusesObserveModeCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	marker := filepath.Join(t.TempDir(), "observe-mode-executed")
 	code := Run([]string{
 		"helm-ai-kernel", "workstation", "enforce",
 		"--class", "shell",
+		"--data-dir", filepath.Join(t.TempDir(), "helm"),
 		"--", "/usr/bin/touch", marker,
 	}, &stdout, &stderr)
 	if code != 126 {
@@ -230,6 +317,7 @@ func TestWorkstationCaptureCommands(t *testing.T) {
 	}
 	artifacts := filepath.Join(tmp, "artifacts")
 	out := filepath.Join(tmp, "capture-receipt.json")
+	dataDir := filepath.Join(tmp, "helm")
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
@@ -255,6 +343,7 @@ func TestWorkstationCaptureCommands(t *testing.T) {
 		"--validation-command", "printf ok",
 		"--completed-at", "2026-05-20T15:01:00Z",
 		"--out", out,
+		"--data-dir", dataDir,
 	}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("capture finish exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())

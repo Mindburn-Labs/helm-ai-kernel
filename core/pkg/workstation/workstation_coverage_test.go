@@ -1,3 +1,5 @@
+// quantum_posture: coverage tests reference classical Ed25519 receipt flows
+// only and do not claim post-quantum protection.
 package workstation
 
 import (
@@ -79,6 +81,7 @@ func TestCaptureLifecycleAndHelperErrors(t *testing.T) {
 	result, err := FinishCapture(artifactDir, CaptureFinishOptions{
 		ValidationCommand: "printf validation-ok",
 		ToolEventsPath:    toolEventsPath,
+		SigningSeed:       workstationTestSigningSeed(),
 		CompletedAt:       completedAt,
 	})
 	if err != nil {
@@ -151,7 +154,7 @@ func TestCaptureLifecycleAndHelperErrors(t *testing.T) {
 
 func TestWorkstationResultEvidenceAndOperatorErrorCoverage(t *testing.T) {
 	root := repoRoot(t)
-	imported, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", "denied-memory"), ImportOptions{})
+	imported, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", "denied-memory"), workstationTestImportOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +264,7 @@ func TestWorkstationDecisionReceiptAndClassifierCoverage(t *testing.T) {
 		EffectType: contracts.EffectTypeWorkstationNetworkEgress,
 		Target:     "https://forbidden.example",
 	}
-	receipt, err := Decide(profile, request, DecisionOptions{})
+	receipt, err := Decide(profile, request, workstationTestDecisionOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +329,7 @@ func TestWorkstationDecisionReceiptAndClassifierCoverage(t *testing.T) {
 	if ok, err := VerifyReceiptSignature(nil); err == nil || ok {
 		t.Fatalf("expected nil receipt signature error, got ok=%v err=%v", ok, err)
 	}
-	imported, err := ImportArtifactDir(filepath.Join(repoRoot(t), "fixtures", "workstation", "allowed-observe"), ImportOptions{})
+	imported, err := ImportArtifactDir(filepath.Join(repoRoot(t), "fixtures", "workstation", "allowed-observe"), workstationTestImportOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,10 +548,10 @@ func TestWorkstationCertificationBranchesAndPolicyLoadErrors(t *testing.T) {
 	if allChecksPass([]CertificationCheck{{Status: "PASS"}, {Status: "FAIL"}}) {
 		t.Fatal("allChecksPass accepted a failing check")
 	}
-	if ok, msg := certifyObserveOnly(t.TempDir()); ok || msg == "" {
+	if ok, msg := certifyObserveOnly(t.TempDir(), workstationTestSigningSeed()); ok || msg == "" {
 		t.Fatalf("expected observe-only certification failure, got ok=%v msg=%q", ok, msg)
 	}
-	if ok, msg := certifyHighRiskFixtures(t.TempDir()); ok || msg == "" {
+	if ok, msg := certifyHighRiskFixtures(t.TempDir(), workstationTestSigningSeed()); ok || msg == "" {
 		t.Fatalf("expected high-risk certification failure, got ok=%v msg=%q", ok, msg)
 	}
 }
@@ -570,7 +573,7 @@ func TestWorkstationSmallHelperBranches(t *testing.T) {
 	if _, err := StartCapture(artifactDir, CaptureStartOptions{Goal: "minimal finish", WorkspacePath: t.TempDir(), StartedAt: started}); err != nil {
 		t.Fatal(err)
 	}
-	minimal, err := FinishCapture(artifactDir, CaptureFinishOptions{CompletedAt: started.Add(time.Minute)})
+	minimal, err := FinishCapture(artifactDir, CaptureFinishOptions{SigningSeed: workstationTestSigningSeed(), CompletedAt: started.Add(time.Minute)})
 	if err != nil {
 		t.Fatal(err)
 	}

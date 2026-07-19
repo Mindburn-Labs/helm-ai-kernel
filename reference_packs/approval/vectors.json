@@ -1,0 +1,133 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 approval vectors only; no hybrid or post-quantum claim.",
+  "schema_version": "approval-vectors.v1",
+  "contract_version": "2026-07-15",
+  "quantum_posture": "classical_ed25519_only",
+  "verified_at": "2026-07-15T12:07:00Z",
+  "authority_snapshot": {
+    "canonical": "authority_snapshot.c14n.json",
+    "sha256": "sha256:7430b9edbe8479a4c7a74114aedf1ef48cda94237d6d989efe76ba03282e7d1b"
+  },
+  "challenge": {
+    "canonical": "challenge.c14n.json",
+    "sha256": "sha256:dfc2af06e1fc96f68f1a90f483d67cb4c969068dbde61f9e79fd858e74533bb3"
+  },
+  "assertions": [
+    {
+      "key_id": "key-a",
+      "signing_payload": "key-a_signing_payload.c14n.json",
+      "signing_digest": "sha256:a6cfacba6a1e4100f5e41a471811d4cbaba9667ececfa341220b28b1da101c11",
+      "public_key": "ed25519:8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+      "signature": "ed25519:6165abc44ecdaecbba70b58b47703290513f62852b85f6584372b92793030bbb878ce3f7a34fc707fd9379b677e30ab6ad96b8413ecce2ddb1f8be455d82490d",
+      "assertion": {
+        "domain": "HELM/ApprovalAssertion/v1",
+        "schema_version": "approval-assertion.v1",
+        "contract_version": "2026-07-15",
+        "challenge_id": "challenge-a",
+        "challenge_hash": "sha256:dfc2af06e1fc96f68f1a90f483d67cb4c969068dbde61f9e79fd858e74533bb3",
+        "key_id": "key-a",
+        "algorithm": "ed25519",
+        "signature": "ed25519:6165abc44ecdaecbba70b58b47703290513f62852b85f6584372b92793030bbb878ce3f7a34fc707fd9379b677e30ab6ad96b8413ecce2ddb1f8be455d82490d"
+      },
+      "assertion_hash": "sha256:1be7283ac3118a6817ec1cca581343efc1b0292065d3fd1e09922f3f712c64de"
+    },
+    {
+      "key_id": "key-b",
+      "signing_payload": "key-b_signing_payload.c14n.json",
+      "signing_digest": "sha256:c2186b14bc1019e274bf6636d0a2ff6d269adb65ff744b652dc7811a0f3626b6",
+      "public_key": "ed25519:8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394",
+      "signature": "ed25519:4c24e5ba0c1a57f290651f6c0282ba3c9255b0c82db6a380c15f4225758f454c3282b03d071183d3cd39af28f43ccf3175df8fa62ac94fa8f33f9efb2bd09509",
+      "assertion": {
+        "domain": "HELM/ApprovalAssertion/v1",
+        "schema_version": "approval-assertion.v1",
+        "contract_version": "2026-07-15",
+        "challenge_id": "challenge-a",
+        "challenge_hash": "sha256:dfc2af06e1fc96f68f1a90f483d67cb4c969068dbde61f9e79fd858e74533bb3",
+        "key_id": "key-b",
+        "algorithm": "ed25519",
+        "signature": "ed25519:4c24e5ba0c1a57f290651f6c0282ba3c9255b0c82db6a380c15f4225758f454c3282b03d071183d3cd39af28f43ccf3175df8fa62ac94fa8f33f9efb2bd09509"
+      },
+      "assertion_hash": "sha256:4f3378e8f25cedb6dfe827a27a06a8827a0dfbc6aa235ec24ad23cc4f87a7dfe"
+    },
+    {
+      "key_id": "key-c",
+      "signing_payload": "key-c_signing_payload.c14n.json",
+      "signing_digest": "sha256:57af1baed8e81029586c73685a6e7d660e1ce05ff153300ff300ff73cbd73b02",
+      "public_key": "ed25519:ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+      "signature": "ed25519:6e345e0e9f49c31d8e618728577bd15bdd4f03977e632ffe663ef3de78317bc316b051a1d99fd0ccb70dc1921fb0246156e821618c766e4666faa17c99a6f00a",
+      "assertion": {
+        "domain": "HELM/ApprovalAssertion/v1",
+        "schema_version": "approval-assertion.v1",
+        "contract_version": "2026-07-15",
+        "challenge_id": "challenge-a",
+        "challenge_hash": "sha256:dfc2af06e1fc96f68f1a90f483d67cb4c969068dbde61f9e79fd858e74533bb3",
+        "key_id": "key-c",
+        "algorithm": "ed25519",
+        "signature": "ed25519:6e345e0e9f49c31d8e618728577bd15bdd4f03977e632ffe663ef3de78317bc316b051a1d99fd0ccb70dc1921fb0246156e821618c766e4666faa17c99a6f00a"
+      },
+      "assertion_hash": "sha256:fea014073533a1aa94d27bd004ae5ed709577905aa485cdc3fbcb63ed92e91aa"
+    }
+  ],
+  "cases": [
+    {
+      "id": "quorum_2_of_2",
+      "assertion_key_ids": [
+        "key-b",
+        "key-a"
+      ],
+      "signer_set": {
+        "canonical": "signer_set.c14n.json",
+        "sha256": "sha256:db1854f4f67ec89ee375dba2aa701b96cfecca8bffe48245a0a454228314807b"
+      },
+      "verified_projection": {
+        "canonical": "verified_projection.c14n.json",
+        "sha256": "sha256:306a57e5941049d4a8402d39ec5629cc576a5b1d549ad849c56d6bd612f380a7"
+      },
+      "expected_status": "verified"
+    },
+    {
+      "id": "quorum_2_of_3",
+      "assertion_key_ids": [
+        "key-c",
+        "key-a",
+        "key-b"
+      ],
+      "signer_set": {
+        "canonical": "over_quorum_signer_set.c14n.json",
+        "sha256": "sha256:70c3aae1e74b77f07bae20752f7c3838981df39c5dc50d416fda1702ad4f49f8"
+      },
+      "verified_projection": {
+        "canonical": "over_quorum_verified_projection.c14n.json",
+        "sha256": "sha256:9b6419ffd7eeb1cc0e851b74faeebf62aac9c8b2771267a03ad27babc7bb1d41"
+      },
+      "expected_status": "verified_over_quorum"
+    }
+  ],
+  "negative_vectors": [
+    {
+      "id": "tampered_signature",
+      "mutation": "flip_key-a_signature_last_bit",
+      "expected_error": "signature_rejected"
+    },
+    {
+      "id": "cross_key_signature",
+      "mutation": "verify_key-a_with_key-b",
+      "expected_error": "signature_rejected"
+    },
+    {
+      "id": "challenge_tenant_substitution",
+      "mutation": "set_challenge_tenant_id_to_tenant-b",
+      "expected_error": "challenge_hash_mismatch"
+    },
+    {
+      "id": "assertion_key_substitution",
+      "mutation": "set_key-a_assertion_key_id_to_key-b",
+      "expected_error": "signature_rejected"
+    },
+    {
+      "id": "invalid_surplus_signature",
+      "mutation": "flip_key-c_signature_in_over_quorum",
+      "expected_error": "signature_rejected"
+    }
+  ]
+}

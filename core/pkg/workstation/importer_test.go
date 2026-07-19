@@ -1,3 +1,5 @@
+// quantum_posture: these importer tests exercise classical Ed25519 receipt
+// material only and do not claim post-quantum protection.
 package workstation
 
 import (
@@ -34,7 +36,7 @@ func TestImportFixtures(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := ImportArtifactDir(filepath.Join(repoRoot(t), "fixtures", "workstation", tc.name), ImportOptions{})
+			result, err := ImportArtifactDir(filepath.Join(repoRoot(t), "fixtures", "workstation", tc.name), workstationTestImportOptions())
 			if err != nil {
 				t.Fatalf("ImportArtifactDir() error = %v", err)
 			}
@@ -65,7 +67,7 @@ func TestImportFixtures(t *testing.T) {
 }
 
 func TestMamaReceiptBoundExecutionFixture(t *testing.T) {
-	result, err := ImportArtifactDir(filepath.Join(repoRoot(t), "fixtures", "workstation", "mama-receipt-bound-execution"), ImportOptions{})
+	result, err := ImportArtifactDir(filepath.Join(repoRoot(t), "fixtures", "workstation", "mama-receipt-bound-execution"), workstationTestImportOptions())
 	if err != nil {
 		t.Fatalf("ImportArtifactDir() error = %v", err)
 	}
@@ -88,11 +90,11 @@ func TestMamaReceiptBoundExecutionFixture(t *testing.T) {
 
 func TestImportDeterministicForSameArtifacts(t *testing.T) {
 	dir := filepath.Join(repoRoot(t), "fixtures", "workstation", "allowed-draft")
-	first, err := ImportArtifactDir(dir, ImportOptions{})
+	first, err := ImportArtifactDir(dir, workstationTestImportOptions())
 	if err != nil {
 		t.Fatalf("first import error = %v", err)
 	}
-	second, err := ImportArtifactDir(dir, ImportOptions{})
+	second, err := ImportArtifactDir(dir, workstationTestImportOptions())
 	if err != nil {
 		t.Fatalf("second import error = %v", err)
 	}
@@ -114,7 +116,7 @@ func TestImportDeterministicForSameArtifacts(t *testing.T) {
 
 func TestReceiptProofGraphAndArtifactBinding(t *testing.T) {
 	dir := filepath.Join(repoRoot(t), "fixtures", "workstation", "allowed-draft")
-	result, err := ImportArtifactDir(dir, ImportOptions{})
+	result, err := ImportArtifactDir(dir, workstationTestImportOptions())
 	if err != nil {
 		t.Fatalf("ImportArtifactDir() error = %v", err)
 	}
@@ -344,7 +346,7 @@ func TestMemoryEffectDefaultsRetentionAndDataClass(t *testing.T) {
 			Sensitivity: "restricted",
 			ContentHash: "sha256:memory-defaults",
 		},
-	}}, profile, map[string]string{ManifestFile: strings.Repeat("a", 64)}, ImportOptions{})
+	}}, profile, map[string]string{ManifestFile: strings.Repeat("a", 64)}, workstationTestImportOptions())
 	if err != nil {
 		t.Fatalf("BuildReceipt() error = %v", err)
 	}
@@ -366,7 +368,7 @@ func TestMemoryEffectDefaultsRetentionAndDataClass(t *testing.T) {
 func TestDecisionReceiptsOperatorViewEvidenceAndCertification(t *testing.T) {
 	root := repoRoot(t)
 	profile := DefaultObserveDraftProfile()
-	network, err := Decide(profile, decisionRequest("network", "https://forbidden.example"), DecisionOptions{})
+	network, err := Decide(profile, decisionRequest("network", "https://forbidden.example"), workstationTestDecisionOptions())
 	if err != nil {
 		t.Fatalf("Decide(network) error = %v", err)
 	}
@@ -376,7 +378,7 @@ func TestDecisionReceiptsOperatorViewEvidenceAndCertification(t *testing.T) {
 	if ok, err := VerifyDecisionReceiptSignature(network); err != nil || !ok {
 		t.Fatalf("network decision signature = %v/%v, want valid", ok, err)
 	}
-	draft, err := Decide(profile, decisionRequest("file", "docs/example.md"), DecisionOptions{})
+	draft, err := Decide(profile, decisionRequest("file", "docs/example.md"), workstationTestDecisionOptions())
 	if err != nil {
 		t.Fatalf("Decide(file) error = %v", err)
 	}
@@ -384,7 +386,7 @@ func TestDecisionReceiptsOperatorViewEvidenceAndCertification(t *testing.T) {
 		t.Fatalf("draft verdict = %s, want ALLOW", draft.Verdict)
 	}
 
-	imported, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", "denied-recurring-loop"), ImportOptions{})
+	imported, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", "denied-recurring-loop"), workstationTestImportOptions())
 	if err != nil {
 		t.Fatalf("import denied-recurring-loop: %v", err)
 	}
@@ -425,7 +427,7 @@ func TestWorkstationSchemas(t *testing.T) {
 	profileSchema := compileSchema(t, filepath.Join(root, "protocols", "json-schemas", "policy", "workstation_policy_profile.v1.schema.json"))
 
 	for _, fixture := range []string{"allowed-observe", "denied-memory", "denied-recurring-loop", "raw-mcp-tunnel-bypass", "ambiguous-resume", "subagent-sidechain-summary", "tainted-browser-pdf-authorization", "mama-receipt-bound-execution", "scope-audit-all-boundaries"} {
-		result, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", fixture), ImportOptions{})
+		result, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", fixture), workstationTestImportOptions())
 		if err != nil {
 			t.Fatalf("import %s: %v", fixture, err)
 		}
@@ -444,13 +446,13 @@ func TestWorkstationSchemas(t *testing.T) {
 			t.Fatalf("profile %s does not validate: %v", profile, err)
 		}
 	}
-	decision, err := Decide(DefaultObserveDraftProfile(), decisionRequest("network", "https://forbidden.example"), DecisionOptions{})
+	decision, err := Decide(DefaultObserveDraftProfile(), decisionRequest("network", "https://forbidden.example"), workstationTestDecisionOptions())
 	if err != nil {
 		t.Fatalf("decision receipt: %v", err)
 	}
 	validateSchemaValue(t, decisionSchema, decision)
 
-	scopeAuditImport, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", "scope-audit-all-boundaries"), ImportOptions{})
+	scopeAuditImport, err := ImportArtifactDir(filepath.Join(root, "fixtures", "workstation", "scope-audit-all-boundaries"), workstationTestImportOptions())
 	if err != nil {
 		t.Fatalf("scope audit fixture import: %v", err)
 	}

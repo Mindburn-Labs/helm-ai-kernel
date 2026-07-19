@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-19T13:42:09Z
-# Commit: e4870678d23ae12795d9d3a45ed21fecc339062c
+# Generated: 2026-07-19T13:58:18Z
+# Commit: 7cad2b162980bef47239d00c5063f45fe47ac3a5
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -129,6 +129,8 @@ ecaa6140fb21a6116f7cc242f6cf9aa833e9078defa714b64029003e4a65eb7a  core/pkg/contr
 260c051bc7d06cffc8ed9809c044143623ae65929535dea2c08629cf4539bd89  core/pkg/contracts/approval_assertion_test.go
 84f49d46862d49f31dac979e691fd9bda9f09a3ff59c3ffe0399616047c53a49  core/pkg/contracts/approval_binding.go
 b8b80ba2979df721f2bca2d7d38551a1d120f5403b2e2c74d2e9f3322556441b  core/pkg/contracts/approval_binding_test.go
+391895bfb69c1a0f91b2585fd8a17c58608645be484cc0cb9d5d0c4aa0ca8366  core/pkg/contracts/approval_dispatch_admission.go
+b686e8e874d813093f35eaf123a64888cc05e2e2945ff2277857ca4c6e2df273  core/pkg/contracts/approval_dispatch_admission_test.go
 def59a057d1f59792abcca4f67f2e05ac2f60f3e1fa91448d0e3f14cbfaa0378  core/pkg/contracts/approval_grant.go
 efd49fe0effd23e9259c3a697a50d5ffb591ddad003d5d6e5de5a9711c869f3e  core/pkg/contracts/approval_grant_consumption.go
 16ebf03e7f7b40c804e5cee8994cef56f9ea67a9468f5587346db433d9900c6e  core/pkg/contracts/approval_grant_consumption_test.go

@@ -7,8 +7,9 @@ Status: internal, source-owned, pre-production.
 This runtime lets one authenticated workload consume one live, signed
 `ApprovalGrant` for the exact pack lifecycle action already approved by the
 Kernel ceremony. It also exposes a read-only recovery operation for response
-loss. It does not create approval authority, mint a generic `EffectPermit`,
-dispatch a connector, or prove a production deployment.
+loss and a separately scoped, signed near-effect dispatch admission. It does
+not create approval authority, mint a generic `EffectPermit`, dispatch a
+connector, cancel admitted work, or prove a production deployment.
 
 ## Startup contract
 
@@ -17,19 +18,21 @@ flag is set, any missing or invalid dependency is startup-fatal, including in a
 non-production process. SQLite is rejected; the ceremony ledger must use the
 PostgreSQL runtime and its forced tenant/workspace RLS policy. Scoped
 emergency-stop fencing must also be enabled against the same PostgreSQL
-runtime; consumption and FENCE use one transaction-scoped advisory lock for
-the verified tenant/workspace.
+runtime; consumption, dispatch admission, and FENCE use one
+transaction-scoped advisory lock for the verified tenant/workspace.
 
 | Variable | Requirement |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL DSN. The configured runtime role must be non-superuser and must not have `BYPASSRLS`. |
-| `HELM_APPROVAL_CONSUMPTION_ENABLED` | Set to `1` to mount the two internal routes. |
+| `DATABASE_URL` | PostgreSQL DSN. The configured role must be non-superuser, must not have `BYPASSRLS`, and currently must own the target schema/tables because startup runs idempotent source-owned DDL. A separate migration/runtime credential split is not implemented in this slice. |
+| `HELM_APPROVAL_CONSUMPTION_ENABLED` | Set to `1` to mount the four internal consumption/admission routes. |
 | `HELM_EMERGENCY_STOP_FENCE_ENABLED` | Must be `1`; approval consumption will not start without the durable scoped-stop coordinator. |
 | `HELM_APPROVAL_CONSUMER_JWKS_URL` | Absolute HTTPS JWKS URL for workload access-token verification. |
 | `HELM_APPROVAL_CONSUMER_ISSUER` | Exact expected JWT `iss`. |
 | `HELM_APPROVAL_CONSUMER_AUDIENCE` | Exact expected JWT `aud`; it is also bound into the persisted consumption record. |
 | `HELM_APPROVAL_CONSUMER_RESOURCE` | Required RFC 8707 resource indicator for this Kernel consumption surface. |
 | `HELM_APPROVAL_CONSUMER_SCOPE` | Required scope; defaults to `helm.approval.consume`. |
+| `HELM_APPROVAL_DISPATCH_SCOPE` | Separate dispatch-admission scope; defaults to `helm.approval.dispatch` and must differ from the consumption scope. |
+| `HELM_APPROVAL_DISPATCH_ADMISSION_TTL` | Immutable admission lifetime; defaults to `30s`, cannot exceed `1m`, and is capped by the signed grant expiry. |
 | `HELM_APPROVAL_CONSUMER_MAX_TOKEN_TTL` | Maximum `iat` to `exp` interval; defaults to `5m` and cannot exceed `15m`. |
 | `HELM_APPROVAL_SIGNING_KEY_REF` | Exact key reference already bound into signed grants. |
 | `HELM_APPROVAL_KERNEL_TRUST_ROOT_ID` | Exact Kernel trust-root identifier already bound into signed grants. |
@@ -37,14 +40,20 @@ the verified tenant/workspace.
 The token must have a valid RSA signature from the configured JWKS and include
 `sub`, `tenant_id`, `workspace_id`, `iss`, `aud`, `resource`, `scope`, `iat`,
 and `exp`. Caller headers and JSON fields never supply workload scope.
-The runtime database role needs `SELECT` on `emergency_stop_fences`; it remains
-non-superuser and must not receive `BYPASSRLS`.
+After initialization, the data path uses `SELECT` on
+`emergency_stop_fences`, `SELECT, INSERT, UPDATE` on `approval_ceremonies`,
+and `SELECT, INSERT` on `approval_dispatch_admissions`. The current process
+still runs idempotent `CREATE`/`ALTER` statements at startup, so the configured
+connection role must also own those schema objects; DML-only runtime authority
+is a remaining hardening item. It remains non-superuser and must not receive
+`BYPASSRLS`.
 
 ## Internal routes
 
-Both routes accept the same strict JSON object and reject unknown fields,
-trailing JSON, non-JSON content types, uppercase or malformed hashes, oversized
-bodies, and invalid nonces before querying the ledger.
+The consume and consumption-recovery routes accept the same strict JSON object
+and reject unknown fields, trailing JSON, non-JSON content types, uppercase or
+malformed hashes, oversized bodies, and invalid nonces before querying the
+ledger.
 
 ```json
 {
@@ -63,15 +72,60 @@ bodies, and invalid nonces before querying the ledger.
   the same subject, tenant, workspace, and audience while the original grant
   remains live. It does not increment the record version, consume again, or
   create new authority. Recovery remains available after FENCE so a
-  response-loss ambiguity can close with the persisted signed evidence. The
-  current internal Data Plane accepts a valid persisted consumption record as
-  dispatch input; production promotion is therefore blocked until its final
-  same-scope near-effect FENCE gate covers recovered and cached records.
+  response-loss ambiguity can close with the persisted signed evidence.
 
-Responses set `Cache-Control: no-store` and
+The dispatch-admission routes require the separately configured dispatch
+scope (default `helm.approval.dispatch`) and accept:
+
+```json
+{
+  "approval_id": "approval-...",
+  "attempt_id": "attempt-...",
+  "consumption_hash": "sha256:<64 lowercase hex characters>",
+  "idempotency_key_hash": "sha256:<64 lowercase hex characters>",
+  "effect_hash": "sha256:<64 lowercase hex characters>",
+  "connector_id": "connector-...",
+  "action": "install"
+}
+```
+
+`action` is one of `install`, `upgrade`, `uninstall`, or `rollback` and must
+match the signed consumption.
+
+- `POST /internal/v1/approval-grants/admit-dispatch` acquires the same
+  tenant/workspace advisory lock as FENCE, verifies the exact signed
+  consumption and workload identity, and persists a Kernel-signed
+  `approval-dispatch-admission.v1` record before returning it. FENCE-first
+  rejects a new admission. Admission-first creates an admitted `NOT_STARTED`
+  record that future FENCE reconciliation must treat as pre-existing work;
+  that state does not claim the connector has started. This slice does not yet
+  implement admission close transitions or an active-work disposition API.
+- An exact retry of an already committed admission returns the same immutable
+  record and expiry, including after a later FENCE. Reusing an attempt with
+  changed bindings, or reusing one consumption for a second attempt, conflicts.
+- `POST /internal/v1/approval-grants/recover-dispatch-admission` performs the
+  exact read-only response-loss recovery for the same workload identity and
+  request bindings. It creates no authority and does not extend the admission
+  expiry.
+- Once an admission expires, exact claim/recovery still returns the same
+  expired evidence, while a new attempt for that consumption conflicts. There
+  is no renewal path in this slice; the Data Plane must fail closed and await
+  the later close/reconciliation contract. Signature verification alone is
+  not a liveness check: the effect boundary must also call the contract's
+  half-open `ValidateAt(now)` gate before `expires_at`.
+
+Successful responses set `Cache-Control: no-store` and
 `X-Helm-Contract-Status: internal_non_production`. A client must persist the
-returned consumption record and signature before attempting the separately
-authorized pack lifecycle dispatch.
+returned consumption and dispatch-admission records and signatures. Production
+promotion remains blocked until the Data Plane verifies the admission and
+persists it atomically with `CONSUMED -> DISPATCHING` before every connector
+effect, including cached and recovered consumptions. That gate is necessary
+but not sufficient: source-owned connector selection/certification, active-work
+listing and disposition, close/uncertainty transitions, and connector-boundary
+acknowledgement evidence are also required before production or Emergency Stop
+claims. In this slice `connector_id` is asserted by the dispatch-scoped
+workload and then signed; it is not yet resolved from the approved policy or a
+certified connector binding, so it remains a release blocker.
 
 ## Failure handling
 
@@ -81,14 +135,14 @@ authorized pack lifecycle dispatch.
 | `401` | Missing, invalid, expired, or overlong workload token. | Obtain a fresh resource-bound token. |
 | `403` | Missing scope or workload identity does not match the signed grant. | Treat as a security denial; do not substitute body/header scope. |
 | `404` | No record exists in the authenticated tenant/workspace scope. | Reconcile the source approval reference. |
-| `409` | Grant state, tuple, replay, expiry, or an active FENCE rejects consumption. `X-Helm-Reason-Code: EMERGENCY_STOP_FENCED` identifies the bounded fence denial. | Do not dispatch. Use recovery only to reconcile a consumption that may already have committed. |
+| `409` | Grant/admission state, tuple, immutable replay binding, expiry, or the single-consumption rule rejects the operation; an active FENCE rejects new consumption/admission mutations but not exact committed admission replay/recovery. `X-Helm-Reason-Code: EMERGENCY_STOP_FENCED` identifies the bounded fence denial. | Do not dispatch. Use the matching recovery route only to reconcile an operation that may already have committed. |
 | `415` | Request is not `application/json`. | Correct the client contract; do not retry unchanged input. |
-| `503` | Durable authority, signature verification, runtime wiring, or scoped-stop status is unavailable. `X-Helm-Reason-Code: EMERGENCY_STOP_UNVERIFIED` identifies a failed early fence check. | Stop dispatch and repair the Kernel dependency. |
+| `503` | Durable authority, signature verification, runtime wiring, or scoped-stop status is unavailable. On `consume` only, `X-Helm-Reason-Code: EMERGENCY_STOP_UNVERIFIED` identifies a failed early fence check; dispatch-admission storage failures return the bounded generic authority error. | Stop dispatch and repair the Kernel dependency. |
 
-Never retry `consume` by dispatching optimistically. After an ambiguous HTTP
-response, call `recover` with the same tuple and the same workload identity. If
-recovery does not return the signed record, no connector operation is
-authorized.
+Never retry `consume` or `admit-dispatch` by dispatching optimistically. After
+an ambiguous HTTP response, call the corresponding recovery route with the
+same tuple, bindings, and workload identity. A consumption record without a
+live, verified dispatch admission authorizes no connector operation.
 
 ## Source-owned checks
 
@@ -101,9 +155,10 @@ make docs-coverage
 make docs-truth
 ```
 
-The PostgreSQL target proves forced RLS on both authority tables, single-winner
-concurrency, exact-scope FENCE isolation, shared scope-lock serialization,
-post-lock expiry enforcement, denied-grant immutability, and post-FENCE
+The PostgreSQL target proves forced RLS on the ceremony, dispatch-admission,
+and emergency-stop tables; single-winner consumption; exact-scope isolation;
+concurrent admission/FENCE serialization; immutable exact admission replay;
+post-lock expiry enforcement; denied-grant immutability; and post-FENCE
 recovery with a non-bypass runtime role. These checks do not prove Data Plane
-integration, connector execution, outcome/compensation closure, EvidencePack
+enforcement, connector execution, outcome/compensation closure, EvidencePack
 emission, deployment, or GA release authority.

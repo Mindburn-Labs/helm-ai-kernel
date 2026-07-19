@@ -22,12 +22,14 @@ import (
 )
 
 const (
-	approvalGrantConsumePath            = "/internal/v1/approval-grants/consume"
-	approvalGrantConsumptionRecoverPath = "/internal/v1/approval-grants/recover"
-	approvalGrantConsumptionMaxBody     = 32 << 10
-	approvalConsumptionReasonHeader     = "X-Helm-Reason-Code"
-	approvalConsumptionFencedReason     = "EMERGENCY_STOP_FENCED"
-	approvalConsumptionUnverifiedReason = "EMERGENCY_STOP_UNVERIFIED"
+	approvalGrantConsumePath             = "/internal/v1/approval-grants/consume"
+	approvalGrantConsumptionRecoverPath  = "/internal/v1/approval-grants/recover"
+	approvalDispatchAdmissionPath        = "/internal/v1/approval-grants/admit-dispatch"
+	approvalDispatchAdmissionRecoverPath = "/internal/v1/approval-grants/recover-dispatch-admission"
+	approvalGrantConsumptionMaxBody      = 32 << 10
+	approvalConsumptionReasonHeader      = "X-Helm-Reason-Code"
+	approvalConsumptionFencedReason      = "EMERGENCY_STOP_FENCED"
+	approvalConsumptionUnverifiedReason  = "EMERGENCY_STOP_UNVERIFIED"
 )
 
 var errApprovalConsumptionStopUnverified = errors.New("approval consumption emergency-stop status is unverified")
@@ -37,16 +39,23 @@ type approvalGrantConsumer interface {
 	RecoverGrantConsumption(context.Context, string, string, string, string) (approvalceremony.Record, error)
 }
 
+type approvalDispatchAdmitter interface {
+	Claim(context.Context, approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error)
+	Recover(context.Context, approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error)
+}
+
 type approvalConsumerTokenValidator interface {
 	ValidateAuthorization(string) (*mcppkg.OAuthTokenClaims, error)
 }
 
 type approvalConsumptionRuntime struct {
-	consumer    approvalGrantConsumer
-	validator   approvalConsumerTokenValidator
-	stops       kernel.ScopedStopReader
-	audience    string
-	maxTokenTTL time.Duration
+	consumer          approvalGrantConsumer
+	admitter          approvalDispatchAdmitter
+	validator         approvalConsumerTokenValidator
+	dispatchValidator approvalConsumerTokenValidator
+	stops             kernel.ScopedStopReader
+	audience          string
+	maxTokenTTL       time.Duration
 }
 
 type approvalGrantConsumptionRequest struct {
@@ -71,47 +80,69 @@ type approvalGrantConsumptionResponse struct {
 	Version                       int64                              `json:"version"`
 }
 
+type approvalDispatchAdmissionResponse struct {
+	Admission                   contracts.ApprovalDispatchAdmission `json:"admission"`
+	AdmissionSignatureAlgorithm string                              `json:"admission_signature_algorithm"`
+	AdmissionSignature          string                              `json:"admission_signature"`
+}
+
 func registerApprovalGrantConsumptionRoutes(mux *http.ServeMux, runtime *approvalConsumptionRuntime) {
 	if mux == nil || runtime == nil {
 		return
 	}
 	mux.HandleFunc(approvalGrantConsumePath, runtime.protect(runtime.handle(false)))
 	mux.HandleFunc(approvalGrantConsumptionRecoverPath, runtime.protect(runtime.handle(true)))
+	mux.HandleFunc(approvalDispatchAdmissionPath, runtime.protectDispatch(runtime.handleDispatch(false)))
+	mux.HandleFunc(approvalDispatchAdmissionRecoverPath, runtime.protectDispatch(runtime.handleDispatch(true)))
 }
 
 func (runtime *approvalConsumptionRuntime) protect(next http.HandlerFunc) http.HandlerFunc {
+	return runtime.protectWorkload(
+		runtime.validator, runtime != nil && runtime.consumer != nil && runtime.stops != nil,
+		"helm-approval-consumer", "approval-consumer", "approval consumption", next,
+	)
+}
+
+func (runtime *approvalConsumptionRuntime) protectDispatch(next http.HandlerFunc) http.HandlerFunc {
+	return runtime.protectWorkload(
+		runtime.dispatchValidator, runtime != nil && runtime.admitter != nil && runtime.stops != nil,
+		"helm-approval-dispatch", "approval-dispatcher", "approval dispatch", next,
+	)
+}
+
+func (runtime *approvalConsumptionRuntime) protectWorkload(validator approvalConsumerTokenValidator, ready bool, realm, role, capability string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if runtime == nil || runtime.consumer == nil || runtime.validator == nil || runtime.stops == nil ||
+		if runtime == nil || !ready || validator == nil ||
 			!validWorkloadClaim(runtime.audience) || runtime.maxTokenTTL <= 0 {
 			api.WriteError(w, http.StatusServiceUnavailable, "Approval grant consumer unavailable", "workload authentication is not configured")
 			return
 		}
 		token, detail, ok := helmauth.BearerToken(r)
 		if !ok {
-			writeApprovalConsumerUnauthorized(w, detail)
+			writeApprovalWorkloadUnauthorized(w, realm, detail)
 			return
 		}
-		claims, err := runtime.validator.ValidateAuthorization(token)
+		claims, err := validator.ValidateAuthorization(token)
 		if err != nil {
 			var validationErr *mcppkg.JWKSValidationError
 			if errors.As(err, &validationErr) && validationErr.Kind == mcppkg.JWKSErrMissingScope {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="helm-approval-consumer", error="insufficient_scope"`)
-				api.WriteForbidden(w, "Workload token is missing the approval consumption scope")
+				w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s", error="insufficient_scope"`, realm))
+				api.WriteForbidden(w, "Workload token is missing the "+capability+" scope")
 				return
 			}
-			writeApprovalConsumerUnauthorized(w, "Invalid or expired workload token")
+			writeApprovalWorkloadUnauthorized(w, realm, "Invalid or expired workload token")
 			return
 		}
 		if claims == nil || !validWorkloadClaim(claims.RegisteredClaims.Subject) ||
 			!validWorkloadClaim(claims.TenantID) || !validWorkloadClaim(claims.WorkspaceID) {
-			writeApprovalConsumerUnauthorized(w, "Workload token subject, tenant, and workspace are required")
+			writeApprovalWorkloadUnauthorized(w, realm, "Workload token subject, tenant, and workspace are required")
 			return
 		}
 		issuedAt := claims.RegisteredClaims.IssuedAt
 		expiresAt := claims.RegisteredClaims.ExpiresAt
 		if issuedAt == nil || expiresAt == nil || !expiresAt.After(issuedAt.Time) ||
 			expiresAt.Sub(issuedAt.Time) > runtime.maxTokenTTL {
-			writeApprovalConsumerUnauthorized(w, "Workload token lifetime is invalid")
+			writeApprovalWorkloadUnauthorized(w, realm, "Workload token lifetime is invalid")
 			return
 		}
 		identity := approvalceremony.ConsumerIdentity{
@@ -120,9 +151,51 @@ func (runtime *approvalConsumptionRuntime) protect(next http.HandlerFunc) http.H
 		}
 		ctx := approvalceremony.WithConsumerIdentity(r.Context(), identity)
 		ctx = helmauth.WithPrincipal(ctx, &helmauth.BasePrincipal{
-			ID: identity.Subject, TenantID: identity.TenantID, Roles: []string{"approval-consumer"},
+			ID: identity.Subject, TenantID: identity.TenantID, Roles: []string{role},
 		})
 		next(w, r.WithContext(ctx))
+	}
+}
+
+func (runtime *approvalConsumptionRuntime) handleDispatch(recoverOnly bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			api.WriteMethodNotAllowed(w)
+			return
+		}
+		mediaType, _, mediaTypeErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if mediaTypeErr != nil || mediaType != "application/json" {
+			api.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported media type", "Content-Type must be application/json")
+			return
+		}
+		request, err := decodeApprovalDispatchAdmissionRequest(w, r)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid approval dispatch admission request")
+			return
+		}
+		var record approvalceremony.DispatchAdmissionRecord
+		if recoverOnly {
+			record, err = runtime.admitter.Recover(r.Context(), request)
+		} else {
+			record, err = runtime.admitter.Claim(r.Context(), request)
+		}
+		if err != nil {
+			writeApprovalConsumptionError(w, err)
+			return
+		}
+		if err := record.Validate(); err != nil {
+			api.WriteError(w, http.StatusServiceUnavailable, "Approval dispatch admission unavailable", "admission record is incomplete")
+			return
+		}
+		response := approvalDispatchAdmissionResponse{
+			Admission:                   record.Admission,
+			AdmissionSignatureAlgorithm: record.SignatureAlgorithm,
+			AdmissionSignature:          record.Signature,
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Helm-Contract-Status", "internal_non_production")
+		_ = json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -215,6 +288,23 @@ func decodeApprovalGrantConsumptionRequest(w http.ResponseWriter, r *http.Reques
 	return request, nil
 }
 
+func decodeApprovalDispatchAdmissionRequest(w http.ResponseWriter, r *http.Request) (approvalceremony.DispatchAdmissionRequest, error) {
+	var request approvalceremony.DispatchAdmissionRequest
+	r.Body = http.MaxBytesReader(w, r.Body, approvalGrantConsumptionMaxBody)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return approvalceremony.DispatchAdmissionRequest{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return approvalceremony.DispatchAdmissionRequest{}, errors.New("request must contain exactly one JSON object")
+	}
+	if err := request.Validate(); err != nil {
+		return approvalceremony.DispatchAdmissionRequest{}, err
+	}
+	return request, nil
+}
+
 func writeApprovalConsumptionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, approvalceremony.ErrInvalidRecord):
@@ -239,7 +329,11 @@ func writeApprovalConsumptionError(w http.ResponseWriter, err error) {
 }
 
 func writeApprovalConsumerUnauthorized(w http.ResponseWriter, detail string) {
-	w.Header().Set("WWW-Authenticate", `Bearer realm="helm-approval-consumer"`)
+	writeApprovalWorkloadUnauthorized(w, "helm-approval-consumer", detail)
+}
+
+func writeApprovalWorkloadUnauthorized(w http.ResponseWriter, realm, detail string) {
+	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, realm))
 	api.WriteUnauthorized(w, detail)
 }
 

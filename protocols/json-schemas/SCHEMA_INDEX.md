@@ -116,9 +116,11 @@ pass. Provider-specific regions, SKUs, hostnames, workload support, and actions
 live in versioned capability profiles; workload kinds and graph relationships
 are extensible contract tokens rather than a website-only Kernel enum. Schema
 presence or a candidate profile alone grants no execution authority.
-The envelope and receipt files in this directory define preview wire shapes
-only; their cryptographic verifier and cross-language reference pack are a
-separate promotion prerequisite.
+The envelope and receipt files have a deterministic Go verifier and an
+independent cross-language reference pack, but remain non-executable preview
+contracts. Production promotion still requires a certified connector and a
+deployed Data Plane path through the source-owned durable effect reservation,
+start interlock, reconciliation, and signed closure boundaries.
 
 ### Evidence (`evidence/`)
 

@@ -615,41 +615,7 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 }
 
 func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
-	if effect == nil {
-		return "", fmt.Errorf("effect is nil")
-	}
-	effectBytes, err := canonicalize.JCS(effectDigestEnvelopeFrom(effect))
-	if err != nil {
-		return "", err
-	}
-	return canonicalize.HashBytes(effectBytes), nil
-}
-
-type effectDigestEnvelope struct {
-	EffectType     string                `json:"effect_type"`
-	Params         map[string]any        `json:"params,omitempty"`
-	IdempotencyKey string                `json:"idempotency_key,omitempty"`
-	Irreversible   bool                  `json:"irreversible,omitempty"`
-	ArgsHash       string                `json:"args_hash,omitempty"`
-	OutputHash     string                `json:"output_hash,omitempty"`
-	Taint          []string              `json:"taint,omitempty"`
-	Compensation   *effectDigestEnvelope `json:"compensation,omitempty"`
-}
-
-func effectDigestEnvelopeFrom(effect *contracts.Effect) *effectDigestEnvelope {
-	if effect == nil {
-		return nil
-	}
-	return &effectDigestEnvelope{
-		EffectType:     effect.EffectType,
-		Params:         effect.Params,
-		IdempotencyKey: effect.IdempotencyKey,
-		Irreversible:   effect.Irreversible,
-		ArgsHash:       effect.ArgsHash,
-		OutputHash:     effect.OutputHash,
-		Taint:          contracts.NormalizeTaintLabels(effect.Taint),
-		Compensation:   effectDigestEnvelopeFrom(effect.Compensation),
-	}
+	return contracts.CanonicalEffectDigest(effect)
 }
 
 // recordBehavioralEvent records a trust score event if the behavioral scorer is configured.

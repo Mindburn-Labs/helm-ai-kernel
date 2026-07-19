@@ -253,7 +253,7 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 	if err != nil {
 		return nil, err
 	}
-	if err := verifySandboxExecutionDecisionBinding(verdict.Decision, authorization); err != nil {
+	if err := verifySandboxExecutionDecisionBinding(verdict.Decision, verdict.Intent, authorization); err != nil {
 		return nil, err
 	}
 
@@ -414,8 +414,11 @@ func (b *SandboxBroker) verifySandboxAuthority(verdict *effectgraph.NodeVerdict)
 	if decision.EffectDigest == "" || intent.EffectDigestHash != decision.EffectDigest {
 		return fmt.Errorf("sandbox execution intent does not bind the decision effect digest")
 	}
-	if decision.Action == "" || intent.AllowedTool != decision.Action {
-		return fmt.Errorf("sandbox execution intent does not bind the allowed tool")
+	if intent.AllowedTool != contracts.EffectTypeRunSandboxedCode {
+		return fmt.Errorf("sandbox execution intent does not authorize sandboxed code")
+	}
+	if decision.Action != "" && intent.AllowedTool != decision.Action {
+		return fmt.Errorf("sandbox execution intent does not match the decision action")
 	}
 	now := b.clock()
 	if intent.IssuedAt.After(now) || intent.ExpiresAt.IsZero() || !now.Before(intent.ExpiresAt) {
@@ -438,7 +441,10 @@ func (b *SandboxBroker) verifySandboxAuthority(verdict *effectgraph.NodeVerdict)
 	return nil
 }
 
-func verifySandboxExecutionDecisionBinding(decision *contracts.DecisionRecord, expected SandboxExecutionAuthorization) error {
+func verifySandboxExecutionDecisionBinding(decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, expected SandboxExecutionAuthorization) error {
+	if decision == nil || intent == nil {
+		return fmt.Errorf("sandbox decision and execution intent are required")
+	}
 	authorizedExecution, ok := decision.InputContext[SandboxExecutionDecisionContextKey]
 	if !ok || authorizedExecution == nil {
 		return fmt.Errorf("sandbox decision does not contain a complete execution authorization")
@@ -453,6 +459,21 @@ func verifySandboxExecutionDecisionBinding(decision *contracts.DecisionRecord, e
 	}
 	if authorizedHash != expectedHash {
 		return fmt.Errorf("sandbox execution spec or lease does not match the signed decision context")
+	}
+	// Decision signatures do not directly cover InputContext. Guardian instead
+	// signs EffectDigest, so recompute the canonical effect from the complete
+	// context and the Intent-signed tool. This closes the cryptographic chain:
+	// authorization -> effect digest -> Decision signature and Intent signature.
+	effectDigest, err := contracts.CanonicalEffectDigest(&contracts.Effect{
+		EffectType: intent.AllowedTool,
+		Params:     decision.InputContext,
+		Taint:      contracts.TaintLabelsFromContext(decision.InputContext),
+	})
+	if err != nil {
+		return fmt.Errorf("derive signed sandbox effect digest: %w", err)
+	}
+	if decision.EffectDigest != effectDigest || intent.EffectDigestHash != effectDigest {
+		return fmt.Errorf("sandbox execution authorization is not bound by the signed effect digest")
 	}
 	return nil
 }
@@ -704,7 +725,7 @@ func (b *SandboxBroker) claimPreparedExecution(ctx context.Context, prepared *Pr
 		b.revokeUnstartedRecord(ctx, record, err.Error())
 		return preparedExecutionRecord{}, nil, fmt.Errorf("prepared execution authority is no longer valid: %w", err)
 	}
-	if err := verifySandboxExecutionDecisionBinding(record.verdict.Decision, record.authorization); err != nil {
+	if err := verifySandboxExecutionDecisionBinding(record.verdict.Decision, record.verdict.Intent, record.authorization); err != nil {
 		b.revokeUnstartedRecord(ctx, record, err.Error())
 		return preparedExecutionRecord{}, nil, fmt.Errorf("prepared execution decision binding is no longer valid: %w", err)
 	}

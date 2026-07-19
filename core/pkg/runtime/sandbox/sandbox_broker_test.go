@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	kernelcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectgraph"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/lease"
 	sandbox_runtime "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
@@ -175,7 +176,7 @@ func authorizedVerdict(t *testing.T, execLease *lease.ExecutionLease, workload *
 	t.Helper()
 	verdict := testVerdict()
 	authorization := sandboxAuthorization(t, execLease, verdict.Profile, workload)
-	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+	bindSandboxAuthorization(t, verdict, authorization)
 	return verdict
 }
 
@@ -190,8 +191,23 @@ func authorizedVerdictWithTimeout(t *testing.T, execLease *lease.ExecutionLease,
 		MaxProcesses: 10,
 	}
 	authorization := sandboxAuthorization(t, execLease, verdict.Profile, workload)
-	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+	bindSandboxAuthorization(t, verdict, authorization)
 	return verdict
+}
+
+func bindSandboxAuthorization(t *testing.T, verdict *effectgraph.NodeVerdict, authorization sandbox_runtime.SandboxExecutionAuthorization) {
+	t.Helper()
+	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+	digest, err := contracts.CanonicalEffectDigest(&contracts.Effect{
+		EffectType: verdict.Intent.AllowedTool,
+		Params:     verdict.Decision.InputContext,
+		Taint:      contracts.TaintLabelsFromContext(verdict.Decision.InputContext),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verdict.Decision.EffectDigest = digest
+	verdict.Intent.EffectDigestHash = digest
 }
 
 func sandboxAuthorization(t *testing.T, execLease *lease.ExecutionLease, profile *effectgraph.ExecutionProfile, workload *sandbox_runtime.SandboxWorkload) sandbox_runtime.SandboxExecutionAuthorization {
@@ -567,6 +583,65 @@ func TestPrepareExecutionWithWorkloadRequiresVerifiedAuthorizationAndExactSigned
 	}
 }
 
+func TestSignedEffectDigestCryptographicallyBindsFullSandboxAuthorization(t *testing.T) {
+	resetClock()
+	signer, err := kernelcrypto.NewEd25519Signer("sandbox-test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).
+		WithAuthorizationVerifier(signer).
+		WithClock(clock)
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+
+	l := acquireLease(t, lm)
+	verdict := authorizedVerdict(t, l, testWorkload())
+	if err := signer.SignDecision(verdict.Decision); err != nil {
+		t.Fatal(err)
+	}
+	if err := signer.SignIntent(verdict.Intent); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload())
+	if err != nil {
+		t.Fatalf("cryptographically bound authorization was rejected: %v", err)
+	}
+	if _, _, err := broker.Execute(ctx, prepared); err != nil {
+		t.Fatalf("cryptographically bound execution failed after sealed clone: %v", err)
+	}
+
+	runner = &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+	tamperedLease := acquireLease(t, lm)
+	tamperedVerdict := authorizedVerdict(t, tamperedLease, testWorkload())
+	if err := signer.SignDecision(tamperedVerdict.Decision); err != nil {
+		t.Fatal(err)
+	}
+	if err := signer.SignIntent(tamperedVerdict.Intent); err != nil {
+		t.Fatal(err)
+	}
+	changedWorkload := testWorkload()
+	changedWorkload.Command[0] = "/usr/bin/substituted"
+	changedAuthorization := sandboxAuthorization(t, tamperedLease, tamperedVerdict.Profile, changedWorkload)
+	// This simulates an attacker changing InputContext after signing. Generic
+	// Decision verification still succeeds because EffectDigest, not the map
+	// itself, is signed; the broker must recompute and reject the mismatch.
+	tamperedVerdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = changedAuthorization
+	if valid, verifyErr := signer.VerifyDecision(tamperedVerdict.Decision); verifyErr != nil || !valid {
+		t.Fatalf("test precondition failed: generic decision verification rejected the unsigned context mutation: valid=%v err=%v", valid, verifyErr)
+	}
+	if valid, verifyErr := signer.VerifyIntent(tamperedVerdict.Intent); verifyErr != nil || !valid {
+		t.Fatalf("test precondition failed: execution intent signature was not valid: valid=%v err=%v", valid, verifyErr)
+	}
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, tamperedLease, tamperedVerdict, changedWorkload); err == nil {
+		t.Fatal("post-signature sandbox authorization substitution was accepted")
+	}
+	assertLeasePendingAndRunnerUnused(t, lm, tamperedLease, runner)
+}
+
 func TestPrepareExecutionRequiresSignedFullRuntimeAndExactLeaseIdentity(t *testing.T) {
 	t.Run("missing full execution authorization", func(t *testing.T) {
 		broker, leaseManager, runner := setupBroker()
@@ -595,7 +670,7 @@ func TestPrepareExecutionRequiresSignedFullRuntimeAndExactLeaseIdentity(t *testi
 		verdict := authorizedVerdict(t, execLease, testWorkload())
 		authorization := verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey].(sandbox_runtime.SandboxExecutionAuthorization)
 		authorization.SandboxID = "sbx-caller-selected"
-		verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+		bindSandboxAuthorization(t, verdict, authorization)
 		if _, err := broker.PrepareExecutionWithWorkload(ctx, execLease, verdict, testWorkload()); err == nil {
 			t.Fatal("sandbox preparation accepted an instance ID not derived from the exact lease")
 		}
@@ -628,7 +703,7 @@ func TestPrepareExecutionRequiresSignedFullRuntimeAndExactLeaseIdentity(t *testi
 		if err != nil {
 			t.Fatal(err)
 		}
-		verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+		bindSandboxAuthorization(t, verdict, authorization)
 		verdict.Profile.NetworkPolicy.EgressAllowlist[0] = "0.0.0.0/0"
 		if _, err := broker.PrepareExecutionWithWorkload(ctx, execLease, verdict, testWorkload()); err == nil {
 			t.Fatal("sandbox preparation accepted an in-place allowlist mutation absent from the signed decision")
@@ -694,7 +769,7 @@ func TestPrepareExecution_NoRunner(t *testing.T) {
 	if authErr != nil {
 		t.Fatal(authErr)
 	}
-	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+	bindSandboxAuthorization(t, verdict, authorization)
 
 	_, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload())
 	if err == nil {

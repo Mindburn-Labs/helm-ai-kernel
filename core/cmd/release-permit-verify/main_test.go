@@ -221,19 +221,17 @@ func validPermitJSON() string {
 }
 
 func TestWritePermitFileRejectsSymlinkOutput(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "target.json")
-	if err := os.WriteFile(target, []byte("{}"), 0o600); err != nil {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("target.json", []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(dir, "release-permit.json")
-	if err := os.Symlink(target, link); err != nil {
+	if err := os.Symlink("target.json", "release-permit.json"); err != nil {
 		t.Fatal(err)
 	}
-	if err := writePermitFile(link, []byte("overwritten")); err == nil {
+	if err := writePermitFile("release-permit.json", []byte("overwritten")); err == nil {
 		t.Fatal("writePermitFile accepted a symlinked output path")
 	}
-	content, err := os.ReadFile(target)
+	content, err := os.ReadFile("target.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,12 +240,24 @@ func TestWritePermitFileRejectsSymlinkOutput(t *testing.T) {
 	}
 }
 
-func TestWritePermitFileCreatesOwnerOnlyFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "release-permit.json")
-	if err := writePermitFile(path, []byte("ok")); err != nil {
+func TestWritePermitFileRejectsDirectoryComponent(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.Mkdir("sub", 0o700); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(path)
+	for _, p := range []string{"sub/release-permit.json", "/tmp/release-permit.json", "../release-permit.json", "."} {
+		if err := writePermitFile(p, []byte("x")); err == nil {
+			t.Fatalf("writePermitFile accepted non-basename output path %q", p)
+		}
+	}
+}
+
+func TestWritePermitFileCreatesOwnerOnlyFile(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := writePermitFile("release-permit.json", []byte("ok")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat("release-permit.json")
 	if err != nil {
 		t.Fatal(err)
 	}

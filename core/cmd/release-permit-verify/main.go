@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -506,6 +507,14 @@ func requireKeys(
 // untrusted checkout cannot redirect the permit write onto another
 // runner-accessible file, and keeps the artifact owner-only.
 func writePermitFile(path string, content []byte) error {
+	// The permit is written to a bare basename in the trusted working
+	// directory the workflow chose. Refusing any directory component removes
+	// the parent-traversal surface entirely: there is no attacker-influenced
+	// path segment to point through a symlink, so O_NOFOLLOW on the leaf is
+	// the only symlink guard needed.
+	if path != filepath.Base(path) || path == "." || path == ".." || strings.ContainsRune(path, filepath.Separator) {
+		return fmt.Errorf("output path %q must be a bare filename in the working directory", path)
+	}
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("output path %q is a symlink", path)

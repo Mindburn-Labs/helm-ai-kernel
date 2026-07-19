@@ -139,7 +139,7 @@ def parse_time(value):
 def verify_connector_authority(authority, outer):
     if (
         authority.get("schema_version") != "approval-connector-authority.v1"
-        or authority.get("contract_version") != "2026-07-17"
+        or authority.get("contract_version") != "2026-07-17.1"
         or authority.get("state") != "certified"
     ):
         raise VectorError("connector_authority_rejected", "unsupported connector authority contract")
@@ -150,8 +150,11 @@ def verify_connector_authority(authority, outer):
         "workspace_id",
         "pack_id",
         "pack_version",
+        "connector_action",
         "connector_id",
         "connector_version",
+        "release_scope_kind",
+        "release_authority_id",
         "connector_executor_kind",
         "connector_signature_ref",
         "connector_signer_id",
@@ -166,13 +169,20 @@ def verify_connector_authority(authority, outer):
             raise VectorError("connector_authority_rejected", f"invalid connector authority {field}")
     if authority["connector_executor_kind"] not in ("digital", "analog"):
         raise VectorError("connector_authority_rejected", "invalid connector executor kind")
+    if authority["release_scope_kind"] not in ("global", "tenant_workspace"):
+        raise VectorError("connector_authority_rejected", "invalid connector release scope")
+    revision = authority.get("release_registry_revision")
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1 or revision > 2**53 - 1:
+        raise VectorError("connector_authority_rejected", "invalid connector release registry revision")
 
     for field in (
         "pack_manifest_hash",
         "effect_hash",
         "policy_hash",
         "connector_binary_hash",
+        "connector_signature_hash",
         "certification_hash",
+        "release_authority_hash",
     ):
         prefixed_bytes(authority.get(field), "sha256:", 32)
 

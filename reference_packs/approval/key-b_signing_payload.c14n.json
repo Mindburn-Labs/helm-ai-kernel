@@ -1,1 +1,1 @@
-{"algorithm":"ed25519","challenge_hash":"sha256:807532aa6c3a4e9c203845e8926bad4f39f2fbc0166c8837867971d5fc142a45","challenge_id":"challenge-a","contract_version":"2026-07-15","domain":"HELM/ApprovalAssertion/v1","key_id":"key-b","schema_version":"approval-assertion.v1"}
+{"algorithm":"ed25519","challenge_hash":"sha256:a72cf045db9ce31ed6155b2cc1dd61e7f757ac1963c09e2e316d5643ea59b6f7","challenge_id":"challenge-a","contract_version":"2026-07-15","domain":"HELM/ApprovalAssertion/v1","key_id":"key-b","schema_version":"approval-assertion.v1"}

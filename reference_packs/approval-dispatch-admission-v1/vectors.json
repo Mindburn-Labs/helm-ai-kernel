@@ -6,17 +6,17 @@
   "verification_time": "2026-07-16T12:09:02Z",
   "consumption": {
     "canonical": "consumption.c14n.json",
-    "sha256": "sha256:f6678eaf506166edde7f51aa804e3660704b659b5a808eab500bffb738af9ccd"
+    "sha256": "sha256:74768fa1913e4fcb9795f255528cc9f85c15e9a3120150df8d484281b947f728"
   },
   "admission": {
     "canonical": "admission.c14n.json",
-    "sha256": "sha256:97fa1c81beafc090d071bd0fb00366141ab8c63ea58e2925c71817209fd50fed",
+    "sha256": "sha256:e44c8fd36bfcb677e0177a3208a2565671439b4ef51a80dcc145bb4e73376c0d",
     "signing_payload": {
       "canonical": "signing_payload.c14n.json",
-      "sha256": "sha256:4feac3dcdbdddd1ed11bc55dcc84c0b1cc708b73c77095b1fe4da1dd9e0dd36d"
+      "sha256": "sha256:21f638fd94abf6fcf59b1429e3b1dc4ecedab71eb9a8753952f1bc354dfccee5"
     },
     "public_key": "ed25519:91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a",
-    "signature": "ed25519:a6ffcf619b03e213be72b4d06cf672eed2101d6fe21586ab74cd3a92353e7e824f417d0787761322961ce3c41cc6242002afd8a449e6da1f4e3545a8f5d9f30d"
+    "signature": "ed25519:63ae8ad7329d5d459101e7fc39d6a101016a3bc57b4abbb2220e672986a0136db1f3cceec2aaa3f4e124ed7cf46baab42848e02ec53521e89b985cc1eb966703"
   },
   "negative_vectors": [
     {

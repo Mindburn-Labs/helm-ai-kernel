@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
@@ -112,16 +113,19 @@ func (a *MCPAdapter) governed(ctx context.Context, req *runtimeadapters.AdaptedR
 	outcome := a.bridge.Govern(ctx, req, inputHash)
 
 	effectPayload, err := json.Marshal(mcpEffectPayload{
-		AdapterID:     a.ID(),
-		ToolName:      req.ToolName,
-		IntentNode:    intentNode,
-		Verdict:       string(outcome.Verdict),
-		ReasonCode:    outcome.ReasonCode,
-		DecisionID:    outcome.DecisionID,
-		ReceiptHash:   outcome.ReceiptHash,
-		DispatchState: outcome.DispatchState,
-		OutputHash:    outcome.OutputHash,
-		PermitID:      permitID(outcome.Permit),
+		AdapterID:            a.ID(),
+		ToolName:             req.ToolName,
+		IntentNode:           intentNode,
+		Verdict:              string(outcome.Verdict),
+		ReasonCode:           outcome.ReasonCode,
+		DecisionID:           outcome.DecisionID,
+		ReceiptHash:          outcome.ReceiptHash,
+		DispatchState:        outcome.DispatchState,
+		OutputHash:           outcome.OutputHash,
+		PermitID:             permitID(outcome.Permit),
+		ReservationID:        effectReservationID(outcome.EffectReservation),
+		ReservationState:     effectReservationState(outcome.EffectReservation),
+		ReleaseAuthorityHash: effectReleaseAuthorityHash(outcome.EffectReservation),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("runtimeadapters/mcp: effect payload marshal failed: %w", err)
@@ -156,16 +160,21 @@ func (a *MCPAdapter) governed(ctx context.Context, req *runtimeadapters.AdaptedR
 	resp.DenyReason = &runtimeadapters.DenyReason{
 		Code:       outcome.ReasonCode,
 		Message:    outcome.Reason,
-		Actionable: actionableFor(outcome.Verdict),
+		Actionable: actionableFor(outcome),
 	}
 	a.logger.InfoContext(ctx, "mcp tool call not allowed",
 		"tool", req.ToolName, "verdict", outcome.Verdict, "reason", outcome.ReasonCode)
 	return resp, nil
 }
 
-func actionableFor(v contracts.Verdict) string {
-	if v == contracts.VerdictEscalate {
+func actionableFor(outcome GovernedOutcome) string {
+	if outcome.Verdict == contracts.VerdictEscalate {
 		return "request_approval"
+	}
+	if outcome.DispatchState == DispatchStateStarted || outcome.DispatchState == DispatchStateUncertain ||
+		(outcome.EffectReservation != nil && (outcome.EffectReservation.State == approvalceremony.EffectReservationStateStarted ||
+			outcome.EffectReservation.State == approvalceremony.EffectReservationStateUncertain)) {
+		return "reconcile_effect"
 	}
 	return "modify_scope"
 }
@@ -186,14 +195,38 @@ type mcpProofPayload struct {
 }
 
 type mcpEffectPayload struct {
-	AdapterID     string `json:"adapter_id"`
-	ToolName      string `json:"tool_name"`
-	IntentNode    string `json:"intent_node"`
-	Verdict       string `json:"verdict"`
-	ReasonCode    string `json:"reason_code,omitempty"`
-	DecisionID    string `json:"decision_id,omitempty"`
-	ReceiptHash   string `json:"receipt_hash,omitempty"`
-	DispatchState string `json:"dispatch_state"`
-	OutputHash    string `json:"output_hash,omitempty"`
-	PermitID      string `json:"permit_id,omitempty"`
+	AdapterID            string `json:"adapter_id"`
+	ToolName             string `json:"tool_name"`
+	IntentNode           string `json:"intent_node"`
+	Verdict              string `json:"verdict"`
+	ReasonCode           string `json:"reason_code,omitempty"`
+	DecisionID           string `json:"decision_id,omitempty"`
+	ReceiptHash          string `json:"receipt_hash,omitempty"`
+	DispatchState        string `json:"dispatch_state"`
+	OutputHash           string `json:"output_hash,omitempty"`
+	PermitID             string `json:"permit_id,omitempty"`
+	ReservationID        string `json:"reservation_id,omitempty"`
+	ReservationState     string `json:"reservation_state,omitempty"`
+	ReleaseAuthorityHash string `json:"release_authority_hash,omitempty"`
+}
+
+func effectReservationID(event *approvalceremony.EffectReservationEvent) string {
+	if event == nil {
+		return ""
+	}
+	return event.Admission.Admission.AdmissionID
+}
+
+func effectReservationState(event *approvalceremony.EffectReservationEvent) string {
+	if event == nil {
+		return ""
+	}
+	return string(event.State)
+}
+
+func effectReleaseAuthorityHash(event *approvalceremony.EffectReservationEvent) string {
+	if event == nil {
+		return ""
+	}
+	return event.ReleaseAuthority.Authority.AuthorityHash
 }

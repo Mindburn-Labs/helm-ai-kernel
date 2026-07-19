@@ -36,7 +36,7 @@ func TestVerifyQuorumAcceptsDistinctTrustedSignersDeterministically(t *testing.T
 	if len(got.Signers) != 2 || got.Signers[0].PrincipalID != "principal-a" || got.Signers[1].PrincipalID != "principal-b" {
 		t.Fatalf("Signers are not canonically sorted: %+v", got.Signers)
 	}
-	if want := "sha256:8525189c09651a7828b285d7111f04562e83eeaae28b21a974ace81c7d41dc25"; got.SignerSetHash != want {
+	if want := "sha256:fb2dec462529ed0e66abe321b97e254026f02050f0c1b51cfa8130a8ffdef385"; got.SignerSetHash != want {
 		t.Fatalf("SignerSetHash = %q, want %q", got.SignerSetHash, want)
 	}
 
@@ -617,10 +617,14 @@ func connectorAuthorityFixture(t *testing.T) contracts.ApprovalConnectorAuthorit
 		State:           contracts.ApprovalConnectorAuthorityStateV1,
 		BindingRef:      "binding-a", TenantID: "tenant-a", WorkspaceID: "workspace-a",
 		PackID: "pack-a", PackVersion: "1.0.0", PackManifestHash: shaRef("a"),
-		Action: contracts.ApprovalGrantActionInstall, EffectHash: shaRef("1"), PolicyHash: shaRef("3"),
-		ConnectorID: "connector-a", ConnectorVersion: "1.0.0", ConnectorExecutorKind: "digital",
+		Action: contracts.ApprovalGrantActionInstall, ConnectorAction: contracts.ApprovalGrantActionInstall,
+		EffectHash: shaRef("1"), PolicyHash: shaRef("3"),
+		ConnectorID: "connector-a", ConnectorVersion: "1.0.0",
+		ReleaseScopeKind: contracts.ConnectorReleaseAuthorityScopeGlobal, ReleaseAuthorityID: "connector-registry-a",
+		ReleaseRegistryRevision: 1, ReleaseAuthorityHash: shaRef("4"), ConnectorExecutorKind: "digital",
 		ConnectorBinaryHash: shaRef("7"), ConnectorSignatureRef: "sigstore://connector-a/1.0.0",
-		ConnectorSignerID: "publisher-a", ConnectorSandboxProfile: "sandbox-pack-lifecycle-v1",
+		ConnectorSignatureHash: shaRef("6"),
+		ConnectorSignerID:      "publisher-a", ConnectorSandboxProfile: "sandbox-pack-lifecycle-v1",
 		ConnectorDriftPolicyRef: "policy://connector-drift/v1", CertificationRef: "cert://connector-a/1.0.0",
 		CertificationHash: shaRef("8"), CertificationAuthority: "spiffe://helm/certification-authority",
 	}).Seal()

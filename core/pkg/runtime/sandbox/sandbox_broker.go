@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -71,6 +72,9 @@ type PreparedExecution struct {
 	Verdict *effectgraph.NodeVerdict
 
 	// TokenIDs lists scoped token IDs issued for cleanup and audit.
+	// Credential issuance is deferred until Execute, so this remains empty on
+	// every caller-visible prepared value and is retained only for API
+	// compatibility and mutation detection.
 	TokenIDs []string
 
 	// PreparedAt is when the execution was prepared.
@@ -130,11 +134,16 @@ type preparedExecutionRecord struct {
 	backend       string
 	leaseID       string
 	sandboxID     string
+	expiresAt     time.Time
 	runner        SandboxRunner
+	sourceLease   *lease.ExecutionLease
+	verdict       *effectgraph.NodeVerdict
 	authorization SandboxExecutionAuthorization
 	spec          pkg_sandbox.SandboxSpec
-	tokenIDs      []string
-	credentials   []SandboxCredentialMaterial
+	// tokenIDs and credentials are populated only after this record is removed
+	// from the prepared map and the source lease is atomically activated.
+	tokenIDs    []string
+	credentials []SandboxCredentialMaterial
 }
 
 // SandboxBroker mediates between approved effect graphs and execution backends.
@@ -147,7 +156,10 @@ type SandboxBroker struct {
 	verifier   AuthorizationVerifier
 	runners    map[string]SandboxRunner // backend name → runner
 	prepared   map[*PreparedExecution]preparedExecutionRecord
-	clock      func() time.Time
+	// preparedByLease prevents duplicate broker reservations for one pending
+	// source-owned lease while preserving pointer-bound single-use execution.
+	preparedByLease map[string]*PreparedExecution
+	clock           func() time.Time
 }
 
 // WithAuthorizationVerifier installs the Kernel trust-root verifier. A broker
@@ -163,11 +175,12 @@ func NewSandboxBroker(
 	leases lease.LeaseManager,
 ) *SandboxBroker {
 	return &SandboxBroker{
-		credBroker: credBroker,
-		leases:     leases,
-		runners:    make(map[string]SandboxRunner),
-		prepared:   make(map[*PreparedExecution]preparedExecutionRecord),
-		clock:      time.Now,
+		credBroker:      credBroker,
+		leases:          leases,
+		runners:         make(map[string]SandboxRunner),
+		prepared:        make(map[*PreparedExecution]preparedExecutionRecord),
+		preparedByLease: make(map[string]*PreparedExecution),
+		clock:           time.Now,
 	}
 }
 
@@ -184,20 +197,27 @@ func (b *SandboxBroker) RegisterRunner(name string, runner SandboxRunner) {
 	b.runners[name] = runner
 }
 
-// PrepareExecution is the deprecated implicit-workload entrypoint. It fails
-// closed because an executable command must be bound before preparation is
-// sealed. Call PrepareExecutionWithWorkload instead.
+// PrepareExecution is the compatibility entrypoint for callers that already
+// carry the complete workload in the signed decision context. It never accepts
+// an implicit or caller-mutated command: the workload is decoded from
+// sandbox_execution_authorization.v1 and then rebuilt and compared byte-for-
+// byte by PrepareExecutionWithWorkload.
 func (b *SandboxBroker) PrepareExecution(
 	ctx context.Context,
 	execLease *lease.ExecutionLease,
 	verdict *effectgraph.NodeVerdict,
 ) (*PreparedExecution, error) {
-	return nil, fmt.Errorf("explicit sandbox workload is required; use PrepareExecutionWithWorkload")
+	workload, err := sandboxWorkloadFromDecision(verdict)
+	if err != nil {
+		return nil, err
+	}
+	return b.PrepareExecutionWithWorkload(ctx, execLease, verdict, workload)
 }
 
-// PrepareExecutionWithWorkload builds everything needed for a sandbox run.
-// It validates executable material before activating the lease, issuing
-// credentials, and sealing the complete SandboxSpec.
+// PrepareExecutionWithWorkload builds a secret-free, single-use preparation.
+// It validates and seals the complete SandboxSpec but deliberately leaves the
+// source lease PENDING and issues no credential. Execute owns those effects
+// after it atomically claims and re-verifies the exact prepared value.
 func (b *SandboxBroker) PrepareExecutionWithWorkload(
 	ctx context.Context,
 	execLease *lease.ExecutionLease,
@@ -219,6 +239,7 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 	if err := validateSandboxWorkload(workload); err != nil {
 		return nil, err
 	}
+	b.reapExpiredPreparedExecutions(ctx)
 	// Establish signature trust before resolving a caller-selected lease ID.
 	// This prevents unsigned inputs from using the lease store as an oracle.
 	if err := b.verifySandboxAuthority(verdict); err != nil {
@@ -244,44 +265,15 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 		return nil, fmt.Errorf("no runner registered for backend %q", sourceLease.Backend)
 	}
 	if len(sourceLease.SecretBindings) > 0 {
+		if b.credBroker == nil {
+			return nil, fmt.Errorf("sandbox credential broker is required")
+		}
 		if _, ok := runner.(SandboxCredentialRunner); !ok {
 			return nil, fmt.Errorf("runner for backend %q cannot receive broker-sealed credentials", sourceLease.Backend)
 		}
 	}
 
-	// Activate the exact sandbox instance already derived from the immutable
-	// lease and bound by the signed decision.
 	sandboxID := authorization.SandboxID
-	if err := b.leases.Activate(ctx, sourceLease.LeaseID, sandboxID); err != nil {
-		return nil, fmt.Errorf("activate lease: %w", err)
-	}
-
-	// Issue scoped credentials.
-	var tokenIDs []string
-	var credentials []SandboxCredentialMaterial
-	for _, binding := range sourceLease.SecretBindings {
-		token, err := b.credBroker.IssueToken(TokenRequest{
-			SandboxID:       sandboxID,
-			RequestedScopes: binding.Scopes,
-			TTLSeconds:      int(sourceLease.TTL.Seconds()),
-		})
-		if err != nil {
-			// Best effort: revoke already-issued tokens and lease.
-			for _, tid := range tokenIDs {
-				_ = b.credBroker.RevokeToken(tid)
-			}
-			_ = b.leases.Revoke(ctx, sourceLease.LeaseID, fmt.Sprintf("credential issuance failed: %v", err))
-			return nil, fmt.Errorf("issue credential for %s: %w", binding.SecretRef, err)
-		}
-		tokenIDs = append(tokenIDs, token.TokenID)
-		credentials = append(credentials, SandboxCredentialMaterial{
-			SecretRef:   binding.SecretRef,
-			MountPath:   binding.MountPath,
-			EnvVar:      binding.EnvVar,
-			Scopes:      append([]string(nil), binding.Scopes...),
-			BearerToken: token.BearerToken,
-		})
-	}
 
 	// Use the byte-equivalent spec that was already bound by the signed
 	// decision. No runtime field is filled from unsigned inputs after this point.
@@ -291,29 +283,41 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 		Lease:      cloneExecutionLease(sourceLease),
 		Spec:       &spec,
 		Verdict:    verdict,
-		TokenIDs:   tokenIDs,
 		PreparedAt: b.clock(),
 	}
 	fingerprint, err := preparedExecutionFingerprint(prepared)
 	if err != nil {
-		for _, tokenID := range tokenIDs {
-			_ = b.credBroker.RevokeToken(tokenID)
-		}
-		_ = b.leases.Revoke(ctx, sourceLease.LeaseID, fmt.Sprintf("seal prepared execution: %v", err))
 		return nil, fmt.Errorf("seal prepared execution: %w", err)
 	}
+	expiresAt := sourceLease.ExpiresAt
+	if verdict.Intent.ExpiresAt.Before(expiresAt) {
+		expiresAt = verdict.Intent.ExpiresAt
+	}
+	if !b.clock().Before(expiresAt) {
+		return nil, fmt.Errorf("sandbox preparation authority has expired")
+	}
+	sealedVerdict, err := cloneNodeVerdict(verdict)
+	if err != nil {
+		return nil, fmt.Errorf("seal sandbox verdict: %w", err)
+	}
 	b.mu.Lock()
+	if _, exists := b.preparedByLease[sourceLease.LeaseID]; exists {
+		b.mu.Unlock()
+		return nil, fmt.Errorf("sandbox execution lease already has an unconsumed preparation")
+	}
 	b.prepared[prepared] = preparedExecutionRecord{
 		fingerprint:   fingerprint,
 		backend:       sourceLease.Backend,
 		leaseID:       sourceLease.LeaseID,
 		sandboxID:     sandboxID,
+		expiresAt:     expiresAt,
 		runner:        runner,
+		sourceLease:   cloneExecutionLease(sourceLease),
+		verdict:       sealedVerdict,
 		authorization: cloneSandboxExecutionAuthorization(authorization),
 		spec:          cloneSandboxSpec(&spec),
-		tokenIDs:      append([]string(nil), tokenIDs...),
-		credentials:   cloneSandboxCredentialMaterial(credentials),
 	}
+	b.preparedByLease[sourceLease.LeaseID] = prepared
 	b.mu.Unlock()
 	return prepared, nil
 }
@@ -325,6 +329,9 @@ func (b *SandboxBroker) resolvePendingLease(ctx context.Context, execLease *leas
 	}
 	if current == nil || current.Status != lease.LeaseStatusPending {
 		return nil, fmt.Errorf("sandbox execution lease is missing or not pending")
+	}
+	if !b.clock().Before(current.ExpiresAt) {
+		return nil, fmt.Errorf("sandbox execution lease has expired")
 	}
 	currentHash, err := canonicalize.CanonicalHash(current)
 	if err != nil {
@@ -377,6 +384,10 @@ func BuildSandboxExecutionAuthorization(execLease *lease.ExecutionLease, profile
 		WorkDir:  execLease.WorkspacePath,
 		Network:  buildNetworkPolicy(profile),
 		Limits:   buildResourceLimits(profile),
+	}
+	leaseWindow := execLease.ExpiresAt.Sub(execLease.CreatedAt)
+	if spec.Limits.Timeout <= 0 || leaseWindow <= 0 || spec.Limits.Timeout > leaseWindow {
+		return SandboxExecutionAuthorization{}, fmt.Errorf("sandbox runtime timeout exceeds its signed lease window")
 	}
 	leaseAuthorization := sandboxLeaseAuthorization(execLease)
 	leaseHash, err := canonicalize.CanonicalHash(leaseAuthorization)
@@ -446,6 +457,34 @@ func verifySandboxExecutionDecisionBinding(decision *contracts.DecisionRecord, e
 	return nil
 }
 
+func sandboxWorkloadFromDecision(verdict *effectgraph.NodeVerdict) (*SandboxWorkload, error) {
+	if verdict == nil || verdict.Decision == nil {
+		return nil, fmt.Errorf("verdict or decision is nil")
+	}
+	value, ok := verdict.Decision.InputContext[SandboxExecutionDecisionContextKey]
+	if !ok || value == nil {
+		return nil, fmt.Errorf("explicit sandbox workload is required in the signed decision context")
+	}
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("encode signed sandbox execution authorization: %w", err)
+	}
+	var authorization SandboxExecutionAuthorization
+	if err := json.Unmarshal(payload, &authorization); err != nil {
+		return nil, fmt.Errorf("decode signed sandbox execution authorization: %w", err)
+	}
+	if authorization.SchemaVersion != SandboxExecutionAuthorizationSchemaVersion {
+		return nil, fmt.Errorf("signed sandbox execution authorization schema is invalid")
+	}
+	return &SandboxWorkload{
+		Command:  append([]string(nil), authorization.Spec.Command...),
+		Args:     append([]string(nil), authorization.Spec.Args...),
+		Env:      cloneStringMap(authorization.Spec.Env),
+		Labels:   cloneStringMap(authorization.Spec.Labels),
+		Detached: authorization.Spec.Detached,
+	}, nil
+}
+
 func validateSandboxWorkload(workload *SandboxWorkload) error {
 	if workload == nil || len(workload.Command) == 0 || workload.Command[0] == "" {
 		return fmt.Errorf("sandbox workload requires an explicit command")
@@ -500,7 +539,7 @@ func (b *SandboxBroker) Execute(
 	ctx context.Context,
 	prepared *PreparedExecution,
 ) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {
-	record, err := b.claimPreparedExecution(ctx, prepared)
+	record, sourceLease, err := b.claimPreparedExecution(ctx, prepared)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -511,10 +550,48 @@ func (b *SandboxBroker) Execute(
 		return nil, nil, fmt.Errorf("no runner for backend %q (cleanup=%s)", record.backend, cleanup.Status)
 	}
 
+	now := b.clock()
+	remainingAuthority := record.expiresAt.Sub(now)
+	if record.spec.Limits.Timeout <= 0 || remainingAuthority <= 0 || record.spec.Limits.Timeout > remainingAuthority {
+		b.revokeUnstartedRecord(ctx, record, "sandbox runtime timeout exceeds remaining authority")
+		return nil, nil, fmt.Errorf("sandbox runtime timeout exceeds remaining lease or intent authority")
+	}
+
 	// Validate spec before execution.
 	if err := runner.Validate(&record.spec); err != nil {
-		b.cleanupRecord(ctx, record)
+		b.revokeUnstartedRecord(ctx, record, fmt.Sprintf("sandbox spec validation failed: %v", err))
 		return nil, nil, fmt.Errorf("validate sandbox spec: %w", err)
+	}
+
+	credentialDeadline := record.expiresAt
+	if record.spec.Limits.Timeout > 0 {
+		runtimeDeadline := now.Add(record.spec.Limits.Timeout)
+		if runtimeDeadline.Before(credentialDeadline) {
+			credentialDeadline = runtimeDeadline
+		}
+	}
+	if len(sourceLease.SecretBindings) > 0 {
+		if _, err := credentialTTLSeconds(b.clock(), credentialDeadline); err != nil {
+			b.revokeUnstartedRecord(ctx, record, err.Error())
+			return nil, nil, err
+		}
+	}
+
+	// Lease activation and credential issuance are deliberately delayed until
+	// the exact prepared execution has been atomically claimed, re-authorized,
+	// and runner-validated. An abandoned preparation therefore owns no active
+	// lease, bearer credential, or provider side effect.
+	if err := b.leases.Activate(ctx, sourceLease.LeaseID, record.sandboxID); err != nil {
+		return nil, nil, fmt.Errorf("activate lease: %w", err)
+	}
+	record.tokenIDs, record.credentials, err = b.issueCredentials(sourceLease, record.sandboxID, credentialDeadline)
+	if err != nil {
+		for _, tokenID := range record.tokenIDs {
+			_ = b.credBroker.RevokeToken(tokenID)
+		}
+		clearSandboxCredentialMaterial(record.credentials)
+		_ = b.leases.Revoke(ctx, sourceLease.LeaseID, fmt.Sprintf("credential issuance failed: %v", err))
+		return nil, nil, err
 	}
 
 	// Execute. Bearer material crosses only the broker-to-runner interface and
@@ -543,72 +620,171 @@ func (b *SandboxBroker) Execute(
 	return result, receipt, nil
 }
 
+func (b *SandboxBroker) issueCredentials(sourceLease *lease.ExecutionLease, sandboxID string, deadline time.Time) ([]string, []SandboxCredentialMaterial, error) {
+	if len(sourceLease.SecretBindings) == 0 {
+		return nil, nil, nil
+	}
+	if b.credBroker == nil {
+		return nil, nil, fmt.Errorf("sandbox credential broker is required")
+	}
+	var tokenIDs []string
+	var credentials []SandboxCredentialMaterial
+	for _, binding := range sourceLease.SecretBindings {
+		ttlSeconds, err := credentialTTLSeconds(b.clock(), deadline)
+		if err != nil {
+			return tokenIDs, credentials, err
+		}
+		token, err := b.credBroker.IssueToken(TokenRequest{
+			SandboxID:       sandboxID,
+			RequestedScopes: binding.Scopes,
+			TTLSeconds:      ttlSeconds,
+		})
+		if err != nil {
+			return tokenIDs, credentials, fmt.Errorf("issue credential for %s: %w", binding.SecretRef, err)
+		}
+		if token.ExpiresAt.After(deadline) {
+			_ = b.credBroker.RevokeToken(token.TokenID)
+			return tokenIDs, credentials, fmt.Errorf("issued credential for %s exceeds its governing authority deadline", binding.SecretRef)
+		}
+		tokenIDs = append(tokenIDs, token.TokenID)
+		credentials = append(credentials, SandboxCredentialMaterial{
+			SecretRef:   binding.SecretRef,
+			MountPath:   binding.MountPath,
+			EnvVar:      binding.EnvVar,
+			Scopes:      append([]string(nil), binding.Scopes...),
+			BearerToken: token.BearerToken,
+		})
+	}
+	return tokenIDs, credentials, nil
+}
+
+func credentialTTLSeconds(now, deadline time.Time) (int, error) {
+	remaining := deadline.Sub(now)
+	seconds := int(remaining / time.Second)
+	if seconds < 1 {
+		return 0, fmt.Errorf("sandbox credential authority has less than one second remaining")
+	}
+	return seconds, nil
+}
+
 // claimPreparedExecution atomically consumes one exact broker-prepared object.
 // A caller-constructed value, a copied value, a mutated value, or a replay is
 // rejected before runner lookup or validation.
-func (b *SandboxBroker) claimPreparedExecution(ctx context.Context, prepared *PreparedExecution) (preparedExecutionRecord, error) {
+func (b *SandboxBroker) claimPreparedExecution(ctx context.Context, prepared *PreparedExecution) (preparedExecutionRecord, *lease.ExecutionLease, error) {
 	if prepared == nil {
-		return preparedExecutionRecord{}, fmt.Errorf("prepared execution is incomplete")
+		return preparedExecutionRecord{}, nil, fmt.Errorf("prepared execution is incomplete")
 	}
+	b.reapExpiredPreparedExecutions(ctx)
 	b.mu.Lock()
 	record, ok := b.prepared[prepared]
 	if ok {
 		delete(b.prepared, prepared)
+		delete(b.preparedByLease, record.leaseID)
 	}
 	b.mu.Unlock()
 	if !ok {
-		return preparedExecutionRecord{}, fmt.Errorf("execution was not prepared by this broker or was already consumed")
+		return preparedExecutionRecord{}, nil, fmt.Errorf("execution was not prepared by this broker or was already consumed")
 	}
 	if err := validatePreparedExecutionAuthority(prepared, b.clock()); err != nil {
-		cleanup := b.cleanupRecord(ctx, record)
-		return preparedExecutionRecord{}, fmt.Errorf("%w (cleanup=%s)", err, cleanup.Status)
+		b.revokeUnstartedRecord(ctx, record, err.Error())
+		return preparedExecutionRecord{}, nil, err
 	}
 
 	fingerprint, err := preparedExecutionFingerprint(prepared)
 	if err != nil || fingerprint != record.fingerprint {
-		cleanup := b.cleanupRecord(ctx, record)
+		b.revokeUnstartedRecord(ctx, record, "prepared execution changed after authorization")
 		if err != nil {
-			return preparedExecutionRecord{}, fmt.Errorf("canonicalize prepared execution for dispatch: %w (cleanup=%s)", err, cleanup.Status)
+			return preparedExecutionRecord{}, nil, fmt.Errorf("canonicalize prepared execution for dispatch: %w", err)
 		}
-		return preparedExecutionRecord{}, fmt.Errorf("prepared execution changed after authorization (cleanup=%s)", cleanup.Status)
+		return preparedExecutionRecord{}, nil, fmt.Errorf("prepared execution changed after authorization")
 	}
 	// Re-resolve the trust root immediately before the runner boundary so key
 	// revocation or intent expiry after preparation cannot be ignored.
-	if err := b.verifySandboxAuthority(prepared.Verdict); err != nil {
-		cleanup := b.cleanupRecord(ctx, record)
-		return preparedExecutionRecord{}, fmt.Errorf("prepared execution authority is no longer valid: %w (cleanup=%s)", err, cleanup.Status)
+	if err := b.verifySandboxAuthority(record.verdict); err != nil {
+		b.revokeUnstartedRecord(ctx, record, err.Error())
+		return preparedExecutionRecord{}, nil, fmt.Errorf("prepared execution authority is no longer valid: %w", err)
 	}
-	if err := verifySandboxExecutionDecisionBinding(prepared.Verdict.Decision, record.authorization); err != nil {
-		cleanup := b.cleanupRecord(ctx, record)
-		return preparedExecutionRecord{}, fmt.Errorf("prepared execution decision binding is no longer valid: %w (cleanup=%s)", err, cleanup.Status)
+	if err := verifySandboxExecutionDecisionBinding(record.verdict.Decision, record.authorization); err != nil {
+		b.revokeUnstartedRecord(ctx, record, err.Error())
+		return preparedExecutionRecord{}, nil, fmt.Errorf("prepared execution decision binding is no longer valid: %w", err)
 	}
-	currentLease, err := b.leases.Get(ctx, record.leaseID)
+	currentLease, err := b.resolvePendingLease(ctx, record.sourceLease)
 	if err != nil {
-		cleanup := b.cleanupRecord(ctx, record)
-		return preparedExecutionRecord{}, fmt.Errorf("resolve prepared execution lease: %w (cleanup=%s)", err, cleanup.Status)
-	}
-	if currentLease == nil {
-		cleanup := b.cleanupRecord(ctx, record)
-		return preparedExecutionRecord{}, fmt.Errorf("prepared execution lease is missing (cleanup=%s)", cleanup.Status)
-	}
-	if currentLease.Status != lease.LeaseStatusActive || currentLease.SandboxID != record.sandboxID || !b.clock().Before(currentLease.ExpiresAt) {
-		cleanup := b.cleanupRecord(ctx, record)
-		return preparedExecutionRecord{}, fmt.Errorf("prepared execution lease is stale or changed (cleanup=%s)", cleanup.Status)
+		return preparedExecutionRecord{}, nil, fmt.Errorf("resolve prepared execution lease: %w", err)
 	}
 	currentLeaseHash, err := canonicalize.CanonicalHash(sandboxLeaseAuthorization(currentLease))
 	if err != nil {
-		cleanup := b.cleanupRecord(ctx, record)
-		return preparedExecutionRecord{}, fmt.Errorf("canonicalize current prepared execution lease: %w (cleanup=%s)", err, cleanup.Status)
+		b.revokeUnstartedRecord(ctx, record, err.Error())
+		return preparedExecutionRecord{}, nil, fmt.Errorf("canonicalize current prepared execution lease: %w", err)
 	}
 	authorizedLeaseHash, err := canonicalize.CanonicalHash(record.authorization.Lease)
 	if err != nil || currentLeaseHash != authorizedLeaseHash {
-		cleanup := b.cleanupRecord(ctx, record)
+		b.revokeUnstartedRecord(ctx, record, "prepared execution lease identity changed after authorization")
 		if err != nil {
-			return preparedExecutionRecord{}, fmt.Errorf("canonicalize authorized prepared execution lease: %w (cleanup=%s)", err, cleanup.Status)
+			return preparedExecutionRecord{}, nil, fmt.Errorf("canonicalize authorized prepared execution lease: %w", err)
 		}
-		return preparedExecutionRecord{}, fmt.Errorf("prepared execution lease identity changed after authorization (cleanup=%s)", cleanup.Status)
+		return preparedExecutionRecord{}, nil, fmt.Errorf("prepared execution lease identity changed after authorization")
 	}
-	return record, nil
+	return record, currentLease, nil
+}
+
+// CancelPreparedExecution releases one exact unconsumed broker preparation.
+// Because preparation has no lease, credential, or runner side effect, cancel
+// only removes the single-use reservation and revokes the still-pending lease.
+func (b *SandboxBroker) CancelPreparedExecution(ctx context.Context, prepared *PreparedExecution) error {
+	if prepared == nil {
+		return fmt.Errorf("prepared execution is incomplete")
+	}
+	b.reapExpiredPreparedExecutions(ctx)
+	b.mu.Lock()
+	record, ok := b.prepared[prepared]
+	if ok {
+		delete(b.prepared, prepared)
+		delete(b.preparedByLease, record.leaseID)
+	}
+	b.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("execution was not prepared by this broker or was already consumed")
+	}
+	b.revokeUnstartedRecord(ctx, record, "prepared execution canceled before dispatch")
+	return nil
+}
+
+// reapExpiredPreparedExecutions bounds broker-owned preparation state by the
+// earlier of the source lease and signed intent expiry. Prepared records never
+// contain bearer material; reaping additionally revokes their pending leases.
+func (b *SandboxBroker) reapExpiredPreparedExecutions(ctx context.Context) {
+	now := b.clock()
+	var expired []preparedExecutionRecord
+	b.mu.Lock()
+	for prepared, record := range b.prepared {
+		if now.Before(record.expiresAt) {
+			continue
+		}
+		delete(b.prepared, prepared)
+		delete(b.preparedByLease, record.leaseID)
+		expired = append(expired, record)
+	}
+	b.mu.Unlock()
+	for _, record := range expired {
+		b.revokeUnstartedRecord(ctx, record, "prepared execution expired before dispatch")
+	}
+}
+
+func (b *SandboxBroker) revokeUnstartedRecord(ctx context.Context, record preparedExecutionRecord, reason string) {
+	current, err := b.leases.Get(ctx, record.leaseID)
+	if err != nil || current == nil || current.Status != lease.LeaseStatusPending {
+		return
+	}
+	currentHash, err := canonicalize.CanonicalHash(sandboxLeaseAuthorization(current))
+	if err != nil {
+		return
+	}
+	authorizedHash, err := canonicalize.CanonicalHash(record.authorization.Lease)
+	if err != nil || currentHash != authorizedHash {
+		return
+	}
+	_ = b.leases.Revoke(ctx, record.leaseID, reason)
 }
 
 func validatePreparedExecutionAuthority(prepared *PreparedExecution, now time.Time) error {
@@ -670,6 +846,21 @@ func cloneExecutionLease(execLease *lease.ExecutionLease) *lease.ExecutionLease 
 		cloned.SecretBindings[index].Scopes = append([]string(nil), binding.Scopes...)
 	}
 	return &cloned
+}
+
+func cloneNodeVerdict(verdict *effectgraph.NodeVerdict) (*effectgraph.NodeVerdict, error) {
+	if verdict == nil {
+		return nil, fmt.Errorf("sandbox verdict is nil")
+	}
+	payload, err := json.Marshal(verdict)
+	if err != nil {
+		return nil, err
+	}
+	var cloned effectgraph.NodeVerdict
+	if err := json.Unmarshal(payload, &cloned); err != nil {
+		return nil, err
+	}
+	return &cloned, nil
 }
 
 func cloneSandboxExecutionAuthorization(authorization SandboxExecutionAuthorization) SandboxExecutionAuthorization {

@@ -179,6 +179,21 @@ func authorizedVerdict(t *testing.T, execLease *lease.ExecutionLease, workload *
 	return verdict
 }
 
+func authorizedVerdictWithTimeout(t *testing.T, execLease *lease.ExecutionLease, workload *sandbox_runtime.SandboxWorkload, timeout time.Duration) *effectgraph.NodeVerdict {
+	t.Helper()
+	verdict := testVerdict()
+	verdict.Profile.Limits = &pkg_sandbox.ResourceLimits{
+		CPUMillis:    500,
+		MemoryMB:     256,
+		DiskMB:       100,
+		Timeout:      timeout,
+		MaxProcesses: 10,
+	}
+	authorization := sandboxAuthorization(t, execLease, verdict.Profile, workload)
+	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+	return verdict
+}
+
 func sandboxAuthorization(t *testing.T, execLease *lease.ExecutionLease, profile *effectgraph.ExecutionProfile, workload *sandbox_runtime.SandboxWorkload) sandbox_runtime.SandboxExecutionAuthorization {
 	t.Helper()
 	authorization, err := sandbox_runtime.BuildSandboxExecutionAuthorization(execLease, profile, workload)
@@ -263,7 +278,7 @@ func TestExecuteRejectsMutatedPreparedExecutionAndConsumesAuthorization(t *testi
 		t.Fatal("mutated prepared execution reached sandbox runner")
 	}
 	got, err := leaseManager.Get(ctx, execLease.LeaseID)
-	if err != nil || got.Status != lease.LeaseStatusCompleted {
+	if err != nil || got.Status != lease.LeaseStatusRevoked {
 		t.Fatalf("rejected prepared execution was not cleaned up: lease=%+v err=%v", got, err)
 	}
 	prepared.Verdict.Decision.Verdict = string(contracts.VerdictAllow)
@@ -308,7 +323,7 @@ func TestExecuteRejectsWorkloadMutationAfterPreparation(t *testing.T) {
 		t.Fatal("post-authorization workload mutation reached sandbox runner")
 	}
 	got, getErr := leaseManager.Get(ctx, execLease.LeaseID)
-	if getErr != nil || got.Status != lease.LeaseStatusCompleted {
+	if getErr != nil || got.Status != lease.LeaseStatusRevoked {
 		t.Fatalf("mutated workload lease was not cleaned up: lease=%+v err=%v", got, getErr)
 	}
 }
@@ -329,7 +344,7 @@ func TestExecuteRejectsExpiredPreparedAuthorization(t *testing.T) {
 		t.Fatal("expired prepared authorization reached sandbox runner")
 	}
 	got, getErr := leaseManager.Get(ctx, execLease.LeaseID)
-	if getErr != nil || got.Status != lease.LeaseStatusCompleted {
+	if getErr != nil || got.Status != lease.LeaseStatusRevoked {
 		t.Fatalf("expired prepared authorization was not cleaned up: lease=%+v err=%v", got, getErr)
 	}
 }
@@ -366,6 +381,9 @@ func TestExecuteRejectsSourceLeaseExpansionAfterAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := leaseManager.Activate(ctx, execLease.LeaseID, "sbx-external-owner"); err != nil {
+		t.Fatal(err)
+	}
 	if err := leaseManager.Extend(ctx, execLease.LeaseID, time.Hour); err != nil {
 		t.Fatal(err)
 	}
@@ -391,6 +409,38 @@ func TestPrepareExecutionRequiresExplicitWorkload(t *testing.T) {
 	got, err := leaseManager.Get(ctx, execLease.LeaseID)
 	if err != nil || got.Status != lease.LeaseStatusPending {
 		t.Fatalf("implicit workload rejection changed lease state: lease=%+v err=%v", got, err)
+	}
+}
+
+func TestPrepareExecutionCompatibilityDerivesOnlySignedWorkload(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	verdict := authorizedVerdict(t, execLease, testWorkload())
+
+	// Exercise the representation produced by JSON decoding at a transport
+	// boundary, not only the in-process typed fixture.
+	payload, err := json.Marshal(verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = decoded
+
+	prepared, err := broker.PrepareExecution(ctx, execLease, verdict)
+	if err != nil {
+		t.Fatalf("compatibility entrypoint rejected signed workload: %v", err)
+	}
+	if prepared.Spec == nil || prepared.Spec.Command[0] != testWorkload().Command[0] {
+		t.Fatalf("compatibility entrypoint lost signed workload: %#v", prepared.Spec)
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("preparation reached sandbox runner")
+	}
+	if err := broker.CancelPreparedExecution(ctx, prepared); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -421,10 +471,30 @@ func TestPrepareExecutionWithWorkload(t *testing.T) {
 		t.Fatalf("prepared workload env/labels = %#v/%#v", prepared.Spec.Env, prepared.Spec.Labels)
 	}
 
-	// Lease should now be ACTIVE.
+	// Preparation is side-effect free: activation happens only after Execute
+	// atomically claims and re-verifies the exact prepared object.
 	got, _ := lm.Get(ctx, l.LeaseID)
-	if got.Status != lease.LeaseStatusActive {
-		t.Fatalf("expected ACTIVE, got %s", got.Status)
+	if got.Status != lease.LeaseStatusPending {
+		t.Fatalf("expected PENDING, got %s", got.Status)
+	}
+}
+
+func TestPrepareExecutionRejectsDuplicateUnconsumedLease(t *testing.T) {
+	broker, lm, runner := setupBroker()
+	l := acquireLease(t, lm)
+	verdict := authorizedVerdict(t, l, testWorkload())
+	first, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload()); err == nil {
+		t.Fatal("one pending lease acquired multiple broker preparations")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("duplicate preparation reached sandbox runner")
+	}
+	if err := broker.CancelPreparedExecution(ctx, first); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -708,7 +778,7 @@ func TestPrepareExecution_NilVerdict(t *testing.T) {
 	}
 }
 
-func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *testing.T) {
+func TestExecute_TokenListMutationIsRejectedBeforeCredentialIssuance(t *testing.T) {
 	resetClock()
 	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
 	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
@@ -739,8 +809,8 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(prepared.TokenIDs) != 1 {
-		t.Fatalf("issued token IDs = %d, want 1", len(prepared.TokenIDs))
+	if len(prepared.TokenIDs) != 0 {
+		t.Fatalf("preparation issued %d token IDs, want 0", len(prepared.TokenIDs))
 	}
 	prepared.TokenIDs = append(prepared.TokenIDs, "caller-injected-token")
 
@@ -754,12 +824,12 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 	if len(runner.lastCredentials) != 0 {
 		t.Fatal("rejected execution released broker credentials to the runner")
 	}
-	if len(credBroker.GetIssuances()) != 1 {
-		t.Fatal("expected one auditable credential issuance")
+	if len(credBroker.GetIssuances()) != 0 {
+		t.Fatal("mutated preparation triggered credential issuance")
 	}
 	got, getErr := lm.Get(ctx, l.LeaseID)
-	if getErr != nil || got.Status != lease.LeaseStatusCompleted {
-		t.Fatalf("rejected execution lease was not completed: lease=%+v err=%v", got, getErr)
+	if getErr != nil || got.Status != lease.LeaseStatusRevoked {
+		t.Fatalf("rejected execution lease was not revoked: lease=%+v err=%v", got, getErr)
 	}
 }
 
@@ -819,6 +889,142 @@ func TestExecuteCredentialsStayInsideBrokerRunnerBoundary(t *testing.T) {
 	}
 	if valid, reason := credBroker.ValidateToken(runner.lastCredentials[0].BearerToken); valid || reason != "token revoked" {
 		t.Fatalf("credential remained valid after execution cleanup: valid=%v reason=%q", valid, reason)
+	}
+}
+
+func TestAbandonedPreparationIssuesNoCredentialAndCanBeCanceled(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+	l, err := lm.Acquire(ctx, lease.LeaseRequest{
+		RunID:         "run-abandoned-preparation",
+		WorkspacePath: "/workspace",
+		Backend:       "docker",
+		ProfileName:   "net-limited",
+		TemplateRef:   "example.invalid/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TTL:           time.Hour,
+		SecretBindings: []lease.SecretBinding{{
+			SecretRef: "repo-token",
+			EnvVar:    "REPO_TOKEN",
+			Scopes:    []string{"repo:read"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verdict := authorizedVerdict(t, l, testWorkload())
+	authorization := verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey].(sandbox_runtime.SandboxExecutionAuthorization)
+	credBroker.SetScopeAllowlist(authorization.SandboxID, []string{"repo:read"})
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(credBroker.GetIssuances()) != 0 || len(prepared.TokenIDs) != 0 {
+		t.Fatal("preparation retained a credential before dispatch")
+	}
+	got, getErr := lm.Get(ctx, l.LeaseID)
+	if getErr != nil || got.Status != lease.LeaseStatusPending {
+		t.Fatalf("preparation activated its lease: lease=%+v err=%v", got, getErr)
+	}
+	if err := broker.CancelPreparedExecution(ctx, prepared); err != nil {
+		t.Fatal(err)
+	}
+	got, getErr = lm.Get(ctx, l.LeaseID)
+	if getErr != nil || got.Status != lease.LeaseStatusRevoked {
+		t.Fatalf("cancellation did not revoke pending lease: lease=%+v err=%v", got, getErr)
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("abandoned preparation reached the runner")
+	}
+}
+
+func TestExecuteCredentialTTLUsesRemainingAuthorityLifetime(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+	l, err := lm.Acquire(ctx, lease.LeaseRequest{
+		RunID:         "run-remaining-credential-ttl",
+		WorkspacePath: "/workspace",
+		Backend:       "docker",
+		ProfileName:   "net-limited",
+		TemplateRef:   "example.invalid/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TTL:           time.Hour,
+		SecretBindings: []lease.SecretBinding{{
+			SecretRef: "repo-token",
+			Scopes:    []string{"repo:read"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verdict := authorizedVerdictWithTimeout(t, l, testWorkload(), 30*time.Second)
+	authorization := verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey].(sandbox_runtime.SandboxExecutionAuthorization)
+	credBroker.SetScopeAllowlist(authorization.SandboxID, []string{"repo:read"})
+	clockTime = baseTime.Add(59*time.Minute + 30*time.Second)
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := broker.Execute(ctx, prepared); err != nil {
+		t.Fatal(err)
+	}
+	issuances := credBroker.GetIssuances()
+	if len(issuances) != 1 {
+		t.Fatalf("credential issuances = %d, want 1", len(issuances))
+	}
+	if issuances[0].ExpiresAt.After(l.ExpiresAt) || !issuances[0].ExpiresAt.Equal(l.ExpiresAt) {
+		t.Fatalf("credential expiry %s escaped remaining lease deadline %s", issuances[0].ExpiresAt, l.ExpiresAt)
+	}
+}
+
+func TestExecuteRejectsSubsecondCredentialAuthorityBeforeActivation(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
+	runner := &mockRunner{}
+	broker.RegisterRunner("docker", runner)
+	l, err := lm.Acquire(ctx, lease.LeaseRequest{
+		RunID:          "run-subsecond-credential-ttl",
+		WorkspacePath:  "/workspace",
+		Backend:        "docker",
+		ProfileName:    "net-limited",
+		TemplateRef:    "example.invalid/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TTL:            time.Hour,
+		SecretBindings: []lease.SecretBinding{{SecretRef: "repo-token", Scopes: []string{"repo:read"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verdict := authorizedVerdictWithTimeout(t, l, testWorkload(), 250*time.Millisecond)
+	authorization := verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey].(sandbox_runtime.SandboxExecutionAuthorization)
+	credBroker.SetScopeAllowlist(authorization.SandboxID, []string{"repo:read"})
+	clockTime = l.ExpiresAt.Add(-500 * time.Millisecond)
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := broker.Execute(ctx, prepared); err == nil {
+		t.Fatal("subsecond credential authority reached sandbox execution")
+	}
+	if len(credBroker.GetIssuances()) != 0 || runner.runCalled {
+		t.Fatal("subsecond authority triggered a credential or runner side effect")
+	}
+	got, getErr := lm.Get(ctx, l.LeaseID)
+	if getErr != nil || got.Status != lease.LeaseStatusRevoked {
+		t.Fatalf("subsecond authority did not revoke pending lease: lease=%+v err=%v", got, getErr)
 	}
 }
 

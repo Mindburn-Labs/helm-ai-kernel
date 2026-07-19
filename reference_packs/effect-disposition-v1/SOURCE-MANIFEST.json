@@ -1,0 +1,15 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/effect-disposition-v1",
+  "pinning_authority": "reference_packs/effect-disposition-v1/vectors.json",
+  "verifier": "reference_packs/effect-disposition-v1/verify_vectors.py",
+  "immutable_payloads": [
+    {"file": "command.c14n.json", "sha256": "ed456e135ca8ef5dcd478a30c051075afa6a227a69da36e1fda69f742c3a7cca"},
+    {"file": "command_envelope.c14n.json", "sha256": "d2da0650d072d59875051c5da36cb47b13ccf8e22b6c76a5199502e718ab46d3"},
+    {"file": "command_signing_payload.c14n.json", "sha256": "0fa7de510d46faf826e64044daaecadd45618f10d7badd010391ff780c2739a6"},
+    {"file": "receipt.c14n.json", "sha256": "0e8ade9f53e15729ce367ded018222eb4a87eef91dd56419886fdef4a79a8ef3"},
+    {"file": "receipt_signing_payload.c14n.json", "sha256": "c809c734db7dff6ed571873a0be72c97c9c2cf7d3a66dd938da48a0c5bcef43f"}
+  ],
+  "$comment": "quantum_posture: classical_ed25519_only. These `*.c14n.json` files are byte-exact canonical (RFC 8785) effect-disposition command and receipt signing payloads whose SHA-256 digests are hash-pinned in vectors.json and covered by a live classical Ed25519 signature. They cannot host an inline annotation without invalidating that signature/digest, so this manifest carries the posture note. This is not a post-quantum claim and does not alter any payload bytes.",
+  "purpose": "Local immutable-payload posture record for the effect-disposition reference pack. vectors.json remains the verified hash-pinning authority."
+}

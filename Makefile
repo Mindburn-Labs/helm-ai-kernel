@@ -1,4 +1,4 @@
-.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -51,6 +51,10 @@ verify-connector-release-authority-vectors:
 	cd core && go test ./pkg/registry/connectors -run 'TestConnectorReleaseAuthority(ReferencePackMatchesGoImplementation|Schemas)' -count=1
 	python3 reference_packs/connector-release-authority-v1/verify_vectors.py
 
+verify-effect-close-vectors:
+	cd core && go test ./pkg/boundary/approvalceremony -run 'TestEffectClose(ReferencePackMatchesGoImplementation|Schemas)' -count=1
+	python3 reference_packs/effect-close-v1/verify_vectors.py
+
 test-sdk-go-standalone:
 	cd sdk/go && GOWORK=off go test ./...
 
@@ -79,6 +83,7 @@ verify-fixtures:
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
 	$(MAKE) verify-approval-ceremony-vectors
 	$(MAKE) verify-connector-release-authority-vectors
+	$(MAKE) verify-effect-close-vectors
 	python3 reference_packs/extauthz/verify_extauthz_vectors.py
 	python3 reference_packs/approval/verify_approval_vectors.py
 	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto

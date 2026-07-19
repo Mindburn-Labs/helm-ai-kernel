@@ -15,6 +15,7 @@ const (
 	EffectReservationStateStarted    EffectReservationState = "STARTED"
 	EffectReservationStateNotStarted EffectReservationState = "NOT_STARTED"
 	EffectReservationStateUncertain  EffectReservationState = "UNCERTAIN"
+	EffectReservationStateCompleted  EffectReservationState = "COMPLETED"
 )
 
 var (
@@ -45,6 +46,14 @@ type EffectReservationEvent struct {
 	ProofSessionRef       string `json:"proof_session_ref,omitempty"`
 	IntentRef             string `json:"intent_ref,omitempty"`
 	EffectRef             string `json:"effect_ref,omitempty"`
+
+	ClosePriorState     string `json:"close_prior_state,omitempty"`
+	AcknowledgementHash string `json:"acknowledgement_hash,omitempty"`
+	CloseReceiptHash    string `json:"close_receipt_hash,omitempty"`
+	Outcome             string `json:"outcome,omitempty"`
+	EvidencePackRef     string `json:"evidence_pack_ref,omitempty"`
+	EvidencePackHash    string `json:"evidence_pack_hash,omitempty"`
+	ReconciliationRef   string `json:"reconciliation_ref,omitempty"`
 }
 
 func (e EffectReservationEvent) Validate() error {
@@ -74,8 +83,19 @@ func (e EffectReservationEvent) Validate() error {
 	for field, value := range map[string]string{
 		"reason_code": e.ReasonCode, "connector_execution_ref": e.ConnectorExecutionRef,
 		"proof_session_ref": e.ProofSessionRef, "intent_ref": e.IntentRef, "effect_ref": e.EffectRef,
+		"close_prior_state": e.ClosePriorState, "outcome": e.Outcome,
+		"evidence_pack_ref": e.EvidencePackRef, "reconciliation_ref": e.ReconciliationRef,
 	} {
 		if value != "" && (!validToken(value) || len(value) > 512) {
+			return invalidRecord("effect reservation " + field + " is invalid")
+		}
+	}
+	for field, value := range map[string]string{
+		"acknowledgement_hash": e.AcknowledgementHash,
+		"close_receipt_hash":   e.CloseReceiptHash,
+		"evidence_pack_hash":   e.EvidencePackHash,
+	} {
+		if value != "" && !validSHA256(value) {
 			return invalidRecord("effect reservation " + field + " is invalid")
 		}
 	}
@@ -83,23 +103,24 @@ func (e EffectReservationEvent) Validate() error {
 	case EffectReservationStateAdmitted:
 		if e.Sequence != 1 || !e.OccurredAt.Equal(e.AdmittedAt) || e.StartedAt != nil || e.ResolvedAt != nil ||
 			e.ReasonCode != "" || e.ConnectorExecutionRef != "" || e.ProofSessionRef != "" ||
-			e.IntentRef != "" || e.EffectRef != "" {
+			e.IntentRef != "" || e.EffectRef != "" || effectReservationHasCloseMetadata(e) {
 			return invalidRecord("ADMITTED must be the metadata-free initial reservation event")
 		}
 	case EffectReservationStateStarted:
 		if e.Sequence != 2 || e.StartedAt == nil || !isUTC(*e.StartedAt) || !e.StartedAt.Equal(e.OccurredAt) ||
 			e.ResolvedAt != nil || !e.StartedAt.Before(e.Admission.Admission.ExpiresAt) ||
-			!validToken(e.ConnectorExecutionRef) {
+			!validToken(e.ConnectorExecutionRef) || effectReservationHasCloseMetadata(e) {
 			return invalidRecord("STARTED must be the second event with an in-lifetime execution reference")
 		}
 	case EffectReservationStateNotStarted:
 		if e.Sequence != 2 || e.StartedAt != nil || e.ResolvedAt == nil || !isUTC(*e.ResolvedAt) ||
-			!e.ResolvedAt.Equal(e.OccurredAt) || !validToken(e.ReasonCode) || e.ConnectorExecutionRef != "" {
+			!e.ResolvedAt.Equal(e.OccurredAt) || !validToken(e.ReasonCode) || e.ConnectorExecutionRef != "" ||
+			effectReservationHasCloseMetadata(e) {
 			return invalidRecord("NOT_STARTED must resolve the initial reservation before connector start")
 		}
 	case EffectReservationStateUncertain:
 		if (e.Sequence != 2 && e.Sequence != 3) || e.ResolvedAt == nil || !isUTC(*e.ResolvedAt) ||
-			!e.ResolvedAt.Equal(e.OccurredAt) || !validToken(e.ReasonCode) {
+			!e.ResolvedAt.Equal(e.OccurredAt) || !validToken(e.ReasonCode) || effectReservationHasCloseMetadata(e) {
 			return invalidRecord("UNCERTAIN must carry a bounded reason and resolution time")
 		}
 		if e.Sequence == 2 && e.StartedAt != nil {
@@ -108,10 +129,49 @@ func (e EffectReservationEvent) Validate() error {
 		if e.Sequence == 3 && (e.StartedAt == nil || !isUTC(*e.StartedAt) || e.StartedAt.After(*e.ResolvedAt)) {
 			return invalidRecord("post-start UNCERTAIN must preserve the earlier start time")
 		}
+	case EffectReservationStateCompleted:
+		if (e.Sequence != 3 && e.Sequence != 4) || e.ResolvedAt == nil || !isUTC(*e.ResolvedAt) ||
+			!e.ResolvedAt.Equal(e.OccurredAt) || e.ReasonCode != "" ||
+			!validToken(e.ConnectorExecutionRef) || !validToken(e.IntentRef) ||
+			!validSHA256(e.AcknowledgementHash) || !validSHA256(e.CloseReceiptHash) ||
+			!validToken(e.EvidencePackRef) || !validSHA256(e.EvidencePackHash) ||
+			(e.StartedAt != nil && (!isUTC(*e.StartedAt) || e.StartedAt.After(*e.ResolvedAt))) {
+			return invalidRecord("COMPLETED must carry signed close and evidence references")
+		}
+		switch e.ClosePriorState {
+		case contracts.EffectClosePriorStateStarted:
+			if e.Sequence != 3 || e.StartedAt == nil {
+				return invalidRecord("STARTED closure must preserve start time at sequence 3")
+			}
+		case contracts.EffectClosePriorStateUncertain:
+			if !validToken(e.ReconciliationRef) || (e.Sequence == 3 && e.StartedAt != nil) ||
+				(e.Sequence == 4 && e.StartedAt == nil) {
+				return invalidRecord("UNCERTAIN closure must preserve its exact lifecycle shape and reconciliation ref")
+			}
+		default:
+			return invalidRecord("COMPLETED has unsupported close prior state")
+		}
+		switch e.Outcome {
+		case contracts.ConnectorEffectOutcomeApplied:
+			if !validToken(e.EffectRef) {
+				return invalidRecord("APPLIED completion requires effect_ref")
+			}
+		case contracts.ConnectorEffectOutcomeNotApplied:
+			if e.EffectRef != "" {
+				return invalidRecord("NOT_APPLIED completion must not claim effect_ref")
+			}
+		default:
+			return invalidRecord("COMPLETED has unsupported outcome")
+		}
 	default:
 		return invalidRecord("effect reservation state is unsupported")
 	}
 	return nil
+}
+
+func effectReservationHasCloseMetadata(e EffectReservationEvent) bool {
+	return e.ClosePriorState != "" || e.AcknowledgementHash != "" || e.CloseReceiptHash != "" ||
+		e.Outcome != "" || e.EvidencePackRef != "" || e.EvidencePackHash != "" || e.ReconciliationRef != ""
 }
 
 // EffectTransitionMeta supplies bounded evidence references for a durable

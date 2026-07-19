@@ -19,6 +19,8 @@ Active surface for the `helm-ai-kernel` project.
 - `make verify-connector-release-authority-vectors` compiles and exercises the
   canonical `connector_release.json` authority and detached-signature envelope,
   then verifies cross-statement semantics in Go and independent Python.
+- `make verify-effect-close-vectors` verifies connector acknowledgement and
+  Kernel close-receipt hashing/signatures in Go and independent Python.
 
 ## Connector release authority
 
@@ -27,6 +29,14 @@ not candidate connector metadata. `connector_release_authority_envelope.json`
 wraps it with the detached Ed25519 signature. See
 `docs/operations/connector-release-authority.md` for trust, revocation, and
 current-state boundaries.
+
+## Effect close
+
+`connector_effect_acknowledgement.json` and its detached-signature envelope
+define connector evidence about `APPLIED` versus `NOT_APPLIED`.
+`effect_close_receipt.json` is the separate Kernel-signed terminal statement
+that binds that evidence to an exact reservation head and sealed EvidencePack.
+The connector acknowledgement alone never authorizes `COMPLETED`.
 
 ## Documentation Contract
 

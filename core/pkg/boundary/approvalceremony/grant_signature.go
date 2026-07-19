@@ -28,6 +28,7 @@ type GrantSignatureVerifier interface {
 	VerifyGrantSignature(contracts.ApprovalGrant, string, string) error
 	VerifyGrantConsumptionSignature(contracts.ApprovalGrantConsumption, string, string) error
 	VerifyDispatchAdmissionSignature(contracts.ApprovalDispatchAdmission, string, string) error
+	VerifyEffectCloseReceiptSignature(contracts.EffectCloseReceipt, string, string) error
 }
 
 type Ed25519GrantSignatureVerifier struct {
@@ -110,6 +111,28 @@ func (v *Ed25519GrantSignatureVerifier) VerifyDispatchAdmissionSignature(admissi
 	}
 	if !ed25519.Verify(v.publicKey, payload, rawSignature) {
 		return fmt.Errorf("%w: bad dispatch admission ed25519 signature", ErrGrantSignatureRejected)
+	}
+	return nil
+}
+
+func (v *Ed25519GrantSignatureVerifier) VerifyEffectCloseReceiptSignature(receipt contracts.EffectCloseReceipt, algorithm, signature string) error {
+	if v == nil || len(v.publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
+	}
+	if algorithm != GrantSignatureEd25519 || receipt.SigningKeyRef != v.signingKeyRef ||
+		receipt.KernelTrustRootID != v.kernelTrustRootID {
+		return fmt.Errorf("%w: effect close receipt trust-root metadata mismatch", ErrGrantSignatureRejected)
+	}
+	payload, err := EffectCloseReceiptSigningPayload(receipt, algorithm)
+	if err != nil {
+		return err
+	}
+	rawSignature, err := hex.DecodeString(signature)
+	if err != nil || len(rawSignature) != ed25519.SignatureSize || hex.EncodeToString(rawSignature) != signature {
+		return fmt.Errorf("%w: effect close receipt signature encoding is invalid", ErrGrantSignatureRejected)
+	}
+	if !ed25519.Verify(v.publicKey, payload, rawSignature) {
+		return fmt.Errorf("%w: bad effect close receipt ed25519 signature", ErrGrantSignatureRejected)
 	}
 	return nil
 }

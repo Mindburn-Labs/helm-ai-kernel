@@ -9,7 +9,7 @@ import (
 
 const (
 	ApprovalGrantConsumptionSchemaV1   = "approval-grant-consumption.v1"
-	ApprovalGrantConsumptionContractV1 = "2026-07-16"
+	ApprovalGrantConsumptionContractV1 = "2026-07-17"
 )
 
 // ApprovalGrantConsumption is the portable, Kernel-signed record that a
@@ -34,10 +34,11 @@ type ApprovalGrantConsumption struct {
 	Audience    string `json:"audience"`
 	ConsumedBy  string `json:"consumed_by"`
 
-	PackID           string `json:"pack_id"`
-	PackVersion      string `json:"pack_version"`
-	PackManifestHash string `json:"pack_manifest_hash"`
-	Action           string `json:"action"`
+	PackID             string                     `json:"pack_id"`
+	PackVersion        string                     `json:"pack_version"`
+	PackManifestHash   string                     `json:"pack_manifest_hash"`
+	Action             string                     `json:"action"`
+	ConnectorAuthority ApprovalConnectorAuthority `json:"connector_authority"`
 
 	IntentHash string `json:"intent_hash"`
 	EffectHash string `json:"effect_hash"`
@@ -93,6 +94,12 @@ func (c ApprovalGrantConsumption) Validate() error {
 	default:
 		return approvalGrantConsumptionInvalid("unsupported action")
 	}
+	if err := c.ConnectorAuthority.ValidateEffectBinding(
+		c.TenantID, c.WorkspaceID, c.PackID, c.PackVersion, c.PackManifestHash,
+		c.Action, c.EffectHash, c.PolicyHash,
+	); err != nil {
+		return approvalGrantConsumptionInvalid(err.Error())
+	}
 	if c.GrantIssuedAt.IsZero() || c.GrantExpiresAt.IsZero() || c.ConsumedAt.IsZero() {
 		return approvalGrantConsumptionInvalid("grant and consumption timestamps are required")
 	}
@@ -147,7 +154,8 @@ func (c ApprovalGrantConsumption) ValidateGrant(grant ApprovalGrant) error {
 	if c.ApprovalID != grant.ApprovalID || c.GrantID != grant.GrantID || c.GrantHash != grant.GrantHash ||
 		c.TenantID != grant.TenantID || c.WorkspaceID != grant.WorkspaceID || c.Audience != grant.Audience ||
 		c.PackID != grant.PackID || c.PackVersion != grant.PackVersion || c.PackManifestHash != grant.PackManifestHash ||
-		c.Action != grant.Action || c.IntentHash != grant.IntentHash || c.EffectHash != grant.EffectHash ||
+		c.Action != grant.Action || c.ConnectorAuthority != grant.ConnectorAuthority ||
+		c.IntentHash != grant.IntentHash || c.EffectHash != grant.EffectHash ||
 		c.PlanHash != grant.PlanHash || c.PolicyVersion != grant.PolicyVersion || c.PolicyEpoch != grant.PolicyEpoch ||
 		c.PolicyHash != grant.PolicyHash || c.ServerIdentity != grant.ServerIdentity ||
 		c.KernelTrustRootID != grant.KernelTrustRootID || c.SigningKeyRef != grant.SigningKeyRef ||

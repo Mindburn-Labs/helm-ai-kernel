@@ -264,6 +264,7 @@ func buildApprovalReferencePack(t *testing.T) map[string][]byte {
 			{ID: "tampered_signature", Mutation: "flip_key-a_signature_last_bit", ExpectedError: "signature_rejected"},
 			{ID: "cross_key_signature", Mutation: "verify_key-a_with_key-b", ExpectedError: "signature_rejected"},
 			{ID: "challenge_tenant_substitution", Mutation: "set_challenge_tenant_id_to_tenant-b", ExpectedError: "challenge_hash_mismatch"},
+			{ID: "connector_authority_substitution", Mutation: "set_connector_authority_connector_id_to_connector-b", ExpectedError: "connector_authority_rejected"},
 			{ID: "assertion_key_substitution", Mutation: "set_key-a_assertion_key_id_to_key-b", ExpectedError: "signature_rejected"},
 			{ID: "invalid_surplus_signature", Mutation: "flip_key-c_signature_in_over_quorum", ExpectedError: "signature_rejected"},
 		},

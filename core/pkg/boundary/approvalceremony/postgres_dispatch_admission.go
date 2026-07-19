@@ -198,7 +198,7 @@ func (s *PostgresStore) claimDispatchAdmission(ctx context.Context, identity Con
 		RETURNING `+dispatchAdmissionColumns,
 		identity.TenantID, identity.WorkspaceID, request.AttemptID, request.ApprovalID,
 		request.ConsumptionHash, request.IdempotencyKeyHash, request.EffectHash,
-		request.ConnectorID, request.Action, identity.Subject, admission.State,
+		admission.ConnectorAuthority.ConnectorID, request.Action, identity.Subject, admission.State,
 		payload, algorithm, signature, admission.IssuedAt, admission.ExpiresAt,
 	))
 	if err != nil {
@@ -272,8 +272,7 @@ func dispatchAdmissionMatches(admission contracts.ApprovalDispatchAdmission, ide
 	}
 	if admission.ApprovalID != request.ApprovalID || admission.AttemptID != request.AttemptID ||
 		admission.ConsumptionHash != request.ConsumptionHash || admission.IdempotencyKeyHash != request.IdempotencyKeyHash ||
-		admission.EffectHash != request.EffectHash || admission.ConnectorID != request.ConnectorID ||
-		admission.Action != request.Action {
+		admission.EffectHash != request.EffectHash || admission.Action != request.Action {
 		return ErrTransitionConflict
 	}
 	return nil
@@ -301,7 +300,7 @@ func scanDispatchAdmission(row rowScanner) (DispatchAdmissionRecord, error) {
 	if tenantID != record.Admission.TenantID || workspaceID != record.Admission.WorkspaceID ||
 		attemptID != record.Admission.AttemptID || approvalID != record.Admission.ApprovalID ||
 		consumptionHash != record.Admission.ConsumptionHash || idempotencyKeyHash != record.Admission.IdempotencyKeyHash ||
-		effectHash != record.Admission.EffectHash || connectorID != record.Admission.ConnectorID ||
+		effectHash != record.Admission.EffectHash || connectorID != record.Admission.ConnectorAuthority.ConnectorID ||
 		action != record.Admission.Action || admittedBy != record.Admission.AdmittedBy ||
 		state != record.Admission.State || !issuedAt.Equal(record.Admission.IssuedAt) ||
 		!expiresAt.Equal(record.Admission.ExpiresAt) {

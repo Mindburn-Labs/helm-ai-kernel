@@ -90,8 +90,10 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
   `CONSUMED -> DISPATCHING` transition, including cached and recovered
   consumption records. That is necessary but not sufficient: active-admission
   listing/disposition, close and uncertainty transitions, connector-boundary
-  acknowledgement evidence, and a source-owned policy/certification binding
-  for the currently workload-asserted `connector_id` are also required.
+  acknowledgement evidence, and a current durable source-owned revocation
+  check for the policy-bound connector release/certification snapshot are also
+  required. The dispatch workload cannot select `connector_id`; the Kernel
+  derives it from the signed approval chain.
 - It does not revoke existing permits, cancel in-flight work, stop unmanaged
   adapters, or implement release/unfence. Those remain separate contracts.
 

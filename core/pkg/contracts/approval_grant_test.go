@@ -49,6 +49,10 @@ func TestApprovalGrantSealDeterministicAndBindsAuthorityFields(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			candidate := base
 			mutate(&candidate)
+			candidate.ConnectorAuthority = approvalConnectorAuthorityFor(
+				candidate.TenantID, candidate.WorkspaceID, candidate.PackID, candidate.PackVersion,
+				candidate.PackManifestHash, candidate.Action, candidate.EffectHash, candidate.PolicyHash,
+			)
 			changed, err := candidate.Seal()
 			if err != nil {
 				t.Fatalf("Seal() mutated error = %v", err)
@@ -134,6 +138,10 @@ func TestApprovalGrantValidateRejectsMalformedOrUnsafeValues(t *testing.T) {
 		t.Run("allowed action "+action, func(t *testing.T) {
 			grant := validApprovalGrant()
 			grant.Action = action
+			grant.ConnectorAuthority = approvalConnectorAuthorityFor(
+				grant.TenantID, grant.WorkspaceID, grant.PackID, grant.PackVersion,
+				grant.PackManifestHash, grant.Action, grant.EffectHash, grant.PolicyHash,
+			)
 			if err := grant.Validate(); err != nil {
 				t.Fatalf("Validate() action %q error = %v", action, err)
 			}
@@ -167,24 +175,28 @@ func TestApprovalGrantValidateAtChecksIntegrityAndWindow(t *testing.T) {
 	}
 
 	sealed.TenantID = "tenant-substitution"
-	if err := sealed.ValidateAt(now); !errors.Is(err, ErrApprovalGrantIntegrity) {
-		t.Fatalf("ValidateAt() substituted error = %v, want ErrApprovalGrantIntegrity", err)
+	if err := sealed.ValidateAt(now); !errors.Is(err, ErrApprovalGrantInvalid) {
+		t.Fatalf("ValidateAt() substituted error = %v, want ErrApprovalGrantInvalid", err)
 	}
 }
 
 func validApprovalGrant() ApprovalGrant {
 	issuedAt := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
 	return ApprovalGrant{
-		SchemaVersion:     ApprovalGrantSchemaV1,
-		ContractVersion:   ApprovalGrantContractV1,
-		GrantID:           "grant-a",
-		TenantID:          "tenant-a",
-		WorkspaceID:       "workspace-a",
-		Audience:          "packs.lifecycle",
-		PackID:            "pack-a",
-		PackVersion:       "1.0.0",
-		PackManifestHash:  sha256Ref("a"),
-		Action:            ApprovalGrantActionInstall,
+		SchemaVersion:    ApprovalGrantSchemaV1,
+		ContractVersion:  ApprovalGrantContractV1,
+		GrantID:          "grant-a",
+		TenantID:         "tenant-a",
+		WorkspaceID:      "workspace-a",
+		Audience:         "packs.lifecycle",
+		PackID:           "pack-a",
+		PackVersion:      "1.0.0",
+		PackManifestHash: sha256Ref("a"),
+		Action:           ApprovalGrantActionInstall,
+		ConnectorAuthority: approvalConnectorAuthorityFor(
+			"tenant-a", "workspace-a", "pack-a", "1.0.0", sha256Ref("a"),
+			ApprovalGrantActionInstall, sha256Ref("1"), sha256Ref("3"),
+		),
 		IntentHash:        sha256Ref("0"),
 		EffectHash:        sha256Ref("1"),
 		PlanHash:          sha256Ref("2"),
@@ -202,6 +214,26 @@ func validApprovalGrant() ApprovalGrant {
 		ExpiresAt:         issuedAt.Add(5 * time.Minute),
 		Nonce:             repeatHex("6"),
 	}
+}
+
+func approvalConnectorAuthorityFor(
+	tenantID, workspaceID, packID, packVersion, packManifestHash, action, effectHash, policyHash string,
+) ApprovalConnectorAuthority {
+	authority, err := (ApprovalConnectorAuthority{
+		SchemaVersion: ApprovalConnectorAuthoritySchemaV1, ContractVersion: ApprovalConnectorAuthorityContractV1,
+		State: ApprovalConnectorAuthorityStateV1, BindingRef: "binding-a",
+		TenantID: tenantID, WorkspaceID: workspaceID, PackID: packID, PackVersion: packVersion,
+		PackManifestHash: packManifestHash, Action: action, EffectHash: effectHash, PolicyHash: policyHash,
+		ConnectorID: "connector-a", ConnectorVersion: "1.0.0", ConnectorExecutorKind: "digital",
+		ConnectorBinaryHash: sha256Ref("7"), ConnectorSignatureRef: "sigstore://connector-a/1.0.0",
+		ConnectorSignerID: "publisher-a", ConnectorSandboxProfile: "sandbox-pack-lifecycle-v1",
+		ConnectorDriftPolicyRef: "policy://connector-drift/v1", CertificationRef: "cert://connector-a/1.0.0",
+		CertificationHash: sha256Ref("8"), CertificationAuthority: "spiffe://helm/certification-authority",
+	}).Seal()
+	if err != nil {
+		panic(err)
+	}
+	return authority
 }
 
 func sha256Ref(character string) string {

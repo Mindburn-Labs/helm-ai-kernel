@@ -116,7 +116,7 @@ func TestDispatchAdmissionSignatureBindsAttemptConnectorAndTrustRoot(t *testing.
 		TenantID: consumption.TenantID, WorkspaceID: consumption.WorkspaceID,
 		Audience: consumption.Audience, AdmittedBy: consumption.ConsumedBy,
 		IdempotencyKeyHash: "sha256:" + strings.Repeat("a", 64), EffectHash: consumption.EffectHash,
-		ConnectorID: "connector-a", Action: consumption.Action,
+		Action: consumption.Action, ConnectorAuthority: consumption.ConnectorAuthority,
 		KernelTrustRootID: consumption.KernelTrustRootID, SigningKeyRef: consumption.SigningKeyRef,
 		IssuedAt: issuedAt, ExpiresAt: issuedAt.Add(30 * time.Second),
 	}).Seal()
@@ -147,7 +147,12 @@ func TestDispatchAdmissionSignatureBindsAttemptConnectorAndTrustRoot(t *testing.
 		t.Fatalf("dispatch admission signing payload is not deterministic: %v", err)
 	}
 	mutated := admission
-	mutated.ConnectorID = "connector-b"
+	mutated.ConnectorAuthority.ConnectorID = "connector-b"
+	mutated.ConnectorAuthority.AuthorityHash = ""
+	mutated.ConnectorAuthority, err = mutated.ConnectorAuthority.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mutated.AdmissionHash = ""
 	mutated, err = mutated.Seal()
 	if err != nil {

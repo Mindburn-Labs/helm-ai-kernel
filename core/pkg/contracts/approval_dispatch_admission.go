@@ -8,7 +8,7 @@ import (
 
 const (
 	ApprovalDispatchAdmissionSchemaV1   = "approval-dispatch-admission.v1"
-	ApprovalDispatchAdmissionContractV1 = "2026-07-17"
+	ApprovalDispatchAdmissionContractV1 = "2026-07-17.1"
 	ApprovalDispatchAdmissionCoverageV1 = "new_governed_dispatches_only"
 	ApprovalDispatchAdmissionStateV1    = "NOT_STARTED"
 	ApprovalDispatchAdmissionMaxTTL     = time.Minute
@@ -39,10 +39,10 @@ type ApprovalDispatchAdmission struct {
 	Audience    string `json:"audience"`
 	AdmittedBy  string `json:"admitted_by"`
 
-	IdempotencyKeyHash string `json:"idempotency_key_hash"`
-	EffectHash         string `json:"effect_hash"`
-	ConnectorID        string `json:"connector_id"`
-	Action             string `json:"action"`
+	IdempotencyKeyHash string                     `json:"idempotency_key_hash"`
+	EffectHash         string                     `json:"effect_hash"`
+	Action             string                     `json:"action"`
+	ConnectorAuthority ApprovalConnectorAuthority `json:"connector_authority"`
 
 	KernelTrustRootID string `json:"kernel_trust_root_id"`
 	SigningKeyRef     string `json:"signing_key_ref"`
@@ -71,8 +71,8 @@ func (a ApprovalDispatchAdmission) Validate() error {
 		"approval_id": a.ApprovalID, "grant_id": a.GrantID,
 		"tenant_id": a.TenantID, "workspace_id": a.WorkspaceID,
 		"audience": a.Audience, "admitted_by": a.AdmittedBy,
-		"connector_id": a.ConnectorID, "kernel_trust_root_id": a.KernelTrustRootID,
-		"signing_key_ref": a.SigningKeyRef,
+		"kernel_trust_root_id": a.KernelTrustRootID,
+		"signing_key_ref":      a.SigningKeyRef,
 	} {
 		if !isApprovalDispatchAdmissionToken(value) {
 			return approvalDispatchAdmissionInvalid(field + " is required and must not contain whitespace")
@@ -91,6 +91,14 @@ func (a ApprovalDispatchAdmission) Validate() error {
 		ApprovalGrantActionUninstall, ApprovalGrantActionRollback:
 	default:
 		return approvalDispatchAdmissionInvalid("unsupported action")
+	}
+	if err := a.ConnectorAuthority.ValidateEffectBinding(
+		a.TenantID, a.WorkspaceID,
+		a.ConnectorAuthority.PackID, a.ConnectorAuthority.PackVersion,
+		a.ConnectorAuthority.PackManifestHash, a.Action, a.EffectHash,
+		a.ConnectorAuthority.PolicyHash,
+	); err != nil {
+		return approvalDispatchAdmissionInvalid(err.Error())
 	}
 	if a.IssuedAt.IsZero() || a.ExpiresAt.IsZero() ||
 		!isApprovalGrantUTC(a.IssuedAt) || !isApprovalGrantUTC(a.ExpiresAt) {
@@ -169,6 +177,7 @@ func (a ApprovalDispatchAdmission) ValidateConsumption(consumption ApprovalGrant
 		a.TenantID != consumption.TenantID || a.WorkspaceID != consumption.WorkspaceID ||
 		a.Audience != consumption.Audience || a.AdmittedBy != consumption.ConsumedBy ||
 		a.EffectHash != consumption.EffectHash || a.Action != consumption.Action ||
+		a.ConnectorAuthority != consumption.ConnectorAuthority ||
 		a.KernelTrustRootID != consumption.KernelTrustRootID || a.SigningKeyRef != consumption.SigningKeyRef {
 		return approvalDispatchAdmissionInvalid("admission does not match the signed consumption")
 	}

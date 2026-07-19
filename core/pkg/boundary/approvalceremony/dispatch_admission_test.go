@@ -53,6 +53,9 @@ func TestDispatchAdmitterBindsPostLockTimeAndExactRetry(t *testing.T) {
 	if err := verifier.VerifyDispatchAdmissionSignature(first.Admission, first.SignatureAlgorithm, first.Signature); err != nil {
 		t.Fatalf("VerifyDispatchAdmissionSignature(): %v", err)
 	}
+	if first.Admission.ConnectorAuthority != consumption.ConnectorAuthority {
+		t.Fatal("dispatch admission did not inherit the approved connector authority")
+	}
 
 	admitter.random = dispatchFailingReader{}
 	second, err := admitter.Claim(context.Background(), request)
@@ -64,7 +67,7 @@ func TestDispatchAdmitterBindsPostLockTimeAndExactRetry(t *testing.T) {
 		t.Fatalf("Recover() = %+v, error = %v", recovered, err)
 	}
 	changed := request
-	changed.ConnectorID = "connector-b"
+	changed.IdempotencyKeyHash = "sha256:" + strings.Repeat("b", 64)
 	if _, err := admitter.Claim(context.Background(), changed); !errors.Is(err, ErrTransitionConflict) {
 		t.Fatalf("changed retry error = %v, want ErrTransitionConflict", err)
 	}
@@ -157,6 +160,6 @@ func dispatchAdmissionRequestForConsumption(consumption contracts.ApprovalGrantC
 		ApprovalID: consumption.ApprovalID, AttemptID: "attempt-a",
 		ConsumptionHash:    consumption.ConsumptionHash,
 		IdempotencyKeyHash: "sha256:" + strings.Repeat("a", 64),
-		EffectHash:         consumption.EffectHash, ConnectorID: "connector-a", Action: consumption.Action,
+		EffectHash:         consumption.EffectHash, Action: consumption.Action,
 	}
 }

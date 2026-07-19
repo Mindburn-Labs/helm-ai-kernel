@@ -99,6 +99,7 @@ func buildApprovalConsumptionReferencePack(t *testing.T) map[string][]byte {
 		},
 		NegativeVectors: []consumptionNegativeVector{
 			{ID: "consumer_substitution", Mutation: "set_consumed_by_to_data-plane-b", ExpectedError: "hash_mismatch"},
+			{ID: "connector_authority_substitution", Mutation: "set_connector_authority_certification_hash_to_tampered", ExpectedError: "connector_authority_rejected"},
 			{ID: "expiry_boundary", Mutation: "set_consumed_at_to_grant_expiry", ExpectedError: "inactive_consumption"},
 			{ID: "signature_tamper", Mutation: "flip_signature_last_bit", ExpectedError: "signature_rejected"},
 		},

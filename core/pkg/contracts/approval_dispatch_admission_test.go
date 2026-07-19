@@ -19,7 +19,7 @@ func TestApprovalDispatchAdmissionSealsAndBindsConsumption(t *testing.T) {
 		TenantID: consumption.TenantID, WorkspaceID: consumption.WorkspaceID,
 		Audience: consumption.Audience, AdmittedBy: consumption.ConsumedBy,
 		IdempotencyKeyHash: approvalGrantSHA("b"), EffectHash: consumption.EffectHash,
-		ConnectorID: "connector-a", Action: consumption.Action,
+		Action: consumption.Action, ConnectorAuthority: consumption.ConnectorAuthority,
 		KernelTrustRootID: consumption.KernelTrustRootID, SigningKeyRef: consumption.SigningKeyRef,
 		IssuedAt: issuedAt, ExpiresAt: issuedAt.Add(30 * time.Second),
 	}).Seal()
@@ -48,7 +48,7 @@ func TestApprovalDispatchAdmissionSealsAndBindsConsumption(t *testing.T) {
 	}
 
 	tampered := admission
-	tampered.ConnectorID = "connector-b"
+	tampered.ConnectorAuthority.ConnectorID = "connector-b"
 	if err := tampered.ValidateConsumption(consumption); err == nil {
 		t.Fatal("tampered admission must fail")
 	}
@@ -71,7 +71,7 @@ func TestApprovalDispatchAdmissionRejectsInvalidShape(t *testing.T) {
 		TenantID: consumption.TenantID, WorkspaceID: consumption.WorkspaceID,
 		Audience: consumption.Audience, AdmittedBy: consumption.ConsumedBy,
 		IdempotencyKeyHash: approvalGrantSHA("b"), EffectHash: consumption.EffectHash,
-		ConnectorID: "connector-a", Action: consumption.Action,
+		Action: consumption.Action, ConnectorAuthority: consumption.ConnectorAuthority,
 		KernelTrustRootID: consumption.KernelTrustRootID, SigningKeyRef: consumption.SigningKeyRef,
 		IssuedAt: issuedAt, ExpiresAt: issuedAt.Add(30 * time.Second),
 	}
@@ -101,6 +101,10 @@ func approvalDispatchAdmissionConsumption(t *testing.T) ApprovalGrantConsumption
 		ApprovalID: "approval-a", GrantID: "grant-a", GrantHash: approvalGrantSHA("a"),
 		TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "packs.lifecycle", ConsumedBy: "spiffe://helm/data-plane-a",
 		PackID: "pack-a", PackVersion: "1.0.0", PackManifestHash: approvalGrantSHA("c"), Action: ApprovalGrantActionInstall,
+		ConnectorAuthority: approvalConnectorAuthorityFor(
+			"tenant-a", "workspace-a", "pack-a", "1.0.0", approvalGrantSHA("c"),
+			ApprovalGrantActionInstall, approvalGrantSHA("e"), approvalGrantSHA("1"),
+		),
 		IntentHash: approvalGrantSHA("d"), EffectHash: approvalGrantSHA("e"), PlanHash: approvalGrantSHA("f"),
 		PolicyVersion: "policy-v1", PolicyEpoch: "epoch-1", PolicyHash: approvalGrantSHA("1"),
 		ServerIdentity: "spiffe://helm/kernel-a", KernelTrustRootID: "kernel-root-1", SigningKeyRef: "kernel-key-1",

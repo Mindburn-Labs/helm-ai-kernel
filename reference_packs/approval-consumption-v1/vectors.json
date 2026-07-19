@@ -1,23 +1,28 @@
 {
   "$comment": "quantum_posture: classical Ed25519 approval grant consumption only; no hybrid or post-quantum claim.",
   "schema_version": "approval-grant-consumption-vectors.v1",
-  "contract_version": "2026-07-16",
+  "contract_version": "2026-07-17",
   "quantum_posture": "classical_ed25519_only",
   "consumption": {
     "canonical": "consumption.c14n.json",
-    "sha256": "sha256:039e9c9a5d65e71f55799bc0e76b0e5b8c15337b4171aff0e858b1c83f246a61",
+    "sha256": "sha256:f6678eaf506166edde7f51aa804e3660704b659b5a808eab500bffb738af9ccd",
     "signing_payload": {
       "canonical": "signing_payload.c14n.json",
-      "sha256": "sha256:83f5b8cfe0a437fed17a3fe54ae35191e7acf0bb3e249afca34a12f071e1f04c"
+      "sha256": "sha256:86acfe67ebca56bad519c84ba8fab5478229043061121a53c0235361e38df010"
     },
     "public_key": "ed25519:ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
-    "signature": "ed25519:924ce5cda6e0804fbf166b1c09df5df9258bc4fa4ea9ced3e054677c0ad6fe2687ca84dad6eb04b31d0c8cafd96d8e98250f3287b528e548fc8e0984694fa601"
+    "signature": "ed25519:dd4dd8deac3be52bfb0b6fa73f8316fa00a2a031341a7acd8cb8d381299c3b7ada8180ac80caeb48cbe6c1a3b283e225b57ca134008d22160a1f9a6b3e28550b"
   },
   "negative_vectors": [
     {
       "id": "consumer_substitution",
       "mutation": "set_consumed_by_to_data-plane-b",
       "expected_error": "hash_mismatch"
+    },
+    {
+      "id": "connector_authority_substitution",
+      "mutation": "set_connector_authority_certification_hash_to_tampered",
+      "expected_error": "connector_authority_rejected"
     },
     {
       "id": "expiry_boundary",

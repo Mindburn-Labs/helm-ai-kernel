@@ -14,7 +14,7 @@ import (
 const (
 	ApprovalChallengeDomainV1   = "HELM/ApprovalChallenge/v1"
 	ApprovalChallengeSchemaV1   = "approval-challenge.v1"
-	ApprovalChallengeContractV1 = "2026-07-15"
+	ApprovalChallengeContractV1 = "2026-07-17"
 
 	ApprovalAssertionDomainV1   = "HELM/ApprovalAssertion/v1"
 	ApprovalAssertionSchemaV1   = "approval-assertion.v1"
@@ -44,10 +44,11 @@ type ApprovalChallenge struct {
 	WorkspaceID string `json:"workspace_id"`
 	Audience    string `json:"audience"`
 
-	PackID           string `json:"pack_id"`
-	PackVersion      string `json:"pack_version"`
-	PackManifestHash string `json:"pack_manifest_hash"`
-	Action           string `json:"action"`
+	PackID             string                     `json:"pack_id"`
+	PackVersion        string                     `json:"pack_version"`
+	PackManifestHash   string                     `json:"pack_manifest_hash"`
+	Action             string                     `json:"action"`
+	ConnectorAuthority ApprovalConnectorAuthority `json:"connector_authority"`
 
 	IntentHash string `json:"intent_hash"`
 	EffectHash string `json:"effect_hash"`
@@ -137,6 +138,12 @@ func (c ApprovalChallenge) Validate() error {
 	}
 	if c.Decision != ApprovalGrantDecisionAllow {
 		return approvalChallengeInvalid("decision must be ALLOW")
+	}
+	if err := c.ConnectorAuthority.ValidateEffectBinding(
+		c.TenantID, c.WorkspaceID, c.PackID, c.PackVersion, c.PackManifestHash,
+		c.Action, c.EffectHash, c.PolicyHash,
+	); err != nil {
+		return approvalChallengeInvalid(err.Error())
 	}
 	if c.Quorum <= 0 {
 		return approvalChallengeInvalid("quorum must be positive")

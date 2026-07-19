@@ -531,11 +531,20 @@ func writePermitFile(path string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	if _, err := file.Write(content); err != nil {
-		file.Close()
-		return err
+	if _, writeErr := file.Write(content); writeErr != nil {
+		// Surface the write failure, but still report a close error that would
+		// otherwise mask a flush/data-loss failure on the permit artifact.
+		if closeErr := file.Close(); closeErr != nil {
+			return errors.Join(writeErr, closeErr)
+		}
+		return writeErr
 	}
-	return file.Close()
+	// A close error on a writable handle can indicate a lost buffered write,
+	// so it must not be discarded for a release-authority artifact.
+	if closeErr := file.Close(); closeErr != nil {
+		return fmt.Errorf("close permit output %q: %w", path, closeErr)
+	}
+	return nil
 }
 
 func fatal(err error) {

@@ -27,6 +27,17 @@ const (
 	// Resource effects
 	EffectTypeCloudComputeBudget = "CLOUD_COMPUTE_BUDGET" // Consume cloud compute resources against budget
 
+	// Governed company launch effect identifiers are reserved by the
+	// provider-neutral route contracts. They remain intentionally absent from
+	// DefaultEffectCatalog until the preview effect, authority, connector, and
+	// conformance layers are promoted together.
+	EffectTypeProviderProvision        = "PROVIDER_PROVISION"
+	EffectTypeDeployProductionActivate = "DEPLOY_PRODUCTION_ACTIVATE"
+	EffectTypeSpendAuthorize           = "SPEND_AUTHORIZE"
+	EffectTypeProviderRollback         = "PROVIDER_ROLLBACK"
+	EffectTypeProviderTeardown         = "PROVIDER_TEARDOWN"
+	EffectTypeCompanyArtifactUpdate    = "COMPANY_ARTIFACT_UPDATE"
+
 	// Business communication effects
 	EffectTypeSendEmail       = "SEND_EMAIL"        // Send email through governed connector
 	EffectTypeSendChatMessage = "SEND_CHAT_MESSAGE" // Send chat message (Slack, Teams, etc.)

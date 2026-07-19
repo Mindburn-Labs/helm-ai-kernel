@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/provider_payload_set.v1.json",
+  "version": "1.0.0-alpha.1",
+  "title": "Launch Provider Payload Set (Preview)",
+  "description": "Hashes of exact connector requests grouped by route placement; raw provider payloads remain outside the provider-neutral route contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "payload_set_id", "tenant_id", "workspace_id", "mission_id", "entries"],
+  "properties": {
+    "schema_version": { "const": "launch_provider_payload_set.v1" },
+    "payload_set_id": { "$ref": "#/$defs/non_empty" },
+    "tenant_id": { "$ref": "#/$defs/non_empty" },
+    "workspace_id": { "$ref": "#/$defs/non_empty" },
+    "mission_id": { "$ref": "#/$defs/non_empty" },
+    "entries": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["placement_id", "effect_id", "provider_action_urn", "payload_hash"],
+        "properties": {
+          "placement_id": { "$ref": "#/$defs/non_empty" },
+          "effect_id": { "enum": ["PROVIDER_PROVISION", "DEPLOY_PRODUCTION_ACTIVATE", "PROVIDER_ROLLBACK", "PROVIDER_TEARDOWN"] },
+          "provider_action_urn": { "$ref": "#/$defs/non_empty" },
+          "payload_hash": { "$ref": "#/$defs/hash" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "raw_payloads_excluded": true }
+}

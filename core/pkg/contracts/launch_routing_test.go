@@ -292,6 +292,10 @@ func TestRouteRejectsUnsafeFXAndTaxEvidence(t *testing.T) {
 	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
 	base := singleLaunchRouteFixture(t, profile, false)
 	for name, mutate := range map[string]func(*launchRouteFixture){
+		"non-identity same-currency FX rate": func(f *launchRouteFixture) {
+			f.fxSnapshot.RateNumerator = 1
+			f.fxSnapshot.RateDenominator = 2
+		},
 		"future FX snapshot": func(f *launchRouteFixture) {
 			f.fxSnapshot.RetrievedAt = "2026-07-19T02:00:00Z"
 		},

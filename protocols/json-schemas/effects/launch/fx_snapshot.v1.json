@@ -3,7 +3,7 @@
   "$id": "https://helm.mindburn.run/schemas/effects/launch/fx_snapshot.v1.json",
   "version": "1.0.0-alpha.1",
   "title": "Launch FX Snapshot (Preview)",
-  "description": "Official-source rational conversion from provider minor units to quote minor units.",
+  "description": "Official-source rational conversion from provider minor units to quote minor units; semantic validation requires the canonical 1/1 rate when both currencies are identical.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "snapshot_id", "source_currency", "quote_currency", "rate_numerator", "rate_denominator", "official_source_url", "content_hash", "retrieved_at", "expires_at"],
@@ -24,5 +24,5 @@
     "non_empty": { "type": "string", "minLength": 1 },
     "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
   },
-  "x-helm": { "status": "preview", "execution_enabled": false, "source_owned_resolution_required": true, "rational_rate": true }
+  "x-helm": { "status": "preview", "execution_enabled": false, "source_owned_resolution_required": true, "rational_rate": true, "same_currency_identity_rate": true }
 }

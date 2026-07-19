@@ -168,6 +168,9 @@ func ValidateLaunchFXSnapshot(value LaunchFXSnapshot) error {
 	if value.SchemaVersion != LaunchFXSnapshotSchemaVersion || value.SnapshotID == "" || !launchCurrencyPattern.MatchString(value.SourceCurrency) || !launchCurrencyPattern.MatchString(value.QuoteCurrency) || value.RateNumerator <= 0 || value.RateDenominator <= 0 || !validLaunchSHA256(value.ContentHash) {
 		return errors.New("launch FX snapshot identity, currencies, rate, or content hash is invalid")
 	}
+	if value.SourceCurrency == value.QuoteCurrency && (value.RateNumerator != 1 || value.RateDenominator != 1) {
+		return errors.New("launch same-currency FX snapshot must use the canonical 1/1 identity rate")
+	}
 	if err := validateLaunchOfficialURL(value.OfficialSourceURL, "FX snapshot"); err != nil {
 		return err
 	}

@@ -106,7 +106,23 @@ func SignConnectorReleaseAuthority(authority contracts.ConnectorReleaseAuthority
 	return envelope, nil
 }
 
+// VerifyEnvelope proves an envelope is signed by a currently trusted key. It is
+// used when importing/appending a new statement, so it rejects a disabled key.
 func (v *Ed25519ReleaseAuthorityVerifier) VerifyEnvelope(envelope contracts.ConnectorReleaseAuthorityEnvelope) error {
+	return v.verifyEnvelope(envelope, true)
+}
+
+// VerifyStoredEnvelope proves an already-persisted envelope's signature and
+// pinned-lifetime binding without requiring the signing key to still be
+// enabled. Disabling a key stops NEW signatures from it; it must not
+// retroactively make an existing stored head unreadable, or a rotation could
+// never read or revoke the old head. Signature validity and the NotBefore/
+// NotAfter window still enforce authenticity.
+func (v *Ed25519ReleaseAuthorityVerifier) VerifyStoredEnvelope(envelope contracts.ConnectorReleaseAuthorityEnvelope) error {
+	return v.verifyEnvelope(envelope, false)
+}
+
+func (v *Ed25519ReleaseAuthorityVerifier) verifyEnvelope(envelope contracts.ConnectorReleaseAuthorityEnvelope, requireEnabled bool) error {
 	if v == nil || !releaseAuthorityToken(v.authorityID) || len(v.keys) == 0 {
 		return releaseAuthorityRejected("verifier is not configured")
 	}
@@ -118,7 +134,10 @@ func (v *Ed25519ReleaseAuthorityVerifier) VerifyEnvelope(envelope contracts.Conn
 		return releaseAuthorityRejected("authority identity or algorithm mismatch")
 	}
 	key, ok := v.keys[authority.SigningKeyRef]
-	if !ok || !key.Enabled || key.AuthorityID != authority.AuthorityID {
+	if !ok || key.AuthorityID != authority.AuthorityID {
+		return releaseAuthorityRejected("signing key is not currently trusted")
+	}
+	if requireEnabled && !key.Enabled {
 		return releaseAuthorityRejected("signing key is not currently trusted")
 	}
 	if authority.SignedAt.Before(key.NotBefore) || !authority.SignedAt.Before(key.NotAfter) {

@@ -25,6 +25,7 @@ var (
 // both the source-authority writer and the read-only runtime projection.
 type ReleaseAuthorityEnvelopeVerifier interface {
 	VerifyEnvelope(contracts.ConnectorReleaseAuthorityEnvelope) error
+	VerifyStoredEnvelope(contracts.ConnectorReleaseAuthorityEnvelope) error
 	VerifyCurrentCertifiedAt(contracts.ConnectorReleaseAuthorityEnvelope, time.Time) error
 }
 
@@ -395,7 +396,10 @@ func validateStoredReleaseAuthority(record releaseAuthorityRecord, verifier Rele
 	if record.CreatedAt.IsZero() {
 		return releaseAuthorityStoreRejected("stored authority is missing created_at")
 	}
-	if err := verifier.VerifyEnvelope(record.Envelope); err != nil {
+	// Verify an already-persisted head without requiring the signing key to
+	// still be enabled: a key rotated/disabled after signing must still let the
+	// stored head be read and revoked. Signature + pinned lifetime still hold.
+	if err := verifier.VerifyStoredEnvelope(record.Envelope); err != nil {
 		return err
 	}
 	return nil

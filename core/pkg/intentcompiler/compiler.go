@@ -9,6 +9,7 @@ package intentcompiler
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -134,8 +135,8 @@ func (c *Compiler) Compile(req *CompileRequest) (*CompileResult, error) {
 
 	// Step 7: Validate.
 	validationErrs := c.validator.Validate(plan)
-	for _, ve := range validationErrs {
-		warnings = append(warnings, ve.Error())
+	if len(validationErrs) > 0 {
+		return nil, fmt.Errorf("validate compiled plan: %w", errors.Join(validationErrs...))
 	}
 
 	return &CompileResult{

@@ -8,15 +8,28 @@ type EffectTypeCatalog struct {
 
 // EffectType defines a specific capability category.
 type EffectType struct {
-	TypeID               string         `json:"type_id"` // E.g., DATA_WRITE, FUNDS_TRANSFER
-	Name                 string         `json:"name"`
-	Description          string         `json:"description,omitempty"`
-	Idempotency          IdempotencyRef `json:"idempotency"`
-	Classification       Classification `json:"classification"`
-	DefaultApprovalLevel string         `json:"default_approval_level,omitempty"` // none, single_human, dual_control, quorum
-	RequiresEvidence     bool           `json:"requires_evidence"`
-	CompensationRequired bool           `json:"compensation_required"`
-	ReceiptSchema        string         `json:"receipt_schema,omitempty"`
+	TypeID                      string         `json:"type_id"` // E.g., DATA_WRITE, FUNDS_TRANSFER
+	Name                        string         `json:"name"`
+	Description                 string         `json:"description,omitempty"`
+	Status                      string         `json:"status,omitempty"` // preview, normative, deprecated
+	Taxon                       string         `json:"taxon,omitempty"`  // E0-E4
+	BaseEffectTypes             []string       `json:"base_effect_types,omitempty"`
+	Idempotency                 IdempotencyRef `json:"idempotency"`
+	Classification              Classification `json:"classification"`
+	DefaultApprovalLevel        string         `json:"default_approval_level,omitempty"` // Risk baseline only; Authority Court remains the sole authorization source.
+	RequiresEvidence            bool           `json:"requires_evidence"`
+	CompensationRequired        bool           `json:"compensation_required"`
+	CompensationEffectType      string         `json:"compensation_effect_type,omitempty"`
+	CompensationAuthorization   string         `json:"compensation_authorization,omitempty"`
+	InputSchema                 string         `json:"input_schema,omitempty"`
+	AuthorizationEnvelopeSchema string         `json:"authorization_envelope_schema,omitempty"`
+	ReceiptSchema               string         `json:"receipt_schema,omitempty"`
+	ConnectorID                 string         `json:"connector_id,omitempty"`
+	ActionURN                   string         `json:"action_urn,omitempty"`
+	PreflightRequired           bool           `json:"preflight_required,omitempty"`
+	TwoPhaseCommitRequired      bool           `json:"two_phase_commit_required,omitempty"`
+	MinEvidenceGrade            string         `json:"min_evidence_grade,omitempty"`
+	PolicyHooks                 []string       `json:"policy_hooks,omitempty"`
 }
 
 type IdempotencyRef struct {

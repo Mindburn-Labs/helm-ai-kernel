@@ -100,6 +100,12 @@ func TestEffectRiskClass(t *testing.T) {
 		{EffectTypeAgentInvokePrivileged, "E3"},
 		{EffectTypeTunnelStart, "E3"},
 		{EffectTypeCloudComputeBudget, "E2"},
+		{EffectTypeProviderProvision, "E3"},
+		{EffectTypeDeployProductionActivate, "E3"},
+		{EffectTypeSpendAuthorize, "E3"},
+		{EffectTypeProviderRollback, "E3"},
+		{EffectTypeProviderTeardown, "E4"},
+		{EffectTypeCompanyArtifactUpdate, "E2"},
 		{EffectTypeAgentIdentityIsolation, "E1"},
 		{"UNKNOWN_EFFECT", "E3"}, // fail-closed default
 	}

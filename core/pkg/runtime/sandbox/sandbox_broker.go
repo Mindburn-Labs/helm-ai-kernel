@@ -7,7 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectgraph"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/intentcompiler"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/lease"
 	pkg_sandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 )
@@ -90,6 +92,12 @@ func (b *SandboxBroker) PrepareExecution(
 	if verdict == nil || verdict.Profile == nil {
 		return nil, fmt.Errorf("verdict or profile is nil")
 	}
+	if verdict.Decision == nil || verdict.Decision.Verdict != string(contracts.VerdictAllow) || verdict.Intent == nil {
+		return nil, fmt.Errorf("verdict is not backed by an ALLOW decision and execution intent")
+	}
+	if !executableSandboxProfile(verdict.Profile.ProfileName) {
+		return nil, fmt.Errorf("sandbox profile %q is not executable", verdict.Profile.ProfileName)
+	}
 
 	// Verify runner exists.
 	b.mu.RLock()
@@ -102,6 +110,9 @@ func (b *SandboxBroker) PrepareExecution(
 	// Verify the verdict's profile backend matches the lease backend.
 	if verdict.Profile.Backend != execLease.Backend {
 		return nil, fmt.Errorf("backend mismatch: lease=%q verdict=%q", execLease.Backend, verdict.Profile.Backend)
+	}
+	if verdict.Profile.ProfileName != execLease.ProfileName {
+		return nil, fmt.Errorf("profile mismatch: lease=%q verdict=%q", execLease.ProfileName, verdict.Profile.ProfileName)
 	}
 
 	// Activate lease.
@@ -149,6 +160,18 @@ func (b *SandboxBroker) PrepareExecution(
 		Tokens:     bearerTokens,
 		PreparedAt: b.clock(),
 	}, nil
+}
+
+func executableSandboxProfile(profile string) bool {
+	switch profile {
+	case intentcompiler.ProfileReadOnly,
+		intentcompiler.ProfileWorkspaceWrite,
+		intentcompiler.ProfileBuildRunner,
+		intentcompiler.ProfileNetLimited:
+		return true
+	default:
+		return false
+	}
 }
 
 // Execute runs prepared work in the appropriate sandbox.

@@ -53,12 +53,13 @@ type ConnectorEffectAcknowledgement struct {
 	ProofSessionRef       string `json:"proof_session_ref,omitempty"`
 	IntentRef             string `json:"intent_ref"`
 
-	IdempotencyKeyHash string `json:"idempotency_key_hash"`
-	EffectHash         string `json:"effect_hash"`
-	Outcome            string `json:"outcome"`
-	ResponseHash       string `json:"response_hash"`
-	EffectRef          string `json:"effect_ref,omitempty"`
-	ReconciliationRef  string `json:"reconciliation_ref,omitempty"`
+	IdempotencyKeyHash     string `json:"idempotency_key_hash"`
+	EffectHash             string `json:"effect_hash"`
+	Outcome                string `json:"outcome"`
+	ResponseHash           string `json:"response_hash"`
+	EffectRef              string `json:"effect_ref,omitempty"`
+	ReconciliationRef      string `json:"reconciliation_ref,omitempty"`
+	DispositionReceiptHash string `json:"disposition_receipt_hash,omitempty"`
 
 	IssuerID      string    `json:"issuer_id"`
 	SigningKeyRef string    `json:"signing_key_ref"`
@@ -109,6 +110,9 @@ func (a ConnectorEffectAcknowledgement) Validate() error {
 	}
 	if a.ReconciliationRef != "" && (!isApprovalGrantToken(a.ReconciliationRef) || len(a.ReconciliationRef) > 512) {
 		return connectorEffectAcknowledgementInvalid("reconciliation_ref must be a bounded token")
+	}
+	if a.DispositionReceiptHash != "" && !isApprovalGrantSHA256(a.DispositionReceiptHash) {
+		return connectorEffectAcknowledgementInvalid("disposition_receipt_hash must be a lowercase sha256 reference")
 	}
 	if a.ProofSessionRef != "" && (!isApprovalGrantToken(a.ProofSessionRef) || len(a.ProofSessionRef) > 512) {
 		return connectorEffectAcknowledgementInvalid("proof_session_ref must be a bounded token")
@@ -203,13 +207,14 @@ type EffectCloseReceipt struct {
 	EffectHash          string `json:"effect_hash"`
 	ResponseHash        string `json:"response_hash"`
 
-	ConnectorExecutionRef string `json:"connector_execution_ref"`
-	ProofSessionRef       string `json:"proof_session_ref,omitempty"`
-	IntentRef             string `json:"intent_ref"`
-	EffectRef             string `json:"effect_ref,omitempty"`
-	ReconciliationRef     string `json:"reconciliation_ref,omitempty"`
-	EvidencePackRef       string `json:"evidence_pack_ref"`
-	EvidencePackHash      string `json:"evidence_pack_hash"`
+	ConnectorExecutionRef  string `json:"connector_execution_ref"`
+	ProofSessionRef        string `json:"proof_session_ref,omitempty"`
+	IntentRef              string `json:"intent_ref"`
+	EffectRef              string `json:"effect_ref,omitempty"`
+	ReconciliationRef      string `json:"reconciliation_ref,omitempty"`
+	DispositionReceiptHash string `json:"disposition_receipt_hash,omitempty"`
+	EvidencePackRef        string `json:"evidence_pack_ref"`
+	EvidencePackHash       string `json:"evidence_pack_hash"`
 
 	KernelTrustRootID string    `json:"kernel_trust_root_id"`
 	SigningKeyRef     string    `json:"signing_key_ref"`
@@ -267,6 +272,9 @@ func (r EffectCloseReceipt) Validate() error {
 	}
 	if r.ReconciliationRef != "" && (!isApprovalGrantToken(r.ReconciliationRef) || len(r.ReconciliationRef) > 512) {
 		return effectCloseReceiptInvalid("reconciliation_ref must be a bounded token")
+	}
+	if r.DispositionReceiptHash != "" && !isApprovalGrantSHA256(r.DispositionReceiptHash) {
+		return effectCloseReceiptInvalid("disposition_receipt_hash must be a lowercase sha256 reference")
 	}
 	if r.ProofSessionRef != "" && (!isApprovalGrantToken(r.ProofSessionRef) || len(r.ProofSessionRef) > 512) {
 		return effectCloseReceiptInvalid("proof_session_ref must be a bounded token")
@@ -333,7 +341,8 @@ func (r EffectCloseReceipt) ValidateAcknowledgement(a ConnectorEffectAcknowledge
 		r.Outcome != a.Outcome || r.IdempotencyKeyHash != a.IdempotencyKeyHash ||
 		r.EffectHash != a.EffectHash || r.ResponseHash != a.ResponseHash ||
 		r.ConnectorExecutionRef != a.ConnectorExecutionRef || r.ProofSessionRef != a.ProofSessionRef || r.IntentRef != a.IntentRef ||
-		r.EffectRef != a.EffectRef || r.ReconciliationRef != a.ReconciliationRef {
+		r.EffectRef != a.EffectRef || r.ReconciliationRef != a.ReconciliationRef ||
+		r.DispositionReceiptHash != a.DispositionReceiptHash {
 		return effectCloseReceiptInvalid("receipt does not match connector acknowledgement")
 	}
 	if r.ClosedAt.Add(EffectCloseMaxClockSkew).Before(a.ObservedAt) {

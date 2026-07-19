@@ -163,7 +163,7 @@ func (s *PostgresStore) Init(ctx context.Context) error {
 	if s.grantVerifier == nil {
 		return fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
 	}
-	if _, err := s.db.ExecContext(ctx, postgresSchema+dispatchAdmissionPostgresSchema+effectReservationPostgresSchema+effectClosurePostgresSchema); err != nil {
+	if _, err := s.db.ExecContext(ctx, postgresSchema+dispatchAdmissionPostgresSchema+effectReservationPostgresSchema+effectClosurePostgresSchema+effectDispositionPostgresSchema); err != nil {
 		return fmt.Errorf("initialize approval ceremony schema: %w", err)
 	}
 	return nil

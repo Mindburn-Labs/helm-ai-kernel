@@ -50,6 +50,7 @@
     "response_hash": { "$ref": "#/$defs/sha256" },
     "effect_ref": { "$ref": "#/$defs/token" },
     "reconciliation_ref": { "$ref": "#/$defs/token" },
+    "disposition_receipt_hash": { "$ref": "#/$defs/sha256" },
     "issuer_id": { "$ref": "#/$defs/token" },
     "signing_key_ref": { "$ref": "#/$defs/token" },
     "algorithm": { "const": "ed25519" },

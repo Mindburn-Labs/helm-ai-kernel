@@ -534,6 +534,10 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 	if err := ValidateLaunchRouteQuote(quote); err != nil {
 		return err
 	}
+	quoteRetrievedAt, _ := time.Parse(time.RFC3339Nano, quote.RetrievedAt)
+	if quoteRetrievedAt.After(now) {
+		return errors.New("launch route quote was retrieved in the future")
+	}
 	if err := ValidateLaunchResourceGraph(resources); err != nil {
 		return err
 	}
@@ -605,6 +609,10 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 		}
 		if err := ValidateLaunchProviderCapabilityProfile(profile); err != nil {
 			return err
+		}
+		profileRetrievedAt, _ := time.Parse(time.RFC3339Nano, profile.RetrievedAt)
+		if profileRetrievedAt.After(now) {
+			return fmt.Errorf("launch route placement %s provider profile was retrieved in the future", placement.PlacementID)
 		}
 		profileHash, _ := DeriveLaunchProviderCapabilityProfileHash(profile)
 		if placement.ProviderProfileRef != profile.ProfileID || !launchConstantEqual(placement.ProviderProfileHash, profileHash) || placement.ProviderID != profile.ProviderID || placement.ProviderConnectorID != profile.ConnectorID || !launchConstantEqual(placement.ProviderConnectorContractHash, profile.ConnectorContractHash) {
@@ -695,7 +703,7 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 	if err := validateLaunchResourceAssignments(resources, graph, placements, nodePlacement); err != nil {
 		return err
 	}
-	if err := validateLaunchQuotePlacements(quote, route.Placements, profilesByPlacement, constraints, resolver, route.TenantID, route.WorkspaceID); err != nil {
+	if err := validateLaunchQuotePlacements(quote, route.Placements, profilesByPlacement, constraints, resolver, route.TenantID, route.WorkspaceID, now); err != nil {
 		return err
 	}
 	return nil
@@ -811,7 +819,7 @@ func validateLaunchResourceAssignments(resources LaunchResourceGraph, graph Laun
 	return nil
 }
 
-func validateLaunchQuotePlacements(quote LaunchRouteQuote, placements []LaunchRoutePlacement, profilesByPlacement map[string]LaunchProviderCapabilityProfile, constraints LaunchConstraintSet, resolver LaunchRouteArtifactResolver, tenantID, workspaceID string) error {
+func validateLaunchQuotePlacements(quote LaunchRouteQuote, placements []LaunchRoutePlacement, profilesByPlacement map[string]LaunchProviderCapabilityProfile, constraints LaunchConstraintSet, resolver LaunchRouteArtifactResolver, tenantID, workspaceID string, now time.Time) error {
 	if len(quote.PlacementCosts) != len(placements) {
 		return errors.New("launch route quote placement count does not match route")
 	}
@@ -848,6 +856,9 @@ func validateLaunchQuotePlacements(quote LaunchRouteQuote, placements []LaunchRo
 		snapshotExpiry, _ := time.Parse(time.RFC3339Nano, snapshot.ExpiresAt)
 		quoteRetrieved, _ := time.Parse(time.RFC3339Nano, quote.RetrievedAt)
 		quoteExpiry, _ := time.Parse(time.RFC3339Nano, quote.ExpiresAt)
+		if snapshotRetrieved.After(now) {
+			return fmt.Errorf("launch route quote placement %s offer snapshot was retrieved in the future", line.PlacementID)
+		}
 		if quoteRetrieved.Before(snapshotRetrieved) || quoteExpiry.After(snapshotExpiry) {
 			return fmt.Errorf("launch route quote placement %s outlives or predates its offer evidence", line.PlacementID)
 		}

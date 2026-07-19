@@ -1,8 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.org/schemas/effects/effect_type_catalog.schema.json",
+  "version": "1.1.0-alpha.1",
   "title": "EffectTypeCatalog",
-  "description": "Per Section 8 - Canonical effect types with idempotency rules",
+  "description": "Wire shape and registered vocabulary for effect catalogs. Vocabulary membership is not execution authority; runtime catalogs and policy boundaries maintain explicit allowlists.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -52,9 +53,36 @@
               "EXTERNAL_API_CALL",
               "CODE_EXEC",
               "SHELL_EXEC",
-              "NETWORK_EXFIL"
+              "NETWORK_EXFIL",
+              "INFRA_DESTROY",
+              "ENV_RECREATE",
+              "PROTECTED_INFRA_STRUCTURE",
+              "CI_CREDENTIAL_ACCESS",
+              "SOFTWARE_PUBLISH",
+              "AGENT_INVOKE_PRIVILEGED",
+              "AGENT_IDENTITY_ISOLATION",
+              "DATA_EGRESS",
+              "TUNNEL_START",
+              "CLOUD_COMPUTE_BUDGET",
+              "SEND_EMAIL",
+              "SEND_CHAT_MESSAGE",
+              "CREATE_CAL_EVENT",
+              "UPDATE_DOC",
+              "CREATE_TASK",
+              "COMMENT_TICKET",
+              "SCREEN_CANDIDATE",
+              "REQUEST_PURCHASE",
+              "EXECUTE_PAYMENT",
+              "CALL_WEBHOOK",
+              "RUN_SANDBOXED_CODE",
+              "PROVIDER_PROVISION",
+              "DEPLOY_PRODUCTION_ACTIVATE",
+              "SPEND_AUTHORIZE",
+              "PROVIDER_ROLLBACK",
+              "PROVIDER_TEARDOWN",
+              "COMPANY_ARTIFACT_UPDATE"
             ],
-            "description": "Canonical effect type identifier (per HELM-RFC-0002)"
+            "description": "Registered effect identifier (per HELM-RFC-0002). Preview identifiers remain non-executable until policy-boundary promotion."
           },
           "name": {
             "type": "string",
@@ -63,11 +91,29 @@
           "description": {
             "type": "string"
           },
+          "status": {
+            "type": "string",
+            "enum": [
+              "preview",
+              "normative",
+              "deprecated"
+            ],
+            "description": "Lifecycle status. Preview entries must not be admitted by production policy boundaries."
+          },
+          "base_effect_types": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Established effects that must all be evaluated for a composite effect."
+          },
           "idempotency": {
             "type": "object",
             "required": [
-              "strategy",
-              "key_composition"
+              "strategy"
             ],
             "properties": {
               "strategy": {
@@ -96,7 +142,8 @@
                 "enum": [
                   "reject",
                   "return_existing",
-                  "log_and_skip"
+                  "log_and_skip",
+                  "reconcile_then_return_existing"
                 ],
                 "description": "Action on duplicate detection"
               }
@@ -161,7 +208,7 @@
               "quorum"
             ],
             "default": "none",
-            "description": "Default approval requirement"
+            "description": "Risk-derived minimum/default only. Authority Court remains the sole authorization source."
           },
           "requires_evidence": {
             "type": "boolean",
@@ -173,9 +220,35 @@
             "default": false,
             "description": "Whether compensation strategy must be defined"
           },
+          "compensation_effect_type": {
+            "type": "string",
+            "description": "Effect type used for compensation when one exists."
+          },
+          "compensation_authorization": {
+            "type": "string",
+            "description": "Whether compensation needs fresh or narrowly pre-authorized authority."
+          },
+          "input_schema": {
+            "type": "string",
+            "description": "JSON Schema reference for the effect-specific canonical input."
+          },
+          "authorization_envelope_schema": {
+            "type": "string",
+            "description": "JSON Schema reference for the verdict and single-use permit envelope."
+          },
           "receipt_schema": {
             "type": "string",
             "description": "JSON Schema reference for effect receipt"
+          },
+          "connector_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exact connector identity bound by the authorization envelope."
+          },
+          "action_urn": {
+            "type": "string",
+            "pattern": "^urn:helm:",
+            "description": "Exact action identifier admitted by the effect authorization envelope."
           },
           "preflight_required": {
             "type": "boolean",

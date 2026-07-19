@@ -11,10 +11,13 @@ import (
 
 // mockPolicy is a test policy evaluator that returns configurable verdicts per step.
 type mockPolicy struct {
-	verdicts map[string]contracts.Verdict // stepID → verdict
+	verdicts      map[string]contracts.Verdict // stepID → verdict
+	evaluateCalls int
+	intentCalls   int
 }
 
 func (m *mockPolicy) EvaluateStep(_ context.Context, step *contracts.PlanStep, _ string) (*contracts.DecisionRecord, error) {
+	m.evaluateCalls++
 	verdict, ok := m.verdicts[step.ID]
 	if !ok {
 		verdict = contracts.VerdictAllow
@@ -27,6 +30,7 @@ func (m *mockPolicy) EvaluateStep(_ context.Context, step *contracts.PlanStep, _
 }
 
 func (m *mockPolicy) IssueIntent(_ context.Context, decision *contracts.DecisionRecord, step *contracts.PlanStep) (*contracts.AuthorizedExecutionIntent, error) {
+	m.intentCalls++
 	if decision.Verdict != string(contracts.VerdictAllow) {
 		return nil, fmt.Errorf("cannot issue intent for %s", decision.Verdict)
 	}
@@ -34,6 +38,30 @@ func (m *mockPolicy) IssueIntent(_ context.Context, decision *contracts.Decision
 		ID:         "intent-" + step.ID,
 		DecisionID: decision.ID,
 	}, nil
+}
+
+func TestEvaluate_RejectsLaunchPreviewBeforePolicyOrIntent(t *testing.T) {
+	for _, preview := range contracts.LaunchMissionEffectCatalogPreview().EffectTypes {
+		policy := &mockPolicy{}
+		eval := effectgraph.NewGraphEvaluator(policy)
+		result, err := eval.Evaluate(context.Background(), &effectgraph.EvaluationRequest{
+			Plan:  singleNodeDAG("preview", preview.TypeID),
+			Actor: "test-user",
+		})
+		if err != nil {
+			t.Fatalf("%s evaluation failed: %v", preview.TypeID, err)
+		}
+		if policy.evaluateCalls != 0 || policy.intentCalls != 0 {
+			t.Errorf("%s reached policy=%d intent=%d", preview.TypeID, policy.evaluateCalls, policy.intentCalls)
+		}
+		if len(result.AllowedSteps) != 0 || len(result.DeniedSteps) != 1 {
+			t.Errorf("%s result allowed=%v denied=%v", preview.TypeID, result.AllowedSteps, result.DeniedSteps)
+		}
+		verdict := result.Verdicts["preview"]
+		if verdict == nil || verdict.Intent != nil || verdict.Decision == nil || verdict.Decision.ReasonCode != "PREVIEW_EFFECT_NOT_EXECUTABLE" {
+			t.Errorf("%s did not produce a fail-closed preview verdict: %+v", preview.TypeID, verdict)
+		}
+	}
 }
 
 func linearDAG() *contracts.PlanSpec {

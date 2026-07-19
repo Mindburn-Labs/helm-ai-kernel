@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/company_artifact_update.v1.json",
+  "version": "1.1.0-alpha.1",
+  "title": "Company Artifact Update Effect Input (Preview)",
+  "description": "Non-executable preview input for a compare-and-set company-state update backed by a reconciled Launch Mission result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "effect_id",
+    "tenant_id",
+    "workspace_id",
+    "mission_id",
+    "effect_ordinal",
+    "artifact_id",
+    "company_state_version",
+    "previous_hash",
+    "new_hash",
+    "generated_spec_hash",
+    "launch_result_hash",
+    "reconciliation_receipt_hash",
+    "source_receipt_ref",
+    "source_receipt_hash",
+    "evidence_pack_ref",
+    "evidence_pack_hash",
+    "plan_hash",
+    "connector_contract_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "launch_effect_input.v1"
+    },
+    "effect_id": {
+      "const": "COMPANY_ARTIFACT_UPDATE"
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mission_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "effect_ordinal": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "company_state_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "previous_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "new_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "generated_spec_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "launch_result_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "reconciliation_receipt_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "source_receipt_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_receipt_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "evidence_pack_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_pack_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "plan_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "connector_contract_hash": {
+      "$ref": "#/$defs/hash"
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    }
+  },
+  "x-helm": {
+    "status": "preview",
+    "execution_enabled": false,
+    "category": "launch",
+    "risk_class": "E2",
+    "approval_level": "single_human",
+    "reversible": true,
+    "reconciliation_required": true,
+    "compare_and_set_required": true,
+    "base_effect_types": [
+      "DATA_WRITE"
+    ]
+  }
+}

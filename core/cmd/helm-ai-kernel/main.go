@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -117,7 +118,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	default:
 		if args[1][0] == '-' {
-			startServer() // Default backward compat behavior for flags passed without 'server'
+			if err := startServer(); err != nil { // Default backward compat behavior for flags passed without 'server'.
+				_, _ = fmt.Fprintf(stderr, "Error: start server: %v\n", err)
+				return 1
+			}
 			return 0
 		}
 		_, _ = fmt.Fprintf(stderr, "Unknown command: %s\n", args[1])
@@ -140,18 +144,46 @@ const (
 )
 
 //nolint:gocognit,gocyclo
-func runServer() {
-	runServerWithOptions(serverOptions{Mode: "server", Stdout: os.Stdout, Stderr: os.Stderr})
+func runServer() error {
+	return runServerWithOptions(serverOptions{Mode: "server", Stdout: os.Stdout, Stderr: os.Stderr})
 }
 
 //nolint:gocognit,gocyclo
-func runServerWithOptions(opts serverOptions) {
+func runServerWithOptions(opts serverOptions) error {
+	// Consume the Desktop launch secret before any optional runtime setup can
+	// spawn a subprocess. The route retains only the in-memory copy below.
+	desktopReadyToken := takeDesktopReadyToken()
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
 	}
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
 	}
+	// SEC: Default to localhost to prevent accidental network exposure.
+	// HELM_BIND_ADDR=0.0.0.0 remains an explicit opt-in for server mode.
+	bindAddr := opts.BindAddr
+	if bindAddr == "" {
+		bindAddr = "127.0.0.1"
+	}
+	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" && opts.BindAddr == "" {
+		bindAddr = envBind
+	}
+	port := opts.Port
+	if port == 0 {
+		port = 8080
+	}
+	if envPort := os.Getenv("HELM_PORT"); envPort != "" && opts.Port == 0 {
+		if p, err := strconv.Atoi(envPort); err == nil {
+			port = p
+		}
+	}
+	apiAddr := net.JoinHostPort(bindAddr, strconv.Itoa(port))
+	apiListener, listenErr := net.Listen("tcp", apiAddr)
+	if listenErr != nil {
+		return fmt.Errorf("bind API server at %s: %w", apiAddr, listenErr)
+	}
+	defer func() { _ = apiListener.Close() }()
+
 	fmt.Fprintf(opts.Stdout, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
@@ -401,32 +433,16 @@ func runServerWithOptions(opts serverOptions) {
 		}
 	}
 
-	// Start API Server
-	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).
-	// Set HELM_BIND_ADDR=0.0.0.0 to listen on all interfaces when intentionally exposing.
-	bindAddr := opts.BindAddr
-	if bindAddr == "" {
-		bindAddr = "127.0.0.1"
-	}
-	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" && opts.BindAddr == "" {
-		bindAddr = envBind
-	}
-	port := opts.Port
-	if port == 0 {
-		port = 8080
-	}
-	if envPort := os.Getenv("HELM_PORT"); envPort != "" && opts.Port == 0 {
-		if p, err := strconv.Atoi(envPort); err == nil {
-			port = p
-		}
-	}
+	// Start API Server. The listener is bound synchronously above so OnReady
+	// cannot advertise a Kernel endpoint that failed to claim its port.
 	mux := http.NewServeMux()
+	registerDesktopReadyRoute(mux, desktopReadyToken)
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}
 	rateLimiter := buildRuntimeRateLimiter()
 	server := &http.Server{
-		Addr: fmt.Sprintf("%s:%d", bindAddr, port),
+		Addr: apiAddr,
 		Handler: helmauth.SecurityHeaders(
 			helmauth.CORSMiddleware(nil)(
 				helmauth.RequestIDMiddleware(
@@ -444,7 +460,7 @@ func runServerWithOptions(opts serverOptions) {
 	}
 	go func() {
 		log.Printf("[helm] API server: %s:%d", bindAddr, port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.Serve(apiListener); err != nil && err != http.ErrServerClosed {
 			logger.Error("API server failed", "error", err)
 		}
 	}()
@@ -541,6 +557,7 @@ func runServerWithOptions(opts serverOptions) {
 		}
 	}
 	log.Println("[helm] shutdown complete")
+	return nil
 }
 
 func servicesInitFailureIsFatal() bool {

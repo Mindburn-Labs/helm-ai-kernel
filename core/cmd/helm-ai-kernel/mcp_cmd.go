@@ -1,3 +1,5 @@
+// quantum_posture: MCP command metadata describes existing Ed25519 receipt
+// evidence only; this CLI layer does not introduce a cryptographic control.
 package main
 
 import (
@@ -114,11 +116,13 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 		transport string
 		port      int
 		authMode  string
+		dataDir   string
 	)
 
 	cmd.StringVar(&transport, "transport", "stdio", "Transport: stdio, http")
 	cmd.IntVar(&port, "port", 9100, "Port for HTTP transport")
 	cmd.StringVar(&authMode, "auth", "none", "Auth mode: none, static-header, oauth")
+	cmd.StringVar(&dataDir, "data-dir", "data", "Data directory for local MCP signing state")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -130,13 +134,13 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "Error: stdio transport only supports --auth none")
 			return 2
 		}
-		if err := serveLocalMCPStdio(os.Stdin, stdout); err != nil {
+		if err := serveLocalMCPStdioWithDataDir(os.Stdin, stdout, dataDir); err != nil {
 			fmt.Fprintf(stderr, "Error: MCP stdio server failed: %v\n", err)
 			return 2
 		}
 		return 0
 	case "http":
-		server, err := newLocalMCPHTTPServer(port, authMode)
+		server, err := newLocalMCPHTTPServerWithDataDir(port, authMode, dataDir)
 		if err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 2

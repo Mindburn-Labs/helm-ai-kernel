@@ -1,7 +1,7 @@
 ---
 title: Scoped Emergency-Stop Fence
 status: internal-foundation
-last_reviewed: 2026-07-11
+last_reviewed: 2026-07-17
 ---
 
 <!-- quantum_posture: FENCE command verification is raw classical Ed25519;
@@ -63,6 +63,17 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
   is enabled, because it cannot establish a tenant/workspace binding. It may
   only return after an authenticated adapter contract binds that scope.
 - The fence covers new governed dispatches only.
+- When approval-grant consumption is enabled on PostgreSQL, FENCE and
+  `GRANT_ISSUED -> CONSUMED` share one tenant/workspace advisory transaction
+  lock. FENCE-first rejects consumption; consumption-first only establishes
+  that the signed consumption record committed before the later FENCE. The
+  separate connector dispatch may not have begun and still needs a final
+  data-plane near-effect fence check.
+- Approval consumption response-loss recovery remains a read-only evidence
+  operation after FENCE: it returns the existing record and creates no new
+  authority. The current internal Data Plane can still use any valid persisted
+  consumption record as dispatch input, so this Kernel change is merge/deploy
+  blocked on a final same-scope near-effect Data Plane fence gate.
 - It does not revoke existing permits, cancel in-flight work, stop unmanaged
   adapters, or implement release/unfence. Those remain separate contracts.
 

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"strings"
 	"testing"
 
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -46,9 +48,24 @@ func TestApprovalConsumptionConfigIsExplicitAndFailClosed(t *testing.T) {
 
 func TestApprovalConsumptionRuntimeDisabledDoesNotRequireDatabase(t *testing.T) {
 	approvalConsumptionTestEnv(t)
-	runtime, err := newApprovalConsumptionRuntime(context.Background(), nil, "sqlite", nil)
+	runtime, err := newApprovalConsumptionRuntime(context.Background(), nil, "sqlite", nil, nil)
 	if err != nil || runtime != nil {
 		t.Fatalf("disabled runtime=%v err=%v", runtime, err)
+	}
+}
+
+func TestApprovalConsumptionRuntimeRequiresEmergencyStopCoordination(t *testing.T) {
+	approvalConsumptionTestEnv(t)
+	t.Setenv(approvalConsumptionEnabledEnv, "1")
+	t.Setenv(approvalConsumerJWKSURLEnv, "https://identity.example.test/.well-known/jwks.json")
+	t.Setenv(approvalConsumerIssuerEnv, "https://identity.example.test")
+	t.Setenv(approvalConsumerAudienceEnv, "helm-data-plane")
+	t.Setenv(approvalConsumerResourceEnv, "https://kernel.example.test/internal/v1/approval-grants")
+	t.Setenv(approvalSigningKeyRefEnv, "kernel-approval-key-1")
+	t.Setenv(approvalKernelTrustRootIDEnv, "kernel-root-1")
+	_, err := newApprovalConsumptionRuntime(context.Background(), new(sql.DB), "postgres", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "emergency-stop scope coordination") {
+		t.Fatalf("missing stop coordination error = %v", err)
 	}
 }
 

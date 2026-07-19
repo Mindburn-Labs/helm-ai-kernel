@@ -30,9 +30,10 @@ const (
 )
 
 var (
-	ErrInvalidRecord      = errors.New("approval ceremony record invalid")
-	ErrNotFound           = errors.New("approval ceremony not found")
-	ErrTransitionConflict = errors.New("approval ceremony transition conflict")
+	ErrInvalidRecord       = errors.New("approval ceremony record invalid")
+	ErrNotFound            = errors.New("approval ceremony not found")
+	ErrTransitionConflict  = errors.New("approval ceremony transition conflict")
+	ErrEmergencyStopFenced = errors.New("approval ceremony scope is emergency-stop fenced")
 )
 
 // Record is the Kernel-owned durable approval lifecycle. Client submissions

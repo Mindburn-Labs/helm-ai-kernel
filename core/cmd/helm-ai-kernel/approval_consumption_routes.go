@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
 
@@ -23,7 +25,12 @@ const (
 	approvalGrantConsumePath            = "/internal/v1/approval-grants/consume"
 	approvalGrantConsumptionRecoverPath = "/internal/v1/approval-grants/recover"
 	approvalGrantConsumptionMaxBody     = 32 << 10
+	approvalConsumptionReasonHeader     = "X-Helm-Reason-Code"
+	approvalConsumptionFencedReason     = "EMERGENCY_STOP_FENCED"
+	approvalConsumptionUnverifiedReason = "EMERGENCY_STOP_UNVERIFIED"
 )
+
+var errApprovalConsumptionStopUnverified = errors.New("approval consumption emergency-stop status is unverified")
 
 type approvalGrantConsumer interface {
 	ConsumeGrant(context.Context, string, string, string, string) (approvalceremony.Record, error)
@@ -37,6 +44,7 @@ type approvalConsumerTokenValidator interface {
 type approvalConsumptionRuntime struct {
 	consumer    approvalGrantConsumer
 	validator   approvalConsumerTokenValidator
+	stops       kernel.ScopedStopReader
 	audience    string
 	maxTokenTTL time.Duration
 }
@@ -73,7 +81,7 @@ func registerApprovalGrantConsumptionRoutes(mux *http.ServeMux, runtime *approva
 
 func (runtime *approvalConsumptionRuntime) protect(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if runtime == nil || runtime.consumer == nil || runtime.validator == nil ||
+		if runtime == nil || runtime.consumer == nil || runtime.validator == nil || runtime.stops == nil ||
 			!validWorkloadClaim(runtime.audience) || runtime.maxTokenTTL <= 0 {
 			api.WriteError(w, http.StatusServiceUnavailable, "Approval grant consumer unavailable", "workload authentication is not configured")
 			return
@@ -140,6 +148,10 @@ func (runtime *approvalConsumptionRuntime) handle(recoverOnly bool) http.Handler
 				r.Context(), request.ApprovalID, request.GrantID, request.GrantHash, request.Nonce,
 			)
 		} else {
+			if err := runtime.requireUnfencedConsumerScope(r.Context()); err != nil {
+				writeApprovalConsumptionError(w, err)
+				return
+			}
 			record, err = runtime.consumer.ConsumeGrant(
 				r.Context(), request.ApprovalID, request.GrantID, request.GrantHash, request.Nonce,
 			)
@@ -166,6 +178,23 @@ func (runtime *approvalConsumptionRuntime) handle(recoverOnly bool) http.Handler
 		w.Header().Set("X-Helm-Contract-Status", "internal_non_production")
 		_ = json.NewEncoder(w).Encode(response)
 	}
+}
+
+func (runtime *approvalConsumptionRuntime) requireUnfencedConsumerScope(ctx context.Context) error {
+	identity, err := (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: verified workload scope is absent", errApprovalConsumptionStopUnverified)
+	}
+	_, fenced, err := runtime.stops.IsFenced(ctx, kernel.StopScope{
+		TenantID: identity.TenantID, WorkspaceID: identity.WorkspaceID,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: scoped stop reader failed", errApprovalConsumptionStopUnverified)
+	}
+	if fenced {
+		return approvalceremony.ErrEmergencyStopFenced
+	}
+	return nil
 }
 
 func decodeApprovalGrantConsumptionRequest(w http.ResponseWriter, r *http.Request) (approvalGrantConsumptionRequest, error) {
@@ -196,6 +225,14 @@ func writeApprovalConsumptionError(w http.ResponseWriter, err error) {
 		api.WriteError(w, http.StatusConflict, "Approval grant unavailable", "grant state, tuple, or expiry does not permit this operation")
 	case errors.Is(err, approvalceremony.ErrConsumerUnavailable):
 		api.WriteForbidden(w, "Workload identity does not match the signed grant")
+	case errors.Is(err, approvalceremony.ErrEmergencyStopFenced):
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set(approvalConsumptionReasonHeader, approvalConsumptionFencedReason)
+		api.WriteError(w, http.StatusConflict, "Approval grant fenced", approvalConsumptionFencedReason)
+	case errors.Is(err, errApprovalConsumptionStopUnverified):
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set(approvalConsumptionReasonHeader, approvalConsumptionUnverifiedReason)
+		api.WriteError(w, http.StatusServiceUnavailable, "Approval grant consumer unavailable", approvalConsumptionUnverifiedReason)
 	default:
 		api.WriteError(w, http.StatusServiceUnavailable, "Approval grant consumer unavailable", "durable grant authority rejected the operation")
 	}

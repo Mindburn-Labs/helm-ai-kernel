@@ -90,27 +90,36 @@ func consumeGrant(ctx context.Context, store ceremonyStore, consumer ConsumerIde
 	if err := record.Grant.ValidateAt(now); err != nil {
 		return Record{}, fmt.Errorf("%w: signed grant is inactive: %v", ErrTransitionConflict, err)
 	}
-	grant := record.Grant
-	consumption, err := (contracts.ApprovalGrantConsumption{
-		SchemaVersion: contracts.ApprovalGrantConsumptionSchemaV1, ContractVersion: contracts.ApprovalGrantConsumptionContractV1,
-		ApprovalID: grant.ApprovalID, GrantID: grant.GrantID, GrantHash: grant.GrantHash,
-		TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, Audience: grant.Audience, ConsumedBy: identity.Subject,
-		PackID: grant.PackID, PackVersion: grant.PackVersion, PackManifestHash: grant.PackManifestHash, Action: grant.Action,
-		IntentHash: grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
-		PolicyVersion: grant.PolicyVersion, PolicyEpoch: grant.PolicyEpoch, PolicyHash: grant.PolicyHash,
-		ServerIdentity: grant.ServerIdentity, KernelTrustRootID: grant.KernelTrustRootID, SigningKeyRef: grant.SigningKeyRef,
-		GrantIssuedAt: grant.IssuedAt, GrantExpiresAt: grant.ExpiresAt, ConsumedAt: now,
-	}).Seal()
-	if err != nil {
-		return Record{}, fmt.Errorf("seal approval grant consumption: %w", err)
-	}
-	signature, err := SignApprovalGrantConsumption(consumption, signer)
-	if err != nil {
-		return Record{}, err
+	sealConsumption := func(grant contracts.ApprovalGrant, consumedAt time.Time) (contracts.ApprovalGrantConsumption, string, string, error) {
+		if grant.GrantID != grantID || grant.GrantHash != grantHash || grant.Nonce != nonce ||
+			grant.TenantID != identity.TenantID || grant.WorkspaceID != identity.WorkspaceID || grant.Audience != identity.Audience {
+			return contracts.ApprovalGrantConsumption{}, "", "", ErrTransitionConflict
+		}
+		if err := grant.ValidateAt(consumedAt); err != nil {
+			return contracts.ApprovalGrantConsumption{}, "", "", fmt.Errorf("%w: signed grant is inactive: %v", ErrTransitionConflict, err)
+		}
+		consumption, err := (contracts.ApprovalGrantConsumption{
+			SchemaVersion: contracts.ApprovalGrantConsumptionSchemaV1, ContractVersion: contracts.ApprovalGrantConsumptionContractV1,
+			ApprovalID: grant.ApprovalID, GrantID: grant.GrantID, GrantHash: grant.GrantHash,
+			TenantID: grant.TenantID, WorkspaceID: grant.WorkspaceID, Audience: grant.Audience, ConsumedBy: identity.Subject,
+			PackID: grant.PackID, PackVersion: grant.PackVersion, PackManifestHash: grant.PackManifestHash, Action: grant.Action,
+			IntentHash: grant.IntentHash, EffectHash: grant.EffectHash, PlanHash: grant.PlanHash,
+			PolicyVersion: grant.PolicyVersion, PolicyEpoch: grant.PolicyEpoch, PolicyHash: grant.PolicyHash,
+			ServerIdentity: grant.ServerIdentity, KernelTrustRootID: grant.KernelTrustRootID, SigningKeyRef: grant.SigningKeyRef,
+			GrantIssuedAt: grant.IssuedAt, GrantExpiresAt: grant.ExpiresAt, ConsumedAt: consumedAt,
+		}).Seal()
+		if err != nil {
+			return contracts.ApprovalGrantConsumption{}, "", "", fmt.Errorf("seal approval grant consumption: %w", err)
+		}
+		signature, err := SignApprovalGrantConsumption(consumption, signer)
+		if err != nil {
+			return contracts.ApprovalGrantConsumption{}, "", "", err
+		}
+		return consumption, GrantSignatureEd25519, signature, nil
 	}
 	return store.consumeGrant(
 		ctx, identity.TenantID, identity.WorkspaceID, approvalID,
-		grantID, grantHash, nonce, consumption, GrantSignatureEd25519, signature, now,
+		grantID, grantHash, nonce, sealConsumption, now,
 	)
 }
 

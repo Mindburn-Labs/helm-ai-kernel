@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-11T23:30:34Z
-# Commit: a2c330a74d2c933074d2f6e002d05d5b06591437
+# Generated: 2026-07-19T13:15:09Z
+# Commit: 0d7f25ada38f205461dabec3d29c1799e33efb46
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -105,7 +105,7 @@ aa584d8a4c9e1a54d30bba5356977c6eb9359adaf1cfdfefb4eb9ff54a2a4e32  core/pkg/kerne
 e868b050de38c5e66bac05e9fd5ff59618d83b0672059e2b1ff8e5e8b52e3329  core/pkg/kernel/retry/retry_test.go
 b9f2e3d11d536db8973b9f5b99a79f2aded4a7ce88b553ea34a3bffc8a36fcdd  core/pkg/kernel/scheduler.go
 65ed2f0e5adeb85221f9917143ad93a9a609557b350d6a8c32b5bf3292cf239f  core/pkg/kernel/scheduler_additional_test.go
-1e1571608de9cccf5e54d2cd59f64c1f2b5848085dbe586075e654cdb4f069ca  core/pkg/kernel/scoped_stop.go
+56156292b698de38988e109ae16ae36fa6a1570002db82177eb1142ae90889b0  core/pkg/kernel/scoped_stop.go
 945af2d9c71c4d9240b6276f9e62b67483c1f2777c881ea140fae7e78005bade  core/pkg/kernel/scoped_stop_catalog_vector_test.go
 cde2c7974c678e5e154217e8ed5aa8217221adb48164691ea53e9ad12af5e9e4  core/pkg/kernel/scoped_stop_test.go
 3fdfb2ec3980fb3f499d48f62ae2959f603f451ec27d1890303fe7f43efb3a27  core/pkg/kernel/secret_ref.go
@@ -125,8 +125,14 @@ bb43d171471ec8a458f26b44374e116becb05fb1a99476d1c0ef30f033ebe98d  core/pkg/contr
 72ae12f46595d86bc220f1c0862e9bc22340724587fa5d0e4100be9e623d531a  core/pkg/contracts/agent.go
 3b6ad36ecd7e4eb74fc82fd57106282292bad4792e88db91a5f7d0321df2195b  core/pkg/contracts/agent_run_receipt.go
 fb8ca705da6f96643da254a1c9cd61a9c15d78bd8517eee57b0e93299a0935d1  core/pkg/contracts/approval.go
+ecaa6140fb21a6116f7cc242f6cf9aa833e9078defa714b64029003e4a65eb7a  core/pkg/contracts/approval_assertion.go
+260c051bc7d06cffc8ed9809c044143623ae65929535dea2c08629cf4539bd89  core/pkg/contracts/approval_assertion_test.go
 84f49d46862d49f31dac979e691fd9bda9f09a3ff59c3ffe0399616047c53a49  core/pkg/contracts/approval_binding.go
 b8b80ba2979df721f2bca2d7d38551a1d120f5403b2e2c74d2e9f3322556441b  core/pkg/contracts/approval_binding_test.go
+def59a057d1f59792abcca4f67f2e05ac2f60f3e1fa91448d0e3f14cbfaa0378  core/pkg/contracts/approval_grant.go
+efd49fe0effd23e9259c3a697a50d5ffb591ddad003d5d6e5de5a9711c869f3e  core/pkg/contracts/approval_grant_consumption.go
+16ebf03e7f7b40c804e5cee8994cef56f9ea67a9468f5587346db433d9900c6e  core/pkg/contracts/approval_grant_consumption_test.go
+7d02911e2ce5de0599afbbb37cdc9ea4e554855cf4aea3ec9f9b49a1d8443013  core/pkg/contracts/approval_grant_test.go
 d6d0443f145537c187fe1dd6010632541a1139a589a394060ba42a66591036c0  core/pkg/contracts/attestation.proto
 a65443797c63eaf591076538f1fb4cddcd578c120db433b5a3b70b6521ba6f6c  core/pkg/contracts/audit.go
 13ca81cd8b0b8e86d1c3f6a2db8eea6f36bc7ca2cdd9034c5bd838520ad0e27f  core/pkg/contracts/autonomy_envelope.go

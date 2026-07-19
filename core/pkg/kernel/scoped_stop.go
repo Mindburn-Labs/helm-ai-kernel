@@ -264,15 +264,32 @@ type ScopedStopReader interface {
 // ScopedStopStore uses the Kernel runtime database (SQLite in local mode,
 // Postgres in production) so fences survive process restart.
 type ScopedStopStore struct {
-	db  *sql.DB
-	now func() time.Time
+	db                 *sql.DB
+	now                func() time.Time
+	postgresScopeLocks bool
 }
 
-func NewScopedStopStore(db *sql.DB, now func() time.Time) *ScopedStopStore {
+type ScopedStopStoreOption func(*ScopedStopStore)
+
+// WithPostgresScopeLocks serializes FENCE with other scope-sensitive
+// transactions, including approval-grant consumption, across Kernel replicas.
+func WithPostgresScopeLocks() ScopedStopStoreOption {
+	return func(store *ScopedStopStore) {
+		store.postgresScopeLocks = true
+	}
+}
+
+func NewScopedStopStore(db *sql.DB, now func() time.Time, options ...ScopedStopStoreOption) *ScopedStopStore {
 	if now == nil {
 		now = time.Now
 	}
-	return &ScopedStopStore{db: db, now: now}
+	store := &ScopedStopStore{db: db, now: now}
+	for _, option := range options {
+		if option != nil {
+			option(store)
+		}
+	}
+	return store
 }
 
 func (s *ScopedStopStore) Init(ctx context.Context) error {
@@ -305,11 +322,84 @@ func (s *ScopedStopStore) Init(ctx context.Context) error {
 	)`); err != nil {
 		return fmt.Errorf("init scoped emergency-stop fences: %w", err)
 	}
+	if s.postgresScopeLocks {
+		if _, err := s.db.ExecContext(ctx, `
+			ALTER TABLE emergency_stop_fences ENABLE ROW LEVEL SECURITY;
+			ALTER TABLE emergency_stop_fences FORCE ROW LEVEL SECURITY;
+			DO $$
+			BEGIN
+				IF NOT EXISTS (
+					SELECT 1 FROM pg_policies
+					WHERE schemaname = current_schema()
+					  AND tablename = 'emergency_stop_fences'
+					  AND policyname = 'emergency_stop_fences_scope_isolation'
+				) THEN
+					CREATE POLICY emergency_stop_fences_scope_isolation ON emergency_stop_fences
+						USING (
+							tenant_id = current_setting('app.current_tenant', true)
+							AND workspace_id = current_setting('app.current_workspace', true)
+						)
+						WITH CHECK (
+							tenant_id = current_setting('app.current_tenant', true)
+							AND workspace_id = current_setting('app.current_workspace', true)
+						);
+				END IF;
+			END
+			$$;
+			ALTER POLICY emergency_stop_fences_scope_isolation ON emergency_stop_fences
+				USING (
+					tenant_id = current_setting('app.current_tenant', true)
+					AND workspace_id = current_setting('app.current_workspace', true)
+				)
+				WITH CHECK (
+					tenant_id = current_setting('app.current_tenant', true)
+					AND workspace_id = current_setting('app.current_workspace', true)
+				);`); err != nil {
+			return fmt.Errorf("init scoped emergency-stop fence RLS: %w", err)
+		}
+	}
 	return nil
 }
 
 func (s *ScopedStopStore) Get(ctx context.Context, scope StopScope) (FenceState, bool, error) {
 	if s == nil || s.db == nil {
+		return FenceState{}, false, fmt.Errorf("%w: scoped emergency-stop store unavailable", ErrScopedStopInvalid)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !s.postgresScopeLocks {
+		return getScopedStop(ctx, s.db, scope)
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: true})
+	if err != nil {
+		return FenceState{}, false, fmt.Errorf("begin scoped emergency-stop read transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := setPostgresStopScope(ctx, tx, scope); err != nil {
+		return FenceState{}, false, err
+	}
+	state, found, err := getScopedStop(ctx, tx, scope)
+	if err != nil {
+		return FenceState{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return FenceState{}, false, fmt.Errorf("commit scoped emergency-stop read transaction: %w", err)
+	}
+	return state, found, nil
+}
+
+type scopedStopQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+type scopedStopExecutor interface {
+	scopedStopQueryer
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func getScopedStop(ctx context.Context, queryer scopedStopQueryer, scope StopScope) (FenceState, bool, error) {
+	if queryer == nil {
 		return FenceState{}, false, fmt.Errorf("%w: scoped emergency-stop store unavailable", ErrScopedStopInvalid)
 	}
 	normalizedScope, err := scope.normalized()
@@ -322,7 +412,7 @@ func (s *ScopedStopStore) Get(ctx context.Context, scope StopScope) (FenceState,
 
 	var state FenceState
 	var issuedAt, expiresAt, fencedAt string
-	err = s.db.QueryRowContext(ctx, `SELECT contract_version, audience, key_id, command_id, command_hash, epoch, actor_id, reason, issued_at, expires_at, fenced_at, kernel_key_id, kernel_signer_profile, kernel_public_key, receipt_hash
+	err = queryer.QueryRowContext(ctx, `SELECT contract_version, audience, key_id, command_id, command_hash, epoch, actor_id, reason, issued_at, expires_at, fenced_at, kernel_key_id, kernel_signer_profile, kernel_public_key, receipt_hash
 		FROM emergency_stop_fences
 		WHERE tenant_id = $1 AND workspace_id = $2`, normalizedScope.TenantID, normalizedScope.WorkspaceID).Scan(
 		&state.ContractVersion,
@@ -391,8 +481,69 @@ func (s *ScopedStopStore) Fence(ctx context.Context, command FenceCommand, ackno
 	}
 	commandSum := sha256.Sum256(commandPayload)
 	commandHash := "sha256:" + hex.EncodeToString(commandSum[:])
+	if !s.postgresScopeLocks {
+		return s.fenceWithExecutor(ctx, s.db, normalized, normalizedAcknowledgement, commandHash)
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return FenceState{}, false, fmt.Errorf("begin scoped emergency-stop transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := lockPostgresStopScope(ctx, tx, normalized.Scope()); err != nil {
+		return FenceState{}, false, err
+	}
+	state, replayed, err := s.fenceWithExecutor(ctx, tx, normalized, normalizedAcknowledgement, commandHash)
+	if err != nil {
+		return FenceState{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return FenceState{}, false, fmt.Errorf("commit scoped emergency-stop transaction: %w", err)
+	}
+	return state, replayed, nil
+}
 
-	existing, found, err := s.Get(ctx, normalized.Scope())
+func lockPostgresStopScope(ctx context.Context, tx *sql.Tx, scope StopScope) error {
+	if tx == nil {
+		return fmt.Errorf("%w: scoped emergency-stop transaction unavailable", ErrScopedStopInvalid)
+	}
+	if err := setPostgresStopScope(ctx, tx, scope); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+		scope.TenantID, scope.WorkspaceID,
+	); err != nil {
+		return fmt.Errorf("coordinate scoped emergency-stop fence: %w", err)
+	}
+	return nil
+}
+
+func setPostgresStopScope(ctx context.Context, tx *sql.Tx, scope StopScope) error {
+	if tx == nil {
+		return fmt.Errorf("%w: scoped emergency-stop transaction unavailable", ErrScopedStopInvalid)
+	}
+	normalized, err := scope.normalized()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, normalized.TenantID); err != nil {
+		return fmt.Errorf("set scoped emergency-stop tenant: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_workspace', $1, true)`, normalized.WorkspaceID); err != nil {
+		return fmt.Errorf("set scoped emergency-stop workspace: %w", err)
+	}
+	return nil
+}
+
+func (s *ScopedStopStore) fenceWithExecutor(
+	ctx context.Context,
+	executor scopedStopExecutor,
+	normalized FenceCommand,
+	normalizedAcknowledgement AcknowledgementIdentity,
+	commandHash string,
+) (FenceState, bool, error) {
+
+	existing, found, err := getScopedStop(ctx, executor, normalized.Scope())
 	if err != nil {
 		return FenceState{}, false, err
 	}
@@ -430,7 +581,7 @@ func (s *ScopedStopStore) Fence(ctx context.Context, command FenceCommand, ackno
 		return FenceState{}, false, fmt.Errorf("hash scoped emergency-stop receipt: %w", err)
 	}
 
-	result, err := s.db.ExecContext(ctx, `INSERT INTO emergency_stop_fences (
+	result, err := executor.ExecContext(ctx, `INSERT INTO emergency_stop_fences (
 		tenant_id, workspace_id, contract_version, audience, key_id, command_id, command_hash, epoch, actor_id, reason, issued_at, expires_at, fenced_at, kernel_key_id, kernel_signer_profile, kernel_public_key, receipt_hash
 	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	ON CONFLICT(tenant_id, workspace_id) DO UPDATE SET
@@ -476,7 +627,7 @@ func (s *ScopedStopStore) Fence(ctx context.Context, command FenceCommand, ackno
 		return FenceState{}, false, fmt.Errorf("read scoped emergency-stop fence result: %w", err)
 	}
 	if affected == 0 {
-		current, currentFound, readErr := s.Get(ctx, state.StopScope)
+		current, currentFound, readErr := getScopedStop(ctx, executor, state.StopScope)
 		if readErr != nil {
 			return FenceState{}, false, readErr
 		}

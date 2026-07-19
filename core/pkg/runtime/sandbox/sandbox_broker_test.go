@@ -174,12 +174,18 @@ func testVerdict() *effectgraph.NodeVerdict {
 func authorizedVerdict(t *testing.T, execLease *lease.ExecutionLease, workload *sandbox_runtime.SandboxWorkload) *effectgraph.NodeVerdict {
 	t.Helper()
 	verdict := testVerdict()
-	authorization, err := sandbox_runtime.BuildSandboxExecutionAuthorization(execLease, verdict.Profile, workload)
+	authorization := sandboxAuthorization(t, execLease, verdict.Profile, workload)
+	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+	return verdict
+}
+
+func sandboxAuthorization(t *testing.T, execLease *lease.ExecutionLease, profile *effectgraph.ExecutionProfile, workload *sandbox_runtime.SandboxWorkload) sandbox_runtime.SandboxExecutionAuthorization {
+	t.Helper()
+	authorization, err := sandbox_runtime.BuildSandboxExecutionAuthorization(execLease, profile, workload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
-	return verdict
+	return authorization
 }
 
 func testWorkload() *sandbox_runtime.SandboxWorkload {
@@ -501,6 +507,19 @@ func TestPrepareExecutionRequiresSignedFullRuntimeAndExactLeaseIdentity(t *testi
 		assertLeasePendingAndRunnerUnused(t, leaseManager, substitutedLease, runner)
 	})
 
+	t.Run("arbitrary signed sandbox instance ID", func(t *testing.T) {
+		broker, leaseManager, runner := setupBroker()
+		execLease := acquireLease(t, leaseManager)
+		verdict := authorizedVerdict(t, execLease, testWorkload())
+		authorization := verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey].(sandbox_runtime.SandboxExecutionAuthorization)
+		authorization.SandboxID = "sbx-caller-selected"
+		verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey] = authorization
+		if _, err := broker.PrepareExecutionWithWorkload(ctx, execLease, verdict, testWorkload()); err == nil {
+			t.Fatal("sandbox preparation accepted an instance ID not derived from the exact lease")
+		}
+		assertLeasePendingAndRunnerUnused(t, leaseManager, execLease, runner)
+	})
+
 	t.Run("unsigned network policy", func(t *testing.T) {
 		broker, leaseManager, runner := setupBroker()
 		execLease := acquireLease(t, leaseManager)
@@ -686,8 +705,6 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 		WithClock(clock)
 	runner := &mockRunner{}
 	broker.RegisterRunner("docker", runner)
-	sandboxID := fmt.Sprintf("sbx-docker-%d", clock().UnixNano())
-	credBroker.SetScopeAllowlist(sandboxID, []string{"repo:read"})
 	l, err := lm.Acquire(ctx, lease.LeaseRequest{
 		RunID:         "run-1",
 		WorkspacePath: "/workspace",
@@ -703,7 +720,10 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, authorizedVerdict(t, l, testWorkload()), testWorkload())
+	verdict := authorizedVerdict(t, l, testWorkload())
+	authorization := verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey].(sandbox_runtime.SandboxExecutionAuthorization)
+	credBroker.SetScopeAllowlist(authorization.SandboxID, []string{"repo:read"})
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -749,8 +769,6 @@ func TestExecuteCredentialsStayInsideBrokerRunnerBoundary(t *testing.T) {
 		return nil
 	}
 	broker.RegisterRunner("docker", runner)
-	sandboxID := fmt.Sprintf("sbx-docker-%d", clock().UnixNano())
-	credBroker.SetScopeAllowlist(sandboxID, []string{"repo:read"})
 	l, err := lm.Acquire(ctx, lease.LeaseRequest{
 		RunID:         "run-credential-boundary",
 		WorkspacePath: "/workspace",
@@ -767,7 +785,10 @@ func TestExecuteCredentialsStayInsideBrokerRunnerBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, authorizedVerdict(t, l, testWorkload()), testWorkload())
+	verdict := authorizedVerdict(t, l, testWorkload())
+	authorization := verdict.Decision.InputContext[sandbox_runtime.SandboxExecutionDecisionContextKey].(sandbox_runtime.SandboxExecutionAuthorization)
+	credBroker.SetScopeAllowlist(authorization.SandboxID, []string{"repo:read"})
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload())
 	if err != nil {
 		t.Fatal(err)
 	}

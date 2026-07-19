@@ -114,6 +114,7 @@ type SandboxLeaseAuthorization struct {
 // configuration. Lease binds that spec to one exact source-owned allocation.
 type SandboxExecutionAuthorization struct {
 	SchemaVersion string                    `json:"schema_version"`
+	SandboxID     string                    `json:"sandbox_id"`
 	Lease         SandboxLeaseAuthorization `json:"lease"`
 	Spec          pkg_sandbox.SandboxSpec   `json:"spec"`
 }
@@ -245,8 +246,9 @@ func (b *SandboxBroker) PrepareExecutionWithWorkload(
 		}
 	}
 
-	// Activate lease.
-	sandboxID := fmt.Sprintf("sbx-%s-%d", sourceLease.Backend, b.clock().UnixNano())
+	// Activate the exact sandbox instance already derived from the immutable
+	// lease and bound by the signed decision.
+	sandboxID := authorization.SandboxID
 	if err := b.leases.Activate(ctx, sourceLease.LeaseID, sandboxID); err != nil {
 		return nil, fmt.Errorf("activate lease: %w", err)
 	}
@@ -373,9 +375,15 @@ func BuildSandboxExecutionAuthorization(execLease *lease.ExecutionLease, profile
 		Network:  buildNetworkPolicy(profile),
 		Limits:   buildResourceLimits(profile),
 	}
+	leaseAuthorization := sandboxLeaseAuthorization(execLease)
+	leaseHash, err := canonicalize.CanonicalHash(leaseAuthorization)
+	if err != nil {
+		return SandboxExecutionAuthorization{}, fmt.Errorf("derive sandbox instance identity: %w", err)
+	}
 	return SandboxExecutionAuthorization{
 		SchemaVersion: SandboxExecutionAuthorizationSchemaVersion,
-		Lease:         sandboxLeaseAuthorization(execLease),
+		SandboxID:     "sbx-" + leaseHash,
+		Lease:         leaseAuthorization,
 		Spec:          spec,
 	}, nil
 }

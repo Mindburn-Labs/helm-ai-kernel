@@ -7,9 +7,10 @@ quantum_posture: this checker is a guardrail, not a cryptographic control.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import pathlib
 import re
-import os
 import subprocess
 import sys
 
@@ -120,6 +121,31 @@ def should_skip(path: pathlib.Path) -> bool:
     return False
 
 
+def is_signed_fixture_receipt(path: pathlib.Path, text: str) -> bool:
+    """Return true only for signed, checked-in workstation receipt fixtures.
+
+    These receipts are canonicalized and signed test inputs.  Adding a textual
+    ``quantum_posture`` annotation to the JSON would change the payload and
+    invalidate the fixture signature; the fixture itself is not a
+    cryptographic control implementation.  Keep the exception deliberately
+    narrow so source code and ordinary JSON crypto configuration remain gated.
+    """
+    if (
+        path.suffix != ".json"
+        or "fixtures" not in path.parts
+        or "receipts" not in path.parts
+    ):
+        return False
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return payload.get("receipt_version") == "agent_run_receipt.v1" and all(
+        isinstance(payload.get(field), str) and payload[field]
+        for field in ("decision_id", "receipt_hash", "signature", "signer_key_id")
+    )
+
+
 def needs_annotation(path: pathlib.Path) -> bool:
     if should_skip(path) or not path.is_file():
         return False
@@ -127,14 +153,18 @@ def needs_annotation(path: pathlib.Path) -> bool:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return False
+    if is_signed_fixture_receipt(path, text):
+        return False
     if not CRYPTO_RE.search(text):
         return False
     if "quantum_posture:" in text:
         return False
-    # Reference-pack vectors are copied byte-for-byte from an external source
-    # authority and are hash-pinned by their consumer.  Keep that payload
-    # immutable; require its local SOURCE-MANIFEST to carry the posture note.
-    if path.name == "vectors.json":
+    # Byte-exact reference-pack payloads -- the pinned `vectors.json` index and
+    # the canonical `*.c14n.json` signing inputs it hash-pins -- carry live
+    # Ed25519 signatures and are consumed as fixed bytes.  An inline annotation
+    # would break the signature/digest, so keep them immutable and require the
+    # local SOURCE-MANIFEST to carry the posture note instead.
+    if path.name == "vectors.json" or path.name.endswith(".c14n.json"):
         manifest = path.with_name("SOURCE-MANIFEST.json")
         if manifest.is_file():
             try:

@@ -1,3 +1,5 @@
+<!-- quantum_posture: this page documents workstation flows that use classical Ed25519 receipts and does not claim post-quantum protection. -->
+
 # Workstation Governance
 
 HELM workstation governance starts as a manifest-first proof surface for local coding-agent runs and adds a selected-effect CLI/hook enforcement bridge. It does not claim HELM controls every Codex, Claude Code, IDE, browser, or desktop action. The adapter imports artifact sets, maps them into ProofGraph nodes, emits signed Agent Run Receipts, and can produce signed policy decision receipts that wrapper scripts must obey.
@@ -35,6 +37,41 @@ helm-ai-kernel workstation import --artifacts fixtures/workstation/denied-networ
 helm-ai-kernel workstation view --receipt /tmp/workstation-receipt.json
 ```
 
+### Local signer and trusted verification
+
+The first local import, decision, capture, or installed hook provisions one
+Ed25519 signer for that HELM data directory. The private seed stays at
+`~/.helm-ai-kernel/keys/workstation-ed25519.seed` with `0600` permissions; the
+directory has `0700` permissions. Its public key is written next to it as
+`workstation-ed25519.pub`. This is a local trust anchor, not a HELM release or
+vendor signing key.
+
+If the process has no resolvable home directory, pass an explicit `--data-dir`.
+HELM will not create a private key relative to the current working directory.
+
+`workstation view` and `workstation verify-decision` report two separate
+results. `integrity` says the receipt was not altered relative to the public
+key named inside it. `signer trusted` says that named key matches the expected
+local or caller-supplied public key. Both must be `true` for a successful
+verification exit code. When verifying a copied receipt on another machine,
+supply a separately trusted public-key file:
+
+```bash
+helm-ai-kernel workstation verify-decision \
+  --receipt /tmp/network-deny.json \
+  --trusted-public-key-file ./workstation-ed25519.pub
+```
+
+Older receipts made with the retired deterministic signer can still be read
+for integrity and migration, but are not trusted. Reissue them with the local
+signer rather than treating the legacy key as a trust root.
+
+For a classified hook operation, failure to provision the local signer or
+persist a denial receipt results in an explicit hook denial. HELM does not
+substitute an unsigned or fabricated receipt. If it cannot write the hook
+denial protocol at all, it returns the client blocking status instead of a
+successful hook exit.
+
 ## Enforcement bridge
 
 Selected workstation effects can be evaluated and recorded:
@@ -52,6 +89,11 @@ helm-ai-kernel workstation enforce \
 ```
 
 `decide` emits a signed policy decision receipt. `enforce` emits the same receipt and exits with code `126` on `DENY`, which makes it usable from shell hooks or wrapper scripts. The bridge covers selected shell, network, MCP, file, memory, and recurring-loop classes; it is not a kernel driver, browser controller, or complete OS sandbox.
+
+The v0.7 shell guard is intentionally narrow. It recognizes only a small set
+of literal destructive command forms and does not interpret shell expansion,
+aliases, `eval`, wrappers, or every destructive tool. Treat it as a
+selected-effect guardrail, not a claim of comprehensive shell enforcement.
 
 ## Operator workflow
 

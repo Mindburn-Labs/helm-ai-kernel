@@ -1,0 +1,13 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/approval-dispatch-admission-v1",
+  "pinning_authority": "reference_packs/approval-dispatch-admission-v1/vectors.json",
+  "verifier": "reference_packs/approval-dispatch-admission-v1/verify_vectors.py",
+  "immutable_payloads": [
+    {"file": "admission.c14n.json", "sha256": "b1085a026768e52aa1a2a005d354f857b25fc961c718db2031d99b58c2276fd3"},
+    {"file": "consumption.c14n.json", "sha256": "d57339f92f441e570896f936794640c68821100b16626ddb2fc013300168c389"},
+    {"file": "signing_payload.c14n.json", "sha256": "07e2a28a25cd19aac852509dca41adaf02dfef4a2ec0bb1c47ae99d2776663c4"}
+  ],
+  "$comment": "quantum_posture: classical_ed25519_only. These `*.c14n.json` files are byte-exact canonical (RFC 8785) approval-dispatch-admission signing payloads whose SHA-256 digests are hash-pinned in vectors.json and covered by a live classical Ed25519 signature. They cannot host an inline annotation without invalidating that signature/digest, so this manifest carries the posture note. This is not a post-quantum claim and does not alter any payload bytes.",
+  "purpose": "Local immutable-payload posture record for the approval-dispatch-admission reference pack. vectors.json remains the verified hash-pinning authority."
+}

@@ -89,6 +89,30 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+## [0.7.3] - 2026-07-19
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.3>.
+
+<!-- quantum_posture: v0.7.3 release notes cover Ed25519 workstation receipt signer trust hardening; none add a post-quantum cryptographic control. -->
+
+- Removed the derivable observe-only workstation receipt signing fallback.
+  Receipt minting now requires a persistent per-data-dir Ed25519 signing key
+  (0600 file, O_EXCL-created); signing paths hard-error on an empty seed, and
+  the MCP bridge maps a missing seed to a fail-closed `PDP_ERROR` deny.
+- The retired derivable signer key is permanently rejected as a trust anchor,
+  including when a caller explicitly pins its public key.
+- Receipt verification separates integrity from trust: the JSON summary
+  renames `signature_valid` to `integrity_valid` and adds `signer_trusted`
+  and `trust_anchor`. `workstation view` and `verify-decision` now exit 1
+  unless the signer is trusted; legacy-signed receipts still load and report
+  `integrity: true, trusted: false` with no silent upgrade.
+- Pre-tool hooks fail closed on signer or receipt-persistence failure: a
+  structured deny is emitted (exit 0), and exit 2 blocks only when the deny
+  JSON itself cannot be written. Safe commands never touch the signer, and
+  HOME-less setups fail closed without creating CWD-relative keys. Setup
+  migration deduplicates legacy hook entries and provisions the key on first
+  classified call.
+
 ## [0.7.2] - 2026-07-13
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2>.

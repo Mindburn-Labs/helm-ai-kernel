@@ -17,6 +17,7 @@ var (
 
 type EffectAcknowledgementVerifier interface {
 	VerifyEnvelope(contracts.ConnectorEffectAcknowledgementEnvelope) error
+	VerifyStoredEnvelope(contracts.ConnectorEffectAcknowledgementEnvelope) error
 }
 
 // EffectEvidencePackVerifier proves that the close request references a
@@ -126,7 +127,12 @@ func (s *EffectCloser) Close(ctx context.Context, request EffectCloseRequest) (E
 	if err := request.Validate(); err != nil {
 		return EffectClosureRecord{}, err
 	}
-	if err := s.acknowledgementVerifier.VerifyEnvelope(request.Acknowledgement); err != nil {
+	// Preflight proves signature + pinned lifetime early (before remote
+	// evidence work) but tolerates a disabled key so an idempotent retry of an
+	// already-COMPLETED close still returns the stored receipt after a key
+	// rotation. The authoritative enabled-key requirement for a genuinely new
+	// close is enforced in closeEffectReservation's new-close branch.
+	if err := s.acknowledgementVerifier.VerifyStoredEnvelope(request.Acknowledgement); err != nil {
 		return EffectClosureRecord{}, err
 	}
 	identity, err := verifiedConsumerIdentity(ctx, s.consumer)

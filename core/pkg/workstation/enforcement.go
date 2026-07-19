@@ -1,3 +1,5 @@
+// quantum_posture: enforcement signs and verifies classical Ed25519 receipts;
+// it is not a post-quantum or hybrid cryptographic control.
 package workstation
 
 import (
@@ -78,6 +80,9 @@ func Decide(
 	return receipt, nil
 }
 
+// VerifyDecisionReceiptSignature checks receipt integrity against the public key
+// embedded in the receipt itself. It does not establish signer trust. Call
+// VerifyDecisionReceiptWithTrustedKey when a caller-owned trust anchor is available.
 func VerifyDecisionReceiptSignature(receipt *contracts.WorkstationPolicyDecisionReceipt) (bool, error) {
 	if receipt == nil {
 		return false, errors.New("decision receipt is nil")
@@ -106,6 +111,24 @@ func VerifyDecisionReceiptSignature(receipt *contracts.WorkstationPolicyDecision
 		return false, nil
 	}
 	return ed25519.Verify(ed25519.PublicKey(pub), canonical, sig), nil
+}
+
+// VerifyDecisionReceiptWithTrustedKey verifies receipt integrity only when its
+// declared signer matches the caller-owned trusted public key.
+func VerifyDecisionReceiptWithTrustedKey(receipt *contracts.WorkstationPolicyDecisionReceipt, trusted ed25519.PublicKey) (bool, error) {
+	if receipt == nil {
+		return false, errors.New("decision receipt is nil")
+	}
+	if len(trusted) != ed25519.PublicKeySize {
+		return false, fmt.Errorf("trusted signer key must be %d bytes", ed25519.PublicKeySize)
+	}
+	if receipt.SignerKeyID != ed25519SignerKeyID(trusted) {
+		return false, nil
+	}
+	if receipt.SignerKeyID == retiredObserveOnlySignerKeyID {
+		return false, nil
+	}
+	return VerifyDecisionReceiptSignature(receipt)
 }
 
 func LoadDecisionReceipt(path string) (*contracts.WorkstationPolicyDecisionReceipt, error) {
@@ -220,14 +243,14 @@ func eventTypeForEffect(effectType string) string {
 
 func signDecisionReceipt(receipt *contracts.WorkstationPolicyDecisionReceipt, seed []byte) error {
 	if len(seed) == 0 {
-		seed = observeOnlySigningSeed[:]
+		return errors.New("signing seed is required")
 	}
 	if len(seed) != ed25519.SeedSize {
 		return fmt.Errorf("signing seed must be %d bytes", ed25519.SeedSize)
 	}
 	priv := ed25519.NewKeyFromSeed(seed)
 	pub := priv.Public().(ed25519.PublicKey)
-	receipt.SignerKeyID = "ed25519:" + hex.EncodeToString(pub)
+	receipt.SignerKeyID = ed25519SignerKeyID(pub)
 	receipt.Signature = ""
 	receipt.ReceiptHash = ""
 	canonical, err := canonicalize.JCS(receipt)

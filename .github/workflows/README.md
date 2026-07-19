@@ -30,7 +30,10 @@ surface for the `helm-ai-kernel` project.
 - `approval-ceremony.yml` runs the durable approval lifecycle against a real
   PostgreSQL service under a `NOSUPERUSER NOBYPASSRLS` runtime role. It pins
   ceremony/signing golden vectors and repeats the atomic issue/consume,
-  tenant/workspace/audience isolation, signed-expiry, and tamper proofs. The
+  tenant/workspace/audience isolation, signed-expiry, and tamper proofs. It also
+  verifies connector release-authority schemas/vectors and repeats the
+  append-only, forced-RLS PostgreSQL registry proof under least-privilege writer
+  and runtime roles. The
   workflow is source-owned CI evidence; it does not by itself establish branch
   protection or GA release authority.
 - `ci.yml` runs the retained per-surface jobs and the Make-first

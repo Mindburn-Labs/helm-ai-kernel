@@ -1,58 +1,105 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "quantum_posture: connector release authority is signed with classical Ed25519; this schema documents that signing shape and makes no hybrid or post-quantum claim.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.org/schemas/connector_release.json",
-  "title": "Connector Release",
-  "description": "A versioned, certified release of a HELM connector, capturing executor kind, schema bindings, sandbox policy, certification proof, and cryptographic identity.",
+  "title": "Connector Release Authority",
+  "description": "Source-owned signed authority for one exact connector release revision. Candidate connector metadata and certification-service verdicts are not release authority.",
   "type": "object",
-  "required": ["connector_id", "name", "version", "state", "executor_kind"],
+  "required": [
+    "schema_version",
+    "contract_version",
+    "authority_id",
+    "signing_key_ref",
+    "algorithm",
+    "registry_revision",
+    "scope_kind",
+    "connector_id",
+    "connector_version",
+    "state",
+    "connector_executor_kind",
+    "connector_sandbox_profile",
+    "connector_drift_policy_ref",
+    "connector_binary_hash",
+    "connector_signature_ref",
+    "connector_signature_hash",
+    "connector_signer_id",
+    "certification_ref",
+    "certification_hash",
+    "certification_authority",
+    "signed_at",
+    "valid_from",
+    "authority_hash"
+  ],
   "properties": {
-    "connector_id": {
-      "type": "string",
-      "description": "Unique identifier for this connector."
+    "schema_version": { "const": "connector-release-authority.v1" },
+    "contract_version": { "const": "2026-07-17" },
+    "authority_id": { "$ref": "#/$defs/token" },
+    "signing_key_ref": { "$ref": "#/$defs/token" },
+    "algorithm": { "const": "ed25519" },
+    "registry_revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "scope_kind": { "enum": ["global", "tenant_workspace"] },
+    "tenant_id": { "$ref": "#/$defs/token" },
+    "workspace_id": { "$ref": "#/$defs/token" },
+    "connector_id": { "$ref": "#/$defs/token" },
+    "connector_version": { "$ref": "#/$defs/token" },
+    "state": { "enum": ["certified", "revoked"] },
+    "connector_executor_kind": { "enum": ["digital", "analog"] },
+    "connector_sandbox_profile": { "$ref": "#/$defs/token" },
+    "connector_drift_policy_ref": { "$ref": "#/$defs/token" },
+    "connector_binary_hash": { "$ref": "#/$defs/sha256" },
+    "connector_signature_ref": { "$ref": "#/$defs/token" },
+    "connector_signature_hash": { "$ref": "#/$defs/sha256" },
+    "connector_signer_id": { "$ref": "#/$defs/token" },
+    "certification_ref": { "$ref": "#/$defs/token" },
+    "certification_hash": { "$ref": "#/$defs/sha256" },
+    "certification_authority": { "$ref": "#/$defs/token" },
+    "signed_at": { "$ref": "#/$defs/timestamp" },
+    "valid_from": { "$ref": "#/$defs/timestamp" },
+    "valid_until": { "$ref": "#/$defs/timestamp" },
+    "previous_authority_hash": { "$ref": "#/$defs/sha256" },
+    "revokes_authority_hash": { "$ref": "#/$defs/sha256" },
+    "authority_hash": { "$ref": "#/$defs/sha256" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "scope_kind": { "const": "global" } } },
+      "then": { "not": { "anyOf": [{ "required": ["tenant_id"] }, { "required": ["workspace_id"] }] } },
+      "else": { "required": ["tenant_id", "workspace_id"] }
     },
-    "name": {
-      "type": "string",
-      "description": "Human-readable name of the connector."
+    {
+      "if": { "properties": { "registry_revision": { "const": 1 } } },
+      "then": { "not": { "required": ["previous_authority_hash"] } },
+      "else": { "required": ["previous_authority_hash"] }
     },
-    "version": {
-      "type": "string",
-      "description": "Semver version string for this release."
-    },
-    "state": {
-      "type": "string",
-      "enum": ["candidate", "certified", "deprecated", "revoked"],
-      "description": "Lifecycle state of this connector release."
-    },
-    "executor_kind": {
-      "type": "string",
-      "enum": ["process", "container", "wasm", "native", "remote"],
-      "description": "Execution model used to run this connector."
-    },
-    "schema_refs": {
-      "type": "array",
-      "description": "References to JSON schema files that define this connector's input/output contracts.",
-      "items": { "type": "string" }
-    },
-    "sandbox_profile": {
-      "type": "string",
-      "description": "Reference to the sandbox policy profile applied during connector execution."
-    },
-    "drift_policy_ref": {
-      "type": "string",
-      "description": "Reference to the drift detection policy for this connector."
-    },
-    "certification_ref": {
-      "type": "string",
-      "description": "Reference to the certification receipt issued after conformance testing."
-    },
-    "binary_hash": {
-      "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "SHA-256 hash of the connector binary or container image digest."
-    },
-    "signature_ref": {
-      "type": "string",
-      "description": "Reference to the cryptographic signature over this release manifest."
+    {
+      "if": { "properties": { "state": { "const": "certified" } } },
+      "then": {
+        "required": ["valid_until"],
+        "not": { "required": ["revokes_authority_hash"] }
+      },
+      "else": {
+        "required": ["previous_authority_hash", "revokes_authority_hash"],
+        "properties": { "registry_revision": { "minimum": 2 } },
+        "not": { "required": ["valid_until"] }
+      }
     }
-  }
+  ],
+  "$defs": {
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^\\S+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$"
+    }
+  },
+  "additionalProperties": false
 }

@@ -13,7 +13,11 @@ on:
       - "core/pkg/canonicalize/**"
       - "core/pkg/contracts/**"
       - "core/pkg/crypto/**"
+      - "core/pkg/registry/connectors/**"
       - "reference_packs/approval/**"
+      - "reference_packs/connector-release-authority-v1/**"
+      - "schemas/connector_release.json"
+      - "schemas/connector_release_authority_envelope.json"
   push:
     branches: [main]
     paths:
@@ -26,7 +30,11 @@ on:
       - "core/pkg/canonicalize/**"
       - "core/pkg/contracts/**"
       - "core/pkg/crypto/**"
+      - "core/pkg/registry/connectors/**"
       - "reference_packs/approval/**"
+      - "reference_packs/connector-release-authority-v1/**"
+      - "schemas/connector_release.json"
+      - "schemas/connector_release_authority_envelope.json"
 
 permissions:
   contents: read
@@ -58,5 +66,9 @@ jobs:
           cache-dependency-path: "core/go.sum"
       - name: Verify ceremony golden vectors
         run: make verify-approval-ceremony-vectors
+      - name: Verify connector release authority vectors
+        run: make verify-connector-release-authority-vectors
       - name: Prove non-bypass RLS and single-use concurrency
         run: make test-approval-ceremony-postgres
+      - name: Prove connector authority append-only isolation and ordering
+        run: make test-connector-release-authority-postgres

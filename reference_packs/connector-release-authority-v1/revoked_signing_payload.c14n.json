@@ -1,0 +1,1 @@
+{"algorithm":"ed25519","authority_hash":"sha256:8e48d29edc2a44c345e26bc5e2a01430cfff266198309ba6f5468b0b607b0ea3","authority_id":"spiffe://helm/connector-release-authority","contract_version":"2026-07-17","domain":"HELM/ConnectorReleaseAuthoritySignature/v1","registry_revision":2,"signing_key_ref":"kms://helm/connector-release-authority/key-a"}

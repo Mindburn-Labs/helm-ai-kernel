@@ -1,0 +1,33 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 approval grant consumption only; no hybrid or post-quantum claim.",
+  "schema_version": "approval-grant-consumption-vectors.v1",
+  "contract_version": "2026-07-16",
+  "quantum_posture": "classical_ed25519_only",
+  "consumption": {
+    "canonical": "consumption.c14n.json",
+    "sha256": "sha256:039e9c9a5d65e71f55799bc0e76b0e5b8c15337b4171aff0e858b1c83f246a61",
+    "signing_payload": {
+      "canonical": "signing_payload.c14n.json",
+      "sha256": "sha256:83f5b8cfe0a437fed17a3fe54ae35191e7acf0bb3e249afca34a12f071e1f04c"
+    },
+    "public_key": "ed25519:ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+    "signature": "ed25519:924ce5cda6e0804fbf166b1c09df5df9258bc4fa4ea9ced3e054677c0ad6fe2687ca84dad6eb04b31d0c8cafd96d8e98250f3287b528e548fc8e0984694fa601"
+  },
+  "negative_vectors": [
+    {
+      "id": "consumer_substitution",
+      "mutation": "set_consumed_by_to_data-plane-b",
+      "expected_error": "hash_mismatch"
+    },
+    {
+      "id": "expiry_boundary",
+      "mutation": "set_consumed_at_to_grant_expiry",
+      "expected_error": "inactive_consumption"
+    },
+    {
+      "id": "signature_tamper",
+      "mutation": "flip_signature_last_bit",
+      "expected_error": "signature_rejected"
+    }
+  ]
+}

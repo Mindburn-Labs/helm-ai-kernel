@@ -403,6 +403,10 @@ func runServerWithOptions(opts serverOptions) error {
 		services.PolicyReconciler = policyReconciler
 		services.PolicySnapshotStore = policyStore
 		services.PolicyScope = policyScope
+		services.ApprovalConsumption, err = newApprovalConsumptionRuntime(ctx, db, databaseMode, signer)
+		if err != nil {
+			log.Fatalf("Failed to initialize approval grant consumption runtime: %v", err)
+		}
 
 		// Receipt transparency log: anchor decision-record receipt hashes at
 		// issuance (see persistDecisionReceipt -> anchorReceiptTransparency). The
@@ -557,7 +561,7 @@ func runServerWithOptions(opts serverOptions) error {
 }
 
 func servicesInitFailureIsFatal() bool {
-	return envBool("HELM_PRODUCTION") || emergencyStopFenceEnabled()
+	return envBool("HELM_PRODUCTION") || emergencyStopFenceEnabled() || envBool(approvalConsumptionEnabledEnv)
 }
 
 func envBool(key string) bool {

@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: tests classical Ed25519 grant-signature verification for
+// dispatch admission; no post-quantum claim.
+
 import (
 	"bytes"
 	"context"

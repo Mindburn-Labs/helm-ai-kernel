@@ -1,3 +1,5 @@
+// quantum_posture: schema tests validate classical Ed25519 wire fields only;
+// they do not implement or claim a post-quantum cryptographic control.
 package contracts_test
 
 import (
@@ -38,6 +40,30 @@ func compileSchema(t *testing.T, relPath string) *jsonschema.Schema {
 	c := jsonschema.NewCompiler()
 	c.Draft = jsonschema.Draft2020
 	url := "file:///" + strings.ReplaceAll(schemaPath, string(filepath.Separator), "/")
+	if strings.HasPrefix(relPath, "effects/launch/") {
+		entries, readErr := os.ReadDir(filepath.Dir(schemaPath))
+		if readErr != nil {
+			t.Fatalf("cannot read launch schema directory: %v", readErr)
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" || entry.Name() == filepath.Base(schemaPath) {
+				continue
+			}
+			resourceData, resourceErr := os.ReadFile(filepath.Join(filepath.Dir(schemaPath), entry.Name()))
+			if resourceErr != nil {
+				t.Fatalf("cannot read launch schema dependency %s: %v", entry.Name(), resourceErr)
+			}
+			var identity struct {
+				ID string `json:"$id"`
+			}
+			if resourceErr := json.Unmarshal(resourceData, &identity); resourceErr != nil || identity.ID == "" {
+				t.Fatalf("launch schema dependency %s has no canonical $id", entry.Name())
+			}
+			if resourceErr := c.AddResource(identity.ID, strings.NewReader(string(resourceData))); resourceErr != nil {
+				t.Fatalf("cannot add launch schema dependency %s: %v", entry.Name(), resourceErr)
+			}
+		}
+	}
 	if err := c.AddResource(url, strings.NewReader(string(data))); err != nil {
 		t.Fatalf("cannot add schema resource %s: %v", relPath, err)
 	}

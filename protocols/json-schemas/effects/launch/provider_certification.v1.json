@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/provider_certification.v1.json",
+  "$comment": "quantum_posture: this preview schema describes classical Ed25519 certification signatures only and makes no hybrid or post-quantum claim.",
+  "version": "1.0.0-alpha.1",
+  "title": "Launch Provider Certification Record (Preview)",
+  "description": "Source-owned signed admission record for one exact provider capability profile and connector contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "certification_id", "profile_ref", "profile_hash", "provider_id", "connector_id", "connector_contract_hash", "certification_tier", "certification_suite_hash", "certification_evidence_hash", "admission_status", "issued_at", "expires_at", "signer_key_id", "record_hash", "signature"],
+  "properties": {
+    "schema_version": { "const": "launch_provider_certification.v1" },
+    "certification_id": { "$ref": "#/$defs/non_empty" },
+    "profile_ref": { "$ref": "#/$defs/non_empty" },
+    "profile_hash": { "$ref": "#/$defs/hash" },
+    "provider_id": { "$ref": "#/$defs/non_empty" },
+    "connector_id": { "$ref": "#/$defs/non_empty" },
+    "connector_contract_hash": { "$ref": "#/$defs/hash" },
+    "certification_tier": { "$ref": "#/$defs/non_empty" },
+    "certification_suite_hash": { "$ref": "#/$defs/hash" },
+    "certification_evidence_hash": { "$ref": "#/$defs/hash" },
+    "admission_status": { "enum": ["ACTIVE", "REVOKED"] },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "signer_key_id": { "$ref": "#/$defs/non_empty" },
+    "record_hash": { "$ref": "#/$defs/hash" },
+    "signature": { "type": "string", "pattern": "^ed25519:[a-f0-9]{128}$" }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "trust_root_required": true, "registry_liveness_required": true }
+}

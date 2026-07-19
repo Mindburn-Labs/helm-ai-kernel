@@ -4,8 +4,9 @@ package contracts
 // These are the stable identifiers for effects that require specific
 // enforcement behavior, risk classification, and approval semantics.
 //
-// Per the HELM Canonical Implementation Plan: every high-risk effect
-// MUST be named, classified, and registered in DefaultEffectCatalog().
+// Per the HELM Canonical Implementation Plan: every executable high-risk effect
+// MUST be named, classified, and registered in DefaultEffectCatalog(). Reserved
+// preview identifiers must remain rejected at dispatch until registration.
 const (
 	// Infrastructure effects
 	EffectTypeInfraDestroy        = "INFRA_DESTROY"             // Destroy infrastructure (e.g., terraform destroy)
@@ -26,6 +27,18 @@ const (
 
 	// Resource effects
 	EffectTypeCloudComputeBudget = "CLOUD_COMPUTE_BUDGET" // Consume cloud compute resources against budget
+
+	// Governed company launch effect identifiers are reserved by the
+	// provider-neutral route contracts. They remain intentionally absent from
+	// DefaultEffectCatalog until the preview effect, authority, connector, and
+	// conformance layers are promoted together. Route validation explicitly
+	// rejects them whenever dispatch authority is requested.
+	EffectTypeProviderProvision        = "PROVIDER_PROVISION"
+	EffectTypeDeployProductionActivate = "DEPLOY_PRODUCTION_ACTIVATE"
+	EffectTypeSpendAuthorize           = "SPEND_AUTHORIZE"
+	EffectTypeProviderRollback         = "PROVIDER_ROLLBACK"
+	EffectTypeProviderTeardown         = "PROVIDER_TEARDOWN"
+	EffectTypeCompanyArtifactUpdate    = "COMPANY_ARTIFACT_UPDATE"
 
 	// Business communication effects
 	EffectTypeSendEmail       = "SEND_EMAIL"        // Send email through governed connector

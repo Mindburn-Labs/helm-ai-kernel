@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/launch_blueprint.v1.json",
+  "version": "1.0.0-alpha.1",
+  "title": "Launch Blueprint (Preview)",
+  "description": "Clean-room fork template containing only workload shape and portable constraints. Source, tenant, provider, account, approval, receipt, and EvidencePack identity are excluded; semantic validation requires contiguous node-0001 through node-N ordinals.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "portable_vocabulary_version", "blueprint_id", "source_reconnect_required", "provider_selection_required", "nodes", "edges", "constraints"],
+  "properties": {
+    "schema_version": { "const": "launch_blueprint.v1" },
+    "portable_vocabulary_version": { "const": "launch_portable_vocabulary.v1" },
+    "blueprint_id": { "type": "string", "pattern": "^blueprint:sha256:[a-f0-9]{64}$" },
+    "source_reconnect_required": { "const": true },
+    "provider_selection_required": { "const": true },
+    "nodes": {
+      "type": "array", "minItems": 1, "maxItems": 9999,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["node_id", "kind", "lifecycle_class", "required_capabilities"],
+        "properties": {
+          "node_id": { "type": "string", "pattern": "^node-[0-9]{4}$" },
+          "kind": { "$ref": "#/$defs/portable_workload_kind" },
+          "lifecycle_class": { "$ref": "#/$defs/lifecycle_class" },
+          "required_capabilities": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/portable_capability" } }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["from_node_id", "to_node_id", "relationship"],
+        "properties": {
+          "from_node_id": { "type": "string", "pattern": "^node-[0-9]{4}$" },
+          "to_node_id": { "type": "string", "pattern": "^node-[0-9]{4}$" },
+          "relationship": { "$ref": "#/$defs/portable_relationship" }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object", "additionalProperties": false,
+      "required": ["maximum_gross_currency", "maximum_gross_minor", "allowed_jurisdictions", "required_residency_tags", "allowed_commitment_terms", "required_route_capabilities"],
+      "properties": {
+        "maximum_gross_currency": { "$ref": "#/$defs/portable_currency" },
+        "maximum_gross_minor": { "type": "integer", "minimum": 0 },
+        "allowed_jurisdictions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/portable_jurisdiction" } },
+        "required_residency_tags": { "type": "array", "uniqueItems": true, "items": { "enum": ["customer-selected", "eea", "eu", "global", "uk", "us"] } },
+        "allowed_commitment_terms": { "type": "array", "uniqueItems": true, "items": { "enum": ["annual", "hourly", "monthly", "prepaid", "spot"] } },
+        "required_route_capabilities": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/portable_capability" } }
+      }
+    }
+  },
+  "$defs": {
+    "portable_workload_kind": { "enum": ["cache", "composite", "container", "database", "function", "gpu_workload", "http_service", "infrastructure", "kubernetes_workload", "message_queue", "object_storage", "scheduled_job", "static_site", "worker"] },
+    "portable_capability": { "enum": ["autoscaling", "custom-domain", "gpu-runtime", "health-check", "http-ingress", "https-endpoint", "managed-mysql", "managed-postgresql", "managed-redis", "object-storage", "persistent-storage", "private-network", "scheduled-execution", "secret-injection", "stateless-runtime", "websocket", "zero-downtime-release"] },
+    "portable_relationship": { "enum": ["connects_to", "depends_on", "mounts", "publishes_to", "reads_from", "replicates_to", "routes_to", "scheduled_by", "subscribes_to", "writes_to"] },
+    "lifecycle_class": { "enum": ["EPHEMERAL", "STATEFUL_DATA", "STATEFUL_RESOURCE", "COMPOSITE"] },
+    "portable_currency": {
+      "description": "ISO 4217 Maintenance Agency List One published 2026-01-01, excluding XTS (testing) and XXX (no currency).",
+      "enum": [
+        "AED", "AFN", "ALL", "AMD", "AOA", "ARS", "AUD", "AWG", "AZN", "BAM", "BBD", "BDT", "BHD", "BIF", "BMD", "BND", "BOB", "BOV", "BRL", "BSD", "BTN", "BWP", "BYN", "BZD", "CAD", "CDF", "CHE", "CHF", "CHW", "CLF", "CLP", "CNY", "COP", "COU", "CRC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", "EGP", "ERN", "ETB", "EUR", "FJD", "FKP", "GBP", "GEL", "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HKD", "HNL", "HTG", "HUF", "IDR", "ILS", "INR", "IQD", "IRR", "ISK", "JMD", "JOD", "JPY", "KES", "KGS", "KHR", "KMF", "KPW", "KRW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MXV", "MYR", "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "NZD", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF", "SAR", "SBD", "SCR", "SDG", "SEK", "SGD", "SHP", "SLE", "SOS", "SRD", "SSP", "STN", "SVC", "SYP", "SZL", "THB", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TWD", "TZS", "UAH", "UGX", "USD", "USN", "UYI", "UYU", "UYW", "UZS", "VED", "VES", "VND", "VUV", "WST", "XAD", "XAF", "XAG", "XAU", "XBA", "XBB", "XBC", "XBD", "XCD", "XCG", "XDR", "XOF", "XPD", "XPF", "XPT", "XSU", "XUA", "YER", "ZAR", "ZMW", "ZWG"
+      ]
+    },
+    "portable_jurisdiction": {
+      "description": "ISO 3166-1 alpha-2 assignment set plus the EU supranational HELM policy scope.",
+      "enum": [
+        "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "EU", "FI", "FJ", "FK", "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HM", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR", "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK", "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VI", "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW"
+      ]
+    }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "clean_room": true, "contiguous_deterministic_node_ordinals": true, "fresh_analysis_and_approval_required": true }
+}

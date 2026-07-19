@@ -112,6 +112,24 @@ func TestEffectRiskClass(t *testing.T) {
 	}
 }
 
+func TestLaunchPreviewEffectsRemainOutsideExecutableCatalog(t *testing.T) {
+	for _, effectID := range []string{
+		EffectTypeProviderProvision,
+		EffectTypeDeployProductionActivate,
+		EffectTypeSpendAuthorize,
+		EffectTypeProviderRollback,
+		EffectTypeProviderTeardown,
+		EffectTypeCompanyArtifactUpdate,
+	} {
+		if LookupEffectType(effectID) != nil {
+			t.Fatalf("preview launch effect %s was promoted into the executable catalog", effectID)
+		}
+		if risk := EffectRiskClass(effectID); risk != "E3" {
+			t.Fatalf("unregistered preview launch effect %s escaped the fail-closed default risk class: %s", effectID, risk)
+		}
+	}
+}
+
 func TestLookupEffectType(t *testing.T) {
 	et := LookupEffectType(EffectTypeInfraDestroy)
 	if et == nil {

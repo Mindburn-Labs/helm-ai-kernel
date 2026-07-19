@@ -580,6 +580,18 @@ func TestProviderCertificationRequiresSignatureTrustAndCurrentRegistryState(t *t
 		t.Fatalf("preview effect crossed the production dispatch catalog boundary: %v", err)
 	}
 
+	fixture = singleLaunchRouteFixture(t, profile, true)
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{1}, ed25519.SeedSize))
+	fixture.certification.ExpiresAt = "2026-07-19T10:00:00Z"
+	fixture.certification = signLaunchProviderCertificationRecord(t, fixture.certification, privateKey)
+	fixture.route.Placements[0].ProviderCertificationHash = fixture.certification.RecordHash
+	fixture.resolver.certifications[fixture.certification.CertificationID] = fixture.certification
+	fixture.resolver.current[fixture.certification.CertificationID] = fixture.certification.RecordHash
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "outlives its provider certification") {
+		t.Fatalf("route outliving its provider certification was accepted: %v", err)
+	}
+
+	fixture = singleLaunchRouteFixture(t, profile, true)
 	fixture.resolver.current[fixture.certification.CertificationID] = launchRoutingHash("9")
 	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "not current") {
 		t.Fatalf("revoked/superseded certification remained authoritative: %v", err)

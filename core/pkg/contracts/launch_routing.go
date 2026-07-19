@@ -716,7 +716,7 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 		if err != nil || !launchConstantEqual(placement.ProviderPayloadSubsetHash, payloadSubsetHash) {
 			return fmt.Errorf("launch route placement %s payload subset hash mismatch", placement.PlacementID)
 		}
-		if err := validateLaunchPlacementCertification(placement, profile, resolver, now, requireDispatchAuthority); err != nil {
+		if err := validateLaunchPlacementCertification(placement, profile, resolver, now, expiresAt, requireDispatchAuthority); err != nil {
 			return err
 		}
 		placements[placement.PlacementID] = placement
@@ -764,7 +764,7 @@ func ValidateLaunchRouteBinding(route LaunchRouteBinding, resolver LaunchRouteAr
 	return nil
 }
 
-func validateLaunchPlacementCertification(placement LaunchRoutePlacement, profile LaunchProviderCapabilityProfile, resolver LaunchRouteArtifactResolver, now time.Time, required bool) error {
+func validateLaunchPlacementCertification(placement LaunchRoutePlacement, profile LaunchProviderCapabilityProfile, resolver LaunchRouteArtifactResolver, now, routeExpiresAt time.Time, required bool) error {
 	if !required && placement.ProviderCertificationRef == "" && placement.ProviderCertificationHash == "" {
 		return nil
 	}
@@ -784,6 +784,10 @@ func validateLaunchPlacementCertification(placement LaunchRoutePlacement, profil
 	}
 	if err := VerifyLaunchProviderCertificationRecord(record, key, now); err != nil {
 		return err
+	}
+	certificationExpiresAt, _ := time.Parse(time.RFC3339Nano, record.ExpiresAt)
+	if routeExpiresAt.After(certificationExpiresAt) {
+		return fmt.Errorf("launch route placement %s outlives its provider certification", placement.PlacementID)
 	}
 	if err := resolver.AssertLaunchCertificationCurrent(record.CertificationID, record.RecordHash); err != nil {
 		return fmt.Errorf("launch provider certification is not current: %w", err)

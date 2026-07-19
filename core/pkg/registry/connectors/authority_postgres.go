@@ -103,12 +103,16 @@ func NewPostgresReleaseAuthorityStore(db *sql.DB, verifier ReleaseAuthorityEnvel
 
 // VerifyEnvelope verifies historical source-authority evidence loaded from a
 // composed reservation stream. It proves signature provenance, not that the
-// statement is still the current certified head.
+// statement is still the current certified head, so it tolerates a signing key
+// disabled/rotated after the evidence was persisted (signature + pinned
+// lifetime still enforced) — otherwise recovering or transitioning an existing
+// reservation (Recover/MarkNotStarted/MarkUncertain/ListActive) would break
+// after a key rotation.
 func (s *PostgresReleaseAuthorityStore) VerifyEnvelope(envelope contracts.ConnectorReleaseAuthorityEnvelope) error {
 	if s == nil || s.verifier == nil {
 		return releaseAuthorityStoreRejected("runtime verifier is not configured")
 	}
-	return s.verifier.VerifyEnvelope(envelope)
+	return s.verifier.VerifyStoredEnvelope(envelope)
 }
 
 const releaseAuthorityRecordColumns = `

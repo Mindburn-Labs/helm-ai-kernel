@@ -29,10 +29,12 @@ type mockRunner struct {
 	validateCalled bool
 	failValidate   bool
 	failRun        bool
+	lastSpec       *pkg_sandbox.SandboxSpec
 }
 
 func (m *mockRunner) Run(spec *pkg_sandbox.SandboxSpec) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {
 	m.runCalled = true
+	m.lastSpec = spec
 	if m.failRun {
 		return nil, nil, errMock("run failed")
 	}
@@ -56,6 +58,19 @@ type errMock string
 
 func (e errMock) Error() string { return string(e) }
 
+type mockAuthorizationVerifier struct {
+	valid bool
+	err   error
+}
+
+func (m mockAuthorizationVerifier) VerifyDecision(*contracts.DecisionRecord) (bool, error) {
+	return m.valid, m.err
+}
+
+func (m mockAuthorizationVerifier) VerifyIntent(*contracts.AuthorizedExecutionIntent) (bool, error) {
+	return m.valid, m.err
+}
+
 type failingCompleteLeaseManager struct {
 	*lease.InMemoryLeaseManager
 }
@@ -68,7 +83,9 @@ func setupBroker() (*sandbox_runtime.SandboxBroker, *lease.InMemoryLeaseManager,
 	resetClock()
 	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
 	leaseManager := lease.NewInMemoryLeaseManager().WithClock(clock)
-	broker := sandbox_runtime.NewSandboxBroker(credBroker, leaseManager).WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, leaseManager).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
 	runner := &mockRunner{}
 	broker.RegisterRunner("docker", runner)
 	return broker, leaseManager, runner
@@ -81,6 +98,7 @@ func acquireLease(t *testing.T, lm *lease.InMemoryLeaseManager) *lease.Execution
 		WorkspacePath:   "/workspace",
 		Backend:         "docker",
 		ProfileName:     "net-limited",
+		TemplateRef:     "example.invalid/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		TTL:             1 * time.Hour,
 		EffectGraphHash: "sha256:abc",
 	})
@@ -91,12 +109,24 @@ func acquireLease(t *testing.T, lm *lease.InMemoryLeaseManager) *lease.Execution
 }
 
 func testVerdict() *effectgraph.NodeVerdict {
+	workload := testWorkload()
 	return &effectgraph.NodeVerdict{
 		StepID: "step-1",
 		Decision: &contracts.DecisionRecord{
-			Verdict: string(contracts.VerdictAllow),
+			ID:           "decision-step-1",
+			Action:       contracts.EffectTypeRunSandboxedCode,
+			EffectDigest: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Verdict:      string(contracts.VerdictAllow),
+			InputContext: map[string]any{sandbox_runtime.SandboxWorkloadDecisionContextKey: workload},
 		},
-		Intent: &contracts.AuthorizedExecutionIntent{ID: "intent-step-1"},
+		Intent: &contracts.AuthorizedExecutionIntent{
+			ID:               "intent-step-1",
+			DecisionID:       "decision-step-1",
+			EffectDigestHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			IssuedAt:         baseTime.Add(-time.Minute),
+			ExpiresAt:        baseTime.Add(time.Hour),
+			AllowedTool:      contracts.EffectTypeRunSandboxedCode,
+		},
 		Profile: &effectgraph.ExecutionProfile{
 			Backend:     "docker",
 			ProfileName: "net-limited",
@@ -104,18 +134,29 @@ func testVerdict() *effectgraph.NodeVerdict {
 	}
 }
 
+func testWorkload() *sandbox_runtime.SandboxWorkload {
+	return &sandbox_runtime.SandboxWorkload{
+		Command: []string{"/usr/bin/example"},
+		Args:    []string{"serve", ""},
+		Env:     map[string]string{"MODE": "test"},
+		Labels:  map[string]string{"helm.test": "sandbox-broker"},
+	}
+}
+
 func TestPrepareExecutionRejectsPrivilegedDeniedBeforeLeaseCredentialsOrRunner(t *testing.T) {
 	resetClock()
 	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
 	leaseManager := lease.NewInMemoryLeaseManager().WithClock(clock)
-	broker := sandbox_runtime.NewSandboxBroker(credBroker, leaseManager).WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, leaseManager).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
 	runner := &mockRunner{}
 	broker.RegisterRunner("docker", runner)
 	l := acquireLease(t, leaseManager)
 	verdict := testVerdict()
 	verdict.Profile.ProfileName = "privileged-denied"
 
-	if _, err := broker.PrepareExecution(ctx, l, verdict); err == nil {
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, l, verdict, testWorkload()); err == nil {
 		t.Fatal("privileged-denied profile reached sandbox preparation")
 	}
 	got, err := leaseManager.Get(ctx, l.LeaseID)
@@ -155,7 +196,7 @@ func TestExecuteRejectsCallerConstructedPreparedExecution(t *testing.T) {
 func TestExecuteRejectsMutatedPreparedExecutionAndConsumesAuthorization(t *testing.T) {
 	broker, leaseManager, runner := setupBroker()
 	execLease := acquireLease(t, leaseManager)
-	prepared, err := broker.PrepareExecution(ctx, execLease, testVerdict())
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, execLease, testVerdict(), testWorkload())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +221,7 @@ func TestExecuteRejectsMutatedPreparedExecutionAndConsumesAuthorization(t *testi
 func TestExecuteRejectsCopiedPreparedExecution(t *testing.T) {
 	broker, leaseManager, runner := setupBroker()
 	execLease := acquireLease(t, leaseManager)
-	prepared, err := broker.PrepareExecution(ctx, execLease, testVerdict())
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, execLease, testVerdict(), testWorkload())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,11 +238,69 @@ func TestExecuteRejectsCopiedPreparedExecution(t *testing.T) {
 	}
 }
 
-func TestPrepareExecution(t *testing.T) {
+func TestExecuteRejectsWorkloadMutationAfterPreparation(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, execLease, testVerdict(), testWorkload())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared.Spec.Command[0] = "/usr/bin/substituted"
+
+	if _, _, err := broker.Execute(ctx, prepared); err == nil {
+		t.Fatal("post-authorization workload mutation reached dispatch")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("post-authorization workload mutation reached sandbox runner")
+	}
+	got, getErr := leaseManager.Get(ctx, execLease.LeaseID)
+	if getErr != nil || got.Status != lease.LeaseStatusCompleted {
+		t.Fatalf("mutated workload lease was not cleaned up: lease=%+v err=%v", got, getErr)
+	}
+}
+
+func TestExecuteRejectsExpiredPreparedAuthorization(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, execLease, testVerdict(), testWorkload())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clockTime = baseTime.Add(2 * time.Hour)
+
+	if _, _, err := broker.Execute(ctx, prepared); err == nil {
+		t.Fatal("expired prepared authorization reached dispatch")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("expired prepared authorization reached sandbox runner")
+	}
+	got, getErr := leaseManager.Get(ctx, execLease.LeaseID)
+	if getErr != nil || got.Status != lease.LeaseStatusCompleted {
+		t.Fatalf("expired prepared authorization was not cleaned up: lease=%+v err=%v", got, getErr)
+	}
+}
+
+func TestPrepareExecutionRequiresExplicitWorkload(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+
+	if _, err := broker.PrepareExecution(ctx, execLease, testVerdict()); err == nil {
+		t.Fatal("implicit empty workload reached preparation")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("implicit empty workload reached sandbox runner")
+	}
+	got, err := leaseManager.Get(ctx, execLease.LeaseID)
+	if err != nil || got.Status != lease.LeaseStatusPending {
+		t.Fatalf("implicit workload rejection changed lease state: lease=%+v err=%v", got, err)
+	}
+}
+
+func TestPrepareExecutionWithWorkload(t *testing.T) {
 	broker, lm, _ := setupBroker()
 	l := acquireLease(t, lm)
 
-	prepared, err := broker.PrepareExecution(ctx, l, testVerdict())
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, testVerdict(), testWorkload())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,6 +310,12 @@ func TestPrepareExecution(t *testing.T) {
 	if prepared.Spec.WorkDir != "/workspace" {
 		t.Fatalf("expected /workspace, got %s", prepared.Spec.WorkDir)
 	}
+	if len(prepared.Spec.Command) != 1 || prepared.Spec.Command[0] != "/usr/bin/example" || len(prepared.Spec.Args) != 2 || prepared.Spec.Args[1] != "" {
+		t.Fatalf("prepared workload command/args = %#v/%#v", prepared.Spec.Command, prepared.Spec.Args)
+	}
+	if prepared.Spec.Env["MODE"] != "test" || prepared.Spec.Labels["helm.test"] != "sandbox-broker" {
+		t.Fatalf("prepared workload env/labels = %#v/%#v", prepared.Spec.Env, prepared.Spec.Labels)
+	}
 
 	// Lease should now be ACTIVE.
 	got, _ := lm.Get(ctx, l.LeaseID)
@@ -219,15 +324,91 @@ func TestPrepareExecution(t *testing.T) {
 	}
 }
 
+func TestPrepareExecutionWithWorkloadRejectsIncompleteWorkloadBeforeLeaseActivation(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	for name, workload := range map[string]*sandbox_runtime.SandboxWorkload{
+		"nil":           nil,
+		"empty command": {},
+		"empty program": {Command: []string{""}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			execLease := acquireLease(t, leaseManager)
+			if _, err := broker.PrepareExecutionWithWorkload(ctx, execLease, testVerdict(), workload); err == nil {
+				t.Fatal("incomplete workload reached preparation")
+			}
+			got, err := leaseManager.Get(ctx, execLease.LeaseID)
+			if err != nil || got.Status != lease.LeaseStatusPending {
+				t.Fatalf("incomplete workload changed lease state: lease=%+v err=%v", got, err)
+			}
+		})
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("incomplete workload reached sandbox runner")
+	}
+}
+
+func TestPrepareExecutionWithWorkloadRequiresVerifiedAuthorizationAndExactSignedWorkload(t *testing.T) {
+	resetClock()
+	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
+	leaseManager := lease.NewInMemoryLeaseManager().WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, leaseManager).WithClock(clock)
+	broker.RegisterRunner("docker", &mockRunner{})
+
+	withoutVerifier := acquireLease(t, leaseManager)
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, withoutVerifier, testVerdict(), testWorkload()); err == nil {
+		t.Fatal("sandbox preparation accepted missing authorization verifier")
+	}
+
+	broker.WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true})
+	changedWorkload := testWorkload()
+	changedWorkload.Command[0] = "/usr/bin/substituted"
+	mismatched := acquireLease(t, leaseManager)
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, mismatched, testVerdict(), changedWorkload); err == nil {
+		t.Fatal("sandbox preparation accepted workload absent from signed decision context")
+	}
+
+	broker.WithAuthorizationVerifier(mockAuthorizationVerifier{valid: false})
+	unverified := acquireLease(t, leaseManager)
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, unverified, testVerdict(), testWorkload()); err == nil {
+		t.Fatal("sandbox preparation accepted unverified decision and intent")
+	}
+
+	for _, execLease := range []*lease.ExecutionLease{withoutVerifier, mismatched, unverified} {
+		got, err := leaseManager.Get(ctx, execLease.LeaseID)
+		if err != nil || got.Status != lease.LeaseStatusPending {
+			t.Fatalf("authorization rejection changed lease state: lease=%+v err=%v", got, err)
+		}
+	}
+}
+
+func TestPrepareExecutionWithWorkloadRejectsLeaseSubstitutionBeforeSideEffects(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	sourceLease := acquireLease(t, leaseManager)
+	substituted := *sourceLease
+	substituted.TemplateRef = "example.invalid/substituted@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, &substituted, testVerdict(), testWorkload()); err == nil {
+		t.Fatal("substituted lease reached preparation")
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatal("substituted lease reached sandbox runner")
+	}
+	got, err := leaseManager.Get(ctx, sourceLease.LeaseID)
+	if err != nil || got.Status != lease.LeaseStatusPending {
+		t.Fatalf("lease substitution changed source-owned state: lease=%+v err=%v", got, err)
+	}
+}
+
 func TestPrepareExecution_NoRunner(t *testing.T) {
 	broker, lm, _ := setupBroker()
 	l, _ := lm.Acquire(ctx, lease.LeaseRequest{
-		RunID:   "run-1",
-		Backend: "wasi", // no runner registered for wasi
-		TTL:     1 * time.Hour,
+		RunID:       "run-1",
+		Backend:     "wasi", // no runner registered for wasi
+		TemplateRef: "example.invalid/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TTL:         1 * time.Hour,
 	})
 
-	_, err := broker.PrepareExecution(ctx, l, testVerdict())
+	_, err := broker.PrepareExecutionWithWorkload(ctx, l, testVerdict(), testWorkload())
 	if err == nil {
 		t.Fatal("expected error for missing runner")
 	}
@@ -236,7 +417,7 @@ func TestPrepareExecution_NoRunner(t *testing.T) {
 func TestExecute(t *testing.T) {
 	broker, lm, runner := setupBroker()
 	l := acquireLease(t, lm)
-	prepared, _ := broker.PrepareExecution(ctx, l, testVerdict())
+	prepared, _ := broker.PrepareExecutionWithWorkload(ctx, l, testVerdict(), testWorkload())
 
 	result, receipt, err := broker.Execute(ctx, prepared)
 	if err != nil {
@@ -251,6 +432,9 @@ func TestExecute(t *testing.T) {
 	if receipt == nil {
 		t.Fatal("expected receipt")
 	}
+	if runner.lastSpec == nil || len(runner.lastSpec.Command) != 1 || runner.lastSpec.Command[0] != "/usr/bin/example" || runner.lastSpec.Env["MODE"] != "test" {
+		t.Fatalf("runner received incomplete authorized workload: %#v", runner.lastSpec)
+	}
 
 	// Lease should be completed.
 	got, _ := lm.Get(ctx, l.LeaseID)
@@ -263,7 +447,7 @@ func TestExecute_RunFailure(t *testing.T) {
 	broker, lm, runner := setupBroker()
 	runner.failRun = true
 	l := acquireLease(t, lm)
-	prepared, _ := broker.PrepareExecution(ctx, l, testVerdict())
+	prepared, _ := broker.PrepareExecutionWithWorkload(ctx, l, testVerdict(), testWorkload())
 
 	_, _, err := broker.Execute(ctx, prepared)
 	if err == nil {
@@ -281,7 +465,7 @@ func TestExecute_ValidateFailure(t *testing.T) {
 	broker, lm, runner := setupBroker()
 	runner.failValidate = true
 	l := acquireLease(t, lm)
-	prepared, _ := broker.PrepareExecution(ctx, l, testVerdict())
+	prepared, _ := broker.PrepareExecutionWithWorkload(ctx, l, testVerdict(), testWorkload())
 
 	_, _, err := broker.Execute(ctx, prepared)
 	if err == nil {
@@ -291,7 +475,7 @@ func TestExecute_ValidateFailure(t *testing.T) {
 
 func TestPrepareExecution_NilLease(t *testing.T) {
 	broker, _, _ := setupBroker()
-	_, err := broker.PrepareExecution(ctx, nil, testVerdict())
+	_, err := broker.PrepareExecutionWithWorkload(ctx, nil, testVerdict(), testWorkload())
 	if err == nil {
 		t.Fatal("expected error for nil lease")
 	}
@@ -300,7 +484,7 @@ func TestPrepareExecution_NilLease(t *testing.T) {
 func TestPrepareExecution_NilVerdict(t *testing.T) {
 	broker, lm, _ := setupBroker()
 	l := acquireLease(t, lm)
-	_, err := broker.PrepareExecution(ctx, l, nil)
+	_, err := broker.PrepareExecutionWithWorkload(ctx, l, nil, testWorkload())
 	if err == nil {
 		t.Fatal("expected error for nil verdict")
 	}
@@ -310,7 +494,9 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 	resetClock()
 	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
 	lm := lease.NewInMemoryLeaseManager().WithClock(clock)
-	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, lm).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
 	broker.RegisterRunner("docker", &mockRunner{})
 	sandboxID := fmt.Sprintf("sbx-docker-%d", clock().UnixNano())
 	credBroker.SetScopeAllowlist(sandboxID, []string{"repo:read"})
@@ -319,6 +505,7 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 		WorkspacePath: "/workspace",
 		Backend:       "docker",
 		ProfileName:   "net-limited",
+		TemplateRef:   "example.invalid/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		TTL:           time.Hour,
 		SecretBindings: []lease.SecretBinding{{
 			SecretRef: "repo-token",
@@ -328,7 +515,7 @@ func TestExecute_TokenListMutationIsRejectedAndPreparedCredentialsAreRevoked(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := broker.PrepareExecution(ctx, l, testVerdict())
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, testVerdict(), testWorkload())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,12 +544,14 @@ func TestExecute_LeaseCompletionFailureIsRecorded(t *testing.T) {
 	resetClock()
 	credBroker := sandbox_runtime.NewCredentialBroker(3600).WithClock(clock)
 	baseManager := lease.NewInMemoryLeaseManager().WithClock(clock)
-	broker := sandbox_runtime.NewSandboxBroker(credBroker, failingCompleteLeaseManager{InMemoryLeaseManager: baseManager}).WithClock(clock)
+	broker := sandbox_runtime.NewSandboxBroker(credBroker, failingCompleteLeaseManager{InMemoryLeaseManager: baseManager}).
+		WithAuthorizationVerifier(mockAuthorizationVerifier{valid: true}).
+		WithClock(clock)
 	runner := &mockRunner{}
 	broker.RegisterRunner("docker", runner)
 
 	l := acquireLease(t, baseManager)
-	prepared, err := broker.PrepareExecution(ctx, l, testVerdict())
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, l, testVerdict(), testWorkload())
 	if err != nil {
 		t.Fatal(err)
 	}

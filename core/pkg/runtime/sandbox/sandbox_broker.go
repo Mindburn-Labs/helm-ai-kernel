@@ -22,6 +22,18 @@ type SandboxRunner interface {
 	Validate(spec *pkg_sandbox.SandboxSpec) error
 }
 
+// AuthorizationVerifier verifies the source-owned Kernel decision and the
+// derived execution intent before any sandbox lease or credential side effect.
+type AuthorizationVerifier interface {
+	VerifyDecision(decision *contracts.DecisionRecord) (bool, error)
+	VerifyIntent(intent *contracts.AuthorizedExecutionIntent) (bool, error)
+}
+
+// SandboxWorkloadDecisionContextKey is the Guardian decision-context field
+// produced from PlanStep.Params["sandbox_workload"]. The signed value must
+// exactly match the workload requested at preparation.
+const SandboxWorkloadDecisionContextKey = "param.sandbox_workload"
+
 // PreparedExecution bundles everything needed to run in a sandbox.
 type PreparedExecution struct {
 	// Lease is the execution lease governing this run.
@@ -43,6 +55,18 @@ type PreparedExecution struct {
 	PreparedAt time.Time
 }
 
+// SandboxWorkload is the caller-supplied executable material that must be
+// present before lease activation, credential issuance, and preparation
+// sealing. Policy-owned image, work directory, network, limits, runtime class,
+// mounts, and warm-lease fields are deliberately not caller-configurable here.
+type SandboxWorkload struct {
+	Command  []string          `json:"command"`
+	Args     []string          `json:"args,omitempty"`
+	Env      map[string]string `json:"env,omitempty"`
+	Labels   map[string]string `json:"labels,omitempty"`
+	Detached bool              `json:"detached,omitempty"`
+}
+
 // preparedExecutionRecord is broker-owned execution state. Execute uses this
 // immutable snapshot rather than caller-mutable PreparedExecution fields after
 // it has proved the exact returned pointer and fingerprint are still current.
@@ -62,9 +86,17 @@ type SandboxBroker struct {
 	mu         sync.RWMutex
 	credBroker *CredentialBroker
 	leases     lease.LeaseManager
+	verifier   AuthorizationVerifier
 	runners    map[string]SandboxRunner // backend name → runner
 	prepared   map[*PreparedExecution]preparedExecutionRecord
 	clock      func() time.Time
+}
+
+// WithAuthorizationVerifier installs the Kernel trust-root verifier. A broker
+// without one remains fail-closed at preparation.
+func (b *SandboxBroker) WithAuthorizationVerifier(verifier AuthorizationVerifier) *SandboxBroker {
+	b.verifier = verifier
+	return b
 }
 
 // NewSandboxBroker creates a broker with the given dependencies.
@@ -94,12 +126,25 @@ func (b *SandboxBroker) RegisterRunner(name string, runner SandboxRunner) {
 	b.runners[name] = runner
 }
 
-// PrepareExecution builds everything needed for a sandbox run.
-// It activates the lease, issues credentials, and constructs the SandboxSpec.
+// PrepareExecution is the deprecated implicit-workload entrypoint. It fails
+// closed because an executable command must be bound before preparation is
+// sealed. Call PrepareExecutionWithWorkload instead.
 func (b *SandboxBroker) PrepareExecution(
 	ctx context.Context,
 	execLease *lease.ExecutionLease,
 	verdict *effectgraph.NodeVerdict,
+) (*PreparedExecution, error) {
+	return nil, fmt.Errorf("explicit sandbox workload is required; use PrepareExecutionWithWorkload")
+}
+
+// PrepareExecutionWithWorkload builds everything needed for a sandbox run.
+// It validates executable material before activating the lease, issuing
+// credentials, and sealing the complete SandboxSpec.
+func (b *SandboxBroker) PrepareExecutionWithWorkload(
+	ctx context.Context,
+	execLease *lease.ExecutionLease,
+	verdict *effectgraph.NodeVerdict,
+	workload *SandboxWorkload,
 ) (*PreparedExecution, error) {
 	if execLease == nil {
 		return nil, fmt.Errorf("lease is nil")
@@ -112,6 +157,18 @@ func (b *SandboxBroker) PrepareExecution(
 	}
 	if !executableSandboxProfile(verdict.Profile.ProfileName) {
 		return nil, fmt.Errorf("sandbox profile %q is not executable", verdict.Profile.ProfileName)
+	}
+	if err := validateSandboxWorkload(workload); err != nil {
+		return nil, err
+	}
+	if err := b.verifySandboxAuthorization(verdict, workload); err != nil {
+		return nil, err
+	}
+	if execLease.TemplateRef == "" {
+		return nil, fmt.Errorf("lease template reference is required")
+	}
+	if err := b.verifyPendingLease(ctx, execLease); err != nil {
+		return nil, err
 	}
 
 	// Verify runner exists.
@@ -159,12 +216,15 @@ func (b *SandboxBroker) PrepareExecution(
 
 	// Build sandbox spec.
 	spec := &pkg_sandbox.SandboxSpec{
-		WorkDir: execLease.WorkspacePath,
-		Network: buildNetworkPolicy(verdict.Profile),
-		Limits:  buildResourceLimits(verdict.Profile),
-	}
-	if execLease.TemplateRef != "" {
-		spec.Image = execLease.TemplateRef
+		Image:    execLease.TemplateRef,
+		Command:  append([]string(nil), workload.Command...),
+		Args:     append([]string(nil), workload.Args...),
+		Env:      cloneStringMap(workload.Env),
+		Labels:   cloneStringMap(workload.Labels),
+		Detached: workload.Detached,
+		WorkDir:  execLease.WorkspacePath,
+		Network:  buildNetworkPolicy(verdict.Profile),
+		Limits:   buildResourceLimits(verdict.Profile),
 	}
 
 	prepared := &PreparedExecution{
@@ -194,6 +254,112 @@ func (b *SandboxBroker) PrepareExecution(
 	}
 	b.mu.Unlock()
 	return prepared, nil
+}
+
+func (b *SandboxBroker) verifyPendingLease(ctx context.Context, execLease *lease.ExecutionLease) error {
+	current, err := b.leases.Get(ctx, execLease.LeaseID)
+	if err != nil {
+		return fmt.Errorf("resolve sandbox execution lease: %w", err)
+	}
+	if current == nil || current.Status != lease.LeaseStatusPending {
+		return fmt.Errorf("sandbox execution lease is missing or not pending")
+	}
+	currentHash, err := canonicalize.CanonicalHash(current)
+	if err != nil {
+		return fmt.Errorf("canonicalize source-owned sandbox lease: %w", err)
+	}
+	requestedHash, err := canonicalize.CanonicalHash(execLease)
+	if err != nil {
+		return fmt.Errorf("canonicalize requested sandbox lease: %w", err)
+	}
+	if currentHash != requestedHash {
+		return fmt.Errorf("sandbox execution lease does not match source-owned state")
+	}
+	return nil
+}
+
+func (b *SandboxBroker) verifySandboxAuthorization(verdict *effectgraph.NodeVerdict, workload *SandboxWorkload) error {
+	decision := verdict.Decision
+	intent := verdict.Intent
+	if b.verifier == nil {
+		return fmt.Errorf("sandbox authorization verifier is required")
+	}
+	if decision.ID == "" || intent.DecisionID != decision.ID {
+		return fmt.Errorf("sandbox execution intent does not bind the decision")
+	}
+	if decision.EffectDigest == "" || intent.EffectDigestHash != decision.EffectDigest {
+		return fmt.Errorf("sandbox execution intent does not bind the decision effect digest")
+	}
+	if decision.Action == "" || intent.AllowedTool != decision.Action {
+		return fmt.Errorf("sandbox execution intent does not bind the allowed tool")
+	}
+	now := b.clock()
+	if intent.IssuedAt.After(now) || intent.ExpiresAt.IsZero() || !now.Before(intent.ExpiresAt) {
+		return fmt.Errorf("sandbox execution intent is not currently valid")
+	}
+	verified, err := b.verifier.VerifyDecision(decision)
+	if err != nil {
+		return fmt.Errorf("sandbox decision signature verification failed: %w", err)
+	}
+	if !verified {
+		return fmt.Errorf("sandbox decision signature verification failed")
+	}
+	verified, err = b.verifier.VerifyIntent(intent)
+	if err != nil {
+		return fmt.Errorf("sandbox execution intent signature verification failed: %w", err)
+	}
+	if !verified {
+		return fmt.Errorf("sandbox execution intent signature verification failed")
+	}
+	authorizedWorkload, ok := decision.InputContext[SandboxWorkloadDecisionContextKey]
+	if !ok || authorizedWorkload == nil {
+		return fmt.Errorf("sandbox decision does not contain an authorized workload")
+	}
+	authorizedHash, err := canonicalize.CanonicalHash(authorizedWorkload)
+	if err != nil {
+		return fmt.Errorf("canonicalize authorized sandbox workload: %w", err)
+	}
+	requestedHash, err := canonicalize.CanonicalHash(workload)
+	if err != nil {
+		return fmt.Errorf("canonicalize requested sandbox workload: %w", err)
+	}
+	if authorizedHash != requestedHash {
+		return fmt.Errorf("sandbox workload does not match the signed decision context")
+	}
+	return nil
+}
+
+func validateSandboxWorkload(workload *SandboxWorkload) error {
+	if workload == nil || len(workload.Command) == 0 || workload.Command[0] == "" {
+		return fmt.Errorf("sandbox workload requires an explicit command")
+	}
+	for _, part := range workload.Command {
+		if part == "" {
+			return fmt.Errorf("sandbox workload command cannot contain empty elements")
+		}
+	}
+	for key := range workload.Env {
+		if key == "" {
+			return fmt.Errorf("sandbox workload environment variable name is empty")
+		}
+	}
+	for key := range workload.Labels {
+		if key == "" {
+			return fmt.Errorf("sandbox workload label name is empty")
+		}
+	}
+	return nil
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 func executableSandboxProfile(profile string) bool {
@@ -260,7 +426,7 @@ func (b *SandboxBroker) claimPreparedExecution(ctx context.Context, prepared *Pr
 	if !ok {
 		return preparedExecutionRecord{}, fmt.Errorf("execution was not prepared by this broker or was already consumed")
 	}
-	if err := validatePreparedExecutionAuthority(prepared); err != nil {
+	if err := validatePreparedExecutionAuthority(prepared, b.clock()); err != nil {
 		cleanup := b.cleanupRecord(ctx, record)
 		return preparedExecutionRecord{}, fmt.Errorf("%w (cleanup=%s)", err, cleanup.Status)
 	}
@@ -273,10 +439,25 @@ func (b *SandboxBroker) claimPreparedExecution(ctx context.Context, prepared *Pr
 		}
 		return preparedExecutionRecord{}, fmt.Errorf("prepared execution changed after authorization (cleanup=%s)", cleanup.Status)
 	}
+	currentLease, err := b.leases.Get(ctx, record.leaseID)
+	if err != nil {
+		cleanup := b.cleanupRecord(ctx, record)
+		return preparedExecutionRecord{}, fmt.Errorf("resolve prepared execution lease: %w (cleanup=%s)", err, cleanup.Status)
+	}
+	if currentLease == nil {
+		cleanup := b.cleanupRecord(ctx, record)
+		return preparedExecutionRecord{}, fmt.Errorf("prepared execution lease is missing (cleanup=%s)", cleanup.Status)
+	}
+	if currentLease.Status != lease.LeaseStatusActive || !b.clock().Before(currentLease.ExpiresAt) ||
+		currentLease.Backend != record.backend || currentLease.ProfileName != prepared.Verdict.Profile.ProfileName ||
+		currentLease.TemplateRef != record.spec.Image {
+		cleanup := b.cleanupRecord(ctx, record)
+		return preparedExecutionRecord{}, fmt.Errorf("prepared execution lease is stale or changed (cleanup=%s)", cleanup.Status)
+	}
 	return record, nil
 }
 
-func validatePreparedExecutionAuthority(prepared *PreparedExecution) error {
+func validatePreparedExecutionAuthority(prepared *PreparedExecution, now time.Time) error {
 	if prepared == nil || prepared.Lease == nil || prepared.Spec == nil || prepared.Verdict == nil || prepared.Verdict.Profile == nil {
 		return fmt.Errorf("prepared execution is incomplete")
 	}
@@ -291,6 +472,9 @@ func validatePreparedExecutionAuthority(prepared *PreparedExecution) error {
 	}
 	if prepared.Verdict.Profile.ProfileName != prepared.Lease.ProfileName {
 		return fmt.Errorf("profile mismatch: lease=%q verdict=%q", prepared.Lease.ProfileName, prepared.Verdict.Profile.ProfileName)
+	}
+	if prepared.Verdict.Intent.IssuedAt.After(now) || prepared.Verdict.Intent.ExpiresAt.IsZero() || !now.Before(prepared.Verdict.Intent.ExpiresAt) {
+		return fmt.Errorf("prepared execution intent is not currently valid")
 	}
 	return nil
 }

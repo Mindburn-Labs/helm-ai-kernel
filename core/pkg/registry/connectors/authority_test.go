@@ -1,3 +1,5 @@
+// quantum_posture: these tests exercise classical Ed25519 connector release
+// authority signing and verification; no hybrid or post-quantum claim.
 package connectors
 
 import (

@@ -1,3 +1,5 @@
+// quantum_posture: connector release authority verification uses classical
+// Ed25519 keys only; no hybrid or post-quantum verification is claimed.
 package connectors
 
 import (

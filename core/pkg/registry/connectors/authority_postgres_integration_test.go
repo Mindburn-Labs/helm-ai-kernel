@@ -1,3 +1,5 @@
+// quantum_posture: this integration test persists classical Ed25519 connector
+// release authority records; no hybrid or post-quantum claim.
 package connectors
 
 import (

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.helm.ai/boundary/update_bundle_manifest.v1.schema.json",
+  "title": "HELM Offline Update Bundle Manifest v1",
+  "$comment": "Signed manifest of an offline update bundle for disconnected appliance fleets: a JCS-canonical (RFC 8785) entry list over a tar.gz payload. The verifier rejects extra, missing, mismatched, traversal, and non-regular-file members. Format + verifier only in v1 — no build tooling, no OTA mechanism. Operators may additionally cosign sign-blob the manifest file at the transport layer; the in-repo trust anchor is the Ed25519 signature. quantum_posture: classical Ed25519 signatures; this preview contract makes no hybrid or post-quantum claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "kernel_version",
+    "created_at",
+    "entries",
+    "artifact_set_hash",
+    "signer_key_id",
+    "record_hash",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": { "const": "update_bundle_manifest.v1" },
+    "bundle_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+    "kernel_version": { "$ref": "#/$defs/non_empty" },
+    "created_at": { "$ref": "#/$defs/rfc3339" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "size"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "pattern": "^[^/]", "$comment": "clean relative path, forward slashes" },
+          "sha256": { "$ref": "#/$defs/hash" },
+          "size": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "$comment": "sorted by path; artifact_set_hash is sha256 over the JCS-canonical entry list"
+    },
+    "artifact_set_hash": { "$ref": "#/$defs/hash" },
+    "signer_key_id": { "$ref": "#/$defs/non_empty" },
+    "record_hash": { "$ref": "#/$defs/hash" },
+    "signature": { "type": "string", "pattern": "^ed25519:[a-f0-9]{128}$" }
+  },
+  "$defs": {
+    "non_empty": { "type": "string", "minLength": 1 },
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "rfc3339": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}" }
+  }
+}

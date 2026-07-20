@@ -46,7 +46,11 @@ func TestCanonicalizeDecision_FullBinding(t *testing.T) {
 	}{
 		{"ID", func(d *contracts.DecisionRecord) { d.ID = "dec-TAMPERED" }},
 		{"Verdict", func(d *contracts.DecisionRecord) { d.Verdict = "FAIL" }},
-		{"Reason", func(d *contracts.DecisionRecord) { d.Reason = "Tampered reason" }},
+		// HELM-303 preimage V2: the attested reason field is the
+		// machine-readable ReasonCode; free-text Reason left the preimage
+		// deliberately (prose is prohibited from export and must not carry
+		// the signed claim). See TestCanonicalizeDecisionV2_ReasonNotBound.
+		{"ReasonCode", func(d *contracts.DecisionRecord) { d.ReasonCode = "TAMPERED_CODE" }},
 		{"PhenotypeHash", func(d *contracts.DecisionRecord) { d.PhenotypeHash = "sha256:deadbeef" }},
 		{"PolicyContentHash", func(d *contracts.DecisionRecord) { d.PolicyContentHash = "sha256:YYYY" }},
 		{"EffectDigest", func(d *contracts.DecisionRecord) { d.EffectDigest = "sha256:ZZZZ" }},
@@ -90,5 +94,28 @@ func TestCanonicalizeDecision_EmptyFields(t *testing.T) {
 	ok, err := signer.VerifyDecision(d)
 	if err != nil || !ok {
 		t.Fatalf("signature should verify with empty optional fields: ok=%v err=%v", ok, err)
+	}
+}
+
+
+// TestCanonicalizeDecisionV2_ReasonNotBound pins the HELM-303 semantics
+// change explicitly: mutating free-text Reason on a V2-signed record does NOT
+// invalidate the signature — ReasonCode is the attested claim.
+func TestCanonicalizeDecisionV2_ReasonNotBound(t *testing.T) {
+	signer, err := NewEd25519Signer("drift7-v2-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &contracts.DecisionRecord{ID: "dec-v2", Verdict: "DENY", Reason: "human words", ReasonCode: "POLICY_DENY"}
+	if err := signer.SignDecision(d); err != nil {
+		t.Fatal(err)
+	}
+	if d.SignatureVersion != contracts.DecisionRecordSignatureV2 {
+		t.Fatalf("expected V2 signature version, got %q", d.SignatureVersion)
+	}
+	d.Reason = "different human words"
+	ok, err := signer.VerifyDecision(d)
+	if err != nil || !ok {
+		t.Fatalf("Reason mutation must not invalidate a V2 signature (ok=%v err=%v)", ok, err)
 	}
 }

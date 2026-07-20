@@ -153,3 +153,76 @@ type authorizedExecutionIntentSigningEnvelope struct {
 func CanonicalizeReceipt(receiptID, decisionID, effectID, status, outputHash, prevHash string, lamportClock uint64, argsHash string) string {
 	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s%s%d%s%s", receiptID, SigSeparator, decisionID, SigSeparator, effectID, SigSeparator, status, SigSeparator, outputHash, SigSeparator, prevHash, SigSeparator, lamportClock, SigSeparator, argsHash)
 }
+
+// --- HELM-303: V5 receipt / V2 decision signing preimages -----------------
+
+// CanonicalizeReceiptV5 extends the V4 preimage with the receipt's
+// governance-meaning fields: verdict, reason_code, policy_hash, session_id.
+// With V4, those fields could be rewritten on a persisted receipt without
+// invalidating its signature (the chain made it tamper-evident only once a
+// successor existed; the chain tip was signature-silent). Field order is
+// fixed and versioned; never reorder within a version.
+func CanonicalizeReceiptV5(r *contracts.Receipt) string {
+	v4 := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s", v4,
+		SigSeparator, contracts.ReceiptSignatureV5,
+		SigSeparator, r.Verdict,
+		SigSeparator, r.ReasonCode,
+		SigSeparator, r.PolicyHash,
+		SigSeparator, r.SessionID)
+}
+
+// ReceiptSigningPayload stamps the receipt with the current preimage version
+// and returns the payload to sign. All signers must use this instead of
+// calling a Canonicalize* function directly, so a new preimage revision is a
+// one-line change here rather than an eight-site hunt.
+func ReceiptSigningPayload(r *contracts.Receipt) string {
+	r.SignatureVersion = contracts.ReceiptSignatureV5
+	return CanonicalizeReceiptV5(r)
+}
+
+// ReceiptVerifyPayload reconstructs the signed payload according to the
+// receipt's declared preimage version. Empty = legacy V4 (receipts signed
+// before HELM-303 stay verifiable under the preimage they were signed over);
+// unknown versions are rejected rather than guessed.
+func ReceiptVerifyPayload(r *contracts.Receipt) (string, error) {
+	switch r.SignatureVersion {
+	case "":
+		return CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash), nil
+	case contracts.ReceiptSignatureV5:
+		return CanonicalizeReceiptV5(r), nil
+	default:
+		return "", fmt.Errorf("unsupported receipt signature version %q", r.SignatureVersion)
+	}
+}
+
+// CanonicalizeDecisionV2 signs the machine-readable ReasonCode in place of
+// free-text Reason: the exported, keyed-on field is the attested one, and
+// prose (which the telemetry contract prohibits from export) leaves the
+// preimage entirely.
+func CanonicalizeDecisionV2(id, verdict, reasonCode, phenotypeHash, policyContentHash, effectDigest string) string {
+	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s%s%s",
+		contracts.DecisionRecordSignatureV2, SigSeparator,
+		id, SigSeparator, verdict, SigSeparator, reasonCode, SigSeparator,
+		phenotypeHash, SigSeparator, policyContentHash, SigSeparator, effectDigest)
+}
+
+// DecisionSigningPayload stamps the record with the current preimage version
+// and returns the payload to sign.
+func DecisionSigningPayload(d *contracts.DecisionRecord) string {
+	d.SignatureVersion = contracts.DecisionRecordSignatureV2
+	return CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+}
+
+// DecisionVerifyPayload reconstructs the signed payload per the record's
+// declared preimage version; empty = legacy (free-text Reason).
+func DecisionVerifyPayload(d *contracts.DecisionRecord) (string, error) {
+	switch d.SignatureVersion {
+	case "":
+		return CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest), nil
+	case contracts.DecisionRecordSignatureV2:
+		return CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest), nil
+	default:
+		return "", fmt.Errorf("unsupported decision signature version %q", d.SignatureVersion)
+	}
+}

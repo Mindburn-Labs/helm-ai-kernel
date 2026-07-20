@@ -17,6 +17,11 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def require(text: str, token: str, path: Path) -> None:
+    if token not in text:
+        fail(f"{path}: missing required authority-state hardening token: {token}")
+
+
 def require_digest_default(path: Path, text: str) -> None:
     match = re.search(r'KUBE_HELM_IMAGE="\$\{KUBE_HELM_IMAGE:-([^}]+)\}"', text)
     if not match:
@@ -56,9 +61,39 @@ def check_chart_smoke(path: Path) -> None:
     require_digest_default(path, text)
 
 
+def check_authority_state_chart(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    required = [
+        'name: prepare-authority-state',
+        'runtimeInit.image must be pinned by immutable sha256 digest',
+        'runAsUser: 0',
+        'runAsGroup: 0',
+        'runAsNonRoot: false',
+        'readOnlyRootFilesystem: true',
+        'add:\n                - CHOWN',
+        'chown 0:0 "$data_dir"\n              chmod 0700 "$data_dir"',
+        'chown 0:0 "$root_key"\n                chmod 0600 "$root_key"',
+        'chmod 0600 "$root_key"\n              chown "$runtime_uid:$runtime_gid" "$root_key"\n              chown "$runtime_uid:$runtime_gid" "$data_dir"',
+        'HELM_AUTHORITY_RUNTIME_UID',
+        'HELM_AUTHORITY_RUNTIME_GID',
+        'chmod 0700 "$data_dir"',
+        'chmod 0600 "$root_key"',
+        'cmp -s "$source_key" "$root_key"',
+        'refusing silent rotation',
+        'mountPath: /var/run/helm-signing-key',
+        'defaultMode: 256',
+    ]
+    for token in required:
+        require(text, token, path)
+    for token in ['subPath: root.key', 'mountPath: {{ printf "%s/root.key"']:
+        if token in text:
+            fail(f"{path}: kernel must not receive the signing Secret as a root.key subPath")
+
+
 def main() -> None:
     check_kind_smoke(ROOT / "scripts/ci/kind_smoke.sh")
     check_chart_smoke(ROOT / "scripts/ci/helm_chart_smoke.sh")
+    check_authority_state_chart(ROOT / "deploy/helm-chart/templates/deployment.yaml")
     print("Helm smoke hardening checks passed.")
 
 

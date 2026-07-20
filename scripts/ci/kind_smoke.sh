@@ -66,7 +66,27 @@ PY
     chmod 0600 "$HELM_KUBECONFIG"
 }
 
+kind_failure_diagnostics() {
+    # Keep diagnostics useful without reading Secrets or printing process
+    # environments. Pod descriptions expose secret references, not values.
+    echo "::group::kind smoke diagnostics"
+    kubectl -n "$NAMESPACE" get pods -o wide || true
+    kubectl -n "$NAMESPACE" describe pods || true
+    while IFS= read -r pod; do
+        [ -n "$pod" ] || continue
+        echo "::group::logs $pod"
+        kubectl -n "$NAMESPACE" logs "$pod" --all-containers=true --prefix=true || true
+        kubectl -n "$NAMESPACE" logs "$pod" --all-containers=true --prefix=true --previous || true
+        echo "::endgroup::"
+    done < <(kubectl -n "$NAMESPACE" get pods -o name 2>/dev/null || true)
+    echo "::endgroup::"
+}
+
 cleanup() {
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        kind_failure_diagnostics
+    fi
     if [ -n "$PF_PID" ]; then
         kill "$PF_PID" >/dev/null 2>&1 || true
     fi
@@ -75,6 +95,7 @@ cleanup() {
         kind delete cluster --name "$CLUSTER" >/dev/null 2>&1 || true
     fi
     rm -rf "$TMP_DIR"
+    return "$status"
 }
 trap cleanup EXIT
 

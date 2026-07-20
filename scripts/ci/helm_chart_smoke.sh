@@ -99,6 +99,42 @@ assert_not_contains "$default_rendered" "configmap-reload"
 assert_not_contains "$default_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
+assert_contains "$default_rendered" "name: prepare-authority-state"
+assert_contains "$default_rendered" "HELM_AUTHORITY_DATA_DIR"
+assert_contains "$default_rendered" "HELM_AUTHORITY_RUNTIME_UID"
+assert_contains "$default_rendered" "HELM_AUTHORITY_RUNTIME_GID"
+assert_contains "$default_rendered" "/var/run/helm-signing-key"
+assert_contains "$default_rendered" "defaultMode: 256"
+assert_contains "$default_rendered" "runAsNonRoot: false"
+assert_contains "$default_rendered" "runAsUser: 0"
+assert_contains "$default_rendered" "runAsGroup: 0"
+authority_init_security="$RENDER_DIR/rendered-authority-init-security.yaml"
+awk '/name: prepare-authority-state/{capture=1} capture{print} capture && /^[[:space:]]+command:/{exit}' "$default_rendered" >"$authority_init_security"
+assert_contains "$authority_init_security" "add:"
+assert_contains "$authority_init_security" "CHOWN"
+assert_not_contains "$authority_init_security" "SYS_ADMIN"
+assert_contains "$default_rendered" "refusing silent rotation"
+assert_not_contains "$default_rendered" "subPath: root.key"
+assert_not_contains "$default_rendered" "mountPath: /data/root.key"
+
+runtime_init_fail_log="$RENDER_DIR/runtime-init-unpinned-image.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set runtimeInit.image=alpine:3.20 >"$RENDER_DIR/runtime-init-unpinned-image.yaml" 2>"$runtime_init_fail_log"; then
+    echo "::error::chart render with an unpinned authority init image unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$runtime_init_fail_log" "runtimeInit.image"
+
+authority_identity_rendered="$RENDER_DIR/rendered-authority-identity.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set podSecurityContext.runAsUser=12345 \
+    --set podSecurityContext.runAsGroup=12346 >"$authority_identity_rendered"
+assert_contains "$authority_identity_rendered" "HELM_AUTHORITY_RUNTIME_UID"
+assert_contains "$authority_identity_rendered" "value: \"12345\""
+assert_contains "$authority_identity_rendered" "HELM_AUTHORITY_RUNTIME_GID"
+assert_contains "$authority_identity_rendered" "value: \"12346\""
 
 emergency_stop_rendered="$RENDER_DIR/rendered-emergency-stop.yaml"
 helm_runner template "$RELEASE" "$CHART" \

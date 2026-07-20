@@ -41,12 +41,24 @@ type receiptSourceSummary struct {
 // ScanReceipts projects workstation observe/decision receipts into the same
 // anonymized RiskEnvelope shape as Scan. It never exports raw receipt fields.
 func ScanReceipts(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, error) {
+	result, err := ScanReceiptsWithEvidence(root, opts)
+	if err != nil {
+		return riskenvelope.RiskEnvelope{}, err
+	}
+	return result.Envelope, nil
+}
+
+// ScanReceiptsWithEvidence projects receipt observations and retains only the
+// anonymized projection summary needed to bind a local scan pack. Receipt
+// provenance remains unverified: this command does not validate a runtime
+// receipt chain or establish live agent policy.
+func ScanReceiptsWithEvidence(root string, opts BuildOptions) (ScanResult, error) {
 	if opts.Now.IsZero() {
 		opts.Now = time.Now().UTC()
 	}
 	events, summary, surface, err := collectReceiptProjectionInputs(root)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	for _, event := range events {
 		tool, risk := receiptToolAndRisk(event.EffectType)
@@ -55,15 +67,15 @@ func ScanReceipts(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, er
 	}
 	sourceHash, err := riskenvelope.CanonicalSHA256Ref(summary)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	envelopeID, err := riskenvelope.EnvelopeID(opts.Salt, sourceHash)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	findings, err := projectReceiptFindings(events, opts.Salt)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	sort.Slice(findings, func(i, j int) bool {
 		if findings[i].Severity != findings[j].Severity {
@@ -99,12 +111,18 @@ func ScanReceipts(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, er
 	}
 	sealed, err := riskenvelope.Seal(envelope)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	if err := sealed.Validate(); err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
-	return sealed, nil
+	return ScanResult{
+		Envelope:          sealed,
+		SourceKind:        ScanSourceKindReceiptProjection,
+		Coverage:          ScanCoverageCompleteDeclaredScope,
+		ReceiptProvenance: ReceiptProvenanceUnverified,
+		sourceSummary:     summary,
+	}, nil
 }
 
 func collectReceiptProjectionInputs(root string) ([]receiptProjectionInput, receiptSourceSummary, riskenvelope.AgentSurface, error) {

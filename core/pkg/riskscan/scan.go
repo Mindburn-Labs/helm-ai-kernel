@@ -1,7 +1,6 @@
 package riskscan
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -54,27 +53,56 @@ type PrivacyManifest struct {
 	GeneratedBy           string `json:"generated_by"`
 }
 
+const (
+	ScanSourceKindStaticConfig        = "static_config"
+	ScanSourceKindReceiptProjection   = "receipt_projection"
+	ScanCoverageCompleteDeclaredScope = "complete_declared_scope"
+	ReceiptProvenanceNotApplicable    = "not_applicable"
+	ReceiptProvenanceUnverified       = "unverified"
+)
+
+// ScanResult retains the safe, aggregate source projection that produced an
+// envelope. It is used only to create a sealed local scan pack; it never
+// contains raw paths, source text, prompts, command bodies, or secrets.
+type ScanResult struct {
+	Envelope          riskenvelope.RiskEnvelope
+	SourceKind        string
+	Coverage          string
+	ReceiptProvenance string
+	sourceSummary     any
+}
+
 // ErrScanCoverageIncomplete means the CLI-only static scan could not inspect
 // its declared candidate/config scope. Callers must not export a partial
 // RiskEnvelope or scan artifact.
 var ErrScanCoverageIncomplete = errors.New("risk scan coverage incomplete")
 
 func Scan(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, error) {
+	result, err := ScanWithEvidence(root, opts)
+	if err != nil {
+		return riskenvelope.RiskEnvelope{}, err
+	}
+	return result.Envelope, nil
+}
+
+// ScanWithEvidence performs a strict static scan and retains its anonymized
+// projection summary for a later sealed local evidence-pack export.
+func ScanWithEvidence(root string, opts BuildOptions) (ScanResult, error) {
 	scanner := shadow.NewScanner()
 	scanner.RequireComplete = true
 	report, err := scanner.Scan(root)
 	if err != nil {
 		if errors.Is(err, shadow.ErrScanCoverageIncomplete) {
-			return riskenvelope.RiskEnvelope{}, scanCoverageError("static candidate coverage could not be completed")
+			return ScanResult{}, scanCoverageError("static candidate coverage could not be completed")
 		}
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	obs, err := collectConfigObservation(root, true)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	opts.Root = root
-	return BuildEnvelope(report, obs, opts)
+	return buildEnvelopeWithEvidence(report, obs, opts)
 }
 
 func CollectConfigObservation(root string) (ConfigObservation, error) {
@@ -140,13 +168,21 @@ func scanCoverageError(reason string) error {
 }
 
 func BuildEnvelope(report *shadow.Report, obs ConfigObservation, opts BuildOptions) (riskenvelope.RiskEnvelope, error) {
+	result, err := buildEnvelopeWithEvidence(report, obs, opts)
+	if err != nil {
+		return riskenvelope.RiskEnvelope{}, err
+	}
+	return result.Envelope, nil
+}
+
+func buildEnvelopeWithEvidence(report *shadow.Report, obs ConfigObservation, opts BuildOptions) (ScanResult, error) {
 	if report == nil {
-		return riskenvelope.RiskEnvelope{}, fmt.Errorf("shadow report is required")
+		return ScanResult{}, fmt.Errorf("shadow report is required")
 	}
 	if opts.Now.IsZero() {
 		opts.Now = time.Now().UTC()
 	}
-	sourceHash, err := riskenvelope.CanonicalSHA256Ref(sourceSummary{
+	summary := sourceSummary{
 		FilesScanned:          report.FilesScanned,
 		FilesSkipped:          report.FilesSkipped,
 		SummaryByVendor:       report.SummaryByVendor,
@@ -155,17 +191,18 @@ func BuildEnvelope(report *shadow.Report, obs ConfigObservation, opts BuildOptio
 		HelmPresent:           report.HelmCoverage.Present,
 		MCPServerCount:        obs.MCPServerCount,
 		StaticConfigFilesRead: obs.StaticConfigFilesRead,
-	})
+	}
+	sourceHash, err := riskenvelope.CanonicalSHA256Ref(summary)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	envelopeID, err := riskenvelope.EnvelopeID(opts.Salt, sourceHash)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	findings, err := projectFindings(report.Findings, obs, opts.Salt)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	sort.Slice(findings, func(i, j int) bool {
 		if findings[i].Severity != findings[j].Severity {
@@ -199,12 +236,18 @@ func BuildEnvelope(report *shadow.Report, obs ConfigObservation, opts BuildOptio
 	}
 	sealed, err := riskenvelope.Seal(envelope)
 	if err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
 	if err := sealed.Validate(); err != nil {
-		return riskenvelope.RiskEnvelope{}, err
+		return ScanResult{}, err
 	}
-	return sealed, nil
+	return ScanResult{
+		Envelope:          sealed,
+		SourceKind:        ScanSourceKindStaticConfig,
+		Coverage:          ScanCoverageCompleteDeclaredScope,
+		ReceiptProvenance: ReceiptProvenanceNotApplicable,
+		sourceSummary:     summary,
+	}, nil
 }
 
 func EnvelopeJSON(envelope riskenvelope.RiskEnvelope) ([]byte, error) {
@@ -263,72 +306,6 @@ func RenderHTML(envelope riskenvelope.RiskEnvelope) ([]byte, error) {
 		return nil, err
 	}
 	return b.Bytes(), nil
-}
-
-func WriteEvidencePack(path string, envelope riskenvelope.RiskEnvelope, previews map[string][]byte) (err error) {
-	if err := envelope.Validate(); err != nil {
-		return err
-	}
-	body, err := EnvelopeJSON(envelope)
-	if err != nil {
-		return err
-	}
-	files := map[string][]byte{
-		"risk-envelope.json":     body,
-		"schema-validation.json": mustJSON(schemaValidation(envelope)),
-		"privacy-manifest.json":  mustJSON(PrivacyManifest{GeneratedBy: "helm-ai-kernel scan"}),
-		"source-pack-hash.json":  mustJSON(map[string]string{"source_pack_hash": envelope.SourcePackHash}),
-	}
-	for name, data := range previews {
-		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("preview name is required")
-		}
-		clean := filepath.ToSlash(filepath.Clean(name))
-		if strings.HasPrefix(clean, "../") || clean == ".." || filepath.IsAbs(clean) {
-			return fmt.Errorf("invalid preview path %q", name)
-		}
-		files[clean] = data
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := f.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-	tw := tar.NewWriter(f)
-	defer func() {
-		if closeErr := tw.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-
-	names := make([]string, 0, len(files))
-	for name := range files {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		data := files[name]
-		header := &tar.Header{
-			Name:    name,
-			Mode:    0o644,
-			Size:    int64(len(data)),
-			ModTime: time.Unix(0, 0).UTC(),
-		}
-		if err := tw.WriteHeader(header); err != nil {
-			return err
-		}
-		if _, err := tw.Write(data); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func UploadEnvelope(ctx context.Context, url string, body []byte) error {

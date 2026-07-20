@@ -24,6 +24,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
@@ -38,6 +39,9 @@ import (
 //	1 = verification failed
 //	2 = runtime error
 func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "scan" {
+		return runVerifyScanCmd(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "external-receipt" {
 		return runVerifyExternalReceiptCmd(args[1:], stdout, stderr)
 	}
@@ -128,6 +132,10 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		verifyTarget = tempDir
+	}
+	if riskscan.IsEvidencePack(verifyTarget) {
+		_, _ = fmt.Fprintln(stderr, "Error: risk-scan/v1 packs require `helm-ai-kernel verify scan --bundle <path>`")
+		return 2
 	}
 
 	// Use the standalone verifier library (zero network deps)

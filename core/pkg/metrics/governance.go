@@ -30,6 +30,38 @@ type GovernanceMetrics struct {
 	latencyNext    int
 }
 
+// Label-cardinality bounds (HELM-301). The `tool` label value arrives from
+// callers (with the pilot: connector-supplied names), and unlike reason_code
+// it has no typed registry to validate against — so the collector itself
+// enforces the bound: values are charset/length-sanitized and at most
+// maxToolLabelValues distinct tools are tracked, with overflow collapsed into
+// toolLabelOverflow. This keeps /metrics cardinality finite no matter what
+// arrives at RecordDecision.
+const (
+	maxToolLabelValues = 64
+	maxToolLabelLen    = 64
+	toolLabelOverflow  = "_other"
+)
+
+// sanitizeToolLabel maps an arbitrary caller-supplied tool name onto the
+// bounded label vocabulary: printable ASCII minus `"` and `\` (the two
+// characters with meaning inside a quoted Prometheus label), truncated to
+// maxToolLabelLen; empty input becomes the overflow bucket.
+func sanitizeToolLabel(tool string) string {
+	if tool == "" {
+		return toolLabelOverflow
+	}
+	b := make([]byte, 0, len(tool))
+	for i := 0; i < len(tool) && len(b) < maxToolLabelLen; i++ {
+		c := tool[i]
+		if c < 0x20 || c > 0x7e || c == '"' || c == '\\' {
+			c = '_'
+		}
+		b = append(b, c)
+	}
+	return string(b)
+}
+
 // NewGovernanceMetrics creates a new metrics collector.
 func NewGovernanceMetrics() *GovernanceMetrics {
 	return &GovernanceMetrics{
@@ -52,11 +84,27 @@ func (m *GovernanceMetrics) RecordDecision(allowed bool, tool, reasonCode, agent
 	atomic.AddInt64(&m.chainLength, 1)
 
 	m.mu.Lock()
+	tool = sanitizeToolLabel(tool)
+	if _, seen := m.toolCounts[tool]; !seen && len(m.toolCounts) >= maxToolLabelValues {
+		tool = toolLabelOverflow
+	}
 	m.toolCounts[tool]++
 	if reasonCode != "" {
 		m.reasonCounts[reasonCode]++
 	}
-	m.activeAgents[agentID] = time.Now()
+	now := time.Now()
+	m.activeAgents[agentID] = now
+	// HELM-302: evict idle agents opportunistically so a long-lived kernel
+	// does not accumulate every agent id ever seen. The snapshot's activity
+	// window is 5 minutes; anything past 10 is dead weight.
+	if len(m.activeAgents) > 1024 {
+		cutoff := now.Add(-10 * time.Minute)
+		for id, seen := range m.activeAgents {
+			if seen.Before(cutoff) {
+				delete(m.activeAgents, id)
+			}
+		}
+	}
 	if len(m.latencySamples) < 1024 {
 		m.latencySamples = append(m.latencySamples, latencyUs)
 	} else {

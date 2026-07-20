@@ -79,6 +79,12 @@ verify-update-bundle-vectors:
 	cd core && go test ./pkg/boundary/profile -run TestUpdateBundleManifestSchema -count=1
 	python3 reference_packs/update-bundle-v1/verify_vectors.py
 
+.PHONY: verify-launch-mission-vectors
+
+verify-launch-mission-vectors:
+	cd core && go test ./pkg/contracts -run TestLaunchMissionReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/launch-mission-v1/verify_vectors.py
+
 test-sdk-go-standalone:
 	cd sdk/go && GOWORK=off go test ./...
 
@@ -121,6 +127,7 @@ verify-fixtures:
 	$(MAKE) verify-effect-disposition-vectors
 	$(MAKE) verify-boundary-profile-vectors
 	$(MAKE) verify-update-bundle-vectors
+	$(MAKE) verify-launch-mission-vectors
 	python3 reference_packs/extauthz/verify_extauthz_vectors.py
 	python3 reference_packs/approval/verify_approval_vectors.py
 	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto

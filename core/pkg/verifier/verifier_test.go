@@ -418,6 +418,216 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 	})
 }
 
+func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyHex := hex.EncodeToString(pub)
+	// Mirrors crypto.CanonicalizeReceipt field order.
+	sign := func(effectID string) string {
+		payload := "exec-001:dec-001:" + effectID + ":APPLIED:sha256:out::1:sha256:args"
+		return hex.EncodeToString(ed25519.Sign(priv, []byte(payload)))
+	}
+	receipt := func(effectID, sig, pubKeyHex string) map[string]any {
+		keySet := map[string]any{}
+		if pubKeyHex != "" {
+			keySet["ed25519"] = pubKeyHex
+		}
+		return map[string]any{
+			"receipt_id":          "exec-001",
+			"decision_id":         "dec-001",
+			"effect_id":           effectID,
+			"status":              "APPLIED",
+			"output_hash":         "sha256:out",
+			"prev_hash":           "",
+			"lamport_clock":       1,
+			"args_hash":           "sha256:args",
+			"signature":           sig,
+			"signature_algorithm": "ed25519",
+			"public_key_set":      keySet,
+		}
+	}
+	const signedEffectID = "mcp_governed_effect_execution/proof.local_write"
+
+	t.Run("signed effect_id class dispatches without unsigned type", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, sign(signedEffectID), keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("dev-local governed-effect receipt signature should verify: %+v", check)
+			}
+		}
+	})
+
+	t.Run("legacy type dispatch still verifies", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		const legacyEffectID = "mcp.effect/proof.local_write"
+		doc := receipt(legacyEffectID, sign(legacyEffectID), keyHex)
+		doc["type"] = "mcp_governed_effect_execution"
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("legacy governed-effect receipt signature should verify: %+v", check)
+			}
+		}
+	})
+
+	t.Run("tampered signature fails closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		forged := hex.EncodeToString(ed25519.Sign(priv, []byte("exec-001:dec-001:"+signedEffectID+":APPLIED:sha256:out::1:sha256:args-tampered")))
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, forged, keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("missing key disclosure fails closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, sign(signedEffectID), ""))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("non-dev-local profile refuses disclosure trust", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, sign(signedEffectID), keyHex))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+}
+
+func TestVerifyBundleReceiptClassBindingMismatch(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyHex := hex.EncodeToString(pub)
+	receipt := func(effectID, receiptType string) map[string]any {
+		// Valid signature over the canonical payload: the receipt would verify
+		// under either class path if dispatch trusted the unsigned type.
+		payload := "exec-001:dec-001:" + effectID + ":APPLIED:sha256:out::1:sha256:args"
+		return map[string]any{
+			"type":                receiptType,
+			"receipt_id":          "exec-001",
+			"decision_id":         "dec-001",
+			"effect_id":           effectID,
+			"status":              "APPLIED",
+			"output_hash":         "sha256:out",
+			"prev_hash":           "",
+			"lamport_clock":       1,
+			"args_hash":           "sha256:args",
+			"signature":           hex.EncodeToString(ed25519.Sign(priv, []byte(payload))),
+			"signature_algorithm": "ed25519",
+			"public_key_set":      map[string]any{"ed25519": keyHex},
+		}
+	}
+
+	t.Run("unsigned type contradicting signed policy class is rejected", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"),
+			receipt("mcp_policy_decision/proof.read", "mcp_governed_effect_execution"))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("unsigned type contradicting signed effect class is rejected", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"),
+			receipt("mcp_governed_effect_execution/proof.local_write", "mcp_policy_decision"))
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("signed policy class with key set verifies without unsigned type", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		doc := receipt("mcp_policy_decision/proof.read", "")
+		delete(doc, "type")
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, check := range report.Checks {
+			if check.Name == "embedded_signature_trust" && !check.Pass {
+				t.Fatalf("signed-class policy receipt should verify: %+v", check)
+			}
+		}
+	})
+}
+
+func TestCheckPolicyDecisionHashesSignedBinding(t *testing.T) {
+	writePolicyReceipt := func(t *testing.T, dir string, doc map[string]any) {
+		t.Helper()
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+	}
+
+	t.Run("signed binding passes", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writePolicyReceipt(t, dir, map[string]any{
+			"receipt_id":    "rcpt-001",
+			"decision_id":   "dec-001",
+			"effect_id":     "mcp_policy_decision/proof.read",
+			"status":        "DENY",
+			"output_hash":   "sha256:out",
+			"args_hash":     "sha256:args",
+			"signature":     "abc123",
+			"lamport_clock": 1,
+		})
+		result := checkPolicyDecisionHashes(dir)
+		if !result.Pass {
+			t.Fatalf("MCP policy receipt with signed binding should pass: %+v", result)
+		}
+	})
+
+	t.Run("missing binding fields fail closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		writePolicyReceipt(t, dir, map[string]any{
+			"receipt_id":    "rcpt-001",
+			"decision_id":   "dec-001",
+			"effect_id":     "mcp_policy_decision/proof.read",
+			"status":        "DENY",
+			"output_hash":   "sha256:out",
+			"signature":     "abc123",
+			"lamport_clock": 1,
+		})
+		result := checkPolicyDecisionHashes(dir)
+		if result.Pass {
+			t.Fatalf("MCP policy receipt without args_hash must fail: %+v", result)
+		}
+	})
+}
+
 func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {

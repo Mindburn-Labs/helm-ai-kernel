@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/effects/launch/launch_effect_receipt.v1.json",
   "$comment": "quantum_posture: this preview receipt carries classical Ed25519 signature fields only and makes no hybrid or post-quantum claim.",
-  "version": "1.4.0-alpha.1",
+  "version": "1.6.0-alpha.1",
   "title": "Launch Effect Native Receipt (Preview)",
-  "description": "Non-executable Receipt Format v1 profile binding one launch effect to its principal, audience, canonical approval consumption, signed dispatch admission, certified connector release and provider route, commercial evidence, consumed permit, exact request/result hashes, reconciliation proof, ProofGraph node, and EvidencePack closure.",
+  "description": "Non-executable Receipt Format v1 profile binding one launch effect to its principal, audience, canonical approval consumption, signed dispatch admission, durable effect reservation, certified connector release and provider route, commercial evidence, consumed permit, exact request/result hashes, reconciliation proof, ProofGraph node, and EvidencePack closure.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -36,7 +36,9 @@
     "input_schema_hash",
     "input_hash",
     "idempotency_key",
+    "plan_hash",
     "request_hash",
+    "args_c14n_hash",
     "result_hash",
     "kernel_verdict_ref",
     "kernel_verdict_hash",
@@ -46,11 +48,15 @@
     "approval_consumption_hash",
     "dispatch_admission_ref",
     "dispatch_admission_hash",
+    "effect_reservation_ref",
+    "effect_reservation_hash",
     "effect_permit_ref",
     "effect_permit_hash",
     "permit_nonce",
     "permit_consumption_ref",
     "permit_consumption_hash",
+    "proof_session_ref",
+    "evidence_reservation_ref",
     "policy_epoch",
     "emergency_fence_epoch",
     "connector_contract_hash",
@@ -102,7 +108,9 @@
     "input_schema_hash": { "$ref": "#/$defs/hash" },
     "input_hash": { "$ref": "#/$defs/hash" },
     "idempotency_key": { "$ref": "#/$defs/hash" },
+    "plan_hash": { "$ref": "#/$defs/hash" },
     "request_hash": { "$ref": "#/$defs/hash" },
+    "args_c14n_hash": { "$ref": "#/$defs/hash" },
     "result_hash": { "$ref": "#/$defs/hash" },
     "kernel_verdict_ref": { "type": "string", "minLength": 1 },
     "kernel_verdict_hash": { "$ref": "#/$defs/hash" },
@@ -112,11 +120,15 @@
     "approval_consumption_hash": { "$ref": "#/$defs/hash" },
     "dispatch_admission_ref": { "type": "string", "minLength": 1 },
     "dispatch_admission_hash": { "$ref": "#/$defs/hash" },
+    "effect_reservation_ref": { "type": "string", "minLength": 1 },
+    "effect_reservation_hash": { "$ref": "#/$defs/hash" },
     "effect_permit_ref": { "type": "string", "minLength": 1 },
     "effect_permit_hash": { "$ref": "#/$defs/hash" },
     "permit_nonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22,}$" },
     "permit_consumption_ref": { "type": "string", "minLength": 1 },
     "permit_consumption_hash": { "$ref": "#/$defs/hash" },
+    "proof_session_ref": { "type": "string", "minLength": 1 },
+    "evidence_reservation_ref": { "type": "string", "minLength": 1 },
     "policy_epoch": { "type": "string", "minLength": 1 },
     "emergency_fence_epoch": { "type": "integer", "minimum": 0 },
     "connector_contract_hash": { "$ref": "#/$defs/hash" },
@@ -138,6 +150,15 @@
     "route_binding_ref": { "type": "string", "minLength": 1 },
     "route_binding_hash": { "$ref": "#/$defs/hash" },
     "route_placement_id": { "type": "string", "minLength": 1 },
+    "provider_id": { "type": "string", "minLength": 1 },
+    "provider_account_ref": { "type": "string", "minLength": 1 },
+    "provider_account_hash": { "$ref": "#/$defs/hash" },
+    "region_id": { "type": "string", "minLength": 1 },
+    "offering_id": { "type": "string", "minLength": 1 },
+    "provider_connector_id": { "type": "string", "minLength": 1 },
+    "provider_connector_contract_hash": { "$ref": "#/$defs/hash" },
+    "provider_action_urn": { "type": "string", "minLength": 1 },
+    "provider_payload_hash": { "$ref": "#/$defs/hash" },
     "provider_capability_profile_ref": { "type": "string", "minLength": 1 },
     "provider_capability_profile_hash": { "$ref": "#/$defs/hash" },
     "provider_certification_ref": { "type": "string", "minLength": 1 },
@@ -170,8 +191,9 @@
     {
       "if": { "properties": { "outcome": { "const": "SUCCEEDED" } }, "required": ["outcome"] },
       "then": {
-        "required": ["evidence_pack_ref", "evidence_pack_hash"],
+        "required": ["evidence_pack_ref", "evidence_pack_hash", "previous_receipt_id"],
         "properties": {
+          "receipt_revision": { "minimum": 2 },
           "reconciliation_status": { "const": "PROVEN_APPLIED" },
           "dependency_state": { "const": "RELEASED" },
           "reconciliation_revision": { "minimum": 1 }
@@ -181,8 +203,9 @@
     {
       "if": { "properties": { "outcome": { "const": "FAILED" } }, "required": ["outcome"] },
       "then": {
-        "required": ["evidence_pack_ref", "evidence_pack_hash"],
+        "required": ["evidence_pack_ref", "evidence_pack_hash", "previous_receipt_id"],
         "properties": {
+          "receipt_revision": { "minimum": 2 },
           "reconciliation_status": { "enum": ["PROVEN_APPLIED", "PROVEN_NOT_APPLIED"] },
           "dependency_state": { "const": "FROZEN" },
           "reconciliation_revision": { "minimum": 1 }
@@ -207,6 +230,13 @@
           "route_binding_ref",
           "route_binding_hash",
           "route_placement_id",
+          "provider_id",
+          "provider_account_ref",
+          "provider_account_hash",
+          "region_id",
+          "offering_id",
+          "provider_connector_id",
+          "provider_connector_contract_hash",
           "provider_capability_profile_ref",
           "provider_capability_profile_hash",
           "provider_certification_ref",
@@ -216,6 +246,19 @@
           "price_evidence_hash",
           "terms_evidence_hash"
         ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "effect_id": {
+            "enum": ["PROVIDER_PROVISION", "DEPLOY_PRODUCTION_ACTIVATE", "PROVIDER_ROLLBACK", "PROVIDER_TEARDOWN"]
+          }
+        },
+        "required": ["effect_id"]
+      },
+      "then": {
+        "required": ["provider_action_urn", "provider_payload_hash"]
       }
     },
     {

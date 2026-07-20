@@ -120,11 +120,12 @@ FX, tax, and credit evidence and recompute gross exposure using conservative
 integer arithmetic. Workload kinds and graph relationships remain extensible
 tokens rather than a website-only Kernel enum. Schema presence or a candidate
 provider profile grants no execution authority.
-The effect envelope and receipt files in this directory define preview wire
-shapes only. Their identifiers remain absent from the executable catalog until
-base-effect expansion, policy and Kernel boundary consumers, connector
-certification, cryptographic verification, and committed cross-language
-reference packs are promoted together.
+The effect envelope and receipt files now have a deterministic Go verifier and
+an independent cross-language reference pack, but remain non-executable preview
+contracts. Their identifiers remain absent from the executable catalog until
+base-effect expansion, every policy and Kernel boundary consumer, connector
+certification, durable effect reservation, start interlock, reconciliation, and
+signed closure are promoted together through the deployed Data Plane.
 
 ### Evidence (`evidence/`)
 

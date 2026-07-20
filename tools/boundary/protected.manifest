@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-19T23:55:06Z
+# Generated: 2026-07-20T00:09:54Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -162,7 +162,7 @@ f7828f30856587a6e72d8058b0a08396e0746c5104b5eff6de28c0ef2d421d12  core/pkg/contr
 a4d12be0b1401a4ea024f4eacb1f2e2c6f6809356f1060890828812aa8cbb1cd  core/pkg/contracts/contracts_stress_coverage_test.go
 3670d455717968e63e8dbcf0c38f79812d0bf72cb7eb234a51b305a27aede0c4  core/pkg/contracts/counterfactual_receipt.go
 ed4994cdbba2b72e5626b91ade9226920896458d6ef4b3c62e127c1fce18e139  core/pkg/contracts/counterfactual_receipt_test.go
-f511897af1dc5a36eb0549e94cb26318a5f36f957b06176ae2bf2009eab507fd  core/pkg/contracts/decision.go
+59e02a6d182673df19d3ca5f1ea7cf584cdd3f51042204427fa5c7e06e02ba28  core/pkg/contracts/decision.go
 d443d4bd34f27e417b061a0346fa93b41de07822da7c1b8703f18e457b54de8e  core/pkg/contracts/decision.proto
 3e47d320d74867aacd97603f6007a47ba4e7927df8b0a185769566791e74c4b3  core/pkg/contracts/decision_request.go
 e23388a6c24921b11239be71d1b34dd6c3925756a6900ac02c09c8101b9b0cc1  core/pkg/contracts/decision_request_test.go
@@ -279,7 +279,7 @@ cec8685ee1984a7d2354c6772225a93f0b2410933199464e7a982e90cf8c17de  core/pkg/contr
 ec5e678d2ee82478613d555157bee76e6219e89e33bff48ba73912064889c879  core/pkg/crypto/audit.go
 7bb309852eb6f56e94608764d95590d12d0363799464cefd13890a6be6337561  core/pkg/crypto/audit_test.go
 4c93d6bca52d1d607b7a6a17431e621dae6a282517502fcdb02c339583d784cc  core/pkg/crypto/cache.go
-79aab34d221445ea9b5a3365d355db5c4415c05d70bf43c9876268ea8fe44ea1  core/pkg/crypto/canonical.go
+2c10948521a17836c5480fb719fbb2a23c7e4c2674d8afd9022284cb5beea2df  core/pkg/crypto/canonical.go
 21e64571c1be21d57c3c7fada229e4283b0c06bff51b53fc91d45050c1725579  core/pkg/crypto/canonical_hardening_test.go
 79c5800555e866ef43ef7cc0f0578676770ab6292ea2860e2e331d0ee25c764b  core/pkg/crypto/chaos_test.go
 0319cee4ab2b72af8110ef535a2d1686d748d7ebd8befe932c65e515883d9dd2  core/pkg/crypto/counterfactual_signer_test.go
@@ -301,7 +301,7 @@ a9b60b330f8ce8f4aa558bbda110fb407dcb8f74f8497967cbc8c4d386c3a9cd  core/pkg/crypt
 bab2d05941ac4c7a1882b7d591c81e1bc2656a40b6d4950729709f0381dd1395  core/pkg/crypto/hybrid_signer.go
 cad401318be5054777686c63a35dfb23e1d74785d66266429688d30f7fa74edb  core/pkg/crypto/hybrid_signer_test.go
 90e7358c3118c7fc6c63417109cf216ed75dba623ef333d803dac8f6945c2170  core/pkg/crypto/hybrid_verifier.go
-b0def61ff6687ea6eeeedc62b7b39b85aaea1776893d9f86dd4d282dc6c08be5  core/pkg/crypto/intent_v2_test.go
+e4d8ce1138cb33baf3b9a8e6685c4edc1faa97aadcecc394a8598c9d031e78e5  core/pkg/crypto/intent_v2_test.go
 f3af5bd442e958b32b5e30d3f8965f92d308abf6273ae05c3d1d2f823709d9be  core/pkg/crypto/keyring.go
 83ca3291457c5fb929e09e979ead5c6501aa34081fca10ee10b0d5f220d96d46  core/pkg/crypto/keyring_fuzz_test.go
 0ddfb885a8a074dbca8314e67fb8d305dd85e0b2641fe1ab70c2f3457960b613  core/pkg/crypto/keyring_test.go

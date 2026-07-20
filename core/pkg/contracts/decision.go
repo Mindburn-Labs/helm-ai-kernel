@@ -125,8 +125,7 @@ type PolicyRef struct {
 const VerdictPending = "PENDING"
 
 // AuthorizedExecutionIntentSignatureV2 binds the full authority window and
-// portable effect semantics. Empty version identifies the legacy signature
-// preimage and is retained only for non-sandbox compatibility verification.
+// portable effect semantics. Unversioned legacy intents are never executable.
 const AuthorizedExecutionIntentSignatureV2 = "authorized_execution_intent.v2"
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.

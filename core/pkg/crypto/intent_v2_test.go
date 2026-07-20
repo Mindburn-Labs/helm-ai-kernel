@@ -47,7 +47,7 @@ func TestExecutionIntentV2BindsCompleteAuthority(t *testing.T) {
 	}
 }
 
-func TestExecutionIntentLegacyVerificationRemainsAvailable(t *testing.T) {
+func TestExecutionIntentLegacyVerificationIsRejected(t *testing.T) {
 	signer, err := NewEd25519Signer("legacy-intent-key")
 	if err != nil {
 		t.Fatal(err)
@@ -63,8 +63,8 @@ func TestExecutionIntentLegacyVerificationRemainsAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if valid, verifyErr := signer.VerifyIntent(intent); verifyErr != nil || !valid {
-		t.Fatalf("legacy non-sandbox intent no longer verifies: valid=%v err=%v", valid, verifyErr)
+	if valid, verifyErr := signer.VerifyIntent(intent); verifyErr == nil || valid {
+		t.Fatalf("legacy intent retained execution authority: valid=%v err=%v", valid, verifyErr)
 	}
 }
 

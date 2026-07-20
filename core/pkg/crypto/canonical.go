@@ -65,10 +65,10 @@ func CanonicalizeDecisionStrict(id, verdict, reason, phenotypeHash, policyConten
 	return CanonicalizeDecision(id, verdict, reason, phenotypeHash, policyContentHash, effectDigest), nil
 }
 
-// CanonicalizeIntent creates a canonical string representation of an intent for signing.
-// New signing paths pass effectDigestHash to bind the intent to the exact
-// effect approved by the decision; the variadic form preserves old callers
-// that only need to inspect the legacy component ordering.
+// CanonicalizeIntent creates the historical compact intent preimage.
+//
+// Deprecated: retained only for fixture compatibility. It does not bind the
+// authority window and must never be used to grant execution authority.
 func CanonicalizeIntent(id, decisionID, allowedTool string, effectDigestHash ...string) string {
 	if len(effectDigestHash) == 0 {
 		return fmt.Sprintf("%s%s%s%s%s", id, SigSeparator, decisionID, SigSeparator, allowedTool)
@@ -79,14 +79,11 @@ func CanonicalizeIntent(id, decisionID, allowedTool string, effectDigestHash ...
 // CanonicalizeAuthorizedExecutionIntent returns the versioned signing
 // preimage for an execution intent. V2 binds the authority window, signer and
 // algorithm identity, taint, emergency authority, idempotency, and complete
-// portable effect semantics. Empty version preserves verification of legacy
-// non-sandbox intents that used the compact colon-delimited preimage.
+// portable effect semantics. Legacy unversioned preimages are rejected because
+// they do not bind expiry and therefore cannot grant execution authority.
 func CanonicalizeAuthorizedExecutionIntent(intent *contracts.AuthorizedExecutionIntent) ([]byte, error) {
 	if intent == nil {
 		return nil, fmt.Errorf("execution intent is nil")
-	}
-	if intent.SignatureVersion == "" {
-		return []byte(CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)), nil
 	}
 	if intent.SignatureVersion != contracts.AuthorizedExecutionIntentSignatureV2 {
 		return nil, fmt.Errorf("unsupported execution intent signature version %q", intent.SignatureVersion)

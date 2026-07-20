@@ -68,8 +68,18 @@ Expected fields:
 verdict: DENY
 reason: OPERATE_PERMISSIONS_EMPTY
 effect: WORKSTATION_SHELL_COMMAND
-signature: true
+integrity: true
+trusted: true
 ```
+
+`integrity` checks that the receipt has not been altered relative to the key
+named in the receipt. `trusted` checks that this is the expected local signer.
+Both must be `true`. For a receipt moved to another machine, use
+`--trusted-public-key-file` with a public key obtained from a trusted channel.
+
+The installed hook has a deliberately narrow shell guard: it recognizes only
+selected literal destructive commands. It does not claim to parse every shell
+expansion, wrapper, or destructive tool.
 
 ## Prove An Escalation
 

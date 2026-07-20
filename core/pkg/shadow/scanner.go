@@ -22,6 +22,10 @@ var (
 	scannerOpen    = os.Open
 )
 
+// ErrScanCoverageIncomplete means a strict scanner could not inspect all
+// relevant candidate inputs. Callers must not export a partial report.
+var ErrScanCoverageIncomplete = errors.New("shadow: scan coverage incomplete")
+
 // Scanner walks a directory tree and produces a Report of shadow-AI findings.
 // Zero-allocation-per-match is not a goal; deterministic output is.
 type Scanner struct {
@@ -31,6 +35,11 @@ type Scanner struct {
 	// Excludes are glob patterns (relative to scan root) to skip.
 	// Defaults include node_modules, .git, dist, build, etc.
 	Excludes []string
+
+	// RequireComplete fails the scan when a relevant candidate cannot be read,
+	// inspected, or scanned. The default scanner remains best-effort for legacy
+	// shadow-scan callers; RiskEnvelope scans enable this explicitly.
+	RequireComplete bool
 
 	// Clock returns the current time (injectable for testing).
 	Clock func() time.Time
@@ -66,10 +75,16 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 
 	err = scannerWalkDir(absRoot, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			// Skip unreadable paths rather than abort the whole scan.
+			if s.RequireComplete && !s.shouldSkipDir(absRoot, path) {
+				return incompleteScanError("unable to traverse declared scan scope")
+			}
+			// Legacy shadow scans skip unreadable paths rather than aborting.
 			return nil
 		}
 		if d == nil {
+			if s.RequireComplete {
+				return incompleteScanError("unable to traverse declared scan scope")
+			}
 			return errors.New("shadow: nil directory entry")
 		}
 		if d.IsDir() {
@@ -84,18 +99,29 @@ func (s *Scanner) Scan(root string) (*Report, error) {
 		}
 		info, err := d.Info()
 		if err != nil {
+			if s.RequireComplete {
+				return incompleteScanError("unable to inspect candidate input")
+			}
 			r.FilesSkipped++
 			return nil
 		}
 		if info.Size() > s.MaxFileBytes {
+			if s.RequireComplete {
+				return incompleteScanError("candidate input exceeds scan size limit")
+			}
 			r.FilesSkipped++
 			return nil
 		}
 		r.FilesScanned++
-		s.scanFile(path, absRoot, r)
+		if err := s.scanFile(path, absRoot, r); err != nil && s.RequireComplete {
+			return incompleteScanError("unable to read candidate input")
+		}
 		return nil
 	})
 	if err != nil {
+		if s.RequireComplete && !errors.Is(err, ErrScanCoverageIncomplete) {
+			return nil, incompleteScanError("unable to traverse declared scan scope")
+		}
 		return nil, err
 	}
 
@@ -172,15 +198,18 @@ func (s *Scanner) shouldScanFile(path string) bool {
 }
 
 // scanFile inspects a single file and appends findings to the report.
-func (s *Scanner) scanFile(path, root string, r *Report) {
+func (s *Scanner) scanFile(path, root string, r *Report) error {
 	f, err := scannerOpen(path)
 	if err != nil {
-		return
+		return err
 	}
 	defer f.Close()
 
 	rel, err := scannerRel(root, path)
 	if err != nil {
+		if s.RequireComplete {
+			return err
+		}
 		rel = path
 	}
 
@@ -212,6 +241,9 @@ func (s *Scanner) scanFile(path, root string, r *Report) {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
 
 	// Filename-only rules: MCP config files match by path, not content
 	base := strings.ToLower(filepath.Base(path))
@@ -226,6 +258,11 @@ func (s *Scanner) scanFile(path, root string, r *Report) {
 			DetectedAt: s.Clock(),
 		})
 	}
+	return nil
+}
+
+func incompleteScanError(reason string) error {
+	return fmt.Errorf("%w: %s", ErrScanCoverageIncomplete, reason)
 }
 
 // annotateHelmAbsence upgrades SDK-import findings to HIGH severity when no

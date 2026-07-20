@@ -573,23 +573,27 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		return nil, fmt.Errorf("effect digest mismatch: decision=%s requested=%s", decision.EffectDigest, effectDigest)
 	}
 
-	// Determine Allowed Tool (matching identification logic)
-	var allowedTool string
-	if tn, ok := effect.Params["tool_name"].(string); ok && tn != "" {
-		allowedTool = tn
-	} else {
-		allowedTool = effect.EffectType
+	allowedTool := executionIntentAllowedTool(effect)
+	effectBinding, err := contracts.NewEffectDigestBinding(effect)
+	if err != nil {
+		return nil, fmt.Errorf("bind execution intent effect: %w", err)
 	}
 
 	// 3. Create Intent
 	now := g.clock.Now()
+	expiresAt, err := executionIntentExpiresAt(effect, now)
+	if err != nil {
+		return nil, err
+	}
 
 	intent := &contracts.AuthorizedExecutionIntent{
 		ID:               "intent-" + decision.ID, // Deterministic ID
 		DecisionID:       decision.ID,
 		EffectDigestHash: effectDigest,
+		EffectBinding:    effectBinding,
+		IdempotencyKey:   effect.IdempotencyKey,
 		IssuedAt:         now,
-		ExpiresAt:        now.Add(5 * time.Minute),
+		ExpiresAt:        expiresAt,
 		Signer:           "kernel",
 		AllowedTool:      allowedTool,
 		Taint:            contracts.NormalizeTaintLabels(effect.Taint),
@@ -615,41 +619,72 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 }
 
 func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
-	if effect == nil {
-		return "", fmt.Errorf("effect is nil")
+	return contracts.CanonicalEffectDigest(effect)
+}
+
+const (
+	defaultExecutionIntentTTL        = 5 * time.Minute
+	sandboxIntentDispatchWindow      = 5 * time.Minute
+	sandboxIntentMinimumDispatchTime = time.Second
+)
+
+// executionIntentExpiresAt keeps the default short dispatch authority for
+// ordinary effects. A sandbox intent must also cover its signed runtime so the
+// default 5-30 minute profiles can execute; it receives at most five minutes
+// of dispatch slack and can never outlive the exact signed lease.
+func executionIntentAllowedTool(effect *contracts.Effect) string {
+	if effect.EffectType == contracts.EffectTypeRunSandboxedCode {
+		return effect.EffectType
 	}
-	effectBytes, err := canonicalize.JCS(effectDigestEnvelopeFrom(effect))
+	if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
+		return toolName
+	}
+	return effect.EffectType
+}
+
+func executionIntentExpiresAt(effect *contracts.Effect, now time.Time) (time.Time, error) {
+	if effect == nil {
+		return time.Time{}, fmt.Errorf("execution intent requires an effect")
+	}
+	if effect.EffectType != contracts.EffectTypeRunSandboxedCode {
+		return now.Add(defaultExecutionIntentTTL), nil
+	}
+	if effect.Params == nil {
+		return time.Time{}, fmt.Errorf("sandbox execution intent requires complete authorization parameters")
+	}
+	value, ok := effect.Params["param.sandbox_execution"]
+	if !ok || value == nil {
+		return time.Time{}, fmt.Errorf("sandbox execution intent requires complete runtime and lease authorization")
+	}
+	payload, err := json.Marshal(value)
 	if err != nil {
-		return "", err
+		return time.Time{}, fmt.Errorf("encode sandbox execution authority window: %w", err)
 	}
-	return canonicalize.HashBytes(effectBytes), nil
-}
-
-type effectDigestEnvelope struct {
-	EffectType     string                `json:"effect_type"`
-	Params         map[string]any        `json:"params,omitempty"`
-	IdempotencyKey string                `json:"idempotency_key,omitempty"`
-	Irreversible   bool                  `json:"irreversible,omitempty"`
-	ArgsHash       string                `json:"args_hash,omitempty"`
-	OutputHash     string                `json:"output_hash,omitempty"`
-	Taint          []string              `json:"taint,omitempty"`
-	Compensation   *effectDigestEnvelope `json:"compensation,omitempty"`
-}
-
-func effectDigestEnvelopeFrom(effect *contracts.Effect) *effectDigestEnvelope {
-	if effect == nil {
-		return nil
+	var authorization struct {
+		Lease struct {
+			ExpiresAt time.Time `json:"expires_at"`
+		} `json:"lease"`
+		Spec sandbox.SandboxSpec `json:"spec"`
 	}
-	return &effectDigestEnvelope{
-		EffectType:     effect.EffectType,
-		Params:         effect.Params,
-		IdempotencyKey: effect.IdempotencyKey,
-		Irreversible:   effect.Irreversible,
-		ArgsHash:       effect.ArgsHash,
-		OutputHash:     effect.OutputHash,
-		Taint:          contracts.NormalizeTaintLabels(effect.Taint),
-		Compensation:   effectDigestEnvelopeFrom(effect.Compensation),
+	if err := json.Unmarshal(payload, &authorization); err != nil {
+		return time.Time{}, fmt.Errorf("decode sandbox execution authority window: %w", err)
 	}
+	runtimeTimeout := authorization.Spec.Limits.Timeout
+	leaseRemaining := authorization.Lease.ExpiresAt.Sub(now)
+	if runtimeTimeout <= 0 || authorization.Lease.ExpiresAt.IsZero() {
+		return time.Time{}, fmt.Errorf("sandbox execution intent requires a positive signed runtime and lease expiry")
+	}
+	if leaseRemaining <= runtimeTimeout {
+		return time.Time{}, fmt.Errorf("sandbox execution lease does not leave enough authority for runtime and dispatch")
+	}
+	dispatchWindow := leaseRemaining - runtimeTimeout
+	if dispatchWindow < sandboxIntentMinimumDispatchTime {
+		return time.Time{}, fmt.Errorf("sandbox execution lease does not leave enough authority for runtime and dispatch")
+	}
+	if dispatchWindow > sandboxIntentDispatchWindow {
+		dispatchWindow = sandboxIntentDispatchWindow
+	}
+	return now.Add(runtimeTimeout + dispatchWindow), nil
 }
 
 // recordBehavioralEvent records a trust score event if the behavioral scorer is configured.

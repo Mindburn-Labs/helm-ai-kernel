@@ -10,7 +10,7 @@ npm ci
 npm run build
 ```
 
-Package metadata declares version `0.7.2` in `package.json`; this README does
+Package metadata declares version `0.7.3` in `package.json`; this README does
 not claim that a registry package has been published.
 
 ## Local Development
@@ -86,4 +86,4 @@ and sandbox grants attached to HELM-native receipts and EvidencePacks.
 
 ## Release Notes
 
-`0.7.2` is the release-hardening patch with the retained OpenAPI client surface and protobuf message bindings.
+`0.7.3` is the release-hardening patch with the retained OpenAPI client surface and protobuf message bindings.

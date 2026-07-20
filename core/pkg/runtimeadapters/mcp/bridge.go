@@ -8,11 +8,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
@@ -27,6 +29,10 @@ const (
 	DispatchStateFailed        = "dispatch_failed"
 	DispatchStateNoDispatch    = "no_dispatch_proof"
 	DispatchStateNotDispatched = "not_dispatched"
+	DispatchStateAdmitted      = "admitted"
+	DispatchStateStarted       = "started"
+	DispatchStateNotStarted    = "not_started"
+	DispatchStateUncertain     = "uncertain"
 )
 
 // ApprovalEvidence is verifier-approved evidence that satisfies an escalation.
@@ -34,6 +40,9 @@ type ApprovalEvidence struct {
 	ApproverID   string
 	ApprovalHash string
 	GrantedScope string
+	// DispatchAdmission is the exact Kernel-signed near-effect authority. A
+	// production effect-reservation boundary requires it for every write.
+	DispatchAdmission *approvalceremony.DispatchAdmissionRecord
 }
 
 // ApprovalStore verifies approval evidence for an escalated request. It is keyed
@@ -41,6 +50,17 @@ type ApprovalEvidence struct {
 // proposed effect it was granted for.
 type ApprovalStore interface {
 	Approved(requestHash string) (ApprovalEvidence, bool)
+}
+
+// EffectReservationBoundary is the durable lifecycle authority used by the
+// production write path. approvalceremony.EffectReservationAdmitter satisfies
+// this interface without exposing database handles to the bridge.
+type EffectReservationBoundary interface {
+	Admit(context.Context, approvalceremony.DispatchAdmissionRecord) (approvalceremony.EffectReservationEvent, error)
+	Recover(context.Context, string) (approvalceremony.EffectReservationEvent, error)
+	MarkStarted(context.Context, string, approvalceremony.EffectTransitionMeta) (approvalceremony.EffectReservationEvent, error)
+	MarkNotStarted(context.Context, string, approvalceremony.EffectTransitionMeta) (approvalceremony.EffectReservationEvent, error)
+	MarkUncertain(context.Context, string, approvalceremony.EffectTransitionMeta) (approvalceremony.EffectReservationEvent, error)
 }
 
 // WriteClassifier reports whether a tool call is a bounded write that requires
@@ -78,18 +98,19 @@ func DefaultWriteClassifier(toolName string, _ map[string]any) bool {
 // enabled by default. DelegationSessionID is forwarded into the decision record
 // but not yet scope-enforced on this path.
 type GovernedBridge struct {
-	firewall    *mcpcore.ExecutionFirewall // optional boundary gate: allowlist/identity/scope/pinned-schema
-	serverID    string
-	scopes      []string
-	profile     contracts.WorkstationPolicyProfile
-	signingSeed []byte
-	nonces      effects.NonceStore
-	connector   effects.Connector // optional: nil => allowed but not dispatched (no-dispatch proof)
-	approvals   ApprovalStore     // optional: nil => escalations cannot be satisfied
-	isWrite     WriteClassifier
-	permitTTL   time.Duration
-	issuerID    string
-	now         func() time.Time
+	firewall     *mcpcore.ExecutionFirewall // optional boundary gate: allowlist/identity/scope/pinned-schema
+	serverID     string
+	scopes       []string
+	profile      contracts.WorkstationPolicyProfile
+	signingSeed  []byte
+	nonces       effects.NonceStore
+	connector    effects.Connector // optional: nil => allowed but not dispatched (no-dispatch proof)
+	approvals    ApprovalStore     // optional: nil => escalations cannot be satisfied
+	reservations EffectReservationBoundary
+	isWrite      WriteClassifier
+	permitTTL    time.Duration
+	issuerID     string
+	now          func() time.Time
 }
 
 // BridgeConfig configures a GovernedBridge.
@@ -108,8 +129,8 @@ type BridgeConfig struct {
 	// Profile is the workstation policy profile. Zero value uses the default
 	// observe/draft profile (which denies all operate-class MCP calls).
 	Profile contracts.WorkstationPolicyProfile
-	// SigningSeed is the ed25519 seed used to sign decision receipts. Zero value
-	// uses the workstation observe-only seed (non-production).
+	// SigningSeed is the Ed25519 seed used to sign decision receipts. It is
+	// required; a zero value fails closed through the governed decision path.
 	SigningSeed []byte
 	// Nonces prevents permit replay. Zero value uses an in-process store.
 	Nonces effects.NonceStore
@@ -118,6 +139,10 @@ type BridgeConfig struct {
 	// Approvals verifies approval evidence for escalated writes. Nil => writes
 	// requiring approval always escalate and can never proceed.
 	Approvals ApprovalStore
+	// EffectReservations enables the durable near-effect path for writes. When
+	// configured, a write without an exact signed dispatch admission or a
+	// lifecycle-aware connector fails closed.
+	EffectReservations EffectReservationBoundary
 	// IsWrite classifies bounded writes that require approval. Nil => default.
 	IsWrite WriteClassifier
 	// PermitTTL bounds permit validity. Zero => 5 minutes.
@@ -155,33 +180,35 @@ func NewGovernedBridge(cfg BridgeConfig) *GovernedBridge {
 		now = time.Now
 	}
 	return &GovernedBridge{
-		firewall:    cfg.Firewall,
-		serverID:    cfg.ServerID,
-		scopes:      cfg.GrantedScopes,
-		profile:     profile,
-		signingSeed: cfg.SigningSeed,
-		nonces:      nonces,
-		connector:   cfg.Connector,
-		approvals:   cfg.Approvals,
-		isWrite:     isWrite,
-		permitTTL:   ttl,
-		issuerID:    issuer,
-		now:         now,
+		firewall:     cfg.Firewall,
+		serverID:     cfg.ServerID,
+		scopes:       cfg.GrantedScopes,
+		profile:      profile,
+		signingSeed:  cfg.SigningSeed,
+		nonces:       nonces,
+		connector:    cfg.Connector,
+		approvals:    cfg.Approvals,
+		reservations: cfg.EffectReservations,
+		isWrite:      isWrite,
+		permitTTL:    ttl,
+		issuerID:     issuer,
+		now:          now,
 	}
 }
 
 // GovernedOutcome is the result of governing one MCP tool call.
 type GovernedOutcome struct {
-	Verdict       contracts.Verdict
-	DecisionID    string
-	ReceiptHash   string
-	ReasonCode    string
-	Reason        string
-	Permit        *effects.EffectPermit
-	Output        any
-	OutputHash    string
-	DispatchState string
-	Approval      *ApprovalEvidence
+	Verdict           contracts.Verdict
+	DecisionID        string
+	ReceiptHash       string
+	ReasonCode        string
+	Reason            string
+	Permit            *effects.EffectPermit
+	Output            any
+	OutputHash        string
+	DispatchState     string
+	Approval          *ApprovalEvidence
+	EffectReservation *approvalceremony.EffectReservationEvent
 }
 
 // Govern evaluates an MCP tool call and, on ALLOW, mints a permit and (if a
@@ -189,12 +216,35 @@ type GovernedOutcome struct {
 // hash of the request, already computed by the adapter.
 func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash string) GovernedOutcome {
 	now := b.now().UTC()
+	permitScope, err := b.resolvePermitScope(req)
+	if err != nil {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    "CONNECTOR_PERMIT_SCOPE_REJECTED",
+			Reason:        err.Error(),
+			DispatchState: DispatchStateNotDispatched,
+		}
+	}
+	if b.reservations != nil && !permitScope.connectorDeclared {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    "CONNECTOR_PERMIT_SCOPE_UNSUPPORTED",
+			Reason:        "durable execution connector does not declare its exact permit scope",
+			DispatchState: DispatchStateNotDispatched,
+		}
+	}
+	boundaryEffect := "read"
+	if permitScope.connectorDeclared {
+		boundaryEffect = strings.ToLower(string(permitScope.effectType))
+	} else if b.isWrite(req.ToolName, req.Arguments) {
+		boundaryEffect = "write"
+	}
 
 	// Boundary gate (allowlist / server identity / scope / pinned schema) runs
 	// before policy. A boundary refusal short-circuits; policy is never asked to
 	// authorize a call the boundary already rejected.
 	if b.firewall != nil {
-		if outcome, ok := b.authorizeBoundary(ctx, req, inputHash); !ok {
+		if outcome, ok := b.authorizeBoundary(ctx, req, inputHash, boundaryEffect); !ok {
 			return outcome
 		}
 	}
@@ -240,8 +290,13 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	}
 
 	// Approval-gated ESCALATE tier: policy allows it, but a bounded write needs
-	// human approval evidence bound to this exact request.
+	// human approval evidence bound to this exact request. Connector-declared
+	// effect metadata is authoritative when present; the verb heuristic remains
+	// only for legacy connectors without a permit-scope contract.
 	isWrite := b.isWrite(req.ToolName, req.Arguments)
+	if permitScope.connectorDeclared {
+		isWrite = effectTypeRequiresApproval(permitScope.effectType)
+	}
 	if isWrite {
 		approval, ok := b.checkApproval(inputHash)
 		if !ok {
@@ -252,17 +307,36 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 		}
 		base.Approval = &approval
 	}
-
 	// ALLOW: mint a permit bound to the verdict. The nonce is deterministic over
 	// (intent, verdict, tool) — NOT the clock — so an identical request always
 	// yields the same nonce and can be recognized as a replay regardless of when
 	// it arrives.
-	permit, err := b.mintPermit(req, inputHash, receipt, now)
+	permit, err := b.mintPermit(req, inputHash, receipt, now, permitScope)
 	if err != nil {
 		base.Verdict = contracts.VerdictDeny
 		base.ReasonCode = string(contracts.ReasonPDPError)
 		base.Reason = err.Error()
 		return base
+	}
+
+	var lifecycle *bridgeExecutionLifecycle
+	if isWrite && b.reservations != nil {
+		reservation, reservationErr := b.admitWriteReservation(ctx, req, inputHash, base.Approval)
+		if reservationErr != nil {
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "EFFECT_RESERVATION_REJECTED"
+			base.Reason = reservationErr.Error()
+			return base
+		}
+		base.EffectReservation = &reservation
+		base.DispatchState = DispatchStateAdmitted
+		if reservation.State != approvalceremony.EffectReservationStateAdmitted {
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "EFFECT_RESERVATION_NOT_DISPATCHABLE"
+			base.Reason = "effect reservation is not in ADMITTED state; reconcile instead of retrying"
+			return base
+		}
+		lifecycle = &bridgeExecutionLifecycle{boundary: b.reservations, admissionID: reservation.Admission.Admission.AdmissionID}
 	}
 
 	// Single-use replay protection is enforced for WRITES only: a bounded write
@@ -272,11 +346,27 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	// the concurrent-duplicate TOCTOU window.
 	if isWrite {
 		if fresh, err := b.consumeNonce(permit.Nonce); err != nil {
+			resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "NONCE_STORE_UNAVAILABLE")
+			applyEffectReservation(&base, resolved)
+			if resolutionErr != nil {
+				base.Verdict = contracts.VerdictDeny
+				base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+				base.Reason = resolutionErr.Error()
+				return base
+			}
 			base.Verdict = contracts.VerdictDeny
 			base.ReasonCode = string(contracts.ReasonPDPError)
 			base.Reason = fmt.Sprintf("nonce store error: %v", err)
 			return base
 		} else if !fresh {
+			resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "WRITE_PERMIT_REPLAY")
+			applyEffectReservation(&base, resolved)
+			if resolutionErr != nil {
+				base.Verdict = contracts.VerdictDeny
+				base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+				base.Reason = resolutionErr.Error()
+				return base
+			}
 			base.Verdict = contracts.VerdictDeny
 			base.ReasonCode = string(contracts.ReasonPlanTransactionConflict)
 			base.Reason = "single-use write permit already consumed (replay)"
@@ -290,12 +380,89 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	// Dispatch through the connector if one is bound; otherwise emit no-dispatch
 	// proof (allowed, but the effect was not executed by the kernel).
 	if b.connector == nil {
+		resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "CONNECTOR_NOT_CONFIGURED")
+		applyEffectReservation(&base, resolved)
+		if resolutionErr != nil {
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+			base.Reason = resolutionErr.Error()
+			return base
+		}
 		base.DispatchState = DispatchStateNoDispatch
 		return base
 	}
-	output, execErr := b.connector.Execute(ctx, permit, req.ToolName, req.Arguments)
+	var output any
+	var execErr error
+	if lifecycle != nil {
+		connector, ok := b.connector.(effects.LifecycleConnector)
+		if !ok {
+			resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "CONNECTOR_LIFECYCLE_UNSUPPORTED")
+			applyEffectReservation(&base, resolved)
+			if resolutionErr != nil {
+				base.Verdict = contracts.VerdictDeny
+				base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+				base.Reason = resolutionErr.Error()
+				return base
+			}
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "CONNECTOR_LIFECYCLE_UNSUPPORTED"
+			base.Reason = "write connector does not expose a durable start seam"
+			base.DispatchState = DispatchStateNotStarted
+			return base
+		}
+		output, execErr = connector.ExecuteWithLifecycle(ctx, permit, req.ToolName, req.Arguments, lifecycle)
+		current, recoverErr := b.reservations.Recover(ctx, lifecycle.admissionID)
+		if recoverErr != nil {
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "EFFECT_RESERVATION_UNVERIFIED"
+			base.Reason = fmt.Sprintf("recover effect reservation after connector return: %v", recoverErr)
+			base.DispatchState = DispatchStateUncertain
+			return base
+		}
+		base.EffectReservation = &current
+		base.DispatchState = dispatchStateForReservation(current.State)
+		if current.State == approvalceremony.EffectReservationStateAdmitted {
+			uncertain, transitionErr := b.reservations.MarkUncertain(ctx, lifecycle.admissionID, approvalceremony.EffectTransitionMeta{ReasonCode: "CONNECTOR_LIFECYCLE_MISSING"})
+			if transitionErr == nil {
+				base.EffectReservation = &uncertain
+			}
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+			base.Reason = "connector returned without durable lifecycle evidence"
+			base.DispatchState = DispatchStateUncertain
+			return base
+		}
+		if execErr == nil && current.State != approvalceremony.EffectReservationStateStarted {
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+			base.Reason = "connector returned success without a durable STARTED event"
+			return base
+		}
+	} else {
+		output, execErr = b.connector.Execute(ctx, permit, req.ToolName, req.Arguments)
+	}
 	if execErr != nil {
-		base.DispatchState = DispatchStateFailed
+		if lifecycle != nil {
+			if base.EffectReservation != nil && base.EffectReservation.State == approvalceremony.EffectReservationStateStarted {
+				if uncertain, transitionErr := b.reservations.MarkUncertain(ctx, lifecycle.admissionID, approvalceremony.EffectTransitionMeta{
+					ReasonCode:            "CONNECTOR_RETURNED_ERROR_AFTER_START",
+					ConnectorExecutionRef: base.EffectReservation.ConnectorExecutionRef,
+					ProofSessionRef:       base.EffectReservation.ProofSessionRef,
+					IntentRef:             base.EffectReservation.IntentRef,
+					EffectRef:             base.EffectReservation.EffectRef,
+				}); transitionErr == nil {
+					base.EffectReservation = &uncertain
+				}
+			}
+			base.DispatchState = DispatchStateUncertain
+			if base.EffectReservation != nil {
+				base.DispatchState = dispatchStateForReservation(base.EffectReservation.State)
+			}
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "CONNECTOR_EXECUTION_NOT_CONFIRMED"
+		} else {
+			base.DispatchState = DispatchStateFailed
+		}
 		base.Reason = execErr.Error()
 		return base
 	}
@@ -303,7 +470,15 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	if hashErr != nil {
 		// A source effect happened but we cannot canonicalize its output: record
 		// the ambiguity for reconciliation rather than claiming clean success.
-		base.DispatchState = DispatchStateFailed
+		if lifecycle != nil {
+			if uncertain, transitionErr := b.reservations.MarkUncertain(ctx, lifecycle.admissionID, approvalceremony.EffectTransitionMeta{ReasonCode: "OUTPUT_EVIDENCE_INVALID"}); transitionErr == nil {
+				base.EffectReservation = &uncertain
+			}
+			base.DispatchState = DispatchStateUncertain
+			base.Verdict = contracts.VerdictDeny
+		} else {
+			base.DispatchState = DispatchStateFailed
+		}
 		base.Reason = fmt.Sprintf("output canonicalization failed: %v", hashErr)
 		return base
 	}
@@ -313,16 +488,119 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	return base
 }
 
+func (b *GovernedBridge) admitWriteReservation(
+	ctx context.Context,
+	req *runtimeadapters.AdaptedRequest,
+	inputHash string,
+	approval *ApprovalEvidence,
+) (approvalceremony.EffectReservationEvent, error) {
+	if b == nil || b.reservations == nil || approval == nil || approval.DispatchAdmission == nil {
+		return approvalceremony.EffectReservationEvent{}, fmt.Errorf("durable write reservation requires a Kernel-signed dispatch admission")
+	}
+	record := *approval.DispatchAdmission
+	admission := record.Admission
+	if approval.ApprovalHash == "" || approval.ApprovalHash != admission.AdmissionHash {
+		return approvalceremony.EffectReservationEvent{}, fmt.Errorf("approval evidence does not bind the dispatch admission hash")
+	}
+	if approval.GrantedScope != req.ToolName || admission.ConnectorAuthority.ConnectorAction != req.ToolName {
+		return approvalceremony.EffectReservationEvent{}, fmt.Errorf("approval connector action does not bind the requested MCP tool")
+	}
+	if admission.EffectHash != inputHash {
+		return approvalceremony.EffectReservationEvent{}, fmt.Errorf("dispatch admission effect hash does not bind the MCP request")
+	}
+	if b.connector == nil || admission.ConnectorAuthority.ConnectorID != b.connector.ID() {
+		return approvalceremony.EffectReservationEvent{}, fmt.Errorf("dispatch admission connector does not match the runtime connector")
+	}
+	return b.reservations.Admit(ctx, record)
+}
+
+func (b *GovernedBridge) resolvePreDispatchFailure(ctx context.Context, lifecycle *bridgeExecutionLifecycle, reasonCode string) (*approvalceremony.EffectReservationEvent, error) {
+	if lifecycle == nil {
+		return nil, nil
+	}
+	resolved, err := b.reservations.MarkNotStarted(ctx, lifecycle.admissionID, approvalceremony.EffectTransitionMeta{ReasonCode: reasonCode})
+	if err == nil {
+		return &resolved, nil
+	}
+	uncertain, uncertainErr := b.reservations.MarkUncertain(ctx, lifecycle.admissionID, approvalceremony.EffectTransitionMeta{ReasonCode: "PRE_DISPATCH_RESOLUTION_FAILED"})
+	if uncertainErr == nil {
+		return &uncertain, fmt.Errorf("persist NOT_STARTED: %w", err)
+	}
+	recovered, recoverErr := b.reservations.Recover(ctx, lifecycle.admissionID)
+	if recoverErr == nil {
+		return &recovered, errors.Join(fmt.Errorf("persist NOT_STARTED: %w", err), fmt.Errorf("persist UNCERTAIN: %w", uncertainErr))
+	}
+	return nil, errors.Join(fmt.Errorf("persist NOT_STARTED: %w", err), fmt.Errorf("persist UNCERTAIN: %w", uncertainErr), fmt.Errorf("recover reservation: %w", recoverErr))
+}
+
+func applyEffectReservation(outcome *GovernedOutcome, event *approvalceremony.EffectReservationEvent) {
+	if outcome == nil || event == nil {
+		return
+	}
+	outcome.EffectReservation = event
+	outcome.DispatchState = dispatchStateForReservation(event.State)
+}
+
+func dispatchStateForReservation(state approvalceremony.EffectReservationState) string {
+	switch state {
+	case approvalceremony.EffectReservationStateAdmitted:
+		return DispatchStateAdmitted
+	case approvalceremony.EffectReservationStateStarted:
+		return DispatchStateStarted
+	case approvalceremony.EffectReservationStateNotStarted:
+		return DispatchStateNotStarted
+	case approvalceremony.EffectReservationStateUncertain:
+		return DispatchStateUncertain
+	default:
+		return DispatchStateFailed
+	}
+}
+
+type bridgeExecutionLifecycle struct {
+	boundary    EffectReservationBoundary
+	admissionID string
+}
+
+func (l *bridgeExecutionLifecycle) MarkStarted(ctx context.Context, meta effects.ExecutionLifecycleMeta) error {
+	if l == nil || l.boundary == nil {
+		return fmt.Errorf("effect reservation lifecycle is unavailable")
+	}
+	_, err := l.boundary.MarkStarted(ctx, l.admissionID, approvalEffectTransitionMeta(meta))
+	if errors.Is(err, approvalceremony.ErrEffectReservationStartDenied) {
+		return errors.Join(effects.ErrExecutionStartDenied, err)
+	}
+	return err
+}
+
+func (l *bridgeExecutionLifecycle) MarkNotStarted(ctx context.Context, meta effects.ExecutionLifecycleMeta) error {
+	if l == nil || l.boundary == nil {
+		return fmt.Errorf("effect reservation lifecycle is unavailable")
+	}
+	_, err := l.boundary.MarkNotStarted(ctx, l.admissionID, approvalEffectTransitionMeta(meta))
+	return err
+}
+
+func (l *bridgeExecutionLifecycle) MarkUncertain(ctx context.Context, meta effects.ExecutionLifecycleMeta) error {
+	if l == nil || l.boundary == nil {
+		return fmt.Errorf("effect reservation lifecycle is unavailable")
+	}
+	_, err := l.boundary.MarkUncertain(ctx, l.admissionID, approvalEffectTransitionMeta(meta))
+	return err
+}
+
+func approvalEffectTransitionMeta(meta effects.ExecutionLifecycleMeta) approvalceremony.EffectTransitionMeta {
+	return approvalceremony.EffectTransitionMeta{
+		ReasonCode: meta.ReasonCode, ConnectorExecutionRef: meta.ConnectorExecutionRef,
+		ProofSessionRef: meta.ProofSessionRef, IntentRef: meta.IntentRef, EffectRef: meta.EffectRef,
+	}
+}
+
 // authorizeBoundary runs the MCP execution firewall. It returns (outcome,false)
 // when the boundary refuses (caller returns that outcome); (_,true) when the
 // boundary authorizes dispatch and policy evaluation should proceed. It is
 // fail-closed: schema/canonicalization or firewall errors deny.
-func (b *GovernedBridge) authorizeBoundary(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash string) (GovernedOutcome, bool) {
+func (b *GovernedBridge) authorizeBoundary(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash, effect string) (GovernedOutcome, bool) {
 	serverID := firstNonEmpty(b.serverID, req.Metadata["server_id"])
-	effect := "read"
-	if b.isWrite(req.ToolName, req.Arguments) {
-		effect = "write"
-	}
 	argsHash := inputHash
 	if tool, ok := b.firewall.Catalog.Lookup(req.ToolName); ok {
 		hash, err := mcpcore.ValidateToolArguments(tool, req.Arguments)
@@ -404,7 +682,56 @@ func (b *GovernedBridge) consumeNonce(nonce string) (bool, error) {
 	return true, b.nonces.RecordNonce(nonce)
 }
 
-func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHash string, receipt *contracts.WorkstationPolicyDecisionReceipt, now time.Time) (*effects.EffectPermit, error) {
+type permitScopeResolution struct {
+	effectType        effects.EffectType
+	scope             effects.EffectScope
+	resourceRef       string
+	connectorDeclared bool
+}
+
+func (b *GovernedBridge) resolvePermitScope(req *runtimeadapters.AdaptedRequest) (permitScopeResolution, error) {
+	resolution := permitScopeResolution{
+		effectType:  effects.EffectTypeExecute,
+		scope:       effects.EffectScope{AllowedAction: req.ToolName},
+		resourceRef: req.ToolName,
+	}
+	provider, ok := b.connector.(effects.PermitScopeProvider)
+	if !ok {
+		return resolution, nil
+	}
+	effectType, scope, resourceRef, err := provider.PermitScope(req.ToolName, req.Arguments)
+	if err != nil {
+		return permitScopeResolution{}, fmt.Errorf("mcp bridge: connector permit scope: %w", err)
+	}
+	if !knownEffectType(effectType) {
+		return permitScopeResolution{}, fmt.Errorf("mcp bridge: connector permit scope returned unsupported effect type %q", effectType)
+	}
+	if scope.AllowedAction != req.ToolName {
+		return permitScopeResolution{}, fmt.Errorf("mcp bridge: connector permit action %q does not bind %q", scope.AllowedAction, req.ToolName)
+	}
+	if effectTypeRequiresApproval(effectType) && strings.TrimSpace(resourceRef) == "" {
+		return permitScopeResolution{}, fmt.Errorf("mcp bridge: connector permit scope omitted the governed resource")
+	}
+	return permitScopeResolution{
+		effectType: effectType, scope: scope, resourceRef: resourceRef, connectorDeclared: true,
+	}, nil
+}
+
+func knownEffectType(effectType effects.EffectType) bool {
+	switch effectType {
+	case effects.EffectTypeRead, effects.EffectTypeWrite, effects.EffectTypeDelete,
+		effects.EffectTypeExecute, effects.EffectTypeNetwork, effects.EffectTypeFinance:
+		return true
+	default:
+		return false
+	}
+}
+
+func effectTypeRequiresApproval(effectType effects.EffectType) bool {
+	return effectType != effects.EffectTypeRead
+}
+
+func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHash string, receipt *contracts.WorkstationPolicyDecisionReceipt, now time.Time, resolution permitScopeResolution) (*effects.EffectPermit, error) {
 	verdictHash, err := canonicalize.CanonicalHash(receipt)
 	if err != nil {
 		return nil, fmt.Errorf("mcp bridge: verdict hash: %w", err)
@@ -418,10 +745,10 @@ func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHa
 		PermitID:    "permit-" + hex.EncodeToString(nonceSum[:8]),
 		IntentHash:  inputHash,
 		VerdictHash: verdictHash,
-		EffectType:  effects.EffectTypeExecute,
+		EffectType:  resolution.effectType,
 		ConnectorID: connectorIDFor(b.connector),
-		Scope:       effects.EffectScope{AllowedAction: req.ToolName},
-		ResourceRef: req.ToolName,
+		Scope:       resolution.scope,
+		ResourceRef: resolution.resourceRef,
 		ExpiresAt:   now.Add(b.permitTTL),
 		SingleUse:   true,
 		Nonce:       hex.EncodeToString(nonceSum[:]),

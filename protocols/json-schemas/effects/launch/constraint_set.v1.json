@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/constraint_set.v1.json",
+  "version": "1.0.0-alpha.1",
+  "title": "Launch Constraint Set (Preview)",
+  "description": "Versioned mission policy for provider, jurisdiction, residency, commitment, capability, currency, and gross-exposure limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "constraint_set_id", "tenant_id", "workspace_id", "mission_id", "maximum_gross_currency", "maximum_gross_minor", "allowed_providers", "allowed_jurisdictions", "required_residency_tags", "allowed_commitment_terms", "required_route_capabilities", "policy_expression_hash"],
+  "properties": {
+    "schema_version": { "const": "launch_constraint_set.v1" },
+    "constraint_set_id": { "$ref": "#/$defs/non_empty" },
+    "tenant_id": { "$ref": "#/$defs/non_empty" },
+    "workspace_id": { "$ref": "#/$defs/non_empty" },
+    "mission_id": { "$ref": "#/$defs/non_empty" },
+    "maximum_gross_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "maximum_gross_minor": { "type": "integer", "minimum": 0 },
+    "allowed_providers": { "$ref": "#/$defs/string_set" },
+    "allowed_jurisdictions": { "$ref": "#/$defs/string_set" },
+    "required_residency_tags": { "$ref": "#/$defs/string_set" },
+    "allowed_commitment_terms": { "$ref": "#/$defs/string_set" },
+    "required_route_capabilities": { "$ref": "#/$defs/string_set" },
+    "policy_expression_hash": { "$ref": "#/$defs/hash" }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 },
+    "string_set": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/non_empty" } }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "provider_neutral_policy": true }
+}

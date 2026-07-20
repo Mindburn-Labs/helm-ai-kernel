@@ -2,8 +2,14 @@ package effects
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrExecutionStartDenied means a lifecycle authority proved that the effect
+// must not cross its external seam. Connectors may resolve the still-ADMITTED
+// attempt as NOT_STARTED; other start errors remain ambiguous.
+var ErrExecutionStartDenied = errors.New("effect execution start denied")
 
 // EffectType classifies the kind of side effect being executed.
 // The taxonomy is defined in protocols/json-schemas/effects/.
@@ -93,6 +99,44 @@ type EffectScope struct {
 type Connector interface {
 	Execute(ctx context.Context, permit *EffectPermit, toolName string, params map[string]any) (any, error)
 	ID() string
+}
+
+// PermitScopeProvider lets a connector declare the exact permit shape it will
+// accept for a tool call. The governed bridge uses this contract instead of
+// guessing connector-specific effect classes, parameter scope, or resource
+// identifiers. Implementations must be deterministic and side-effect free.
+type PermitScopeProvider interface {
+	Connector
+	PermitScope(toolName string, params map[string]any) (EffectType, EffectScope, string, error)
+}
+
+// ExecutionLifecycleMeta carries bounded connector-side evidence references.
+// It contains no authority; the durable reservation already binds the exact
+// admission, release, request, and idempotency hash.
+type ExecutionLifecycleMeta struct {
+	ReasonCode            string
+	ConnectorExecutionRef string
+	ProofSessionRef       string
+	IntentRef             string
+	EffectRef             string
+}
+
+// ExecutionLifecycle is the durable state handle supplied to connectors that
+// can identify their last pre-effect seam. A connector must mark STARTED before
+// crossing that seam, NOT_STARTED for proven pre-dispatch failures, and
+// UNCERTAIN whenever it cannot prove that the source-side effect did not begin.
+type ExecutionLifecycle interface {
+	MarkStarted(context.Context, ExecutionLifecycleMeta) error
+	MarkNotStarted(context.Context, ExecutionLifecycleMeta) error
+	MarkUncertain(context.Context, ExecutionLifecycleMeta) error
+}
+
+// LifecycleConnector is the production connector extension. Governed bridges
+// with durable effect admission fail closed when a write connector does not
+// implement this interface.
+type LifecycleConnector interface {
+	Connector
+	ExecuteWithLifecycle(context.Context, *EffectPermit, string, map[string]any, ExecutionLifecycle) (any, error)
 }
 
 // Gateway is the canonical interface for the effects execution chokepoint.

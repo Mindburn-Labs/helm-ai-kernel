@@ -1,0 +1,77 @@
+{
+  "schema_version": "launch_provider_capability_profile.v1",
+  "profile_id": "digitalocean-app-platform-candidate-v1",
+  "provider_id": "digitalocean",
+  "connector_id": "digitalocean-app-platform",
+  "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "profile_version": "candidate-1",
+  "profile_status": "CANDIDATE",
+  "regions": [
+    {
+      "region_id": "ams",
+      "jurisdiction": "EU",
+      "residency_tags": ["eu", "netherlands"],
+      "offerings": [
+        {
+          "offering_id": "app-platform",
+          "supported_workload_kinds": ["http_service", "static_site"],
+          "supported_capabilities": ["buildpack-detection", "health-check", "https-endpoint", "managed-tls", "source-deploy", "stateless-runtime"],
+          "supported_lifecycle_classes": ["EPHEMERAL"]
+        }
+      ]
+    },
+    {
+      "region_id": "fra",
+      "jurisdiction": "EU",
+      "residency_tags": ["eu", "germany"],
+      "offerings": [
+        {
+          "offering_id": "app-platform",
+          "supported_workload_kinds": ["http_service", "static_site"],
+          "supported_capabilities": ["buildpack-detection", "health-check", "https-endpoint", "managed-tls", "source-deploy", "stateless-runtime"],
+          "supported_lifecycle_classes": ["EPHEMERAL"]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
+      "action_urn": "urn:helm:connector:digitalocean:apps:activate",
+      "reconciliation_mode": "OPERATION_POLL",
+      "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+      "supported_transition_classes": ["RELEASE_CUTOVER", "RESOURCE_STATE_TRANSITION"],
+      "supported_compensation_classes": []
+    },
+    {
+      "effect_id": "PROVIDER_PROVISION",
+      "action_urn": "urn:helm:connector:digitalocean:apps:create",
+      "reconciliation_mode": "OPERATION_POLL",
+      "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+      "supported_transition_classes": [],
+      "supported_compensation_classes": []
+    },
+    {
+      "effect_id": "PROVIDER_ROLLBACK",
+      "action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
+      "reconciliation_mode": "OPERATION_POLL",
+      "idempotency_mode": "COMPARE_AND_SET",
+      "supported_transition_classes": [],
+      "supported_compensation_classes": ["RELEASE_ROLLBACK"]
+    },
+    {
+      "effect_id": "PROVIDER_TEARDOWN",
+      "action_urn": "urn:helm:connector:digitalocean:apps:delete",
+      "reconciliation_mode": "READ_AFTER_WRITE",
+      "idempotency_mode": "RECONCILE_BEFORE_RETRY",
+      "supported_transition_classes": [],
+      "supported_compensation_classes": []
+    }
+  ],
+  "pricing_evidence_ref": "fixture://digitalocean/app-platform/pricing",
+  "pricing_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "terms_evidence_ref": "fixture://digitalocean/app-platform/terms",
+  "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "retrieved_at": "2026-07-19T00:00:00Z",
+  "expires_at": "2026-07-20T00:00:00Z"
+}

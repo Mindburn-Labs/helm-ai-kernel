@@ -1,0 +1,102 @@
+name: Approval Ceremony
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/approval-ceremony.yml"
+      - "Makefile"
+      - "core/go.mod"
+      - "core/go.sum"
+      - "core/pkg/boundary/approvalceremony/**"
+      - "core/pkg/boundary/approvalverify/**"
+      - "core/pkg/canonicalize/**"
+      - "core/pkg/contracts/**"
+      - "core/pkg/crypto/**"
+      - "core/pkg/effects/**"
+      - "core/pkg/runtimeadapters/mcp/**"
+      - "core/pkg/connectors/github/**"
+      - "core/pkg/registry/connectors/**"
+      - "reference_packs/approval/**"
+      - "reference_packs/connector-release-authority-v1/**"
+      - "reference_packs/effect-close-v1/**"
+      - "reference_packs/effect-disposition-v1/**"
+      - "schemas/connector_release.json"
+      - "schemas/connector_release_authority_envelope.json"
+      - "schemas/connector_effect_acknowledgement.json"
+      - "schemas/connector_effect_acknowledgement_envelope.json"
+      - "schemas/effect_close_receipt.json"
+      - "schemas/effect_disposition_command.json"
+      - "schemas/effect_disposition_command_envelope.json"
+      - "schemas/effect_disposition_receipt.json"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/approval-ceremony.yml"
+      - "Makefile"
+      - "core/go.mod"
+      - "core/go.sum"
+      - "core/pkg/boundary/approvalceremony/**"
+      - "core/pkg/boundary/approvalverify/**"
+      - "core/pkg/canonicalize/**"
+      - "core/pkg/contracts/**"
+      - "core/pkg/crypto/**"
+      - "core/pkg/effects/**"
+      - "core/pkg/runtimeadapters/mcp/**"
+      - "core/pkg/connectors/github/**"
+      - "core/pkg/registry/connectors/**"
+      - "reference_packs/approval/**"
+      - "reference_packs/connector-release-authority-v1/**"
+      - "reference_packs/effect-close-v1/**"
+      - "reference_packs/effect-disposition-v1/**"
+      - "schemas/connector_release.json"
+      - "schemas/connector_release_authority_envelope.json"
+      - "schemas/connector_effect_acknowledgement.json"
+      - "schemas/connector_effect_acknowledgement_envelope.json"
+      - "schemas/effect_close_receipt.json"
+      - "schemas/effect_disposition_command.json"
+      - "schemas/effect_disposition_command_envelope.json"
+      - "schemas/effect_disposition_receipt.json"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-concurrency-and-isolation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres@sha256:97ff59a4e30e08d1c11bdcd9455e7832368c0572b576c9092cde2df4ae5552a3
+        env:
+          POSTGRES_USER: helm_admin
+          POSTGRES_PASSWORD: helm_ci_password
+          POSTGRES_DB: helm_approval
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U helm_admin -d helm_approval"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      HELM_TEST_POSTGRES_URL: postgres://helm_admin:helm_ci_password@127.0.0.1:5432/helm_approval?sslmode=disable
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.12"
+          cache-dependency-path: "core/go.sum"
+      - name: Verify ceremony golden vectors
+        run: make verify-approval-ceremony-vectors
+      - name: Verify connector release authority vectors
+        run: make verify-connector-release-authority-vectors
+      - name: Verify signed effect close vectors
+        run: make verify-effect-close-vectors
+      - name: Verify signed effect disposition vectors
+        run: make verify-effect-disposition-vectors
+      - name: Prove non-bypass RLS and single-use concurrency
+        run: make test-approval-ceremony-postgres
+      - name: Prove connector authority append-only isolation and ordering
+        run: make test-connector-release-authority-postgres
+      - name: Prove effect reservation disposition and signed close ordering
+        run: make test-effect-reservation-postgres

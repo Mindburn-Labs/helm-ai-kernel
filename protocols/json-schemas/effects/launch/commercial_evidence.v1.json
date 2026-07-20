@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/launch/commercial_evidence.v1.json",
+  "version": "1.0.0-alpha.1",
+  "title": "Launch Commercial Evidence (Preview)",
+  "description": "Source-owned, deterministic provider-price conversion and reserve calculation for one multi-provider route quote.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "evidence_id", "tenant_id", "workspace_id", "mission_id", "quote_currency", "placement_costs", "retrieved_at", "expires_at"],
+  "properties": {
+    "schema_version": { "const": "launch_commercial_evidence.v1" },
+    "evidence_id": { "$ref": "#/$defs/non_empty" },
+    "tenant_id": { "$ref": "#/$defs/non_empty" },
+    "workspace_id": { "$ref": "#/$defs/non_empty" },
+    "mission_id": { "$ref": "#/$defs/non_empty" },
+    "quote_currency": { "$ref": "#/$defs/currency" },
+    "placement_costs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["placement_id", "provider_id", "provider_account_ref", "provider_account_hash", "region_id", "offering_id", "billing_cadence", "commitment_term", "provider_currency", "provider_base_cost_minor", "price_evidence_ref", "price_evidence_hash", "terms_evidence_ref", "terms_evidence_hash", "fx_snapshot_ref", "fx_snapshot_hash", "tax_snapshot_ref", "tax_snapshot_hash", "fx_reserve_bps", "base_cost_minor", "tax_reserve_minor", "fx_reserve_minor", "tax_fx_reserve_minor", "gross_exposure_minor"],
+        "properties": {
+          "placement_id": { "$ref": "#/$defs/non_empty" },
+          "provider_id": { "$ref": "#/$defs/non_empty" },
+          "provider_account_ref": { "$ref": "#/$defs/provider_account_ref" },
+          "provider_account_hash": { "$ref": "#/$defs/hash" },
+          "region_id": { "$ref": "#/$defs/non_empty" },
+          "offering_id": { "$ref": "#/$defs/non_empty" },
+          "billing_cadence": { "$ref": "#/$defs/non_empty" },
+          "commitment_term": { "$ref": "#/$defs/non_empty" },
+          "provider_currency": { "$ref": "#/$defs/currency" },
+          "provider_base_cost_minor": { "$ref": "#/$defs/minor" },
+          "price_evidence_ref": { "$ref": "#/$defs/non_empty" },
+          "price_evidence_hash": { "$ref": "#/$defs/hash" },
+          "terms_evidence_ref": { "$ref": "#/$defs/non_empty" },
+          "terms_evidence_hash": { "$ref": "#/$defs/hash" },
+          "fx_snapshot_ref": { "$ref": "#/$defs/non_empty" },
+          "fx_snapshot_hash": { "$ref": "#/$defs/hash" },
+          "tax_snapshot_ref": { "$ref": "#/$defs/non_empty" },
+          "tax_snapshot_hash": { "$ref": "#/$defs/hash" },
+          "fx_reserve_bps": { "type": "integer", "minimum": 0, "maximum": 10000 },
+          "base_cost_minor": { "$ref": "#/$defs/minor" },
+          "tax_reserve_minor": { "$ref": "#/$defs/minor" },
+          "fx_reserve_minor": { "$ref": "#/$defs/minor" },
+          "tax_fx_reserve_minor": { "$ref": "#/$defs/minor" },
+          "gross_exposure_minor": { "$ref": "#/$defs/minor" }
+        }
+      }
+    },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "non_empty": { "type": "string", "minLength": 1 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "provider_account_ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,31}:[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$" },
+    "minor": { "type": "integer", "minimum": 0 }
+  },
+  "x-helm": { "status": "preview", "execution_enabled": false, "source_owned_resolution_required": true, "integer_ceiling_arithmetic": true }
+}

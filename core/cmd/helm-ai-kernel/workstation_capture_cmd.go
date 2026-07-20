@@ -1,3 +1,5 @@
+// quantum_posture: this command layer records workstation receipts using the
+// existing classical Ed25519 receipt path; it adds no post-quantum control.
 package main
 
 import (
@@ -86,7 +88,7 @@ func runWorkstationCaptureStartCmd(args []string, stdout, stderr io.Writer) int 
 func runWorkstationCaptureFinishCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("workstation capture finish", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var artifacts, validationCommand, toolEvents, out, seedHex, seedFile, completedAtRaw string
+	var artifacts, validationCommand, toolEvents, out, seedHex, seedFile, completedAtRaw, dataDir string
 	var jsonOut bool
 	cmd.StringVar(&artifacts, "artifacts", "", "Artifact directory from capture start")
 	cmd.StringVar(&validationCommand, "validation-command", "", "Validation command to run in workspace")
@@ -94,6 +96,7 @@ func runWorkstationCaptureFinishCmd(args []string, stdout, stderr io.Writer) int
 	cmd.StringVar(&out, "out", "", "Write canonical import result JSON to this path")
 	cmd.StringVar(&seedHex, "signing-seed-hex", "", "Deprecated unsafe argv seed input; use --signing-seed-file")
 	cmd.StringVar(&seedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
 	cmd.StringVar(&completedAtRaw, "completed-at", "", "Optional RFC3339 completed timestamp")
 	cmd.BoolVar(&jsonOut, "json", false, "Print canonical import result JSON")
 	if err := cmd.Parse(args); err != nil {
@@ -103,7 +106,7 @@ func runWorkstationCaptureFinishCmd(args []string, stdout, stderr io.Writer) int
 		_, _ = fmt.Fprintln(stderr, "Error: --artifacts is required")
 		return 2
 	}
-	seed, err := loadSigningSeed(seedHex, seedFile)
+	seed, err := resolveWorkstationSigningSeed(dataDir, seedHex, seedFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2

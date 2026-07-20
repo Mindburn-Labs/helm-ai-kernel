@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -53,12 +54,22 @@ type PrivacyManifest struct {
 	GeneratedBy           string `json:"generated_by"`
 }
 
+// ErrScanCoverageIncomplete means the CLI-only static scan could not inspect
+// its declared candidate/config scope. Callers must not export a partial
+// RiskEnvelope or scan artifact.
+var ErrScanCoverageIncomplete = errors.New("risk scan coverage incomplete")
+
 func Scan(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, error) {
-	report, err := shadow.NewScanner().Scan(root)
+	scanner := shadow.NewScanner()
+	scanner.RequireComplete = true
+	report, err := scanner.Scan(root)
 	if err != nil {
+		if errors.Is(err, shadow.ErrScanCoverageIncomplete) {
+			return riskenvelope.RiskEnvelope{}, scanCoverageError("static candidate coverage could not be completed")
+		}
 		return riskenvelope.RiskEnvelope{}, err
 	}
-	obs, err := CollectConfigObservation(root)
+	obs, err := collectConfigObservation(root, true)
 	if err != nil {
 		return riskenvelope.RiskEnvelope{}, err
 	}
@@ -67,6 +78,10 @@ func Scan(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, error) {
 }
 
 func CollectConfigObservation(root string) (ConfigObservation, error) {
+	return collectConfigObservation(root, false)
+}
+
+func collectConfigObservation(root string, requireComplete bool) (ConfigObservation, error) {
 	obs := ConfigObservation{
 		AgentSurface:   riskenvelope.AgentSurfaceUnknown,
 		PermissionMode: riskenvelope.PermissionModeUnknown,
@@ -76,7 +91,16 @@ func CollectConfigObservation(root string) (ConfigObservation, error) {
 		return obs, err
 	}
 	err = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry == nil {
+		if walkErr != nil {
+			if requireComplete && !shouldSkipPath(path) {
+				return scanCoverageError("static configuration coverage could not be completed")
+			}
+			return nil
+		}
+		if entry == nil {
+			if requireComplete {
+				return scanCoverageError("static configuration coverage could not be completed")
+			}
 			return nil
 		}
 		if entry.IsDir() {
@@ -91,16 +115,28 @@ func CollectConfigObservation(root string) (ConfigObservation, error) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
+			if requireComplete {
+				return scanCoverageError("recognized configuration could not be read")
+			}
 			return nil
 		}
 		obs.StaticConfigFilesRead++
-		applyConfigObservation(&obs, kind, data)
+		if err := applyConfigObservation(&obs, kind, data); err != nil && requireComplete {
+			return scanCoverageError("recognized configuration is invalid")
+		}
 		return nil
 	})
 	if err != nil {
+		if requireComplete && !errors.Is(err, ErrScanCoverageIncomplete) {
+			return obs, scanCoverageError("static configuration coverage could not be completed")
+		}
 		return obs, err
 	}
 	return obs, nil
+}
+
+func scanCoverageError(reason string) error {
+	return fmt.Errorf("%w: %s", ErrScanCoverageIncomplete, reason)
 }
 
 func BuildEnvelope(report *shadow.Report, obs ConfigObservation, opts BuildOptions) (riskenvelope.RiskEnvelope, error) {
@@ -435,42 +471,47 @@ func resolveAgentSurface(report *shadow.Report, obs ConfigObservation) riskenvel
 	return riskenvelope.AgentSurfaceUnknown
 }
 
-func applyConfigObservation(obs *ConfigObservation, kind string, data []byte) {
+func applyConfigObservation(obs *ConfigObservation, kind string, data []byte) error {
 	switch kind {
 	case "claude_json":
 		obs.AgentSurface = riskenvelope.AgentSurfaceClaudeCode
 		obs.ManagedSettingsPresent = true
-		applyJSONConfig(obs, data)
+		return applyJSONConfig(obs, data)
 	case "mcp_json":
-		applyJSONConfig(obs, data)
+		if err := applyJSONConfig(obs, data); err != nil {
+			return err
+		}
 		if obs.AgentSurface == riskenvelope.AgentSurfaceUnknown {
 			obs.AgentSurface = riskenvelope.AgentSurfaceMCP
 		}
 	case "codex_toml":
 		obs.AgentSurface = riskenvelope.AgentSurfaceCodex
-		applyTOMLConfig(obs, data)
+		return applyTOMLConfig(obs, data)
 	}
+	return nil
 }
 
-func applyJSONConfig(obs *ConfigObservation, data []byte) {
+func applyJSONConfig(obs *ConfigObservation, data []byte) error {
 	var raw any
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return
+		return err
 	}
 	obs.MCPServerCount += countMap(raw, "mcpServers")
 	if mode := findString(raw, "permissionMode", "defaultMode", "approval_policy", "approvalPolicy"); mode != "" {
 		obs.PermissionMode = normalizePermissionMode(mode)
 	}
+	return nil
 }
 
-func applyTOMLConfig(obs *ConfigObservation, data []byte) {
+func applyTOMLConfig(obs *ConfigObservation, data []byte) error {
 	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
-		return
+		return err
 	}
 	if mode := findString(raw, "approval_policy", "approvalPolicy", "permission_mode", "permissionMode"); mode != "" {
 		obs.PermissionMode = normalizePermissionMode(mode)
 	}
+	return nil
 }
 
 func countMap(v any, key string) int {
@@ -562,6 +603,15 @@ func shouldSkipDir(name string) bool {
 	default:
 		return false
 	}
+}
+
+func shouldSkipPath(path string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(filepath.Clean(path)), "/") {
+		if shouldSkipDir(part) {
+			return true
+		}
+	}
+	return false
 }
 
 type sourceSummary struct {

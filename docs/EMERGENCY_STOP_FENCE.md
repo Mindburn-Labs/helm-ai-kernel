@@ -1,7 +1,7 @@
 ---
 title: Scoped Emergency-Stop Fence
 status: internal-foundation
-last_reviewed: 2026-07-11
+last_reviewed: 2026-07-18
 ---
 
 <!-- quantum_posture: FENCE command verification is raw classical Ed25519;
@@ -10,8 +10,10 @@ acknowledgement profile binding fails closed and this foundation makes no PQ gua
 # Scoped Emergency-Stop Fence
 
 The Kernel has an internal, opt-in fence for a specific tenant/workspace. When
-active, the Guardian denies new governed dispatches for that scope. It is not
-an operator-ready Emergency Stop yet.
+active, the Kernel-owned guarded evaluation, approval-consumption, and
+dispatch-admission paths deny their covered new transitions for that scope.
+This is not end-to-end connector enforcement or an operator-ready Emergency
+Stop yet.
 
 ## Activation boundary
 
@@ -62,7 +64,55 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
 - The unauthenticated OpenAI-compatible proxy is unavailable while the fence
   is enabled, because it cannot establish a tenant/workspace binding. It may
   only return after an authenticated adapter contract binds that scope.
-- The fence covers new governed dispatches only.
+- The intended fence coverage is new governed dispatches only. Current proven
+  coverage is limited to the Kernel-owned gates listed here; connector-boundary
+  coverage still depends on the Data Plane integration below.
+- When approval-grant consumption is enabled on PostgreSQL, FENCE and
+  `GRANT_ISSUED -> CONSUMED` share one tenant/workspace advisory transaction
+  lock. FENCE-first rejects consumption; consumption-first only establishes
+  that the signed consumption record committed before the later FENCE. The
+  separate connector dispatch may not have begun.
+- Approval consumption response-loss recovery remains a read-only evidence
+  operation after FENCE: it returns the existing record and creates no new
+  authority.
+- Kernel dispatch admission is the near-effect ordering gate for new governed
+  pack dispatches. It shares the same tenant/workspace advisory lock with
+  FENCE and persists a short-lived signed admission bound to the exact
+  consumption, attempt, idempotency-key hash, effect, connector, and action.
+  FENCE-first denies new admission; admission-first creates a pre-FENCE
+  admitted record even when its signed state is still `NOT_STARTED`. Exact
+  replay returns the original record without extending expiry; changed
+  bindings conflict. Admission alone no longer authorizes a later connector
+  start: the separate internal effect reservation stream reacquires the same
+  scope lock at `MarkStarted`, rechecks current FENCE, and rechecks the current
+  certified exact-release head before durably crossing the pre-network seam.
+  If FENCE/revocation commits first, the connector closes `NOT_STARTED` and
+  emits no network request; if `STARTED` commits first, the effect is active
+  work that the later stop must reconcile. The stream exposes active
+  `ADMITTED / STARTED / UNCERTAIN` work. A separate internal signed-close
+  boundary can reconcile `STARTED` or `UNCERTAIN` after FENCE/revocation by
+  verifying a connector acknowledgement and EvidencePack and atomically
+  appending a Kernel-signed `COMPLETED` receipt. Close creates no execution
+  authority and does not re-open the stopped scope. A separate internal signed
+  disposition chain now binds operator intent to the exact current FENCE and
+  active reservation head, with Kernel receipts explicitly declaring
+  `execution_authority: NONE`; close must bind the latest current-FENCE
+  disposition receipt and rejects `HOLD`.
+  There is still no deployed close/disposition adapter, Control Plane durable
+  command outbox, governed compensation controller, or renewal after expiry.
+- This Kernel gate does not by itself enforce the connector boundary. Merge,
+  deploy, and production claims remain blocked until the Data Plane requires
+  and atomically persists the signed admission before every
+  `CONSUMED -> DISPATCHING` transition, including cached and recovered
+  consumption records. The internal boundary now implements append-only
+  lifecycle transitions, active-work listing, exact current-release locking at
+  both admission and start, typed no-network denial, and the GitHub pre-network
+  seam when configured. Production remains blocked on deployed Data Plane
+  wiring, deployed connector acknowledgement/close evidence, cross-plane
+  disposition delivery/reconciliation, and controlled runtime proof. The
+  dispatch workload cannot select
+  `connector_id`, `connector_action`, release scope, or revision; the Kernel
+  derives them from the signed approval chain.
 - It does not revoke existing permits, cancel in-flight work, stop unmanaged
   adapters, or implement release/unfence. Those remain separate contracts.
 

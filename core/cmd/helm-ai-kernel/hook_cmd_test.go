@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,15 +44,36 @@ func TestHookPreToolDeniesDestructiveBashAndWritesReceipt(t *testing.T) {
 	if ok, err := workstation.VerifyDecisionReceiptSignature(receipt); err != nil || !ok {
 		t.Fatalf("receipt signature ok=%v err=%v", ok, err)
 	}
+	trustedKey, err := loadTrustedPublicKeyFile(workstationSigningPublicKeyPath(tmp))
+	if err != nil {
+		t.Fatalf("load hook trusted public key: %v", err)
+	}
+	if ok, err := workstation.VerifyDecisionReceiptWithTrustedKey(receipt, trustedKey); err != nil || !ok {
+		t.Fatalf("trusted receipt verification ok=%v err=%v", ok, err)
+	}
 
 	stdout.Reset()
 	stderr.Reset()
-	code = Run([]string{"helm-ai-kernel", "workstation", "verify-decision", "--receipt", receipts[0]}, &stdout, &stderr)
+	code = Run([]string{"helm-ai-kernel", "workstation", "verify-decision", "--receipt", receipts[0], "--data-dir", tmp}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("verify-decision exit = %d stderr = %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "signature: true") {
-		t.Fatalf("verify-decision output missing signature=true: %s", stdout.String())
+	if !strings.Contains(stdout.String(), "integrity: true") || !strings.Contains(stdout.String(), "trusted:   true") {
+		t.Fatalf("verify-decision output missing trusted integrity: %s", stdout.String())
+	}
+
+	wrongKeyFile := filepath.Join(tmp, "wrong-trusted.pub")
+	if err := os.WriteFile(wrongKeyFile, []byte(strings.Repeat("f", 64)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "workstation", "verify-decision", "--receipt", receipts[0], "--trusted-public-key-file", wrongKeyFile}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("wrong-anchor verify-decision exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "integrity: true") || !strings.Contains(stdout.String(), "trusted:   false") {
+		t.Fatalf("wrong-anchor verify-decision output missing trust separation: %s", stdout.String())
 	}
 
 	raw, err := os.ReadFile(receipts[0])
@@ -64,12 +86,12 @@ func TestHookPreToolDeniesDestructiveBashAndWritesReceipt(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	code = Run([]string{"helm-ai-kernel", "workstation", "verify-decision", "--receipt", tampered}, &stdout, &stderr)
+	code = Run([]string{"helm-ai-kernel", "workstation", "verify-decision", "--receipt", tampered, "--data-dir", tmp}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("tampered verify-decision exit = %d, want 1 stdout = %s stderr = %s", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "signature: false") {
-		t.Fatalf("tampered verify-decision output missing signature=false: %s", stdout.String())
+	if !strings.Contains(stdout.String(), "integrity: false") {
+		t.Fatalf("tampered verify-decision output missing integrity=false: %s", stdout.String())
 	}
 }
 
@@ -87,6 +109,91 @@ func TestHookPreToolAllowsSafeBashWithoutApprovalOutput(t *testing.T) {
 	if receipts := globReceipts(t, tmp); len(receipts) != 0 {
 		t.Fatalf("safe bash wrote receipts: %v", receipts)
 	}
+}
+
+func TestHookPreToolFailsClosedWhenLocalSigningKeyIsInsecure(t *testing.T) {
+	tmp := t.TempDir()
+	keyDir := filepath.Join(tmp, workstationSigningKeyDirectory)
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(workstationSigningSeedPath(tmp), []byte(strings.Repeat("0", 64)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "signer is unavailable") {
+		t.Fatalf("hook should explicitly deny signer failure, output=%s", stdout.String())
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 0 {
+		t.Fatalf("signer failure must not write a fake receipt: %v", receipts)
+	}
+}
+
+func TestHookPreToolFailsClosedWhenReceiptCannotPersist(t *testing.T) {
+	tmp := t.TempDir()
+	if _, err := ensureLocalWorkstationSigningSeed(tmp); err != nil {
+		t.Fatalf("prepare local signing key: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "receipts"), []byte("not a directory\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "receipt persistence is unavailable") {
+		t.Fatalf("hook should explicitly deny receipt persistence failure, output=%s", stdout.String())
+	}
+}
+
+func TestHookPreToolReturnsBlockingExitWhenDenyCannotBeWritten(t *testing.T) {
+	tmp := t.TempDir()
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
+	var stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), failingHookWriter{}, &stderr)
+	if code != 2 {
+		t.Fatalf("hook exit = %d, want blocking exit 2; stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "emit denial") {
+		t.Fatalf("stderr missing denial write failure: %s", stderr.String())
+	}
+}
+
+func TestHookPreToolDoesNotCreateCWDKeyWithoutHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	workdir := t.TempDir()
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(workdir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(previous)
+	})
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code"}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "local receipt signer is unavailable") {
+		t.Fatalf("HOME-less hook = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(workdir, "keys", workstationSigningSeedName)); !os.IsNotExist(err) {
+		t.Fatalf("HOME-less hook created a CWD signing key: %v", err)
+	}
+}
+
+type failingHookWriter struct{}
+
+func (failingHookWriter) Write([]byte) (int, error) {
+	return 0, errors.New("test hook output failure")
 }
 
 func TestHookPreToolDeniesCodexMCPButSkipsHelmSelfMCP(t *testing.T) {

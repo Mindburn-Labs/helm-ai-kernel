@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-20T00:39:41Z
+# Generated: 2026-07-20T00:59:10Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -53,8 +53,8 @@ cd43cd1e4a3a2f30f4798f207072516bdd6ad68d28d172d387dd845df56a238c  core/pkg/kerne
 732f3fa25c18cf9ecf08bb3754609b7e90ee902740d1462adb8b56ac07578c02  core/pkg/kernel/csnf_profiles_test.go
 c0b4f4265d3f3c26bb64c4f16c85173c6710af658f011c8c505ae8c2b224d1ee  core/pkg/kernel/csnf_test.go
 970c1a61709ab311d58b894cddcb980a1bb966769856c0f5a03b7cdbb4a6428f  core/pkg/kernel/csnf_transform_test.go
-b52cd04f6736f25de263a0b17a515ca556014306c93846a3d3c3e02255934545  core/pkg/kernel/effect_boundary.go
-41d70ffd722facf40064733059a3e028fbae7742426a6a3442b54a6caa15e95c  core/pkg/kernel/effect_boundary_test.go
+f20cd965b0a3c4f61ee0c9bda70ef6ae4df5061c1c765923d3184b44b8fd1836  core/pkg/kernel/effect_boundary.go
+16439b4d279ab79f65123beca760e40b4ee52332ab29c8d02c021cd970ddb6fc  core/pkg/kernel/effect_boundary_test.go
 0dc660648c120bc2fbffd20c4561d711a913752749d67436bbcd52edca3c4aba  core/pkg/kernel/error_ir.go
 b2751ec1da7eda3baf2f7c4d80a46161e15dfe56d5cd61c86424d55322f41bf5  core/pkg/kernel/error_ir_test.go
 fe094bf61d6183a9c13c25fc7aa2f262d3ba4b22de5b1280c079edc1c86736a9  core/pkg/kernel/errorir/errorir_test.go
@@ -195,7 +195,7 @@ c1910943db1064a742523422c0827c5aa12a1b865fe715249b9e27121444bb82  core/pkg/contr
 3429340fb57e94e0576861987d327a1ed1f0e615ee048011b51b627f3f77b7b5  core/pkg/contracts/effect_catalog.go
 3988397fb51017932b675de6b5d17e0525ffbaf107f7bb7e51aa8dbbab90b338  core/pkg/contracts/effect_close.go
 911679cd806c40d59d08e9ce7f7193b02bb33131af59a7f960a0b461fc68f89b  core/pkg/contracts/effect_close_test.go
-303c1542755fdf80443fddd23c1497b6b2f1f1daed1abd3b94489d09e8a5a2c3  core/pkg/contracts/effect_digest.go
+c28d761ccb93946b2c8a0be7075b131ed8e343d5e8a9f28e67138d10b5f56779  core/pkg/contracts/effect_digest.go
 17bfbbae549b2d652aaec4f3c877e018d20c8115b1928b58c1733252fc7da24a  core/pkg/contracts/effect_digest_test.go
 1c7c5ef7a4e2701fc614d24568b5e20e530b441ba9f8faf4852436dee63270e9  core/pkg/contracts/effect_disposition.go
 ece0a93751bbda6880f444534fe99c4c17e381b1fe0d74a650defcf51bf59882  core/pkg/contracts/effect_disposition_test.go

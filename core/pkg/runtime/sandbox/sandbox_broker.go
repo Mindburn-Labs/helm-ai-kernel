@@ -46,10 +46,7 @@ type AuthorizationVerifier interface {
 }
 
 const (
-	// SandboxExecutionDecisionContextKey is the Guardian decision-context field
-	// produced from PlanStep.Params["sandbox_execution"]. The signed value binds
-	// the complete runner spec and exact immutable lease identity before the
-	// lease is activated or credentials are issued.
+	// SandboxExecutionDecisionContextKey carries the signed spec and lease.
 	SandboxExecutionDecisionContextKey = "param.sandbox_execution"
 
 	SandboxExecutionAuthorizationSchemaVersion = "sandbox_execution_authorization.v1"
@@ -72,9 +69,7 @@ type PreparedExecution struct {
 	// compatibility and mutation detection.
 	TokenIDs []string
 
-	// Tokens is retained for source compatibility only. Credential material is
-	// never caller-visible and this field is always nil. Deprecated: trusted
-	// runners receive ephemeral material through SandboxCredentialRunner.
+	// Tokens is deprecated, always nil, and excluded from serialization.
 	Tokens []string `json:"-"`
 
 	// PreparedAt is when the execution was prepared.
@@ -117,9 +112,7 @@ type SandboxExecutionAuthorization struct {
 	Spec          pkg_sandbox.SandboxSpec   `json:"spec"`
 }
 
-// preparedExecutionRecord is broker-owned execution state. Execute uses this
-// immutable snapshot rather than caller-mutable PreparedExecution fields after
-// it has proved the exact returned pointer and fingerprint are still current.
+// preparedExecutionRecord is the broker-owned immutable execution snapshot.
 type preparedExecutionRecord struct {
 	fingerprint   string
 	backend       string
@@ -153,8 +146,7 @@ type SandboxBroker struct {
 	clock           func() time.Time
 }
 
-// WithAuthorizationVerifier installs the Kernel trust-root verifier. A broker
-// without one remains fail-closed at preparation.
+// WithAuthorizationVerifier installs the required Kernel trust root.
 func (b *SandboxBroker) WithAuthorizationVerifier(verifier AuthorizationVerifier) *SandboxBroker {
 	b.verifier = verifier
 	return b
@@ -188,11 +180,7 @@ func (b *SandboxBroker) RegisterRunner(name string, runner SandboxRunner) {
 	b.runners[name] = runner
 }
 
-// PrepareExecution is the compatibility entrypoint for callers that already
-// carry the complete workload in the signed decision context. It never accepts
-// an implicit or caller-mutated command: the workload is decoded from
-// sandbox_execution_authorization.v1 and then rebuilt and compared byte-for-
-// byte by PrepareExecutionWithWorkload.
+// PrepareExecution decodes workload only from signed decision context.
 func (b *SandboxBroker) PrepareExecution(
 	ctx context.Context,
 	execLease *lease.ExecutionLease,
@@ -205,10 +193,7 @@ func (b *SandboxBroker) PrepareExecution(
 	return b.PrepareExecutionWithWorkload(ctx, execLease, verdict, workload)
 }
 
-// PrepareExecutionWithWorkload builds a secret-free, single-use preparation.
-// It validates and seals the complete SandboxSpec but deliberately leaves the
-// source lease PENDING and issues no credential. Execute owns those effects
-// after it atomically claims and re-verifies the exact prepared value.
+// PrepareExecutionWithWorkload seals a secret-free, single-use preparation.
 func (b *SandboxBroker) PrepareExecutionWithWorkload(
 	ctx context.Context,
 	execLease *lease.ExecutionLease,
@@ -338,10 +323,7 @@ func (b *SandboxBroker) resolvePendingLease(ctx context.Context, execLease *leas
 	return current, nil
 }
 
-// BuildSandboxExecutionAuthorization constructs the complete, secret-free
-// value that the Kernel must sign before this broker may activate a lease. The
-// same function is used at dispatch, preventing a producer/consumer split in
-// how the runtime spec or lease identity is canonicalized.
+// BuildSandboxExecutionAuthorization builds the exact secret-free signed input.
 func BuildSandboxExecutionAuthorization(execLease *lease.ExecutionLease, profile *effectgraph.ExecutionProfile, workload *SandboxWorkload) (SandboxExecutionAuthorization, error) {
 	if execLease == nil {
 		return SandboxExecutionAuthorization{}, fmt.Errorf("lease is nil")
@@ -582,17 +564,20 @@ func (b *SandboxBroker) Execute(
 		return nil, nil, fmt.Errorf("no runner for backend %q (cleanup=%s)", record.backend, cleanup.Status)
 	}
 
-	now := b.clock()
-	remainingAuthority := record.expiresAt.Sub(now)
-	if record.spec.Limits.Timeout <= 0 || remainingAuthority <= 0 || record.spec.Limits.Timeout > remainingAuthority {
-		b.revokeUnstartedRecord(ctx, record, "sandbox runtime timeout exceeds remaining authority")
-		return nil, nil, fmt.Errorf("sandbox runtime timeout exceeds remaining lease or intent authority")
+	if err := validateExecutionStartWindow(record, b.clock()); err != nil {
+		b.revokeUnstartedRecord(ctx, record, err.Error())
+		return nil, nil, err
 	}
 
 	// Validate spec before execution.
 	if err := runner.Validate(&record.spec); err != nil {
 		b.revokeUnstartedRecord(ctx, record, fmt.Sprintf("sandbox spec validation failed: %v", err))
 		return nil, nil, fmt.Errorf("validate sandbox spec: %w", err)
+	}
+	now := b.clock()
+	if err := validateExecutionStartWindow(record, now); err != nil {
+		b.revokeUnstartedRecord(ctx, record, err.Error())
+		return nil, nil, err
 	}
 
 	credentialDeadline := record.expiresAt
@@ -625,6 +610,10 @@ func (b *SandboxBroker) Execute(
 		_ = b.leases.Revoke(ctx, sourceLease.LeaseID, fmt.Sprintf("credential issuance failed: %v", err))
 		return nil, nil, err
 	}
+	if err := validateExecutionStartWindow(record, b.clock()); err != nil {
+		cleanup := b.cleanupRecord(ctx, record)
+		return nil, nil, fmt.Errorf("sandbox authority expired before runner dispatch (cleanup=%s): %w", cleanup.Status, err)
+	}
 
 	// Execute. Bearer material crosses only the broker-to-runner interface and
 	// is never present in the caller-visible PreparedExecution or signed spec.
@@ -650,6 +639,20 @@ func (b *SandboxBroker) Execute(
 		return result, receipt, fmt.Errorf("sandbox execution: %w", err)
 	}
 	return result, receipt, nil
+}
+
+func validateExecutionStartWindow(record preparedExecutionRecord, now time.Time) error {
+	if record.verdict == nil || record.verdict.Intent == nil {
+		return fmt.Errorf("sandbox execution intent is missing")
+	}
+	if err := record.verdict.Intent.ValidateAt(now); err != nil {
+		return fmt.Errorf("sandbox execution intent is not currently valid: %w", err)
+	}
+	remaining := record.expiresAt.Sub(now)
+	if record.spec.Limits.Timeout <= 0 || remaining <= 0 || record.spec.Limits.Timeout > remaining {
+		return fmt.Errorf("sandbox runtime timeout exceeds remaining lease or intent authority")
+	}
+	return nil
 }
 
 func (b *SandboxBroker) issueCredentials(sourceLease *lease.ExecutionLease, sandboxID string, deadline time.Time) ([]string, []SandboxCredentialMaterial, error) {
@@ -699,9 +702,7 @@ func credentialTTLSeconds(now, deadline time.Time) (int, error) {
 	return seconds, nil
 }
 
-// claimPreparedExecution atomically consumes one exact broker-prepared object.
-// A caller-constructed value, a copied value, a mutated value, or a replay is
-// rejected before runner lookup or validation.
+// claimPreparedExecution atomically consumes one exact prepared object.
 func (b *SandboxBroker) claimPreparedExecution(ctx context.Context, prepared *PreparedExecution) (preparedExecutionRecord, *lease.ExecutionLease, error) {
 	if prepared == nil {
 		return preparedExecutionRecord{}, nil, fmt.Errorf("prepared execution is incomplete")
@@ -760,9 +761,7 @@ func (b *SandboxBroker) claimPreparedExecution(ctx context.Context, prepared *Pr
 	return record, currentLease, nil
 }
 
-// CancelPreparedExecution releases one exact unconsumed broker preparation.
-// Because preparation has no lease, credential, or runner side effect, cancel
-// only removes the single-use reservation and revokes the still-pending lease.
+// CancelPreparedExecution revokes one exact unconsumed preparation.
 func (b *SandboxBroker) CancelPreparedExecution(ctx context.Context, prepared *PreparedExecution) error {
 	if prepared == nil {
 		return fmt.Errorf("prepared execution is incomplete")
@@ -782,9 +781,7 @@ func (b *SandboxBroker) CancelPreparedExecution(ctx context.Context, prepared *P
 	return nil
 }
 
-// reapExpiredPreparedExecutions bounds broker-owned preparation state by the
-// earlier of the source lease and signed intent expiry. Prepared records never
-// contain bearer material; reaping additionally revokes their pending leases.
+// reapExpiredPreparedExecutions revokes expired pending preparations.
 func (b *SandboxBroker) reapExpiredPreparedExecutions(ctx context.Context) {
 	now := b.clock()
 	var expired []preparedExecutionRecord

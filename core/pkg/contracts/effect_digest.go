@@ -8,10 +8,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
 
-// CanonicalEffectDigest returns the source-owned digest used by Guardian,
-// execution intents, and effect consumers. EffectID, DecisionID, and Example
-// are intentionally excluded because they identify or explain an invocation;
-// the returned digest binds its executable semantics and compensation graph.
+// CanonicalEffectDigest binds executable semantics, excluding display identity.
 func CanonicalEffectDigest(effect *Effect) (string, error) {
 	if effect == nil {
 		return "", fmt.Errorf("effect is nil")
@@ -23,10 +20,7 @@ func CanonicalEffectDigest(effect *Effect) (string, error) {
 	return hashEffectDigestBinding(binding)
 }
 
-// EffectDigestBinding is the portable, identity-free semantic projection of
-// an Effect. Carrying this projection on a signed execution intent lets a
-// consumer independently reconstruct the exact digest even when the effect
-// uses idempotency, irreversibility, argument/output hashes, or compensation.
+// EffectDigestBinding is the portable, identity-free effect projection.
 //
 //nolint:govet // field order follows the canonical wire contract.
 type EffectDigestBinding struct {

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/google/uuid"
 )
 
@@ -29,9 +30,15 @@ const (
 	EffectTypeExternalAPICall  EffectType = "EXTERNAL_API_CALL"
 )
 
-// IsExecutableEffectType is the explicit production allowlist for this
-// boundary. A catalog or schema registration never grants execution authority.
+// IsExecutableEffectType admits canonical production and legacy boundary types;
+// preview registration is always denied and PDP approval remains mandatory.
 func IsExecutableEffectType(effectType EffectType) bool {
+	if contracts.IsLaunchMissionEffectPreview(string(effectType)) {
+		return false
+	}
+	if contracts.LookupEffectType(string(effectType)) != nil {
+		return true
+	}
 	switch effectType {
 	case EffectTypeDataWrite,
 		EffectTypeFundsTransfer,

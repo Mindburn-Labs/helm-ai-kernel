@@ -92,6 +92,11 @@ func TestExecutableEffectTypeAllowlistRejectsUnknown(t *testing.T) {
 	if !IsExecutableEffectType(EffectTypeDataWrite) {
 		t.Fatal("known runtime effect was removed from the executable allowlist")
 	}
+	for _, definition := range contracts.DefaultEffectCatalog().EffectTypes {
+		if !IsExecutableEffectType(EffectType(definition.TypeID)) {
+			t.Errorf("production catalog effect %s was removed from the boundary", definition.TypeID)
+		}
+	}
 	if IsExecutableEffectType(EffectType("UNKNOWN_EFFECT")) {
 		t.Fatal("unknown effect entered the executable allowlist")
 	}

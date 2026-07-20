@@ -40,6 +40,7 @@ type mockRunner struct {
 	lastSpec        *pkg_sandbox.SandboxSpec
 	lastCredentials []sandbox_runtime.SandboxCredentialMaterial
 	credentialCheck func([]sandbox_runtime.SandboxCredentialMaterial) error
+	validateHook    func()
 }
 
 func (m *mockRunner) Run(spec *pkg_sandbox.SandboxSpec) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {
@@ -58,10 +59,34 @@ func (m *mockRunner) Run(spec *pkg_sandbox.SandboxSpec) (*pkg_sandbox.Result, *p
 
 func (m *mockRunner) Validate(spec *pkg_sandbox.SandboxSpec) error {
 	m.validateCalled = true
+	if m.validateHook != nil {
+		m.validateHook()
+	}
 	if m.failValidate {
 		return errMock("validation failed")
 	}
 	return nil
+}
+
+func TestExecuteRejectsIntentExpiringDuringRunnerValidation(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	verdict := authorizedVerdict(t, execLease, testWorkload())
+	prepared, err := broker.PrepareExecutionWithWorkload(ctx, execLease, verdict, testWorkload())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.validateHook = func() { clockTime = verdict.Intent.ExpiresAt }
+	if _, _, err := broker.Execute(ctx, prepared); err == nil {
+		t.Fatal("intent expiry during runner validation reached execution")
+	}
+	if runner.runCalled {
+		t.Fatal("expired intent reached the runner")
+	}
+	got, err := leaseManager.Get(ctx, execLease.LeaseID)
+	if err != nil || got.Status != lease.LeaseStatusRevoked {
+		t.Fatalf("expired validation did not revoke pending lease: lease=%+v err=%v", got, err)
+	}
 }
 
 func (m *mockRunner) RunWithCredentials(spec *pkg_sandbox.SandboxSpec, credentials []sandbox_runtime.SandboxCredentialMaterial) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {

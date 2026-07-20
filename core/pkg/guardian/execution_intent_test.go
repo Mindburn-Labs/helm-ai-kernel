@@ -13,7 +13,7 @@ func TestExecutionIntentExpiryNeverEscapesSignedLease(t *testing.T) {
 	leaseExpiry := now.Add(32 * time.Minute)
 	effect := sandboxTimingEffect(leaseExpiry, 30*time.Minute)
 
-	expiresAt, err := executionIntentExpiresAt(effect, contracts.EffectTypeRunSandboxedCode, now)
+	expiresAt, err := executionIntentExpiresAt(effect, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestExecutionIntentExpiryRejectsInsufficientDispatchWindow(t *testing.T) {
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
 	effect := sandboxTimingEffect(now.Add(30*time.Minute+500*time.Millisecond), 30*time.Minute)
 
-	if _, err := executionIntentExpiresAt(effect, contracts.EffectTypeRunSandboxedCode, now); err == nil {
+	if _, err := executionIntentExpiresAt(effect, now); err == nil {
 		t.Fatal("sandbox intent accepted a lease without minimum dispatch authority")
 	}
 }
@@ -35,14 +35,14 @@ func TestExecutionIntentExpiryRejectsExpiredLease(t *testing.T) {
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
 	effect := sandboxTimingEffect(now.Add(-time.Hour), 30*time.Minute)
 
-	if _, err := executionIntentExpiresAt(effect, contracts.EffectTypeRunSandboxedCode, now); err == nil {
+	if _, err := executionIntentExpiresAt(effect, now); err == nil {
 		t.Fatal("sandbox intent accepted an expired lease")
 	}
 }
 
 func TestExecutionIntentExpiryKeepsDefaultForOrdinaryEffects(t *testing.T) {
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	expiresAt, err := executionIntentExpiresAt(&contracts.Effect{EffectType: contracts.EffectTypeGeneric}, contracts.EffectTypeGeneric, now)
+	expiresAt, err := executionIntentExpiresAt(&contracts.Effect{EffectType: contracts.EffectTypeGeneric}, now)
 	if err != nil {
 		t.Fatal(err)
 	}

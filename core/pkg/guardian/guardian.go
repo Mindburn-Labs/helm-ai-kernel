@@ -573,13 +573,7 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 		return nil, fmt.Errorf("effect digest mismatch: decision=%s requested=%s", decision.EffectDigest, effectDigest)
 	}
 
-	// Determine Allowed Tool (matching identification logic)
-	var allowedTool string
-	if tn, ok := effect.Params["tool_name"].(string); ok && tn != "" {
-		allowedTool = tn
-	} else {
-		allowedTool = effect.EffectType
-	}
+	allowedTool := executionIntentAllowedTool(effect)
 	effectBinding, err := contracts.NewEffectDigestBinding(effect)
 	if err != nil {
 		return nil, fmt.Errorf("bind execution intent effect: %w", err)
@@ -587,7 +581,7 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 
 	// 3. Create Intent
 	now := g.clock.Now()
-	expiresAt, err := executionIntentExpiresAt(effect, allowedTool, now)
+	expiresAt, err := executionIntentExpiresAt(effect, now)
 	if err != nil {
 		return nil, err
 	}
@@ -638,11 +632,24 @@ const (
 // ordinary effects. A sandbox intent must also cover its signed runtime so the
 // default 5-30 minute profiles can execute; it receives at most five minutes
 // of dispatch slack and can never outlive the exact signed lease.
-func executionIntentExpiresAt(effect *contracts.Effect, allowedTool string, now time.Time) (time.Time, error) {
-	if allowedTool != contracts.EffectTypeRunSandboxedCode {
+func executionIntentAllowedTool(effect *contracts.Effect) string {
+	if effect.EffectType == contracts.EffectTypeRunSandboxedCode {
+		return effect.EffectType
+	}
+	if toolName, ok := effect.Params["tool_name"].(string); ok && toolName != "" {
+		return toolName
+	}
+	return effect.EffectType
+}
+
+func executionIntentExpiresAt(effect *contracts.Effect, now time.Time) (time.Time, error) {
+	if effect == nil {
+		return time.Time{}, fmt.Errorf("execution intent requires an effect")
+	}
+	if effect.EffectType != contracts.EffectTypeRunSandboxedCode {
 		return now.Add(defaultExecutionIntentTTL), nil
 	}
-	if effect == nil || effect.Params == nil {
+	if effect.Params == nil {
 		return time.Time{}, fmt.Errorf("sandbox execution intent requires complete authorization parameters")
 	}
 	value, ok := effect.Params["param.sandbox_execution"]

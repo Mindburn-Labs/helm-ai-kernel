@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-20T00:24:03Z
+# Generated: 2026-07-20T00:39:41Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -601,9 +601,9 @@ f3bae08d14fe098e6b6322c7eac60746ae5fd2277e348d82c3a9d3701becb05a  core/pkg/guard
 2c66096e622a633b6fa2f8e3d18bc519d1ef2444b1d5b1e8e9199d1acfc3403c  core/pkg/guardian/compliance_checker.go
 3bf046b9f5630ade87ed4fc4d31c5a0223e5ef3e24b9427ec7fa268282a2e555  core/pkg/guardian/compliance_checker_test.go
 33b80ff2f4dc9eba8c135cb61ac232deb9be30e84fe63585e31f6ddfeadd19b1  core/pkg/guardian/decision_fuzz_test.go
-51e48bad67b24b2aa360563b62f61f17491c96e50013d9e351624640768d37f1  core/pkg/guardian/execution_intent_test.go
+d4fa373206ebec6a2226322a2aea776c5d66a8f8c5b4f533c0e61c2e116deb3b  core/pkg/guardian/execution_intent_test.go
 d23c84456f34f27e6cb7fd113211028dbd88c34980fe81e3b74a307d701a4bfd  core/pkg/guardian/extended2_test.go
-6ee656f035b2f364b9bb4bcbe58fa5eb0f23ed768d54cc7fbd352bc2f510c05b  core/pkg/guardian/guardian.go
+ca357a16947145067179f4586df61e61b38d0d500cc498764598462c8c87efd9  core/pkg/guardian/guardian.go
 9fc820cc5de13baf08dc3a37d97142e2ad3f506f82a06b38b92579e180d93d15  core/pkg/guardian/guardian_additional_coverage_test.go
 05d2907a744570e725955e9967f578b098389dee199fa7af7d54c2381f770a54  core/pkg/guardian/guardian_behavior_coverage_test.go
 2a5ca32bc0c383992332eea7cd839575ee7dd4b6266c2ed64c7bd8a2bfec044f  core/pkg/guardian/guardian_bench_test.go

@@ -24,10 +24,7 @@ type SandboxRunner interface {
 	Validate(spec *pkg_sandbox.SandboxSpec) error
 }
 
-// SandboxCredentialMaterial is ephemeral broker-to-runner material. It must
-// never be serialized, logged, returned through PreparedExecution, or retained
-// after the run. The binding metadata is signed through the lease; only the
-// short-lived bearer value is minted after authorization.
+// SandboxCredentialMaterial is ephemeral, non-serializable runner material.
 type SandboxCredentialMaterial struct {
 	SecretRef   string   `json:"-"`
 	MountPath   string   `json:"-"`
@@ -36,16 +33,13 @@ type SandboxCredentialMaterial struct {
 	BearerToken string   `json:"-"`
 }
 
-// SandboxCredentialRunner is required for leases with secret bindings. It
-// keeps bearer material inside the broker-to-runner boundary instead of
-// exposing it to the caller that holds PreparedExecution.
+// SandboxCredentialRunner keeps bearer material inside the runner boundary.
 type SandboxCredentialRunner interface {
 	SandboxRunner
 	RunWithCredentials(spec *pkg_sandbox.SandboxSpec, credentials []SandboxCredentialMaterial) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error)
 }
 
-// AuthorizationVerifier verifies the source-owned Kernel decision and the
-// derived execution intent before any sandbox lease or credential side effect.
+// AuthorizationVerifier checks decision and intent trust before side effects.
 type AuthorizationVerifier interface {
 	VerifyDecision(decision *contracts.DecisionRecord) (bool, error)
 	VerifyIntent(intent *contracts.AuthorizedExecutionIntent) (bool, error)
@@ -87,10 +81,7 @@ type PreparedExecution struct {
 	PreparedAt time.Time
 }
 
-// SandboxWorkload is the caller-supplied executable material that must be
-// present before lease activation, credential issuance, and preparation
-// sealing. Policy-owned image, work directory, network, limits, runtime class,
-// mounts, and warm-lease fields are deliberately not caller-configurable here.
+// SandboxWorkload is caller input bound before any execution side effect.
 type SandboxWorkload struct {
 	Command []string          `json:"command"`
 	Args    []string          `json:"args,omitempty"`
@@ -102,10 +93,7 @@ type SandboxWorkload struct {
 	Detached bool `json:"detached,omitempty"`
 }
 
-// SandboxLeaseAuthorization is the immutable, secret-free identity of one
-// source-owned execution lease. Lifecycle fields that necessarily change when
-// the lease is activated are excluded; LeaseID and every field that selects or
-// constrains execution remain signed.
+// SandboxLeaseAuthorization is one immutable, secret-free lease identity.
 type SandboxLeaseAuthorization struct {
 	LeaseID          string                `json:"lease_id"`
 	RunID            string                `json:"run_id"`
@@ -121,10 +109,7 @@ type SandboxLeaseAuthorization struct {
 	ExpiresAt        time.Time             `json:"expires_at"`
 }
 
-// SandboxExecutionAuthorization is the complete decision payload required for
-// preparation. Spec includes the image, command, arguments, environment,
-// workspace, network policy, limits, mounts, runtime class, and warm-lease
-// configuration. Lease binds that spec to one exact source-owned allocation.
+// SandboxExecutionAuthorization binds the complete spec to its exact lease.
 type SandboxExecutionAuthorization struct {
 	SchemaVersion string                    `json:"schema_version"`
 	SandboxID     string                    `json:"sandbox_id"`

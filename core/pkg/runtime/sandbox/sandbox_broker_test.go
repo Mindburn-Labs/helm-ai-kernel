@@ -727,6 +727,7 @@ func TestGuardianIssuedDefaultSandboxIntentExecutesWithinSignedWindow(t *testing
 	workload := testWorkload()
 	authorization := sandboxAuthorization(t, execLease, profile, workload)
 	inputContext := map[string]any{sandbox_runtime.SandboxExecutionDecisionContextKey: authorization}
+	inputContext["tool_name"] = "inner-tool"
 	effect := &contracts.Effect{
 		EffectType: contracts.EffectTypeRunSandboxedCode,
 		Params:     inputContext,
@@ -752,6 +753,9 @@ func TestGuardianIssuedDefaultSandboxIntentExecutesWithinSignedWindow(t *testing
 	}
 	if !intent.ExpiresAt.Equal(baseTime.Add(35 * time.Minute)) {
 		t.Fatalf("default 30-minute sandbox received intent expiry %s", intent.ExpiresAt)
+	}
+	if intent.AllowedTool != contracts.EffectTypeRunSandboxedCode {
+		t.Fatalf("sandbox intent authorized inner tool %q", intent.AllowedTool)
 	}
 
 	broker := sandbox_runtime.NewSandboxBroker(sandbox_runtime.NewCredentialBroker(3600).WithClock(clock), lm).

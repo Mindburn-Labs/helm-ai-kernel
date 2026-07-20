@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-20
 ---
 
 # Changelog
@@ -89,11 +89,11 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-## [0.7.3] - 2026-07-19
+## [0.7.3] - 2026-07-20
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.3>.
 
-<!-- quantum_posture: v0.7.3 release notes cover Ed25519 workstation receipt signer trust hardening; none add a post-quantum cryptographic control. -->
+<!-- quantum_posture: v0.7.3 release notes cover Ed25519 workstation receipt signer trust hardening plus approval, connector-effect, launch-contract, and release-permit signing; all signatures remain classical Ed25519; none add a post-quantum cryptographic control. -->
 
 - Removed the derivable observe-only workstation receipt signing fallback.
   Receipt minting now requires a persistent per-data-dir Ed25519 signing key
@@ -112,6 +112,39 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
   HOME-less setups fail closed without creating CWD-relative keys. Setup
   migration deduplicates legacy hook entries and provisions the key on first
   classified call.
+- Established a durable approval foundation: approvals bind source-owned
+  grants to a signed assertion contract, verify a trusted-signer quorum, and
+  carry durable ceremony authority with sealed store read authority.
+  Consumption of an approval grant is fenced, and dispositions move over an
+  authenticated transport with signed active-work disposition records.
+- Hardened the connector effect lifecycle: effects are reserved before
+  dispatch, dispatch admission is fenced, connector authority is bound to
+  approvals, certified connector release authority is persisted, and effects
+  close with signed evidence.
+- Added universal workload and cloud route contracts and fail-closed launch
+  effect preview contracts: prepared executions are sealed, credentials stay
+  inside the runner boundary and are deferred until dispatch, unsupervised
+  detached execution is rejected, authorization is bound to the signed effect
+  digest, previews cannot dispatch effects or reuse credits, and routes are
+  bounded by certification expiry.
+- Added a persisted principal↔tenant binding registry (SQLite and Postgres)
+  with an admin endpoint, so the kernel can authorize multiple tenants
+  instead of a single environment-configured pair.
+- Added the `helm connect` device-code cloud flow, including headless Codex
+  project connection; Desktop Codex sidecar readiness is now certified before
+  use, and launch tokens and config links are contained to the project
+  workspace.
+- Added a deterministic autonomous release permit: reviewer identity is
+  canonicalized, case-folded self-review and merge self-pins are rejected,
+  and authority generation lineage is bound.
+- `scan` now fails closed on incomplete local coverage.
+- CI and release tooling: PRs that backward-break a public contract now fail
+  a breaking-change gate (`oasdiff`/`buf breaking` against the base branch,
+  with an explicit major-version or labeled override), and the release
+  workflow can publish a signed container image for an arbitrary commit sha.
+
+No RiskEnvelope, website, checkout, connector certification, or Company AI OS
+GA scope is included.
 
 ## [0.7.2] - 2026-07-13
 

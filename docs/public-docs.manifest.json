@@ -118,6 +118,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "integrations/native-client-boundary",
+      "title": "Native Client Integration Boundary",
+      "section": "integrations",
+      "source_path": "docs/INTEGRATIONS/native-client-boundary.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/native-client-boundary",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "integrations/framework-adapters",
       "title": "Framework Adapters",
       "section": "integrations",

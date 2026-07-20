@@ -95,6 +95,8 @@ HELM AI Kernel does:
 - emit signed receipts for `ALLOW`, `DENY`, and `ESCALATE` decisions;
 - quarantine unknown MCP servers and tools until they are inspected and approved;
 - produce offline-verifiable EvidencePacks for source-backed receipt material.
+- maintain owner-checked, project-scoped Codex setup state and fail closed when its
+  local authority, lifecycle evidence, or recovery transaction is unsafe.
 
 HELM AI Kernel does not:
 
@@ -103,6 +105,10 @@ HELM AI Kernel does not:
 - replace secret scanning, network firewalls, endpoint controls, or OS sandboxing;
 - prevent prompt injection at generation time; enforcement happens at dispatch;
 - capture side effects from tools that bypass the HELM proxy or MCP boundary;
+- turn generated native-client configuration or a Kernel-only synthetic denial
+  into proof that a real Codex or Claude Code session loaded it;
+- govern native-client actions outside the exact configured hook classes and
+  routed MCP calls;
 - certify every MCP tool schema through static analysis;
 - certify compliance with a regulatory standard by itself.
 

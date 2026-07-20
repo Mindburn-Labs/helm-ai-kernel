@@ -35,16 +35,18 @@ Then choose one path.
 - [Scan agent risk](reference/agent-risk-scan.md)
 - [OpenAI proxy](INTEGRATIONS/openai_baseurl.md)
 - [Verify receipts](VERIFICATION.md)
+- [Native client integration boundary](INTEGRATIONS/native-client-boundary.md)
 
 ## Local Client Setup Boundary
 
-Codex setup and printed MCP configuration can record exact local configuration,
-but intentionally leave `client_load_observed=false`. They do not prove that
-Codex or Claude Code loaded the configuration in a real session. A native
-client claim needs a sterile client home and disposable workspace that loads the
-configured server, exercises only configured hook classes and routed MCP calls,
-and verifies resulting receipts. Direct upstream and unconfigured client paths
-remain outside that review.
+Codex project setup can record exact local configuration, a signed lifecycle
+receipt, and a Kernel-only synthetic denial. It intentionally reports
+`client_load_observed=false`: those local checks do not show that Codex or
+Claude Code loaded the configuration in a real session. A native-client claim
+requires a sterile client home and disposable workspace that visibly load the
+configured server, exercise only configured hook classes and routed MCP calls,
+and verify the resulting receipts. Other client actions and bypassing upstream
+paths remain outside that review.
 
 ## More
 

@@ -1,6 +1,6 @@
 ---
 title: Agent Clients
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-14
 ---
 
 # Agent Clients
@@ -52,3 +52,16 @@ agent/tool requests action
 
 Setup writes local config and draft policy files only when `--yes` is present.
 It does not approve detected tools.
+
+## Native-Client Limits
+
+| Client path | Local evidence | Not established by setup |
+| --- | --- | --- |
+| Codex project scope | Exact owned config, signed lifecycle receipt, recovery journal, and Kernel-only synthetic denial | That a real Codex session loaded the config or governed any action outside the configured hook classes and routed MCP calls |
+| Claude Code | Direct CLI used to request MCP registration plus selected PreToolUse hook configuration | Readback of CLI-owned MCP serialization, Codex-style project lifecycle/recovery, or a real Claude Code session result |
+
+The Codex project lifecycle is intentionally isolated by workspace under the
+selected data directory. If it is interrupted, use `setup recover codex --scope
+project --yes`; migrate old unscoped state with `setup migrate codex --scope
+project --yes`. See the [Native Client Integration
+Boundary](native-client-boundary.md) for what that setup can and cannot prove.

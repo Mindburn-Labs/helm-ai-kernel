@@ -2,9 +2,9 @@
 
 **A local firewall for AI-agent actions.**
 
-HELM sits between Claude Code, Codex, MCP tools, shell commands, and other agent
-actions. It decides `ALLOW`, `DENY`, or `ESCALATE`, then writes a signed receipt
-you can verify later.
+HELM evaluates actions that reach its configured MCP, proxy, wrapper, or hook
+boundary. It decides `ALLOW`, `DENY`, or `ESCALATE`, then writes a signed
+receipt you can verify later.
 
 ![HELM AI Kernel: one boundary, one decision, one receipt](docs/assets/readme-boundary-preview.png)
 
@@ -63,6 +63,7 @@ You get:  a signed receipt you can verify offline
 | CLI commands | [CLI reference](docs/reference/cli.md) |
 | Security model | [Execution security model](docs/EXECUTION_SECURITY_MODEL.md) |
 | MCP tool quarantine | [MCP integration](docs/INTEGRATIONS/mcp.md) |
+| Native client lifecycle and review limits | [Maintainer protocol](docs/INTEGRATIONS/native-client-lifecycle.md) |
 | Evidence verification | [Verification](docs/VERIFICATION.md) |
 | AI security category map | [AI Security Categories](docs/AI_SECURITY_CATEGORIES.md) |
 
@@ -73,6 +74,11 @@ You get:  a signed receipt you can verify offline
 - Not a vague AI-safety claim.
 
 It is the open-source execution boundary: policy in, action checked, receipt out.
+
+Codex project setup proves generated local configuration and a Kernel-only
+synthetic denial. It does not by itself prove that a live Codex session loaded
+the configuration; see the native-client lifecycle protocol before making that
+claim.
 
 ## Free Forever
 

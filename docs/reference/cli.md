@@ -1,6 +1,6 @@
 ---
 title: CLI
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-14
 ---
 
 # CLI
@@ -29,6 +29,25 @@ helm-ai-kernel setup --client cursor --print-config
 
 Setup writes local client configuration and draft policy artifacts. It does not
 approve tools.
+
+For Codex project scope, lifecycle management is explicit:
+
+```bash
+helm-ai-kernel setup status codex --scope project --json
+helm-ai-kernel setup recover codex --scope project --dry-run --json
+helm-ai-kernel setup recover codex --scope project --yes
+helm-ai-kernel setup migrate codex --scope project --dry-run --json
+helm-ai-kernel setup migrate codex --scope project --yes
+helm-ai-kernel setup remove codex --scope project --yes
+```
+
+The lifecycle summary records local configuration and a Kernel-only synthetic
+denial; `client_load_observed=false` is not a client-session failure, it is an
+honest boundary. See the [Native Client Integration
+Boundary](../INTEGRATIONS/native-client-boundary.md) for public proof limits.
+
+Claude Code setup requires a direct executable. If PATH resolves through a mise
+shim, use `CLAUDE_CODE_BIN=/absolute/path/to/claude` with the setup command.
 
 ## MCP Approval Commands
 

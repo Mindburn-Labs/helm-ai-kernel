@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-14
 ---
 
 # Changelog
@@ -84,10 +84,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-No public feature claim is active in this section. Keep research scaffolds and
-hardware-backed enforcement language out of the public changelog until a tagged
-release ships source-owned tests, verifier evidence, and release artifacts for
-that exact capability.
+- Documented the source-backed native-client lifecycle boundary: private Codex
+  project namespaces, durable receipt-envelope recovery, explicit legacy-state
+  migration, and selected-hook/MCP limits. The new maintainer review protocol
+  keeps local configuration and Kernel-only synthetic-denial proof separate
+  from a real native-client session.
+- No tagged release, real native-client session result, or broader desktop
+  enforcement claim is created by this documentation and lifecycle work.
 
 ## [0.7.2] - 2026-07-13
 

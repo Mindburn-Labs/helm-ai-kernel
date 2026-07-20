@@ -1,6 +1,6 @@
 ---
 title: MCP
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-14
 ---
 
 # MCP
@@ -31,6 +31,12 @@ Print or install client config:
 helm-ai-kernel mcp print-config --client codex
 helm-ai-kernel mcp install --client claude-code
 ```
+
+Printing or installing client config is not proof that the client loaded it.
+HELM governs only calls that reach the configured server; direct upstream calls
+remain outside this boundary. For Codex project setup, recovery, and real-client
+review limits, see [Native Client Integration
+Boundary](native-client-boundary.md).
 
 ## Authorize Before Dispatch
 

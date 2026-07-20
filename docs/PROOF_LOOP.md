@@ -1,6 +1,6 @@
 ---
 title: HELM Proof Loop
-last_reviewed: 2026-07-02
+last_reviewed: 2026-07-14
 ---
 
 # HELM Proof Loop
@@ -47,6 +47,16 @@ helm-ai-kernel workstation verify-decision \
 | EvidencePack | Moves proof between machines | offline verifier result |
 | Category pages | Explain adjacent tools without superiority claims | cited public evidence |
 
+## Native Setup Is A Separate Layer
+
+Codex project setup adds a signed local lifecycle transaction around the
+generated config. Its exact-config checks and Kernel-only synthetic denial are
+useful local evidence, but `client_load_observed=false` means a real client has
+not yet been observed. The next layer is a sterile native-client review that
+exercises only configured hook classes and routed MCP calls; direct client or
+upstream paths remain outside the evidence. See the [Native Client Integration
+Boundary](INTEGRATIONS/native-client-boundary.md) for the public review limits.
+
 ## Boundaries
 
 - HELM only governs effects routed through an adapter, wrapper, hook, proxy, or
@@ -56,6 +66,8 @@ helm-ai-kernel workstation verify-decision \
 - Receipts prove the evaluated action and verdict. They do not prove every
   tool outside the boundary was governed.
 - EvidencePacks are portable proof bundles, not marketing screenshots.
+- Native setup receipts do not prove a client session merely because the config
+  and synthetic denial passed.
 
 ## Next
 

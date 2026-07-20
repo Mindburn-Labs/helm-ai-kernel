@@ -1,6 +1,6 @@
 ---
 title: Claim Boundaries
-last_reviewed: 2026-07-01
+last_reviewed: 2026-07-14
 ---
 
 # Claim Boundaries
@@ -19,6 +19,8 @@ or release artifacts.
 - Decisions, approvals, and revocations write local receipts.
 - EvidencePacks can be checked from local material without trusting a hosted
   service.
+- Codex project setup can record a signed local lifecycle transaction and a
+  Kernel-only synthetic denial without claiming a real client session.
 - The public conformance proof path supports `L1` and `L2` CLI shortcuts.
 
 ## Not Public Claims
@@ -29,6 +31,9 @@ or release artifacts.
 - No full operating-system, browser, IDE, eBPF, seccomp, TPM, hardware enclave,
   packet blocking, or proprietary hosted-agent control is claimed unless a
   tested path proves the specific effect crossed HELM.
+- No local config, lifecycle receipt, or synthetic denial is a claim that Codex
+  or Claude Code loaded the generated configuration. Native-client review must
+  identify the exact configured hook class and routed MCP call exercised.
 - No `L4` conformance claim is public. `L3` remains source/test coverage until
   a public proof path is wired and tested.
 

@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-20T00:59:10Z
+# Generated: 2026-07-20T20:48:59Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -447,9 +447,9 @@ f2229d08f1b6ad50f51e976305814161e9269884bf563c18fb57bb7416285d10  core/pkg/verif
 bfbe8e2d25ff38dc49eb34028cfede4e449bdc63e3b810f1b19913a11b72442b  core/pkg/verifier/externalreceipt/externalreceipt.go
 fdb3835dc6315a0730a961d458a0c1e4f9f5d79059f33b8908718f075718e12f  core/pkg/verifier/externalreceipt/externalreceipt_test.go
 e70d160b80a81e70a4d1019d9903135d25f813bbe5803b1da8582e727e8c819c  core/pkg/verifier/host_evidence_test.go
-c72cf3a4275a7529e23812ddc487ba759648f9a33248ed76b1453dae709849be  core/pkg/verifier/verifier.go
+0a90747696d5caaa95af478b94bd088b0d96f5ed383bf014a1c9cc4f4d80006f  core/pkg/verifier/verifier.go
 6826dbc4685bd55768db73e1d39e7195ac05571d2452337aa10c87704027f153  core/pkg/verifier/verifier_behavior_coverage_test.go
-c066a6086e521c514cfdc2e36a0cab0a99b259499332046b54506630d0ccb2d8  core/pkg/verifier/verifier_test.go
+2c4a15b6ae93de4e280db50a58e9e59e3ac6dfb80e891a345dad03e646cca1de  core/pkg/verifier/verifier_test.go
 f5332ef5eaa72e342066a9d3dad0f822415efeece0312fd97c9cb23674b2c647  core/pkg/connectors/sandbox/README.md
 54d138f657e16bc1df4cf260a562f3e0ad239f6c145129565799700401c6f78d  core/pkg/connectors/sandbox/branchfs.go
 3a43db565ecb1e9d80be41747dfcf8d591f131ef7ef2979b9066f77309ed7656  core/pkg/connectors/sandbox/bridge.go

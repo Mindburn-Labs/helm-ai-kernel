@@ -71,16 +71,9 @@ func (v *GraphValidator) Validate(plan *contracts.PlanSpec) []error {
 	}
 
 	// Validate effect types are known (if catalog available).
-	if v.catalog != nil {
-		knownTypes := make(map[string]bool, len(v.catalog.EffectTypes))
-		for _, et := range v.catalog.EffectTypes {
-			knownTypes[et.TypeID] = true
-		}
-		for _, node := range dag.Nodes {
-			if node.EffectType != "" && !knownTypes[node.EffectType] {
-				// Not an error — unknown types get E3 (fail-closed) by EffectRiskClass.
-				// But we surface it as a validation warning.
-			}
+	for _, node := range dag.Nodes {
+		if contracts.IsLaunchMissionEffectPreview(node.EffectType) {
+			errs = append(errs, fmt.Errorf("step %s uses preview effect %s, which is not executable", node.ID, node.EffectType))
 		}
 	}
 

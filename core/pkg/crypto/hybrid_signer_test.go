@@ -177,22 +177,25 @@ func TestHybridSigner_SignIntent(t *testing.T) {
 	assert.Equal(t, SigPrefixHybrid+SigSeparator+"hybrid-key-2", intent.SignatureType)
 
 	// Verify
-	payload := CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err := signer.Verify([]byte(payload), intent.Signature)
+	payload, err := CanonicalizeAuthorizedExecutionIntent(intent)
+	require.NoError(t, err)
+	valid, err := signer.Verify(payload, intent.Signature)
 	require.NoError(t, err)
 	assert.True(t, valid)
 
 	// Tamper
 	intent.AllowedTool = "delete_file"
-	payloadTampered := CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err = signer.Verify([]byte(payloadTampered), intent.Signature)
+	payloadTampered, err := CanonicalizeAuthorizedExecutionIntent(intent)
+	require.NoError(t, err)
+	valid, err = signer.Verify(payloadTampered, intent.Signature)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered intent")
 
 	intent.AllowedTool = "read_file"
 	intent.EffectDigestHash = "sha256:tampered-effect"
-	payloadTampered = CanonicalizeIntent(intent.ID, intent.DecisionID, intent.AllowedTool, intent.EffectDigestHash)
-	valid, err = signer.Verify([]byte(payloadTampered), intent.Signature)
+	payloadTampered, err = CanonicalizeAuthorizedExecutionIntent(intent)
+	require.NoError(t, err)
+	valid, err = signer.Verify(payloadTampered, intent.Signature)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered effect digest")
 }

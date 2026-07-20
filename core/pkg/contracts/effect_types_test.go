@@ -100,6 +100,12 @@ func TestEffectRiskClass(t *testing.T) {
 		{EffectTypeAgentInvokePrivileged, "E3"},
 		{EffectTypeTunnelStart, "E3"},
 		{EffectTypeCloudComputeBudget, "E2"},
+		{EffectTypeProviderProvision, "E3"},
+		{EffectTypeDeployProductionActivate, "E3"},
+		{EffectTypeSpendAuthorize, "E3"},
+		{EffectTypeProviderRollback, "E3"},
+		{EffectTypeProviderTeardown, "E4"},
+		{EffectTypeCompanyArtifactUpdate, "E2"},
 		{EffectTypeAgentIdentityIsolation, "E1"},
 		{"UNKNOWN_EFFECT", "E3"}, // fail-closed default
 	}
@@ -113,19 +119,22 @@ func TestEffectRiskClass(t *testing.T) {
 }
 
 func TestLaunchPreviewEffectsRemainOutsideExecutableCatalog(t *testing.T) {
-	for _, effectID := range []string{
-		EffectTypeProviderProvision,
-		EffectTypeDeployProductionActivate,
-		EffectTypeSpendAuthorize,
-		EffectTypeProviderRollback,
-		EffectTypeProviderTeardown,
-		EffectTypeCompanyArtifactUpdate,
+	for _, effect := range []struct {
+		effectID string
+		risk     string
+	}{
+		{EffectTypeProviderProvision, "E3"},
+		{EffectTypeDeployProductionActivate, "E3"},
+		{EffectTypeSpendAuthorize, "E3"},
+		{EffectTypeProviderRollback, "E3"},
+		{EffectTypeProviderTeardown, "E4"},
+		{EffectTypeCompanyArtifactUpdate, "E2"},
 	} {
-		if LookupEffectType(effectID) != nil {
-			t.Fatalf("preview launch effect %s was promoted into the executable catalog", effectID)
+		if LookupEffectType(effect.effectID) != nil {
+			t.Fatalf("preview launch effect %s was promoted into the executable catalog", effect.effectID)
 		}
-		if risk := EffectRiskClass(effectID); risk != "E3" {
-			t.Fatalf("unregistered preview launch effect %s escaped the fail-closed default risk class: %s", effectID, risk)
+		if risk := EffectRiskClass(effect.effectID); risk != effect.risk {
+			t.Fatalf("preview launch effect %s risk class = %s, want %s", effect.effectID, risk, effect.risk)
 		}
 	}
 }

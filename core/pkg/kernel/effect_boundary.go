@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/google/uuid"
 )
 
@@ -28,6 +29,31 @@ const (
 	EffectTypeAuditLog         EffectType = "AUDIT_LOG"
 	EffectTypeExternalAPICall  EffectType = "EXTERNAL_API_CALL"
 )
+
+// IsExecutableEffectType admits canonical production and legacy boundary types;
+// preview registration is always denied and PDP approval remains mandatory.
+func IsExecutableEffectType(effectType EffectType) bool {
+	if contracts.IsLaunchMissionEffectPreview(string(effectType)) {
+		return false
+	}
+	if contracts.LookupEffectType(string(effectType)) != nil {
+		return true
+	}
+	switch effectType {
+	case EffectTypeDataWrite,
+		EffectTypeFundsTransfer,
+		EffectTypePermissionChange,
+		EffectTypeDeploy,
+		EffectTypeNotify,
+		EffectTypeModuleInstall,
+		EffectTypeConfigChange,
+		EffectTypeAuditLog,
+		EffectTypeExternalAPICall:
+		return true
+	default:
+		return false
+	}
+}
 
 // EffectSubject represents the actor submitting an effect.
 type EffectSubject struct {
@@ -138,6 +164,9 @@ func (b *InMemoryEffectBoundary) Submit(ctx context.Context, req *EffectRequest)
 	// Validate required fields
 	if req.EffectType == "" {
 		return nil, fmt.Errorf("effect_type is required")
+	}
+	if !IsExecutableEffectType(req.EffectType) {
+		return nil, fmt.Errorf("effect_type %q is not executable at this boundary", req.EffectType)
 	}
 	if req.Subject.SubjectID == "" {
 		return nil, fmt.Errorf("subject.subject_id is required")

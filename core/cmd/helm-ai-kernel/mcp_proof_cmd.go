@@ -65,12 +65,14 @@ type mcpProofScenarioResult struct {
 	ScenarioID                  string                 `json:"scenario_id"`
 	Name                        string                 `json:"name"`
 	ThreatClass                 string                 `json:"threat_class"`
+	PreDispatchAdapter          string                 `json:"pre_dispatch_adapter"`
 	ServerID                    string                 `json:"server_id"`
 	ToolName                    string                 `json:"tool_name"`
 	Verdict                     string                 `json:"verdict"`
 	Reason                      string                 `json:"reason"`
 	Dispatched                  bool                   `json:"dispatched"`
 	DispatchCount               int                    `json:"dispatch_count"`
+	ConnectorCalls              int                    `json:"connector_calls"`
 	ReplayNoRedispatch          bool                   `json:"replay_no_redispatch"`
 	ReceiptRef                  string                 `json:"receipt_ref"`
 	ReceiptHash                 string                 `json:"receipt_hash"`
@@ -218,9 +220,13 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 	}
 
 	runDir := filepath.Join(outRoot, runID)
-	if err := os.MkdirAll(runDir, 0o700); err != nil {
-		fmt.Fprintf(stderr, "Error: create proof output: %v\n", err)
-		return 1
+	if err := mcpProofRequireClassicalProfile(); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	if err := mcpProofCreateFreshRunDir(runDir); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
 	}
 
 	receiptSigner, err := loadOrGenerateSignerWithDataDir(filepath.Join(runDir, ".helm-receipts"))
@@ -253,6 +259,10 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 	packDir, err := lpreceipts.WriteEvidencePack(runDir, runID, artifacts)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: write EvidencePack: %v\n", err)
+		return 1
+	}
+	if err := mcpProofRequireReplayGate(packDir); err != nil {
+		fmt.Fprintf(stderr, "Error: mark MCP proof replay gate: %v\n", err)
 		return 1
 	}
 	evidenceDataDir := filepath.Join(runDir, ".helm-evidence")
@@ -532,6 +542,69 @@ func mcpProofScenarios(at time.Time) []mcpProofScenario {
 	}
 }
 
+const mcpProofPreDispatchAdapterID = "mcp_proof_pre_dispatch/v1"
+
+// mcpProofPreDispatchAdapter is the proof-only boundary wrapper. Every vector
+// goes through it: only an ALLOW vector explicitly marked for execution can
+// reach SafeExecutor and its local connector.
+type mcpProofPreDispatchAdapter struct {
+	runID       string
+	generatedAt time.Time
+	signer      helmcrypto.Signer
+	executor    *executor.SafeExecutor
+	driver      *mcpProofLocalDriver
+}
+
+type mcpProofDispatchResult struct {
+	execution      *mcpProofExecutionResult
+	connectorCalls int
+}
+
+func (a *mcpProofPreDispatchAdapter) Authorize(scenario mcpProofScenario) launchpadmcp.Decision {
+	return launchpadmcp.AuthorizeAt(scenario.Server, scenario.Request, a.generatedAt)
+}
+
+func (a *mcpProofPreDispatchAdapter) Dispatch(
+	ctx context.Context,
+	scenario mcpProofScenario,
+	decision launchpadmcp.Decision,
+	policyEvaluationHash string,
+	authorizationInputsHash string,
+) (*mcpProofDispatchResult, error) {
+	if a == nil || a.executor == nil || a.driver == nil || a.signer == nil {
+		return nil, fmt.Errorf("pre-dispatch adapter is not initialized")
+	}
+	before := a.driver.DispatchCount()
+	result := &mcpProofDispatchResult{}
+	if decision.Verdict == string(contracts.VerdictAllow) {
+		if !scenario.Execute {
+			return nil, fmt.Errorf("ALLOW scenario %s has no declared SafeExecutor path", scenario.ID)
+		}
+		executionResult, err := executeMCPProofScenario(
+			ctx,
+			a.runID,
+			a.generatedAt,
+			scenario,
+			policyEvaluationHash,
+			authorizationInputsHash,
+			a.signer,
+			a.executor,
+			a.driver,
+		)
+		if err != nil {
+			return nil, err
+		}
+		result.execution = executionResult
+	} else if scenario.Execute {
+		return nil, fmt.Errorf("non-ALLOW scenario %s attempted execution", scenario.ID)
+	}
+	result.connectorCalls = a.driver.DispatchCount() - before
+	if decision.Verdict != string(contracts.VerdictAllow) && result.connectorCalls != 0 {
+		return nil, fmt.Errorf("non-ALLOW scenario %s reached connector %d times", scenario.ID, result.connectorCalls)
+	}
+	return result, nil
+}
+
 func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time.Time, scenarios []mcpProofScenario, signer helmcrypto.Signer) ([]mcpProofScenarioResult, map[string][]byte, error) {
 	results := make([]mcpProofScenarioResult, 0, len(scenarios))
 	artifacts := map[string][]byte{}
@@ -568,9 +641,16 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 		nil,
 		func() time.Time { return generatedAt },
 	)
+	preDispatch := &mcpProofPreDispatchAdapter{
+		runID:       runID,
+		generatedAt: generatedAt,
+		signer:      signer,
+		executor:    safeExecutor,
+		driver:      driver,
+	}
 
 	for idx, scenario := range scenarios {
-		decision := launchpadmcp.AuthorizeAt(scenario.Server, scenario.Request, generatedAt)
+		decision := preDispatch.Authorize(scenario)
 		if decision.Verdict != scenario.Expected.Verdict || decision.Reason != scenario.Expected.Reason {
 			return nil, nil, fmt.Errorf(
 				"proof scenario %s returned %s/%s, want %s/%s",
@@ -609,23 +689,18 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 		authorizationEvaluationHash := lpreceipts.HashBytes(authorizationEvaluationData)
 		authorizationEvaluationRef := "02_PROOFGRAPH/authorization_evaluations/" + scenario.ID + ".json"
 		artifacts[authorizationEvaluationRef] = authorizationEvaluationData
-		dispatchesBefore := driver.DispatchCount()
-		var executionResult *mcpProofExecutionResult
-		if scenario.Execute {
-			executionResult, err = executeMCPProofScenario(
-				context.Background(),
-				runID,
-				generatedAt,
-				scenario,
-				authorizationEvaluationHash,
-				authorizationInputsHash,
-				signer,
-				safeExecutor,
-				driver,
-			)
-			if err != nil {
-				return nil, nil, fmt.Errorf("execute scenario %s: %w", scenario.ID, err)
-			}
+		dispatchResult, err := preDispatch.Dispatch(
+			context.Background(),
+			scenario,
+			decision,
+			authorizationEvaluationHash,
+			authorizationInputsHash,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("pre-dispatch scenario %s: %w", scenario.ID, err)
+		}
+		executionResult := dispatchResult.execution
+		if executionResult != nil {
 			artifacts["receipts/"+scenario.ID+"-execution.json"] = executionResult.receiptData
 			artifacts["receipts/"+scenario.ID+"-execution-replay.json"] = executionResult.replayReceiptData
 			artifacts["02_PROOFGRAPH/decisions/"+scenario.ID+".json"] = executionResult.decisionData
@@ -633,7 +708,7 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 			artifacts["04_EXPORTS/reversible_effect.txt"] = executionResult.effectArtifactData
 			artifacts["08_TAPES/"+scenario.ID+"-replay.json"] = executionResult.replayData
 		}
-		dispatchCount := driver.DispatchCount() - dispatchesBefore
+		dispatchCount := dispatchResult.connectorCalls
 		if scenario.Execute && dispatchCount != 1 {
 			return nil, nil, fmt.Errorf("proof scenario %s dispatched %d times, want exactly 1", scenario.ID, dispatchCount)
 		}
@@ -671,12 +746,14 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 			ScenarioID:                  scenario.ID,
 			Name:                        scenario.Name,
 			ThreatClass:                 scenario.ThreatClass,
+			PreDispatchAdapter:          mcpProofPreDispatchAdapterID,
 			ServerID:                    scenario.Request.ServerID,
 			ToolName:                    scenario.Request.ToolName,
 			Verdict:                     decision.Verdict,
 			Reason:                      decision.Reason,
 			Dispatched:                  dispatched,
 			DispatchCount:               dispatchCount,
+			ConnectorCalls:              dispatchResult.connectorCalls,
 			ReplayNoRedispatch:          executionResult != nil && executionResult.replayEnvelopeEqual,
 			ReceiptRef:                  "02_PROOFGRAPH/receipts/" + scenario.ID + ".json",
 			ReceiptHash:                 receiptHash,
@@ -732,7 +809,71 @@ func buildMCPProofArtifacts(runDir, runID, scenarioName string, generatedAt time
 	artifacts["mcp_proof_transcript.json"] = transcriptData
 	artifacts["proofgraph.json"] = buildMCPProofGraph(runID, generatedAt, results)
 	artifacts["09_SCHEMAS/mcp_proof_transcript.schema.json"] = []byte(mcpProofTranscriptSchema + "\n")
+	if err := addMCPProofReplayAndTamperArtifacts(runID, results, transcriptData, artifacts); err != nil {
+		return nil, nil, err
+	}
 	return results, artifacts, nil
+}
+
+func addMCPProofReplayAndTamperArtifacts(runID string, results []mcpProofScenarioResult, transcriptData []byte, artifacts map[string][]byte) error {
+	entries := make([]map[string]any, 0, 1)
+	for _, result := range results {
+		if result.Verdict != string(contracts.VerdictAllow) {
+			continue
+		}
+		if result.ExecutionReceiptRef == "" || result.ReplayReceiptRef == "" || !result.ReplayEnvelopeEqual {
+			return fmt.Errorf("ALLOW scenario %s is missing replay evidence", result.ScenarioID)
+		}
+		entries = append(entries, map[string]any{
+			"scenario_id":           result.ScenarioID,
+			"execution_receipt_ref": result.ExecutionReceiptRef,
+			"execution_receipt_hash": result.ExecutionReceiptHash,
+			"replay_receipt_ref":    result.ReplayReceiptRef,
+			"replay_receipt_hash":   result.ReplayReceiptHash,
+			"connector_calls":       result.ConnectorCalls,
+		})
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("MCP proof requires replay evidence for an ALLOW scenario")
+	}
+	tapeManifest, err := mcpProofJSON(map[string]any{
+		"schema_version": "helm.mcp.proof.tape-manifest/v1",
+		"run_id":         runID,
+		"entries":        entries,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal replay tape manifest: %w", err)
+	}
+	artifacts["08_TAPES/tape_manifest.json"] = tapeManifest
+	first := entries[0]
+	determinismManifest, err := mcpProofJSON(map[string]any{
+		"schema_version": "helm.mcp.proof.determinism/v1",
+		"run_id":         runID,
+		"live_hash":      first["execution_receipt_hash"],
+		"replay_hash":    first["replay_receipt_hash"],
+	})
+	if err != nil {
+		return fmt.Errorf("marshal determinism manifest: %w", err)
+	}
+	artifacts["02_PROOFGRAPH/determinism_manifest.json"] = determinismManifest
+
+	tamperVectors, err := mcpProofJSON(map[string]any{
+		"schema_version":           "helm.mcp.proof.tamper-vectors/v1",
+		"required_verifier_check":  "mcp_proof_semantics",
+		"vectors": []map[string]any{
+			{
+				"id":                   "transcript_schema_tamper",
+				"target_ref":           "04_EXPORTS/mcp_proof_transcript.json",
+				"expected_target_hash": lpreceipts.HashBytes(transcriptData),
+				"expected_rejection":   "mcp_proof_semantics",
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal tamper vectors: %w", err)
+	}
+	artifacts["12_REPORTS/mcp_proof_tamper_vectors.json"] = tamperVectors
+	return nil
 }
 
 func executeMCPProofScenario(
@@ -980,6 +1121,66 @@ func mcpProofJSON(value any) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
+func mcpProofRequireClassicalProfile() error {
+	profile := strings.TrimSpace(os.Getenv("HELM_RECEIPT_PROFILE"))
+	if profile == "" || profile == helmcrypto.ReceiptProfileClassical {
+		return nil
+	}
+	return fmt.Errorf("mcp proof is a dev-local classical-only proof; HELM_RECEIPT_PROFILE=%q is rejected before any governed effect", profile)
+}
+
+// mcpProofCreateFreshRunDir makes a run ID an immutable proof instance. A
+// retry never resumes an old execution store, which prevents a stale
+// idempotency receipt from being mistaken for a new governed effect.
+func mcpProofCreateFreshRunDir(runDir string) error {
+	if _, err := os.Lstat(runDir); err == nil {
+		return fmt.Errorf("proof output %q already exists; mcp proof never resumes a run ID, choose a new --run-id or --out", runDir)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect proof output %q: %w", runDir, err)
+	}
+	if err := os.MkdirAll(runDir, 0o700); err != nil {
+		return fmt.Errorf("create proof output: %w", err)
+	}
+	return nil
+}
+
+// mcpProofRequireReplayGate upgrades the generated launchpad index before it
+// is sealed. The generic offline verifier then requires the proof replay tape
+// in addition to the MCP-specific semantic check.
+func mcpProofRequireReplayGate(packDir string) error {
+	path := filepath.Join(packDir, "00_INDEX.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var index map[string]json.RawMessage
+	if err := json.Unmarshal(data, &index); err != nil {
+		return err
+	}
+	var gates []string
+	if raw, ok := index["gates"]; ok {
+		if err := json.Unmarshal(raw, &gates); err != nil {
+			return fmt.Errorf("decode 00_INDEX.json gates: %w", err)
+		}
+	}
+	for _, gate := range gates {
+		if gate == "G2" {
+			return nil
+		}
+	}
+	gates = append(gates, "G2")
+	raw, err := json.Marshal(gates)
+	if err != nil {
+		return err
+	}
+	index["gates"] = raw
+	updated, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(updated, '\n'), 0o600)
+}
+
 func mcpProofScope(scenario string) string {
 	if strings.TrimSpace(scenario) == "all" {
 		return "complete"
@@ -1096,13 +1297,15 @@ const mcpProofTranscriptSchema = `{
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["scenario_id", "verdict", "reason", "dispatched", "dispatch_count", "replay_no_redispatch", "receipt_ref"],
-        "properties": {
-          "scenario_id": { "type": "string" },
-          "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
-          "reason": { "type": "string" },
-          "dispatched": { "type": "boolean" },
-          "dispatch_count": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "required": ["scenario_id", "pre_dispatch_adapter", "verdict", "reason", "dispatched", "dispatch_count", "connector_calls", "replay_no_redispatch", "receipt_ref"],
+	        "properties": {
+	          "scenario_id": { "type": "string" },
+	          "pre_dispatch_adapter": { "const": "mcp_proof_pre_dispatch/v1" },
+	          "verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
+	          "reason": { "type": "string" },
+	          "dispatched": { "type": "boolean" },
+	          "dispatch_count": { "type": "integer", "minimum": 0, "maximum": 1 },
+	          "connector_calls": { "type": "integer", "minimum": 0, "maximum": 1 },
           "replay_no_redispatch": { "type": "boolean" },
           "receipt_ref": { "type": "string" }
         }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -173,8 +174,8 @@ func TestScanReceiptsProjectsObservedTrafficWithoutRawLeakage(t *testing.T) {
 	if envelope.Posture.AgentSurface != riskenvelope.AgentSurfaceClaudeCode {
 		t.Fatalf("agent surface = %s, want claude_code", envelope.Posture.AgentSurface)
 	}
-	if envelope.Posture.PermissionMode != riskenvelope.PermissionModeAcceptEdits {
-		t.Fatalf("permission mode = %s, want accept_edits", envelope.Posture.PermissionMode)
+	if envelope.Posture.PermissionMode != riskenvelope.PermissionModeUnknown {
+		t.Fatalf("permission mode = %s, want unknown", envelope.Posture.PermissionMode)
 	}
 	wantRisks := map[riskenvelope.RiskCode]bool{
 		riskenvelope.RiskBroadShellAllow:              false,
@@ -182,6 +183,9 @@ func TestScanReceiptsProjectsObservedTrafficWithoutRawLeakage(t *testing.T) {
 		riskenvelope.RiskSecretClassAgentReadable:     false,
 	}
 	for _, finding := range envelope.Findings {
+		if finding.Evidence.PermissionMode != riskenvelope.PermissionModeUnknown {
+			t.Fatalf("finding permission mode = %s, want unknown", finding.Evidence.PermissionMode)
+		}
 		if _, ok := wantRisks[finding.RiskCode]; ok {
 			wantRisks[finding.RiskCode] = true
 		}
@@ -220,6 +224,58 @@ func TestScanReceiptsProjectsObservedTrafficWithoutRawLeakage(t *testing.T) {
 				t.Fatalf("%s leaked raw receipt input %q", name, raw)
 			}
 		}
+	}
+}
+
+func TestScanReceiptsFailsClosedOnInvalidDeclaredInput(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "receipt.json"), []byte("{not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ScanReceipts(root, BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+	if !errors.Is(err, ErrScanCoverageIncomplete) {
+		t.Fatalf("ScanReceipts() error = %v, want coverage error", err)
+	}
+	if strings.Contains(err.Error(), root) {
+		t.Fatalf("ScanReceipts() leaked local path: %v", err)
+	}
+
+	_, err = ScanReceipts(filepath.Join(root, "missing"), BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+	if !errors.Is(err, ErrScanCoverageIncomplete) {
+		t.Fatalf("ScanReceipts() missing-root error = %v, want coverage error", err)
+	}
+}
+
+func TestScanFailsClosedOnInvalidRecognizedConfig(t *testing.T) {
+	for name, writeInvalid := range map[string]func(t *testing.T, root string){
+		"mcp json": func(t *testing.T, root string) {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte("{not-json"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"codex toml": func(t *testing.T, root string) {
+			t.Helper()
+			dir := filepath.Join(root, ".codex")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("approval_policy = ["), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeInvalid(t, root)
+			_, err := Scan(root, BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+			if !errors.Is(err, ErrScanCoverageIncomplete) {
+				t.Fatalf("Scan() error = %v, want coverage error", err)
+			}
+			if strings.Contains(err.Error(), root) {
+				t.Fatalf("Scan() leaked local path: %v", err)
+			}
+		})
 	}
 }
 

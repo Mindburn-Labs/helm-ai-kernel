@@ -272,7 +272,9 @@ func TestHelpersAndDirectScanFileBranches(t *testing.T) {
 	scannerRel = func(string, string) (string, error) {
 		return "", errors.New("rel failed")
 	}
-	s.scanFile(file, "relative-root", direct)
+	if err := s.scanFile(file, "relative-root", direct); err != nil {
+		t.Fatalf("scanFile() rel fallback error = %v", err)
+	}
 	if len(direct.Findings) != 1 || direct.Findings[0].Path != file {
 		t.Fatalf("scanFile() rel error findings = %#v", direct.Findings)
 	}
@@ -283,11 +285,91 @@ func TestHelpersAndDirectScanFileBranches(t *testing.T) {
 		return nil, errors.New("open failed")
 	}
 	before := len(direct.Findings)
-	s.scanFile(file, root, direct)
+	if err := s.scanFile(file, root, direct); err == nil {
+		t.Fatal("scanFile() open error = nil, want error")
+	}
 	if len(direct.Findings) != before {
 		t.Fatalf("scanFile() open error changed findings: %#v", direct.Findings)
 	}
 	restore()
+}
+
+func TestStrictScannerFailsClosedOnIncompleteCoverage(t *testing.T) {
+	t.Run("missing root", func(t *testing.T) {
+		s := NewScanner()
+		s.RequireComplete = true
+		_, err := s.Scan(filepath.Join(t.TempDir(), "missing"))
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict missing-root error = %v, want coverage error", err)
+		}
+	})
+
+	t.Run("walk error", func(t *testing.T) {
+		restore := replaceScannerHooks(t)
+		scannerWalkDir = func(root string, fn fs.WalkDirFunc) error {
+			return fn(filepath.Join(root, "unreadable"), nil, errors.New("permission denied"))
+		}
+		_, err := (&Scanner{RequireComplete: true, MaxFileBytes: 2 * 1024 * 1024, Clock: time.Now}).Scan("root")
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict walk error = %v, want coverage error", err)
+		}
+		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "unreadable") {
+			t.Fatalf("strict walk error leaked source detail: %v", err)
+		}
+		restore()
+	})
+
+	t.Run("stat error", func(t *testing.T) {
+		restore := replaceScannerHooks(t)
+		scannerWalkDir = func(root string, fn fs.WalkDirFunc) error {
+			if err := fn(root, fakeDirEntry{name: "root", dir: true}, nil); err != nil {
+				return err
+			}
+			return fn(filepath.Join(root, "candidate.py"), fakeDirEntry{name: "candidate.py", infoErr: errors.New("stat failed")}, nil)
+		}
+		_, err := (&Scanner{RequireComplete: true, MaxFileBytes: 2 * 1024 * 1024, Clock: time.Now}).Scan("root")
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict stat error = %v, want coverage error", err)
+		}
+		restore()
+	})
+
+	t.Run("oversized candidate", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "large.py", "import openai\n")
+		s := NewScanner()
+		s.RequireComplete = true
+		s.MaxFileBytes = 1
+		_, err := s.Scan(root)
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict oversized error = %v, want coverage error", err)
+		}
+	})
+
+	t.Run("open error", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "candidate.py", "import openai\n")
+		restore := replaceScannerHooks(t)
+		scannerOpen = func(string) (*os.File, error) { return nil, errors.New("open failed") }
+		s := NewScanner()
+		s.RequireComplete = true
+		_, err := s.Scan(root)
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict open error = %v, want coverage error", err)
+		}
+		restore()
+	})
+
+	t.Run("long line", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "candidate.py", strings.Repeat("x", 1024*1024+1))
+		s := NewScanner()
+		s.RequireComplete = true
+		_, err := s.Scan(root)
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict long line error = %v, want coverage error", err)
+		}
+	})
 }
 
 func replaceScannerHooks(t *testing.T) func() {

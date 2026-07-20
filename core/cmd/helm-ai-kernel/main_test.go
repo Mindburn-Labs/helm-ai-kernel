@@ -60,6 +60,20 @@ func TestRunNoArgsPrintsFrontDoor(t *testing.T) {
 	assert.Empty(t, stderr.String())
 }
 
+func TestRunVersionReportsFullSourceRevision(t *testing.T) {
+	originalCommit := commit
+	commit = "0123456789abcdef0123456789abcdef01234567"
+	t.Cleanup(func() { commit = originalCommit })
+
+	var stdout, stderr bytes.Buffer
+	exitCode := Run([]string{"helm", "version"}, &stdout, &stderr)
+
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout.String(), "(0123456789ab)")
+	assert.Contains(t, stdout.String(), "Source Revision:        "+commit)
+	assert.Empty(t, stderr.String())
+}
+
 func TestRunHelpAllPrintsFullCommandList(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	exitCode := Run([]string{"helm", "help", "--all"}, &stdout, &stderr)

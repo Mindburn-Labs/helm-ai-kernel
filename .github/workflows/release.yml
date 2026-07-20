@@ -247,7 +247,10 @@ jobs:
           if [[ "${ref}" =~ ^v[0-9] ]]; then ref="${ref#v}"; fi
           {
             echo "version=${ref}"
-            echo "commit=$(git rev-parse --short=12 HEAD)"
+            # Campaign reports require the exact immutable source revision.
+            # A shortened value cannot be reconciled with a signed 40/64-char
+            # Kernel provenance field inside the published image.
+            echo "commit=$(git rev-parse HEAD)"
             echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } >> "${GITHUB_OUTPUT}"
       - id: push

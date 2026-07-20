@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/certification/adversarial_campaign_report.v2.schema.json",
+  "$comment": "quantum_posture: this schema describes classical Ed25519 campaign report authentication and does not claim post-quantum protection.",
+  "title": "HELM Kernel Adversarial Campaign Report v2",
+  "description": "Deterministic, campaign/run-bound, Ed25519-attested result of canonical EvidencePack verification and all mandatory Kernel adversarial detectors.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "helm.adversarial_campaign_report.v2" },
+    "campaign_id": { "$ref": "#/$defs/identifier" },
+    "run_id": { "$ref": "#/$defs/identifier" },
+    "pass": { "type": "boolean" },
+    "status": {
+      "enum": [
+        "passed",
+        "bundle_verification_failed",
+        "coverage_incomplete",
+        "adversarial_failed"
+      ]
+    },
+    "trust_profile": {
+      "enum": ["dev-local", "team", "customer", "high-assurance"]
+    },
+    "evaluation_time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "campaign_trust_key_id": { "$ref": "#/$defs/prefixed_sha256" },
+    "bundle_verified": { "type": "boolean" },
+    "verifier_version": { "type": "string", "minLength": 1 },
+    "verification_summary": { "type": "string", "minLength": 1 },
+    "verification_issue_count": { "type": "integer", "minimum": 0 },
+    "verification_checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/verification_check" }
+    },
+    "evidence_root": { "$ref": "#/$defs/raw_sha256" },
+    "merkle_root": { "$ref": "#/$defs/raw_sha256" },
+    "index_entry_count": { "type": "integer", "minimum": 0 },
+    "mandatory_suites": { "const": 10 },
+    "coverage_verified": { "type": "boolean" },
+    "covered_suites": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "missing_suites": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "coverage_checks": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/coverage_check" }
+    },
+    "executed_suites": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "passed_suites": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "failed_suites": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "suites": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/suite_result" }
+    },
+    "untested_regions": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "model/provider clean-room execution" },
+        { "const": "independent SecurityFinding verification lifecycle" },
+        { "const": "patch generation and regression validation" },
+        { "const": "staging, production smoke, and soak" }
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "known_limitations": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "the campaign evaluates only artifacts present in the supplied sealed EvidencePack" },
+        { "const": "a passing report is conformance evidence, not a bug-free or production-ready claim" },
+        { "const": "producer, verifier, and patcher identity separation is enforced by the HELM control plane, not this offline command" }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "runner_provenance": { "$ref": "#/$defs/runner_provenance" },
+    "attestation": { "$ref": "#/$defs/attestation" }
+  },
+  "required": [
+    "schema_version",
+    "campaign_id",
+    "run_id",
+    "pass",
+    "status",
+    "trust_profile",
+    "evaluation_time",
+    "campaign_trust_key_id",
+    "bundle_verified",
+    "verifier_version",
+    "verification_summary",
+    "verification_issue_count",
+    "verification_checks",
+    "index_entry_count",
+    "mandatory_suites",
+    "coverage_verified",
+    "covered_suites",
+    "missing_suites",
+    "coverage_checks",
+    "executed_suites",
+    "passed_suites",
+    "failed_suites",
+    "untested_regions",
+    "known_limitations",
+    "runner_provenance",
+    "attestation"
+  ],
+  "allOf": [
+    {
+      "if": { "properties": { "bundle_verified": { "const": true } } },
+      "then": {
+        "required": ["evidence_root", "merkle_root"],
+        "properties": { "index_entry_count": { "minimum": 1 } }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "passed" } } },
+      "then": {
+        "properties": {
+          "pass": { "const": true },
+          "bundle_verified": { "const": true },
+          "coverage_verified": { "const": true },
+          "covered_suites": { "const": 10 },
+          "missing_suites": { "const": 0 },
+          "coverage_checks": { "minItems": 10, "maxItems": 10 },
+          "executed_suites": { "const": 10 },
+          "passed_suites": { "const": 10 },
+          "failed_suites": { "const": 0 },
+          "suites": { "minItems": 10, "maxItems": 10 }
+        },
+        "required": ["suites"]
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "bundle_verification_failed" } } },
+      "then": {
+        "properties": {
+          "pass": { "const": false },
+          "bundle_verified": { "const": false },
+          "coverage_verified": { "const": false },
+          "covered_suites": { "const": 0 },
+          "missing_suites": { "const": 0 },
+          "coverage_checks": { "maxItems": 0 },
+          "executed_suites": { "const": 0 },
+          "passed_suites": { "const": 0 },
+          "failed_suites": { "const": 0 }
+        },
+        "not": { "required": ["suites"] }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "coverage_incomplete" } } },
+      "then": {
+        "properties": {
+          "pass": { "const": false },
+          "bundle_verified": { "const": true },
+          "coverage_verified": { "const": false },
+          "missing_suites": { "minimum": 1 },
+          "coverage_checks": { "minItems": 10, "maxItems": 10 },
+          "executed_suites": { "const": 0 },
+          "passed_suites": { "const": 0 },
+          "failed_suites": { "const": 0 }
+        },
+        "not": { "required": ["suites"] }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "adversarial_failed" } } },
+      "then": {
+        "properties": {
+          "pass": { "const": false },
+          "bundle_verified": { "const": true },
+          "coverage_verified": { "const": true },
+          "covered_suites": { "const": 10 },
+          "missing_suites": { "const": 0 },
+          "coverage_checks": { "minItems": 10, "maxItems": 10 },
+          "executed_suites": { "const": 10 },
+          "passed_suites": { "maximum": 9 },
+          "failed_suites": { "minimum": 1 },
+          "suites": { "minItems": 10, "maxItems": 10 }
+        },
+        "required": ["suites"]
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:/-]+$"
+    },
+    "raw_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "prefixed_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "verification_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "pass": { "type": "boolean" },
+        "detail": { "type": "string" },
+        "reason": { "type": "string" }
+      },
+      "required": ["name", "pass"]
+    },
+    "coverage_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "suite_id": { "type": "string", "pattern": "^ADV-(0[1-9]|10)$" },
+        "covered": { "type": "boolean" },
+        "evidence_count": { "type": "integer", "minimum": 0 },
+        "mutation_id": { "type": "string", "minLength": 1 },
+        "positive_control_passed": { "type": "boolean" },
+        "mutation_applied": { "type": "boolean" },
+        "mutation_rejected": { "type": "boolean" },
+        "mutation_restored": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "required": [
+        "suite_id",
+        "covered",
+        "evidence_count",
+        "mutation_id",
+        "positive_control_passed",
+        "mutation_applied",
+        "mutation_rejected",
+        "mutation_restored",
+        "reason"
+      ]
+    },
+    "suite_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "suite_id": { "type": "string", "pattern": "^ADV-(0[1-9]|10)$" },
+        "name": { "type": "string", "minLength": 1 },
+        "pass": { "type": "boolean" },
+        "test_results": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/test_result" }
+        }
+      },
+      "required": ["suite_id", "name", "pass", "test_results"]
+    },
+    "test_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "test_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "pass": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "evidence": { "type": "string" }
+      },
+      "required": ["test_id", "name", "pass"]
+    },
+    "runner_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kernel_commit": { "type": "string", "pattern": "^([a-f0-9]{40}|[a-f0-9]{64})$" },
+        "executable_sha256": { "$ref": "#/$defs/prefixed_sha256" },
+        "detector_revision": { "type": "string", "minLength": 1 },
+        "detector_definition_sha256": { "$ref": "#/$defs/prefixed_sha256" }
+      },
+      "required": [
+        "kernel_commit",
+        "executable_sha256",
+        "detector_revision",
+        "detector_definition_sha256"
+      ]
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "const": "ed25519" },
+        "key_id": { "$ref": "#/$defs/prefixed_sha256" },
+        "signature": { "type": "string", "pattern": "^[a-f0-9]{128}$" }
+      },
+      "required": ["algorithm", "key_id", "signature"]
+    }
+  }
+}

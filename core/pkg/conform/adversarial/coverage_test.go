@@ -142,7 +142,7 @@ func TestCoverageSnapshotMustMatchExternallyVerifiedRoots(t *testing.T) {
 	})
 }
 
-func TestCoverageOmitsOnlyAnExternallyVerifiedDetachedConformanceSignature(t *testing.T) {
+func TestCoverageAllowsOnlyAnExternallyVerifiedUnindexedConformanceSignature(t *testing.T) {
 	dir := t.TempDir()
 	publicKeyHex := writePassingCoverageArtifacts(t, dir)
 	opts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
@@ -172,6 +172,29 @@ func TestCoverageOmitsOnlyAnExternallyVerifiedDetachedConformanceSignature(t *te
 	unexpectedResult := EvaluateCoverageWithOptions(dir, opts)
 	if unexpectedResult.Pass || unexpectedResult.CoveredSuites != 0 || unexpectedResult.MissingSuites != 10 {
 		t.Fatalf("unexpected unindexed file result=%+v, want all coverage to fail closed", unexpectedResult)
+	}
+}
+
+func TestCoveragePreservesAnIndexedConformanceSignature(t *testing.T) {
+	dir := t.TempDir()
+	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	signaturePath := filepath.Join(dir, "07_ATTESTATIONS", "conformance_report.sig")
+	if err := os.MkdirAll(filepath.Dir(signaturePath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(signaturePath, []byte(`{"signature":"indexed-externally-verified-fixture"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeCoverageIndex(t, dir)
+	opts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
+	opts.AllowVerifiedConformanceSignature = true
+
+	result := EvaluateCoverageWithOptions(dir, opts)
+	if !result.Pass || result.CoveredSuites != 10 || result.MissingSuites != 0 {
+		t.Fatalf("indexed conformance signature result=%+v, want complete coverage", result)
+	}
+	if _, err := os.Stat(signaturePath); err != nil {
+		t.Fatalf("source indexed signature was modified: %v", err)
 	}
 }
 

@@ -99,6 +99,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	case "version", "--version", "-v":
 		fmt.Fprintf(stdout, "%sHELM AI Kernel%s %s (%s)\n", ColorBold, ColorReset, displayVersion(), displayCommit())
+		fmt.Fprintf(stdout, "  Source Revision:        %s\n", sourceCommit())
 		fmt.Fprintf(stdout, "  Report Schema:          %s\n", reportSchemaVersion)
 		fmt.Fprintf(stdout, "  EvidencePack Schema:    1\n")
 		fmt.Fprintf(stdout, "  Compatibility Schema:   1\n")

@@ -20,11 +20,19 @@ func displayVersion() string {
 }
 
 func displayCommit() string {
-	if commit != "" && commit != "unknown" {
-		if len(commit) > 12 {
-			return commit[:12]
+	full := sourceCommit()
+	if full != "" && full != "unknown" {
+		if len(full) > 12 {
+			return full[:12]
 		}
-		return commit
+		return full
+	}
+	return full
+}
+
+func sourceCommit() string {
+	if value := strings.TrimSpace(commit); value != "" && value != "unknown" {
+		return value
 	}
 	return getBuildInfo()
 }

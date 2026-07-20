@@ -152,6 +152,14 @@
 | `proof_result.schema.json`     | L3          | normative | Formal proof verifier result         |
 | `verification_scope.v1.json`   | L2          | normative | Verification coverage and risk scope |
 
+### Certification (`certification/`)
+
+| Schema                                      | Conformance | Status  | Description                                                |
+| ------------------------------------------- | ----------- | ------- | ---------------------------------------------------------- |
+| `conformance_report.v1.schema.json`         | L2          | normative | General signed conformance report                        |
+| `module_attestation.schema.json`            | L2          | normative | Signed module-level certification attestation            |
+| `adversarial_campaign_report.v2.schema.json` | L2         | preview | Campaign/run-bound Kernel adversarial detector report     |
+
 ### Telemetry (`telemetry/`)
 
 | Schema                  | Conformance | Status    | Description                    |

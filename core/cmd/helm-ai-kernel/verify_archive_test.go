@@ -37,6 +37,35 @@ func TestExtractEvidenceArchiveRejectsOversizedEntries(t *testing.T) {
 	}
 }
 
+func TestExtractEvidenceArchiveRejectsTooManyEntries(t *testing.T) {
+	bundlePath := filepath.Join(t.TempDir(), "entry-bomb.tar")
+	file, err := os.Create(bundlePath)
+	if err != nil {
+		t.Fatalf("create archive: %v", err)
+	}
+	tarWriter := tar.NewWriter(file)
+	for _, name := range []string{"one", "two", "three"} {
+		if err := tarWriter.WriteHeader(&tar.Header{
+			Name: name,
+			Mode: 0600,
+			Size: 0,
+		}); err != nil {
+			t.Fatalf("write tar header: %v", err)
+		}
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("close tar writer: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+
+	err = extractEvidenceArchiveWithEntryLimit(bundlePath, t.TempDir(), 2)
+	if err == nil || !strings.Contains(err.Error(), "exceeds 2 entries") {
+		t.Fatalf("expected entry-limit error, got %v", err)
+	}
+}
+
 func TestExtractCertifyArchiveRejectsOversizedEntries(t *testing.T) {
 	bundlePath := filepath.Join(t.TempDir(), "oversized.tar")
 	file, err := os.Create(bundlePath)

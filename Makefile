@@ -1,10 +1,10 @@
-.PHONY: build test test-cli test-race test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible bounty-kernel bounty-kernel-verify proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
 PREPARE_VERSION := $(if $(filter command line,$(origin VERSION)),$(VERSION),$(RELEASE_VERSION))
-GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+GIT_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
 QUALITY := python3 scripts/ci/quality.py
@@ -92,6 +92,45 @@ release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalo
 
 crucible: build
 	bash scripts/usecases/run_all.sh
+
+# Strict Kernel bug-bounty campaign. The candidate EvidencePack remains
+# read-only; the deterministic signed report must be written outside it.
+bounty-kernel: build
+	@test -n "$(BOUNTY_BUNDLE)" || (echo "BOUNTY_BUNDLE is required" && exit 2)
+	@test -n "$(BOUNTY_PROFILE)" || (echo "BOUNTY_PROFILE is required" && exit 2)
+	@test -n "$(BOUNTY_REPORT)" || (echo "BOUNTY_REPORT is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX" || (echo "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_CAMPAIGN_ID" || (echo "HELM_BOUNTY_CAMPAIGN_ID is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_RUN_ID" || (echo "HELM_BOUNTY_RUN_ID is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_EVALUATION_TIME_RFC3339" || (echo "HELM_BOUNTY_EVALUATION_TIME_RFC3339 is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_REPORT_SIGNING_KEY_HEX" || (echo "HELM_BOUNTY_REPORT_SIGNING_KEY_HEX is required" && exit 2)
+	HELM_KERNEL_COMMIT="$(GIT_COMMIT)" ./bin/helm-ai-kernel conform adversarial \
+		--bundle "$(BOUNTY_BUNDLE)" \
+		--profile "$(BOUNTY_PROFILE)" \
+		--storage-receipt "$(BOUNTY_STORAGE_RECEIPT)" \
+		--report "$(BOUNTY_REPORT)"
+
+# Replay-safe verification requires the expected campaign identity, campaign
+# trust root, runner bytes, exact evidence roots, profile, and source commit.
+bounty-kernel-verify: build
+	@test -n "$(BOUNTY_REPORT)" || (echo "BOUNTY_REPORT is required" && exit 2)
+	@test -n "$(BOUNTY_PROFILE)" || (echo "BOUNTY_PROFILE is required" && exit 2)
+	@test -n "$(BOUNTY_EXECUTABLE_SHA256)" || (echo "BOUNTY_EXECUTABLE_SHA256 is required" && exit 2)
+	@test -n "$(BOUNTY_EVIDENCE_ROOT)" || (echo "BOUNTY_EVIDENCE_ROOT is required" && exit 2)
+	@test -n "$(BOUNTY_MERKLE_ROOT)" || (echo "BOUNTY_MERKLE_ROOT is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX" || (echo "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_CAMPAIGN_ID" || (echo "HELM_BOUNTY_CAMPAIGN_ID is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_RUN_ID" || (echo "HELM_BOUNTY_RUN_ID is required" && exit 2)
+	@test -n "$$HELM_BOUNTY_REPORT_PUBLIC_KEY_HEX" || (echo "HELM_BOUNTY_REPORT_PUBLIC_KEY_HEX is required" && exit 2)
+	./bin/helm-ai-kernel conform adversarial verify-report \
+		--report "$(BOUNTY_REPORT)" \
+		--expected-campaign-id "$$HELM_BOUNTY_CAMPAIGN_ID" \
+		--expected-run-id "$$HELM_BOUNTY_RUN_ID" \
+		--expected-kernel-commit "$(GIT_COMMIT)" \
+		--expected-executable-sha256 "$(BOUNTY_EXECUTABLE_SHA256)" \
+		--expected-trust-profile "$(BOUNTY_PROFILE)" \
+		--expected-evidence-root "$(BOUNTY_EVIDENCE_ROOT)" \
+		--expected-merkle-root "$(BOUNTY_MERKLE_ROOT)"
 
 proxy: build
 	./bin/helm-ai-kernel proxy --upstream http://127.0.0.1:19090/v1

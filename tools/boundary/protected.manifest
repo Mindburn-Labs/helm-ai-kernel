@@ -1,6 +1,6 @@
 # HELM Protected Manifest
-# Generated: 2026-07-11T23:30:34Z
-# Commit: a2c330a74d2c933074d2f6e002d05d5b06591437
+# Generated: 2026-07-17T18:31:52Z
+# Commit: 34bab12fc677b1568416a6467ed722634fd1418e
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
 #
@@ -656,7 +656,7 @@ b084e586791f8a6ca882cb8ec49cae843a10ee13a3b94f527eeb2af34acf3494  protocols/conf
 35149966be79226039f1cfe611f70da36c2e9f93e2d9e96a91bb995a3bfb2cc9  protocols/conformance/v1/test-vectors.json
 9b81d0320f3dfd15d5f50f031fc41ed1d0bf19f78653f81ac03dac9f0e8cc131  protocols/conformance/workstation/v1/conformance-pack.json
 cabc519027fc1c737db0b8008ccbb7fbe32bd473a407334aee32f5fb1d1e7314  protocols/json-schemas/README.md
-6cb1e97968066e3d4b1616ecd99cc9a32eb9f54468894fbbc7b5b12fe16b0ac8  protocols/json-schemas/SCHEMA_INDEX.md
+bff4d12fc8f55e829d68468e59a5918d91059656726047cb0cb65eedd649d309  protocols/json-schemas/SCHEMA_INDEX.md
 44d2b23e718d7d3e6011c5cabbcf7653553a265b96a24020a9db18e44ce49e9f  protocols/json-schemas/access/OperatorAccessPolicy.v1.json
 341c45c009dafdc7ba58ce07cb1efc851f0d5e7ca867463e82d2bbccd0e68766  protocols/json-schemas/access/PrivilegedAccessReceipt.v1.json
 ca16cb628b8913f291816419eeeaabf663281437f8cf4ef8079b0e4a2773b60f  protocols/json-schemas/access/PrivilegedAccessRequest.v1.json
@@ -674,6 +674,7 @@ b33cd57db21eb1fd4b89541107daa3bfd0c4ab94463f774a7385fadadaecd48e  protocols/json
 1bedd3af3c16ed6ec0be23f4380a9c20145d53b736f4cb83ccab4de656a0d168  protocols/json-schemas/business/sla.schema.json
 aa046fc5e1069ea17f774020c3a0a6bbead6573459318efe0f8d09af4573d4ea  protocols/json-schemas/certification/DeployAttestationProfile.v1.json
 cb7ea621a272d85483a0569c0a5fea8b73ffc20a4393e1fa5fbfec91e9e9a3c4  protocols/json-schemas/certification/PackAttestationProfile.v1.json
+8ba8b1d7d4bfb71abb51e40e861f65179c8f6dfb7e8310724349ef92e1faab12  protocols/json-schemas/certification/adversarial_campaign_report.v2.schema.json
 6b2103e3ff06b7eb18545ac6e15b57e542d119fea0d99041d9f5ecf3160951e2  protocols/json-schemas/certification/conformance_report.v1.schema.json
 dae5189b9adba5fd0e9afd57627d3211e8cb4355617a58bf98fab3993fed5202  protocols/json-schemas/certification/module_attestation.schema.json
 3dd325597ae519c55b7c2a9e14f4376a4a9b6163abf3ff9c5114ba578be9a1a4  protocols/json-schemas/cli/helm_cli_schema.json

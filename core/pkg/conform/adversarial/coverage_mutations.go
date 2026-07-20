@@ -56,11 +56,16 @@ func newCoverageMutationWorkspace(evidenceDir string, opts VerificationOptions) 
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 	mutationRoot := filepath.Join(tempDir, "evidence-pack")
-	if err := copyCoverageMutationTree(evidenceDir, mutationRoot, opts.AllowVerifiedConformanceSignature); err != nil {
+	if err := copyCoverageMutationTree(evidenceDir, mutationRoot); err != nil {
 		cleanup()
 		return "", func() {}, err
 	}
-	verifiedRoots, err := evidence.VerifyEvidencePackIndexRoots(mutationRoot)
+	var verifiedRoots evidence.EvidencePackIndexRoots
+	if opts.AllowVerifiedConformanceSignature {
+		verifiedRoots, err = evidence.VerifyEvidencePackIndexRootsAllowingVerifiedConformanceSignature(mutationRoot)
+	} else {
+		verifiedRoots, err = evidence.VerifyEvidencePackIndexRoots(mutationRoot)
+	}
 	if err != nil {
 		cleanup()
 		return "", func() {}, fmt.Errorf("verify mutation snapshot inventory: %w", err)
@@ -105,7 +110,7 @@ func canonicalSHA256Digest(name, value string) (string, error) {
 	return value, nil
 }
 
-func copyCoverageMutationTree(source, destination string, omitVerifiedConformanceSignature bool) error {
+func copyCoverageMutationTree(source, destination string) error {
 	var copiedBytes int64
 	entries := 0
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
@@ -133,9 +138,6 @@ func copyCoverageMutationTree(source, destination string, omitVerifiedConformanc
 		}
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("mutation snapshot rejects non-regular file: %s", entry.Name())
-		}
-		if omitVerifiedConformanceSignature && filepath.ToSlash(rel) == "07_ATTESTATIONS/conformance_report.sig" {
-			return nil
 		}
 		copiedBytes += info.Size()
 		if info.Size() > maxCoverageMutationBytes || copiedBytes > maxCoverageMutationBytes {

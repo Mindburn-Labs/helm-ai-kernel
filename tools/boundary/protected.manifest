@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-20T00:09:54Z
+# Generated: 2026-07-20T00:24:03Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -162,7 +162,7 @@ f7828f30856587a6e72d8058b0a08396e0746c5104b5eff6de28c0ef2d421d12  core/pkg/contr
 a4d12be0b1401a4ea024f4eacb1f2e2c6f6809356f1060890828812aa8cbb1cd  core/pkg/contracts/contracts_stress_coverage_test.go
 3670d455717968e63e8dbcf0c38f79812d0bf72cb7eb234a51b305a27aede0c4  core/pkg/contracts/counterfactual_receipt.go
 ed4994cdbba2b72e5626b91ade9226920896458d6ef4b3c62e127c1fce18e139  core/pkg/contracts/counterfactual_receipt_test.go
-59e02a6d182673df19d3ca5f1ea7cf584cdd3f51042204427fa5c7e06e02ba28  core/pkg/contracts/decision.go
+db0503f5c5ebfe1301affd0659e49152da1e9a231000387f8aab4b1f19a640b2  core/pkg/contracts/decision.go
 d443d4bd34f27e417b061a0346fa93b41de07822da7c1b8703f18e457b54de8e  core/pkg/contracts/decision.proto
 3e47d320d74867aacd97603f6007a47ba4e7927df8b0a185769566791e74c4b3  core/pkg/contracts/decision_request.go
 e23388a6c24921b11239be71d1b34dd6c3925756a6900ac02c09c8101b9b0cc1  core/pkg/contracts/decision_request_test.go
@@ -196,7 +196,7 @@ c1910943db1064a742523422c0827c5aa12a1b865fe715249b9e27121444bb82  core/pkg/contr
 3988397fb51017932b675de6b5d17e0525ffbaf107f7bb7e51aa8dbbab90b338  core/pkg/contracts/effect_close.go
 911679cd806c40d59d08e9ce7f7193b02bb33131af59a7f960a0b461fc68f89b  core/pkg/contracts/effect_close_test.go
 303c1542755fdf80443fddd23c1497b6b2f1f1daed1abd3b94489d09e8a5a2c3  core/pkg/contracts/effect_digest.go
-5a8302a0a57b08f895b61331ff13529cb78e81358caf314c95e4bba6b2c2385e  core/pkg/contracts/effect_digest_test.go
+17bfbbae549b2d652aaec4f3c877e018d20c8115b1928b58c1733252fc7da24a  core/pkg/contracts/effect_digest_test.go
 1c7c5ef7a4e2701fc614d24568b5e20e530b441ba9f8faf4852436dee63270e9  core/pkg/contracts/effect_disposition.go
 ece0a93751bbda6880f444534fe99c4c17e381b1fe0d74a650defcf51bf59882  core/pkg/contracts/effect_disposition_test.go
 b64fa3d70e9a5e4807012d3b4ccb3e9e6b49d87df8c5bfbaeabfddd59726c363  core/pkg/contracts/effect_receipt.go

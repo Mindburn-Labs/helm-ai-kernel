@@ -325,9 +325,9 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 		return fmt.Errorf("execution blocked: decision verdict is %s (reason: %s)", decision.Verdict, decision.Reason)
 	}
 
-	// 4. Expiration Check
-	if e.clock().After(intent.ExpiresAt) {
-		return fmt.Errorf("execution blocked: intent expired at %s", intent.ExpiresAt)
+	// 4. Signed authority-window check
+	if err := intent.ValidateAt(e.clock()); err != nil {
+		return fmt.Errorf("execution blocked: %w", err)
 	}
 
 	return nil

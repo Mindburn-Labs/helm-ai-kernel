@@ -2,9 +2,22 @@ package contracts_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
+
+func TestAuthorizedExecutionIntentValidateAt(t *testing.T) {
+	now := time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC)
+	intent := &contracts.AuthorizedExecutionIntent{IssuedAt: now.Add(time.Second), ExpiresAt: now.Add(time.Hour)}
+	if err := intent.ValidateAt(now); err == nil {
+		t.Fatal("future-issued intent was accepted")
+	}
+	intent.IssuedAt = now
+	if err := intent.ValidateAt(now); err != nil {
+		t.Fatalf("active intent rejected: %v", err)
+	}
+}
 
 func TestCanonicalEffectDigestBindsExecutableSemantics(t *testing.T) {
 	effect := &contracts.Effect{

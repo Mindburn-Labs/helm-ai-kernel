@@ -429,9 +429,8 @@ func (b *SandboxBroker) verifySandboxAuthority(verdict *effectgraph.NodeVerdict)
 	if decision.Action != "" && intent.AllowedTool != decision.Action {
 		return fmt.Errorf("sandbox execution intent does not match the decision action")
 	}
-	now := b.clock()
-	if intent.IssuedAt.After(now) || intent.ExpiresAt.IsZero() || !now.Before(intent.ExpiresAt) {
-		return fmt.Errorf("sandbox execution intent is not currently valid")
+	if err := intent.ValidateAt(b.clock()); err != nil {
+		return fmt.Errorf("sandbox execution intent is not currently valid: %w", err)
 	}
 	verified, err := b.verifier.VerifyDecision(decision)
 	if err != nil {
@@ -851,8 +850,8 @@ func validatePreparedExecutionAuthority(prepared *PreparedExecution, now time.Ti
 	if prepared.Verdict.Profile.ProfileName != prepared.Lease.ProfileName {
 		return fmt.Errorf("profile mismatch: lease=%q verdict=%q", prepared.Lease.ProfileName, prepared.Verdict.Profile.ProfileName)
 	}
-	if prepared.Verdict.Intent.IssuedAt.After(now) || prepared.Verdict.Intent.ExpiresAt.IsZero() || !now.Before(prepared.Verdict.Intent.ExpiresAt) {
-		return fmt.Errorf("prepared execution intent is not currently valid")
+	if err := prepared.Verdict.Intent.ValidateAt(now); err != nil {
+		return fmt.Errorf("prepared execution intent is not currently valid: %w", err)
 	}
 	return nil
 }

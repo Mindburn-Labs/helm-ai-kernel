@@ -3,6 +3,7 @@
 package contracts
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -151,4 +152,18 @@ type AuthorizedExecutionIntent struct {
 	EmergencyActivationID        string `json:"emergency_activation_id,omitempty"`
 	EmergencyDelegationSessionID string `json:"emergency_delegation_session_id,omitempty"`
 	EmergencyScopeHash           string `json:"emergency_scope_hash,omitempty"`
+}
+
+// ValidateAt confirms that the signed execution-authority window is active.
+func (i *AuthorizedExecutionIntent) ValidateAt(now time.Time) error {
+	if i == nil {
+		return fmt.Errorf("execution intent is required")
+	}
+	if i.IssuedAt.After(now) {
+		return fmt.Errorf("execution intent is not active until %s", i.IssuedAt)
+	}
+	if i.ExpiresAt.IsZero() || !now.Before(i.ExpiresAt) {
+		return fmt.Errorf("execution intent expired at %s", i.ExpiresAt)
+	}
+	return nil
 }

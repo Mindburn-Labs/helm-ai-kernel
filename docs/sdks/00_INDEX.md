@@ -1,20 +1,58 @@
 ---
 title: SDKs
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-15
 ---
 
 # SDKs
 
-Use an SDK when you want typed access to the local HELM HTTP API. Use the
-OpenAI-compatible proxy when an existing app can set `base_url` or `baseURL`.
+Use an SDK for typed access to a local HELM AI Kernel HTTP surface. Use the
+OpenAI-compatible proxy when an existing application can set `base_url` or
+`baseURL`.
+
+This guide publishes no hosted HELM API base URL.
 
 ## Local Base URLs
 
-| Surface | Base URL |
-| --- | --- |
-| HELM boundary | `http://127.0.0.1:7714` |
-| API server | `http://127.0.0.1:8080` |
-| OpenAI proxy | `http://127.0.0.1:9090/v1` |
+| Runtime mode | Base URL | Use |
+| --- | --- | --- |
+| `quickstart` or `serve` | `http://127.0.0.1:7714` | Local boundary and proof loop |
+| `server` | `http://127.0.0.1:8080` | Generic API server |
+| OpenAI proxy | `http://127.0.0.1:9090/v1` | OpenAI-compatible calls |
+| HTTP MCP transport | `http://localhost:9100/mcp` | Selected MCP runtime only |
+
+Pin the mode and base URL together. Do not move an example between ports without
+starting the corresponding runtime.
+
+## Verified v0.7.3 Coordinates
+
+Run a clean registry check before copying these into a managed client estate.
+The following four coordinates are declared for the v0.7.3 release:
+
+Source version claims are tied to the repository `VERSION` (`0.7.3` for this release).
+The matching Go subdirectory tag is `sdk/go/v0.7.3`.
+
+```bash
+npm install @mindburn/helm-ai-kernel@0.7.3
+python -m pip install helm-sdk==0.7.3
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.3
+```
+
+The matching Java coordinate is `io.github.mindburnlabs:helm-sdk:0.7.3`:
+
+```xml
+<dependency>
+  <groupId>io.github.mindburnlabs</groupId>
+  <artifactId>helm-sdk</artifactId>
+  <version>0.7.3</version>
+</dependency>
+```
+
+Rust source and a v0.7.3 crate artifact exist under `sdk/rust/`, but public
+registry discovery was inconsistent at the last review. Recheck the target
+registry before publishing `cargo add` as a supported install path.
+
+Use `version-status.json` and `make version-drift-published` before changing a
+pinned version claim.
 
 ## Clients In This Repository
 
@@ -26,70 +64,53 @@ OpenAI-compatible proxy when an existing app can set `base_url` or `baseURL`.
 | Rust | `sdk/rust/` | `make test-sdk-rust` |
 | Java | `sdk/java/` | `make test-sdk-java` |
 
-Registry package availability can differ from source availability. Verify the
-target package registry before publishing pinned install instructions.
-Use `version-status.json` or `make version-drift-published` before making a
-pinned package claim.
+## Authentication Coverage
 
-Current source identity includes the Java coordinate
-`io.github.mindburnlabs:helm-sdk:0.7.2`; verify registry availability before
-presenting it as an install path.
+Protected routes require an HTTP `Authorization` header whose scheme is
+`Bearer` and whose credential is `$HELM_ADMIN_API_KEY`. Tenant-scoped routes
+also bind tenant and principal headers. A scoped emergency fence can
+additionally require `X-Helm-Workspace-ID`.
 
-Source version claims are tied to the repository `VERSION` (`0.7.2` for this release). Current source package coordinates include:
+| Client | API key | Tenant | Principal | Workspace |
+| --- | --- | --- | --- | --- |
+| Go | yes | yes | yes | no helper |
+| TypeScript | yes | yes | no helper | no helper |
+| Python | yes | yes | no helper | no helper |
+| Java | yes | no helper | no helper | no helper |
+| Rust | no helper | no helper | no helper | no helper |
 
-- Go module: `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.2`
-- Go subdirectory tag: `sdk/go/v0.7.2`
-- Java dependency:
+When the chosen client lacks a required header, use the documented HTTP route or
+generate a client from the [public OpenAPI](/openapi.yaml). Do not silently omit
+server-required identity scope.
 
-```xml
-<dependency>
-  <groupId>io.github.mindburnlabs</groupId>
-  <artifactId>helm-sdk</artifactId>
-  <version>0.7.2</version>
-</dependency>
-```
+## Public TypeScript Sandbox
 
-## Python
-
-```python
-from helm_sdk import HelmClient
-
-client = HelmClient(base_url="http://127.0.0.1:7714")
-```
-
-## TypeScript
+The public demo route is the shortest no-admin-key SDK proof. It is a sandbox
+example, not a protected action sample:
 
 ```ts
 import { HelmClient } from "@mindburn/helm-ai-kernel";
 
-const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
-```
+const helm = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
+const demo = await helm.runPublicDemo("dangerous_shell");
+const verification = await helm.verifyPublicDemoReceipt(
+  demo.receipt,
+  demo.proof_refs.receipt_hash,
+);
 
-## Go
-
-```go
-client := helm.New("http://127.0.0.1:7714")
-```
-
-## Rust
-
-```rust
-let client = HelmClient::new("http://127.0.0.1:7714");
-```
-
-## Java
-
-```java
-HelmClient client = new HelmClient("http://127.0.0.1:7714");
+console.log(demo, verification);
 ```
 
 ## Client Behavior
 
 | Condition | Do this |
 | --- | --- |
-| `ALLOW` | Continue with the governed result |
+| `ALLOW` | Continue only through the wrapper or executor that requested the decision |
 | `DENY` | Stop and show the reason code |
-| `ESCALATE` | Show the approval hint; do not continue automatically |
-| Missing receipt | Confirm the app called HELM instead of the upstream directly |
+| `ESCALATE` | Keep the call blocked; show the scoped approval hint |
+| Missing receipt | Confirm the application called HELM instead of the upstream directly |
+| Required header missing | Stop and use a client path that can send the server-required scope |
 
-SDK helpers are local clients for the Kernel boundary.
+SDK helpers are clients for local Kernel contracts. Source availability alone
+does not prove registry availability, native-client loading, hosted service
+availability, or interception of calls that bypass HELM.

@@ -1,0 +1,106 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 connector release authority only; no hybrid or post-quantum claim.",
+  "schema_version": "connector-release-authority-vectors.v1",
+  "contract_version": "2026-07-17",
+  "quantum_posture": "classical_ed25519_only",
+  "authority_id": "spiffe://helm/connector-release-authority",
+  "public_key": "ed25519:d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+  "key_not_before": "2026-07-17T10:59:00Z",
+  "key_not_after": "2026-07-17T13:01:00Z",
+  "verification_time": "2026-07-17T12:02:00Z",
+  "certified": {
+    "authority": {
+      "canonical": "certified_authority.c14n.json",
+      "sha256": "sha256:e8a8a275710377690ef002f047acaa3192745c3fb4d8d99d20f22cb6b038620c"
+    },
+    "envelope": {
+      "canonical": "certified_envelope.c14n.json",
+      "sha256": "sha256:eead57fb010ce408a9b1785f425c3298d707aec216ef3fc4ef6002e1ccf4e676"
+    },
+    "signing_payload": {
+      "canonical": "certified_signing_payload.c14n.json",
+      "sha256": "sha256:7045b453728bd7def23cce2a25750f451bb946681eeb3338955cf9804a5e986c"
+    }
+  },
+  "revoked": {
+    "authority": {
+      "canonical": "revoked_authority.c14n.json",
+      "sha256": "sha256:24c252117e8991237c821398db8b90d5f525d719b0ad9929916ab38eff6aa5d9"
+    },
+    "envelope": {
+      "canonical": "revoked_envelope.c14n.json",
+      "sha256": "sha256:9f10d13aceb2edc30939a748555a70d3b2b95ff2e6a15073c7ccff45ab9f391f"
+    },
+    "signing_payload": {
+      "canonical": "revoked_signing_payload.c14n.json",
+      "sha256": "sha256:3087276cd8fe1768c073ebe837acc41eb46408b47b34b610052fc2c9f5d9f405"
+    }
+  },
+  "negative_vectors": [
+    {
+      "id": "version_substitution",
+      "mutation": "set_certified_connector_version_to_2",
+      "expected_error": "hash_mismatch"
+    },
+    {
+      "id": "artifact_signature_substitution",
+      "mutation": "set_certified_connector_signature_hash_to_tampered",
+      "expected_error": "hash_mismatch"
+    },
+    {
+      "id": "authority_substitution",
+      "mutation": "set_certified_authority_id_and_reseal",
+      "expected_error": "authority_rejected"
+    },
+    {
+      "id": "key_substitution",
+      "mutation": "set_certified_signing_key_ref_and_reseal",
+      "expected_error": "trust_rejected"
+    },
+    {
+      "id": "revision_zero",
+      "mutation": "set_certified_registry_revision_to_zero",
+      "expected_error": "contract_rejected"
+    },
+    {
+      "id": "revision_overflow",
+      "mutation": "set_certified_registry_revision_above_jcs_safe",
+      "expected_error": "contract_rejected"
+    },
+    {
+      "id": "timestamp_precision",
+      "mutation": "set_certified_signed_at_to_nanosecond_precision",
+      "expected_error": "contract_rejected"
+    },
+    {
+      "id": "stale_after_revocation",
+      "mutation": "treat_certified_as_current_after_revocation",
+      "expected_error": "current_state_rejected"
+    },
+    {
+      "id": "expiry_boundary",
+      "mutation": "hide_revocation_and_verify_at_certified_expiry",
+      "expected_error": "inactive_authority"
+    },
+    {
+      "id": "signature_tamper",
+      "mutation": "flip_certified_envelope_signature_last_bit",
+      "expected_error": "signature_rejected"
+    },
+    {
+      "id": "chain_scope_substitution",
+      "mutation": "substitute_revoked_tenant_workspace_after_verification",
+      "expected_error": "current_state_rejected"
+    },
+    {
+      "id": "chain_material_substitution",
+      "mutation": "substitute_revoked_binary_hash_after_verification",
+      "expected_error": "current_state_rejected"
+    },
+    {
+      "id": "chain_timeline_rollback",
+      "mutation": "move_revoked_timeline_backwards_after_verification",
+      "expected_error": "current_state_rejected"
+    }
+  ]
+}

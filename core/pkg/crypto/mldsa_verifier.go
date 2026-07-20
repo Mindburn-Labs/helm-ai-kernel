@@ -1,3 +1,5 @@
+// quantum_posture: ML-DSA-65 verification is post-quantum when explicitly
+// configured; it does not upgrade classical identities or external edges.
 package crypto
 
 import (
@@ -49,12 +51,15 @@ func (v *MLDSAVerifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bo
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
+	payload, err := CanonicalizeAuthorizedExecutionIntent(i)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(i.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(v.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(v.publicKey, payload, nil, sig), nil
 }
 
 // VerifyReceipt verifies a Receipt signature using ML-DSA-65.

@@ -1,3 +1,5 @@
+// quantum_posture: this is a classical Ed25519 verifier; no post-quantum
+// protection is provided or claimed by this implementation.
 package crypto
 
 import (
@@ -68,12 +70,15 @@ func (v *Ed25519Verifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (
 	if i.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool, i.EffectDigestHash)
+	payload, err := CanonicalizeAuthorizedExecutionIntent(i)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(i.Signature)
 	if err != nil {
 		return false, err
 	}
-	return v.Verify([]byte(payload), sig), nil
+	return v.Verify(payload, sig), nil
 }
 
 func (v *Ed25519Verifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {

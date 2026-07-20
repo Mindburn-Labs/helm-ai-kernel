@@ -1,0 +1,1 @@
+{"acknowledgement_hash":"sha256:4653690500b68bb6dd040a4692cbe6435253e07abffdeb2131e2a559f4c6ed6b","algorithm":"ed25519","connector_id":"github","connector_version":"1.0.0","contract_version":"2026-07-18","domain":"HELM/ConnectorEffectAcknowledgementSignature/v1","issuer_id":"publisher-a","signing_key_ref":"kms://helm/connector-ack/key-a"}

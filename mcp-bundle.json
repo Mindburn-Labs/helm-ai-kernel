@@ -1,7 +1,7 @@
 {
   "manifest_version": "1.0",
   "name": "helm-governance",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "HELM Execution Authority — fail-closed AI governance firewall with policy enforcement, profile-aware signed receipts, and tamper-evident EvidencePack audit trail.",
   "author": {
     "name": "Mindburn Labs",

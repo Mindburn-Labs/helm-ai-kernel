@@ -1,0 +1,12 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/approval-consumption-v1",
+  "pinning_authority": "reference_packs/approval-consumption-v1/vectors.json",
+  "verifier": "reference_packs/approval-consumption-v1/verify_vectors.py",
+  "immutable_payloads": [
+    {"file": "consumption.c14n.json", "sha256": "039e9c9a5d65e71f55799bc0e76b0e5b8c15337b4171aff0e858b1c83f246a61"},
+    {"file": "signing_payload.c14n.json", "sha256": "83f5b8cfe0a437fed17a3fe54ae35191e7acf0bb3e249afca34a12f071e1f04c"}
+  ],
+  "$comment": "quantum_posture: classical_ed25519_only. These `*.c14n.json` files are byte-exact canonical (RFC 8785) approval-grant-consumption signing payloads whose SHA-256 digests are hash-pinned in vectors.json and covered by a live classical Ed25519 signature. They cannot host an inline annotation without invalidating that signature/digest, so this manifest carries the posture note. This is not a post-quantum claim and does not alter any payload bytes.",
+  "purpose": "Local immutable-payload posture record for the approval-grant-consumption reference pack. vectors.json remains the verified hash-pinning authority."
+}

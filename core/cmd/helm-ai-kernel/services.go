@@ -60,17 +60,19 @@ type Services struct {
 	MemoryAPI *api.MemoryService
 
 	// --- Kernel & Execution ---
-	BoundaryEnforcer *boundary.PerimeterEnforcer
-	BoundarySurfaces *boundary.SurfaceRegistry
-	MerkleTree       *merkle.MerkleTree
-	Sandbox          sandbox.Sandbox
-	Obligation       *obligation.ObligationEngine
-	EmergencyStops   *kernel.ScopedStopStore
+	BoundaryEnforcer    *boundary.PerimeterEnforcer
+	BoundarySurfaces    *boundary.SurfaceRegistry
+	MerkleTree          *merkle.MerkleTree
+	Sandbox             sandbox.Sandbox
+	Obligation          *obligation.ObligationEngine
+	EmergencyStops      *kernel.ScopedStopStore
+	ApprovalConsumption *approvalConsumptionRuntime
 
 	// --- Evidence ---
-	Evidence      *evidence.DefaultExporter
-	ReceiptStore  store.ReceiptStore
-	ReceiptSigner helmcrypto.Signer
+	Evidence          *evidence.DefaultExporter
+	ReceiptStore      store.ReceiptStore
+	ReceiptSigner     helmcrypto.Signer
+	PrincipalBindings store.PrincipalBindingStore
 
 	// --- Receipt Transparency Log (RFC 6962) ---
 	// TranspLog anchors every issued receipt hash in an append-only Merkle
@@ -115,10 +117,11 @@ type Services struct {
 // Subsystems that persist state under dataDir (e.g. the KMS keystore) must
 // receive it explicitly instead of resolving relative paths against the
 // container CWD, which on a distroless rootfs is `/` and therefore read-only.
-func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logger *slog.Logger, dataDir string) (*Services, error) {
+func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logger *slog.Logger, dataDir, databaseMode string) (*Services, error) {
 	dataDir = normalizedDataDir(dataDir)
 	s := &Services{
 		DataDir:           dataDir,
+		DatabaseMode:      databaseMode,
 		DatabaseStatus:    "unknown",
 		SQLitePath:        filepath.Join(dataDir, "helm.db"),
 		ArtifactStorePath: filepath.Join(dataDir, "artifacts"),
@@ -154,7 +157,11 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 		if db == nil {
 			return nil, fmt.Errorf("scoped emergency-stop fence requires a durable database")
 		}
-		emergencyStops := kernel.NewScopedStopStore(db, time.Now)
+		var stopOptions []kernel.ScopedStopStoreOption
+		if databaseMode == "postgres" {
+			stopOptions = append(stopOptions, kernel.WithPostgresScopeLocks())
+		}
+		emergencyStops := kernel.NewScopedStopStore(db, time.Now, stopOptions...)
 		if err := emergencyStops.Init(ctx); err != nil {
 			return nil, fmt.Errorf("init scoped emergency-stop store: %w", err)
 		}

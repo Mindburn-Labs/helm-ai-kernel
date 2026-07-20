@@ -1,0 +1,48 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 approval dispatch admission only; no hybrid or post-quantum claim.",
+  "schema_version": "approval-dispatch-admission-vectors.v1",
+  "contract_version": "2026-07-17.1",
+  "quantum_posture": "classical_ed25519_only",
+  "verification_time": "2026-07-16T12:09:02Z",
+  "consumption": {
+    "canonical": "consumption.c14n.json",
+    "sha256": "sha256:74768fa1913e4fcb9795f255528cc9f85c15e9a3120150df8d484281b947f728"
+  },
+  "admission": {
+    "canonical": "admission.c14n.json",
+    "sha256": "sha256:e44c8fd36bfcb677e0177a3208a2565671439b4ef51a80dcc145bb4e73376c0d",
+    "signing_payload": {
+      "canonical": "signing_payload.c14n.json",
+      "sha256": "sha256:21f638fd94abf6fcf59b1429e3b1dc4ecedab71eb9a8753952f1bc354dfccee5"
+    },
+    "public_key": "ed25519:91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a",
+    "signature": "ed25519:63ae8ad7329d5d459101e7fc39d6a101016a3bc57b4abbb2220e672986a0136db1f3cceec2aaa3f4e124ed7cf46baab42848e02ec53521e89b985cc1eb966703"
+  },
+  "negative_vectors": [
+    {
+      "id": "attempt_substitution",
+      "mutation": "set_attempt_id_to_attempt-b",
+      "expected_error": "hash_mismatch"
+    },
+    {
+      "id": "connector_authority_substitution",
+      "mutation": "set_connector_authority_certification_hash_to_tampered",
+      "expected_error": "connector_authority_rejected"
+    },
+    {
+      "id": "consumption_substitution",
+      "mutation": "set_consumption_hash_to_tampered_and_reseal",
+      "expected_error": "consumption_binding_rejected"
+    },
+    {
+      "id": "expiry_boundary",
+      "mutation": "set_verification_time_to_expires_at",
+      "expected_error": "inactive_admission"
+    },
+    {
+      "id": "signature_tamper",
+      "mutation": "flip_signature_last_bit",
+      "expected_error": "signature_rejected"
+    }
+  ]
+}

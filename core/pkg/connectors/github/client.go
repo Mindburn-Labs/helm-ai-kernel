@@ -268,9 +268,9 @@ func splitRepo(repo string) (owner, name string, err error) {
 }
 
 // doJSON performs an HTTP request against the GitHub REST API with
-// authentication, JSON body handling, retry-on-transient-failure, and
-// rate-limit awareness. The out parameter is JSON-decoded on 2xx success;
-// for methods where no body is expected, pass a *struct{} or nil.
+// authentication, JSON body handling, retry-on-transient-failure for safe
+// reads, and rate-limit awareness. Mutating methods are never retried because
+// GitHub does not provide an idempotency key for these endpoints.
 func (c *Client) doJSON(ctx context.Context, method, path string, body any, out any) error {
 	var bodyBytes []byte
 	if body != nil {
@@ -295,10 +295,14 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 			req.Header.Set("Content-Type", "application/json")
 		}
 
-		resp, err := c.httpClient.Do(req)
+		httpClient := *c.httpClient
+		if method != http.MethodGet && method != http.MethodHead {
+			httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		}
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("transport error: %w", err)
-			if !shouldRetry(attempt) {
+			if !shouldRetryRequest(method, attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))
@@ -310,7 +314,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 		resp.Body.Close()
 		if readErr != nil {
 			lastErr = fmt.Errorf("read response body: %w", readErr)
-			if !shouldRetry(attempt) {
+			if !shouldRetryRequest(method, attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))
@@ -328,7 +332,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 				RetryAfter: wait,
 				RawBody:    string(respBody),
 			}
-			if !shouldRetry(attempt) {
+			if !shouldRetryRequest(method, attempt) {
 				return lastErr
 			}
 			// cap wait at 60s to avoid pathological stalls
@@ -350,11 +354,14 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 				Message:    "server error",
 				RawBody:    string(respBody),
 			}
-			if !shouldRetry(attempt) {
+			if !shouldRetryRequest(method, attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))
 			continue
+		}
+		if resp.StatusCode >= 300 && resp.StatusCode <= 399 {
+			return &APIError{StatusCode: resp.StatusCode, Message: "unexpected redirect", RawBody: string(respBody)}
 		}
 
 		// 4xx: structured error, no retry.
@@ -461,6 +468,10 @@ func backoff(attempt int) time.Duration {
 // Valid attempts are 0 through maxRetries-1; after maxRetries-1 we stop.
 func shouldRetry(attempt int) bool {
 	return attempt < maxRetries-1
+}
+
+func shouldRetryRequest(method string, attempt int) bool {
+	return (method == http.MethodGet || method == http.MethodHead) && shouldRetry(attempt)
 }
 
 // bytesReader wraps a []byte in an io.Reader if non-nil, else returns nil.

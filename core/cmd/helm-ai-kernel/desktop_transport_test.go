@@ -214,6 +214,13 @@ type desktopTransportChildResult struct {
 	err   error
 }
 
+const desktopTransportChildAdminKey = "desktop-transport-test-key"
+
+type desktopTransportRuntimeAddress struct {
+	Bind string `json:"bind"`
+	Port int    `json:"port"`
+}
+
 func TestDesktopTransportChildStdoutAndHealth(t *testing.T) {
 	key := make([]byte, desktopTransportKeySize)
 	for i := range key {
@@ -221,6 +228,14 @@ func TestDesktopTransportChildStdoutAndHealth(t *testing.T) {
 	}
 	nonce := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{3}, desktopTransportMinNonceSize))
 	dataDir := t.TempDir()
+	legacyAPI := reserveDesktopTransportLegacyListener(t)
+	legacyHealth := reserveDesktopTransportLegacyListener(t)
+	legacyMetrics := reserveDesktopTransportLegacyListener(t)
+	legacyPorts := []int{
+		legacyAPI.Addr().(*net.TCPAddr).Port,
+		legacyHealth.Addr().(*net.TCPAddr).Port,
+		legacyMetrics.Addr().(*net.TCPAddr).Port,
+	}
 
 	cmd := exec.Command(os.Args[0], "-test.run=^TestDesktopTransportChildProcess$")
 	cmd.Dir = t.TempDir()
@@ -229,7 +244,12 @@ func TestDesktopTransportChildStdoutAndHealth(t *testing.T) {
 		"HELM_DESKTOP_TRANSPORT_CHILD_DATA_DIR=" + dataDir,
 		desktopTransportKeyEnv + "=" + base64.RawURLEncoding.EncodeToString(key),
 		desktopTransportNonceEnv + "=" + nonce,
-		"HELM_ADMIN_API_KEY=desktop-transport-test-key",
+		"HELM_ADMIN_API_KEY=" + desktopTransportChildAdminKey,
+		"HELM_BIND_ADDR=0.0.0.0",
+		fmt.Sprintf("HELM_PORT=%d", legacyPorts[0]),
+		fmt.Sprintf("HELM_HEALTH_PORT=%d", legacyPorts[1]),
+		fmt.Sprintf("HELM_METRICS_PORT=%d", legacyPorts[2]),
+		"HELM_METRICS_ENABLED=1",
 		"PATH=" + os.Getenv("PATH"),
 	}
 	stdout, err := cmd.StdoutPipe()
@@ -294,6 +314,13 @@ func TestDesktopTransportChildStdoutAndHealth(t *testing.T) {
 	if err := waitForDesktopTransportHealth(record); err != nil {
 		t.Fatal(err)
 	}
+	for _, legacyPort := range legacyPorts {
+		if record.Port == legacyPort {
+			t.Fatalf("transport record reused reserved legacy port %d", legacyPort)
+		}
+	}
+	assertDesktopTransportRuntimeAddress(t, record, "/api/v1/console/diagnostics", "runtime")
+	assertDesktopTransportRuntimeAddress(t, record, "/api/v1/console/surfaces/settings", "summary")
 
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("stop desktop transport child: %v", err)
@@ -309,6 +336,61 @@ func TestDesktopTransportChildStdoutAndHealth(t *testing.T) {
 	}
 	if len(result.lines) != 1 || result.lines[0] != line {
 		t.Fatalf("child stdout lines = %#v, want exactly the signed record", result.lines)
+	}
+	for _, legacyPort := range legacyPorts {
+		if strings.Contains(stderr.String(), fmt.Sprintf(":%d", legacyPort)) {
+			t.Fatalf("desktop transport touched reserved legacy port %d: stderr=%s", legacyPort, stderr.String())
+		}
+	}
+}
+
+func reserveDesktopTransportLegacyListener(t *testing.T) net.Listener {
+	t.Helper()
+	listener, err := net.Listen("tcp4", desktopTransportHost+":0")
+	if err != nil {
+		t.Fatalf("reserve legacy desktop transport port: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	return listener
+}
+
+func assertDesktopTransportRuntimeAddress(t *testing.T, record desktopTransportReadyRecord, path, field string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d%s", record.Host, record.Port, path), nil)
+	if err != nil {
+		t.Fatalf("build %s request: %v", path, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+desktopTransportChildAdminKey)
+	req.Header.Set(tenantHeader, defaultRuntimeTenantID)
+	req.Header.Set(principalHeader, "system-admin")
+	resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatalf("request %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("%s status = %d, want %d: %s", path, resp.StatusCode, http.StatusOK, body)
+	}
+
+	var payload struct {
+		Runtime desktopTransportRuntimeAddress `json:"runtime"`
+		Summary desktopTransportRuntimeAddress `json:"summary"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode %s response: %v", path, err)
+	}
+	var runtime desktopTransportRuntimeAddress
+	switch field {
+	case "runtime":
+		runtime = payload.Runtime
+	case "summary":
+		runtime = payload.Summary
+	default:
+		t.Fatalf("unsupported runtime address field %q", field)
+	}
+	if runtime.Bind != record.Host || runtime.Port != record.Port {
+		t.Fatalf("%s runtime = %s:%d, want %s:%d", path, runtime.Bind, runtime.Port, record.Host, record.Port)
 	}
 }
 

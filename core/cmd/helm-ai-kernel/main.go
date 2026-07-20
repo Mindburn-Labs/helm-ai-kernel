@@ -396,11 +396,21 @@ func runServerWithOptions(opts serverOptions) error {
 	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).
 	// Set HELM_BIND_ADDR=0.0.0.0 to listen on all interfaces when intentionally exposing.
 	bindAddr, port := resolveServerAddress(opts)
+	var apiListener net.Listener
 	if opts.DesktopTransport != nil {
 		// Transport-v1 ignores ambient address/port configuration. The listener
-		// is bound atomically below to the only allowed address, 127.0.0.1:0.
+		// is bound atomically to the only allowed address, 127.0.0.1:0.
 		bindAddr = desktopTransportHost
 		port = 0
+		var err error
+		apiListener, port, err = startDesktopTransport(opts.DesktopTransport, protocolStdout)
+		if err != nil {
+			return err
+		}
+		// Console route closures capture opts. Make their reported runtime
+		// endpoint match the already attested listener, never a normal-mode port.
+		opts.BindAddr = bindAddr
+		opts.Port = port
 	}
 	mux := http.NewServeMux()
 	if extraRoutes != nil {
@@ -423,14 +433,6 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	if opts.DesktopTransport == nil && bindAddr == "0.0.0.0" {
 		log.Printf("[helm] WARNING: API server binding to all interfaces (0.0.0.0:%d) — ensure firewall rules are in place", port)
-	}
-	var apiListener net.Listener
-	if opts.DesktopTransport != nil {
-		var err error
-		apiListener, port, err = startDesktopTransport(opts.DesktopTransport, protocolStdout)
-		if err != nil {
-			return err
-		}
 	}
 	go func() {
 		log.Printf("[helm] API server: %s:%d", bindAddr, port)

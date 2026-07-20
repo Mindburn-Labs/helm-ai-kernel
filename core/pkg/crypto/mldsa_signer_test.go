@@ -108,11 +108,18 @@ func TestMLDSASigner_SignDecision(t *testing.T) {
 		t.Error("VerifyDecision returned false for valid decision")
 	}
 
-	// Tampered decision must fail
+	// HELM-303 (preimage V2): the machine-readable ReasonCode is attested;
+	// free-text Reason deliberately is NOT (prose is prohibited from export
+	// and must not be the signed claim).
 	d.Reason = "I changed this"
+	valid, err = signer.VerifyDecision(d)
+	if err != nil || !valid {
+		t.Error("Reason is not part of the V2 preimage; mutating it must not invalidate")
+	}
+	d.ReasonCode = "TAMPERED_CODE"
 	valid, _ = signer.VerifyDecision(d)
 	if valid {
-		t.Error("VerifyDecision accepted tampered decision")
+		t.Error("Tampered ReasonCode accepted")
 	}
 }
 

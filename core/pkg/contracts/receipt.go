@@ -34,6 +34,14 @@ type Receipt struct {
 	LamportClock uint64 `json:"lamport_clock"`       // Monotonic logical clock per session
 	ArgsHash     string `json:"args_hash,omitempty"` // SHA-256 of JCS-canonicalized tool args bound at the PEP boundary
 
+	// SignatureVersion names the signing-preimage revision this receipt's
+	// Signature was computed over (HELM-303). Empty = the legacy V4 preimage
+	// (receipt_id, decision_id, effect_id, status, output_hash, prev_hash,
+	// lamport, args_hash). ReceiptSignatureV5 additionally binds verdict,
+	// reason_code, policy_hash and session_id, so the governance meaning of a
+	// receipt can no longer be rewritten without invalidating its signature.
+	SignatureVersion string `json:"signature_version,omitempty"`
+
 	// Receipt-as-First-Class Artifact Extensions
 	ReplayScript     *ReplayScriptRef   `json:"replay_script,omitempty"`     // Link to deterministic replay script
 	Provenance       *ReceiptProvenance `json:"provenance,omitempty"`        // Chain of custody
@@ -148,3 +156,12 @@ type WitnessSignature struct {
 	WitnessID string `json:"witness_id"`
 	Signature string `json:"signature"`
 }
+
+// ReceiptSignatureV5 marks the HELM-303 signing preimage: the legacy V4
+// fields plus verdict, reason_code, policy_hash and session_id. The
+// emergency/safe_dep tail stays deliberately outside the receipt preimage —
+// emergency authority is already signature-bound via the V2
+// AuthorizedExecutionIntent preimage, and double-binding it here would force
+// a receipt re-sign on every intent-side evolution. Revisit in V6 only with
+// a concrete threat that the intent binding does not already cover.
+const ReceiptSignatureV5 = "receipt.v5"

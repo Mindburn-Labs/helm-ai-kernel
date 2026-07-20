@@ -38,7 +38,10 @@ func (v *MLDSAVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	payload, perr := DecisionVerifyPayload(d)
+	if perr != nil {
+		return false, perr
+	}
 	sig, err := hex.DecodeString(d.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
@@ -67,7 +70,10 @@ func (v *MLDSAVerifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if r.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	payload, perr := ReceiptVerifyPayload(r)
+	if perr != nil {
+		return false, perr
+	}
 	sig, err := hex.DecodeString(r.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)

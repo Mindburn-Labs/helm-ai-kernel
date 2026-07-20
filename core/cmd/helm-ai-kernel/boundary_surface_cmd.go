@@ -69,8 +69,11 @@ func localMCPReceiptPath(id string) string {
 
 func runBoundarySurfaceCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel boundary <status|capabilities|records|get|verify|checkpoint> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel boundary <status|capabilities|records|get|verify|checkpoint|profile> [flags]")
 		return 2
+	}
+	if args[0] == "profile" {
+		return runBoundaryProfileCmd(args[1:], stdout, stderr)
 	}
 	registry := newLocalSurfaceRegistry()
 	switch args[0] {
@@ -87,7 +90,7 @@ func runBoundarySurfaceCmd(args []string, stdout, stderr io.Writer) int {
 	case "checkpoint", "checkpoints":
 		return runBoundaryCheckpoint(args[1:], registry, stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel boundary <status|capabilities|records|get|verify|checkpoint> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel boundary <status|capabilities|records|get|verify|checkpoint|profile> [flags]")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown boundary subcommand: %s\n", args[0])
@@ -1520,7 +1523,7 @@ func relationshipHash(subject, object, relation string) string {
 }
 
 func init() {
-	Register(Subcommand{Name: "boundary", Aliases: []string{}, Usage: "Inspect execution-boundary status, records, and checkpoints", RunFn: runBoundarySurfaceCmd})
+	Register(Subcommand{Name: "boundary", Aliases: []string{}, Usage: "Inspect execution-boundary status, records, and checkpoints; compile/attest Boundary Enforcement Profiles", RunFn: runBoundarySurfaceCmd})
 	Register(Subcommand{Name: "identity", Aliases: []string{}, Usage: "Inspect HELM AI Kernel agent identities", RunFn: runIdentityCmd})
 	Register(Subcommand{Name: "authz", Aliases: []string{}, Usage: "Inspect ReBAC authorization health and snapshots", RunFn: runAuthzSurfaceCmd})
 	Register(Subcommand{Name: "approvals", Aliases: []string{}, Usage: "Manage local approval ceremonies", RunFn: runApprovalsSurfaceCmd})

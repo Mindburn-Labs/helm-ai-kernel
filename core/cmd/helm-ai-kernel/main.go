@@ -36,6 +36,7 @@ import (
 	dockersandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox/docker"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/ledger"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
 
 	_ "github.com/lib/pq" // Postgres Driver
@@ -187,7 +188,10 @@ func runServerWithOptions(opts serverOptions) error {
 	fmt.Fprintf(opts.Stdout, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
-	logger := slog.Default()
+	// Stamp trace_id/span_id/correlation_id from ctx onto every record
+	// (HELM-333); requires *Context slog variants at call sites.
+	logger := slog.New(tracing.NewSlogHandler(slog.Default().Handler()))
+	slog.SetDefault(logger)
 	dataDir := opts.DataDir
 	if dataDir == "" {
 		dataDir = "data"

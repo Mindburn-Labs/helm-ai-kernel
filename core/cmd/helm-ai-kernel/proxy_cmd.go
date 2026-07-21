@@ -37,6 +37,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // proxyReceipt is the governance receipt attached to every proxied request.
@@ -540,6 +542,12 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			ctx = context.WithValue(ctx, ctxKeyCorrelationID, string(corr))
 			ctx = context.WithValue(ctx, ctxKeyRequestModel, requestModel)
 
+			// Stamp the product identity onto the edge server span so OTel
+			// traces and receipts join 1:1 (HELM-333); same attribute the
+			// governance tracer uses.
+			oteltrace.SpanFromContext(ctx).SetAttributes(
+				attribute.String(observability.HelmCorrelationID, string(corr)))
+
 			// Inject W3C traceparent so the upstream provider's traces (if any)
 			// link back into our governance trace tree. InjectHTTPHeaders also
 			// sets the advisory X-Helm-Correlation-ID for upstreams that echo it.
@@ -969,8 +977,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stdout, "  Every tool call is governed, hashed, and receipted. Ctrl+C to stop.\n")
 
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
+		Addr: addr,
+		// The proxy is an external ingress edge: run every request inside an
+		// otelhttp server span so an inbound W3C traceparent is continued
+		// (HELM-333) before governance and upstream forwarding run.
+		Handler:           tracing.WrapEdgeHandler(mux, "helm.proxy"),
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 

@@ -29,8 +29,11 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // Server is the HELM Governance REST API server.
@@ -41,6 +44,7 @@ type Server struct {
 	sessions       map[string][]string // sessionID → []receiptID
 	lamport        uint64
 	mux            *http.ServeMux
+	edge           http.Handler // otelhttp-wrapped entry point (HELM-333)
 	allowedOrigins []string // CORS allowed origins (nil = no CORS headers)
 	authenticator  Authenticator
 }
@@ -144,6 +148,11 @@ func NewServer(cfg ServerConfig) *Server {
 		authenticator:  cfg.Authenticator,
 	}
 	s.registerRoutes()
+	// The edge participates in W3C trace context (HELM-333): every request
+	// runs inside a server span, continuing an inbound traceparent when
+	// present. Configure OTel (otel.SetTracerProvider) before building the
+	// server — the tracer is resolved at construction time.
+	s.edge = tracing.WrapEdgeHandler(http.HandlerFunc(s.serveEdge), "helm.api")
 	return s
 }
 
@@ -156,8 +165,15 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
 }
 
-// ServeHTTP implements http.Handler.
+// ServeHTTP implements http.Handler. It delegates through the otelhttp
+// wrapper so every request gets a server span before edge handling runs.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.edge.ServeHTTP(w, r)
+}
+
+// serveEdge is the edge handler running inside the server span: CORS,
+// correlation adopt-or-mint, and routing.
+func (s *Server) serveEdge(w http.ResponseWriter, r *http.Request) {
 	// SEC: CORS uses same-origin by default. Callers should wrap with
 	// auth.CORSMiddleware for configurable origin allowlisting.
 	// Wildcard CORS removed to prevent cross-origin receipt exfiltration.
@@ -183,6 +199,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	corr, _ := tracing.AdoptOrMintFromHeaders(r.Header)
 	ctx := tracing.WithCorrelationID(r.Context(), corr)
 	tracing.InjectHTTPHeaders(ctx, w.Header())
+	// Stamp the product identity onto the server span so OTel traces and
+	// receipts join 1:1 (same attribute the governance tracer uses).
+	oteltrace.SpanFromContext(ctx).SetAttributes(
+		attribute.String(observability.HelmCorrelationID, string(corr)))
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return

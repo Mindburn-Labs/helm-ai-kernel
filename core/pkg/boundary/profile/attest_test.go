@@ -112,6 +112,36 @@ func TestLoosenedRuleFailsClosed(t *testing.T) {
 	}
 }
 
+// TestGateDispatchRejectsForgedShapes pins that the gate validates the whole
+// record, not just two fields: a hand-built MATCH carrying failed checks, or
+// an otherwise malformed record, must gate closed.
+func TestGateDispatchRejectsForgedShapes(t *testing.T) {
+	compiled, posture := compiledFixture(t)
+	good, err := Attest(compiled.Receipt, compiled.Files, proberFromExpected(posture, string(compiled.Files[nftFilePath])), testSigner(t), testAttestOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !GateDispatch(good) {
+		t.Fatal("a sealed MATCH must gate open")
+	}
+	for name, mutate := range map[string]func(*PostureAttestation){
+		"match with failed check": func(a *PostureAttestation) {
+			a.Checks = append(a.Checks, PostureCheck{Target: "systemd:x", Property: "NoNewPrivileges", Expected: "yes", Observed: "no", Result: CheckFail})
+		},
+		"no checks at all":     func(a *PostureAttestation) { a.Checks = nil },
+		"unknown verdict":      func(a *PostureAttestation) { a.Verdict = "PROBABLY" },
+		"receipt hash cleared": func(a *PostureAttestation) { a.ReceiptHash = "" },
+		"record hash cleared":  func(a *PostureAttestation) { a.RecordHash = "" },
+	} {
+		forged := good
+		forged.Checks = append([]PostureCheck(nil), good.Checks...)
+		mutate(&forged)
+		if GateDispatch(forged) {
+			t.Fatalf("%s must gate closed", name)
+		}
+	}
+}
+
 func TestLoosenedNftRulesetDrifts(t *testing.T) {
 	compiled, posture := compiledFixture(t)
 	loosened := strings.Replace(string(compiled.Files[nftFilePath]),

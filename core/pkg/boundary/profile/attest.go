@@ -191,7 +191,13 @@ func Attest(receipt CompileReceipt, files map[string][]byte, prober Prober, sign
 // and VerifyPostureAttestation against a trusted public key — an
 // unauthenticated hash-sealed record is forgeable by whoever supplies it.
 func GateDispatch(attestation PostureAttestation) bool {
-	return attestation.RecordHash != "" && attestation.Verdict == VerdictMatch
+	// Shape validation is part of the gate: a hand-built record claiming
+	// MATCH while carrying failed checks (or an otherwise invalid shape)
+	// must not gate open just because two fields look right.
+	if err := validatePostureAttestationShape(attestation, true); err != nil {
+		return false
+	}
+	return attestation.Verdict == VerdictMatch
 }
 
 // PostureAttestationSigningBytes is the RFC 8785 payload sealed (and, when a

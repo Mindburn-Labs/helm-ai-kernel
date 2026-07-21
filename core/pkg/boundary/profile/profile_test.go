@@ -75,6 +75,8 @@ func TestValidateRejections(t *testing.T) {
 		{"invalid address family", func(in *ProfileInput) { in.Hardening.RestrictAddressFamilies = []string{"INET"} }, "AF_*"},
 		{"relative read-only path", func(in *ProfileInput) { in.Hardening.ReadOnlyPaths = []string{"etc/helm"} }, "absolute"},
 		{"invalid device permit", func(in *ProfileInput) { in.DevicePermits = []string{"/dev/null rwx"} }, "device permit"},
+		{"device permit traversal", func(in *ProfileInput) { in.DevicePermits = []string{"/dev/../proc/kcore rw"} }, "clean path under /dev"},
+		{"device permit dot segment", func(in *ProfileInput) { in.DevicePermits = []string{"/dev/./mem rw"} }, "clean path under /dev"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

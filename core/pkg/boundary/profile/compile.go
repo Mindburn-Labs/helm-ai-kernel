@@ -332,9 +332,11 @@ func emitExpectedPosture(in ProfileInput, nftRuleset string) ([]byte, error) {
 }
 
 // expectedGatewayProps stores expectations in the exact string forms
-// `systemctl show -p <prop> --value` reports. Humanized durations
-// (CPUQuotaPerSecUSec) are deliberately NOT attested through systemd —
-// CPU/memory/pids limits are attested via the cgroup filesystem instead.
+// `systemctl show -p <prop> --value` reports. The CPU quota is deliberately
+// NOT attested through systemd — it is reported as a humanized duration
+// (CPUQuotaPerSecUSec) whose rendering varies — so it is attested only via
+// the cgroup filesystem. MemoryMax and TasksMax report as plain integers, so
+// they are attested at both layers.
 func expectedGatewayProps(in ProfileInput) map[string]string {
 	h := in.Hardening
 	props := map[string]string{

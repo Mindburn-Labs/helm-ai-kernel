@@ -163,6 +163,29 @@ func TestSchemasRejectWhatGoRejects(t *testing.T) {
 		}
 	})
 
+	t.Run("tcp address must be a literal ip:port", func(t *testing.T) {
+		for _, bad := range []string{"gateway.local:7714", "127.0.0.1", "not-an-address"} {
+			doc := decode(fixtureInput())
+			doc["topology"].(map[string]any)["gateway"] = map[string]any{"kind": "tcp", "address": bad}
+			if err := inputSchema.Validate(doc); err == nil {
+				t.Fatalf("gateway address %q must be rejected by the schema", bad)
+			}
+		}
+	})
+
+	t.Run("domains without cidrs need the acknowledgment", func(t *testing.T) {
+		in := fixtureInput()
+		in.Egress.AllowedCIDRs = nil
+		doc := decode(in) // unacknowledged: Go rejects it, so the schema must too
+		if err := inputSchema.Validate(doc); err == nil {
+			t.Fatal("domains with no CIDRs must be rejected without the acknowledgment")
+		}
+		in.EgressDomainsGatewayOnly = true
+		if err := inputSchema.Validate(decode(in)); err != nil {
+			t.Fatalf("acknowledged gateway-only domains must validate: %v", err)
+		}
+	})
+
 	t.Run("artifact path traversal", func(t *testing.T) {
 		compiled, _ := compiledFixture(t)
 		for _, bad := range []string{"../escape.conf", "systemd/../../etc/shadow", "a//b.conf", "/etc/shadow", "a/./b.conf", "back\\slash.conf"} {

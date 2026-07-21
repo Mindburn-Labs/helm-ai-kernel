@@ -181,6 +181,12 @@ func TestVerifyBundleTampers(t *testing.T) {
 		{"manifest entry hash flip", func(_ map[string][]byte, manifest *UpdateBundleManifest, _ *[]tarMember) {
 			manifest.Entries[0].SHA256 = "sha256:" + strings.Repeat("cd", 32)
 		}, ""},
+		{"traversal directory member", func(_ map[string][]byte, _ *UpdateBundleManifest, members *[]tarMember) {
+			*members = append(*members, tarMember{name: "../etc/", typeflag: tar.TypeDir})
+		}, "clean"},
+		{"absolute directory member", func(_ map[string][]byte, _ *UpdateBundleManifest, members *[]tarMember) {
+			*members = append(*members, tarMember{name: "/", typeflag: tar.TypeDir})
+		}, "relative"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,6 +203,39 @@ func TestVerifyBundleTampers(t *testing.T) {
 				t.Fatalf("error %q does not mention %q", err.Error(), tc.wantSub)
 			}
 		})
+	}
+}
+
+// TestVerifyBundleRejectsTrailingData pins that content appended after the
+// tar end-of-archive marker cannot be smuggled past the manifest.
+func TestVerifyBundleRejectsTrailingData(t *testing.T) {
+	payloads := fixturePayloads()
+	manifest := sealedManifest(t, payloads)
+	inner := buildTarGz(t, membersFor(payloads))
+
+	// Re-compress the valid tar bytes together with appended non-padding
+	// data inside a single gzip stream.
+	var raw bytes.Buffer
+	gzr, err := gzip.NewReader(bytes.NewReader(inner))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ReadFrom(gzr); err != nil {
+		t.Fatal(err)
+	}
+	raw.WriteString("smuggled payload")
+	var out bytes.Buffer
+	gzw := gzip.NewWriter(&out)
+	if _, err := gzw.Write(raw.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	err = VerifyBundle(bytes.NewReader(out.Bytes()), manifest, testSigner(t).PublicKeyBytes())
+	if err == nil || !strings.Contains(err.Error(), "non-padding data") {
+		t.Fatalf("trailing data must be rejected, got %v", err)
 	}
 }
 

@@ -184,6 +184,14 @@ func (in ProfileInput) Validate() error {
 		if !validDevicePermit.MatchString(permit) {
 			return fmt.Errorf("device permit %q must match %s", permit, validDevicePermit.String())
 		}
+		// The regex alone would accept "/dev/../proc/kcore rw"; permits must
+		// stay under /dev, so reject traversal and empty segments outright.
+		node, _, _ := strings.Cut(permit, " ")
+		for _, part := range strings.Split(strings.TrimPrefix(node, "/"), "/") {
+			if part == "" || part == "." || part == ".." {
+				return fmt.Errorf("device permit %q must be a clean path under /dev", permit)
+			}
+		}
 	}
 	return nil
 }

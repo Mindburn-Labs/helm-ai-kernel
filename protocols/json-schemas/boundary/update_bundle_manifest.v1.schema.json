@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.helm.ai/boundary/update_bundle_manifest.v1.schema.json",
   "title": "HELM Offline Update Bundle Manifest v1",
-  "$comment": "Signed manifest of an offline update bundle for disconnected appliance fleets: a JCS-canonical (RFC 8785) entry list over a tar.gz payload. The verifier rejects extra, missing, mismatched, traversal, and non-regular-file members. Format + verifier only in v1 — no build tooling, no OTA mechanism. Operators may additionally cosign sign-blob the manifest file at the transport layer; the in-repo trust anchor is the Ed25519 signature. quantum_posture: classical Ed25519 signatures; this preview contract makes no hybrid or post-quantum claim.",
+  "$comment": "Signed manifest of an offline update bundle for disconnected appliance fleets: a JCS-canonical (RFC 8785) entry list over a tar.gz payload. The verifier rejects extra, missing, mismatched and traversal members, every non-regular member except directories (which carry no content and are skipped after their path is validated), and any non-padding bytes trailing the archive. Format + verifier only in v1 — no build tooling, no OTA mechanism. Operators may additionally cosign sign-blob the manifest file at the transport layer; the in-repo trust anchor is the Ed25519 signature. quantum_posture: classical Ed25519 signatures; this preview contract makes no hybrid or post-quantum claim.",
   "type": "object",
   "additionalProperties": false,
   "required": [

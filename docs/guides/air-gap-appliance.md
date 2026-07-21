@@ -3,6 +3,8 @@ title: Run HELM On A Sealed Or Air-Gapped Host
 last_reviewed: 2026-07-21
 ---
 
+<!-- quantum_posture: this page references Ed25519 receipt signatures and signed bundles but does not implement cryptographic controls. -->
+
 # Run HELM On A Sealed Or Air-Gapped Host
 
 HELM AI Kernel runs as a single static binary that makes no outbound calls of

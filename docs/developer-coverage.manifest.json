@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "quantum_posture": "quantum_posture: this manifest indexes developer surfaces and references signing tools (for example cosign) but does not implement cryptographic controls.",
   "product": "HELM AI Kernel",
   "repo": "helm-ai-kernel",
   "local_repo_path": "helm-ai-kernel",

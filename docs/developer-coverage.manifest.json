@@ -134,11 +134,13 @@
       "example_paths": [
         "examples/python_openai_baseurl/README.md",
         "examples/ts_openai_baseurl/README.md",
-        "examples/js_openai_baseurl/README.md"
+        "examples/js_openai_baseurl/README.md",
+        "examples/governed_local_inference/README.md"
       ],
       "validation_commands": [
         "make build",
-        "cd core && go test ./cmd/helm-ai-kernel -run 'Test.*Quickstart|Test.*Proxy' -count=1"
+        "cd core && go test ./cmd/helm-ai-kernel -run 'Test.*Quickstart|Test.*Proxy' -count=1",
+        "examples/governed_local_inference/run.sh"
       ],
       "claim_terms": [
         "helm-ai-kernel serve",

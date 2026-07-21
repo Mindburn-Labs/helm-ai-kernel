@@ -1,0 +1,86 @@
+# helm-gateway.service — reference systemd unit for running the HELM AI Kernel
+# governed gateway on a single host (non-Kubernetes). This is a hardened
+# reference: review every path, account, and directive before adapting it.
+#
+# The host OS owns process and network isolation; this unit expresses that
+# intent through systemd. HELM decides authority and writes receipts.
+#
+# Install (as root):
+#   install -D -m0755 helm-ai-kernel /usr/local/bin/helm-ai-kernel
+#   install -D -m0644 helm-gateway.service /etc/systemd/system/helm-gateway.service
+#   systemctl daemon-reload && systemctl enable --now helm-gateway.service
+#   journalctl -u helm-gateway -f
+#
+# Check the hardening on the host after adapting:
+#   systemd-analyze verify helm-gateway.service
+#   systemd-analyze security helm-gateway.service
+
+[Unit]
+Description=HELM AI Kernel governed gateway
+Documentation=https://helm.docs.mindburn.org/guides/air-gap-appliance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs the governed server. To instead front a local OpenAI-compatible model
+# server with the receipted proxy, replace ExecStart with:
+#   ExecStart=/usr/local/bin/helm-ai-kernel proxy --upstream http://127.0.0.1:8000/v1 --port 9090 --receipts-dir /var/lib/helm/receipts
+ExecStart=/usr/local/bin/helm-ai-kernel serve --policy /etc/helm/release.high_risk.v3.toml
+Restart=on-failure
+RestartSec=2
+
+# --- Identity: an unprivileged, system-managed account ---
+DynamicUser=yes
+StateDirectory=helm
+StateDirectoryMode=0750
+Environment=HELM_RECEIPTS_DIR=/var/lib/helm/receipts
+
+# --- Filesystem: read-only root, no home, private tmp ---
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/helm
+ProtectProc=invisible
+ProcSubset=pid
+
+# --- Privilege and capability reduction ---
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+# --- System call surface ---
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+
+# --- Network: the host firewall owns egress; keep the surface narrow. ---
+# The gateway is intended to listen on loopback. Open only what the host allows.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+# To reach a local model server or an allowlisted upstream, add its address:
+#   IPAddressAllow=127.0.0.1
+
+# --- Devices: none by default. A GPU-backed model server is a separate unit
+#     and is the one that should receive the accelerator device. ---
+DevicePolicy=closed
+
+# --- Resource ceilings (tune to the host) ---
+TasksMax=512
+MemoryMax=2G
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

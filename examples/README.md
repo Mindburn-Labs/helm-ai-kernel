@@ -50,6 +50,7 @@ Or run the binary directly with an explicit port:
 | `js_openai_baseurl/` | JavaScript `fetch` client pointed at the HELM boundary | `cd examples/js_openai_baseurl && node main.js` |
 | `python_openai_baseurl/` | Python SDK client pointed at the HELM boundary | `cd examples/python_openai_baseurl && python main.py` |
 | `ts_openai_baseurl/` | TypeScript client pointed at the HELM boundary | `cd examples/ts_openai_baseurl && npx tsx main.ts` |
+| `governed_local_inference/` | Governed local inference for a sealed or air-gapped host: proxy in front of a local model server, ALLOW plus DENY, signed receipts verified offline | `examples/governed_local_inference/run.sh` |
 
 ## Verification Examples
 

@@ -467,3 +467,64 @@ func (i fakeFileInfo) IsDir() bool {
 func (i fakeFileInfo) Sys() any {
 	return nil
 }
+
+func TestScanLocalInferenceRuntimesAndGateways(t *testing.T) {
+	root := t.TempDir()
+	// One fixture per signature family.
+	writeFile(t, root, "app/ollama_client.py", "import ollama\nr = ollama.chat(model='llama3')\n")             // import
+	writeFile(t, root, "infra/docker-compose.yml", "services:\n  vllm:\n    image: vllm/vllm-openai:latest\n") // compose image
+	writeFile(t, root, "infra/Dockerfile", "FROM ghcr.io/ggml-org/llama.cpp:server\n")                         // Dockerfile image
+	writeFile(t, root, "app/lmstudio.py", "client = OpenAIClient(base_url='http://localhost:1234/v1')\n")      // distinctive port
+	writeFile(t, root, "models/Modelfile", "FROM llama3\nPARAMETER temperature 0.7\n")                         // filename rule
+	writeFile(t, root, "run/serve.py", "cmd = 'vllm serve meta-llama/Llama-3-8B --port 8000'\n")               // CLI invocation
+	writeFile(t, root, "gw/proxy.py", "import litellm\n")                                                      // gateway import
+	writeFile(t, root, "gw/compose.yaml", "services:\n  gw:\n    image: ghcr.io/berriai/litellm:main\n")       // gateway image
+	// Negative: a colliding bare port (:8000) with no runtime-identifying token must NOT be flagged.
+	writeFile(t, root, "neg/plain.py", "URL = 'http://localhost:8000/v1'\n")
+
+	now := time.Unix(1700000000, 0).UTC()
+	scanner := NewScanner()
+	scanner.Clock = func() time.Time { return now }
+
+	report, err := scanner.Scan(root)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	type want struct{ kind, vendor, severity string }
+	wantByPath := map[string]want{
+		"app/ollama_client.py":     {"local_llm_runtime", "ollama", "LOW"},
+		"infra/docker-compose.yml": {"local_llm_runtime", "vllm", "LOW"},
+		"infra/Dockerfile":         {"local_llm_runtime", "llamacpp", "LOW"},
+		"app/lmstudio.py":          {"local_llm_runtime", "lmstudio", "LOW"},
+		"models/Modelfile":         {"local_llm_runtime", "ollama", "LOW"},
+		"run/serve.py":             {"local_llm_runtime", "vllm", "LOW"},
+		"gw/proxy.py":              {"llm_gateway", "litellm", "MEDIUM"},
+		"gw/compose.yaml":          {"llm_gateway", "litellm", "MEDIUM"},
+	}
+	got := map[string]want{}
+	for _, f := range report.Findings {
+		if f.Kind == "local_llm_runtime" || f.Kind == "llm_gateway" {
+			got[f.Path] = want{f.Kind, f.Vendor, f.Severity}
+			if f.Note == "" {
+				t.Errorf("finding %s missing remediation note", f.Path)
+			}
+		}
+		if f.Path == "neg/plain.py" && (f.Kind == "local_llm_runtime" || f.Kind == "llm_gateway") {
+			t.Errorf("false positive on colliding bare port :8000: %#v", f)
+		}
+	}
+	for path, w := range wantByPath {
+		g, ok := got[path]
+		if !ok {
+			t.Errorf("missing detection for %s (want %+v); findings=%#v", path, w, report.Findings)
+			continue
+		}
+		if g != w {
+			t.Errorf("%s: got %+v, want %+v", path, g, w)
+		}
+	}
+	if _, flagged := got["neg/plain.py"]; flagged {
+		t.Errorf("neg/plain.py should not be flagged as a runtime/gateway")
+	}
+}

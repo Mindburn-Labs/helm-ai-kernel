@@ -183,16 +183,24 @@ func (s *Scanner) shouldSkipDir(root, path string) bool {
 
 func (s *Scanner) shouldScanFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
-	base := filepath.Base(path)
+	lb := strings.ToLower(filepath.Base(path))
 	switch ext {
 	case ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".mjs", ".cjs":
 		return true
 	case ".json", ".yaml", ".yml", ".toml":
-		// Only scan these if they look like agent-related config.
-		lb := strings.ToLower(base)
+		// Only scan these if they look like agent-related config or a
+		// container-compose file (which may name a local-inference image).
 		return strings.Contains(lb, "mcp") || strings.Contains(lb, "agent") ||
 			lb == "package.json" || lb == "pyproject.toml" || lb == "requirements.txt" ||
-			lb == "go.mod" || lb == "settings.json"
+			lb == "go.mod" || lb == "settings.json" ||
+			lb == "docker-compose.yml" || lb == "docker-compose.yaml" ||
+			lb == "compose.yml" || lb == "compose.yaml"
+	}
+	// Extensionless manifests that carry container-image or local-runtime
+	// signatures (Dockerfile FROM/CMD lines, Ollama Modelfile).
+	switch lb {
+	case "dockerfile", "containerfile", "modelfile":
+		return true
 	}
 	return false
 }
@@ -255,6 +263,18 @@ func (s *Scanner) scanFile(path, root string, r *Report) error {
 			Path:       rel,
 			Severity:   "MEDIUM",
 			Note:       "MCP server configuration file — verify servers are governed",
+			DetectedAt: s.Clock(),
+		})
+	}
+	// An Ollama Modelfile marks a local model server on this host.
+	if base == "modelfile" {
+		r.Findings = append(r.Findings, Finding{
+			Kind:       "local_llm_runtime",
+			Vendor:     "ollama",
+			Language:   "config",
+			Path:       rel,
+			Severity:   "LOW",
+			Note:       "Ollama Modelfile — local model server; route inference through the HELM proxy or Local Inference Gateway to govern it",
 			DetectedAt: s.Clock(),
 		})
 	}
@@ -446,4 +466,136 @@ var importRules = []importRule{
 		Pattern:  regexp.MustCompile(`sk-ant-[A-Za-z0-9-]{40,}`),
 		Severity: "HIGH",
 		Note:     "Possible Anthropic API key in source — rotate immediately and move to secrets"},
+
+	// ---- Local LLM runtimes (kind: local_llm_runtime) ----
+	// Signatures are client-library imports, server CLI/module invocations,
+	// container-image names, and distinctive localhost base-URL ports. Ports
+	// that commonly collide (8000 / 8080 / 3000 / 5000) are deliberately NOT
+	// used as standalone signals; those runtimes are matched by image or CLI.
+	// Sources verified 2026-07-21: each runtime's own serving docs.
+
+	// Ollama — :11434.
+	{Kind: "local_llm_runtime", Vendor: "ollama", Language: "python",
+		Pattern:  regexp.MustCompile(`(?m)^\s*(import\s+ollama|from\s+ollama\s+import)`),
+		Severity: "LOW", Note: "Ollama Python client — route through the HELM proxy / Local Inference Gateway"},
+	{Kind: "local_llm_runtime", Vendor: "ollama", Language: "typescript",
+		Pattern:  regexp.MustCompile(`(?m)(from\s+['"]ollama['"]|require\(['"]ollama['"]\))`),
+		Severity: "LOW", Note: "Ollama JS client — route through the HELM proxy / Local Inference Gateway"},
+	{Kind: "local_llm_runtime", Vendor: "ollama", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)(localhost|127\.0\.0\.1):11434|\bollama\s+serve\b|(^|/)ollama/ollama\b`),
+		Severity: "LOW", Note: "Ollama local model server (:11434) — govern via the HELM proxy / Local Inference Gateway"},
+
+	// vLLM — :8000, image vllm/vllm-openai, `vllm serve`.
+	{Kind: "local_llm_runtime", Vendor: "vllm", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)vllm/vllm-openai|\bvllm\s+serve\b|vllm\.entrypoints\.openai`),
+		Severity: "LOW", Note: "vLLM OpenAI-compatible server — front it with the HELM proxy to govern inference"},
+
+	// llama.cpp — llama-server, image ghcr.io/ggml-org/llama.cpp.
+	{Kind: "local_llm_runtime", Vendor: "llamacpp", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)\bllama-server\b|ghcr\.io/ggml-org/llama\.cpp`),
+		Severity: "LOW", Note: "llama.cpp server — front it with the HELM proxy to govern inference"},
+	{Kind: "local_llm_runtime", Vendor: "llamacpp", Language: "python",
+		Pattern:  regexp.MustCompile(`(?m)^\s*(import\s+llama_cpp|from\s+llama_cpp\s+import)`),
+		Severity: "LOW", Note: "llama-cpp-python — local model server; route through the HELM proxy"},
+
+	// SGLang — :30000, image lmsysorg/sglang, sglang.launch_server.
+	{Kind: "local_llm_runtime", Vendor: "sglang", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)lmsysorg/sglang|sglang\.launch_server|(localhost|127\.0\.0\.1):30000`),
+		Severity: "LOW", Note: "SGLang server — front it with the HELM proxy to govern inference"},
+
+	// Hugging Face TGI — text-generation-launcher (archived / maintenance since 2026-03).
+	{Kind: "local_llm_runtime", Vendor: "tgi", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)\btext-generation-launcher\b|ghcr\.io/huggingface/text-generation-inference`),
+		Severity: "LOW", Note: "Hugging Face TGI (upstream archived / maintenance mode since 2026-03) — front it with the HELM proxy"},
+
+	// NVIDIA Triton + NIM.
+	{Kind: "local_llm_runtime", Vendor: "triton", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)nvcr\.io/nvidia/tritonserver|\btritonserver\b`),
+		Severity: "LOW", Note: "NVIDIA Triton Inference Server — front the OpenAI-compatible endpoint with the HELM proxy"},
+	{Kind: "local_llm_runtime", Vendor: "nvidia-nim", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)nvcr\.io/nim/`),
+		Severity: "LOW", Note: "NVIDIA NIM microservice — front it with the HELM proxy to govern inference"},
+
+	// LMDeploy — :23333, `lmdeploy serve api_server`.
+	{Kind: "local_llm_runtime", Vendor: "lmdeploy", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)\blmdeploy\s+serve\b|(localhost|127\.0\.0\.1):23333`),
+		Severity: "LOW", Note: "LMDeploy api_server — front it with the HELM proxy to govern inference"},
+
+	// OpenVINO Model Server.
+	{Kind: "local_llm_runtime", Vendor: "openvino", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)openvino/model_server`),
+		Severity: "LOW", Note: "OpenVINO Model Server — front the OpenAI-compatible endpoint with the HELM proxy"},
+
+	// Apple MLX — mlx_lm.server.
+	{Kind: "local_llm_runtime", Vendor: "mlx", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)mlx_lm\.server`),
+		Severity: "LOW", Note: "MLX local model server — route through the HELM proxy / Local Inference Gateway"},
+
+	// Docker Model Runner — :12434 /engines/v1, `docker model`.
+	{Kind: "local_llm_runtime", Vendor: "docker-model-runner", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)(localhost|127\.0\.0\.1):12434|\bdocker\s+model\s+(run|serve|status)\b`),
+		Severity: "LOW", Note: "Docker Model Runner (:12434) — route through the HELM proxy / Local Inference Gateway"},
+
+	// LM Studio — :1234, `lms` CLI.
+	{Kind: "local_llm_runtime", Vendor: "lmstudio", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)(localhost|127\.0\.0\.1):1234\b`),
+		Severity: "LOW", Note: "LM Studio local server (:1234) — route through the HELM proxy / Local Inference Gateway"},
+
+	// GPT4All — :4891/v1.
+	{Kind: "local_llm_runtime", Vendor: "gpt4all", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)(localhost|127\.0\.0\.1):4891`),
+		Severity: "LOW", Note: "GPT4All local API server (:4891) — route through the HELM proxy / Local Inference Gateway"},
+	{Kind: "local_llm_runtime", Vendor: "gpt4all", Language: "python",
+		Pattern:  regexp.MustCompile(`(?m)^\s*(import\s+gpt4all|from\s+gpt4all\s+import)`),
+		Severity: "LOW", Note: "GPT4All Python client — route through the HELM proxy / Local Inference Gateway"},
+
+	// KoboldCpp — :5001.
+	{Kind: "local_llm_runtime", Vendor: "koboldcpp", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)(localhost|127\.0\.0\.1):5001|\bkoboldcpp\b`),
+		Severity: "LOW", Note: "KoboldCpp server (:5001) — route the OpenAI-compatible endpoint through the HELM proxy"},
+
+	// Jan + cortex.cpp — :1337 / :39281.
+	{Kind: "local_llm_runtime", Vendor: "jan", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)(localhost|127\.0\.0\.1):1337`),
+		Severity: "LOW", Note: "Jan local API server (:1337) — route through the HELM proxy / Local Inference Gateway"},
+	{Kind: "local_llm_runtime", Vendor: "cortex", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)(localhost|127\.0\.0\.1):3928[19]`),
+		Severity: "LOW", Note: "cortex.cpp local server — route through the HELM proxy / Local Inference Gateway"},
+
+	// Xinference — :9997, image xprobe/xinference.
+	{Kind: "local_llm_runtime", Vendor: "xinference", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)xprobe/xinference|(localhost|127\.0\.0\.1):9997`),
+		Severity: "LOW", Note: "Xinference server — front it with the HELM proxy to govern inference"},
+
+	// GPUStack — image gpustack/gpustack.
+	{Kind: "local_llm_runtime", Vendor: "gpustack", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)gpustack/gpustack`),
+		Severity: "LOW", Note: "GPUStack server — front the OpenAI-compatible endpoint with the HELM proxy"},
+
+	// ---- Local LLM gateways / routers (kind: llm_gateway) ----
+	// Aggregators that reach models on a path that can bypass HELM unless HELM
+	// sits in front — flagged one step above plain runtimes.
+
+	// LiteLLM proxy — :4000, image ghcr.io/berriai/litellm.
+	{Kind: "llm_gateway", Vendor: "litellm", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)ghcr\.io/berriai/litellm|\blitellm\s+--(config|port)\b|(localhost|127\.0\.0\.1):4000`),
+		Severity: "MEDIUM", Note: "LiteLLM proxy — a routing layer that can reach models around HELM; keep HELM in front of it"},
+	{Kind: "llm_gateway", Vendor: "litellm", Language: "python",
+		Pattern:  regexp.MustCompile(`(?m)^\s*(import\s+litellm|from\s+litellm\s+import)`),
+		Severity: "MEDIUM", Note: "LiteLLM library — a routing layer that can reach models around HELM; keep HELM in front of it"},
+
+	// LocalAI — image localai/localai.
+	{Kind: "llm_gateway", Vendor: "localai", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)\blocalai/localai\b`),
+		Severity: "MEDIUM", Note: "LocalAI — an OpenAI-compatible aggregator; keep HELM in front of it to govern inference"},
+
+	// FastChat — fastchat.serve.openai_api_server.
+	{Kind: "llm_gateway", Vendor: "fastchat", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)fastchat\.serve`),
+		Severity: "MEDIUM", Note: "FastChat OpenAI API server — a routing layer; keep HELM in front of it"},
+
+	// Open WebUI — image ghcr.io/open-webui/open-webui.
+	{Kind: "llm_gateway", Vendor: "open-webui", Language: "any",
+		Pattern:  regexp.MustCompile(`(?m)ghcr\.io/open-webui/open-webui`),
+		Severity: "MEDIUM", Note: "Open WebUI — a front-end/router over local models; keep HELM in front of it"},
 }

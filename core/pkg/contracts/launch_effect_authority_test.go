@@ -161,6 +161,19 @@ func TestLaunchEffectAuthorizationEnvelopeConsumesPermitOnce(t *testing.T) {
 	}
 }
 
+func TestLaunchEffectAuthorizationEnvelopeRejectsExpiryBeforeAtomicFinalization(t *testing.T) {
+	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
+	ctx.FinalizeDispatch = func(expected contracts.LaunchEffectDispatchFinalization) (contracts.LaunchEffectDispatchFinalizationResult, error) {
+		if expected.Permit != ctx.Permit {
+			return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("permit compare-and-swap binding mismatch")
+		}
+		return contracts.LaunchEffectDispatchFinalizationResult{CommittedAt: expected.MustCommitBefore}, nil
+	}
+	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "expired before atomic dispatch finalization") {
+		t.Fatalf("dispatch expiry race error = %v", err)
+	}
+}
+
 func launchArtifactAuthorizationFixture(t *testing.T) (contracts.LaunchEffectAuthorizationEnvelope, contracts.LaunchEffectEnvelopeVerificationContext, ed25519.PrivateKey, ed25519.PublicKey) {
 	t.Helper()
 	envelope, ctx, privateKey, publicKey, _ := launchEffectAuthorizationFixtureAt(t, 5)
@@ -329,14 +342,17 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 		ResolveEmergencyFence: func(tenantID, workspaceID string) (contracts.LaunchEmergencyFenceSnapshot, error) {
 			return contracts.LaunchEmergencyFenceSnapshot{TenantID: tenantID, WorkspaceID: workspaceID, EffectiveEpoch: envelope.EmergencyFenceEpoch}, nil
 		},
-		FinalizeDispatch: func(expected contracts.LaunchEffectPermitBinding) error {
-			if expected != permit {
-				return fmt.Errorf("permit compare-and-swap binding mismatch")
+		FinalizeDispatch: func(expected contracts.LaunchEffectDispatchFinalization) (contracts.LaunchEffectDispatchFinalizationResult, error) {
+			if expected.Permit != permit {
+				return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("permit compare-and-swap binding mismatch")
+			}
+			if !now.Before(expected.MustCommitBefore) {
+				return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("dispatch authority expired")
 			}
 			if !consumed.CompareAndSwap(false, true) {
-				return fmt.Errorf("permit already consumed")
+				return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("permit already consumed")
 			}
-			return nil
+			return contracts.LaunchEffectDispatchFinalizationResult{CommittedAt: now}, nil
 		},
 		Permit: permit,
 	}

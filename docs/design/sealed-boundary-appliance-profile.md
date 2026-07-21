@@ -33,7 +33,7 @@ fail-closed — never the fourth (enforce):
 | OS-kernel isolation | the firewall / LSM / cgroup manager | compiler for systemd hardening drop-ins + default-drop nftables ruleset + cgroup limits; posture attestor; fail-closed start gate |
 | GPU governance | a GPU/MIG partition manager | `DeviceAllow=` device permits + `DevicePolicy=closed` (attestation binding to `EnginePin.AttestedMeasurement` is Slice B) |
 | systemd units | an init system / supervisor | reference units under `deploy/appliance/` (privileged attest oneshot + unprivileged gateway) |
-| air-gap guide | an OTA/update daemon | `docs/deployment/air-gap-appliance.md` + signed offline update-bundle **format + verifier** (`update_bundle_manifest.v1`); build tooling out of scope |
+| air-gap guide | an OTA/update daemon | `docs/deployment/boundary-enforcement-profile.md` (layered on the merged sealed-host baseline `docs/guides/air-gap-appliance.md`) + signed offline update-bundle **format + verifier** (`update_bundle_manifest.v1`); build tooling out of scope |
 
 ## 3. Architecture (as built)
 

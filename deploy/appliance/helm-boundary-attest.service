@@ -19,7 +19,7 @@
 
 [Unit]
 Description=HELM boundary posture attestation (fail-closed gate for helm-gateway)
-Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/air-gap-appliance.md
+Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/boundary-enforcement-profile.md
 Before=helm-gateway.service
 
 [Service]

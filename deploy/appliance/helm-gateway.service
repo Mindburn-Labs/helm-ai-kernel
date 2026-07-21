@@ -14,7 +14,7 @@
 
 [Unit]
 Description=HELM AI Kernel gateway (sealed appliance)
-Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/air-gap-appliance.md
+Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/boundary-enforcement-profile.md
 Requires=helm-boundary-attest.service
 After=helm-boundary-attest.service network-online.target
 Wants=network-online.target

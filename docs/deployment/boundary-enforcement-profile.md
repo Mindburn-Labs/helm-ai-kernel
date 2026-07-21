@@ -1,9 +1,18 @@
-# Air-Gap Appliance Deployment — Boundary Enforcement Profile
+# Boundary Enforcement Profile — Sealed-Appliance Deployment
 
 How to run the HELM AI Kernel gateway on a sealed Linux appliance —
-air-gapped or egress-restricted — with OS-level enforcement compiled from
-policy and continuously *provable* (not continuously *monitored*; see the
+air-gapped or egress-restricted — with OS-level enforcement **compiled from
+policy** and *provable* on demand (not continuously *monitored*; see the
 honesty section).
+
+> **Relationship to the sealed-host baseline:** [Run HELM On A Sealed Or
+> Air-Gapped Host](../guides/air-gap-appliance.md) covers placing the current
+> kernel release as the only governed path on a sealed host (single hardened
+> unit under `deploy/systemd/`, local-inference governance, offline
+> verification). **This document layers the Boundary Enforcement Profile on
+> top**: compiled systemd/nftables/cgroup artifacts, signed compile receipts,
+> live posture attestation, and fail-closed drift gating via the
+> `deploy/appliance/` unit pair. The profile ships with the 0.7.4 milestone.
 
 Doctrine invariant, stated once and relied on everywhere:
 
@@ -112,6 +121,11 @@ refuses to start the gateway. The OS does the refusing.
 which stays fully unprivileged (`CapabilityBoundingSet=` empty). Running the
 probe inside the gateway would either over-privilege it or turn fail-closed
 into fail-bricked.
+
+**Unit lineage:** `deploy/systemd/helm-gateway.service` is the standalone
+hardened single-host reference (no profile gating). The `deploy/appliance/`
+pair is the profile-gated topology: same hardening posture, plus the
+attest-oneshot dependency and the compiled per-profile drop-in.
 
 ## 3. First boot, governance side
 

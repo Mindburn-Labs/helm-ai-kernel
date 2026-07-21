@@ -10,7 +10,13 @@ hardening drop-ins, a default-drop nftables ruleset, cgroup limits, device
 permits) from a hash-bound policy input and seals a signed compile receipt;
 systemd and nftables enforce them; `boundary profile attest` proves the live
 posture matches and **fails closed on drift**. Full guide:
-[docs/deployment/air-gap-appliance.md](../../docs/deployment/air-gap-appliance.md).
+[docs/deployment/boundary-enforcement-profile.md](../../docs/deployment/boundary-enforcement-profile.md).
+
+Unit lineage: [deploy/systemd/helm-gateway.service](../systemd/helm-gateway.service)
+is the standalone hardened single-host reference (no profile gating; see
+[Run HELM On A Sealed Or Air-Gapped Host](../../docs/guides/air-gap-appliance.md)).
+This directory is the **profile-gated** topology: the same hardening posture
+plus the attest-oneshot start dependency and the compiled per-profile drop-in.
 
 ## Files
 

@@ -9,7 +9,7 @@
 
 [Unit]
 Description=Periodic HELM boundary posture re-attestation (drift evidence)
-Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/air-gap-appliance.md
+Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/boundary-enforcement-profile.md
 
 [Timer]
 OnBootSec=15min

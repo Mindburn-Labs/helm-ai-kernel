@@ -164,11 +164,29 @@ func TestSchemasRejectWhatGoRejects(t *testing.T) {
 	})
 
 	t.Run("tcp address must be a literal ip:port", func(t *testing.T) {
-		for _, bad := range []string{"gateway.local:7714", "127.0.0.1", "not-an-address"} {
+		bad := []string{
+			"gateway.local:7714", "127.0.0.1", "not-an-address", // shape
+			"127.0.0.1:0", "127.0.0.1:00000", "127.0.0.1:65536", "127.0.0.1:99999", // ports the Go validator rejects
+			"999.0.0.1:7714", "127.0.0.256:7714", "127.0.0:7714", "127.0.0.1.5:7714", // impossible IPv4
+		}
+		for _, address := range bad {
 			doc := decode(fixtureInput())
-			doc["topology"].(map[string]any)["gateway"] = map[string]any{"kind": "tcp", "address": bad}
+			doc["topology"].(map[string]any)["gateway"] = map[string]any{"kind": "tcp", "address": address}
 			if err := inputSchema.Validate(doc); err == nil {
-				t.Fatalf("gateway address %q must be rejected by the schema", bad)
+				t.Fatalf("gateway address %q must be rejected by the schema", address)
+			}
+			// Whatever the schema rejects here, the Go validator must reject too.
+			in := fixtureInput()
+			in.Topology.Gateway = GatewayEndpoint{Kind: "tcp", Address: address}
+			if err := in.Validate(); err == nil {
+				t.Fatalf("gateway address %q must also be rejected by Validate", address)
+			}
+		}
+		for _, address := range []string{"127.0.0.1:1", "10.0.0.255:65535", "[::1]:7714"} {
+			doc := decode(fixtureInput())
+			doc["topology"].(map[string]any)["gateway"] = map[string]any{"kind": "tcp", "address": address}
+			if err := inputSchema.Validate(doc); err != nil {
+				t.Fatalf("gateway address %q must validate: %v", address, err)
 			}
 		}
 	})

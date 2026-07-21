@@ -1,3 +1,5 @@
+// quantum_posture: setup wires only classical Ed25519 receipt signer sources;
+// it does not provide post-quantum or hybrid cryptographic protection.
 package main
 
 import (
@@ -32,16 +34,17 @@ var (
 )
 
 type setupOptions struct {
-	Target       string
-	Operation    string
-	Scope        string
-	Workspace    string
-	WorkspaceSet bool
-	Yes          bool
-	DryRun       bool
-	JSON         bool
-	NoQuickstart bool
-	DataDir      string
+	Target          string
+	Operation       string
+	Scope           string
+	Workspace       string
+	WorkspaceSet    bool
+	Yes             bool
+	DryRun          bool
+	JSON            bool
+	NoQuickstart    bool
+	DataDir         string
+	SigningSeedFile string
 }
 
 type setupSummary struct {
@@ -152,7 +155,7 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup: create data dir: %v\n", err)
 		return 1
 	}
-	if _, err := ensureLocalWorkstationSigningSeed(opts.DataDir); err != nil {
+	if _, err := resolveWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile); err != nil {
 		fmt.Fprintf(stderr, "setup: provision local receipt signing key: %v\n", err)
 		return 1
 	}
@@ -297,6 +300,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Install without starting the blocking Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
+	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
@@ -323,6 +327,7 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Report a headless setup without a Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
+	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	if includeYes {
 		fs.BoolVar(&opts.Yes, "yes", false, "Remove without prompting")
 	}
@@ -487,12 +492,17 @@ func setupUninstallCommand(opts setupOptions) string {
 	if opts.Scope == "project" {
 		workspace = " --workspace " + shellQuote(opts.Workspace)
 	}
+	signingSeedFile := ""
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		signingSeedFile = " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
 	return fmt.Sprintf(
-		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s",
+		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s%s",
 		opts.Target,
 		opts.Scope,
 		workspace,
 		shellQuote(opts.DataDir),
+		signingSeedFile,
 	)
 }
 
@@ -688,7 +698,11 @@ func setupHookMatcher(target string) string {
 }
 
 func setupHookCommand(opts setupOptions, bin string) string {
-	return shellQuote(bin) + " hook pre-tool --client " + opts.Target + " --data-dir " + shellQuote(opts.DataDir)
+	command := shellQuote(bin) + " hook pre-tool --client " + opts.Target + " --data-dir " + shellQuote(opts.DataDir)
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		command += " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
+	return command
 }
 
 func upsertHookConfig(path, matcher, command, allowedRoot string) error {

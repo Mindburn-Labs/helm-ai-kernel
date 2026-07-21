@@ -98,10 +98,12 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
 - Added the **Boundary Enforcement Profile**. `helm-ai-kernel boundary profile compile`
   emits systemd hardening drop-ins, a default-drop nftables ruleset,
   cgroup limits and device permits from a hash-bound `boundary_profile_input.v1`
-  document, sealed by a signed `profile_compile_receipt.v1`. HELM compiles and
-  attests; systemd and nftables enforce — this is not a host-level enforcement
-  claim, and no eBPF, seccomp, TPM, hardware-enclave or packet-blocking control
-  is added.
+  document, sealed by a signed `profile_compile_receipt.v1`. These are text
+  artifacts an operator applies with `systemctl` and `nft`: the host's own
+  systemd and nftables do the enforcing, and the kernel gains no enforcement
+  mechanism of its own — no eBPF program, seccomp filter, TPM binding,
+  hardware enclave, or in-process packet filter. HELM compiles and attests;
+  the OS enforces.
 - `boundary profile attest` reads live OS posture (systemd unit properties, the
   nftables ruleset, cgroup-v2 limits) and emits a hash-sealed
   `posture_attestation.v1` recording `MATCH` or `DRIFT` with per-check

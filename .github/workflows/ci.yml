@@ -139,6 +139,8 @@ jobs:
         run: make lint
       - name: ProofGraph signature write guard
         run: bash scripts/ci/check_proofgraph_signature_writes.sh
+      - name: Reason-code reachability
+        run: python3 scripts/ci/check_reason_code_reachability.py
       - name: Build
         run: make build
       - name: Test
@@ -172,6 +174,22 @@ jobs:
         run: make crucible
       - name: Benchmark report
         run: make bench-report
+
+  # Runs the `go-race` gate from scripts/ci/quality-gates.json. That gate is
+  # registered only in the `merge` profile, and no workflow invokes
+  # `make quality-merge` — so the race detector never ran in CI. Kept as its own
+  # job so it runs concurrently with `kernel` instead of serializing behind it.
+  kernel-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.12"
+          cache-dependency-path: "**/go.sum"
+      - name: Core race tests
+        run: make test-race
 
   python-sdk:
     runs-on: ubuntu-latest

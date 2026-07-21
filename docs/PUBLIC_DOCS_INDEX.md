@@ -26,6 +26,7 @@ it does not claim that a live docs route or runtime is available.
 - [Quickstart](QUICKSTART.md)
 - [Developer Journey](DEVELOPER_JOURNEY.md)
 - [Write Policies](architecture/policy-languages.md)
+- [Run HELM On A Sealed Or Air-Gapped Host](guides/air-gap-appliance.md)
 - [OpenAI Proxy](INTEGRATIONS/openai_baseurl.md)
 - [OpenClaw](INTEGRATIONS/openclaw.md)
 - [Hermes](INTEGRATIONS/hermes.md)

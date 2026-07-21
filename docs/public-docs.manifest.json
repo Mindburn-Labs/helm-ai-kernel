@@ -61,8 +61,8 @@
   "api_contract": {
     "schema_version": 1,
     "source_path": "api/openapi/helm.openapi.yaml",
-    "content_sha256": "sha256:408a69429e0327ad119ca565308a4c9a482782dbcd7f79cc79168683e82f2c51",
-    "git_blob_sha1": "9a54fd29fcd7c360e5610a84071ad701470544be",
+    "content_sha256": "sha256:88a300bd92d30eb08d43e087041d4771f90665ad9d5a6cd6cf95caad4885f8c7",
+    "git_blob_sha1": "9f97ed9fc3536a241bc2ad03709b8683157d8e7f",
     "public_operations": [
       {"method": "GET", "path": "/api/health", "operation_id": "getPublicDemoHealth"},
       {"method": "POST", "path": "/api/demo/run", "operation_id": "runPublicDemo"},
@@ -207,6 +207,12 @@
       "slug": "guides/air-gap-appliance",
       "title": "Run HELM On A Sealed Or Air-Gapped Host",
       "section": "guide",
+      "category": "build",
+      "tasks": ["install", "configure-boundary", "verify-evidencepack"],
+      "audiences": ["local-operator", "integrator"],
+      "publication_status": "source-public",
+      "runtime_scope": "local-runtime",
+      "inbound_human_path": ["index", "public-docs", "guides/air-gap-appliance"],
       "source_path": "docs/guides/air-gap-appliance.md",
       "docs_origin_hint": "helm.docs.mindburn.org/guides/air-gap-appliance",
       "access": "public",

@@ -23,8 +23,32 @@ func TestLaunchEffectAuthorizationEnvelopeVerifiesAuthorityBoundary(t *testing.T
 	if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/launch_effect_envelope.v1.json"), envelope); err != nil {
 		t.Fatalf("signed launch authorization envelope rejected by schema: %v", err)
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		t.Fatalf("signed launch authorization envelope rejected: %v", err)
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopePreflightGrantsNoNetworkAuthority(t *testing.T) {
+	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
+	var finalized atomic.Bool
+	var networkStarted atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		contracts.LaunchEffectDispatchFinalization,
+		func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+		func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+	) error {
+		finalized.Store(true)
+		return nil
+	}
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error {
+		networkStarted.Store(true)
+		return nil
+	}
+	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("launch authorization preflight rejected: %v", err)
+	}
+	if finalized.Load() || networkStarted.Load() {
+		t.Fatal("non-authorizing preflight finalized or started a connector effect")
 	}
 }
 
@@ -34,7 +58,7 @@ func TestLaunchEffectAuthorizationEnvelopeVerifiesProviderAuthorityBranches(t *t
 		fixture := launchInputFixtures()[fixtureIndex]
 		t.Run(fixture.effectID, func(t *testing.T) {
 			envelope, ctx, _, _, _ := launchEffectAuthorizationFixtureAt(t, fixtureIndex)
-			if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+			if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 				t.Fatalf("provider authority envelope rejected: %v", err)
 			}
 		})
@@ -153,36 +177,141 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsFenceReplay(t *testing.T) {
 
 func TestLaunchEffectAuthorizationEnvelopeConsumesPermitOnce(t *testing.T) {
 	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil {
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil {
 		t.Fatal("single-use permit was consumed twice")
 	}
 }
 
 func TestLaunchEffectAuthorizationEnvelopeRejectsExpiryBeforeAtomicFinalization(t *testing.T) {
 	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
-	ctx.FinalizeDispatch = func(expected contracts.LaunchEffectDispatchFinalization) (contracts.LaunchEffectDispatchFinalizationResult, error) {
-		if expected.Permit != ctx.Permit {
-			return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("permit compare-and-swap binding mismatch")
+	var consumed atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		expected contracts.LaunchEffectDispatchFinalization,
+		validate func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+		start func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+	) error {
+		if err := validate(contracts.LaunchEffectDispatchFinalizationObservation{
+			ObservedAt: expected.MustStartBefore, ObservedAuthority: expected.Permit,
+		}); err != nil {
+			return err
 		}
-		return contracts.LaunchEffectDispatchFinalizationResult{CommittedAt: expected.MustCommitBefore}, nil
+		consumed.Store(true)
+		return start(contracts.LaunchEffectDispatchFinalizationObservation{ObservedAt: expected.MustStartBefore, ObservedAuthority: expected.Permit})
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "expired before atomic dispatch finalization") {
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "expired before atomic dispatch finalization") {
 		t.Fatalf("dispatch expiry race error = %v", err)
+	}
+	if consumed.Load() {
+		t.Fatal("expired finalization consumed the single-use permit")
 	}
 }
 
 func TestLaunchEffectAuthorizationEnvelopeRejectsPolicyChangeBeforeAtomicFinalization(t *testing.T) {
 	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
-	ctx.FinalizeDispatch = func(expected contracts.LaunchEffectDispatchFinalization) (contracts.LaunchEffectDispatchFinalizationResult, error) {
+	var consumed atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		expected contracts.LaunchEffectDispatchFinalization,
+		validate func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+		start func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+	) error {
 		observed := expected.Permit
 		observed.PolicyEpoch = "epoch-2"
-		return contracts.LaunchEffectDispatchFinalizationResult{CommittedAt: ctx.Now, ObservedAuthority: observed}, nil
+		if err := validate(contracts.LaunchEffectDispatchFinalizationObservation{ObservedAt: ctx.Now, ObservedAuthority: observed}); err != nil {
+			return err
+		}
+		consumed.Store(true)
+		return start(contracts.LaunchEffectDispatchFinalizationObservation{ObservedAt: ctx.Now, ObservedAuthority: observed})
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "authority changed before atomic dispatch finalization") {
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "authority changed before atomic dispatch finalization") {
 		t.Fatalf("policy epoch race error = %v", err)
+	}
+	if consumed.Load() {
+		t.Fatal("stale policy finalization consumed the single-use permit")
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopeRejectsStaleConnectorStartObservation(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(contracts.LaunchEffectDispatchFinalization, *contracts.LaunchEffectDispatchFinalizationObservation)
+		expect string
+	}{
+		{
+			name: "policy changed after permit consumption",
+			mutate: func(_ contracts.LaunchEffectDispatchFinalization, observation *contracts.LaunchEffectDispatchFinalizationObservation) {
+				observation.ObservedAuthority.PolicyEpoch = "epoch-2"
+			},
+			expect: "authority changed before atomic dispatch finalization",
+		},
+		{
+			name: "authority expired after permit consumption",
+			mutate: func(expected contracts.LaunchEffectDispatchFinalization, observation *contracts.LaunchEffectDispatchFinalizationObservation) {
+				observation.ObservedAt = expected.MustStartBefore
+			},
+			expect: "expired before atomic dispatch finalization",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
+			var consumed atomic.Bool
+			var networkStarted atomic.Bool
+			ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error {
+				networkStarted.Store(true)
+				return nil
+			}
+			ctx.FinalizeAndStartDispatch = func(
+				expected contracts.LaunchEffectDispatchFinalization,
+				validate func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+				start func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+			) error {
+				initial := contracts.LaunchEffectDispatchFinalizationObservation{ObservedAt: ctx.Now, ObservedAuthority: expected.Permit}
+				if err := validate(initial); err != nil {
+					return err
+				}
+				consumed.Store(true)
+				startObservation := initial
+				test.mutate(expected, &startObservation)
+				return start(startObservation)
+			}
+			err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx)
+			if err == nil || !strings.Contains(err.Error(), test.expect) {
+				t.Fatalf("stale connector start error = %v, want %q", err, test.expect)
+			}
+			if !consumed.Load() {
+				t.Fatal("test did not cross the permit CAS boundary")
+			}
+			if networkStarted.Load() {
+				t.Fatal("stale connector authority crossed the network seam")
+			}
+		})
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopeAcceptsEquivalentAtomicTimestamps(t *testing.T) {
+	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
+	ctx.FinalizeAndStartDispatch = func(
+		expected contracts.LaunchEffectDispatchFinalization,
+		validate func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+		start func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+	) error {
+		observed := expected.Permit
+		zone := time.FixedZone("equivalent-instant", 0)
+		observed.PermitIssuedAt = observed.PermitIssuedAt.In(zone)
+		observed.PermitExpiry = observed.PermitExpiry.In(zone)
+		observed.KernelVerdictIssuedAt = observed.KernelVerdictIssuedAt.In(zone)
+		observed.KernelVerdictExpiry = observed.KernelVerdictExpiry.In(zone)
+		observed.DispatchDeadline = observed.DispatchDeadline.In(zone)
+		if err := validate(contracts.LaunchEffectDispatchFinalizationObservation{ObservedAt: ctx.Now, ObservedAuthority: observed}); err != nil {
+			return err
+		}
+		return start(contracts.LaunchEffectDispatchFinalizationObservation{ObservedAt: ctx.Now, ObservedAuthority: observed})
+	}
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("equivalent source-owned timestamps were rejected: %v", err)
 	}
 }
 
@@ -354,17 +483,30 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 		ResolveEmergencyFence: func(tenantID, workspaceID string) (contracts.LaunchEmergencyFenceSnapshot, error) {
 			return contracts.LaunchEmergencyFenceSnapshot{TenantID: tenantID, WorkspaceID: workspaceID, EffectiveEpoch: envelope.EmergencyFenceEpoch}, nil
 		},
-		FinalizeDispatch: func(expected contracts.LaunchEffectDispatchFinalization) (contracts.LaunchEffectDispatchFinalizationResult, error) {
+		FinalizeAndStartDispatch: func(
+			expected contracts.LaunchEffectDispatchFinalization,
+			validate func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+			start func(contracts.LaunchEffectDispatchFinalizationObservation) error,
+		) error {
 			if expected.Permit != permit {
-				return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("permit compare-and-swap binding mismatch")
+				return fmt.Errorf("permit compare-and-swap binding mismatch")
 			}
-			if !now.Before(expected.MustCommitBefore) {
-				return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("dispatch authority expired")
+			if !now.Before(expected.MustStartBefore) {
+				return fmt.Errorf("dispatch authority expired")
+			}
+			if err := validate(contracts.LaunchEffectDispatchFinalizationObservation{ObservedAt: now, ObservedAuthority: permit}); err != nil {
+				return err
 			}
 			if !consumed.CompareAndSwap(false, true) {
-				return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("permit already consumed")
+				return fmt.Errorf("permit already consumed")
 			}
-			return contracts.LaunchEffectDispatchFinalizationResult{CommittedAt: now, ObservedAuthority: permit}, nil
+			return start(contracts.LaunchEffectDispatchFinalizationObservation{ObservedAt: now, ObservedAuthority: permit})
+		},
+		StartDispatch: func(expected contracts.LaunchEffectPermitBinding) error {
+			if expected != permit {
+				return fmt.Errorf("connector start permit binding mismatch")
+			}
+			return nil
 		},
 		Permit: permit,
 	}

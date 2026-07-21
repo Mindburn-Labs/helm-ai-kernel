@@ -492,7 +492,7 @@ var importRules = []importRule{
 
 	// llama.cpp — llama-server, image ghcr.io/ggml-org/llama.cpp.
 	{Kind: "local_llm_runtime", Vendor: "llamacpp", Language: "any",
-		Pattern:  regexp.MustCompile(`(?m)\bllama-server\b|ghcr\.io/ggml-org/llama\.cpp`),
+		Pattern:  regexp.MustCompile(`(?m)\bllama-server\b|(?:^|[^\w.-])ghcr\.io/ggml-org/llama\.cpp`),
 		Severity: "LOW", Note: "llama.cpp server — front it with the HELM proxy to govern inference"},
 	{Kind: "local_llm_runtime", Vendor: "llamacpp", Language: "python",
 		Pattern:  regexp.MustCompile(`(?m)^\s*(import\s+llama_cpp|from\s+llama_cpp\s+import)`),
@@ -505,15 +505,15 @@ var importRules = []importRule{
 
 	// Hugging Face TGI — text-generation-launcher (archived / maintenance since 2026-03).
 	{Kind: "local_llm_runtime", Vendor: "tgi", Language: "any",
-		Pattern:  regexp.MustCompile(`(?m)\btext-generation-launcher\b|ghcr\.io/huggingface/text-generation-inference`),
+		Pattern:  regexp.MustCompile(`(?m)\btext-generation-launcher\b|(?:^|[^\w.-])ghcr\.io/huggingface/text-generation-inference`),
 		Severity: "LOW", Note: "Hugging Face TGI (upstream archived / maintenance mode since 2026-03) — front it with the HELM proxy"},
 
 	// NVIDIA Triton + NIM.
 	{Kind: "local_llm_runtime", Vendor: "triton", Language: "any",
-		Pattern:  regexp.MustCompile(`(?m)nvcr\.io/nvidia/tritonserver|\btritonserver\b`),
+		Pattern:  regexp.MustCompile(`(?m)(?:^|[^\w.-])nvcr\.io/nvidia/tritonserver|\btritonserver\b`),
 		Severity: "LOW", Note: "NVIDIA Triton Inference Server — front the OpenAI-compatible endpoint with the HELM proxy"},
 	{Kind: "local_llm_runtime", Vendor: "nvidia-nim", Language: "any",
-		Pattern:  regexp.MustCompile(`(?m)nvcr\.io/nim/`),
+		Pattern:  regexp.MustCompile(`(?m)(?:^|[^\w.-])nvcr\.io/nim/`),
 		Severity: "LOW", Note: "NVIDIA NIM microservice — front it with the HELM proxy to govern inference"},
 
 	// LMDeploy — :23333, `lmdeploy serve api_server`.
@@ -578,7 +578,7 @@ var importRules = []importRule{
 
 	// LiteLLM proxy — :4000, image ghcr.io/berriai/litellm.
 	{Kind: "llm_gateway", Vendor: "litellm", Language: "any",
-		Pattern:  regexp.MustCompile(`(?m)ghcr\.io/berriai/litellm|\blitellm\s+--(config|port)\b|(localhost|127\.0\.0\.1):4000`),
+		Pattern:  regexp.MustCompile(`(?m)(?:^|[^\w.-])ghcr\.io/berriai/litellm|\blitellm\s+--(config|port)\b|(localhost|127\.0\.0\.1):4000`),
 		Severity: "MEDIUM", Note: "LiteLLM proxy — a routing layer that can reach models around HELM; keep HELM in front of it"},
 	{Kind: "llm_gateway", Vendor: "litellm", Language: "python",
 		Pattern:  regexp.MustCompile(`(?m)^\s*(import\s+litellm|from\s+litellm\s+import)`),
@@ -596,6 +596,6 @@ var importRules = []importRule{
 
 	// Open WebUI — image ghcr.io/open-webui/open-webui.
 	{Kind: "llm_gateway", Vendor: "open-webui", Language: "any",
-		Pattern:  regexp.MustCompile(`(?m)ghcr\.io/open-webui/open-webui`),
+		Pattern:  regexp.MustCompile(`(?m)(?:^|[^\w.-])ghcr\.io/open-webui/open-webui`),
 		Severity: "MEDIUM", Note: "Open WebUI — a front-end/router over local models; keep HELM in front of it"},
 }

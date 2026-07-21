@@ -36,6 +36,8 @@ spec:
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         # Egress enforcement: install the iptables REDIRECT before the workload
         # starts, so every outbound TCP is forced through the egress proxy sidecar.

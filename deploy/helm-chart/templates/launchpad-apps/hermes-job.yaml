@@ -42,6 +42,8 @@ spec:
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         {{- include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" $cfg.egressSidecar) | nindent 8 }}
       containers:
@@ -123,6 +125,8 @@ spec:
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       # Init container order matters: the egress-init installs the iptables
       # REDIRECT and runs to completion FIRST, then the egress proxy starts as a
       # restartPolicy:Always sidecar (Pod completion is driven solely by the main

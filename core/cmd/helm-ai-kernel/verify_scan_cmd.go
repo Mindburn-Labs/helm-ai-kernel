@@ -28,11 +28,15 @@ func runVerifyScanCmd(args []string, stdout, stderr io.Writer) int {
 	if err := cmd.Parse(normalized); err != nil {
 		return 2
 	}
+	// Only the positional actually used as the bundle is consumed; anything
+	// beyond it is a usage error, including when --bundle was supplied.
+	consumed := 0
 	if bundle == "" && cmd.NArg() > 0 {
 		bundle = cmd.Arg(0)
+		consumed = 1
 	}
-	if cmd.NArg() > 1 {
-		fmt.Fprintf(stderr, "Error: unexpected argument: %s\n", cmd.Arg(1))
+	if cmd.NArg() > consumed {
+		fmt.Fprintf(stderr, "Error: unexpected argument: %s\n", cmd.Arg(consumed))
 		return 2
 	}
 	if bundle == "" {

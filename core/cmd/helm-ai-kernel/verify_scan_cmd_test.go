@@ -130,6 +130,18 @@ func TestCLI_VerifyScan_UsageErrors(t *testing.T) {
 	}
 }
 
+// A verifiable bundle plus a stray positional must still be a usage error: with
+// a real pack the command would otherwise succeed and silently ignore the extra.
+func TestCLI_VerifyScan_RejectsExtraPositionalWithBundleFlag(t *testing.T) {
+	dir := t.TempDir()
+	pack := writeTestScanPack(t, dir)
+
+	var stdout, stderr bytes.Buffer
+	if rc := runVerifyScanCmd([]string{"--bundle", pack, "extra"}, &stdout, &stderr); rc != 2 {
+		t.Fatalf("expected rc=2 for an unexpected extra argument, got %d (out=%s)", rc, stdout.String())
+	}
+}
+
 func TestCLI_Verify_RejectsRiskScanPack(t *testing.T) {
 	dir := t.TempDir()
 	pack := writeTestScanPack(t, dir)

@@ -138,6 +138,7 @@ type LaunchProviderOffering struct {
 type LaunchProviderAction struct {
 	EffectID                     string   `json:"effect_id"`
 	ActionURN                    string   `json:"action_urn"`
+	ProviderDestinationHash      string   `json:"provider_destination_hash"`
 	ReconciliationMode           string   `json:"reconciliation_mode"`
 	IdempotencyMode              string   `json:"idempotency_mode"`
 	SupportedTransitionClasses   []string `json:"supported_transition_classes"`
@@ -193,9 +194,10 @@ type LaunchRoutePlacement struct {
 }
 
 type LaunchRouteActionBinding struct {
-	EffectID            string `json:"effect_id"`
-	ProviderActionURN   string `json:"provider_action_urn"`
-	ProviderPayloadHash string `json:"provider_payload_hash"`
+	EffectID                string `json:"effect_id"`
+	ProviderActionURN       string `json:"provider_action_urn"`
+	ProviderDestinationHash string `json:"provider_destination_hash"`
+	ProviderPayloadHash     string `json:"provider_payload_hash"`
 }
 
 type LaunchRouteDependency struct {
@@ -429,7 +431,7 @@ func ValidateLaunchProviderCapabilityProfile(profile LaunchProviderCapabilityPro
 	}
 	previous = ""
 	for _, action := range profile.Actions {
-		if action.EffectID == "" || action.EffectID <= previous || !launchEffectIsProviderMutation(action.EffectID) || action.ActionURN == "" {
+		if action.EffectID == "" || action.EffectID <= previous || !launchEffectIsProviderMutation(action.EffectID) || action.ActionURN == "" || !validLaunchSHA256(action.ProviderDestinationHash) {
 			return errors.New("launch provider actions must be registered, unique, and sorted by effect_id")
 		}
 		previous = action.EffectID
@@ -808,7 +810,7 @@ func validateLaunchPlacementActions(placement LaunchRoutePlacement, profile Laun
 	}
 	previous := ""
 	for _, binding := range placement.ActionBindings {
-		if binding.EffectID == "" || binding.EffectID <= previous || binding.ProviderActionURN == "" || !validLaunchSHA256(binding.ProviderPayloadHash) {
+		if binding.EffectID == "" || binding.EffectID <= previous || binding.ProviderActionURN == "" || !validLaunchSHA256(binding.ProviderDestinationHash) || !validLaunchSHA256(binding.ProviderPayloadHash) {
 			return fmt.Errorf("launch route placement %s actions must be complete, unique, and sorted", placement.PlacementID)
 		}
 		previous = binding.EffectID
@@ -816,11 +818,11 @@ func validateLaunchPlacementActions(placement LaunchRoutePlacement, profile Laun
 			return fmt.Errorf("launch effect %s is not registered in the canonical dispatch catalog", binding.EffectID)
 		}
 		action, ok := profileActions[binding.EffectID]
-		if !ok || action.ActionURN != binding.ProviderActionURN {
+		if !ok || action.ActionURN != binding.ProviderActionURN || !launchConstantEqual(action.ProviderDestinationHash, binding.ProviderDestinationHash) {
 			return fmt.Errorf("launch route action %s is absent from provider profile", binding.EffectID)
 		}
 		entry, ok := payloadEntries[launchTupleKey(binding.EffectID, binding.ProviderActionURN)]
-		if !ok || !launchConstantEqual(entry.PayloadHash, binding.ProviderPayloadHash) {
+		if !ok || !launchConstantEqual(entry.DestinationHash, binding.ProviderDestinationHash) || !launchConstantEqual(entry.PayloadHash, binding.ProviderPayloadHash) {
 			return fmt.Errorf("launch route action %s does not bind the provider payload set", binding.EffectID)
 		}
 	}

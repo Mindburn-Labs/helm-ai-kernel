@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -116,6 +117,19 @@ type LaunchEffectPermitBinding struct {
 	PolicyEpoch             string
 	EmergencyFenceEpoch     int64
 	DispatchDeadline        time.Time
+	RouteBindingRef         string
+	RouteBindingHash        string
+	RoutePlacementID        string
+	ProviderID              string
+	ProviderAccountRef      string
+	ProviderAccountHash     string
+	RegionID                string
+	OfferingID              string
+	ProviderConnectorID     string
+	ProviderConnectorHash   string
+	ProviderActionURN       string
+	ProviderDestinationHash string
+	ProviderPayloadHash     string
 	SingleUse               bool
 }
 
@@ -125,6 +139,25 @@ type LaunchEffectPermitBinding struct {
 type LaunchEffectDispatchFinalization struct {
 	Permit          LaunchEffectPermitBinding
 	MustStartBefore time.Time
+}
+
+// LaunchEffectDispatchDestination is the exact provider route presented to the
+// network seam. EndpointURI is transmitted, while only its approval-bound hash
+// is retained in the permit and evidence contracts.
+type LaunchEffectDispatchDestination struct {
+	EndpointURI             string
+	RouteBindingRef         string
+	RouteBindingHash        string
+	RoutePlacementID        string
+	ProviderID              string
+	ProviderAccountRef      string
+	ProviderAccountHash     string
+	RegionID                string
+	OfferingID              string
+	ProviderConnectorID     string
+	ProviderConnectorHash   string
+	ProviderActionURN       string
+	ProviderDestinationHash string
 }
 
 // LaunchEffectDispatchRequest contains the exact immutable bytes that cross
@@ -138,6 +171,7 @@ type LaunchEffectDispatchRequest struct {
 	RequestBody     []byte
 	ArgsC14N        []byte
 	ProviderPayload []byte
+	Destination     LaunchEffectDispatchDestination
 }
 
 // LaunchEffectDispatchFinalizationObservation is independently rebuilt by the
@@ -145,11 +179,12 @@ type LaunchEffectDispatchRequest struct {
 // serialization fence. A caller-provided timestamp or copied permit is never
 // accepted as fresh authority.
 type LaunchEffectDispatchFinalizationObservation struct {
-	ObservedAt          time.Time
-	ObservedAuthority   LaunchEffectPermitBinding
-	RequestBodyHash     string
-	ArgsC14NHash        string
-	ProviderPayloadHash string
+	ObservedAt              time.Time
+	ObservedAuthority       LaunchEffectPermitBinding
+	RequestBodyHash         string
+	ArgsC14NHash            string
+	ProviderDestinationHash string
+	ProviderPayloadHash     string
 }
 
 // LaunchEffectApprovalAuthority is independently loaded from the canonical
@@ -224,7 +259,10 @@ type LaunchEffectEnvelopeVerificationContext struct {
 	// permit when validate fails. A separate time or state pre-read is
 	// insufficient, and returning a bearer grant for later use is forbidden.
 	//
-	// StartDispatch is the connector's bounded last pre-effect seam. Crossing a
+	// StartDispatch is the connector's bounded last pre-effect seam. It MUST
+	// enforce request.Destination as the credential-broker account binding and
+	// egress destination; the certified connector may not derive or substitute
+	// an account, endpoint, route, action, or connector identity. Crossing a
 	// network sink anywhere else is not authorized by this contract. The
 	// finalizer must resolve NOT_STARTED versus UNKNOWN according to the durable
 	// reservation lifecycle if start returns an error.
@@ -341,7 +379,7 @@ func verifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	if err := verifyLaunchPermitBinding(envelope, ctx.Permit); err != nil {
 		return err
 	}
-	if _, _, err := resolveAndVerifyLaunchDispatchRequest(envelope, ctx.Permit, ctx); err != nil {
+	if _, _, _, err := resolveAndVerifyLaunchDispatchRequest(envelope, ctx.Permit, ctx); err != nil {
 		return err
 	}
 	if err := verifyLaunchCanonicalApproval(envelope, ctx); err != nil {
@@ -490,16 +528,17 @@ func resolveAndVerifyLaunchDispatchFinalizationObservation(
 	if err := fresh.VerifyDependencyState(envelope.DependencySetRef, envelope.DependencySetHash); err != nil {
 		return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, fmt.Errorf("launch authorization envelope dependency state changed before atomic dispatch finalization: %w", err)
 	}
-	request, providerPayloadHash, err := resolveAndVerifyLaunchDispatchRequest(envelope, permit, fresh)
+	request, providerDestinationHash, providerPayloadHash, err := resolveAndVerifyLaunchDispatchRequest(envelope, permit, fresh)
 	if err != nil {
 		return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, err
 	}
 	return LaunchEffectDispatchFinalizationObservation{
-		ObservedAt:          observedAt,
-		ObservedAuthority:   permit,
-		RequestBodyHash:     envelope.RequestBodyHash,
-		ArgsC14NHash:        envelope.ArgsC14NHash,
-		ProviderPayloadHash: providerPayloadHash,
+		ObservedAt:              observedAt,
+		ObservedAuthority:       permit,
+		RequestBodyHash:         envelope.RequestBodyHash,
+		ArgsC14NHash:            envelope.ArgsC14NHash,
+		ProviderDestinationHash: providerDestinationHash,
+		ProviderPayloadHash:     providerPayloadHash,
 	}, request, nil
 }
 
@@ -507,13 +546,13 @@ func resolveAndVerifyLaunchDispatchRequest(
 	envelope LaunchEffectAuthorizationEnvelope,
 	permit LaunchEffectPermitBinding,
 	ctx LaunchEffectEnvelopeVerificationContext,
-) (LaunchEffectDispatchRequest, string, error) {
+) (LaunchEffectDispatchRequest, string, string, error) {
 	if ctx.ResolveDispatchRequest == nil {
-		return LaunchEffectDispatchRequest{}, "", errors.New("launch authorization envelope requires exact source-owned dispatch bytes")
+		return LaunchEffectDispatchRequest{}, "", "", errors.New("launch authorization envelope requires exact source-owned dispatch bytes")
 	}
 	request, err := ctx.ResolveDispatchRequest(permit)
 	if err != nil {
-		return LaunchEffectDispatchRequest{}, "", fmt.Errorf("resolve launch authorization envelope dispatch bytes: %w", err)
+		return LaunchEffectDispatchRequest{}, "", "", fmt.Errorf("resolve launch authorization envelope dispatch bytes: %w", err)
 	}
 	// Clone before hashing. The same private copies are handed to StartDispatch,
 	// preventing a source buffer from being mutated between verification and the
@@ -523,26 +562,70 @@ func resolveAndVerifyLaunchDispatchRequest(
 	request.ProviderPayload = append([]byte(nil), request.ProviderPayload...)
 	requestBodyHash := canonicalize.ComputeArtifactHash(request.RequestBody)
 	if !launchConstantEqual(requestBodyHash, envelope.RequestBodyHash) || !launchConstantEqual(requestBodyHash, permit.RequestBodyHash) {
-		return LaunchEffectDispatchRequest{}, "", errors.New("launch authorization envelope exact dispatch body does not match its approved request hash")
+		return LaunchEffectDispatchRequest{}, "", "", errors.New("launch authorization envelope exact dispatch body does not match its approved request hash")
 	}
 	argsC14NHash := canonicalize.ComputeArtifactHash(request.ArgsC14N)
 	if !launchConstantEqual(argsC14NHash, envelope.ArgsC14NHash) || !launchConstantEqual(argsC14NHash, permit.ArgsC14NHash) {
-		return LaunchEffectDispatchRequest{}, "", errors.New("launch authorization envelope exact dispatch arguments do not match their approved canonical hash")
+		return LaunchEffectDispatchRequest{}, "", "", errors.New("launch authorization envelope exact dispatch arguments do not match their approved canonical hash")
 	}
+	providerDestinationHash := ""
 	providerPayloadHash := ""
 	if launchEffectIsProviderMutation(envelope.EffectID) {
 		expected, ok := envelope.Input["provider_payload_hash"].(string)
 		if !ok || !validLaunchSHA256(expected) {
-			return LaunchEffectDispatchRequest{}, "", errors.New("launch authorization envelope provider mutation has no canonical payload hash")
+			return LaunchEffectDispatchRequest{}, "", "", errors.New("launch authorization envelope provider mutation has no canonical payload hash")
 		}
 		providerPayloadHash = canonicalize.ComputeArtifactHash(request.ProviderPayload)
-		if !launchConstantEqual(providerPayloadHash, expected) {
-			return LaunchEffectDispatchRequest{}, "", errors.New("launch authorization envelope exact provider payload does not match its approved route hash")
+		if !launchConstantEqual(providerPayloadHash, expected) || !launchConstantEqual(providerPayloadHash, permit.ProviderPayloadHash) {
+			return LaunchEffectDispatchRequest{}, "", "", errors.New("launch authorization envelope exact provider payload does not match its approved route hash")
 		}
-	} else if len(request.ProviderPayload) != 0 {
-		return LaunchEffectDispatchRequest{}, "", errors.New("launch authorization envelope non-provider effect supplied provider payload bytes")
+		providerDestinationHash, err = verifyLaunchDispatchDestination(envelope, permit, request.Destination)
+		if err != nil {
+			return LaunchEffectDispatchRequest{}, "", "", err
+		}
+	} else if len(request.ProviderPayload) != 0 || request.Destination != (LaunchEffectDispatchDestination{}) {
+		return LaunchEffectDispatchRequest{}, "", "", errors.New("launch authorization envelope non-provider effect supplied provider dispatch authority")
 	}
-	return request, providerPayloadHash, nil
+	return request, providerDestinationHash, providerPayloadHash, nil
+}
+
+func verifyLaunchDispatchDestination(envelope LaunchEffectAuthorizationEnvelope, permit LaunchEffectPermitBinding, destination LaunchEffectDispatchDestination) (string, error) {
+	if destination.EndpointURI == "" || strings.ContainsAny(destination.EndpointURI, "\r\n") {
+		return "", errors.New("launch authorization envelope provider destination URI is missing or unsafe")
+	}
+	parsed, err := url.Parse(destination.EndpointURI)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
+		return "", errors.New("launch authorization envelope provider destination must be an absolute credential-free HTTPS URI")
+	}
+	destinationHash := canonicalize.ComputeArtifactHash([]byte(destination.EndpointURI))
+	inputBindings := []struct {
+		name  string
+		value string
+		bound string
+	}{
+		{"route_binding_ref", destination.RouteBindingRef, permit.RouteBindingRef},
+		{"route_binding_hash", destination.RouteBindingHash, permit.RouteBindingHash},
+		{"route_placement_id", destination.RoutePlacementID, permit.RoutePlacementID},
+		{"provider", destination.ProviderID, permit.ProviderID},
+		{"provider_account_ref", destination.ProviderAccountRef, permit.ProviderAccountRef},
+		{"provider_account_hash", destination.ProviderAccountHash, permit.ProviderAccountHash},
+		{"region", destination.RegionID, permit.RegionID},
+		{"provider_offering_id", destination.OfferingID, permit.OfferingID},
+		{"provider_connector_id", destination.ProviderConnectorID, permit.ProviderConnectorID},
+		{"provider_connector_contract_hash", destination.ProviderConnectorHash, permit.ProviderConnectorHash},
+		{"provider_action_urn", destination.ProviderActionURN, permit.ProviderActionURN},
+		{"provider_destination_hash", destination.ProviderDestinationHash, permit.ProviderDestinationHash},
+	}
+	for _, binding := range inputBindings {
+		inputValue, ok := envelope.Input[binding.name].(string)
+		if !ok || inputValue == "" || binding.value == "" || !launchConstantEqual(inputValue, binding.value) || !launchConstantEqual(binding.value, binding.bound) {
+			return "", fmt.Errorf("launch authorization envelope exact provider destination does not match approved %s", binding.name)
+		}
+	}
+	if !launchConstantEqual(destinationHash, destination.ProviderDestinationHash) {
+		return "", errors.New("launch authorization envelope exact provider destination URI does not match its approved hash")
+	}
+	return destinationHash, nil
 }
 
 func verifyLaunchCurrentConnectorRelease(authority ApprovalConnectorAuthority, ctx LaunchEffectEnvelopeVerificationContext) error {
@@ -872,8 +955,13 @@ func verifyLaunchProviderRouteBinding(envelope LaunchEffectAuthorizationEnvelope
 				break
 			}
 		}
-		if action == nil || !launchInputMatchesString(envelope.Input, "provider_action_urn", action.ProviderActionURN) || !launchInputMatchesString(envelope.Input, "provider_payload_hash", action.ProviderPayloadHash) {
-			return errors.New("launch provider input action or payload is absent from route placement")
+		if action == nil ||
+			!launchInputMatchesString(envelope.Input, "provider_offering_id", placement.OfferingID) ||
+			!launchInputMatchesString(envelope.Input, "region", placement.RegionID) ||
+			!launchInputMatchesString(envelope.Input, "provider_action_urn", action.ProviderActionURN) ||
+			!launchInputMatchesString(envelope.Input, "provider_destination_hash", action.ProviderDestinationHash) ||
+			!launchInputMatchesString(envelope.Input, "provider_payload_hash", action.ProviderPayloadHash) {
+			return errors.New("launch provider input destination, action, or payload is absent from route placement")
 		}
 	}
 	return nil
@@ -1140,6 +1228,38 @@ func verifyLaunchPermitBinding(envelope LaunchEffectAuthorizationEnvelope, permi
 		!verdictIssuedAt.Equal(permit.KernelVerdictIssuedAt) || !verdictExpiry.Equal(permit.KernelVerdictExpiry) ||
 		!deadline.Equal(permit.DispatchDeadline) {
 		return errors.New("launch authorization envelope permit time binding mismatch")
+	}
+	if launchEffectIsProviderMutation(envelope.EffectID) {
+		providerBindings := []struct {
+			name  string
+			bound string
+		}{
+			{"route_binding_ref", permit.RouteBindingRef},
+			{"route_binding_hash", permit.RouteBindingHash},
+			{"route_placement_id", permit.RoutePlacementID},
+			{"provider", permit.ProviderID},
+			{"provider_account_ref", permit.ProviderAccountRef},
+			{"provider_account_hash", permit.ProviderAccountHash},
+			{"region", permit.RegionID},
+			{"provider_offering_id", permit.OfferingID},
+			{"provider_connector_id", permit.ProviderConnectorID},
+			{"provider_connector_contract_hash", permit.ProviderConnectorHash},
+			{"provider_action_urn", permit.ProviderActionURN},
+			{"provider_destination_hash", permit.ProviderDestinationHash},
+			{"provider_payload_hash", permit.ProviderPayloadHash},
+		}
+		for _, binding := range providerBindings {
+			value, ok := envelope.Input[binding.name].(string)
+			if !ok || value == "" || binding.bound == "" || !launchConstantEqual(value, binding.bound) {
+				return fmt.Errorf("launch authorization envelope permit binding mismatch for %s", binding.name)
+			}
+		}
+	} else if permit.RouteBindingRef != "" || permit.RouteBindingHash != "" || permit.RoutePlacementID != "" ||
+		permit.ProviderID != "" || permit.ProviderAccountRef != "" || permit.ProviderAccountHash != "" ||
+		permit.RegionID != "" || permit.OfferingID != "" || permit.ProviderConnectorID != "" ||
+		permit.ProviderConnectorHash != "" || permit.ProviderActionURN != "" || permit.ProviderDestinationHash != "" ||
+		permit.ProviderPayloadHash != "" {
+		return errors.New("launch authorization envelope non-provider permit carries provider dispatch authority")
 	}
 	return nil
 }

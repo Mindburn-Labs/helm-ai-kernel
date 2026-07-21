@@ -232,6 +232,14 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsInvalidTimeWindowsAndPermitBind
 			t.Fatalf("permit field mismatch error = %v", err)
 		}
 	})
+
+	t.Run("provider account permit mismatch", func(t *testing.T) {
+		envelope, ctx, _, _, _ := launchEffectAuthorizationFixtureAt(t, 0)
+		ctx.Permit.ProviderAccountRef = "account:other"
+		if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "permit binding mismatch for provider_account_ref") {
+			t.Fatalf("provider account permit mismatch error = %v", err)
+		}
+	})
 }
 
 func TestLaunchEffectAuthorizationEnvelopeRejectsFenceReplay(t *testing.T) {
@@ -342,6 +350,54 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsDispatchByteDriftAtConnectorSea
 				request.ProviderPayload[0] ^= 1
 			},
 		},
+		{
+			name:         "provider endpoint",
+			fixtureIndex: 0,
+			expect:       "destination URI",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.Destination.EndpointURI = "https://api.other-cloud.invalid/v1"
+			},
+		},
+		{
+			name:         "provider account",
+			fixtureIndex: 0,
+			expect:       "approved provider_account_ref",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.Destination.ProviderAccountRef = "account:other"
+			},
+		},
+		{
+			name:         "route placement",
+			fixtureIndex: 0,
+			expect:       "approved route_placement_id",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.Destination.RoutePlacementID = "placement-other"
+			},
+		},
+		{
+			name:         "provider connector",
+			fixtureIndex: 0,
+			expect:       "approved provider_connector_id",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.Destination.ProviderConnectorID = "connector-other"
+			},
+		},
+		{
+			name:         "provider action",
+			fixtureIndex: 0,
+			expect:       "approved provider_action_urn",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.Destination.ProviderActionURN = "urn:helm:provider:other"
+			},
+		},
+		{
+			name:         "non-provider destination",
+			fixtureIndex: 5,
+			expect:       "non-provider effect supplied provider dispatch authority",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.Destination.EndpointURI = "https://api.other-cloud.invalid/v1"
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -375,6 +431,28 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsDispatchByteDriftAtConnectorSea
 			}
 			if networkStarted.Load() {
 				t.Fatal("changed dispatch bytes crossed the network seam")
+			}
+		})
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopeRejectsUnsafeProviderDestinationURI(t *testing.T) {
+	for name, endpoint := range map[string]string{
+		"plaintext":   "http://api.digitalocean.invalid/v1",
+		"credentials": "https://user:secret@api.digitalocean.invalid/v1",
+		"fragment":    "https://api.digitalocean.invalid/v1#other",
+		"newline":     "https://api.digitalocean.invalid/v1\r\nX-Test: injected",
+	} {
+		t.Run(name, func(t *testing.T) {
+			envelope, ctx, _, _, _ := launchEffectAuthorizationFixtureAt(t, 0)
+			resolve := ctx.ResolveDispatchRequest
+			ctx.ResolveDispatchRequest = func(permit contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
+				request, err := resolve(permit)
+				request.Destination.EndpointURI = endpoint
+				return request, err
+			}
+			if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "provider destination") {
+				t.Fatalf("unsafe provider destination error = %v", err)
 			}
 		})
 	}
@@ -756,6 +834,25 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 	}
 	if launchTestProviderMutation(fixture.effectID) {
 		dispatchRequest.ProviderPayload = launchProviderPayloadFixture(fixture.effectID)
+		dispatchRequest.Destination = contracts.LaunchEffectDispatchDestination{
+			EndpointURI:             launchProviderDestinationFixture(launchInputString(input, "provider")),
+			RouteBindingRef:         launchInputString(input, "route_binding_ref"),
+			RouteBindingHash:        launchInputString(input, "route_binding_hash"),
+			RoutePlacementID:        launchInputString(input, "route_placement_id"),
+			ProviderID:              launchInputString(input, "provider"),
+			ProviderAccountRef:      launchInputString(input, "provider_account_ref"),
+			ProviderAccountHash:     launchInputString(input, "provider_account_hash"),
+			RegionID:                launchInputString(input, "region"),
+			OfferingID:              launchInputString(input, "provider_offering_id"),
+			ProviderConnectorID:     launchInputString(input, "provider_connector_id"),
+			ProviderConnectorHash:   launchInputString(input, "provider_connector_contract_hash"),
+			ProviderActionURN:       launchInputString(input, "provider_action_urn"),
+			ProviderDestinationHash: launchInputString(input, "provider_destination_hash"),
+		}
+	}
+	expectedProviderDestinationHash := ""
+	if dispatchRequest.Destination.EndpointURI != "" {
+		expectedProviderDestinationHash = canonicalize.ComputeArtifactHash([]byte(dispatchRequest.Destination.EndpointURI))
 	}
 	expectedProviderPayloadHash := ""
 	if len(dispatchRequest.ProviderPayload) != 0 {
@@ -918,7 +1015,7 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 			if expected.Permit != permit || observation.ObservedAuthority != permit || observation.ObservedAt.Before(now) {
 				return fmt.Errorf("dispatch commit binding mismatch")
 			}
-			if observation.RequestBodyHash != permit.RequestBodyHash || observation.ArgsC14NHash != permit.ArgsC14NHash || observation.ProviderPayloadHash != expectedProviderPayloadHash {
+			if observation.RequestBodyHash != permit.RequestBodyHash || observation.ArgsC14NHash != permit.ArgsC14NHash || observation.ProviderDestinationHash != expectedProviderDestinationHash || observation.ProviderPayloadHash != expectedProviderPayloadHash {
 				return fmt.Errorf("dispatch commit payload binding mismatch")
 			}
 			return nil
@@ -950,7 +1047,7 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 			if expected != permit {
 				return fmt.Errorf("connector start permit binding mismatch")
 			}
-			if !bytes.Equal(request.RequestBody, dispatchRequest.RequestBody) || !bytes.Equal(request.ArgsC14N, dispatchRequest.ArgsC14N) || !bytes.Equal(request.ProviderPayload, dispatchRequest.ProviderPayload) {
+			if !bytes.Equal(request.RequestBody, dispatchRequest.RequestBody) || !bytes.Equal(request.ArgsC14N, dispatchRequest.ArgsC14N) || !bytes.Equal(request.ProviderPayload, dispatchRequest.ProviderPayload) || request.Destination != dispatchRequest.Destination {
 				return fmt.Errorf("connector start dispatch bytes mismatch")
 			}
 			return nil
@@ -970,7 +1067,7 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 }
 
 func launchPermitBinding(envelope contracts.LaunchEffectAuthorizationEnvelope, issuedAt, expiry, verdictIssuedAt, verdictExpiry, deadline time.Time) contracts.LaunchEffectPermitBinding {
-	return contracts.LaunchEffectPermitBinding{
+	permit := contracts.LaunchEffectPermitBinding{
 		EffectPermitRef: envelope.EffectPermitRef, EffectPermitHash: envelope.EffectPermitHash, PermitNonce: envelope.PermitNonce,
 		ProofSessionRef: envelope.ProofSessionRef, EvidenceReservationRef: envelope.EvidenceReservationRef,
 		PermitIssuedAt: issuedAt, PermitExpiry: expiry, KernelVerdictRef: envelope.KernelVerdictRef, KernelVerdictHash: envelope.KernelVerdictHash,
@@ -987,6 +1084,22 @@ func launchPermitBinding(envelope contracts.LaunchEffectAuthorizationEnvelope, i
 		ActionURN: envelope.ActionURN, RequestBodyHash: envelope.RequestBodyHash, ArgsC14NHash: envelope.ArgsC14NHash,
 		PolicyEpoch: envelope.PolicyEpoch, EmergencyFenceEpoch: envelope.EmergencyFenceEpoch, DispatchDeadline: deadline, SingleUse: true,
 	}
+	if launchTestProviderMutation(envelope.EffectID) {
+		permit.RouteBindingRef = launchInputString(envelope.Input, "route_binding_ref")
+		permit.RouteBindingHash = launchInputString(envelope.Input, "route_binding_hash")
+		permit.RoutePlacementID = launchInputString(envelope.Input, "route_placement_id")
+		permit.ProviderID = launchInputString(envelope.Input, "provider")
+		permit.ProviderAccountRef = launchInputString(envelope.Input, "provider_account_ref")
+		permit.ProviderAccountHash = launchInputString(envelope.Input, "provider_account_hash")
+		permit.RegionID = launchInputString(envelope.Input, "region")
+		permit.OfferingID = launchInputString(envelope.Input, "provider_offering_id")
+		permit.ProviderConnectorID = launchInputString(envelope.Input, "provider_connector_id")
+		permit.ProviderConnectorHash = launchInputString(envelope.Input, "provider_connector_contract_hash")
+		permit.ProviderActionURN = launchInputString(envelope.Input, "provider_action_urn")
+		permit.ProviderDestinationHash = launchInputString(envelope.Input, "provider_destination_hash")
+		permit.ProviderPayloadHash = launchInputString(envelope.Input, "provider_payload_hash")
+	}
+	return permit
 }
 
 func launchApprovalAuthority(t *testing.T, effectID string, input map[string]any, effectHash string, now time.Time, principal, audience, trustRootID string) (contracts.LaunchEffectApprovalAuthority, string) {
@@ -1160,6 +1273,7 @@ func bindLaunchInputToRoute(t *testing.T, input map[string]any, effectID string,
 		"provider_account_ref":             placement.ProviderAccountRef,
 		"provider_account_hash":            placement.ProviderAccountHash,
 		"region":                           placement.RegionID,
+		"provider_offering_id":             placement.OfferingID,
 		"jurisdiction":                     placement.Jurisdiction,
 		"route_binding_ref":                fixture.route.RouteID,
 		"route_binding_hash":               routeHash,
@@ -1204,6 +1318,7 @@ func bindLaunchInputToRoute(t *testing.T, input map[string]any, effectID string,
 	for _, action := range placement.ActionBindings {
 		if action.EffectID == effectID {
 			setLaunchInputIfPresent(input, "provider_action_urn", action.ProviderActionURN)
+			setLaunchInputIfPresent(input, "provider_destination_hash", action.ProviderDestinationHash)
 			setLaunchInputIfPresent(input, "provider_payload_hash", action.ProviderPayloadHash)
 			return
 		}
@@ -1215,6 +1330,11 @@ func setLaunchInputIfPresent(input map[string]any, field string, value any) {
 	if _, ok := input[field]; ok {
 		input[field] = value
 	}
+}
+
+func launchInputString(input map[string]any, field string) string {
+	value, _ := input[field].(string)
+	return value
 }
 
 func launchTestProviderMutation(effectID string) bool {

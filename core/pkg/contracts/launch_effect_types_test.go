@@ -1,3 +1,5 @@
+// quantum_posture: the envelope and receipt fixtures use classical Ed25519
+// signatures only and make no hybrid or post-quantum protection claim.
 package contracts_test
 
 import (
@@ -357,6 +359,81 @@ func TestLaunchActivationAndCompensationRepresentStatefulResourcesWithoutDeploym
 	}
 	if err := contracts.ValidateLaunchEffectInputSemantics(contracts.EffectTypeProviderRollback, rollback); err != nil {
 		t.Fatalf("data restore failed semantic validation: %v", err)
+	}
+}
+
+func TestLaunchEffectPreviewEnvelopeSchema(t *testing.T) {
+	fixture := launchInputFixtures()[0]
+	key, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, fixture.input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := launchHash("e")
+	envelope := map[string]any{
+		"schema_version":               "launch_effect_envelope.v1",
+		"effect_id":                    fixture.effectID,
+		"tenant_id":                    "tenant-1",
+		"workspace_id":                 "workspace-1",
+		"mission_id":                   "mission-1",
+		"principal":                    "spiffe://helm/data-plane-1",
+		"audience":                     "launch.dispatch",
+		"kernel_trust_root_id":         "kernel-root-1",
+		"effect_ordinal":               1,
+		"input_schema_ref":             fixture.schema,
+		"input_schema_hash":            h,
+		"input":                        fixture.input,
+		"input_hash":                   key,
+		"idempotency_key":              key,
+		"plan_hash":                    launchHash("a"),
+		"approval_artifact_ref":        "approval-1",
+		"approval_artifact_hash":       launchHash("b"),
+		"approval_consumption_ref":     "approval-consumption-1",
+		"approval_consumption_hash":    launchHash("e"),
+		"dispatch_admission_ref":       "dispatch-admission-1",
+		"dispatch_admission_hash":      launchHash("1"),
+		"connector_authority_ref":      "connector-release-authority-1",
+		"connector_authority_hash":     launchHash("2"),
+		"dependency_set_ref":           "dependency-set-1",
+		"dependency_set_hash":          launchHash("f"),
+		"policy_epoch":                 "epoch-1",
+		"emergency_fence_epoch":        4,
+		"verdict":                      "ALLOW",
+		"kernel_verdict_ref":           "verdict-1",
+		"kernel_verdict_issued_at":     "2026-07-18T11:59:00Z",
+		"kernel_verdict_expiry":        "2026-07-18T12:06:00Z",
+		"kernel_verdict_signer_key_id": "kernel-key-1",
+		"kernel_verdict_hash":          launchHash("c"),
+		"kernel_verdict_signature":     "ed25519:" + strings.Repeat("a", 128),
+		"effect_permit_ref":            "permit-1",
+		"effect_permit_hash":           launchHash("0"),
+		"permit_nonce":                 "0123456789abcdefABCDEF",
+		"permit_issued_at":             "2026-07-18T12:00:00Z",
+		"permit_expiry":                "2026-07-18T12:05:00Z",
+		"proof_session_ref":            "proof-session-1",
+		"evidence_reservation_ref":     "evidence-reservation-1",
+		"connector_id":                 contracts.LaunchConnectorProviderRoute,
+		"connector_contract_hash":      launchHash("d"),
+		"action_urn":                   contracts.LaunchActionProviderProvision,
+		"request_body_hash":            key,
+		"args_c14n_hash":               key,
+		"dispatch_deadline":            "2026-07-18T12:04:00Z",
+		"replay_hint":                  "single_use_permit",
+	}
+	envelopeSchema := compileSchema(t, "effects/launch/launch_effect_envelope.v1.json")
+	if err := envelopeSchema.Validate(envelope); err != nil {
+		t.Fatalf("valid authorization envelope rejected: %v", err)
+	}
+	incompleteEnvelope := cloneLaunchInput(t, envelope)
+	incompleteInput := cloneLaunchInput(t, fixture.input)
+	delete(incompleteInput, "resource_graph_hash")
+	incompleteEnvelope["input"] = incompleteInput
+	if err := envelopeSchema.Validate(incompleteEnvelope); err == nil {
+		t.Fatal("authorization envelope schema accepted an input that violates its effect-specific schema")
+	}
+	wrongSchemaRef := cloneLaunchInput(t, envelope)
+	wrongSchemaRef["input_schema_ref"] = "effects/launch/provider_teardown.v1.json"
+	if err := envelopeSchema.Validate(wrongSchemaRef); err == nil {
+		t.Fatal("authorization envelope schema accepted a mismatched input schema reference")
 	}
 }
 

@@ -15,10 +15,10 @@ files. It is not a complete copy of any GitHub release.
 
 ## Current Release Target
 
-The current source release target is `v0.7.3`. Its expected visible release
+The current source release target is `v0.7.4`. Its expected visible release
 assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
-`v0.7.3.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.7.4.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `multiple.intoto.jsonl`, and matching
 `*.cosign.bundle` files for every primary asset.
@@ -26,16 +26,16 @@ assets are platform binaries for Darwin, Linux, and Windows,
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
 
-## v0.7.3 Asset Contract
+## v0.7.4 Asset Contract
 
-`make release-assets` stages the `v0.7.3` asset set under
+`make release-assets` stages the `v0.7.4` asset set under
 `dist/release-assets/`, and the release workflow must attach that set to the
 GitHub release before publication is claimed:
 
 - five CLI binaries
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.7.3.openvex.json`
+- `v0.7.4.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`

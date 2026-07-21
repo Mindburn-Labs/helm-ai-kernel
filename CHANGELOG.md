@@ -89,6 +89,39 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+## [0.7.4] - 2026-07-21
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.4>.
+
+<!-- quantum_posture: v0.7.4 records use classical Ed25519 signatures and SHA-256 content hashes; none add a post-quantum cryptographic control. -->
+
+- Added the **Boundary Enforcement Profile**: `helm-ai-kernel boundary profile
+  compile` emits systemd hardening drop-ins, a default-drop nftables ruleset,
+  cgroup limits and device permits from a hash-bound `boundary_profile_input.v1`
+  document, sealed by a signed `profile_compile_receipt.v1`. HELM compiles and
+  attests; systemd and nftables enforce — this is not a host-level enforcement
+  claim, and no eBPF, seccomp, TPM, hardware-enclave or packet-blocking control
+  is added.
+- `boundary profile attest` reads live OS posture (systemd unit properties, the
+  nftables ruleset, cgroup-v2 limits) and emits a hash-sealed
+  `posture_attestation.v1` recording `MATCH` or `DRIFT` with per-check
+  expected/observed diffs. `--enforce` exits non-zero on anything but a sealed
+  `MATCH`, so a systemd dependency can refuse to start the gateway. Drift is
+  attested at service (re)start and on demand, not monitored continuously.
+- `boundary profile verify` verifies a compile receipt, artifact set and
+  attestation entirely offline; `boundary profile bundle-verify` verifies a
+  signed offline update bundle against an `update_bundle_manifest.v1`. The
+  update-bundle surface is a format and verifier only — no build tooling and no
+  OTA mechanism.
+- Added sealed-appliance reference units under `deploy/appliance/` (a short-lived
+  privileged attestation oneshot gating a fully unprivileged gateway) and the
+  deployment guide `docs/deployment/boundary-enforcement-profile.md`.
+- Added four `protocols/json-schemas/boundary/` schemas (profile input, compile
+  receipt, posture attestation, update-bundle manifest) with schema-parity tests
+  binding them to the Go validators, plus two cross-runtime golden vector packs
+  (`boundary-profile-v1`, `update-bundle-v1`) verified by independent Python
+  implementations and wired into `make verify-fixtures`.
+
 ## [0.7.3] - 2026-07-20
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.3>.

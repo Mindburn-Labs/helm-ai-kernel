@@ -94,14 +94,14 @@ EvidencePacks are portable proof bundles for local review and offline replay.
 
 ## Release Evidence
 
-Current source release target: `v0.7.3`.
+Current source release target: `v0.7.4`.
 
-The `v0.7.3` release is complete only after the listed local verification
+The `v0.7.4` release is complete only after the listed local verification
 assets appear on the GitHub release and verify locally.
 
 Check the GitHub release and local verification artifacts together:
 
-- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.3`
-- v0.7.3 Asset Contract
-- `v0.7.3.openvex.json`
-- `v0.7.3.json`
+- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.4`
+- v0.7.4 Asset Contract
+- `v0.7.4.openvex.json`
+- `v0.7.4.json`

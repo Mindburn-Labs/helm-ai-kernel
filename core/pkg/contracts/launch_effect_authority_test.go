@@ -543,6 +543,32 @@ func TestLaunchEffectReceiptRejectsNoncanonicalAndUntrustedProof(t *testing.T) {
 		t.Fatal("receipt signed an uppercase digest")
 	}
 
+	unsafeSignedInteger := int64(9_007_199_254_740_992)
+	type receiptMutationTest struct {
+		name   string
+		mutate func(*contracts.LaunchEffectReceipt)
+	}
+	unsafeIntegerTests := []receiptMutationTest{
+		{"emergency fence epoch", func(receipt *contracts.LaunchEffectReceipt) { receipt.EmergencyFenceEpoch = unsafeSignedInteger }},
+		{"Lamport clock", func(receipt *contracts.LaunchEffectReceipt) { receipt.Lamport = 9_007_199_254_740_992 }},
+	}
+	if unsafeInteger := int(unsafeSignedInteger); int64(unsafeInteger) == unsafeSignedInteger {
+		unsafeIntegerTests = append(unsafeIntegerTests,
+			receiptMutationTest{"effect ordinal", func(receipt *contracts.LaunchEffectReceipt) { receipt.EffectOrdinal = unsafeInteger }},
+			receiptMutationTest{"receipt revision", func(receipt *contracts.LaunchEffectReceipt) { receipt.ReceiptRevision = unsafeInteger }},
+			receiptMutationTest{"reconciliation revision", func(receipt *contracts.LaunchEffectReceipt) { receipt.ReconciliationRevision = unsafeInteger }},
+		)
+	}
+	for _, test := range unsafeIntegerTests {
+		t.Run("unsafe integer "+test.name, func(t *testing.T) {
+			unsafe := launchUnknownReceiptFixture()
+			test.mutate(&unsafe)
+			if _, err := contracts.SignLaunchEffectReceipt(unsafe, privateKey); err == nil || !strings.Contains(err.Error(), "JCS safe-integer") {
+				t.Fatalf("receipt accepted a cross-language unsafe %s: %v", test.name, err)
+			}
+		})
+	}
+
 	signed, err := contracts.SignLaunchEffectReceipt(launchUnknownReceiptFixture(), privateKey)
 	if err != nil {
 		t.Fatal(err)
@@ -619,6 +645,16 @@ func TestLaunchEffectReceiptRejectsNoncanonicalAndUntrustedProof(t *testing.T) {
 	}
 	if err := contracts.VerifyLaunchEffectReceipt(signed, receiptDependentProof); err == nil {
 		t.Fatal("receipt accepted a circular ProofGraph receipt dependency")
+	}
+	rawReceiptDependentProof := launchReceiptVerificationContext(publicKey)
+	rawReceiptDependentProof.ResolveEvidenceDAG = func(nodeHash string) (contracts.LaunchEffectEvidenceDAG, error) {
+		return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{{
+			NodeHash: nodeHash, ArtifactRefs: []string{strings.Repeat("0", 64)}, ProofSessionRef: signed.ProofSessionRef,
+			EvidenceReservationRef: signed.EvidenceReservationRef, Lamport: 1,
+		}}}, nil
+	}
+	if err := contracts.VerifyLaunchEffectReceipt(signed, rawReceiptDependentProof); err == nil {
+		t.Fatal("receipt accepted a raw receipt ID as an evidence dependency")
 	}
 
 	cyclicProof := launchReceiptVerificationContext(publicKey)
@@ -1325,7 +1361,9 @@ func launchMissionReferencePackBytes(t *testing.T) []byte {
 			{"id": "verdict_signature_tamper", "expected_error": "signature_rejected"},
 			{"id": "receipt_result_tamper", "expected_error": "receipt_id_mismatch"},
 			{"id": "receipt_authority_tamper", "expected_error": "binding_mismatch"},
+			{"id": "receipt_raw_id_evidence_cycle", "expected_error": "evidence_cycle"},
 			{"id": "receipt_evidence_cycle", "expected_error": "evidence_cycle"},
+			{"id": "receipt_unsafe_integer", "expected_error": "unsafe_integer"},
 			{"id": "unsafe_integer", "expected_error": "unsafe_integer"},
 		},
 	}

@@ -6,11 +6,11 @@
   "immutable_payloads": [
     {
       "file": "vectors.json",
-      "sha256": "e8d8571e3e9d217af4351c778c4de9c284d6247dbda23eb241e7e9330b2ac9cc"
+      "sha256": "071252e2fe6390a2dc875f52152ebbdcbda43dd4dd661434f05164c15a9838e9"
     },
     {
       "file": "verify_vectors.py",
-      "sha256": "5000887a383403a8ac48e4ac34843f690f98d8d9750880434d202691dcf3491a"
+      "sha256": "e1929f6e711efd1c0861aa298615f5ec7ccb1ea83d52d334d1608859dea803a5"
     }
   ],
   "quantum_posture": "classical_ed25519_only",

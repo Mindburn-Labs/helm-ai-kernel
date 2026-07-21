@@ -978,7 +978,15 @@
     },
     {
       "expected_error": "evidence_cycle",
+      "id": "receipt_raw_id_evidence_cycle"
+    },
+    {
+      "expected_error": "evidence_cycle",
       "id": "receipt_evidence_cycle"
+    },
+    {
+      "expected_error": "unsafe_integer",
+      "id": "receipt_unsafe_integer"
     },
     {
       "expected_error": "unsafe_integer",

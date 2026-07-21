@@ -929,3 +929,75 @@ func TestCompiler_Compile_ContainsRule(t *testing.T) {
 		t.Fatal("compiled graph should contain rule with ID as key")
 	}
 }
+
+// Graph.Validate evaluates artifact presence only. Before this guard, a
+// requirement carrying a CEL Expression but no ArtifactType was assumed
+// satisfied, so Validate could return true *plus a rule hash* for a policy
+// whose expression was never evaluated — a fail-open verdict carrying evidence
+// of an evaluation that did not happen.
+func TestGraph_Validate_RefusesCELExpressionRequirement(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddRule("act-cel", RequirementSet{
+		ID:    "rs-cel",
+		Logic: AND,
+		Requirements: []Requirement{
+			{ID: "r1", Expression: "intent.risk < 3"},
+		},
+	})
+
+	ok, hash, err := g.Validate("act-cel", nil)
+	if err == nil {
+		t.Fatal("expected Validate to refuse a CEL expression requirement")
+	}
+	if ok {
+		t.Fatal("fail-open: reported satisfied without evaluating the expression")
+	}
+	if hash != "" {
+		t.Fatalf("must not emit a rule hash for an unevaluated rule, got %q", hash)
+	}
+	if !strings.Contains(err.Error(), "EvaluateRequirementSet") {
+		t.Fatalf("error should name the canonical evaluator, got %q", err)
+	}
+}
+
+// The guard must see expressions nested in child sets, not just top-level ones.
+func TestGraph_Validate_RefusesNestedCELExpressionRequirement(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddRule("act-nested", RequirementSet{
+		ID:    "rs-root",
+		Logic: AND,
+		Requirements: []Requirement{
+			{ID: "r1", ArtifactType: "evidence/alert"},
+		},
+		Children: []RequirementSet{{
+			ID:           "rs-child",
+			Logic:        AND,
+			Requirements: []Requirement{{ID: "r2", Expression: "state.approved == true"}},
+		}},
+	})
+
+	arts := []*pkg_artifact.ArtifactEnvelope{{Type: "evidence/alert"}}
+	ok, _, err := g.Validate("act-nested", arts)
+	if err == nil || ok {
+		t.Fatal("expected a nested CEL expression requirement to be refused")
+	}
+}
+
+// A requirement with neither an ArtifactType nor an Expression is malformed.
+// It must fail closed rather than count as satisfied.
+func TestGraph_Validate_MalformedRequirementFailsClosed(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddRule("act-malformed", RequirementSet{
+		ID:           "rs-malformed",
+		Logic:        AND,
+		Requirements: []Requirement{{ID: "r1", Description: "no artifact type, no expression"}},
+	})
+
+	ok, _, err := g.Validate("act-malformed", nil)
+	if ok {
+		t.Fatal("fail-open: malformed requirement counted as satisfied")
+	}
+	if err == nil {
+		t.Fatal("expected an error for an unsatisfiable rule")
+	}
+}

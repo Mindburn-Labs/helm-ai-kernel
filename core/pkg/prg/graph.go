@@ -131,15 +131,44 @@ func (g *Graph) Validate(actionID string, artifacts []*pkg_artifact.ArtifactEnve
 		return false, "", fmt.Errorf("no policy defined for action %s", actionID)
 	}
 
+	// check evaluates artifact presence only. Returning true for a rule whose CEL
+	// expressions were never evaluated would hand the caller a satisfied verdict
+	// and a rule hash for a policy this evaluator did not actually apply. Refuse
+	// instead, and name the evaluator that can.
+	if hasExpressionRequirement(rule) {
+		return false, "", fmt.Errorf(
+			"action %s carries CEL expression requirements: Graph.Validate evaluates artifact presence only — use PolicyEngine.EvaluateRequirementSet",
+			actionID,
+		)
+	}
+
 	if check(rule, artifacts) {
 		return true, rule.Hash(), nil
 	}
 	return false, "", fmt.Errorf("missing requirement")
 }
 
+// hasExpressionRequirement reports whether rs or any descendant carries a CEL
+// Expression. Used by Validate to refuse rules it cannot faithfully evaluate.
+func hasExpressionRequirement(rs RequirementSet) bool {
+	for _, req := range rs.Requirements {
+		if req.Expression != "" {
+			return true
+		}
+	}
+	for _, child := range rs.Children {
+		if hasExpressionRequirement(child) {
+			return true
+		}
+	}
+	return false
+}
+
 // check is the legacy artifact-presence validator used by Graph.Validate.
-// It evaluates only ArtifactType requirements; CEL Expression requirements are
-// treated as satisfied here. The canonical evaluator that honours CEL is
+// It evaluates only ArtifactType requirements. Rules carrying CEL Expressions
+// are rejected by Validate before reaching here, so anything this function sees
+// must be checkable; a requirement it cannot check is malformed and fails
+// closed. The canonical evaluator that honours CEL is
 // PolicyEngine.EvaluateRequirementSet — prefer it for policy decisions. This
 // function is retained for the artifact-only Graph.Validate API and kept in
 // operator-semantics sync with that path.
@@ -163,8 +192,10 @@ func check(rs RequirementSet, artifacts []*pkg_artifact.ArtifactEnvelope) bool {
 				}
 			}
 		} else {
-			// Expression or others ignored in this legacy check
-			has = true
+			// Neither an ArtifactType nor (per Validate's guard) an Expression:
+			// the requirement is malformed. Fail closed — this evaluator must
+			// never report a requirement it did not actually check as satisfied.
+			has = false
 		}
 		leafResults = append(leafResults, has)
 	}

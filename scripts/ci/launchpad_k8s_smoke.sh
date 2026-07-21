@@ -202,6 +202,10 @@ cleanup() {
         kubectl get pods -n "$NAMESPACE" -o wide 2>/dev/null || true
         kubectl describe pods -n "$NAMESPACE" 2>/dev/null | tail -200 || true
         kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=launchpad-app --all-containers --tail=200 2>/dev/null || true
+        # A failed Helm test hook is retained (hook-delete-policy deletes only on
+        # success), so its Pod is still readable here. This is the diagnostic the
+        # dropped `helm test` log flag used to provide on the failure path.
+        kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=test --all-containers --tail=200 2>/dev/null || true
         echo "::endgroup::"
         # Best-effort namespace-scoped teardown so the next run starts clean.
         # The cluster itself stays around when KEEP_CLUSTER=1.

@@ -68,7 +68,7 @@ They do not authorize a merge or replace the active GitHub merge policy.
 
 ## Pull Requests
 
-- **Current transition rule**: The human GitHub approval rule on `main` remains enforced, including its approval, required code owner review, and last-push protections. Direct merges are blocked. Do not remove or bypass this rule during implementation or evaluation.
+- **Current transition rule**: The human GitHub approval rule on `main` remains enforced, including its required approving reviews, required code owner review, and require-approval-after-last-push protections. Direct merges are blocked. Do not remove or bypass this rule during implementation or evaluation.
 - **Future machine authority**: The human rule can be replaced only after a source-owned machine permit bound to the exact PR head and an exact-head GitHub App interlock are live-proven by configuration and runtime readbacks. This authority is not live today.
 - **DCO**: every commit is signed off (`git commit -s`); see above.
 - Keep PRs narrow and reviewable.

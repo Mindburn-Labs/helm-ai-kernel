@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -512,6 +514,9 @@ func verifyScanEvidenceSummary(packDir, wantHash string) error {
 	var summary any
 	if err := decoder.Decode(&summary); err != nil {
 		return fmt.Errorf("parse source projection summary: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return fmt.Errorf("source projection summary has trailing data")
 	}
 	canonical, err := canonicalize.JCS(summary)
 	if err != nil {

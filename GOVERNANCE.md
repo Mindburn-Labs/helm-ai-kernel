@@ -70,12 +70,13 @@ enforced policy controls whether a pull request can merge.
 ### Branch Protection & Review Policies
 
 The human GitHub approval rule on the default branch (`main`) is the current
-enforced transition state: its approval, Codeowner, and last-push protections
+enforced transition state: its approval, required code owner review, and
+last-push protections
 remain in place, and direct pushes are structurally blocked. It must not be
 removed or bypassed during implementation or evaluation.
 
 The rule can be replaced only after a source-owned machine permit bound to the
-exact PR head, an exact-head GitHub App merge interlock, and configuration plus
+exact PR head, an exact-head GitHub App interlock, and configuration plus
 runtime readbacks are live-proven. That machine authority is not live today.
 
 Required CI and vulnerability checks remain separate repository controls.

@@ -90,8 +90,8 @@ It does **not** verify the following:
    every obligation a permitted decision carries) is a separate axis
    not yet modeled.
 7. **GitHub merge authority.** This theorem does not establish GitHub merge
-   or deployment authority. A Lean proof, CI result, reviewer or maintainer
-   identity, DCO sign-off, or other attribution trailer is technical or
+   or deployment authority. Lean proofs, CI results, reviewer or maintainer
+   identity, DCO sign-offs, and other attribution trailers are technical or
    provenance evidence only; none authorizes a merge. The current human GitHub
    approval rule remains enforced and must not be removed or bypassed until a
    source-owned machine permit bound to the exact PR head, an exact-head GitHub

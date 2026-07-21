@@ -1,3 +1,9 @@
+// quantum_posture: these tests hash patch bytes with classical SHA-256 to bind
+// an operator override to the exact content it authorized. The hash is a
+// tamper-evidence binding within a single local apply decision, not a long-lived
+// signature or a confidentiality control, so it carries no harvest-now-decrypt-later
+// exposure. Migration follows the kernel-wide hash policy; nothing here pins
+// SHA-256 independently.
 package patchdelivery
 
 import (

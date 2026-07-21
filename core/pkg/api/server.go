@@ -25,6 +25,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 )
 
 // Server is the HELM Governance REST API server.
@@ -168,7 +169,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	s.mux.ServeHTTP(w, r)
+	// Adopt-or-mint the product request identity at this external edge
+	// (telemetry contract §2.2): a valid inbound X-Helm-Correlation-ID is
+	// adopted, anything else is replaced with a minted ID, and the ID used
+	// is always echoed on the response.
+	corr, _ := tracing.AdoptOrMintFromHeaders(r.Header)
+	ctx := tracing.WithCorrelationID(r.Context(), corr)
+	tracing.InjectHTTPHeaders(ctx, w.Header())
+	s.mux.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // ListenAndServe starts the API server with production-grade timeouts.
@@ -254,17 +262,23 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 
 	sig := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s:%d", receiptID, status, prevHash, lamport)))
 
+	correlationID := ""
+	if corr, ok := tracing.GetCorrelationID(r.Context()); ok {
+		correlationID = string(corr)
+	}
+
 	receipt := &contracts.Receipt{
-		ReceiptID:    receiptID,
-		DecisionID:   decisionID,
-		EffectID:     req.Tool,
-		Status:       status,
-		Timestamp:    time.Now().UTC(),
-		ExecutorID:   req.AgentID,
-		Signature:    hex.EncodeToString(sig[:]),
-		PrevHash:     prevHash,
-		LamportClock: lamport,
-		ArgsHash:     "sha256:" + hex.EncodeToString(argsHash[:]),
+		ReceiptID:     receiptID,
+		DecisionID:    decisionID,
+		CorrelationID: correlationID,
+		EffectID:      req.Tool,
+		Status:        status,
+		Timestamp:     time.Now().UTC(),
+		ExecutorID:    req.AgentID,
+		Signature:     hex.EncodeToString(sig[:]),
+		PrevHash:      prevHash,
+		LamportClock:  lamport,
+		ArgsHash:      "sha256:" + hex.EncodeToString(argsHash[:]),
 		Metadata: map[string]any{
 			"decision_hash": decResp.DecisionHash,
 			"principal_id":  principal.ID,

@@ -14,6 +14,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receipts/policies"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 )
 
 // UsageMeter is an optional interface for recording execution usage events.
@@ -379,16 +380,22 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 	}
 
 	receipt := &contracts.Receipt{
-		ReceiptID:    "rcpt-" + decision.ID,
-		DecisionID:   decision.ID,
-		EffectID:     effect.EffectID,
-		Status:       "SUCCESS",
-		BlobHash:     blobHash,
-		OutputHash:   outputHash,
-		ArgsHash:     effect.ArgsHash, // PEP boundary hash bound into signed receipt
-		Timestamp:    e.clock(),
-		PrevHash:     prevHash,
-		LamportClock: lamportClock,
+		ReceiptID:     "rcpt-" + decision.ID,
+		DecisionID:    decision.ID,
+		CorrelationID: decision.CorrelationID,
+		EffectID:      effect.EffectID,
+		Status:        "SUCCESS",
+		BlobHash:      blobHash,
+		OutputHash:    outputHash,
+		ArgsHash:      effect.ArgsHash, // PEP boundary hash bound into signed receipt
+		Timestamp:     e.clock(),
+		PrevHash:      prevHash,
+		LamportClock:  lamportClock,
+	}
+	if receipt.CorrelationID == "" {
+		if corr, ok := tracing.GetCorrelationID(ctx); ok {
+			receipt.CorrelationID = string(corr)
+		}
 	}
 	if intent != nil {
 		receipt.EmergencyActivationID = intent.EmergencyActivationID

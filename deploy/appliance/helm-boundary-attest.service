@@ -1,0 +1,43 @@
+# HELM Boundary Enforcement Profile — posture attestation oneshot.
+#
+# Reads the live OS posture (systemd unit properties, the nftables ruleset,
+# cgroup limits) and compares it against the signed compile receipt. Exits
+# non-zero on DRIFT or on any probe failure, which blocks helm-gateway.service
+# from starting (it hard-Requires= this unit): the OS does the refusing —
+# HELM only compiles, attests, and fails closed.
+#
+# This is a separate short-lived privileged unit because reading the live
+# nftables ruleset requires CAP_NET_ADMIN. Granting that capability to the
+# long-running gateway would over-privilege it, and running the probe inside
+# the unprivileged gateway would turn fail-closed into fail-bricked. The
+# gateway itself stays fully unprivileged.
+#
+# Drift window honesty: posture is attested at gateway (re)start, on each
+# timer tick (helm-boundary-attest.timer), and on demand. It is NOT monitored
+# continuously; a timer-detected DRIFT emits a receipt but does not stop an
+# already-running gateway unless the operator wires that policy themselves.
+
+[Unit]
+Description=HELM boundary posture attestation (fail-closed gate for helm-gateway)
+Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/boundary-enforcement-profile.md
+Before=helm-gateway.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+Environment=HELM_DATA_DIR=/var/lib/helm
+ExecStart=/usr/local/bin/helm-ai-kernel boundary profile attest --enforce \
+  --receipt /etc/helm/boundary/compile_receipt.json \
+  --artifacts /etc/helm/boundary/artifacts
+
+# Privileged only where the probes require it; hardened everywhere else.
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/helm
+
+[Install]
+WantedBy=multi-user.target

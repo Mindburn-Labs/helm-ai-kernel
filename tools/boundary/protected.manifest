@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-20T20:48:59Z
+# Generated: 2026-07-21T09:25:24Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -687,7 +687,7 @@ b084e586791f8a6ca882cb8ec49cae843a10ee13a3b94f527eeb2af34acf3494  protocols/conf
 35149966be79226039f1cfe611f70da36c2e9f93e2d9e96a91bb995a3bfb2cc9  protocols/conformance/v1/test-vectors.json
 9b81d0320f3dfd15d5f50f031fc41ed1d0bf19f78653f81ac03dac9f0e8cc131  protocols/conformance/workstation/v1/conformance-pack.json
 cabc519027fc1c737db0b8008ccbb7fbe32bd473a407334aee32f5fb1d1e7314  protocols/json-schemas/README.md
-51cc7c1c8da889cf79bc90e6a4a4b7e985f70d1ae8296f973ef4b98a80edf925  protocols/json-schemas/SCHEMA_INDEX.md
+c22bd08c2bedbb6c4d0ad9ac3ea22839477d8effb29a792745ddca8ee2878e25  protocols/json-schemas/SCHEMA_INDEX.md
 44d2b23e718d7d3e6011c5cabbcf7653553a265b96a24020a9db18e44ce49e9f  protocols/json-schemas/access/OperatorAccessPolicy.v1.json
 341c45c009dafdc7ba58ce07cb1efc851f0d5e7ca867463e82d2bbccd0e68766  protocols/json-schemas/access/PrivilegedAccessReceipt.v1.json
 ca16cb628b8913f291816419eeeaabf663281437f8cf4ef8079b0e4a2773b60f  protocols/json-schemas/access/PrivilegedAccessRequest.v1.json
@@ -698,7 +698,11 @@ fcbe893d7a19528a30cbac8a06be634ac2677e5199af8a0b09b1820eba424d7e  protocols/json
 77c7f1102b0dc7ffedf4ced58b4d6b95213e40ff9925651bda47337fd3be0c59  protocols/json-schemas/authority/side_effect_authority_record.schema.json
 4abdd3bd202fe71f6337fd8c32fbfb05c89ba6f30ac801442f14f7bba37bad22  protocols/json-schemas/autonomy_envelope/v1.json
 5e3278db56ce4c9d48475efc54475cb2345870a7a30badce6df7beeabc66ced0  protocols/json-schemas/backpressure_policy/v1.json
+9a1be6ed73527bad9302db3a54bcebd19e385f8f3382c51e87f22ca041d5da7e  protocols/json-schemas/boundary/boundary_profile_input.v1.schema.json
 5f1e37a958f601cd4f8a241f0c9ea1cc6d9e6f97013ccd6bad120b5cf7850136  protocols/json-schemas/boundary/extauthz.v1.schema.json
+6f0ead25e223c5f916c06708c13973c31340c0c7597cd171a07297dd8b1ba4cc  protocols/json-schemas/boundary/posture_attestation.v1.schema.json
+41510a546210825a7d1c1224ec0a803f9143c13d46fc8d62435e51e0c59c65cc  protocols/json-schemas/boundary/profile_compile_receipt.v1.schema.json
+b6eccc4adc6621d39c3ba1f411fb176a66b7ac4698e6c3bd8183da01e3b5a5e1  protocols/json-schemas/boundary/update_bundle_manifest.v1.schema.json
 b33cd57db21eb1fd4b89541107daa3bfd0c4ab94463f774a7385fadadaecd48e  protocols/json-schemas/business/escalation_policy.schema.json
 91d39f0c4aad747ffcff1cd9c587ffcdc393b50935701cda01cd4ebbdf2c81e2  protocols/json-schemas/business/human_task.schema.json
 555c3d64a44609a2797b61ea0e994dd8bab056b6584e5a9ceb36da39b349a8e3  protocols/json-schemas/business/obligation.schema.json

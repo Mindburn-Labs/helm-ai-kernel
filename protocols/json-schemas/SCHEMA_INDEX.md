@@ -44,6 +44,10 @@
 | Schema | Conformance | Status | Description |
 | --- | --- | --- | --- |
 | `extauthz.v1.schema.json` | L1 | preview | Gateway-to-Kernel external authorization contract |
+| `boundary_profile_input.v1.schema.json` | L2 | preview | Boundary Enforcement Profile policy input (hash-bound compiler input) |
+| `profile_compile_receipt.v1.schema.json` | L2 | preview | Boundary Enforcement Profile compile receipt (HELM compiles + attests; the OS enforces) |
+| `posture_attestation.v1.schema.json` | L2 | preview | Live OS posture attestation (MATCH/DRIFT, fail-closed on drift) |
+| `update_bundle_manifest.v1.schema.json` | L2 | preview | Signed offline update-bundle manifest (format + verifier only) |
 
 ### Policy (`policy/`)
 

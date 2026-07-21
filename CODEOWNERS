@@ -1,5 +1,0 @@
-# Advisory routing only: CODEOWNERS has zero code-merge-authority weight.
-# Code merges require source-owned deterministic gates plus a distinct-provider
-# exact-head machine interlock; human identity, labels, and commit trailers
-# cannot replace them.
-*       @Mindburn-Labs/admins

@@ -21,6 +21,7 @@
     "pack_id": { "type": "string" },
     "format_version": { "type": "string" },
     "created_at": { "type": "string", "format": "date-time" },
+    "correlation_id": { "type": "string", "description": "Product request identity (X-Helm-Correlation-ID) joining this pack to its decision, receipts, and lifecycle events. Optional; outside the pack signature until HELM-303." },
     "identity": { "$ref": "#/$defs/identity" },
     "policy": { "$ref": "#/$defs/policy" },
     "effect": { "$ref": "#/$defs/effect" },

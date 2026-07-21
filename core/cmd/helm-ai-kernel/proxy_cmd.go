@@ -527,7 +527,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 			// helm correlation_id — also used as gen_ai.tool.call.id so OTel traces
 			// and helm-ai-kernel receipts cross-reference 1:1.
-			corr := tracing.NewCorrelationID()
+			// Adopt-or-mint (telemetry contract §2.2): a valid inbound
+			// X-Helm-Correlation-ID is honoured so a caller can thread one
+			// product identity through the whole request path; anything
+			// else is replaced with a freshly minted ID.
+			corr, _ := tracing.AdoptOrMintFromHeaders(req.Header)
 			ctx := tracing.WithCorrelationID(req.Context(), corr)
 			ctx = context.WithValue(ctx, ctxKeyCorrelationID, string(corr))
 			ctx = context.WithValue(ctx, ctxKeyRequestModel, requestModel)

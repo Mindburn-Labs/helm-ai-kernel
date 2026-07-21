@@ -8,6 +8,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policybundles"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/decls"
 	"github.com/google/cel-go/common/types"
@@ -135,6 +136,9 @@ func (pe *PolicyEngine) Evaluate(ctx context.Context, policyID string, req contr
 		Action:    req.Action,
 		Resource:  req.ResourceID,
 		Verdict:   "DENY", // Default deny
+	}
+	if corr, ok := tracing.GetCorrelationID(ctx); ok {
+		decision.CorrelationID = string(corr)
 	}
 
 	// Prepare CEL input

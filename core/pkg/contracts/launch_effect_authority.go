@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -16,8 +17,9 @@ import (
 const LaunchEffectEnvelopeSchemaVersion = "launch_effect_envelope.v1"
 
 // LaunchEffectAuthorizationEnvelope is the preview dispatch contract. Merely
-// constructing this value grants no authority: VerifyLaunchEffectAuthorizationEnvelope
-// must resolve and bind the single-use permit immediately before dispatch.
+// constructing or preflighting this value grants no authority:
+// StartLaunchEffectAuthorizationEnvelope must resolve and consume the
+// single-use permit inside the last pre-effect serialization fence.
 type LaunchEffectAuthorizationEnvelope struct {
 	SchemaVersion           string         `json:"schema_version"`
 	EffectID                string         `json:"effect_id"`
@@ -125,9 +127,10 @@ type LaunchEffectDispatchFinalization struct {
 	MustStartBefore time.Time
 }
 
-// LaunchEffectDispatchFinalizationObservation is independently rebuilt inside
-// the source-owned finalizer before it consumes the permit. The validator must
-// accept this observation before CAS or network start.
+// LaunchEffectDispatchFinalizationObservation is independently rebuilt by the
+// contract from source-owned resolvers while the finalizer holds its dispatch
+// serialization fence. A caller-provided timestamp or copied permit is never
+// accepted as fresh authority.
 type LaunchEffectDispatchFinalizationObservation struct {
 	ObservedAt        time.Time
 	ObservedAuthority LaunchEffectPermitBinding
@@ -177,21 +180,26 @@ type LaunchEffectEnvelopeVerificationContext struct {
 	MaximumPermitTTL         time.Duration
 	ResolveVerdictKey        func(kernelTrustRootID, signerKeyID string) (ed25519.PublicKey, error)
 	ResolveEmergencyFence    func(tenantID, workspaceID string) (LaunchEmergencyFenceSnapshot, error)
+	// The following resolvers are invoked only from validate/start while the
+	// finalizer owns the dispatch fence. ResolvePermitBinding returns the
+	// immutable binding even after its single-use CAS; CAS state remains owned by
+	// FinalizeAndStartDispatch. ResolveCurrentConnectorRelease must lock/read the
+	// anti-rollback registry head, and VerifyCurrentConnectorRelease must verify
+	// its source signature and validity at the supplied source time.
+	ResolveDispatchTime            func() (time.Time, error)
+	ResolvePermitBinding           func(effectPermitRef, effectPermitHash string) (LaunchEffectPermitBinding, error)
+	ResolvePolicyEpoch             func(tenantID, workspaceID string) (string, error)
+	ResolveCurrentConnectorRelease func(ApprovalConnectorAuthority) (ConnectorReleaseAuthorityEnvelope, error)
+	VerifyCurrentConnectorRelease  func(ConnectorReleaseAuthorityEnvelope, time.Time) error
 	// FinalizeAndStartDispatch MUST hold the source-owned dispatch serialization
-	// fence while it: reads a source-owned wall clock, requires
-	// it to be strictly before expected.MustStartBefore, re-read the canonical
-	// scoped-stop state, deny an active or unavailable fence, require its
-	// effective epoch to equal expected.Permit.EmergencyFenceEpoch, re-check
-	// predecessor receipt state,
-	// compare the canonical approval consumption and dispatch admission, verify
-	// that the exact connector release remains current and non-revoked, invokes
-	// validate with the independently rebuilt observation, CASes expected.Permit
-	// only after validation succeeds, persists the durable effect reservation as
-	// STARTED, independently re-reads the same authority and wall clock, and
-	// invokes start with that observation before releasing the serialization
-	// fence. It MUST not consume the permit when validate fails. A separate time
-	// or state pre-read is insufficient, and returning a bearer grant for later
-	// use is forbidden.
+	// fence while it invokes validate, CASes expected.Permit only after validation
+	// succeeds, persists the durable effect reservation as STARTED, and invokes
+	// start before releasing the serialization fence. validate and start each
+	// independently re-read the source clock, permit, policy epoch, scoped-stop
+	// state, approval consumption/admission, dependency state, connector release,
+	// and provider route/certification when applicable. It MUST not consume the
+	// permit when validate fails. A separate time or state pre-read is
+	// insufficient, and returning a bearer grant for later use is forbidden.
 	//
 	// StartDispatch is the connector's bounded last pre-effect seam. Crossing a
 	// network sink anywhere else is not authorized by this contract. The
@@ -199,8 +207,8 @@ type LaunchEffectEnvelopeVerificationContext struct {
 	// reservation lifecycle if start returns an error.
 	FinalizeAndStartDispatch func(
 		expected LaunchEffectDispatchFinalization,
-		validate func(LaunchEffectDispatchFinalizationObservation) error,
-		start func(LaunchEffectDispatchFinalizationObservation) error,
+		validate func() (LaunchEffectDispatchFinalizationObservation, error),
+		start func() error,
 	) error
 	StartDispatch func(expected LaunchEffectPermitBinding) error
 	Permit        LaunchEffectPermitBinding
@@ -341,61 +349,137 @@ func startLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEn
 	if err != nil {
 		return err
 	}
-	validated := false
-	started := false
-	validatedAt := time.Time{}
-	validate := func(observation LaunchEffectDispatchFinalizationObservation) error {
-		if validated {
-			return errors.New("launch authorization envelope finalization observation was validated twice")
+	var validateClaimed atomic.Bool
+	var validated atomic.Bool
+	var startClaimed atomic.Bool
+	var started atomic.Bool
+	validate := func() (LaunchEffectDispatchFinalizationObservation, error) {
+		if !validateClaimed.CompareAndSwap(false, true) {
+			return LaunchEffectDispatchFinalizationObservation{}, errors.New("launch authorization envelope finalization observation was validated twice")
 		}
-		if err := verifyLaunchDispatchFinalizationObservation(observation, expectedFinalization, ctx.Now); err != nil {
-			return err
+		observation, err := resolveAndVerifyLaunchDispatchFinalizationObservation(envelope, expectedFinalization, ctx)
+		if err != nil {
+			return LaunchEffectDispatchFinalizationObservation{}, err
 		}
-		validated = true
-		validatedAt = observation.ObservedAt
-		return nil
+		validated.Store(true)
+		return observation, nil
 	}
-	start := func(observation LaunchEffectDispatchFinalizationObservation) error {
-		if !validated {
+	start := func() error {
+		if !validated.Load() {
 			return errors.New("launch authorization envelope connector start preceded atomic authority validation")
 		}
-		if started {
+		if !startClaimed.CompareAndSwap(false, true) {
 			return errors.New("launch authorization envelope connector start interlock was consumed twice")
 		}
-		if observation.ObservedAt.Before(validatedAt) {
-			return errors.New("launch authorization envelope connector start observation is backdated")
-		}
-		if err := verifyLaunchDispatchFinalizationObservation(observation, expectedFinalization, ctx.Now); err != nil {
+		observation, err := resolveAndVerifyLaunchDispatchFinalizationObservation(envelope, expectedFinalization, ctx)
+		if err != nil {
 			return fmt.Errorf("launch authorization envelope connector start observation: %w", err)
 		}
-		if err := ctx.StartDispatch(expectedFinalization.Permit); err != nil {
+		if err := ctx.StartDispatch(observation.ObservedAuthority); err != nil {
 			return err
 		}
-		started = true
+		started.Store(true)
 		return nil
 	}
 	if err := ctx.FinalizeAndStartDispatch(expectedFinalization, validate, start); err != nil {
 		return fmt.Errorf("finalize and start launch authorization envelope dispatch: %w", err)
 	}
-	if !validated || !started {
+	if !validated.Load() || !started.Load() {
 		return errors.New("launch authorization envelope finalizer returned without validated connector start")
 	}
 	return nil
 }
 
-func verifyLaunchDispatchFinalizationObservation(
-	observation LaunchEffectDispatchFinalizationObservation,
+func resolveAndVerifyLaunchDispatchFinalizationObservation(
+	envelope LaunchEffectAuthorizationEnvelope,
 	expected LaunchEffectDispatchFinalization,
-	initialVerificationTime time.Time,
-) error {
-	if observation.ObservedAt.IsZero() || observation.ObservedAt.Before(initialVerificationTime) {
-		return errors.New("launch authorization envelope dispatch finalization time is missing or backdated")
+	ctx LaunchEffectEnvelopeVerificationContext,
+) (LaunchEffectDispatchFinalizationObservation, error) {
+	if ctx.ResolveDispatchTime == nil || ctx.ResolvePermitBinding == nil || ctx.ResolvePolicyEpoch == nil {
+		return LaunchEffectDispatchFinalizationObservation{}, errors.New("launch authorization envelope finalization requires source-owned clock, permit, and policy resolvers")
 	}
-	if !observation.ObservedAt.Before(expected.MustStartBefore) {
-		return errors.New("launch authorization envelope expired before atomic dispatch finalization")
+	observedAt, err := ctx.ResolveDispatchTime()
+	if err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, fmt.Errorf("resolve launch authorization envelope dispatch time: %w", err)
 	}
-	if !launchEffectPermitBindingEqual(observation.ObservedAuthority, expected.Permit) {
-		return errors.New("launch authorization envelope authority changed before atomic dispatch finalization")
+	if observedAt.IsZero() || observedAt.Before(ctx.Now) {
+		return LaunchEffectDispatchFinalizationObservation{}, errors.New("launch authorization envelope dispatch finalization time is missing or backdated")
+	}
+	if !observedAt.Before(expected.MustStartBefore) {
+		return LaunchEffectDispatchFinalizationObservation{}, errors.New("launch authorization envelope expired before atomic dispatch finalization")
+	}
+	permit, err := ctx.ResolvePermitBinding(envelope.EffectPermitRef, envelope.EffectPermitHash)
+	if err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, fmt.Errorf("resolve launch authorization envelope permit binding: %w", err)
+	}
+	if !launchEffectPermitBindingEqual(permit, expected.Permit) {
+		return LaunchEffectDispatchFinalizationObservation{}, errors.New("launch authorization envelope authority changed before atomic dispatch finalization")
+	}
+	policyEpoch, err := ctx.ResolvePolicyEpoch(envelope.TenantID, envelope.WorkspaceID)
+	if err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, fmt.Errorf("resolve launch authorization envelope policy epoch: %w", err)
+	}
+	if policyEpoch == "" || policyEpoch != envelope.PolicyEpoch || policyEpoch != permit.PolicyEpoch {
+		return LaunchEffectDispatchFinalizationObservation{}, errors.New("launch authorization envelope policy epoch changed before atomic dispatch finalization")
+	}
+
+	fresh := ctx
+	fresh.Now = observedAt
+	fresh.ExpectedPolicyEpoch = policyEpoch
+	fresh.Permit = permit
+	if err := verifyLaunchEnvelopeTimes(envelope, fresh); err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, err
+	}
+	if err := verifyLaunchPermitBinding(envelope, permit); err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, err
+	}
+	if fresh.ResolveVerdictKey == nil {
+		return LaunchEffectDispatchFinalizationObservation{}, errors.New("launch authorization envelope finalization requires a verdict trust-root resolver")
+	}
+	verdictPublicKey, err := fresh.ResolveVerdictKey(envelope.KernelTrustRootID, envelope.KernelVerdictSignerKey)
+	if err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, fmt.Errorf("resolve launch authorization envelope finalization verdict key: %w", err)
+	}
+	if err := verifyLaunchVerdictSignature(envelope, verdictPublicKey); err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, err
+	}
+	if err := verifyLaunchEmergencyFence(envelope, fresh); err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, err
+	}
+	authority, err := resolveAndVerifyLaunchCanonicalApproval(envelope, fresh)
+	if err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, err
+	}
+	if err := verifyLaunchCurrentConnectorRelease(authority.Grant.ConnectorAuthority, fresh); err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, err
+	}
+	if launchEffectRequiresProviderRoute(envelope.EffectID) {
+		if err := verifyLaunchProviderRouteBinding(envelope, fresh); err != nil {
+			return LaunchEffectDispatchFinalizationObservation{}, fmt.Errorf("launch authorization envelope provider route changed before atomic dispatch finalization: %w", err)
+		}
+	}
+	if fresh.VerifyDependencyState == nil {
+		return LaunchEffectDispatchFinalizationObservation{}, errors.New("launch authorization envelope finalization requires source-owned dependency receipt verification")
+	}
+	if err := fresh.VerifyDependencyState(envelope.DependencySetRef, envelope.DependencySetHash); err != nil {
+		return LaunchEffectDispatchFinalizationObservation{}, fmt.Errorf("launch authorization envelope dependency state changed before atomic dispatch finalization: %w", err)
+	}
+	return LaunchEffectDispatchFinalizationObservation{ObservedAt: observedAt, ObservedAuthority: permit}, nil
+}
+
+func verifyLaunchCurrentConnectorRelease(authority ApprovalConnectorAuthority, ctx LaunchEffectEnvelopeVerificationContext) error {
+	if ctx.ResolveCurrentConnectorRelease == nil || ctx.VerifyCurrentConnectorRelease == nil {
+		return errors.New("launch authorization envelope finalization requires current connector release resolution and verification")
+	}
+	release, err := ctx.ResolveCurrentConnectorRelease(authority)
+	if err != nil {
+		return fmt.Errorf("resolve current launch connector release: %w", err)
+	}
+	if err := ctx.VerifyCurrentConnectorRelease(release, ctx.Now); err != nil {
+		return fmt.Errorf("verify current launch connector release: %w", err)
+	}
+	if err := authority.ValidateCurrentRelease(release.Authority); err != nil {
+		return fmt.Errorf("launch connector release changed before atomic dispatch finalization: %w", err)
 	}
 	return nil
 }
@@ -510,31 +594,36 @@ func verifyLaunchEnvelopeInputBindings(envelope LaunchEffectAuthorizationEnvelop
 }
 
 func verifyLaunchCanonicalApproval(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+	_, err := resolveAndVerifyLaunchCanonicalApproval(envelope, ctx)
+	return err
+}
+
+func resolveAndVerifyLaunchCanonicalApproval(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) (LaunchEffectApprovalAuthority, error) {
 	if ctx.ResolveApprovalAuthority == nil || ctx.VerifyApprovalAuthority == nil {
-		return errors.New("launch authorization envelope requires canonical approval authority resolution and signature verification")
+		return LaunchEffectApprovalAuthority{}, errors.New("launch authorization envelope requires canonical approval authority resolution and signature verification")
 	}
 	authority, err := ctx.ResolveApprovalAuthority(envelope.ApprovalArtifactRef, envelope.ApprovalArtifactHash, envelope.ApprovalConsumptionRef, envelope.ApprovalConsumptionHash)
 	if err != nil {
-		return fmt.Errorf("resolve canonical launch approval authority: %w", err)
+		return LaunchEffectApprovalAuthority{}, fmt.Errorf("resolve canonical launch approval authority: %w", err)
 	}
 	if err := authority.Grant.ValidateAt(ctx.Now); err != nil {
-		return fmt.Errorf("canonical launch approval grant is invalid: %w", err)
+		return LaunchEffectApprovalAuthority{}, fmt.Errorf("canonical launch approval grant is invalid: %w", err)
 	}
 	if err := authority.Consumption.ValidateGrant(authority.Grant); err != nil {
-		return fmt.Errorf("canonical launch approval consumption is invalid: %w", err)
+		return LaunchEffectApprovalAuthority{}, fmt.Errorf("canonical launch approval consumption is invalid: %w", err)
 	}
 	if err := authority.DispatchAdmission.ValidateAt(ctx.Now); err != nil {
-		return fmt.Errorf("canonical launch dispatch admission is invalid: %w", err)
+		return LaunchEffectApprovalAuthority{}, fmt.Errorf("canonical launch dispatch admission is invalid: %w", err)
 	}
 	if err := authority.DispatchAdmission.ValidateConsumption(authority.Consumption); err != nil {
-		return fmt.Errorf("canonical launch dispatch admission does not bind its consumption: %w", err)
+		return LaunchEffectApprovalAuthority{}, fmt.Errorf("canonical launch dispatch admission does not bind its consumption: %w", err)
 	}
 	if err := ctx.VerifyApprovalAuthority(authority); err != nil {
-		return fmt.Errorf("canonical launch approval or dispatch signatures are invalid: %w", err)
+		return LaunchEffectApprovalAuthority{}, fmt.Errorf("canonical launch approval or dispatch signatures are invalid: %w", err)
 	}
 	expectedAction, err := launchApprovalActionForEffect(envelope.EffectID)
 	if err != nil {
-		return err
+		return LaunchEffectApprovalAuthority{}, err
 	}
 	grant := authority.Grant
 	consumption := authority.Consumption
@@ -552,52 +641,52 @@ func verifyLaunchCanonicalApproval(envelope LaunchEffectAuthorizationEnvelope, c
 		!launchConstantEqual(grant.PackManifestHash, envelope.PlanHash) || !launchConstantEqual(grant.IntentHash, envelope.PlanHash) ||
 		!launchConstantEqual(grant.EffectHash, envelope.InputHash) || !launchConstantEqual(grant.PlanHash, envelope.PlanHash) ||
 		grant.PolicyEpoch != envelope.PolicyEpoch || grant.Action != expectedAction {
-		return errors.New("canonical launch approval grant, consumption, or dispatch admission does not bind the exact dispatch")
+		return LaunchEffectApprovalAuthority{}, errors.New("canonical launch approval grant, consumption, or dispatch admission does not bind the exact dispatch")
 	}
 	connectorAuthority := grant.ConnectorAuthority
 	if connectorAuthority.BindingRef != envelope.ConnectorAuthorityRef || !launchConstantEqual(connectorAuthority.AuthorityHash, envelope.ConnectorAuthorityHash) {
-		return errors.New("canonical launch approval connector authority does not match the dispatch envelope")
+		return LaunchEffectApprovalAuthority{}, errors.New("canonical launch approval connector authority does not match the dispatch envelope")
 	}
 	expectedConnectorID := envelope.ConnectorID
 	expectedConnectorAction := envelope.ActionURN
 	if launchEffectIsProviderMutation(envelope.EffectID) {
 		providerConnectorID, ok := envelope.Input["provider_connector_id"].(string)
 		if !ok || providerConnectorID == "" {
-			return errors.New("launch provider mutation has no approval-bound provider connector")
+			return LaunchEffectApprovalAuthority{}, errors.New("launch provider mutation has no approval-bound provider connector")
 		}
 		expectedConnectorID = providerConnectorID
 		providerConnectorAction, ok := envelope.Input["provider_action_urn"].(string)
 		if !ok || providerConnectorAction == "" {
-			return errors.New("launch provider mutation has no approval-bound provider connector action")
+			return LaunchEffectApprovalAuthority{}, errors.New("launch provider mutation has no approval-bound provider connector action")
 		}
 		expectedConnectorAction = providerConnectorAction
 		certificationRef, refOK := envelope.Input["provider_certification_ref"].(string)
 		certificationHash, hashOK := envelope.Input["provider_certification_hash"].(string)
 		if !refOK || !hashOK || connectorAuthority.CertificationRef != certificationRef || !launchConstantEqual(connectorAuthority.CertificationHash, certificationHash) {
-			return errors.New("canonical launch approval connector authority does not match provider certification")
+			return LaunchEffectApprovalAuthority{}, errors.New("canonical launch approval connector authority does not match provider certification")
 		}
 	}
 	if connectorAuthority.ConnectorID != expectedConnectorID {
-		return errors.New("canonical launch approval connector release does not match the dispatched connector")
+		return LaunchEffectApprovalAuthority{}, errors.New("canonical launch approval connector release does not match the dispatched connector")
 	}
 	if connectorAuthority.ConnectorAction != expectedConnectorAction {
-		return errors.New("canonical launch approval connector release does not match the dispatched connector action")
+		return LaunchEffectApprovalAuthority{}, errors.New("canonical launch approval connector release does not match the dispatched connector action")
 	}
 	permitIssuedAt, err := time.Parse(time.RFC3339Nano, envelope.PermitIssuedAt)
 	if err != nil {
-		return errors.New("launch effect permit issue time is invalid during canonical approval verification")
+		return LaunchEffectApprovalAuthority{}, errors.New("launch effect permit issue time is invalid during canonical approval verification")
 	}
 	permitExpiry, err := time.Parse(time.RFC3339Nano, envelope.PermitExpiry)
 	if err != nil {
-		return errors.New("launch effect permit expiry is invalid during canonical approval verification")
+		return LaunchEffectApprovalAuthority{}, errors.New("launch effect permit expiry is invalid during canonical approval verification")
 	}
 	if permitIssuedAt.Before(admission.IssuedAt) || permitExpiry.After(admission.ExpiresAt) {
-		return errors.New("launch effect permit escapes its canonical dispatch admission window")
+		return LaunchEffectApprovalAuthority{}, errors.New("launch effect permit escapes its canonical dispatch admission window")
 	}
 	if consumption.ConsumedAt.After(ctx.Now) {
-		return errors.New("canonical launch approval consumption is in the future")
+		return LaunchEffectApprovalAuthority{}, errors.New("canonical launch approval consumption is in the future")
 	}
-	return nil
+	return authority, nil
 }
 
 func launchApprovalActionForEffect(effectID string) (string, error) {

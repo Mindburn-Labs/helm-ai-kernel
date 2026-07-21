@@ -96,15 +96,32 @@ func VerifyBundle(r io.Reader, manifest UpdateBundleManifest, publicKey ed25519.
 	// Everything after the tar end-of-archive marker must be zero padding.
 	// Non-zero trailing bytes (or a concatenated gzip member, which the
 	// multistream reader would otherwise absorb) would smuggle content past
-	// the manifest.
-	rest, err := io.ReadAll(gz)
-	if err != nil {
-		return fmt.Errorf("read update bundle trailer: %w", err)
-	}
-	for _, b := range rest {
-		if b != 0 {
-			return fmt.Errorf("update bundle carries %d bytes of non-padding data after the archive", len(rest))
+	// the manifest. Scanned streaming with a fixed buffer and a hard cap so
+	// a hostile bundle cannot force a large allocation in an offline
+	// verifier.
+	buf := make([]byte, 32*1024)
+	var padding int64
+	for {
+		n, err := gz.Read(buf)
+		for _, b := range buf[:n] {
+			if b != 0 {
+				return fmt.Errorf("update bundle carries non-padding data after the archive")
+			}
+		}
+		padding += int64(n)
+		if padding > maxTrailerPaddingBytes {
+			return fmt.Errorf("update bundle trailer exceeds %d bytes of padding", maxTrailerPaddingBytes)
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("read update bundle trailer: %w", err)
 		}
 	}
 	return nil
 }
+
+// maxTrailerPaddingBytes bounds the zero padding tolerated after the tar
+// end-of-archive marker. Real archives pad to a 10 KiB block at most.
+const maxTrailerPaddingBytes = 1 << 20

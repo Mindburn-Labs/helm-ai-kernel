@@ -65,7 +65,8 @@ verify-boundary-profile-vectors:
 	python3 reference_packs/boundary-profile-v1/verify_vectors.py
 
 verify-update-bundle-vectors:
-	cd core && go test ./pkg/boundary/profile/updatebundle -run 'TestUpdateBundle(ReferencePackMatchesGoImplementation|ManifestSchema)' -count=1
+	cd core && go test ./pkg/boundary/profile/updatebundle -run TestUpdateBundleReferencePackMatchesGoImplementation -count=1
+	cd core && go test ./pkg/boundary/profile -run TestUpdateBundleManifestSchema -count=1
 	python3 reference_packs/update-bundle-v1/verify_vectors.py
 
 test-sdk-go-standalone:

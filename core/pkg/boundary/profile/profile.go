@@ -255,12 +255,37 @@ func validateEgress(p firewall.EgressPolicy) error {
 	return nil
 }
 
+// Upper bounds keep the compiler's arithmetic (MemoryMB<<20, CPUMillis*100)
+// far below an int64 overflow, which would otherwise emit negative or
+// wrapped systemd/cgroup limits. The ceilings are orders of magnitude above
+// any real appliance.
+const (
+	maxCPUMillis    = 1_000_000 // 1000 CPUs
+	maxMemoryMB     = 1 << 26   // 64 TiB
+	maxDiskMB       = 1 << 26   // 64 TiB
+	maxMaxProcesses = 1 << 22   // ~4M PIDs
+)
+
 func validateResources(r sandbox.ResourceLimits) error {
 	if r.CPUMillis < 0 || r.MemoryMB < 0 || r.DiskMB < 0 || r.MaxProcesses < 0 || r.Timeout < 0 {
 		return fmt.Errorf("resource limits must not be negative")
 	}
 	if r.CPUMillis%10 != 0 {
 		return fmt.Errorf("cpu_millis must be a multiple of 10 (compiles to an integer CPUQuota percent)")
+	}
+	for _, limit := range []struct {
+		field string
+		value int64
+		max   int64
+	}{
+		{"cpu_millis", r.CPUMillis, maxCPUMillis},
+		{"memory_mb", r.MemoryMB, maxMemoryMB},
+		{"disk_mb", r.DiskMB, maxDiskMB},
+		{"max_processes", int64(r.MaxProcesses), maxMaxProcesses},
+	} {
+		if limit.value > limit.max {
+			return fmt.Errorf("%s must not exceed %d", limit.field, limit.max)
+		}
 	}
 	return nil
 }

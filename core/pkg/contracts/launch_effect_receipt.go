@@ -210,6 +210,7 @@ type LaunchEffectReceipt struct {
 // receipt being verified.
 type LaunchEffectReceiptVerificationContext struct {
 	MinimumLamport         uint64
+	MaximumChainDepth      int
 	ResolveSignerKey       func(signerKeyID string) (ed25519.PublicKey, error)
 	ResolveAuthority       func(reservationRef, reservationHash string) (LaunchEffectReceiptAuthorityBinding, error)
 	ResolveEvidenceDAG     func(nodeHash string) (LaunchEffectEvidenceDAG, error)
@@ -402,34 +403,59 @@ func validateSealedLaunchEffectReceipt(receipt LaunchEffectReceipt) error {
 // resolution, the Ed25519 signature, the source-owned dispatch reservation,
 // pre-receipt evidence DAG, and non-circular EvidencePack closure.
 func VerifyLaunchEffectReceipt(receipt LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
-	if err := verifyLaunchEffectReceiptBase(receipt, ctx); err != nil {
-		return err
+	var chain []LaunchEffectReceipt
+	seen := make(map[string]struct{})
+	current := receipt
+	for {
+		if err := verifyLaunchEffectReceiptBase(current, ctx); err != nil {
+			if len(chain) == 0 {
+				return err
+			}
+			return fmt.Errorf("verify launch effect receipt predecessor revision %d: %w", current.ReceiptRevision, err)
+		}
+		if _, duplicate := seen[current.ReceiptID]; duplicate {
+			return errors.New("launch effect receipt predecessor chain contains a cycle")
+		}
+		seen[current.ReceiptID] = struct{}{}
+		chain = append(chain, current)
+		if current.ReceiptRevision == 1 {
+			break
+		}
+		if ctx.ResolvePreviousReceipt == nil {
+			return errors.New("revised launch effect receipt requires source-owned predecessor resolution")
+		}
+		previous, err := ctx.ResolvePreviousReceipt(current.PreviousReceiptID)
+		if err != nil {
+			return fmt.Errorf("resolve launch effect receipt predecessor revision %d: %w", current.ReceiptRevision-1, err)
+		}
+		if err := validateLaunchEffectReceiptPredecessorLink(current, previous); err != nil {
+			return err
+		}
+		current = previous
+	}
+	for index := 0; index+1 < len(chain); index++ {
+		if err := validateLaunchEffectReceiptRevision(chain[index], chain[index+1]); err != nil {
+			return err
+		}
 	}
 	if receipt.Outcome == "UNKNOWN" {
 		return nil
 	}
-	if ctx.ResolvePreviousReceipt == nil {
-		return errors.New("terminal launch effect receipt requires source-owned predecessor resolution")
+	if len(chain) < 2 {
+		return errors.New("terminal launch effect receipt has no verified predecessor")
 	}
-	previous, err := ctx.ResolvePreviousReceipt(receipt.PreviousReceiptID)
-	if err != nil {
-		return fmt.Errorf("resolve terminal launch effect receipt predecessor: %w", err)
-	}
-	if err := validateLaunchEffectReceiptPredecessorLink(receipt, previous); err != nil {
-		return err
-	}
-	if err := VerifyLaunchEffectReceipt(previous, ctx); err != nil {
-		return fmt.Errorf("verify terminal launch effect receipt predecessor: %w", err)
-	}
-	if err := validateLaunchEffectReceiptRevision(receipt, previous); err != nil {
-		return err
-	}
-	return verifyLaunchEffectReceiptEvidencePack(receipt, previous, ctx)
+	return verifyLaunchEffectReceiptEvidencePack(receipt, chain[1], ctx)
 }
 
 func verifyLaunchEffectReceiptBase(receipt LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
 	if err := ValidateLaunchEffectReceiptSemantics(receipt); err != nil {
 		return err
+	}
+	if ctx.MaximumChainDepth < 1 {
+		return errors.New("launch effect receipt requires a source-owned maximum chain depth")
+	}
+	if receipt.ReceiptRevision > ctx.MaximumChainDepth {
+		return errors.New("launch effect receipt exceeds the source-owned maximum chain depth")
 	}
 	if ctx.MinimumLamport == 0 || receipt.Lamport < ctx.MinimumLamport {
 		return errors.New("launch effect receipt Lamport clock is outside source-owned bounds")
@@ -713,7 +739,6 @@ func validateLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt) 
 		{"kernel_trust_root_id", current.KernelTrustRootID, previous.KernelTrustRootID},
 		{"tool", current.Tool, previous.Tool},
 		{"action", current.Action, previous.Action},
-		{"signer_key_id", current.SignerKeyID, previous.SignerKeyID},
 		{"payload_hash", current.PayloadHash, previous.PayloadHash},
 		{"tenant_id", current.TenantID, previous.TenantID},
 		{"workspace_id", current.WorkspaceID, previous.WorkspaceID},

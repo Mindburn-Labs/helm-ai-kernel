@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-24T17:13:33Z
+# Generated: 2026-07-24T17:13:48Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -229,9 +229,9 @@ bcfd4bc7c3f9463be26db2922ad02336c8f987812e7efe442b879359cd652bf6  core/pkg/contr
 98833e4bc7dfc694f1815fd5a7c6592457f9c4c96db337dae8f39fb4b860d293  core/pkg/contracts/lane.go
 217b3a83a3bad758fe91eee03c53d0b46a4b6652bc54817b2c0bb2ac722e966c  core/pkg/contracts/launch_commercial_evidence.go
 63be4c54fb0ab500f0a6b3f0c00d0e5ae708136936edc94e78219e6e80f6d061  core/pkg/contracts/launch_contract_helpers.go
-03bec6c18f191e3425aeb6fe58ca6200272f42ef10370ab2a718632ea156d788  core/pkg/contracts/launch_effect_authority.go
-0b542a38ef86c8a698a5e3ade2ece8ac45d2cb9d6e81b5d7deb2a54cdeaebe3b  core/pkg/contracts/launch_effect_authority_test.go
-bfa377051a4f0d3f91fc37efb09c8395189e84d56592fb1842b85b089814b075  core/pkg/contracts/launch_effect_receipt.go
+009d5383146cd79e8ca4f8da896160feb8948a316fd5997f08739d6f04527fe9  core/pkg/contracts/launch_effect_authority.go
+b7107b7bd6a062a51481607b59ba06960257254d7041a13981899c24de431a6c  core/pkg/contracts/launch_effect_authority_test.go
+6f75e2bb68a7bd3d1cbb3321bfd8aaf0a20d87db48248e87e33843fb3225627a  core/pkg/contracts/launch_effect_receipt.go
 ca23afe2337234f709e9dbd945d339acbe301409f50b1df8b7474d0eb612b54f  core/pkg/contracts/launch_effect_types.go
 6130dbb6677a6f49195a53c1b2e01583b586bcb4527c00e0d322f3339e5be470  core/pkg/contracts/launch_effect_types_test.go
 890aafba8af988c93a47bf6a9a4c1402f3d57ea6cc1a0088797c51c911cdf66d  core/pkg/contracts/launch_offer_snapshot.go
@@ -775,7 +775,7 @@ ac4380ff65bdb029cbb446fb93bed424b5fffd5f5442e1561fb2a750b85cd343  protocols/json
 dd5387ba1859b543a21834b2324a6fff43dfb75259fbceb190b986a4a733dcdd  protocols/json-schemas/effects/launch/fx_snapshot.v1.json
 6bb737a415fe6d26da29e15c7b704363e6d8e71386ebbafa4005e0640bfc49e8  protocols/json-schemas/effects/launch/launch_blueprint.v1.json
 5d86b96ec1cc2d8d8666e9cc873f001662018ec1cf56dba8eae9293eb090c942  protocols/json-schemas/effects/launch/launch_effect_envelope.v1.json
-dc8921c0c49caa3fc535dd930a5e968f010d67fedad7423c9b0a238341a9ba03  protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json
+229bba3965c4dcf1315e49a86f058fdd999298ffcf1a226e5d247605435e6838  protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json
 51957fd6c6d3feecee30faaace5744f34a4c9f07e536463618dccccab42ed940  protocols/json-schemas/effects/launch/offer_snapshot.v1.json
 551aa88ae907ad3bb46e0a34b3ce2b5211bcd63039e1c2f6652e2e1b39a1be14  protocols/json-schemas/effects/launch/provider_capability_profile.v1.json
 c9e61ca6ca51a807840c24bdf017941b92a9525375dcd1d61ac4b5a6f64fd0fe  protocols/json-schemas/effects/launch/provider_certification.v1.json

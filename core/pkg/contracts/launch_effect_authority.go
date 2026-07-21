@@ -392,8 +392,14 @@ func verifyLaunchCanonicalApproval(envelope LaunchEffectAuthorizationEnvelope, c
 	if connectorAuthority.ConnectorAction != expectedConnectorAction {
 		return errors.New("canonical launch approval connector release does not match the dispatched connector action")
 	}
-	permitIssuedAt, _ := time.Parse(time.RFC3339Nano, envelope.PermitIssuedAt)
-	permitExpiry, _ := time.Parse(time.RFC3339Nano, envelope.PermitExpiry)
+	permitIssuedAt, err := time.Parse(time.RFC3339Nano, envelope.PermitIssuedAt)
+	if err != nil {
+		return errors.New("launch effect permit issue time is invalid during canonical approval verification")
+	}
+	permitExpiry, err := time.Parse(time.RFC3339Nano, envelope.PermitExpiry)
+	if err != nil {
+		return errors.New("launch effect permit expiry is invalid during canonical approval verification")
+	}
 	if permitIssuedAt.Before(admission.IssuedAt) || permitExpiry.After(admission.ExpiresAt) {
 		return errors.New("launch effect permit escapes its canonical dispatch admission window")
 	}

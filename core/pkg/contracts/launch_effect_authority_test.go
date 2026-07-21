@@ -368,8 +368,14 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/launch_effect_receipt.v1.json"), signed); err != nil {
+	receiptSchema := compileSchema(t, "effects/launch/launch_effect_receipt.v1.json")
+	if err := validateAgainstSchema(t, receiptSchema, signed); err != nil {
 		t.Fatalf("signed receipt rejected by schema: %v", err)
+	}
+	unsafeSchemaInteger := signed
+	unsafeSchemaInteger.Lamport = 9_007_199_254_740_992
+	if err := validateAgainstSchema(t, receiptSchema, unsafeSchemaInteger); err == nil {
+		t.Fatal("receipt schema accepted a cross-language unsafe integer")
 	}
 	if err := contracts.VerifyLaunchEffectReceipt(signed, verifyContext); err != nil {
 		t.Fatalf("signed receipt rejected: %v", err)
@@ -429,9 +435,48 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("non-terminal provider conflict was rejected: %v", err)
 	}
+	missingPrefixResolver := launchReceiptVerificationContext(publicKey)
+	if err := contracts.VerifyLaunchEffectReceipt(conflictSigned, missingPrefixResolver); err == nil {
+		t.Fatal("revised UNKNOWN receipt verified without its source-owned chain prefix")
+	}
+	if err := contracts.VerifyLaunchEffectReceipt(conflictSigned, verifyContext); err != nil {
+		t.Fatalf("revised UNKNOWN receipt chain was rejected: %v", err)
+	}
 	if err := contracts.VerifyLaunchEffectReceiptRevision(conflictSigned, signed, verifyContext); err != nil {
 		t.Fatalf("provider conflict revision was rejected: %v", err)
 	}
+
+	// Deterministic fixture keys are reference-pack material only and must
+	// never be registered in a runtime trust root.
+	rotatedPrivateKey := ed25519.NewKeyFromSeed([]byte("fedcba9876543210fedcba9876543210"))
+	rotatedPublicKey := rotatedPrivateKey.Public().(ed25519.PublicKey)
+	rotatedConflict := conflict
+	rotatedConflict.SignerKeyID = "kernel-key-2"
+	rotatedConflictSigned, err := contracts.SignLaunchEffectReceiptRevision(rotatedConflict, signed, rotatedPrivateKey)
+	if err != nil {
+		t.Fatalf("trusted receipt signer-key rotation was rejected while signing: %v", err)
+	}
+	rotationContext := launchReceiptVerificationContext(publicKey)
+	rotationContext.ResolvePreviousReceipt = launchReceiptResolver(signed)
+	rotationContext.ResolveSignerKey = func(signerKeyID string) (ed25519.PublicKey, error) {
+		switch signerKeyID {
+		case "kernel-key-1":
+			return publicKey, nil
+		case "kernel-key-2":
+			return rotatedPublicKey, nil
+		default:
+			return nil, fmt.Errorf("unknown receipt signer key")
+		}
+	}
+	if err := contracts.VerifyLaunchEffectReceipt(rotatedConflictSigned, rotationContext); err != nil {
+		t.Fatalf("trusted receipt signer-key rotation was rejected: %v", err)
+	}
+	untrustedRotationContext := launchReceiptVerificationContext(publicKey)
+	untrustedRotationContext.ResolvePreviousReceipt = launchReceiptResolver(signed)
+	if err := contracts.VerifyLaunchEffectReceipt(rotatedConflictSigned, untrustedRotationContext); err == nil {
+		t.Fatal("receipt signer-key rotation escaped source-owned trust resolution")
+	}
+
 	resolvedConflict := conflictSigned
 	resolvedConflict.ReceiptID = ""
 	resolvedConflict.Signature = ""
@@ -451,6 +496,28 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	}
 	if err := contracts.VerifyLaunchEffectReceiptRevision(resolvedConflictSigned, conflictSigned, verifyContext); err != nil {
 		t.Fatalf("resolved provider conflict revision was rejected: %v", err)
+	}
+	fullChainContext := launchReceiptVerificationContext(publicKey)
+	fullChainContext.ResolvePreviousReceipt = launchReceiptResolver(signed, conflictSigned)
+	if err := contracts.VerifyLaunchEffectReceipt(resolvedConflictSigned, fullChainContext); err != nil {
+		t.Fatalf("complete terminal receipt chain was rejected: %v", err)
+	}
+	truncatedChainContext := launchReceiptVerificationContext(publicKey)
+	truncatedChainContext.ResolvePreviousReceipt = launchReceiptResolver(conflictSigned)
+	if err := contracts.VerifyLaunchEffectReceipt(resolvedConflictSigned, truncatedChainContext); err == nil {
+		t.Fatal("terminal receipt accepted a truncated UNKNOWN chain prefix")
+	}
+	forgedRoot := signed
+	forgedRoot.Signature = strings.Repeat("A", len(forgedRoot.Signature))
+	forgedChainContext := launchReceiptVerificationContext(publicKey)
+	forgedChainContext.ResolvePreviousReceipt = launchReceiptResolver(forgedRoot, conflictSigned)
+	if err := contracts.VerifyLaunchEffectReceipt(resolvedConflictSigned, forgedChainContext); err == nil {
+		t.Fatal("terminal receipt accepted a forged chain root")
+	}
+	boundedChainContext := fullChainContext
+	boundedChainContext.MaximumChainDepth = 2
+	if err := contracts.VerifyLaunchEffectReceipt(resolvedConflictSigned, boundedChainContext); err == nil {
+		t.Fatal("terminal receipt exceeded the source-owned maximum chain depth")
 	}
 
 	tampered := reconciledSigned
@@ -599,6 +666,11 @@ func TestLaunchEffectReceiptRejectsNoncanonicalAndUntrustedProof(t *testing.T) {
 	missingReservation.ResolveAuthority = nil
 	if err := contracts.VerifyLaunchEffectReceipt(signed, missingReservation); err == nil {
 		t.Fatal("receipt accepted missing durable effect reservation verification")
+	}
+	missingChainBound := launchReceiptVerificationContext(publicKey)
+	missingChainBound.MaximumChainDepth = 0
+	if err := contracts.VerifyLaunchEffectReceipt(signed, missingChainBound); err == nil {
+		t.Fatal("receipt accepted no source-owned maximum chain depth")
 	}
 	wrongReservation := launchReceiptVerificationContext(publicKey)
 	wrongReservation.ResolveAuthority = func(string, string) (contracts.LaunchEffectReceiptAuthorityBinding, error) {
@@ -1154,6 +1226,8 @@ func launchTestApprovalAction(effectID string) string {
 	}
 }
 
+// launchApprovalPrivateKey is deterministic reference-pack material only; it
+// must never be registered in a runtime approval trust root.
 func launchApprovalPrivateKey() ed25519.PrivateKey {
 	return ed25519.NewKeyFromSeed([]byte("abcdef0123456789abcdef0123456789"))
 }
@@ -1465,7 +1539,8 @@ func launchUnknownReceiptFixture() contracts.LaunchEffectReceipt {
 func launchReceiptVerificationContext(publicKey ed25519.PublicKey) contracts.LaunchEffectReceiptVerificationContext {
 	authority := launchReceiptAuthorityFixture()
 	return contracts.LaunchEffectReceiptVerificationContext{
-		MinimumLamport: 2,
+		MinimumLamport:    2,
+		MaximumChainDepth: 64,
 		ResolveSignerKey: func(signerKeyID string) (ed25519.PublicKey, error) {
 			if signerKeyID != "kernel-key-1" {
 				return nil, fmt.Errorf("unknown receipt signer key")
@@ -1552,6 +1627,8 @@ func launchReceiptAuthorityBinding(receipt contracts.LaunchEffectReceipt) contra
 	}
 }
 
+// launchFixturePrivateKey is deterministic reference-pack material only; it
+// must never be registered in a runtime receipt trust root.
 func launchFixturePrivateKey() ed25519.PrivateKey {
 	return ed25519.NewKeyFromSeed([]byte("0123456789abcdef0123456789abcdef"))
 }

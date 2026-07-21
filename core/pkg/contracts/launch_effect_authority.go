@@ -191,6 +191,11 @@ type LaunchEffectEnvelopeVerificationContext struct {
 	ResolvePolicyEpoch             func(tenantID, workspaceID string) (string, error)
 	ResolveCurrentConnectorRelease func(ApprovalConnectorAuthority) (ConnectorReleaseAuthorityEnvelope, error)
 	VerifyCurrentConnectorRelease  func(ConnectorReleaseAuthorityEnvelope, time.Time) error
+	// VerifyDispatchCommit MUST source-read the exact consumed single-use permit
+	// and durable STARTED effect reservation produced after validate. It runs
+	// after the second revocable-state recheck and immediately before the network
+	// seam, so callback ordering alone can never stand in for the permit CAS.
+	VerifyDispatchCommit func(LaunchEffectDispatchFinalization, LaunchEffectDispatchFinalizationObservation) error
 	// FinalizeAndStartDispatch MUST hold the source-owned dispatch serialization
 	// fence while it invokes validate, CASes expected.Permit only after validation
 	// succeeds, persists the durable effect reservation as STARTED, and invokes
@@ -374,6 +379,12 @@ func startLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEn
 		observation, err := resolveAndVerifyLaunchDispatchFinalizationObservation(envelope, expectedFinalization, ctx)
 		if err != nil {
 			return fmt.Errorf("launch authorization envelope connector start observation: %w", err)
+		}
+		if ctx.VerifyDispatchCommit == nil {
+			return errors.New("launch authorization envelope connector start requires source-owned permit consumption and STARTED reservation proof")
+		}
+		if err := ctx.VerifyDispatchCommit(expectedFinalization, observation); err != nil {
+			return fmt.Errorf("verify launch authorization envelope dispatch commit: %w", err)
 		}
 		if err := ctx.StartDispatch(observation.ObservedAuthority); err != nil {
 			return err

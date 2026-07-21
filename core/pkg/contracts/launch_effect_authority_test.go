@@ -281,6 +281,33 @@ func TestLaunchEffectAuthorizationEnvelopeConsumesPermitOnce(t *testing.T) {
 	}
 }
 
+func TestLaunchEffectAuthorizationEnvelopeRejectsStartWithoutPermitCAS(t *testing.T) {
+	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
+	var networkStarted atomic.Bool
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error {
+		networkStarted.Store(true)
+		return nil
+	}
+	ctx.FinalizeAndStartDispatch = func(
+		_ contracts.LaunchEffectDispatchFinalization,
+		validate func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		start func() error,
+	) error {
+		if _, err := validate(); err != nil {
+			return err
+		}
+		// Intentionally omit both the permit CAS and durable STARTED reservation.
+		return start()
+	}
+	err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx)
+	if err == nil || !strings.Contains(err.Error(), "permit consumption or STARTED reservation not found") {
+		t.Fatalf("missing permit CAS error = %v", err)
+	}
+	if networkStarted.Load() {
+		t.Fatal("dispatch without a proven permit CAS crossed the network seam")
+	}
+}
+
 func TestLaunchEffectAuthorizationEnvelopeRejectsExpiryBeforeAtomicFinalization(t *testing.T) {
 	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
 	var consumed atomic.Bool
@@ -520,6 +547,7 @@ func TestLaunchEffectAuthorizationEnvelopeRechecksProviderCertificationAtConnect
 
 func TestLaunchEffectAuthorizationEnvelopeAcceptsEquivalentAtomicTimestamps(t *testing.T) {
 	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
+	var committed atomic.Bool
 	observed := ctx.Permit
 	zone := time.FixedZone("equivalent-instant", 0)
 	observed.PermitIssuedAt = observed.PermitIssuedAt.In(zone)
@@ -528,6 +556,12 @@ func TestLaunchEffectAuthorizationEnvelopeAcceptsEquivalentAtomicTimestamps(t *t
 	observed.KernelVerdictExpiry = observed.KernelVerdictExpiry.In(zone)
 	observed.DispatchDeadline = observed.DispatchDeadline.In(zone)
 	ctx.ResolvePermitBinding = func(string, string) (contracts.LaunchEffectPermitBinding, error) { return observed, nil }
+	ctx.VerifyDispatchCommit = func(contracts.LaunchEffectDispatchFinalization, contracts.LaunchEffectDispatchFinalizationObservation) error {
+		if !committed.Load() {
+			return fmt.Errorf("dispatch commit missing")
+		}
+		return nil
+	}
 	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error { return nil }
 	ctx.FinalizeAndStartDispatch = func(
 		_ contracts.LaunchEffectDispatchFinalization,
@@ -537,6 +571,7 @@ func TestLaunchEffectAuthorizationEnvelopeAcceptsEquivalentAtomicTimestamps(t *t
 		if _, err := validate(); err != nil {
 			return err
 		}
+		committed.Store(true)
 		return start()
 	}
 	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
@@ -736,6 +771,15 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 				return err
 			}
 			return release.Authority.ValidateAt(observedAt)
+		},
+		VerifyDispatchCommit: func(expected contracts.LaunchEffectDispatchFinalization, observation contracts.LaunchEffectDispatchFinalizationObservation) error {
+			if !consumed.Load() {
+				return fmt.Errorf("permit consumption or STARTED reservation not found")
+			}
+			if expected.Permit != permit || observation.ObservedAuthority != permit || observation.ObservedAt.Before(now) {
+				return fmt.Errorf("dispatch commit binding mismatch")
+			}
+			return nil
 		},
 		FinalizeAndStartDispatch: func(
 			expected contracts.LaunchEffectDispatchFinalization,

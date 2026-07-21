@@ -41,8 +41,13 @@ def verify_manifest(manifest, public_key_hex, expected_payload_text=None):
     entries = manifest.get("entries", [])
     if not entries:
         raise VectorError("contract_rejected", "manifest carries no entries")
-    if [entry["path"] for entry in entries] != sorted(entry["path"] for entry in entries):
+    paths = [entry["path"] for entry in entries]
+    if paths != sorted(paths):
         raise VectorError("contract_rejected", "manifest entries must be path-sorted")
+    if len(set(paths)) != len(paths):
+        # The Go verifier rejects duplicated paths; without this the dict
+        # built in verify_payloads would silently drop one of them.
+        raise VectorError("contract_rejected", "manifest entry paths must be unique")
     set_hash = sha256_ref(canonical_json(entries).encode("utf-8"))
     if set_hash != manifest.get("artifact_set_hash"):
         raise VectorError("set_hash_mismatch", f"entry set hash {set_hash} != {manifest.get('artifact_set_hash')}")

@@ -54,7 +54,9 @@ func TestValidateRejections(t *testing.T) {
 			in.Topology.WorkloadUnits = []string{"helm-gateway.service"}
 		}, "more than once"},
 		{"tcp gateway with hostname", func(in *ProfileInput) { in.Topology.Gateway.Address = "gateway.local:7714" }, "literal IP"},
-		{"tcp gateway with zero port", func(in *ProfileInput) { in.Topology.Gateway.Address = "127.0.0.1:0" }, "non-zero port"},
+		{"tcp gateway with zero port", func(in *ProfileInput) { in.Topology.Gateway.Address = "127.0.0.1:0" }, "port in 1-65535"},
+		{"tcp gateway with padded zero port", func(in *ProfileInput) { in.Topology.Gateway.Address = "127.0.0.1:00000" }, "port in 1-65535"},
+		{"tcp gateway with out-of-range port", func(in *ProfileInput) { in.Topology.Gateway.Address = "127.0.0.1:99999" }, "port in 1-65535"},
 		{"tcp gateway with path", func(in *ProfileInput) { in.Topology.Gateway.Path = "/run/helm.sock" }, "must not set path"},
 		{"unix gateway relative path", func(in *ProfileInput) {
 			in.Topology.Gateway = GatewayEndpoint{Kind: "unix", Path: "run/helm.sock"}

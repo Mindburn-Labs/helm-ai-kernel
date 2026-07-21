@@ -35,6 +35,7 @@ import (
 	"net/netip"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -222,8 +223,9 @@ func (t Topology) validate() error {
 		if _, err := netip.ParseAddr(host); err != nil {
 			return fmt.Errorf("tcp gateway address host %q must be a literal IP (needed for IPAddressAllow=)", host)
 		}
-		if port == "" || port == "0" {
-			return fmt.Errorf("tcp gateway address %q must carry a non-zero port", t.Gateway.Address)
+		portNum, err := strconv.Atoi(port)
+		if err != nil || portNum < 1 || portNum > 65535 {
+			return fmt.Errorf("tcp gateway address %q must carry a port in 1-65535", t.Gateway.Address)
 		}
 	case "unix":
 		if t.Gateway.Address != "" {

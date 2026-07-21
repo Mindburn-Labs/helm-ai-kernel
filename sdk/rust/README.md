@@ -54,4 +54,4 @@ runtime query is provided.
 
 ## Release Notes
 
-`0.7.4` is the release-hardening patch with the retained OpenAPI client surface and optional protobuf codegen.
+`0.7.4` adds the Boundary Enforcement Profile to the kernel and retains the OpenAPI client surface and optional protobuf codegen.

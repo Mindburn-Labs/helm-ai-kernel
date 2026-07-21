@@ -55,4 +55,4 @@ EvidencePack roots stay authoritative.
 
 ## Release Notes
 
-`0.7.4` is the release-hardening patch with the retained OpenAPI client surface and local test coverage.
+`0.7.4` adds the Boundary Enforcement Profile to the kernel and retains the OpenAPI client surface and local test coverage.

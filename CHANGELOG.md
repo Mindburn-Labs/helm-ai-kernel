@@ -95,8 +95,8 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
 
 <!-- quantum_posture: v0.7.4 records use classical Ed25519 signatures and SHA-256 content hashes; none add a post-quantum cryptographic control. -->
 
-- Added the **Boundary Enforcement Profile**: `helm-ai-kernel boundary profile
-  compile` emits systemd hardening drop-ins, a default-drop nftables ruleset,
+- Added the **Boundary Enforcement Profile**. `helm-ai-kernel boundary profile compile`
+  emits systemd hardening drop-ins, a default-drop nftables ruleset,
   cgroup limits and device permits from a hash-bound `boundary_profile_input.v1`
   document, sealed by a signed `profile_compile_receipt.v1`. HELM compiles and
   attests; systemd and nftables enforce — this is not a host-level enforcement

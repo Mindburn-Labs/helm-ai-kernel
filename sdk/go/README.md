@@ -112,4 +112,4 @@ func main() {
 
 ## Release Notes
 
-`0.7.4` is the release-hardening patch with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.
+`0.7.4` adds the Boundary Enforcement Profile to the kernel and retains the public HTTP client surface, conformance entrypoints, and evidence verification helpers.

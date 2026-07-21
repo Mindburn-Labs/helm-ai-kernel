@@ -86,4 +86,4 @@ and sandbox grants attached to HELM-native receipts and EvidencePacks.
 
 ## Release Notes
 
-`0.7.4` is the release-hardening patch with the retained OpenAPI client surface and protobuf message bindings.
+`0.7.4` adds the Boundary Enforcement Profile to the kernel and retains the OpenAPI client surface and protobuf message bindings.

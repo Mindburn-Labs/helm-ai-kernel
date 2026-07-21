@@ -111,7 +111,7 @@ jobs:
             --head "$branch"; then
             exit 0
           fi
-          if existing_pr="$(gh pr list --head "$branch" --state open --json url --jq '.[0].url')" && [ -n "$existing_pr" ]; then
+          if existing_pr="$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // ""')" && [ -n "$existing_pr" ]; then
             echo "Catalog refresh PR already exists: ${existing_pr}"
             exit 0
           fi

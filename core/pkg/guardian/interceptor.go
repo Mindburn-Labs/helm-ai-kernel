@@ -24,13 +24,17 @@ const (
 	ContextSourceChannel   = "source_channel"
 	ContextTrustLevel      = "trust_level"
 	ContextDestination     = "destination"
+	// ContextAllowTaintedEgress overrides the tainted-egress deny. It is a
+	// security decision and must be bound by the transport, never passed as a
+	// caller argument — see IsReservedSecurityContextKey.
+	ContextAllowTaintedEgress = "allow_tainted_egress"
 )
 
 // IsReservedSecurityContextKey identifies context keys whose values must be
 // bound by a trusted transport or adapter boundary, never by caller arguments.
 func IsReservedSecurityContextKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextDestination:
+	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextDestination, ContextAllowTaintedEgress:
 		return true
 	default:
 		return false
@@ -712,7 +716,7 @@ func (t *TaintEgressInterceptor) Evaluate(ctx context.Context, evalCtx *Evaluati
 		evalCtx.Request.Context["taint"] = taintLabels
 		evalCtx.Tainted = true
 	}
-	if taintTrackingEnabled() && taintedEgressDenied(evalCtx.Request.Context, taintLabels) {
+	if taintEgressEnforcementEnabled() && taintedEgressDenied(evalCtx.Request.Context, taintLabels) {
 		now := t.g.clock.Now()
 		decision := &contracts.DecisionRecord{
 			ID:         newDecisionID(),

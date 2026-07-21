@@ -620,3 +620,66 @@ func TestPermitNonceTrackerBoundsAndPrunesExpiredEntries(t *testing.T) {
 		t.Fatalf("expired nonce entries should be pruned: %v", err)
 	}
 }
+
+func TestPermitScopeBindsExactParamValues(t *testing.T) {
+	c := NewConnector(Config{BaseURL: "https://api.linear.app"})
+	params := map[string]any{
+		"team_id":  "team-1",
+		"title":    "Ship = safely",
+		"priority": 2,
+		"labels":   []string{"security", "connector"},
+	}
+
+	effectType, scope, resourceRef, err := c.PermitScope("linear.create_issue", params)
+	if err != nil {
+		t.Fatalf("permit scope: %v", err)
+	}
+	if effectType != effects.EffectTypeWrite {
+		t.Fatalf("effect type = %q, want %q", effectType, effects.EffectTypeWrite)
+	}
+	if scope.AllowedAction != "linear.create_issue" {
+		t.Fatalf("allowed action = %q, want linear.create_issue", scope.AllowedAction)
+	}
+	wantParams := []string{
+		`labels=["security","connector"]`,
+		"priority=2",
+		"team_id=team-1",
+		"title=Ship = safely",
+	}
+	if strings.Join(scope.AllowedParams, "\n") != strings.Join(wantParams, "\n") {
+		t.Fatalf("allowed params = %#v, want %#v", scope.AllowedParams, wantParams)
+	}
+	if resourceRef != "team:team-1" {
+		t.Fatalf("resource ref = %q, want team:team-1", resourceRef)
+	}
+}
+
+// The scope a connector declares must be accepted by its own execute-time
+// permit validation; otherwise the bridge mints permits the connector rejects.
+func TestPermitScopeRoundTripsThroughValidatePermit(t *testing.T) {
+	c := NewConnector(Config{BaseURL: "https://api.linear.app"})
+	params := map[string]any{"issue_id": "issue-1", "body": "looks good"}
+
+	effectType, scope, resourceRef, err := c.PermitScope("linear.add_comment", params)
+	if err != nil {
+		t.Fatalf("permit scope: %v", err)
+	}
+	permit := &effects.EffectPermit{
+		ConnectorID: c.ID(), EffectType: effectType, Scope: scope, ResourceRef: resourceRef,
+		SingleUse: true, Nonce: "nonce-roundtrip",
+		IssuedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(time.Minute),
+	}
+	if err := c.validatePermit(permit, "linear.add_comment", effectType, params); err != nil {
+		t.Fatalf("connector rejected its own declared scope: %v", err)
+	}
+}
+
+func TestPermitScopeRejectsUnclassifiedAndUnscopedTools(t *testing.T) {
+	c := NewConnector(Config{BaseURL: "https://api.linear.app"})
+	if _, _, _, err := c.PermitScope("linear.delete_universe", map[string]any{}); err == nil {
+		t.Fatal("expected unknown tool to be rejected")
+	}
+	if _, _, _, err := c.PermitScope("linear.create_issue", map[string]any{"title": "no team"}); err == nil {
+		t.Fatal("expected missing team_id to be rejected")
+	}
+}

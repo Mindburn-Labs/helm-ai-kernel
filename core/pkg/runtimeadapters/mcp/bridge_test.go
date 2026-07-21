@@ -490,11 +490,11 @@ func TestGovernedBridgeMintsLinearScopedPermits(t *testing.T) {
 
 	connector := linearconnector.NewConnector(linearconnector.Config{BaseURL: server.URL, Token: "lin_api_test"})
 	approvals := NewMemoryApprovalStore()
-	bridge := NewGovernedBridge(BridgeConfig{
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{
 		Profile:   operateProfile(),
 		Connector: connector,
 		Approvals: approvals,
-	})
+	}))
 	graph := proofgraph.NewGraph()
 	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: bridge})
 	if err != nil {
@@ -527,37 +527,6 @@ func TestGovernedBridgeMintsLinearScopedPermits(t *testing.T) {
 	}
 	if requests != 3 {
 		t.Fatalf("Linear server received %d requests, want 3", requests)
-	}
-}
-
-func TestLinearPermitBindingBindsExactParamValues(t *testing.T) {
-	req := &runtimeadapters.AdaptedRequest{
-		ToolName: "linear.create_issue",
-		Arguments: map[string]any{
-			"team_id":  "team-1",
-			"title":    "Ship = safely",
-			"priority": 2,
-			"labels":   []string{"security", "connector"},
-		},
-	}
-	effectType, allowedParams, resourceRef, ok := linearPermitBinding(req)
-	if !ok {
-		t.Fatal("expected Linear permit binding")
-	}
-	if effectType != effects.EffectTypeWrite {
-		t.Fatalf("effect type = %q, want %q", effectType, effects.EffectTypeWrite)
-	}
-	wantParams := []string{
-		`labels=["security","connector"]`,
-		"priority=2",
-		"team_id=team-1",
-		"title=Ship = safely",
-	}
-	if strings.Join(allowedParams, "\n") != strings.Join(wantParams, "\n") {
-		t.Fatalf("allowed params = %#v, want %#v", allowedParams, wantParams)
-	}
-	if resourceRef != "team:team-1" {
-		t.Fatalf("resource ref = %q, want team:team-1", resourceRef)
 	}
 }
 

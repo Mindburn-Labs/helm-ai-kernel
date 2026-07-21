@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,8 +16,11 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
-// Ensure Connector implements effects.Connector at compile time.
-var _ effects.Connector = (*Connector)(nil)
+// Compile-time contracts for the governed execution path.
+var (
+	_ effects.Connector           = (*Connector)(nil)
+	_ effects.PermitScopeProvider = (*Connector)(nil)
+)
 
 // Connector is the HELM connector for the Linear project management API.
 //
@@ -106,6 +110,41 @@ func NewConnector(cfg Config) *Connector {
 // ID returns the connector identifier.
 func (c *Connector) ID() string {
 	return c.connectorID
+}
+
+// PermitScope declares the exact permit shape this connector will accept for a
+// tool call. The governed bridge mints from this contract instead of guessing
+// Linear's effect classes, parameter scope, or resource identifiers, and
+// Execute re-validates the minted permit against the same rules.
+//
+// Every supplied parameter is bound by exact value so a detached permit cannot
+// be replayed against a different title, body, state, assignee, or label set.
+func (c *Connector) PermitScope(toolName string, params map[string]any) (effects.EffectType, effects.EffectScope, string, error) {
+	effectType, ok := toolEffectTypeMap[toolName]
+	if !ok {
+		return "", effects.EffectScope{}, "", fmt.Errorf("linear: missing effect classification for tool %q", toolName)
+	}
+	resourceKey, resourcePrefix := "issue_id", "issue:"
+	if toolName == "linear.create_issue" || toolName == "linear.list_issues" {
+		resourceKey, resourcePrefix = "team_id", "team:"
+	}
+	paramKeys := make([]string, 0, len(params))
+	for key := range params {
+		paramKeys = append(paramKeys, key)
+	}
+	sort.Strings(paramKeys)
+	allowedParams := make([]string, 0, len(paramKeys))
+	for _, key := range paramKeys {
+		allowedParams = append(allowedParams, key+"="+scopeParamValue(params[key]))
+	}
+	resourceRef := ""
+	if resourceID := strings.TrimSpace(stringParam(params, resourceKey)); resourceID != "" {
+		resourceRef = resourcePrefix + resourceID
+	}
+	if resourceRef == "" {
+		return "", effects.EffectScope{}, "", fmt.Errorf("linear: action %q requires %s", toolName, resourceKey)
+	}
+	return effectType, effects.EffectScope{AllowedAction: toolName, AllowedParams: allowedParams}, resourceRef, nil
 }
 
 // Execute dispatches a tool call through the zero-trust gate and records it in

@@ -93,12 +93,12 @@
     "podSecurityContext": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Pod-level securityContext. Defaults run the kernel as non-root (UID/GID 65534, nobody) with fsGroup so the data volume is writable."
+      "description": "Pod-level securityContext. Defaults run the kernel as non-root (UID/GID 65534, nobody) with fsGroup so the data volume is writable, and set seccompProfile RuntimeDefault so pods are admitted under PodSecurity \"restricted\"."
     },
     "securityContext": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Container-level securityContext. Defaults drop ALL Linux capabilities, disable privilege escalation, and mount the root filesystem read-only; helm.dataDir is the only writable path."
+      "description": "Container-level securityContext. Defaults drop ALL Linux capabilities, disable privilege escalation, mount the root filesystem read-only (helm.dataDir is the only writable path), and set seccompProfile RuntimeDefault so pods are admitted under PodSecurity \"restricted\"."
     },
     "service": {
       "type": "object",

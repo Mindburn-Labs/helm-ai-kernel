@@ -56,7 +56,7 @@ export OPENAI_BASE_URL=http://127.0.0.1:9090/v1
 Every tool call is checked against policy and allowed, denied, or escalated;
 each decision writes a hash-chained receipt. The Local Inference Gateway can
 additionally pin the engine by model hash, so a receipt records *which* model
-answered. See [Use The OpenAI-Compatible Proxy](use-openai-compatible-proxy).
+answered. See [Use The OpenAI-Compatible Proxy](use-openai-compatible-proxy.md).
 
 ## Make the egress policy the host firewall source
 
@@ -87,7 +87,7 @@ helm-ai-kernel verify evidence-pack.tar
 and the JCS canonical form) before any network step; the `--online` ledger
 check is opt-in and off by default. Replay from genesis works without a route
 to the internet. For the full export-and-check walkthrough see
-[Export And Verify EvidencePacks](export-verify-evidencepacks).
+[Export And Verify EvidencePacks](export-verify-evidencepacks.md).
 
 ## Run it as a system service
 

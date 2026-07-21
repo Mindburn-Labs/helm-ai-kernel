@@ -64,6 +64,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "guides/air-gap-appliance",
+      "title": "Run HELM On A Sealed Or Air-Gapped Host",
+      "section": "guide",
+      "source_path": "docs/guides/air-gap-appliance.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/guides/air-gap-appliance",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "how-helm-works",
       "title": "How HELM Works",
       "section": "guide",

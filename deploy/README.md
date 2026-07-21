@@ -30,11 +30,24 @@ helm install helm-ai-kernel deploy/helm-chart
 
 Review `deploy/helm-chart/values.yaml` before use in a real environment.
 
+## systemd (single host)
+
+For a single host without Kubernetes — for example a sealed or air-gapped
+appliance — a hardened reference unit ships at
+`deploy/systemd/helm-gateway.service`. It runs the gateway under a
+system-managed unprivileged account with a read-only root filesystem, no new
+privileges, a narrowed system-call and address-family set, and closed device
+access. The host enforces the isolation; HELM writes the receipts. Review every
+path and directive, then check it on the host with
+`systemd-analyze verify helm-gateway.service`. See the
+[sealed / air-gapped host guide](https://helm.docs.mindburn.org/guides/air-gap-appliance).
+
 ## Scope
 
 Included:
 
 - `Deployment` running `helm-ai-kernel serve`
+- reference `systemd` unit for a single-host deployment at `deploy/systemd/helm-gateway.service`
 - `Service` for HTTP, health, and optional metrics ports
 - optional `Ingress`
 - generated or existing signing-key `Secret`

@@ -114,7 +114,7 @@ func buildInventory(report *shadow.Report) AutoconfigureInventory {
 	}
 	for _, f := range report.Findings {
 		switch f.Kind {
-		case "sdk_import", "helm_absent", "agt_detected":
+		case "sdk_import", "helm_absent", "agt_detected", "local_llm_runtime", "llm_gateway":
 			if f.Vendor == "helm" {
 				continue
 			}

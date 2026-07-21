@@ -132,7 +132,8 @@ helm_runner template "$RELEASE" "$CHART" \
 assert_contains "$hermes_job_rendered" "kind: Job"
 assert_contains "$hermes_job_rendered" "helm-ai-kernel-hermes"
 assert_contains "$hermes_job_rendered" "helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded"
-if grep -Fq 'kube_helm test "$RELEASE" -n "$NAMESPACE" --logs' "$ROOT/scripts/ci/launchpad_k8s_smoke.sh"; then
+# Match any argument order or added redirection, not one exact spelling.
+if grep -Eq 'kube_helm[[:space:]]+test\b[^#]*--logs' "$ROOT/scripts/ci/launchpad_k8s_smoke.sh"; then
     echo "::error::launchpad smoke requests Helm test logs after successful hooks are deleted"
     exit 1
 fi

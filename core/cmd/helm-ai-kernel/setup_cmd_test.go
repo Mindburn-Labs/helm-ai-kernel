@@ -34,6 +34,21 @@ func TestSetupNoArgsPrintsChooser(t *testing.T) {
 	}
 }
 
+func TestSetupHookCommandIncludesExplicitSigningSeedFile(t *testing.T) {
+	opts := setupOptions{
+		Target:          "codex",
+		DataDir:         "/tmp/helm-data",
+		SigningSeedFile: "/private/approved/workstation.seed",
+	}
+	command := setupHookCommand(opts, "/usr/local/bin/helm-ai-kernel")
+	if !strings.Contains(command, "--signing-seed-file '/private/approved/workstation.seed'") {
+		t.Fatalf("hook command did not preserve explicit signer source: %s", command)
+	}
+	if removal := setupUninstallCommand(opts); !strings.Contains(removal, "--signing-seed-file '/private/approved/workstation.seed'") {
+		t.Fatalf("uninstall command did not preserve explicit signer source: %s", removal)
+	}
+}
+
 func TestSetupJSONSupportMatrix(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"helm-ai-kernel", "setup", "--json"}, &stdout, &stderr)

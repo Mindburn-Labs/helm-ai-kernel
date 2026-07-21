@@ -20,9 +20,10 @@ var (
 )
 
 type hookOptions struct {
-	Client  string
-	DataDir string
-	JSON    bool
+	Client          string
+	DataDir         string
+	SigningSeedFile string
+	JSON            bool
 }
 
 type preToolPayload struct {
@@ -85,6 +86,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code or codex")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
+	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	fs.BoolVar(&opts.JSON, "json", false, "Reserved for structured diagnostics")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -143,7 +145,7 @@ func writeHookDeny(stdout io.Writer, reason string) error {
 }
 
 func printHookUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR]")
+	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--signing-seed-file PATH]")
 }
 
 func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
@@ -238,9 +240,9 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 			"tool":   payload.ToolName,
 		},
 	}
-	seed, err := ensureLocalWorkstationSigningSeed(opts.DataDir)
+	seed, err := resolveWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile)
 	if err != nil {
-		return nil, fmt.Errorf("load local workstation signing key: %w", err)
+		return nil, fmt.Errorf("load workstation signing key: %w", err)
 	}
 	return workstation.Decide(profile, req, workstation.DecisionOptions{SigningSeed: seed})
 }

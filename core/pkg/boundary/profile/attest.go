@@ -181,6 +181,12 @@ func Attest(receipt CompileReceipt, files map[string][]byte, prober Prober, sign
 // (the gateway unit hard-requires a successful attest oneshot) — so this
 // function exists for tests and for future gateway integration only. It must
 // never be bypassed with a default-open wrapper.
+//
+// Integration contract for that future wiring: a record hash is integrity,
+// NOT authenticity. A caller gating on a DESERIALIZED attestation (rather
+// than one computed in-process from a Prober) must first require a signature
+// and VerifyPostureAttestation against a trusted public key — an
+// unauthenticated hash-sealed record is forgeable by whoever supplies it.
 func GateDispatch(attestation PostureAttestation) bool {
 	return attestation.RecordHash != "" && attestation.Verdict == VerdictMatch
 }

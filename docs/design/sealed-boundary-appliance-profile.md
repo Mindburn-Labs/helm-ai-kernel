@@ -120,7 +120,10 @@ Key mechanics:
 
 seccomp profile emission per mode tier; GPU attestation binding
 (`EnginePin.AttestedMeasurement` → CC-attestation/TPM quote); update-bundle
-**build tooling**; measured-boot posture; server-side `GateDispatch` wiring.
+**build tooling**; measured-boot posture; server-side `GateDispatch` wiring
+(bound by the `GateDispatch` doc contract: deserialized attestations must be
+signature-verified against a trust root before gating — a hash seal is
+integrity, not authenticity).
 
 ## 6. As-built corrections vs the original proposal
 

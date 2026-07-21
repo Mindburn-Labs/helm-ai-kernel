@@ -272,7 +272,9 @@ func TestHelpersAndDirectScanFileBranches(t *testing.T) {
 	scannerRel = func(string, string) (string, error) {
 		return "", errors.New("rel failed")
 	}
-	s.scanFile(file, "relative-root", direct)
+	if err := s.scanFile(file, "relative-root", direct); err != nil {
+		t.Fatalf("scanFile() rel fallback error = %v", err)
+	}
 	if len(direct.Findings) != 1 || direct.Findings[0].Path != file {
 		t.Fatalf("scanFile() rel error findings = %#v", direct.Findings)
 	}
@@ -283,11 +285,91 @@ func TestHelpersAndDirectScanFileBranches(t *testing.T) {
 		return nil, errors.New("open failed")
 	}
 	before := len(direct.Findings)
-	s.scanFile(file, root, direct)
+	if err := s.scanFile(file, root, direct); err == nil {
+		t.Fatal("scanFile() open error = nil, want error")
+	}
 	if len(direct.Findings) != before {
 		t.Fatalf("scanFile() open error changed findings: %#v", direct.Findings)
 	}
 	restore()
+}
+
+func TestStrictScannerFailsClosedOnIncompleteCoverage(t *testing.T) {
+	t.Run("missing root", func(t *testing.T) {
+		s := NewScanner()
+		s.RequireComplete = true
+		_, err := s.Scan(filepath.Join(t.TempDir(), "missing"))
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict missing-root error = %v, want coverage error", err)
+		}
+	})
+
+	t.Run("walk error", func(t *testing.T) {
+		restore := replaceScannerHooks(t)
+		scannerWalkDir = func(root string, fn fs.WalkDirFunc) error {
+			return fn(filepath.Join(root, "unreadable"), nil, errors.New("permission denied"))
+		}
+		_, err := (&Scanner{RequireComplete: true, MaxFileBytes: 2 * 1024 * 1024, Clock: time.Now}).Scan("root")
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict walk error = %v, want coverage error", err)
+		}
+		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "unreadable") {
+			t.Fatalf("strict walk error leaked source detail: %v", err)
+		}
+		restore()
+	})
+
+	t.Run("stat error", func(t *testing.T) {
+		restore := replaceScannerHooks(t)
+		scannerWalkDir = func(root string, fn fs.WalkDirFunc) error {
+			if err := fn(root, fakeDirEntry{name: "root", dir: true}, nil); err != nil {
+				return err
+			}
+			return fn(filepath.Join(root, "candidate.py"), fakeDirEntry{name: "candidate.py", infoErr: errors.New("stat failed")}, nil)
+		}
+		_, err := (&Scanner{RequireComplete: true, MaxFileBytes: 2 * 1024 * 1024, Clock: time.Now}).Scan("root")
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict stat error = %v, want coverage error", err)
+		}
+		restore()
+	})
+
+	t.Run("oversized candidate", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "large.py", "import openai\n")
+		s := NewScanner()
+		s.RequireComplete = true
+		s.MaxFileBytes = 1
+		_, err := s.Scan(root)
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict oversized error = %v, want coverage error", err)
+		}
+	})
+
+	t.Run("open error", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "candidate.py", "import openai\n")
+		restore := replaceScannerHooks(t)
+		scannerOpen = func(string) (*os.File, error) { return nil, errors.New("open failed") }
+		s := NewScanner()
+		s.RequireComplete = true
+		_, err := s.Scan(root)
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict open error = %v, want coverage error", err)
+		}
+		restore()
+	})
+
+	t.Run("long line", func(t *testing.T) {
+		root := t.TempDir()
+		writeFile(t, root, "candidate.py", strings.Repeat("x", 1024*1024+1))
+		s := NewScanner()
+		s.RequireComplete = true
+		_, err := s.Scan(root)
+		if !errors.Is(err, ErrScanCoverageIncomplete) {
+			t.Fatalf("strict long line error = %v, want coverage error", err)
+		}
+	})
 }
 
 func replaceScannerHooks(t *testing.T) func() {
@@ -384,4 +466,65 @@ func (i fakeFileInfo) IsDir() bool {
 
 func (i fakeFileInfo) Sys() any {
 	return nil
+}
+
+func TestScanLocalInferenceRuntimesAndGateways(t *testing.T) {
+	root := t.TempDir()
+	// One fixture per signature family.
+	writeFile(t, root, "app/ollama_client.py", "import ollama\nr = ollama.chat(model='llama3')\n")             // import
+	writeFile(t, root, "infra/docker-compose.yml", "services:\n  vllm:\n    image: vllm/vllm-openai:latest\n") // compose image
+	writeFile(t, root, "infra/Dockerfile", "FROM ghcr.io/ggml-org/llama.cpp:server\n")                         // Dockerfile image
+	writeFile(t, root, "app/lmstudio.py", "client = OpenAIClient(base_url='http://localhost:1234/v1')\n")      // distinctive port
+	writeFile(t, root, "models/Modelfile", "FROM llama3\nPARAMETER temperature 0.7\n")                         // filename rule
+	writeFile(t, root, "run/serve.py", "cmd = 'vllm serve meta-llama/Llama-3-8B --port 8000'\n")               // CLI invocation
+	writeFile(t, root, "gw/proxy.py", "import litellm\n")                                                      // gateway import
+	writeFile(t, root, "gw/compose.yaml", "services:\n  gw:\n    image: ghcr.io/berriai/litellm:main\n")       // gateway image
+	// Negative: a colliding bare port (:8000) with no runtime-identifying token must NOT be flagged.
+	writeFile(t, root, "neg/plain.py", "URL = 'http://localhost:8000/v1'\n")
+
+	now := time.Unix(1700000000, 0).UTC()
+	scanner := NewScanner()
+	scanner.Clock = func() time.Time { return now }
+
+	report, err := scanner.Scan(root)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	type want struct{ kind, vendor, severity string }
+	wantByPath := map[string]want{
+		"app/ollama_client.py":     {"local_llm_runtime", "ollama", "LOW"},
+		"infra/docker-compose.yml": {"local_llm_runtime", "vllm", "LOW"},
+		"infra/Dockerfile":         {"local_llm_runtime", "llamacpp", "LOW"},
+		"app/lmstudio.py":          {"local_llm_runtime", "lmstudio", "LOW"},
+		"models/Modelfile":         {"local_llm_runtime", "ollama", "LOW"},
+		"run/serve.py":             {"local_llm_runtime", "vllm", "LOW"},
+		"gw/proxy.py":              {"llm_gateway", "litellm", "MEDIUM"},
+		"gw/compose.yaml":          {"llm_gateway", "litellm", "MEDIUM"},
+	}
+	got := map[string]want{}
+	for _, f := range report.Findings {
+		if f.Kind == "local_llm_runtime" || f.Kind == "llm_gateway" {
+			got[f.Path] = want{f.Kind, f.Vendor, f.Severity}
+			if f.Note == "" {
+				t.Errorf("finding %s missing remediation note", f.Path)
+			}
+		}
+		if f.Path == "neg/plain.py" && (f.Kind == "local_llm_runtime" || f.Kind == "llm_gateway") {
+			t.Errorf("false positive on colliding bare port :8000: %#v", f)
+		}
+	}
+	for path, w := range wantByPath {
+		g, ok := got[path]
+		if !ok {
+			t.Errorf("missing detection for %s (want %+v); findings=%#v", path, w, report.Findings)
+			continue
+		}
+		if g != w {
+			t.Errorf("%s: got %+v, want %+v", path, g, w)
+		}
+	}
+	if _, flagged := got["neg/plain.py"]; flagged {
+		t.Errorf("neg/plain.py should not be flagged as a runtime/gateway")
+	}
 }

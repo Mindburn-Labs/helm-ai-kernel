@@ -22,12 +22,25 @@ type Finding struct {
 	//   "api_key"            — hardcoded API key pattern (low confidence)
 	//   "helm_absent"        — agent SDK detected but no HELM routing nearby
 	//   "agt_detected"       — Microsoft Agent Governance Toolkit signature
+	//   "local_llm_runtime"  — a local model server (Ollama, vLLM, llama.cpp,
+	//                          SGLang, TGI, Triton, LM Studio, …); inference
+	//                          should route through the HELM proxy or Local
+	//                          Inference Gateway to be governed
+	//   "llm_gateway"        — a local LLM router/aggregator (LiteLLM, LocalAI,
+	//                          FastChat, …) that can reach models on a path
+	//                          that bypasses HELM unless HELM sits in front
 	Kind string `json:"kind"`
 
 	// Vendor identifies the agent framework or service involved.
 	//   "openai" | "anthropic" | "langchain" | "crewai" | "autogen" |
 	//   "llamaindex" | "semantic-kernel" | "agent-os" (AGT) |
 	//   "helm" | "mcp"
+	// Local-inference vendors (for local_llm_runtime / llm_gateway kinds):
+	//   "ollama" | "vllm" | "llamacpp" | "lmstudio" | "sglang" | "tgi" |
+	//   "triton" | "nvidia-nim" | "lmdeploy" | "openvino" | "mlx" |
+	//   "docker-model-runner" | "gpt4all" | "koboldcpp" | "jan" | "cortex" |
+	//   "xinference" | "litellm" | "localai" | "fastchat" | "open-webui" |
+	//   "gpustack"
 	Vendor string `json:"vendor"`
 
 	// Language is "python" | "typescript" | "go" | "config" | "unknown".

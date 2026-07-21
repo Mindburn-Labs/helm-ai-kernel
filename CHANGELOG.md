@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-20
 ---
 
 # Changelog
@@ -88,6 +88,98 @@ No public feature claim is active in this section. Keep research scaffolds and
 hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
+
+## [0.7.4] - 2026-07-21
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.4>.
+
+<!-- quantum_posture: v0.7.4 records use classical Ed25519 signatures and SHA-256 content hashes; none add a post-quantum cryptographic control. -->
+
+- Added the **Boundary Enforcement Profile**. `helm-ai-kernel boundary profile compile`
+  emits systemd hardening drop-ins, a default-drop nftables ruleset,
+  cgroup limits and device permits from a hash-bound `boundary_profile_input.v1`
+  document, sealed by a signed `profile_compile_receipt.v1`. These are text
+  artifacts an operator applies with `systemctl` and `nft`: the host's own
+  systemd and nftables do the enforcing, and the kernel gains no enforcement
+  mechanism of its own — no eBPF program, seccomp filter, TPM binding,
+  hardware enclave, or in-process packet filter. HELM compiles and attests;
+  the OS enforces.
+- `boundary profile attest` reads live OS posture (systemd unit properties, the
+  nftables ruleset, cgroup-v2 limits) and emits a hash-sealed
+  `posture_attestation.v1` recording `MATCH` or `DRIFT` with per-check
+  expected/observed diffs. `--enforce` exits non-zero on anything but a sealed
+  `MATCH`, so a systemd dependency can refuse to start the gateway. Drift is
+  attested at service (re)start and on demand, not monitored continuously.
+- `boundary profile verify` verifies a compile receipt, artifact set and
+  attestation entirely offline; `boundary profile bundle-verify` verifies a
+  signed offline update bundle against an `update_bundle_manifest.v1`. The
+  update-bundle surface is a format and verifier only — no build tooling and no
+  OTA mechanism.
+- Added sealed-appliance reference units under `deploy/appliance/` (a short-lived
+  privileged attestation oneshot gating a fully unprivileged gateway) and the
+  deployment guide `docs/deployment/boundary-enforcement-profile.md`.
+- Added four `protocols/json-schemas/boundary/` schemas (profile input, compile
+  receipt, posture attestation, update-bundle manifest) with schema-parity tests
+  binding them to the Go validators, plus two cross-runtime golden vector packs
+  (`boundary-profile-v1`, `update-bundle-v1`) verified by independent Python
+  implementations and wired into `make verify-fixtures`.
+
+## [0.7.3] - 2026-07-20
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.3>.
+
+<!-- quantum_posture: v0.7.3 release notes cover Ed25519 workstation receipt signer trust hardening plus approval, connector-effect, launch-contract, and release-permit signing; all signatures remain classical Ed25519; none add a post-quantum cryptographic control. -->
+
+- Removed the derivable observe-only workstation receipt signing fallback.
+  Receipt minting now requires a persistent per-data-dir Ed25519 signing key
+  (0600 file, O_EXCL-created); signing paths hard-error on an empty seed, and
+  the MCP bridge maps a missing seed to a fail-closed `PDP_ERROR` deny.
+- The retired derivable signer key is permanently rejected as a trust anchor,
+  including when a caller explicitly pins its public key.
+- Receipt verification separates integrity from trust: the JSON summary
+  renames `signature_valid` to `integrity_valid` and adds `signer_trusted`
+  and `trust_anchor`. `workstation view` and `verify-decision` now exit 1
+  unless the signer is trusted; legacy-signed receipts still load and report
+  `integrity: true, trusted: false` with no silent upgrade.
+- Pre-tool hooks fail closed on signer or receipt-persistence failure: a
+  structured deny is emitted (exit 0), and exit 2 blocks only when the deny
+  JSON itself cannot be written. Safe commands never touch the signer, and
+  HOME-less setups fail closed without creating CWD-relative keys. Setup
+  migration deduplicates legacy hook entries and provisions the key on first
+  classified call.
+- Established a durable approval foundation: approvals bind source-owned
+  grants to a signed assertion contract, verify a trusted-signer quorum, and
+  carry durable ceremony authority with sealed store read authority.
+  Consumption of an approval grant is fenced, and dispositions move over an
+  authenticated transport with signed active-work disposition records.
+- Hardened the connector effect lifecycle: effects are reserved before
+  dispatch, dispatch admission is fenced, connector authority is bound to
+  approvals, certified connector release authority is persisted, and effects
+  close with signed evidence.
+- Added universal workload and cloud route contracts and fail-closed launch
+  effect preview contracts: prepared executions are sealed, credentials stay
+  inside the runner boundary and are deferred until dispatch, unsupervised
+  detached execution is rejected, authorization is bound to the signed effect
+  digest, previews cannot dispatch effects or reuse credits, and routes are
+  bounded by certification expiry.
+- Added a persisted principal↔tenant binding registry (SQLite and Postgres)
+  with an admin endpoint, so the kernel can authorize multiple tenants
+  instead of a single environment-configured pair.
+- Added the `helm connect` device-code cloud flow, including headless Codex
+  project connection; Desktop Codex sidecar readiness is now certified before
+  use, and launch tokens and config links are contained to the project
+  workspace.
+- Added a deterministic autonomous release permit: reviewer identity is
+  canonicalized, case-folded self-review and merge self-pins are rejected,
+  and authority generation lineage is bound.
+- `scan` now fails closed on incomplete local coverage.
+- CI and release tooling: PRs that backward-break a public contract now fail
+  a breaking-change gate (`oasdiff`/`buf breaking` against the base branch,
+  with an explicit major-version or labeled override), and the release
+  workflow can publish a signed container image for an arbitrary commit sha.
+
+No RiskEnvelope, website, checkout, connector certification, or Company AI OS
+GA scope is included.
 
 ## [0.7.2] - 2026-07-13
 

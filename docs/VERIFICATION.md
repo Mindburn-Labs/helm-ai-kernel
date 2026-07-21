@@ -40,6 +40,12 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
 ```
 
+This workstation command reports `integrity` and `trusted` independently.
+`integrity: true` alone only means the contents match the receipt's declared
+public key. A zero exit status requires `trusted: true` against the expected
+local key or an explicit `--trusted-public-key-file`; use the latter for a
+receipt copied between machines.
+
 For an EvidencePack:
 
 ```bash
@@ -88,14 +94,14 @@ EvidencePacks are portable proof bundles for local review and offline replay.
 
 ## Release Evidence
 
-Current source release target: `v0.7.2`.
+Current source release target: `v0.7.4`.
 
-The `v0.7.2` release is complete only after the listed local verification
+The `v0.7.4` release is complete only after the listed local verification
 assets appear on the GitHub release and verify locally.
 
 Check the GitHub release and local verification artifacts together:
 
-- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2`
-- v0.7.2 Asset Contract
-- `v0.7.2.openvex.json`
-- `v0.7.2.json`
+- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.4`
+- v0.7.4 Asset Contract
+- `v0.7.4.openvex.json`
+- `v0.7.4.json`

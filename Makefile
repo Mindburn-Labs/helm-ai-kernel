@@ -1,4 +1,4 @@
-.PHONY: build test test-cli test-race test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -15,13 +15,59 @@ build:
 	cp bin/helm-ai-kernel bin/helm
 
 test:
-	cd core && go test ./pkg/... -count=1
+	cd core && go test ./pkg/... ./cmd/release-permit-verify/... -count=1
 
 test-cli:
-	cd core && go test ./cmd/helm-ai-kernel -count=1
+	cd core && go test ./cmd/helm-ai-kernel ./cmd/release-permit-verify -count=1
 
 test-race:
 	cd core && go test ./pkg/... -count=1 -race
+
+test-approval-ceremony:
+	cd core && go test -race ./pkg/boundary/approvalceremony -count=1
+
+test-approval-ceremony-postgres:
+	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
+	cd core && go test -race ./pkg/boundary/approvalceremony -run TestPostgresLifecycleSingleIssueAndConsume -count=10
+
+test-connector-release-authority-postgres:
+	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
+	cd core && go test -race ./pkg/registry/connectors -run TestPostgresReleaseAuthorityAppendOnlyCurrentStateAndIsolation -count=10
+
+test-effect-reservation-postgres:
+	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
+	cd core && go test -race ./pkg/boundary/approvalceremony -run TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle -count=10
+
+verify-approval-ceremony-vectors:
+	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
+	cd core && go test ./pkg/boundary/approvalceremony -run TestApprovalCeremonyGoldenVectors -count=1
+	cd core && go test ./pkg/boundary/approvalceremony -run TestApprovalConsumptionReferencePackMatchesGoImplementation -count=1
+	cd core && go test ./pkg/boundary/approvalceremony -run TestApprovalDispatchAdmissionReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/approval/verify_approval_vectors.py
+	python3 reference_packs/approval-consumption-v1/verify_vectors.py
+	python3 reference_packs/approval-dispatch-admission-v1/verify_vectors.py
+
+verify-connector-release-authority-vectors:
+	cd core && go test ./pkg/registry/connectors -run 'TestConnectorReleaseAuthority(ReferencePackMatchesGoImplementation|Schemas)' -count=1
+	python3 reference_packs/connector-release-authority-v1/verify_vectors.py
+
+verify-effect-close-vectors:
+	cd core && go test ./pkg/boundary/approvalceremony -run 'TestEffectClose(ReferencePackMatchesGoImplementation|Schemas)' -count=1
+	python3 reference_packs/effect-close-v1/verify_vectors.py
+
+verify-effect-disposition-vectors:
+	cd core && go test ./pkg/contracts -run '^TestEffectDisposition' -count=1
+	cd core && go test ./pkg/boundary/approvalceremony -run '^TestEffectDisposition' -count=1
+	python3 reference_packs/effect-disposition-v1/verify_vectors.py
+
+verify-boundary-profile-vectors:
+	cd core && go test ./pkg/boundary/profile -run 'TestBoundaryProfile(ReferencePackMatchesGoImplementation|Schemas)' -count=1
+	python3 reference_packs/boundary-profile-v1/verify_vectors.py
+
+verify-update-bundle-vectors:
+	cd core && go test ./pkg/boundary/profile/updatebundle -run TestUpdateBundleReferencePackMatchesGoImplementation -count=1
+	cd core && go test ./pkg/boundary/profile -run TestUpdateBundleManifestSchema -count=1
+	python3 reference_packs/update-bundle-v1/verify_vectors.py
 
 test-sdk-go-standalone:
 	cd sdk/go && GOWORK=off go test ./...
@@ -48,7 +94,15 @@ verify-fixtures:
 	cd core && go test ./pkg/verifier -run TestVerifyBundle_GoldenFixtureRoots -count=1
 	cd core && go test ./pkg/boundary/extauthz -run TestContract -count=1
 	cd core && go test ./pkg/canonicalize -run TestExtauthzGoldenVectorsAreCanonical -count=1
+	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
+	$(MAKE) verify-approval-ceremony-vectors
+	$(MAKE) verify-connector-release-authority-vectors
+	$(MAKE) verify-effect-close-vectors
+	$(MAKE) verify-effect-disposition-vectors
+	$(MAKE) verify-boundary-profile-vectors
+	$(MAKE) verify-update-bundle-vectors
 	python3 reference_packs/extauthz/verify_extauthz_vectors.py
+	python3 reference_packs/approval/verify_approval_vectors.py
 	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto
 
 tee-collateral-verify:

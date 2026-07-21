@@ -1,0 +1,16 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/connector-release-authority-v1",
+  "pinning_authority": "reference_packs/connector-release-authority-v1/vectors.json",
+  "verifier": "reference_packs/connector-release-authority-v1/verify_vectors.py",
+  "immutable_payloads": [
+    {"file": "certified_authority.c14n.json", "sha256": "74dc37ff3c1b11e513bdc50b355fafa3e727661cc6834a08a840618637ef228c"},
+    {"file": "certified_envelope.c14n.json", "sha256": "1550d0c770fd1826e60a3445790d3606f84a978f97d91d017aeeb018ee9fc133"},
+    {"file": "certified_signing_payload.c14n.json", "sha256": "863d8ec6bb255765119bf1bf1e2ce1d485662386530e8e82c7183a0916d2b8e4"},
+    {"file": "revoked_authority.c14n.json", "sha256": "aa6bd11f646b38f7388a2be749ff5babfb0add2bd9fff0582c04e832cb7e9677"},
+    {"file": "revoked_envelope.c14n.json", "sha256": "e064845d90e03a4ebd273d7a926e8525be55b0e93b2e0b15538446053ab832ee"},
+    {"file": "revoked_signing_payload.c14n.json", "sha256": "3091d89aa44e89b110c99410fb52506fa23708d002de58c269334179d0a5680c"}
+  ],
+  "$comment": "quantum_posture: classical_ed25519_only. These `*.c14n.json` files are byte-exact canonical (RFC 8785) connector-release-authority signing payloads whose SHA-256 digests are hash-pinned in vectors.json and covered by a live classical Ed25519 signature. They cannot host an inline annotation without invalidating that signature/digest, so this manifest carries the posture note. This is not a post-quantum claim and does not alter any payload bytes.",
+  "purpose": "Local immutable-payload posture record for the connector-release-authority reference pack. vectors.json remains the verified hash-pinning authority."
+}

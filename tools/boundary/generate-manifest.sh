@@ -35,7 +35,7 @@ PROTECTED_DIRS=(
 {
   echo "# HELM Protected Manifest"
   echo "# Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "# Commit: $(git rev-parse HEAD)"
+  echo "# Source: current protected working tree; per-entry hashes are authoritative"
   echo "# Format: SHA256  PATH"
   echo "# quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control."
   echo "#"

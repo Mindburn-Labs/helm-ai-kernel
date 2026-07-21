@@ -106,6 +106,8 @@ Usage: {{ include "helm-ai-kernel.launchpadApp.egressSidecar" (dict "sidecar" .V
     capabilities:
       drop:
         - ALL
+    seccompProfile:
+      type: RuntimeDefault
   env:
     - name: HELM_EGRESS_LISTEN
       value: {{ printf ":%d" (int $s.port) | quote }}
@@ -160,6 +162,10 @@ Usage: {{ include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" .Valu
       add:
         - NET_ADMIN
         - NET_RAW
+    # RuntimeDefault does not break the iptables install: runc's default seccomp
+    # profile admits the netfilter syscalls once CAP_NET_ADMIN is granted.
+    seccompProfile:
+      type: RuntimeDefault
   command:
     - /bin/sh
     - -c

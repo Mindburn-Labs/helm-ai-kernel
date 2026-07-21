@@ -24,6 +24,8 @@ spec:
     runAsNonRoot: true
     runAsUser: 65534
     runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: connectivity
       image: {{ .Values.launchpadApps.test.image | quote }}

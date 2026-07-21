@@ -44,6 +44,10 @@
 | Schema | Conformance | Status | Description |
 | --- | --- | --- | --- |
 | `extauthz.v1.schema.json` | L1 | preview | Gateway-to-Kernel external authorization contract |
+| `boundary_profile_input.v1.schema.json` | L2 | preview | Boundary Enforcement Profile policy input (hash-bound compiler input) |
+| `profile_compile_receipt.v1.schema.json` | L2 | preview | Boundary Enforcement Profile compile receipt (HELM compiles + attests; the OS enforces) |
+| `posture_attestation.v1.schema.json` | L2 | preview | Live OS posture attestation (MATCH/DRIFT, fail-closed on drift) |
+| `update_bundle_manifest.v1.schema.json` | L2 | preview | Signed offline update-bundle manifest (format + verifier only) |
 
 ### Policy (`policy/`)
 
@@ -107,6 +111,20 @@
 | `effect_digest/v1.json`           | L1          | normative     | Effect digest for hashing                                 |
 | Infrastructure effects            | L3          | normative     | `create_droplet`, `scale_cluster`, `deploy_release`, etc. |
 | Chaos effects                     | L3          | informational | `chaos_kill_node`, `chaos_network_delay`                  |
+| `launch/*.v1.json`                | L2          | preview       | Provider-neutral arbitrary-workload routing, generic state transitions, and non-executable authority/receipt wire shapes |
+
+Launch routing schemas are preview-only. Provider-specific regions, SKUs,
+hostnames, supported workload shapes, pricing evidence, and actions live in
+versioned capability profiles. Route quotes resolve source-owned commercial,
+FX, tax, and credit evidence and recompute gross exposure using conservative
+integer arithmetic. Workload kinds and graph relationships remain extensible
+tokens rather than a website-only Kernel enum. Schema presence or a candidate
+provider profile grants no execution authority.
+The effect envelope and receipt files in this directory define preview wire
+shapes only. Their identifiers remain absent from the executable catalog until
+base-effect expansion, policy and Kernel boundary consumers, connector
+certification, cryptographic verification, and committed cross-language
+reference packs are promoted together.
 
 ### Evidence (`evidence/`)
 

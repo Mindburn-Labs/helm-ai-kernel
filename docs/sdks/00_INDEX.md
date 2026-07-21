@@ -23,31 +23,31 @@ This guide publishes no hosted HELM API base URL.
 Pin the mode and base URL together. Do not move an example between ports without
 starting the corresponding runtime.
 
-## Verified v0.7.2 Coordinates
+## Verified v0.7.4 Coordinates
 
 Run a clean registry check before copying these into a managed client estate.
-The following four coordinates were available for the v0.7.2 release:
+The following four coordinates are declared for the v0.7.4 release:
 
-Source version claims are tied to the repository `VERSION` (`0.7.2` for this release).
-The matching Go subdirectory tag is `sdk/go/v0.7.2`.
+Source version claims are tied to the repository `VERSION` (`0.7.4` for this release).
+The matching Go subdirectory tag is `sdk/go/v0.7.4`.
 
 ```bash
-npm install @mindburn/helm-ai-kernel@0.7.2
-python -m pip install helm-sdk==0.7.2
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.2
+npm install @mindburn/helm-ai-kernel@0.7.4
+python -m pip install helm-sdk==0.7.4
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.4
 ```
 
-The matching Java coordinate is `io.github.mindburnlabs:helm-sdk:0.7.2`:
+The matching Java coordinate is `io.github.mindburnlabs:helm-sdk:0.7.4`:
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.7.2</version>
+  <version>0.7.4</version>
 </dependency>
 ```
 
-Rust source and a v0.7.2 crate artifact exist under `sdk/rust/`, but public
+Rust source and a v0.7.4 crate artifact exist under `sdk/rust/`, but public
 registry discovery was inconsistent at the last review. Recheck the target
 registry before publishing `cargo add` as a supported install path.
 

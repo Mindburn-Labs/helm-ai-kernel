@@ -1,3 +1,5 @@
+// quantum_posture: MCP command metadata describes existing Ed25519 receipt
+// evidence only; this CLI layer does not introduce a cryptographic control.
 package main
 
 import (
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 // runMCPCmd implements `helm-ai-kernel mcp` — MCP server distribution and management.
@@ -24,10 +27,11 @@ import (
 //	2 = config error
 func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|proof|list|get|pending|receipts|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp <serve|bridge|install|pack|print-config|scan|wrap|proof|list|get|pending|receipts|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
+		fmt.Fprintln(stderr, "  bridge        Forward stdio MCP to the cloud edge using the connect credential")
 		fmt.Fprintln(stderr, "  install       Install HELM MCP server for a client")
 		fmt.Fprintln(stderr, "  pack          Generate a .mcpb bundle for desktop clients")
 		fmt.Fprintln(stderr, "  print-config  Print MCP config for a specific client")
@@ -49,6 +53,8 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "serve":
 		return runMCPServe(args[1:], stdout, stderr)
+	case "bridge":
+		return runMCPBridge(args[1:], stdout, stderr)
 	case "install":
 		return runMCPInstall(args[1:], stdout, stderr)
 	case "pack":
@@ -80,10 +86,11 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 	case "authorize-call":
 		return runMCPAuthorizeCall(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel mcp <serve|install|pack|print-config|scan|wrap|proof|list|get|pending|receipts|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel mcp <serve|bridge|install|pack|print-config|scan|wrap|proof|list|get|pending|receipts|quarantine|approve|revoke|auth-profile|authorize-call> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
 		fmt.Fprintln(stdout, "  serve         Start the HELM MCP server (stdio or remote HTTP)")
+		fmt.Fprintln(stdout, "  bridge        Forward stdio MCP to the cloud edge using the connect credential")
 		fmt.Fprintln(stdout, "  install       Install HELM MCP server for a client")
 		fmt.Fprintln(stdout, "  pack          Generate a .mcpb bundle for desktop clients")
 		fmt.Fprintln(stdout, "  print-config  Print MCP config for a specific client")
@@ -111,17 +118,42 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 	cmd.SetOutput(stderr)
 
 	var (
-		transport string
-		port      int
-		authMode  string
+		transport  string
+		port       int
+		authMode   string
+		dataDir    string
+		policyPath string
 	)
 
 	cmd.StringVar(&transport, "transport", "stdio", "Transport: stdio, http")
 	cmd.IntVar(&port, "port", 9100, "Port for HTTP transport")
 	cmd.StringVar(&authMode, "auth", "none", "Auth mode: none, static-header, oauth")
+	cmd.StringVar(&dataDir, "data-dir", "data", "Data directory for local MCP signing state")
+	cmd.StringVar(&policyPath, "policy", "", "Path to a serve policy file; without it, execution is fail-closed (deny-all)")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
+	}
+
+	// A serve policy compiles to the Guardian rule graph. Absent --policy the
+	// graph stays empty, which denies every execution (fail-closed default).
+	var policyGraph *prg.Graph
+	if policyPath != "" {
+		runtimePolicy, err := loadServePolicyRuntime(policyPath)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: load serve policy %q: %v\n", policyPath, err)
+			return 2
+		}
+		policyGraph = runtimePolicy.Graph
+		// Report the compiled allow-set so a mis-authored policy that authorizes
+		// nothing is visible, not a silent deny-all. Logged to stderr so it is
+		// safe on the stdio transport, where stdout carries the MCP protocol.
+		authorized := len(runtimePolicy.AllowMap())
+		if authorized == 0 {
+			fmt.Fprintf(stderr, "Warning: serve policy %q authorizes 0 actions; every execution will be denied\n", policyPath)
+		} else {
+			fmt.Fprintf(stderr, "Serve policy %q authorizes %d action(s)\n", policyPath, authorized)
+		}
 	}
 
 	switch transport {
@@ -130,13 +162,13 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "Error: stdio transport only supports --auth none")
 			return 2
 		}
-		if err := serveLocalMCPStdio(os.Stdin, stdout); err != nil {
+		if err := serveLocalMCPStdioWithDataDirAndPolicy(os.Stdin, stdout, dataDir, policyGraph); err != nil {
 			fmt.Fprintf(stderr, "Error: MCP stdio server failed: %v\n", err)
 			return 2
 		}
 		return 0
 	case "http":
-		server, err := newLocalMCPHTTPServer(port, authMode)
+		server, err := newLocalMCPHTTPServerWithDataDirAndPolicy(port, authMode, dataDir, policyGraph)
 		if err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 2

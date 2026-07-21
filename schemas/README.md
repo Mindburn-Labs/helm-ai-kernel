@@ -1,5 +1,6 @@
 # Schemas
 <!-- docs-generated: surface-readme -->
+<!-- quantum_posture: schemas document classical Ed25519/RSA signing shapes; no post-quantum cryptographic control is added or claimed. -->
 
 ## Purpose
 
@@ -15,6 +16,38 @@ Active surface for the `helm-ai-kernel` project.
 ## Local Commands
 
 - `make docs-coverage` from the repository root verifies coverage for this surface.
+- `make verify-connector-release-authority-vectors` compiles and exercises the
+  canonical `connector_release.json` authority and detached-signature envelope,
+  then verifies cross-statement semantics in Go and independent Python.
+- `make verify-effect-close-vectors` verifies connector acknowledgement and
+  Kernel close-receipt hashing/signatures in Go and independent Python.
+- `make verify-effect-disposition-vectors` verifies disposition command,
+  detached signature, and Kernel receipt contracts in Go and independent
+  Python.
+
+## Connector release authority
+
+`connector_release.json` is the source-owned exact-version authority contract,
+not candidate connector metadata. `connector_release_authority_envelope.json`
+wraps it with the detached Ed25519 signature. See
+`docs/operations/connector-release-authority.md` for trust, revocation, and
+current-state boundaries.
+
+## Effect close
+
+`connector_effect_acknowledgement.json` and its detached-signature envelope
+define connector evidence about `APPLIED` versus `NOT_APPLIED`.
+`effect_close_receipt.json` is the separate Kernel-signed terminal statement
+that binds that evidence to an exact reservation head and sealed EvidencePack.
+The connector acknowledgement alone never authorizes `COMPLETED`.
+
+## Effect disposition
+
+`effect_disposition_command.json` and its detached-signature envelope bind one
+operator instruction to an exact current FENCE, active reservation head, and
+append-only predecessor. `effect_disposition_receipt.json` is the separately
+signed Kernel acknowledgement and fixes `execution_authority` to `NONE`.
+Neither artifact authorizes an external cancellation or compensation.
 
 ## Documentation Contract
 

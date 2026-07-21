@@ -68,8 +68,11 @@ func (v *HybridVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, erro
 
 // VerifyIntent verifies a hybrid-signed AuthorizedExecutionIntent.
 func (v *HybridVerifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, error) {
-	payload := CanonicalizeIntent(i.ID, i.DecisionID, i.AllowedTool)
-	return v.verifyEnvelope([]byte(payload), i.Signature)
+	payload, err := CanonicalizeAuthorizedExecutionIntent(i)
+	if err != nil {
+		return false, err
+	}
+	return v.verifyEnvelope(payload, i.Signature)
 }
 
 // VerifyReceipt verifies a hybrid-signed Receipt over the canonical receipt

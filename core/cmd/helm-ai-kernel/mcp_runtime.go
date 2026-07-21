@@ -42,24 +42,41 @@ type mcpRPCError struct {
 }
 
 func newLocalMCPRuntime() (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
-	signer, err := loadOrGenerateSigner()
+	return newLocalMCPRuntimeWithDataDir("data")
+}
+
+func newLocalMCPRuntimeWithDataDir(dataDir string) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	return newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, nil)
+}
+
+func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
 		return nil, nil, err
 	}
-	return newLocalMCPRuntimeWithSigner(signer)
+	return newLocalMCPRuntimeWithSignerAndPolicy(signer, policyGraph)
 }
 
 func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	return newLocalMCPRuntimeWithSignerAndPolicy(signer, nil)
+}
+
+// newLocalMCPRuntimeWithSignerAndPolicy builds the local MCP runtime whose
+// Guardian enforces policyGraph. A nil policyGraph keeps the historical
+// fail-closed default: the catalog stays discoverable but every execution is
+// denied, because an empty graph carries no allow rule. Pass a compiled graph
+// (see `mcp serve --policy`) to authorize the actions it declares.
+func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
 	if signer == nil {
 		return nil, nil, fmt.Errorf("mcp signer is required")
+	}
+	if policyGraph == nil {
+		policyGraph = prg.NewGraph()
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
 	catalog.RegisterGovernanceTools()
-	// The local MCP catalog is discoverable by default, but execution must not
-	// inherit an implicit allow policy. Until serve policy wiring is plumbed into
-	// this gateway, an empty graph keeps MCP execution fail-closed.
-	guard := guardian.NewGuardian(signer, prg.NewGraph(), nil)
+	guard := guardian.NewGuardian(signer, policyGraph, nil)
 	firewall := mcppkg.NewGovernanceFirewall(guard, catalog)
 
 	return catalog, mcppkg.ToolExecutor(firewall.WrapToolHandler(runLocalMCPTool)), nil
@@ -199,7 +216,15 @@ func resolveLocalMCPPath(rawPath string) (string, error) {
 }
 
 func serveLocalMCPStdio(stdin io.Reader, stdout io.Writer) error {
-	catalog, executor, err := newLocalMCPRuntime()
+	return serveLocalMCPStdioWithDataDir(stdin, stdout, "data")
+}
+
+func serveLocalMCPStdioWithDataDir(stdin io.Reader, stdout io.Writer, dataDir string) error {
+	return serveLocalMCPStdioWithDataDirAndPolicy(stdin, stdout, dataDir, nil)
+}
+
+func serveLocalMCPStdioWithDataDirAndPolicy(stdin io.Reader, stdout io.Writer, dataDir string, policyGraph *prg.Graph) error {
+	catalog, executor, err := newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, policyGraph)
 	if err != nil {
 		return err
 	}
@@ -401,19 +426,28 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 }
 
 func newLocalMCPHTTPServer(port int, authMode string) (*http.Server, error) {
+	return newLocalMCPHTTPServerWithDataDir(port, authMode, "data")
+}
+
+func newLocalMCPHTTPServerWithDataDir(port int, authMode, dataDir string) (*http.Server, error) {
+	return newLocalMCPHTTPServerWithDataDirAndPolicy(port, authMode, dataDir, nil)
+}
+
+func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir string, policyGraph *prg.Graph) (*http.Server, error) {
 	// SEC: Default to localhost to prevent accidental network exposure.
 	mcpBind := "127.0.0.1"
 	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {
 		mcpBind = envBind
 	}
 	baseURL := fmt.Sprintf("http://%s:%d", mcpBind, port)
-	gateway, err := newConfiguredLocalMCPGateway(mcppkg.GatewayConfig{
-		BaseURL:  baseURL,
-		AuthMode: authMode,
-	})
+	catalog, executor, err := newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, policyGraph)
 	if err != nil {
 		return nil, err
 	}
+	gateway := mcppkg.NewGateway(catalog, mcppkg.GatewayConfig{
+		BaseURL:  baseURL,
+		AuthMode: authMode,
+	}, mcppkg.WithExecutor(executor))
 
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)

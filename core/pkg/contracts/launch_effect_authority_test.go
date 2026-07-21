@@ -551,6 +551,13 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsStaleConnectorStartObservation(
 			},
 			expect: "expired before atomic dispatch finalization",
 		},
+		{
+			name: "clock rolled back after permit consumption",
+			mutate: func(_ contracts.LaunchEffectDispatchFinalization, _ *string, observedAt *time.Time) {
+				*observedAt = (*observedAt).Add(-time.Second)
+			},
+			expect: "dispatch clock moved backwards after atomic authority validation",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -558,7 +565,7 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsStaleConnectorStartObservation(
 			var consumed atomic.Bool
 			var networkStarted atomic.Bool
 			policyEpoch := envelope.PolicyEpoch
-			observedAt := ctx.Now
+			observedAt := ctx.Now.Add(time.Second)
 			ctx.ResolvePolicyEpoch = func(string, string) (string, error) { return policyEpoch, nil }
 			ctx.ResolveDispatchTime = func() (time.Time, error) { return observedAt, nil }
 			ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {

@@ -412,6 +412,7 @@ func startLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEn
 	}
 	var validateClaimed atomic.Bool
 	var validated atomic.Bool
+	var validatedObservation atomic.Pointer[LaunchEffectDispatchFinalizationObservation]
 	var startClaimed atomic.Bool
 	var started atomic.Bool
 	validate := func() (LaunchEffectDispatchFinalizationObservation, error) {
@@ -422,6 +423,7 @@ func startLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEn
 		if err != nil {
 			return LaunchEffectDispatchFinalizationObservation{}, err
 		}
+		validatedObservation.Store(&observation)
 		validated.Store(true)
 		return observation, nil
 	}
@@ -435,6 +437,13 @@ func startLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEn
 		observation, request, err := resolveAndVerifyLaunchDispatchFinalizationObservation(envelope, expectedFinalization, ctx)
 		if err != nil {
 			return fmt.Errorf("launch authorization envelope connector start observation: %w", err)
+		}
+		validationObservation := validatedObservation.Load()
+		if validationObservation == nil {
+			return errors.New("launch authorization envelope connector start is missing its validated finalization observation")
+		}
+		if observation.ObservedAt.Before(validationObservation.ObservedAt) {
+			return errors.New("launch authorization envelope dispatch clock moved backwards after atomic authority validation")
 		}
 		if ctx.VerifyDispatchCommit == nil {
 			return errors.New("launch authorization envelope connector start requires source-owned permit consumption and STARTED reservation proof")

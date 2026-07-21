@@ -5,6 +5,7 @@ package contracts_test
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	connectorregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
 )
 
 func TestLaunchEffectAuthorizationEnvelopeVerifiesAuthorityBoundary(t *testing.T) {
@@ -567,6 +569,24 @@ func TestLaunchEffectAuthorizationEnvelopeRechecksRevocableStateAtConnectorSeam(
 				}
 			},
 		},
+		{
+			name:   "connector release signature",
+			expect: "verify current launch connector release",
+			stale: func(ctx *contracts.LaunchEffectEnvelopeVerificationContext, stale *atomic.Bool) {
+				resolve := ctx.ResolveCurrentConnectorRelease
+				ctx.ResolveCurrentConnectorRelease = func(authority contracts.ApprovalConnectorAuthority) (contracts.ConnectorReleaseAuthorityEnvelope, error) {
+					release, err := resolve(authority)
+					if err == nil && stale.Load() {
+						replacement := byte('0')
+						if release.Signature[len(release.Signature)-1] == replacement {
+							replacement = '1'
+						}
+						release.Signature = release.Signature[:len(release.Signature)-1] + string(replacement)
+					}
+					return release, err
+				}
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -802,6 +822,21 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 	if err != nil {
 		t.Fatal(err)
 	}
+	releasePublicKey, releasePrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentRelease := launchCurrentConnectorReleaseFixture(t, authority.Grant.ConnectorAuthority, now, releasePrivateKey)
+	releaseVerifier, err := connectorregistry.NewEd25519ReleaseAuthorityVerifier(
+		currentRelease.Authority.AuthorityID,
+		[]connectorregistry.TrustedReleaseAuthorityKey{{
+			AuthorityID: currentRelease.Authority.AuthorityID, SigningKeyRef: currentRelease.Authority.SigningKeyRef,
+			PublicKey: releasePublicKey, Enabled: true, NotBefore: now.Add(-10 * time.Minute), NotAfter: now.Add(10 * time.Minute),
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := contracts.LaunchEffectEnvelopeVerificationContext{
 		Now: now,
 		ResolveInputSchema: func(schemaRef string) ([]byte, error) {
@@ -871,13 +906,10 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 			if candidate.AuthorityHash != authority.Grant.ConnectorAuthority.AuthorityHash {
 				return contracts.ConnectorReleaseAuthorityEnvelope{}, fmt.Errorf("connector release not found")
 			}
-			return launchCurrentConnectorReleaseFixture(t, candidate, now), nil
+			return currentRelease, nil
 		},
 		VerifyCurrentConnectorRelease: func(release contracts.ConnectorReleaseAuthorityEnvelope, observedAt time.Time) error {
-			if err := release.Validate(); err != nil {
-				return err
-			}
-			return release.Authority.ValidateAt(observedAt)
+			return releaseVerifier.VerifyCurrentCertifiedAt(release, observedAt)
 		},
 		VerifyDispatchCommit: func(expected contracts.LaunchEffectDispatchFinalization, observation contracts.LaunchEffectDispatchFinalizationObservation) error {
 			if !consumed.Load() {
@@ -1086,7 +1118,7 @@ func launchConnectorReleaseFixture(t *testing.T, effectID, connectorID, certific
 	return release
 }
 
-func launchCurrentConnectorReleaseFixture(t *testing.T, authority contracts.ApprovalConnectorAuthority, now time.Time) contracts.ConnectorReleaseAuthorityEnvelope {
+func launchCurrentConnectorReleaseFixture(t *testing.T, authority contracts.ApprovalConnectorAuthority, now time.Time, privateKey ed25519.PrivateKey) contracts.ConnectorReleaseAuthorityEnvelope {
 	t.Helper()
 	validUntil := now.Add(10 * time.Minute)
 	release, err := (contracts.ConnectorReleaseAuthority{
@@ -1108,7 +1140,11 @@ func launchCurrentConnectorReleaseFixture(t *testing.T, authority contracts.Appr
 	if release.AuthorityHash != authority.ReleaseAuthorityHash {
 		t.Fatalf("connector release fixture hash = %s, approval binds %s", release.AuthorityHash, authority.ReleaseAuthorityHash)
 	}
-	return contracts.ConnectorReleaseAuthorityEnvelope{Authority: release, Signature: strings.Repeat("0", 128)}
+	payload, err := connectorregistry.ConnectorReleaseAuthoritySigningPayload(release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return contracts.ConnectorReleaseAuthorityEnvelope{Authority: release, Signature: hex.EncodeToString(ed25519.Sign(privateKey, payload))}
 }
 
 func bindLaunchInputToRoute(t *testing.T, input map[string]any, effectID string, fixture launchRouteFixture) {

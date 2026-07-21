@@ -82,11 +82,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     steps:
       - name: Download Scorecard SARIF
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: scorecard-pr-results
+          path: scorecard-pr-results
 
       - name: Confirm Scorecard evidence
-        run: test -s results.sarif
+        run: test -s scorecard-pr-results/results.sarif

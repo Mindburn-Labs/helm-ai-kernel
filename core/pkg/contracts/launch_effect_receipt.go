@@ -208,11 +208,12 @@ type LaunchEffectReceipt struct {
 // reservation, and ProofGraph source truth. None may be copied from the
 // receipt being verified.
 type LaunchEffectReceiptVerificationContext struct {
-	MinimumLamport     uint64
-	ResolveSignerKey   func(signerKeyID string) (ed25519.PublicKey, error)
-	ResolveAuthority   func(reservationRef, reservationHash string) (LaunchEffectReceiptAuthorityBinding, error)
-	ResolveEvidenceDAG func(nodeHash string) (LaunchEffectEvidenceDAG, error)
-	VerifyEvidencePack func(evidencePackRef, evidencePackHash, previousReceiptID string) error
+	MinimumLamport         uint64
+	ResolveSignerKey       func(signerKeyID string) (ed25519.PublicKey, error)
+	ResolveAuthority       func(reservationRef, reservationHash string) (LaunchEffectReceiptAuthorityBinding, error)
+	ResolveEvidenceDAG     func(nodeHash string) (LaunchEffectEvidenceDAG, error)
+	ResolvePreviousReceipt func(previousReceiptID string) (LaunchEffectReceipt, error)
+	VerifyEvidencePack     func(evidencePackRef, evidencePackHash, previousReceiptID string) error
 }
 
 // LaunchEffectReceiptSigningBytes returns the RFC 8785 content-addressing
@@ -318,9 +319,36 @@ func DeriveLaunchEffectReceiptChainID(receipt LaunchEffectReceipt) (string, erro
 	return "sha256:" + hash, nil
 }
 
-// SignLaunchEffectReceipt seals one immutable receipt revision using Receipt
-// Format v1 content addressing and an Ed25519 signature over ReceiptID.
+// SignLaunchEffectReceipt seals a non-terminal immutable receipt revision using
+// Receipt Format v1 content addressing and an Ed25519 signature over ReceiptID.
+// Terminal revisions must use SignLaunchEffectReceiptRevision so they cannot be
+// created without presenting the exact sealed predecessor they close.
 func SignLaunchEffectReceipt(receipt LaunchEffectReceipt, privateKey ed25519.PrivateKey) (LaunchEffectReceipt, error) {
+	if receipt.Outcome != "UNKNOWN" {
+		return receipt, errors.New("terminal launch effect receipt must be signed as a verified revision")
+	}
+	return signLaunchEffectReceipt(receipt, privateKey)
+}
+
+// SignLaunchEffectReceiptRevision seals a revision only after its exact
+// content-addressed predecessor and immutable transition have been supplied.
+// Cryptographic predecessor verification remains mandatory at verification
+// time because receipt signer keys may rotate between revisions.
+func SignLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, privateKey ed25519.PrivateKey) (LaunchEffectReceipt, error) {
+	if err := validateSealedLaunchEffectReceipt(previous); err != nil {
+		return current, fmt.Errorf("validate launch effect receipt predecessor for signing: %w", err)
+	}
+	signed, err := signLaunchEffectReceipt(current, privateKey)
+	if err != nil {
+		return current, err
+	}
+	if err := validateLaunchEffectReceiptRevision(signed, previous); err != nil {
+		return current, fmt.Errorf("validate launch effect receipt revision for signing: %w", err)
+	}
+	return signed, nil
+}
+
+func signLaunchEffectReceipt(receipt LaunchEffectReceipt, privateKey ed25519.PrivateKey) (LaunchEffectReceipt, error) {
 	if len(privateKey) != ed25519.PrivateKeySize {
 		return receipt, errors.New("launch effect receipt private key has invalid size")
 	}
@@ -348,10 +376,57 @@ func SignLaunchEffectReceipt(receipt LaunchEffectReceipt, privateKey ed25519.Pri
 	return receipt, nil
 }
 
+func validateSealedLaunchEffectReceipt(receipt LaunchEffectReceipt) error {
+	if err := ValidateLaunchEffectReceiptSemantics(receipt); err != nil {
+		return err
+	}
+	if receipt.ReceiptID == "" || receipt.Signature == "" {
+		return errors.New("launch effect receipt predecessor is not sealed")
+	}
+	payload, err := LaunchEffectReceiptSigningBytes(receipt)
+	if err != nil {
+		return fmt.Errorf("canonicalize launch effect receipt predecessor: %w", err)
+	}
+	digest := sha256.Sum256(payload)
+	if !launchConstantEqual(receipt.ReceiptID, hex.EncodeToString(digest[:])) {
+		return errors.New("launch effect receipt predecessor content-addressed ID mismatch")
+	}
+	if _, err := parseLaunchReceiptSignature(receipt.Signature); err != nil {
+		return fmt.Errorf("launch effect receipt predecessor signature is invalid: %w", err)
+	}
+	return nil
+}
+
 // VerifyLaunchEffectReceipt verifies content addressing, trust-root key
 // resolution, the Ed25519 signature, the source-owned dispatch reservation,
 // pre-receipt evidence DAG, and non-circular EvidencePack closure.
 func VerifyLaunchEffectReceipt(receipt LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
+	if err := verifyLaunchEffectReceiptBase(receipt, ctx); err != nil {
+		return err
+	}
+	if receipt.Outcome == "UNKNOWN" {
+		return nil
+	}
+	if ctx.ResolvePreviousReceipt == nil {
+		return errors.New("terminal launch effect receipt requires source-owned predecessor resolution")
+	}
+	previous, err := ctx.ResolvePreviousReceipt(receipt.PreviousReceiptID)
+	if err != nil {
+		return fmt.Errorf("resolve terminal launch effect receipt predecessor: %w", err)
+	}
+	if err := validateLaunchEffectReceiptPredecessorLink(receipt, previous); err != nil {
+		return err
+	}
+	if err := VerifyLaunchEffectReceipt(previous, ctx); err != nil {
+		return fmt.Errorf("verify terminal launch effect receipt predecessor: %w", err)
+	}
+	if err := validateLaunchEffectReceiptRevision(receipt, previous); err != nil {
+		return err
+	}
+	return verifyLaunchEffectReceiptEvidencePack(receipt, previous, ctx)
+}
+
+func verifyLaunchEffectReceiptBase(receipt LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
 	if err := ValidateLaunchEffectReceiptSemantics(receipt); err != nil {
 		return err
 	}
@@ -404,13 +479,15 @@ func VerifyLaunchEffectReceipt(receipt LaunchEffectReceipt, ctx LaunchEffectRece
 	if err := verifyLaunchReceiptEvidenceDAG(receipt, dag); err != nil {
 		return err
 	}
-	if receipt.Outcome != "UNKNOWN" {
-		if ctx.VerifyEvidencePack == nil {
-			return errors.New("terminal launch effect receipt requires source-owned EvidencePack verification")
-		}
-		if err := ctx.VerifyEvidencePack(receipt.EvidencePackRef, receipt.EvidencePackHash, receipt.PreviousReceiptID); err != nil {
-			return fmt.Errorf("verify terminal launch effect receipt EvidencePack: %w", err)
-		}
+	return nil
+}
+
+func verifyLaunchEffectReceiptEvidencePack(receipt, previous LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
+	if ctx.VerifyEvidencePack == nil {
+		return errors.New("terminal launch effect receipt requires source-owned EvidencePack verification")
+	}
+	if err := ctx.VerifyEvidencePack(receipt.EvidencePackRef, receipt.EvidencePackHash, previous.ReceiptID); err != nil {
+		return fmt.Errorf("verify terminal launch effect receipt EvidencePack: %w", err)
 	}
 	return nil
 }
@@ -589,11 +666,31 @@ func VerifyLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, ct
 	if err := VerifyLaunchEffectReceipt(previous, ctx); err != nil {
 		return fmt.Errorf("verify previous launch effect receipt: %w", err)
 	}
-	if err := VerifyLaunchEffectReceipt(current, ctx); err != nil {
+	if err := verifyLaunchEffectReceiptBase(current, ctx); err != nil {
 		return fmt.Errorf("verify current launch effect receipt: %w", err)
 	}
+	if err := validateLaunchEffectReceiptRevision(current, previous); err != nil {
+		return err
+	}
+	if current.Outcome != "UNKNOWN" {
+		return verifyLaunchEffectReceiptEvidencePack(current, previous, ctx)
+	}
+	return nil
+}
+
+func validateLaunchEffectReceiptPredecessorLink(current, previous LaunchEffectReceipt) error {
 	if current.ReceiptRevision != previous.ReceiptRevision+1 || !launchConstantEqual(current.PreviousReceiptID, previous.ReceiptID) {
 		return errors.New("launch effect receipt revision does not extend the signed predecessor")
+	}
+	if previous.Outcome != "UNKNOWN" {
+		return errors.New("terminal launch effect receipt cannot be revised")
+	}
+	return nil
+}
+
+func validateLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt) error {
+	if err := validateLaunchEffectReceiptPredecessorLink(current, previous); err != nil {
+		return err
 	}
 	immutable := []struct {
 		name string
@@ -681,17 +778,20 @@ func VerifyLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, ct
 	if current.Lamport <= previous.Lamport {
 		return errors.New("launch effect receipt revision Lamport clock must advance")
 	}
-	previousTime, _ := time.Parse(time.RFC3339Nano, previous.Timestamp)
-	currentTime, _ := time.Parse(time.RFC3339Nano, current.Timestamp)
+	previousTime, err := time.Parse(time.RFC3339Nano, previous.Timestamp)
+	if err != nil {
+		return errors.New("previous launch effect receipt timestamp is invalid")
+	}
+	currentTime, err := time.Parse(time.RFC3339Nano, current.Timestamp)
+	if err != nil {
+		return errors.New("current launch effect receipt timestamp is invalid")
+	}
 	if !currentTime.After(previousTime) {
 		return errors.New("launch effect receipt revision timestamp must advance")
 	}
 	materialChanged := launchReceiptReconciliationMaterialChanged(current, previous)
 	if materialChanged && current.ReconciliationRevision <= previous.ReconciliationRevision {
 		return errors.New("launch effect receipt reconciliation material changed without a new reconciliation revision")
-	}
-	if previous.Outcome != "UNKNOWN" && materialChanged {
-		return errors.New("terminal launch effect receipt reconciliation material cannot change")
 	}
 	return nil
 }

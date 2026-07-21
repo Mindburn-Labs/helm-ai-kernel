@@ -129,7 +129,8 @@ type LaunchEffectDispatchFinalization struct {
 // finalization committed. The verifier rejects stale, backdated, or expired
 // results before any network dispatch can be authorized.
 type LaunchEffectDispatchFinalizationResult struct {
-	CommittedAt time.Time
+	CommittedAt       time.Time
+	ObservedAuthority LaunchEffectPermitBinding
 }
 
 // LaunchEffectApprovalAuthority is independently loaded from the canonical
@@ -184,7 +185,9 @@ type LaunchEffectEnvelopeVerificationContext struct {
 	// compare the canonical approval consumption and dispatch admission, verify
 	// that the exact connector release remains current and non-revoked, and CAS
 	// expected.Permit. A separate time or state pre-read is insufficient. The
-	// returned CommittedAt MUST be the clock value read by that atomic operation.
+	// returned CommittedAt MUST be the clock value read by that atomic operation;
+	// ObservedAuthority MUST be rebuilt from those same independent source reads,
+	// never copied from expected.Permit.
 	// A successful return is still only pre-dispatch authority: the Data Plane
 	// must use the exact DispatchAdmissionRef/Hash to persist or recover its
 	// durable effect reservation and pass the start interlock before any network
@@ -318,6 +321,9 @@ func VerifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	}
 	if !finalization.CommittedAt.Before(expectedFinalization.MustCommitBefore) {
 		return errors.New("launch authorization envelope expired before atomic dispatch finalization")
+	}
+	if finalization.ObservedAuthority != expectedFinalization.Permit {
+		return errors.New("launch authorization envelope authority changed before atomic dispatch finalization")
 	}
 	return nil
 }

@@ -174,6 +174,18 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsExpiryBeforeAtomicFinalization(
 	}
 }
 
+func TestLaunchEffectAuthorizationEnvelopeRejectsPolicyChangeBeforeAtomicFinalization(t *testing.T) {
+	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
+	ctx.FinalizeDispatch = func(expected contracts.LaunchEffectDispatchFinalization) (contracts.LaunchEffectDispatchFinalizationResult, error) {
+		observed := expected.Permit
+		observed.PolicyEpoch = "epoch-2"
+		return contracts.LaunchEffectDispatchFinalizationResult{CommittedAt: ctx.Now, ObservedAuthority: observed}, nil
+	}
+	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "authority changed before atomic dispatch finalization") {
+		t.Fatalf("policy epoch race error = %v", err)
+	}
+}
+
 func launchArtifactAuthorizationFixture(t *testing.T) (contracts.LaunchEffectAuthorizationEnvelope, contracts.LaunchEffectEnvelopeVerificationContext, ed25519.PrivateKey, ed25519.PublicKey) {
 	t.Helper()
 	envelope, ctx, privateKey, publicKey, _ := launchEffectAuthorizationFixtureAt(t, 5)
@@ -352,7 +364,7 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 			if !consumed.CompareAndSwap(false, true) {
 				return contracts.LaunchEffectDispatchFinalizationResult{}, fmt.Errorf("permit already consumed")
 			}
-			return contracts.LaunchEffectDispatchFinalizationResult{CommittedAt: now}, nil
+			return contracts.LaunchEffectDispatchFinalizationResult{CommittedAt: now, ObservedAuthority: permit}, nil
 		},
 		Permit: permit,
 	}

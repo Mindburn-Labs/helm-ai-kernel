@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -441,8 +442,9 @@ func loadUpdateBundleManifest(path string) (updatebundle.UpdateBundleManifest, e
 	return manifest, nil
 }
 
-// loadStrictJSON rejects unknown fields: operator-authored and trust-bearing
-// documents never get silently reinterpreted.
+// loadStrictJSON rejects unknown fields and trailing values: operator-authored
+// and trust-bearing documents never get silently reinterpreted, and appended
+// data after the first JSON value is an error rather than ignored content.
 func loadStrictJSON(path string, v any) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -452,6 +454,9 @@ func loadStrictJSON(path string, v any) error {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(v); err != nil {
 		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return fmt.Errorf("parse %s: unexpected trailing content after the JSON document", path)
 	}
 	return nil
 }
@@ -470,6 +475,12 @@ func readArtifactDir(dir string) (map[string][]byte, error) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		// Anything but a regular file is tamper: a symlink would hash content
+		// from outside the artifact directory, and devices/FIFOs can hang or
+		// exhaust the reader. Fail closed rather than attest it.
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("artifact %s is not a regular file (mode %s)", rel, d.Type())
+		}
 		if rel == "compile_receipt.json" {
 			return nil
 		}

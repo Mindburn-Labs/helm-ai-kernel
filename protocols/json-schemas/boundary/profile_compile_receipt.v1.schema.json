@@ -33,7 +33,7 @@
         "additionalProperties": false,
         "required": ["path", "sha256"],
         "properties": {
-          "path": { "type": "string", "minLength": 1, "pattern": "^[^/]", "$comment": "clean relative path, forward slashes" },
+          "path": { "$ref": "#/$defs/relative_path" },
           "sha256": { "$ref": "#/$defs/hash" }
         }
       },
@@ -48,6 +48,12 @@
   },
   "$defs": {
     "non_empty": { "type": "string", "minLength": 1 },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^([^/\\\\.][^/\\\\]*|\\.[^/\\\\.][^/\\\\]*|\\.\\.[^/\\\\]+)(/([^/\\\\.][^/\\\\]*|\\.[^/\\\\.][^/\\\\]*|\\.\\.[^/\\\\]+))*$",
+      "$comment": "Clean relative path with forward slashes, mirroring the Go validateArtifactPath fail-closed rules: no leading slash, no backslashes, and no empty, \".\" or \"..\" segments."
+    },
     "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "signature": { "type": "string", "pattern": "^ed25519:[a-f0-9]{128}$" },
     "rfc3339": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}" }

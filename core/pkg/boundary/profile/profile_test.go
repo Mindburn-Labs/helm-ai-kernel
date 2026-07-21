@@ -91,6 +91,37 @@ func TestValidateRejections(t *testing.T) {
 	}
 }
 
+// TestEnforceTierRequiresHardenedMinimum pins the fail-closed rule that an
+// omitted or zero-value hardening block cannot compile an unhardened unit
+// under the enforce tier.
+func TestEnforceTierRequiresHardenedMinimum(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*ProfileInput)
+		wantSub string
+	}{
+		{"zero-value hardening", func(in *ProfileInput) { in.Hardening = HardeningOptions{} }, "no_new_privileges"},
+		{"privileges not dropped", func(in *ProfileInput) { in.Hardening.NoNewPrivileges = false }, "no_new_privileges"},
+		{"protect_system omitted", func(in *ProfileInput) { in.Hardening.ProtectSystem = "" }, "protect_system"},
+		{"protect_system too weak", func(in *ProfileInput) { in.Hardening.ProtectSystem = "yes" }, "protect_system"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := fixtureInput()
+			tc.mutate(&in)
+			err := in.Validate()
+			if err == nil || !strings.Contains(err.Error(), tc.wantSub) {
+				t.Fatalf("enforce tier must reject %s, got %v", tc.name, err)
+			}
+			// The same posture is a legitimate observe-tier profile.
+			in.ModeTier = TierObserve
+			if err := in.Validate(); err != nil {
+				t.Fatalf("observe tier must still accept it: %v", err)
+			}
+		})
+	}
+}
+
 func TestDomainsWithoutCIDRsAcknowledged(t *testing.T) {
 	in := fixtureInput()
 	in.Egress.AllowedCIDRs = nil

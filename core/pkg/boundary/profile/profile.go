@@ -167,6 +167,19 @@ func (in ProfileInput) Validate() error {
 	if err := in.Hardening.validate(); err != nil {
 		return err
 	}
+	if in.ModeTier == TierEnforce {
+		// A zero-value or omitted hardening block would otherwise compile
+		// NoNewPrivileges=no / no ProtectSystem with no operator intent —
+		// the exact silent weakening this profile exists to prevent.
+		if !in.Hardening.NoNewPrivileges {
+			return fmt.Errorf("mode_tier %q requires hardening.no_new_privileges = true", TierEnforce)
+		}
+		switch in.Hardening.ProtectSystem {
+		case "full", "strict":
+		default:
+			return fmt.Errorf("mode_tier %q requires hardening.protect_system to be \"full\" or \"strict\"", TierEnforce)
+		}
+	}
 	for _, permit := range in.DevicePermits {
 		if !validDevicePermit.MatchString(permit) {
 			return fmt.Errorf("device permit %q must match %s", permit, validDevicePermit.String())

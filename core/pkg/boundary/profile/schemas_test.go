@@ -121,6 +121,66 @@ func TestBoundaryProfileSchemas(t *testing.T) {
 	}
 }
 
+// TestSchemasRejectWhatGoRejects keeps schema strictness aligned with the Go
+// validators: tooling that only checks the schema must not accept documents
+// the kernel fails closed on.
+func TestSchemasRejectWhatGoRejects(t *testing.T) {
+	inputSchema := compileBoundarySchema(t, "boundary_profile_input.v1.schema.json")
+	receiptSchema := compileBoundarySchema(t, "profile_compile_receipt.v1.schema.json")
+
+	decode := func(v any) map[string]any {
+		payload, err := canonicalize.JCS(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(payload, &m); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+
+	t.Run("gateway endpoint kind conditionals", func(t *testing.T) {
+		for name, mutate := range map[string]func(map[string]any){
+			"tcp without address": func(m map[string]any) {
+				m["topology"].(map[string]any)["gateway"] = map[string]any{"kind": "tcp"}
+			},
+			"tcp carrying path": func(m map[string]any) {
+				m["topology"].(map[string]any)["gateway"] = map[string]any{"kind": "tcp", "address": "127.0.0.1:7714", "path": "/run/helm.sock"}
+			},
+			"unix without path": func(m map[string]any) {
+				m["topology"].(map[string]any)["gateway"] = map[string]any{"kind": "unix"}
+			},
+			"unix carrying address": func(m map[string]any) {
+				m["topology"].(map[string]any)["gateway"] = map[string]any{"kind": "unix", "path": "/run/helm.sock", "address": "127.0.0.1:7714"}
+			},
+		} {
+			doc := decode(fixtureInput())
+			mutate(doc)
+			if err := inputSchema.Validate(doc); err == nil {
+				t.Fatalf("%s must be rejected by the schema", name)
+			}
+		}
+	})
+
+	t.Run("artifact path traversal", func(t *testing.T) {
+		compiled, _ := compiledFixture(t)
+		for _, bad := range []string{"../escape.conf", "systemd/../../etc/shadow", "a//b.conf", "/etc/shadow", "a/./b.conf", "back\\slash.conf"} {
+			doc := decode(compiled.Receipt)
+			doc["artifacts"].([]any)[0].(map[string]any)["path"] = bad
+			if err := receiptSchema.Validate(doc); err == nil {
+				t.Fatalf("artifact path %q must be rejected by the schema", bad)
+			}
+		}
+		// A clean nested path with dots in the filename still validates.
+		doc := decode(compiled.Receipt)
+		doc["artifacts"].([]any)[0].(map[string]any)["path"] = "systemd/helm-gateway.service.d/50-helm-boundary.conf"
+		if err := receiptSchema.Validate(doc); err != nil {
+			t.Fatalf("clean path must validate: %v", err)
+		}
+	})
+}
+
 func TestUpdateBundleManifestSchema(t *testing.T) {
 	schema := compileBoundarySchema(t, "update_bundle_manifest.v1.schema.json")
 	manifest := sealedUpdateBundleManifest(t)

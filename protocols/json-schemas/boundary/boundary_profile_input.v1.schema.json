@@ -37,7 +37,18 @@
             "kind": { "enum": ["tcp", "unix"] },
             "address": { "type": "string", "$comment": "ip:port, required when kind=tcp (literal IP, becomes IPAddressAllow=)" },
             "path": { "type": "string", "pattern": "^/", "$comment": "absolute socket path, required when kind=unix" }
-          }
+          },
+          "$comment": "kind-conditional requirements mirror the Go validator: tcp needs address and forbids path; unix needs path and forbids address.",
+          "allOf": [
+            {
+              "if": { "properties": { "kind": { "const": "tcp" } }, "required": ["kind"] },
+              "then": { "required": ["address"], "not": { "required": ["path"] } }
+            },
+            {
+              "if": { "properties": { "kind": { "const": "unix" } }, "required": ["kind"] },
+              "then": { "required": ["path"], "not": { "required": ["address"] } }
+            }
+          ]
         }
       }
     },

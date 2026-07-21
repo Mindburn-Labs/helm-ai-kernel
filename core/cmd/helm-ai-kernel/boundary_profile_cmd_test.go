@@ -249,6 +249,36 @@ func TestBoundaryProfileBundleVerifyCLI(t *testing.T) {
 	}
 }
 
+func TestLoadStrictJSONRejectsTrailingContent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":"boundary_profile_input.v1"}{"appended":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var input profile.ProfileInput
+	err := loadStrictJSON(path, &input)
+	if err == nil || !strings.Contains(err.Error(), "trailing content") {
+		t.Fatalf("appended JSON must be rejected, got %v", err)
+	}
+}
+
+func TestReadArtifactDirRejectsNonRegularFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "real.conf"), []byte("ok\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(outside, []byte("not mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "link.conf")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := readArtifactDir(dir); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("a symlinked artifact must be treated as tamper, got %v", err)
+	}
+}
+
 func TestBoundaryProfileUsageExits(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := runBoundaryProfileCmd(nil, &stdout, &stderr); code != 2 {

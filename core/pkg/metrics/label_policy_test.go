@@ -108,33 +108,42 @@ func TestNoProhibitedMetricLabels(t *testing.T) {
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || !vecConstructors[sel.Sel.Name] {
+			if !ok || !vecConstructors[sel.Sel.Name] || len(call.Args) < 2 {
 				return true
 			}
-			for _, arg := range call.Args {
-				lit, ok := arg.(*ast.CompositeLit)
-				if !ok {
+			// The label-name slice is the constructor's last argument. The
+			// gate is fail-closed: labels must be inline string literals at
+			// the registration site — a slice passed through a variable,
+			// constant, or call cannot be statically checked and would be an
+			// evasion channel, so it is itself a violation.
+			arg := call.Args[len(call.Args)-1]
+			lit, ok := arg.(*ast.CompositeLit)
+			if !ok {
+				violations = append(violations, finding{
+					pos:   fset.Position(arg.Pos()).String(),
+					label: "<non-literal label slice — inline the label names>",
+				})
+				return true
+			}
+			for _, elt := range lit.Elts {
+				basic, isBasic := elt.(*ast.BasicLit)
+				if !isBasic || basic.Kind != token.STRING {
+					violations = append(violations, finding{
+						pos:   fset.Position(elt.Pos()).String(),
+						label: "<non-literal label name — inline the label string>",
+					})
 					continue
 				}
-				if arr, ok := lit.Type.(*ast.ArrayType); !ok || arr == nil {
+				label, err := strconv.Unquote(basic.Value)
+				if err != nil {
 					continue
 				}
-				for _, elt := range lit.Elts {
-					basic, ok := elt.(*ast.BasicLit)
-					if !ok || basic.Kind != token.STRING {
-						continue
-					}
-					label, err := strconv.Unquote(basic.Value)
-					if err != nil {
-						continue
-					}
-					seenLabels++
-					if prohibitedMetricLabels[label] {
-						violations = append(violations, finding{
-							pos:   fset.Position(basic.Pos()).String(),
-							label: label,
-						})
-					}
+				seenLabels++
+				if prohibitedMetricLabels[label] {
+					violations = append(violations, finding{
+						pos:   fset.Position(basic.Pos()).String(),
+						label: label,
+					})
 				}
 			}
 			return true

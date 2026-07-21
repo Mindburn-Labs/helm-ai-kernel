@@ -541,13 +541,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			ctx = context.WithValue(ctx, ctxKeyRequestModel, requestModel)
 
 			// Inject W3C traceparent so the upstream provider's traces (if any)
-			// link back into our governance trace tree.
+			// link back into our governance trace tree. InjectHTTPHeaders also
+			// sets the advisory X-Helm-Correlation-ID for upstreams that echo it.
 			helmotel.InjectTraceparent(ctx, req.Header)
 			tracing.InjectHTTPHeaders(ctx, req.Header)
 			ctx = context.WithValue(ctx, ctxKeyTraceparent, req.Header.Get("traceparent"))
-
-			// Set advisory header so upstreams that look for it can echo the id.
-			req.Header.Set("X-Helm-Correlation-ID", string(corr))
 
 			*req = *req.WithContext(ctx)
 

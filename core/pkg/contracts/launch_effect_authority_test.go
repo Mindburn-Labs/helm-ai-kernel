@@ -440,6 +440,7 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsUnsafeProviderDestinationURI(t 
 	for name, endpoint := range map[string]string{
 		"plaintext":   "http://api.digitalocean.invalid/v1",
 		"credentials": "https://user:secret@api.digitalocean.invalid/v1",
+		"query":       "https://api.digitalocean.invalid/v1?token=secret",
 		"fragment":    "https://api.digitalocean.invalid/v1#other",
 		"newline":     "https://api.digitalocean.invalid/v1\r\nX-Test: injected",
 	} {

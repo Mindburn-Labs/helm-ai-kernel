@@ -166,7 +166,10 @@ type LaunchEffectDispatchDestination struct {
 // ProviderPayload is populated only for provider mutations. The contract
 // defensively copies these slices before hashing and passes the same copies to
 // StartDispatch; connectors must transmit those bytes without rebuilding them.
-// These bytes may contain secrets and must never be persisted by this contract.
+// Provider authentication credentials MUST NOT appear in these bytes; the
+// source-owned StartDispatch implementation releases them only after the permit
+// CAS, using Destination.ProviderAccountRef/Hash. Sensitive workload values are
+// never persisted by this contract.
 type LaunchEffectDispatchRequest struct {
 	RequestBody     []byte
 	ArgsC14N        []byte
@@ -594,7 +597,7 @@ func verifyLaunchDispatchDestination(envelope LaunchEffectAuthorizationEnvelope,
 		return "", errors.New("launch authorization envelope provider destination URI is missing or unsafe")
 	}
 	parsed, err := url.Parse(destination.EndpointURI)
-	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" || parsed.Opaque != "" {
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Opaque != "" {
 		return "", errors.New("launch authorization envelope provider destination must be an absolute credential-free HTTPS URI")
 	}
 	destinationHash := canonicalize.ComputeArtifactHash([]byte(destination.EndpointURI))

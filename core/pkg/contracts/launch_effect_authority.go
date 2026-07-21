@@ -133,6 +133,17 @@ type LaunchEffectApprovalAuthority struct {
 	DispatchSignature             string                    `json:"dispatch_signature"`
 }
 
+// LaunchEmergencyFenceSnapshot is source-owned state for every emergency stop
+// applicable to one launch workspace. EffectiveEpoch MUST increase on both
+// stop and clear transitions so a permit issued before a stop-clear cycle can
+// never become dispatchable again.
+type LaunchEmergencyFenceSnapshot struct {
+	TenantID       string
+	WorkspaceID    string
+	EffectiveEpoch int64
+	Active         bool
+}
+
 // LaunchEffectEnvelopeVerificationContext supplies independently resolved
 // source truth. Values copied from the envelope are not valid inputs here.
 type LaunchEffectEnvelopeVerificationContext struct {
@@ -148,9 +159,11 @@ type LaunchEffectEnvelopeVerificationContext struct {
 	ExpectedArgsC14NHash     string
 	ExpectedPolicyEpoch      string
 	MaximumPermitTTL         time.Duration
-	ResolveVerdictKey        func(signerKeyID string) (ed25519.PublicKey, error)
+	ResolveVerdictKey        func(kernelTrustRootID, signerKeyID string) (ed25519.PublicKey, error)
+	ResolveEmergencyFence    func(tenantID, workspaceID string) (LaunchEmergencyFenceSnapshot, error)
 	// FinalizeDispatch MUST atomically: re-read the canonical scoped-stop state,
-	// deny an active or unavailable fence, re-check predecessor receipt state,
+	// deny an active or unavailable fence, require its effective epoch to equal
+	// expected.EmergencyFenceEpoch, re-check predecessor receipt state,
 	// compare the canonical approval consumption and dispatch admission, verify
 	// that the exact connector release remains current and non-revoked, and CAS
 	// this single-use dispatch permit. A separate pre-read is insufficient.
@@ -228,11 +241,14 @@ func VerifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	if ctx.ResolveVerdictKey == nil {
 		return errors.New("launch authorization envelope requires a verdict trust-root resolver")
 	}
-	verdictPublicKey, err := ctx.ResolveVerdictKey(envelope.KernelVerdictSignerKey)
+	verdictPublicKey, err := ctx.ResolveVerdictKey(envelope.KernelTrustRootID, envelope.KernelVerdictSignerKey)
 	if err != nil {
 		return fmt.Errorf("resolve launch authorization envelope verdict key: %w", err)
 	}
 	if err := verifyLaunchVerdictSignature(envelope, verdictPublicKey); err != nil {
+		return err
+	}
+	if err := verifyLaunchEmergencyFence(envelope, ctx); err != nil {
 		return err
 	}
 	if ctx.ResolveInputSchema == nil || ctx.ValidateInput == nil {
@@ -273,6 +289,26 @@ func VerifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	}
 	if err := ctx.FinalizeDispatch(ctx.Permit); err != nil {
 		return fmt.Errorf("finalize launch authorization envelope dispatch: %w", err)
+	}
+	return nil
+}
+
+func verifyLaunchEmergencyFence(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+	if ctx.ResolveEmergencyFence == nil {
+		return errors.New("launch authorization envelope requires source-owned emergency fence state")
+	}
+	snapshot, err := ctx.ResolveEmergencyFence(envelope.TenantID, envelope.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("resolve launch authorization envelope emergency fence: %w", err)
+	}
+	if snapshot.TenantID != envelope.TenantID || snapshot.WorkspaceID != envelope.WorkspaceID {
+		return errors.New("launch authorization envelope emergency fence scope does not match the dispatch")
+	}
+	if snapshot.EffectiveEpoch < 0 || snapshot.EffectiveEpoch != envelope.EmergencyFenceEpoch {
+		return errors.New("launch authorization envelope emergency fence epoch is stale")
+	}
+	if snapshot.Active {
+		return errors.New("launch authorization envelope emergency fence is active")
 	}
 	return nil
 }

@@ -2,6 +2,10 @@ name: Docs Truth
 
 permissions:
   contents: read
+  # Lets the reusable's orphan-ledger step upsert a PR comment. A called
+  # workflow cannot elevate GITHUB_TOKEN beyond the caller's grant, so this
+  # must be declared here or the run fails at startup.
+  pull-requests: write
 
 on:
   pull_request:

@@ -145,6 +145,15 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		policyGraph = runtimePolicy.Graph
+		// Report the compiled allow-set so a mis-authored policy that authorizes
+		// nothing is visible, not a silent deny-all. Logged to stderr so it is
+		// safe on the stdio transport, where stdout carries the MCP protocol.
+		authorized := len(runtimePolicy.AllowMap())
+		if authorized == 0 {
+			fmt.Fprintf(stderr, "Warning: serve policy %q authorizes 0 actions; every execution will be denied\n", policyPath)
+		} else {
+			fmt.Fprintf(stderr, "Serve policy %q authorizes %d action(s)\n", policyPath, authorized)
+		}
 	}
 
 	switch transport {

@@ -1,5 +1,0 @@
-# Advisory routing only: CODEOWNERS has zero code-merge-authority weight.
-# Code merges require source-owned deterministic gates on the current
-# pull-request merge commit and resolved review threads; human identity,
-# labels, and commit trailers cannot replace them.
-*       @Mindburn-Labs/admins

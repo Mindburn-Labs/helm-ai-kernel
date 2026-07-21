@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-21T14:44:41Z
+# Generated: 2026-07-21T15:06:49Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -164,7 +164,7 @@ a4d12be0b1401a4ea024f4eacb1f2e2c6f6809356f1060890828812aa8cbb1cd  core/pkg/contr
 3670d455717968e63e8dbcf0c38f79812d0bf72cb7eb234a51b305a27aede0c4  core/pkg/contracts/counterfactual_receipt.go
 ed4994cdbba2b72e5626b91ade9226920896458d6ef4b3c62e127c1fce18e139  core/pkg/contracts/counterfactual_receipt_test.go
 ede0948b73b13fc4504280b3639a4615029b69769b7227840c48c0bc8855f930  core/pkg/contracts/decision.go
-d443d4bd34f27e417b061a0346fa93b41de07822da7c1b8703f18e457b54de8e  core/pkg/contracts/decision.proto
+1bdabe935d7436a53a04ddc84e5c5c265270afe4632b9ec1e3d2d17466979fa1  core/pkg/contracts/decision.proto
 3e47d320d74867aacd97603f6007a47ba4e7927df8b0a185769566791e74c4b3  core/pkg/contracts/decision_request.go
 e23388a6c24921b11239be71d1b34dd6c3925756a6900ac02c09c8101b9b0cc1  core/pkg/contracts/decision_request_test.go
 7e0c4b7d9d927a3dd649affad9eb50bc4932e25bbba3e494fa34938397ef76e7  core/pkg/contracts/delegation_proof.go
@@ -570,7 +570,7 @@ f7779991fbd5bf082e51beac146520bdae7054f419df711652f400e43f06b1c4  core/pkg/api/a
 3700337026ad0979b101b5873c90e4e161f5074ffa9e251ed8131d21498a8130  core/pkg/api/autonomy_decision_handler_test.go
 0c4838fba74d4179fdebb2f7bd90b0f6364072153e342ab28cfdd60780ef6ebd  core/pkg/api/autonomy_handler.go
 7324c5963a3fbfdf3a176758912963003a78134c0be8280d080977d96512461f  core/pkg/api/contract_test.go
-0e710510ca22f7f9e82d287267bd14e10e9748e1e909290271fe2195177be8d8  core/pkg/api/correlation_edge_test.go
+8ac176cfbc635f0941b495da38296d6451cdc0273e6dc8dec5078f72e1bf78d2  core/pkg/api/correlation_edge_test.go
 0659cb65af36b11e07c6ff6e04793f3732168f3e6f86afa005a7f1c61b034573  core/pkg/api/decision_handler.go
 4955eee7014cf6d5e572d80ed9b09d228cabf1950a34e016f4882ae912358a13  core/pkg/api/governed_gateway.go
 60f01eed104a56ae9054b7564ec7e3dcfe873fb266de79bca4b3c1838cdc95e0  core/pkg/api/governed_gateway_test.go
@@ -584,7 +584,7 @@ e9a5bca9890ef8dabef35ea13d2f8e247ce4db9b2f0013135e8d7b32303026ff  core/pkg/api/m
 1b0bd999c7fbe3a0f103f9d365d47560996884885ab545dd04394fcf8ced9caa  core/pkg/api/migrations/001_create_idempotency_keys.sql
 8417977ea4ed473985b07c615c8e74cd24e7979d4c1e6c61f43769fd5b5b5954  core/pkg/api/openai_proxy.go
 4be8ee8acb6f0b94c82093047ea038445bab9b00159310ed9639f33f6730ba58  core/pkg/api/postgres_idempotency.go
-67b51f7a0586ab6d77fb507c4f16df10dd6f3a2d3dbf5fa4fbe6a119d27debf0  core/pkg/api/server.go
+3e269b66526fb41189827000ebaf765f758ecbcc66e09cef9c67cc13a5a801a2  core/pkg/api/server.go
 9b90d53a4b9566bcafe4463b1090677c2c0f2ba7715dcb5718b491773d4559d7  core/pkg/api/server_test.go
 e888eccb011b8a89de4dcbaa5022783a6db33d439734db6b7f213b624ef689ed  core/pkg/api/test_ingestion_test.go
 9c11ae86654c532e4d33e3f11b77427e496fc08a80aea25bf31c12ee644b2a1c  core/pkg/api/trust/handler.go
@@ -961,7 +961,7 @@ c0ca0052768b38ddd185451616af6a411f6700d2f55d61544e6b6a327b1ce209  protocols/prot
 2d49a81d17c37627dedf1093504345280a437250fe8edaadb5a7e236768a12f4  protocols/proto/helm/authority/v1/authority.proto
 c28f8d64a15c801dff22c984b977f5a3f899684653ab4307386b842cd0b467bb  protocols/proto/helm/effects/v1/effects.proto
 952f916f65ce4c1bac02c9d93bc7bfd661252d10e3454c1e469cd715c108fe6c  protocols/proto/helm/intervention/v1/intervention.proto
-a3b4957fbf92a0950e4dccbe6d48037b8b88b56c0ba5d36ac3cbab1695b92b58  protocols/proto/helm/kernel/v1/helm.proto
+2536134681195f12b77e294e016463957f3050912a98f7ea8c18149adf7ec4c4  protocols/proto/helm/kernel/v1/helm.proto
 f294ad5b8fcc429072bd16a1dcef407e4884e843c6099c5de8d1ce8ec3cc0f2c  protocols/proto/helm/truth/v1/truth.proto
 6e2ee245f428faa27dbb15747f17cace76a0edabc72d1023b99120aa2a29f925  protocols/spec/PROTOCOL.md
 ec9221b14f36813ced2f351d69a54b927cd234e4d929d8f0feba3d8ba7b6cb5d  protocols/spec/agent-provenance-pack-v1.md

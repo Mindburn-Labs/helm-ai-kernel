@@ -166,6 +166,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, ao := range s.allowedOrigins {
 			if ao == "*" || ao == origin {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
+				// The response varies by Origin; without Vary a shared cache
+				// could reuse it across origins.
+				w.Header().Add("Vary", "Origin")
 				break
 			}
 		}

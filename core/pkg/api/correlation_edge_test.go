@@ -23,7 +23,10 @@ func evaluateWithHeader(t *testing.T, srv *Server, inbound string) (*httptest.Re
 		EffectLevel: "E0",
 		SessionID:   "session-corr",
 	}
-	reqBody, _ := json.Marshal(body)
+	reqBody, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshaling request body: %v", err)
+	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	if inbound != "" {

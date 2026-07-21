@@ -1,5 +1,7 @@
 # OpenSSF Best Practices: Gold-Tier Mapping
 
+<!-- quantum_posture: this criteria map references classical Ed25519, ML-DSA-65, and hybrid signer code paths; it makes no claim that every repository surface, release, or connector has post-quantum protection. -->
+
 [![OpenSSF Best Practices](https://bestpractices.dev/projects/9876/badge)](https://bestpractices.dev/projects/9876)
 
 This document maps the OpenSSF Best Practices Badge gold-tier criteria

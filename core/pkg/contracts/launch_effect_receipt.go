@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	LaunchEffectReceiptSchemaVersion = "launch_effect_receipt.v1"
-	LaunchEffectReceiptVersion       = "1.0"
-	LaunchEffectReceiptProfile       = "launch_effect_receipt.v1"
+	LaunchEffectReceiptSchemaVersion  = "launch_effect_receipt.v1"
+	LaunchEffectReceiptVersion        = "1.0"
+	LaunchEffectReceiptProfile        = "launch_effect_receipt.v1"
+	launchEffectReceiptMaxSafeInteger = uint64(1<<53 - 1)
 )
 
 // LaunchEffectReceiptMetadata is intentionally closed and secret-free. Raw
@@ -583,7 +584,10 @@ func verifyLaunchReceiptEvidenceDAG(receipt LaunchEffectReceipt, dag LaunchEffec
 		if node.ProofSessionRef != receipt.ProofSessionRef || node.EvidenceReservationRef != receipt.EvidenceReservationRef {
 			return errors.New("launch effect receipt evidence DAG escaped its proof session or evidence reservation")
 		}
-		if node.Lamport == 0 || node.Lamport >= receipt.Lamport {
+		if node.Lamport == 0 || node.Lamport > launchEffectReceiptMaxSafeInteger {
+			return errors.New("launch effect receipt evidence DAG Lamport clock exceeds the JCS safe-integer range")
+		}
+		if node.Lamport >= receipt.Lamport {
 			return errors.New("launch effect receipt evidence DAG does not strictly precede the receipt")
 		}
 		if !launchStringRefsCanonical(node.ParentHashes) || !launchStringRefsCanonical(node.ArtifactRefs) {
@@ -827,8 +831,18 @@ func ValidateLaunchEffectReceiptSemantics(receipt LaunchEffectReceipt) error {
 	if !validLaunchNonce(receipt.PermitNonce) {
 		return errors.New("launch effect receipt permit nonce is not canonical")
 	}
-	if receipt.EffectOrdinal < 0 || receipt.EmergencyFenceEpoch < 0 || receipt.ReceiptRevision < 1 || receipt.ReconciliationRevision < 0 || receipt.ReconciliationRevision > receipt.ReceiptRevision || receipt.Lamport == 0 {
+	if receipt.EffectOrdinal < 0 || receipt.EmergencyFenceEpoch < 0 || receipt.ReceiptRevision < 1 || receipt.ReconciliationRevision < 0 || receipt.Lamport == 0 {
 		return errors.New("launch effect receipt revision, ordinal, or Lamport clock is invalid")
+	}
+	if uint64(receipt.EffectOrdinal) > launchEffectReceiptMaxSafeInteger ||
+		uint64(receipt.EmergencyFenceEpoch) > launchEffectReceiptMaxSafeInteger ||
+		uint64(receipt.ReceiptRevision) > launchEffectReceiptMaxSafeInteger ||
+		uint64(receipt.ReconciliationRevision) > launchEffectReceiptMaxSafeInteger ||
+		receipt.Lamport > launchEffectReceiptMaxSafeInteger {
+		return errors.New("launch effect receipt numeric field exceeds the JCS safe-integer range")
+	}
+	if receipt.ReconciliationRevision > receipt.ReceiptRevision {
+		return errors.New("launch effect receipt reconciliation revision exceeds its receipt revision")
 	}
 	if receipt.ReceiptRevision == 1 && receipt.PreviousReceiptID != "" {
 		return errors.New("initial launch effect receipt cannot reference a previous revision")

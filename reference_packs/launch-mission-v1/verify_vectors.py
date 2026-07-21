@@ -432,7 +432,8 @@ def verify_receipt_evidence(receipt, dag):
         }
         for artifact in artifacts:
             lowered = artifact.lower()
-            if artifact in forbidden or lowered.startswith("receipt:") or lowered.startswith("evidencepack:"):
+            raw_receipt_id = len(artifact) == 64 and all(character in "0123456789abcdef" for character in artifact)
+            if artifact in forbidden or lowered.startswith("receipt:") or lowered.startswith("evidencepack:") or raw_receipt_id:
                 raise VectorError("evidence_cycle", "receipt evidence depends on a receipt or EvidencePack")
         by_hash[node_hash] = node
 
@@ -551,6 +552,13 @@ def verify_negative_vectors(index):
         observed["receipt_authority_tamper"] = error.code
 
     evidence = copy.deepcopy(index["receipt"]["evidence_dag"])
+    evidence["nodes"][0]["artifact_refs"] = ["0" * 64]
+    try:
+        verify_receipt(index, evidence_override=evidence)
+    except VectorError as error:
+        observed["receipt_raw_id_evidence_cycle"] = error.code
+
+    evidence = copy.deepcopy(index["receipt"]["evidence_dag"])
     top = evidence["nodes"][0]
     other_hash = "sha256:" + "1" * 64
     top["parent_hashes"] = [other_hash]
@@ -568,6 +576,13 @@ def verify_negative_vectors(index):
         verify_receipt(index, evidence_override=evidence)
     except VectorError as error:
         observed["receipt_evidence_cycle"] = error.code
+
+    receipt = copy.deepcopy(index["receipt"]["value"])
+    receipt["lamport"] = MAX_SAFE_INTEGER + 1
+    try:
+        verify_receipt(index, receipt)
+    except VectorError as error:
+        observed["receipt_unsafe_integer"] = error.code
 
     try:
         assert_safe_integers(MAX_SAFE_INTEGER + 1)
@@ -601,7 +616,7 @@ def main():
     print(
         "verified Launch Mission v1 reference pack: "
         "10 authority artifact hashes, a multi-provider/stateful universal route, 6 effect inputs, provider certification, canonical approval, "
-        "Kernel verdict, receipt, and 6 negative mutations; exact Go/Python parity"
+        "Kernel verdict, receipt, and 8 negative mutations; exact Go/Python parity"
     )
 
 

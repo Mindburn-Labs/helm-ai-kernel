@@ -1,3 +1,7 @@
+// quantum_posture: the proxy signs governance receipts with the kernel's
+// classical Ed25519 signer when --sign is enabled and hashes payloads with
+// SHA-256; no post-quantum primitives are used in this file.
+
 package main
 
 import (

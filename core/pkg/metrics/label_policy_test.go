@@ -43,8 +43,9 @@ var vecConstructors = map[string]bool{
 }
 
 // expositionLabelRe matches label names in hand-rolled Prometheus text
-// exposition format strings, e.g. `helm_tool_decisions{tool=%q}`.
-var expositionLabelRe = regexp.MustCompile(`\{(\w+)=%`)
+// exposition format strings, e.g. `helm_tool_decisions{tool=%q}` — including
+// labels after the first one, e.g. `{tool=%q,correlation_id=%q}`.
+var expositionLabelRe = regexp.MustCompile(`[{,]\s*(\w+)=%`)
 
 // TestNoProhibitedMetricLabels statically scans core/ for metric label
 // registrations — both prometheus *Vec constructors and hand-rolled

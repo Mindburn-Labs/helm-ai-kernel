@@ -9,6 +9,11 @@
 //	GET  /api/v1/health         — Health check
 //
 // This server backs Python, TypeScript, and Rust SDKs.
+//
+// quantum_posture: receipts minted here carry a SHA-256 digest in the
+// signature field (hash chaining, not a signature scheme); authentication is
+// delegated to an injected Authenticator. No public-key and no post-quantum
+// primitives live in this file.
 package api
 
 import (
@@ -56,18 +61,19 @@ type authenticatedPrincipalContextKey struct{}
 
 // ReceiptDTO stored in-memory / external schema.
 type ReceiptDTO struct {
-	ReceiptID    string         `json:"receipt_id"`
-	DecisionID   string         `json:"decision_id"`
-	EffectID     string         `json:"effect_id"`
-	Status       string         `json:"status"`
-	Timestamp    string         `json:"timestamp"`
-	ExecutorID   string         `json:"executor_id,omitempty"`
-	Signature    string         `json:"signature"`
-	PrevHash     string         `json:"prev_hash"`
-	LamportClock uint64         `json:"lamport_clock"`
-	DecisionHash string         `json:"decision_hash"`
-	ArgsHash     string         `json:"args_hash,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
+	ReceiptID     string         `json:"receipt_id"`
+	DecisionID    string         `json:"decision_id"`
+	CorrelationID string         `json:"correlation_id,omitempty"`
+	EffectID      string         `json:"effect_id"`
+	Status        string         `json:"status"`
+	Timestamp     string         `json:"timestamp"`
+	ExecutorID    string         `json:"executor_id,omitempty"`
+	Signature     string         `json:"signature"`
+	PrevHash      string         `json:"prev_hash"`
+	LamportClock  uint64         `json:"lamport_clock"`
+	DecisionHash  string         `json:"decision_hash"`
+	ArgsHash      string         `json:"args_hash,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
@@ -81,18 +87,19 @@ func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
 		}
 	}
 	return &ReceiptDTO{
-		ReceiptID:    r.ReceiptID,
-		DecisionID:   r.DecisionID,
-		EffectID:     r.EffectID,
-		Status:       r.Status,
-		Timestamp:    r.Timestamp.Format(time.RFC3339),
-		ExecutorID:   r.ExecutorID,
-		Signature:    r.Signature,
-		PrevHash:     r.PrevHash,
-		LamportClock: r.LamportClock,
-		DecisionHash: decHash,
-		ArgsHash:     r.ArgsHash,
-		Metadata:     r.Metadata,
+		ReceiptID:     r.ReceiptID,
+		DecisionID:    r.DecisionID,
+		CorrelationID: r.CorrelationID,
+		EffectID:      r.EffectID,
+		Status:        r.Status,
+		Timestamp:     r.Timestamp.Format(time.RFC3339),
+		ExecutorID:    r.ExecutorID,
+		Signature:     r.Signature,
+		PrevHash:      r.PrevHash,
+		LamportClock:  r.LamportClock,
+		DecisionHash:  decHash,
+		ArgsHash:      r.ArgsHash,
+		Metadata:      r.Metadata,
 	}
 }
 
@@ -164,18 +171,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Helm-Correlation-ID")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Helm-Correlation-ID")
+	// Adopt-or-mint the product request identity at this external edge
+	// (telemetry contract §2.2): a valid inbound X-Helm-Correlation-ID is
+	// adopted, anything else is replaced with a minted ID, and the ID used
+	// is always echoed on the response — including OPTIONS preflight.
+	corr, _ := tracing.AdoptOrMintFromHeaders(r.Header)
+	ctx := tracing.WithCorrelationID(r.Context(), corr)
+	tracing.InjectHTTPHeaders(ctx, w.Header())
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	// Adopt-or-mint the product request identity at this external edge
-	// (telemetry contract §2.2): a valid inbound X-Helm-Correlation-ID is
-	// adopted, anything else is replaced with a minted ID, and the ID used
-	// is always echoed on the response.
-	corr, _ := tracing.AdoptOrMintFromHeaders(r.Header)
-	ctx := tracing.WithCorrelationID(r.Context(), corr)
-	tracing.InjectHTTPHeaders(ctx, w.Header())
 	s.mux.ServeHTTP(w, r.WithContext(ctx))
 }
 

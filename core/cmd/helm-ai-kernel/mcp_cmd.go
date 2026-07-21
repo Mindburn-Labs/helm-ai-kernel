@@ -16,6 +16,7 @@ import (
 	"time"
 
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
 
 // runMCPCmd implements `helm-ai-kernel mcp` — MCP server distribution and management.
@@ -117,19 +118,42 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 	cmd.SetOutput(stderr)
 
 	var (
-		transport string
-		port      int
-		authMode  string
-		dataDir   string
+		transport  string
+		port       int
+		authMode   string
+		dataDir    string
+		policyPath string
 	)
 
 	cmd.StringVar(&transport, "transport", "stdio", "Transport: stdio, http")
 	cmd.IntVar(&port, "port", 9100, "Port for HTTP transport")
 	cmd.StringVar(&authMode, "auth", "none", "Auth mode: none, static-header, oauth")
 	cmd.StringVar(&dataDir, "data-dir", "data", "Data directory for local MCP signing state")
+	cmd.StringVar(&policyPath, "policy", "", "Path to a serve policy file; without it, execution is fail-closed (deny-all)")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
+	}
+
+	// A serve policy compiles to the Guardian rule graph. Absent --policy the
+	// graph stays empty, which denies every execution (fail-closed default).
+	var policyGraph *prg.Graph
+	if policyPath != "" {
+		runtimePolicy, err := loadServePolicyRuntime(policyPath)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: load serve policy %q: %v\n", policyPath, err)
+			return 2
+		}
+		policyGraph = runtimePolicy.Graph
+		// Report the compiled allow-set so a mis-authored policy that authorizes
+		// nothing is visible, not a silent deny-all. Logged to stderr so it is
+		// safe on the stdio transport, where stdout carries the MCP protocol.
+		authorized := len(runtimePolicy.AllowMap())
+		if authorized == 0 {
+			fmt.Fprintf(stderr, "Warning: serve policy %q authorizes 0 actions; every execution will be denied\n", policyPath)
+		} else {
+			fmt.Fprintf(stderr, "Serve policy %q authorizes %d action(s)\n", policyPath, authorized)
+		}
 	}
 
 	switch transport {
@@ -138,13 +162,13 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "Error: stdio transport only supports --auth none")
 			return 2
 		}
-		if err := serveLocalMCPStdioWithDataDir(os.Stdin, stdout, dataDir); err != nil {
+		if err := serveLocalMCPStdioWithDataDirAndPolicy(os.Stdin, stdout, dataDir, policyGraph); err != nil {
 			fmt.Fprintf(stderr, "Error: MCP stdio server failed: %v\n", err)
 			return 2
 		}
 		return 0
 	case "http":
-		server, err := newLocalMCPHTTPServerWithDataDir(port, authMode, dataDir)
+		server, err := newLocalMCPHTTPServerWithDataDirAndPolicy(port, authMode, dataDir, policyGraph)
 		if err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 2

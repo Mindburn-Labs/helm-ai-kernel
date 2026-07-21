@@ -24,6 +24,9 @@
 // which verifies reconciler bundle signatures); when such a contract lands,
 // signed-input verification slots in ahead of Compile — binding to that
 // verifier pattern — without changing the receipt format.
+//
+// quantum_posture: boundary profile records use classical Ed25519 signatures;
+// this preview contract makes no hybrid or post-quantum claim.
 package profile
 
 import (

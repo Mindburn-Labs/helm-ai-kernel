@@ -1,3 +1,5 @@
+// quantum_posture: boundary profile CLI signs and verifies with classical
+// Ed25519 only; no hybrid or post-quantum claim.
 package main
 
 import (

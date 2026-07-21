@@ -1,3 +1,4 @@
+// quantum_posture: exercises classical Ed25519 CLI paths only.
 package main
 
 import (

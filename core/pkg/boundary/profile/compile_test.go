@@ -1,3 +1,4 @@
+// quantum_posture: exercises classical Ed25519 compile/seal paths only.
 package profile
 
 import (

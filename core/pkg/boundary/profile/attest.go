@@ -1,3 +1,6 @@
+// quantum_posture: posture attestations hash-seal with SHA-256 and sign with
+// classical Ed25519 when a signer is configured; no hybrid or post-quantum
+// claim.
 package profile
 
 import (

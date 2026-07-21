@@ -6,6 +6,8 @@
 > with the as-built corrections in §6. Sequencing decision on record
 > (HELM-305): §6 option 1 — build now — chosen by the DRI on 2026-07-20.
 > Release cut and VERSION bump remain a separate, DRI-only gate.
+> quantum_posture: all records use classical Ed25519 signatures; no hybrid
+> or post-quantum claim.
 
 ## 1. Problem
 

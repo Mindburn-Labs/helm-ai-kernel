@@ -67,3 +67,5 @@ helm-ai-kernel boundary profile verify \
 - The offline update-bundle surface is a **format + verifier** only
   (`boundary profile bundle-verify`); there is no build tooling or OTA
   mechanism in this repo.
+- quantum_posture: compile receipts, posture attestations, and update-bundle
+  manifests use classical Ed25519 signatures; no hybrid or post-quantum claim.

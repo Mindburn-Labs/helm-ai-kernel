@@ -1,3 +1,5 @@
+// quantum_posture: bundle verification trusts classical Ed25519 signatures
+// and SHA-256 content hashes; no hybrid or post-quantum claim.
 package updatebundle
 
 import (

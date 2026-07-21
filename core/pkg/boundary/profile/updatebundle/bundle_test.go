@@ -1,3 +1,4 @@
+// quantum_posture: exercises classical Ed25519 seal/verify paths only.
 package updatebundle
 
 import (

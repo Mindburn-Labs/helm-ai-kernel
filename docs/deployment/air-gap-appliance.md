@@ -188,3 +188,6 @@ trust anchor is the Ed25519 signature and nothing here imports cosign.
   today is the systemd unit dependency described in §2.
 - Mode tiers are `observe | enforce`, validated locally to the boundary
   profile package; they are not a repo-wide autonomy ladder.
+- quantum_posture: every record in this lifecycle (compile receipt, posture
+  attestation, update-bundle manifest) uses classical Ed25519 signatures; no
+  hybrid or post-quantum claim.

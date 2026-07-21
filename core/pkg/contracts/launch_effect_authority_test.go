@@ -380,6 +380,7 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	if signed.Signature != "xSG7ctJfhqZScyUErE/JHicrd2p3zlqbCvXl6zoLh7VIr00RGVJd88uH2cw//cQUJmDgzP33ZXzmbmJiHT2QBw==" {
 		t.Fatalf("launch receipt signature = %s, want committed golden", signed.Signature)
 	}
+	verifyContext.ResolvePreviousReceipt = launchReceiptResolver(signed)
 
 	reconciled := signed
 	reconciled.ReceiptID = ""
@@ -399,7 +400,10 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	reconciled.ProofGraphNode = launchHash("b")
 	reconciled.Timestamp = "2026-07-18T12:04:00Z"
 	reconciled.Lamport = 3
-	reconciledSigned, err := contracts.SignLaunchEffectReceipt(reconciled, privateKey)
+	if _, err := contracts.SignLaunchEffectReceipt(reconciled, privateKey); err == nil {
+		t.Fatal("terminal receipt was signed without its sealed predecessor")
+	}
+	reconciledSigned, err := contracts.SignLaunchEffectReceiptRevision(reconciled, signed, privateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +445,7 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	resolvedConflict.EvidencePackHash = launchHash("e")
 	resolvedConflict.Timestamp = "2026-07-18T12:05:00Z"
 	resolvedConflict.Lamport = 4
-	resolvedConflictSigned, err := contracts.SignLaunchEffectReceipt(resolvedConflict, privateKey)
+	resolvedConflictSigned, err := contracts.SignLaunchEffectReceiptRevision(resolvedConflict, conflictSigned, privateKey)
 	if err != nil {
 		t.Fatalf("provider conflict could not later reconcile: %v", err)
 	}
@@ -467,7 +471,7 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 		t.Fatal("UNKNOWN receipt claimed a finalized EvidencePack")
 	}
 
-	brokenChain := reconciledSigned
+	brokenChain := conflict
 	brokenChain.PreviousReceiptID = strings.Repeat("0", 64)
 	brokenChain, err = contracts.SignLaunchEffectReceipt(brokenChain, privateKey)
 	if err != nil {
@@ -477,9 +481,15 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 		t.Fatal("receipt revision with the wrong predecessor hash verified")
 	}
 
-	unreconciledFailure := receipt
+	unreconciledFailure := signed
+	unreconciledFailure.ReceiptID = ""
+	unreconciledFailure.Signature = ""
+	unreconciledFailure.ReceiptRevision = 2
+	unreconciledFailure.PreviousReceiptID = signed.ReceiptID
 	unreconciledFailure.Outcome = "FAILED"
-	if _, err := contracts.SignLaunchEffectReceipt(unreconciledFailure, privateKey); err == nil {
+	unreconciledFailure.Timestamp = "2026-07-18T12:04:00Z"
+	unreconciledFailure.Lamport = 3
+	if _, err := contracts.SignLaunchEffectReceiptRevision(unreconciledFailure, signed, privateKey); err == nil {
 		t.Fatal("FAILED receipt without terminal reconciliation proof was signed")
 	}
 
@@ -499,7 +509,7 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 		t.Fatal("receipt reconciliation material changed without advancing reconciliation revision")
 	}
 
-	changedImmutable := reconciled
+	changedImmutable := conflict
 	changedImmutable.Principal = "workspace:other"
 	changedImmutable.ReceiptChainID = ""
 	changedImmutableSigned, err := contracts.SignLaunchEffectReceipt(changedImmutable, privateKey)
@@ -651,16 +661,29 @@ func TestLaunchEffectReceiptRejectsNoncanonicalAndUntrustedProof(t *testing.T) {
 	terminal.EvidencePackHash = launchHash("e")
 	terminal.Timestamp = "2026-07-18T12:04:00Z"
 	terminal.Lamport = 3
-	terminalSigned, err := contracts.SignLaunchEffectReceipt(terminal, privateKey)
+	terminalSigned, err := contracts.SignLaunchEffectReceiptRevision(terminal, signed, privateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
+	missingPredecessor := launchReceiptVerificationContext(publicKey)
+	if err := contracts.VerifyLaunchEffectReceipt(terminalSigned, missingPredecessor); err == nil {
+		t.Fatal("terminal receipt accepted no source-owned predecessor resolver")
+	}
+	forgedPredecessor := signed
+	forgedPredecessor.Signature = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+	forgedResolver := launchReceiptVerificationContext(publicKey)
+	forgedResolver.ResolvePreviousReceipt = launchReceiptResolver(forgedPredecessor)
+	if err := contracts.VerifyLaunchEffectReceipt(terminalSigned, forgedResolver); err == nil {
+		t.Fatal("terminal receipt accepted an unverified predecessor signature")
+	}
 	missingPackVerifier := launchReceiptVerificationContext(publicKey)
+	missingPackVerifier.ResolvePreviousReceipt = launchReceiptResolver(signed)
 	missingPackVerifier.VerifyEvidencePack = nil
 	if err := contracts.VerifyLaunchEffectReceipt(terminalSigned, missingPackVerifier); err == nil {
 		t.Fatal("terminal receipt accepted no source-owned EvidencePack verifier")
 	}
 	rejectedPack := launchReceiptVerificationContext(publicKey)
+	rejectedPack.ResolvePreviousReceipt = launchReceiptResolver(signed)
 	rejectedPack.VerifyEvidencePack = func(string, string, string) error { return fmt.Errorf("pack does not bind predecessor") }
 	if err := contracts.VerifyLaunchEffectReceipt(terminalSigned, rejectedPack); err == nil {
 		t.Fatal("terminal receipt accepted an EvidencePack that did not bind its predecessor")
@@ -1441,6 +1464,20 @@ func launchReceiptVerificationContext(publicKey ed25519.PublicKey) contracts.Lau
 			}
 			return nil
 		},
+	}
+}
+
+func launchReceiptResolver(receipts ...contracts.LaunchEffectReceipt) func(string) (contracts.LaunchEffectReceipt, error) {
+	byID := make(map[string]contracts.LaunchEffectReceipt, len(receipts))
+	for _, receipt := range receipts {
+		byID[receipt.ReceiptID] = receipt
+	}
+	return func(receiptID string) (contracts.LaunchEffectReceipt, error) {
+		receipt, ok := byID[receiptID]
+		if !ok {
+			return contracts.LaunchEffectReceipt{}, fmt.Errorf("launch receipt predecessor not found")
+		}
+		return receipt, nil
 	}
 }
 

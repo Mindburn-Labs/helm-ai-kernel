@@ -64,6 +64,49 @@ func TestChallengeSpecV2RestrictsSandboxDraftScope(t *testing.T) {
 	}
 }
 
+func TestRecordValidatesSandboxDraftSourceSnapshot(t *testing.T) {
+	proposal := sandboxDraftProposalForTest()
+	spec, err := proposal.challengeSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+	record := Record{
+		ApprovalID: "approval-a", TenantID: proposal.TenantID, WorkspaceID: proposal.WorkspaceID,
+		State: StateHoldPending, HoldStartedAt: now, Spec: spec,
+		SandboxDraftSource: &SandboxDraftEvidenceSourceSnapshot{
+			ControlIdentity: ControlIdentity{Subject: proposal.Subject, TenantID: proposal.TenantID, WorkspaceID: proposal.WorkspaceID},
+			Proposal:        proposal,
+		},
+		CreatedAt: now, UpdatedAt: now, Version: 1,
+	}
+	if err := record.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+
+	for name, mutate := range map[string]func(*SandboxDraftEvidenceSourceSnapshot){
+		"control subject": func(source *SandboxDraftEvidenceSourceSnapshot) {
+			source.ControlIdentity.Subject = "spiffe://helm/control-plane-b"
+		},
+		"control scope": func(source *SandboxDraftEvidenceSourceSnapshot) {
+			source.ControlIdentity.WorkspaceID = "workspace-b"
+		},
+		"derived spec": func(source *SandboxDraftEvidenceSourceSnapshot) {
+			source.Proposal.PolicyHash = shaRef("e")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := record
+			source := *record.SandboxDraftSource
+			candidate.SandboxDraftSource = &source
+			mutate(&source)
+			if err := candidate.Validate(); !errors.Is(err, ErrInvalidRecord) {
+				t.Fatalf("Validate() error = %v, want ErrInvalidRecord", err)
+			}
+		})
+	}
+}
+
 func TestRecordValidatesCompleteLifecycle(t *testing.T) {
 	hold, challenge, verified, grant := ceremonyFixtures(t)
 	cases := []Record{

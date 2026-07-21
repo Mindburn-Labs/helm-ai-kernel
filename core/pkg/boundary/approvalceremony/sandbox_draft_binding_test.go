@@ -204,8 +204,13 @@ func TestServicePassesVerifiedControlSubjectToSandboxDraftBindingProvider(t *tes
 	if err != nil {
 		t.Fatalf("BeginHold() error = %v", err)
 	}
-	if held.Spec.ApprovalGrantSchemaVersion != "approval-grant.v2" || source.subject != proposal.Subject {
-		t.Fatalf("held spec = %+v, source subject = %q", held.Spec, source.subject)
+	if held.Spec.ApprovalGrantSchemaVersion != "approval-grant.v2" || source.subject != proposal.Subject || source.calls != 1 {
+		t.Fatalf("held spec = %+v, source subject = %q, calls = %d", held.Spec, source.subject, source.calls)
+	}
+	if held.SandboxDraftSource == nil || held.SandboxDraftSource.ControlIdentity != identity ||
+		held.SandboxDraftSource.Proposal.ProposalID != proposal.ProposalID ||
+		!bytes.Equal(held.SandboxDraftSource.Proposal.PlanCanonicalJSON, proposal.PlanCanonicalJSON) {
+		t.Fatalf("held source snapshot = %+v", held.SandboxDraftSource)
 	}
 }
 

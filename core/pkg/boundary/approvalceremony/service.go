@@ -30,6 +30,13 @@ type BindingProvider interface {
 	LoadApprovalBinding(context.Context, string, string, string) (ChallengeSpec, error)
 }
 
+// BindingSourceSnapshotProvider is an optional BindingProvider extension for
+// the sandbox-draft source boundary. It returns the derived spec and the exact
+// source snapshot from one authenticated source read.
+type BindingSourceSnapshotProvider interface {
+	LoadApprovalBindingWithSourceSnapshot(context.Context, string, string, string) (ChallengeSpec, *SandboxDraftEvidenceSourceSnapshot, error)
+}
+
 type AuthorityProvider interface {
 	LoadApprovalAuthority(context.Context, string, string, string, string, string) (approvalverify.TrustStore, error)
 }
@@ -132,9 +139,18 @@ func (s *Service) BeginHold(ctx context.Context, bindingRef string) (Record, err
 	if err != nil {
 		return Record{}, err
 	}
-	spec, err := s.bindings.LoadApprovalBinding(
-		withBindingControlIdentity(ctx, identity), identity.TenantID, identity.WorkspaceID, bindingRef,
-	)
+	bindingCtx := withBindingControlIdentity(ctx, identity)
+	var spec ChallengeSpec
+	var source *SandboxDraftEvidenceSourceSnapshot
+	if snapshotProvider, ok := s.bindings.(BindingSourceSnapshotProvider); ok {
+		spec, source, err = snapshotProvider.LoadApprovalBindingWithSourceSnapshot(
+			bindingCtx, identity.TenantID, identity.WorkspaceID, bindingRef,
+		)
+	} else {
+		spec, err = s.bindings.LoadApprovalBinding(
+			bindingCtx, identity.TenantID, identity.WorkspaceID, bindingRef,
+		)
+	}
 	if err != nil {
 		return Record{}, fmt.Errorf("%w: %v", ErrBindingUnavailable, err)
 	}
@@ -147,6 +163,15 @@ func (s *Service) BeginHold(ctx context.Context, bindingRef string) (Record, err
 	if spec.ServerIdentity != s.config.ServerIdentity || spec.Quorum > s.config.MaxAssertions {
 		return Record{}, invalidRecord("challenge_spec exceeds configured authority")
 	}
+	if source != nil {
+		if source.ControlIdentity.Subject != identity.Subject || source.ControlIdentity.TenantID != identity.TenantID ||
+			source.ControlIdentity.WorkspaceID != identity.WorkspaceID {
+			return Record{}, fmt.Errorf("%w: source snapshot control identity mismatch", ErrBindingUnavailable)
+		}
+		if err := validateSandboxDraftSourceSnapshot(spec, source); err != nil {
+			return Record{}, fmt.Errorf("%w: source snapshot: %v", ErrBindingUnavailable, err)
+		}
+	}
 	if _, err := s.loadAuthority(ctx, spec); err != nil {
 		return Record{}, err
 	}
@@ -157,7 +182,7 @@ func (s *Service) BeginHold(ctx context.Context, bindingRef string) (Record, err
 	now := s.now()
 	return s.store.createHold(ctx, Record{
 		ApprovalID: approvalID, TenantID: spec.TenantID, WorkspaceID: spec.WorkspaceID,
-		State: StateHoldPending, HoldStartedAt: now, Spec: spec,
+		State: StateHoldPending, HoldStartedAt: now, Spec: spec, SandboxDraftSource: source,
 		CreatedAt: now, UpdatedAt: now, Version: 1,
 	})
 }

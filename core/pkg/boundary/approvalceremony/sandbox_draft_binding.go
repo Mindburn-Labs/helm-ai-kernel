@@ -79,21 +79,68 @@ func NewSandboxDraftBindingProvider(source SandboxDraftProposalSource) (*Sandbox
 }
 
 func (p *SandboxDraftBindingProvider) LoadApprovalBinding(ctx context.Context, tenantID, workspaceID, bindingRef string) (ChallengeSpec, error) {
+	spec, _, err := p.LoadApprovalBindingWithSourceSnapshot(ctx, tenantID, workspaceID, bindingRef)
+	return spec, err
+}
+
+// LoadApprovalBindingWithSourceSnapshot derives the V2 spec and captures the
+// proposal from the same authenticated source read for durable ceremony state.
+func (p *SandboxDraftBindingProvider) LoadApprovalBindingWithSourceSnapshot(ctx context.Context, tenantID, workspaceID, bindingRef string) (ChallengeSpec, *SandboxDraftEvidenceSourceSnapshot, error) {
 	if p == nil || p.source == nil {
-		return ChallengeSpec{}, fmt.Errorf("%w: source is required", ErrSandboxDraftProposalInvalid)
+		return ChallengeSpec{}, nil, fmt.Errorf("%w: source is required", ErrSandboxDraftProposalInvalid)
 	}
 	identity, ok := bindingControlIdentity(ctx)
 	if !ok || identity.TenantID != tenantID || identity.WorkspaceID != workspaceID {
-		return ChallengeSpec{}, fmt.Errorf("%w: verified control identity is required", ErrSandboxDraftProposalInvalid)
+		return ChallengeSpec{}, nil, fmt.Errorf("%w: verified control identity is required", ErrSandboxDraftProposalInvalid)
 	}
 	proposal, err := p.source.LoadSandboxDraftProposal(ctx, tenantID, workspaceID, identity.Subject, bindingRef)
 	if err != nil {
-		return ChallengeSpec{}, fmt.Errorf("%w: load source proposal: %v", ErrSandboxDraftProposalInvalid, err)
+		return ChallengeSpec{}, nil, fmt.Errorf("%w: load source proposal: %v", ErrSandboxDraftProposalInvalid, err)
 	}
+	proposal = snapshotSandboxDraftProposal(proposal)
 	if proposal.TenantID != tenantID || proposal.WorkspaceID != workspaceID || proposal.Subject != identity.Subject || proposal.BindingRef != bindingRef {
-		return ChallengeSpec{}, fmt.Errorf("%w: source proposal scope, subject, or reference mismatch", ErrSandboxDraftProposalInvalid)
+		return ChallengeSpec{}, nil, fmt.Errorf("%w: source proposal scope, subject, or reference mismatch", ErrSandboxDraftProposalInvalid)
 	}
-	return proposal.challengeSpec()
+	spec, err := proposal.challengeSpec()
+	if err != nil {
+		return ChallengeSpec{}, nil, err
+	}
+	return spec, &SandboxDraftEvidenceSourceSnapshot{ControlIdentity: identity, Proposal: proposal}, nil
+}
+
+func snapshotSandboxDraftProposal(proposal SandboxDraftProposal) SandboxDraftProposal {
+	proposal.PlanCanonicalJSON = append([]byte(nil), proposal.PlanCanonicalJSON...)
+	proposal.IntentCanonicalJSON = append([]byte(nil), proposal.IntentCanonicalJSON...)
+	proposal.EffectCanonicalJSON = append([]byte(nil), proposal.EffectCanonicalJSON...)
+	return proposal
+}
+
+func validateSandboxDraftSourceSnapshot(spec ChallengeSpec, source *SandboxDraftEvidenceSourceSnapshot) error {
+	if source == nil {
+		return nil
+	}
+	for field, value := range map[string]string{
+		"sandbox_draft_source subject":   source.ControlIdentity.Subject,
+		"sandbox_draft_source tenant":    source.ControlIdentity.TenantID,
+		"sandbox_draft_source workspace": source.ControlIdentity.WorkspaceID,
+	} {
+		if !validToken(value) {
+			return invalidRecord(field + " is invalid")
+		}
+	}
+	if source.ControlIdentity.TenantID != spec.TenantID || source.ControlIdentity.WorkspaceID != spec.WorkspaceID ||
+		source.Proposal.TenantID != source.ControlIdentity.TenantID || source.Proposal.WorkspaceID != source.ControlIdentity.WorkspaceID ||
+		source.Proposal.Subject != source.ControlIdentity.Subject {
+		return invalidRecord("sandbox_draft_source identity or scope mismatch")
+	}
+	derived, err := source.Proposal.challengeSpec()
+	if err != nil {
+		return invalidRecord("sandbox_draft_source proposal is invalid")
+	}
+	if derived != spec {
+		return invalidRecord("sandbox_draft_source does not match challenge_spec")
+	}
+	return nil
 }
 
 // Validate checks the immutable proposal shape and canonical source bytes. It

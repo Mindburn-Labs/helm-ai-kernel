@@ -43,9 +43,10 @@ type Record struct {
 	WorkspaceID string `json:"workspace_id"`
 	State       State  `json:"state"`
 
-	HoldStartedAt    time.Time                           `json:"hold_started_at"`
-	Spec             ChallengeSpec                       `json:"challenge_spec"`
-	Challenge        *contracts.ApprovalChallenge        `json:"challenge,omitempty"`
+	HoldStartedAt       time.Time                           `json:"hold_started_at"`
+	Spec                ChallengeSpec                       `json:"challenge_spec"`
+	SandboxDraftSource  *SandboxDraftEvidenceSourceSnapshot `json:"-"`
+	Challenge           *contracts.ApprovalChallenge        `json:"challenge,omitempty"`
 	VerifiedRef      *approvalverify.VerifiedApprovalRef `json:"verified_ref,omitempty"`
 	Grant            *contracts.ApprovalGrant            `json:"grant,omitempty"`
 	GrantConsumption *contracts.ApprovalGrantConsumption `json:"grant_consumption,omitempty"`
@@ -192,6 +193,9 @@ func (r Record) Validate() error {
 	}
 	if r.Spec.TenantID != r.TenantID || r.Spec.WorkspaceID != r.WorkspaceID {
 		return invalidRecord("challenge_spec record scope mismatch")
+	}
+	if err := validateSandboxDraftSourceSnapshot(r.Spec, r.SandboxDraftSource); err != nil {
+		return err
 	}
 
 	if r.Challenge != nil {

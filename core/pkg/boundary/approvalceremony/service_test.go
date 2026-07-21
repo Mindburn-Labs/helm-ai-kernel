@@ -221,6 +221,41 @@ func TestServiceConsumesAndRecoversOnlyForExactWorkloadIdentity(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsMismatchedSandboxDraftSourceBeforePersisting(t *testing.T) {
+	proposal := sandboxDraftProposalForTest()
+	spec, err := proposal.challengeSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := &SandboxDraftEvidenceSourceSnapshot{
+		ControlIdentity: ControlIdentity{Subject: proposal.Subject, TenantID: proposal.TenantID, WorkspaceID: proposal.WorkspaceID},
+		Proposal:        proposal,
+	}
+	source.Proposal.PolicyHash = shaRef("e")
+	store := &serviceTestStore{}
+	authority := &serviceTestAuthority{store: authorityMetadata(spec)}
+	binding := &serviceTestSnapshotBinding{serviceTestBinding: &serviceTestBinding{spec: spec}, source: source}
+	service, err := newService(
+		store, binding, authority,
+		&serviceTestControl{identity: source.ControlIdentity}, &serviceTestConsumer{identity: consumerForSpec(spec)},
+		crypto.NewEd25519SignerFromKey(ed25519.NewKeyFromSeed(bytes.Repeat([]byte{9}, ed25519.SeedSize)), "sandbox-source-test"),
+		time.Now, bytes.NewReader(make([]byte, 32)), ServiceConfig{
+			MinHoldDuration: 5 * time.Minute, ChallengeTTL: 10 * time.Minute,
+			MaxChallengeLifetime: 20 * time.Minute, GrantTTL: 5 * time.Minute, MaxAssertions: 4,
+			ServerIdentity: spec.ServerIdentity, KernelTrustRootID: "kernel-root-a", SigningKeyRef: "kms://helm/approval-a",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.BeginHold(context.Background(), spec.BindingRef); !errors.Is(err, ErrBindingUnavailable) {
+		t.Fatalf("BeginHold() error = %v, want ErrBindingUnavailable", err)
+	}
+	if authority.calls != 0 || store.createCalls != 0 || binding.calls != 1 {
+		t.Fatalf("mismatched snapshot reached binding=%d authority=%d persistence=%d", binding.calls, authority.calls, store.createCalls)
+	}
+}
+
 func TestServiceClockMatchesPostgresMicrosecondPrecision(t *testing.T) {
 	hold, _, _, grant := ceremonyFixtures(t)
 	clockValue := time.Date(2026, 7, 16, 12, 0, 0, 123456789, time.FixedZone("offset", 2*60*60))
@@ -281,6 +316,11 @@ type serviceTestBinding struct {
 	calls int
 }
 
+type serviceTestSnapshotBinding struct {
+	*serviceTestBinding
+	source *SandboxDraftEvidenceSourceSnapshot
+}
+
 type serviceTestConsumer struct {
 	identity ConsumerIdentity
 	err      error
@@ -302,6 +342,11 @@ func (p *serviceTestConsumer) LoadConsumerIdentity(context.Context) (ConsumerIde
 func (p *serviceTestBinding) LoadApprovalBinding(_ context.Context, _, _, _ string) (ChallengeSpec, error) {
 	p.calls++
 	return p.spec, p.err
+}
+
+func (p *serviceTestSnapshotBinding) LoadApprovalBindingWithSourceSnapshot(_ context.Context, _, _, _ string) (ChallengeSpec, *SandboxDraftEvidenceSourceSnapshot, error) {
+	p.calls++
+	return p.spec, p.source, p.err
 }
 
 func (p *serviceTestAuthority) LoadApprovalAuthority(_ context.Context, _, _, _, _, _ string) (approvalverify.TrustStore, error) {

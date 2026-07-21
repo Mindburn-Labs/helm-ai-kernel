@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS approval_ceremonies (
     state TEXT NOT NULL,
     hold_started_at TIMESTAMPTZ NOT NULL,
     challenge_spec_json JSONB NOT NULL,
+    sandbox_draft_source_json JSONB,
     challenge_json JSONB,
     challenge_hash TEXT,
     challenge_nonce TEXT,
@@ -49,7 +50,8 @@ CREATE TABLE IF NOT EXISTS approval_ceremonies (
 ALTER TABLE approval_ceremonies
     ADD COLUMN IF NOT EXISTS grant_consumption_json JSONB,
     ADD COLUMN IF NOT EXISTS consumption_signature_algorithm TEXT,
-    ADD COLUMN IF NOT EXISTS consumption_signature TEXT;
+    ADD COLUMN IF NOT EXISTS consumption_signature TEXT,
+    ADD COLUMN IF NOT EXISTS sandbox_draft_source_json JSONB;
 
 DO $$
 BEGIN
@@ -127,7 +129,7 @@ ALTER POLICY approval_ceremonies_tenant_isolation ON approval_ceremonies
 
 const recordColumns = `
 approval_id, tenant_id, workspace_id, state, hold_started_at,
-challenge_spec_json, challenge_json, verified_ref_json, grant_json,
+challenge_spec_json, sandbox_draft_source_json, challenge_json, verified_ref_json, grant_json,
 grant_signature_algorithm, grant_signature,
 grant_consumption_json, consumption_signature_algorithm, consumption_signature,
 created_at, updated_at, expires_at, consumed_at, consumed_by, version
@@ -184,15 +186,22 @@ func (s *PostgresStore) createHold(ctx context.Context, record Record) (Record, 
 	if err != nil {
 		return Record{}, fmt.Errorf("marshal approval challenge spec: %w", err)
 	}
+	var sourceJSON any
+	if record.SandboxDraftSource != nil {
+		sourceJSON, err = json.Marshal(record.SandboxDraftSource)
+		if err != nil {
+			return Record{}, fmt.Errorf("marshal sandbox draft source snapshot: %w", err)
+		}
+	}
 	return s.withScopedRecord(ctx, record.TenantID, record.WorkspaceID, ErrTransitionConflict, func(tx *sql.Tx) rowScanner {
 		return tx.QueryRowContext(ctx, `
             INSERT INTO approval_ceremonies (
                 tenant_id, approval_id, workspace_id, state, hold_started_at,
-                challenge_spec_json, created_at, updated_at, version
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                challenge_spec_json, sandbox_draft_source_json, created_at, updated_at, version
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING `+recordColumns,
 			record.TenantID, record.ApprovalID, record.WorkspaceID, record.State,
-			record.HoldStartedAt, specJSON, record.CreatedAt, record.UpdatedAt, record.Version,
+			record.HoldStartedAt, specJSON, sourceJSON, record.CreatedAt, record.UpdatedAt, record.Version,
 		)
 	})
 }
@@ -510,12 +519,12 @@ func scanRecord(row rowScanner) (Record, error) {
 	var record Record
 	var state string
 	var specJSON string
-	var challengeJSON, verifiedJSON, grantJSON, consumptionJSON sql.NullString
+	var sourceJSON, challengeJSON, verifiedJSON, grantJSON, consumptionJSON sql.NullString
 	var signatureAlgorithm, signature, consumptionAlgorithm, consumptionSignature, consumedBy sql.NullString
 	var expiresAt, consumedAt sql.NullTime
 	if err := row.Scan(
 		&record.ApprovalID, &record.TenantID, &record.WorkspaceID, &state,
-		&record.HoldStartedAt, &specJSON, &challengeJSON, &verifiedJSON, &grantJSON,
+		&record.HoldStartedAt, &specJSON, &sourceJSON, &challengeJSON, &verifiedJSON, &grantJSON,
 		&signatureAlgorithm, &signature, &consumptionJSON, &consumptionAlgorithm, &consumptionSignature,
 		&record.CreatedAt, &record.UpdatedAt,
 		&expiresAt, &consumedAt, &consumedBy, &record.Version,
@@ -534,6 +543,13 @@ func scanRecord(row rowScanner) (Record, error) {
 	}
 	if err := json.Unmarshal([]byte(specJSON), &record.Spec); err != nil {
 		return Record{}, fmt.Errorf("decode persisted approval challenge spec: %w", err)
+	}
+	if sourceJSON.Valid {
+		var source *SandboxDraftEvidenceSourceSnapshot
+		if err := json.Unmarshal([]byte(sourceJSON.String), &source); err != nil {
+			return Record{}, fmt.Errorf("decode persisted sandbox draft source snapshot: %w", err)
+		}
+		record.SandboxDraftSource = source
 	}
 	if consumedAt.Valid {
 		value := consumedAt.Time.UTC()

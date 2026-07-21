@@ -1,0 +1,80 @@
+# Declared ReasonCodes that no non-test code can emit.
+#
+# Enforced by scripts/ci/check_reason_code_reachability.py. An entry here is a
+# recorded, reviewed gap — not a dismissal. The gate also fails when a listed
+# code becomes reachable, so this list burns down rather than rotting.
+#
+# Seeded 2026-07-21 from docs/ai/helm-verifiable-execution-research-review.md.
+# 48 of 96 declared codes were unreachable at seed time. Format: identifier
+# first; the rest of the line is free text.
+
+# ── TON / Acton (24) — duplicated registry, NOT unimplemented ──────────────
+# core/pkg/connectors/ton/acton/errors.go declares its own ReasonCode type with
+# these same 24 wire values, and the connector emits those. The contracts copies
+# are the unreachable half of a two-registry split. Remedy is to collapse the
+# duplication onto one registry, not to add emit sites here.
+ReasonTONActonArgvRejected                   ERR_TON_ACTON_ARGV_REJECTED
+ReasonTONActonGenericMainnetScriptDenied     ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED
+ReasonTONActonRawShellForbidden              ERR_TON_ACTON_RAW_SHELL_FORBIDDEN
+ReasonTONActonUnknownCommand                 ERR_TON_ACTON_UNKNOWN_COMMAND
+ReasonTONActonUnsupportedVersion             ERR_TON_ACTON_UNSUPPORTED_VERSION
+ReasonTONApprovalCeremonyRequired            ERR_TON_APPROVAL_CEREMONY_REQUIRED
+ReasonTONCoverageThresholdFailed             ERR_TON_COVERAGE_THRESHOLD_FAILED
+ReasonTONExpectedEffectMismatch              ERR_TON_EXPECTED_EFFECT_MISMATCH
+ReasonTONLibraryMainnetRequiresApproval      ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL
+ReasonTONLibrarySpendCeilingExceeded         ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED
+ReasonTONMainnetRequiresApproval             ERR_TON_MAINNET_REQUIRES_APPROVAL
+ReasonTONMutationThresholdFailed             ERR_TON_MUTATION_THRESHOLD_FAILED
+ReasonTONNetworkGrantRequired                ERR_TON_NETWORK_GRANT_REQUIRED
+ReasonTONPlaintextMnemonicForbidden          ERR_TON_PLAINTEXT_MNEMONIC_FORBIDDEN
+ReasonTONSandboxGrantRequired                ERR_TON_SANDBOX_GRANT_REQUIRED
+ReasonTONScriptManifestHashMismatch          ERR_TON_SCRIPT_MANIFEST_HASH_MISMATCH
+ReasonTONScriptManifestRequired              ERR_TON_SCRIPT_MANIFEST_REQUIRED
+ReasonTONSourceVerificationRequired          ERR_TON_SOURCE_VERIFICATION_REQUIRED
+ReasonTONSpendCeilingExceeded                ERR_TON_SPEND_CEILING_EXCEEDED
+ReasonTONTolkCompilerMismatch                ERR_TON_TOLK_COMPILER_MISMATCH
+ReasonTONTolkCompilerUnpinned                ERR_TON_TOLK_COMPILER_UNPINNED
+ReasonTONVerifyBytecodeMismatch              ERR_TON_VERIFY_BYTECODE_MISMATCH
+ReasonTONVerifyDryRunRequired                ERR_TON_VERIFY_DRY_RUN_REQUIRED
+ReasonTONWalletRefRequired                   ERR_TON_WALLET_REF_REQUIRED
+
+# ── Harness Engineering v1.4 (9 of the 10-code block) — specified, unbuilt ──
+# Declared with conformance vectors in core/pkg/conformance/negative_vectors.go
+# and never emitted. ReasonAssumptionStale is the State Witness gate; it is
+# scheduled work, see docs/ai/helm-enforcement-integrity-remediation-plan.md.
+# NOTE: ReasonPlanTransactionConflict is NOT listed here because it IS emitted --
+# at core/pkg/runtimeadapters/mcp/bridge.go:371, for nonce replay rather than a
+# plan-transaction conflict. Reachability cannot catch a miscoded emission.
+ReasonAssumptionStale                        ERR_ASSUMPTION_STALE
+ReasonGUIPostconditionUnverified             ERR_GUI_POSTCONDITION_UNVERIFIED
+ReasonGreenTestScopeMissing                  ERR_GREEN_TEST_SCOPE_MISSING
+ReasonGroundedActionRefRequired              ERR_GROUNDED_ACTION_REF_REQUIRED
+ReasonHarnessChangeContractInvalid           ERR_HARNESS_CHANGE_CONTRACT_INVALID
+ReasonHarnessMutationRequiresApproval        ERR_HARNESS_MUTATION_REQUIRES_APPROVAL
+ReasonHarnessTraceRequired                   ERR_HARNESS_TRACE_REQUIRED
+ReasonPlanTransactionRequired                ERR_PLAN_TRANSACTION_REQUIRED
+ReasonVerificationScopeRequired              ERR_VERIFICATION_SCOPE_REQUIRED
+
+# ── Tainted-flow (2) — shadowed by core/pkg/conform/reason_codes.go ─────────
+# The conform package declares untyped string constants with identical Go
+# identifiers. Only conform.* is referenced; contracts.* is unreachable.
+ReasonTaintedEscalate                        TAINTED_HIGH_RISK_ESCALATE
+ReasonTaintedInvokeDeny                      TAINTED_PRIVILEGED_INVOKE_DENY
+
+# ── Policy / host-evidence (3) ──────────────────────────────────────────────
+ReasonPolicyDeniedHostObservedEgress         ERR_POLICY_DENIED_BUT_HOST_OBSERVED_EGRESS
+ReasonPolicyHashMismatch                     POLICY_HASH_MISMATCH
+ReasonPolicySigInvalid                       POLICY_SIGNATURE_INVALID
+
+# ── Remaining (10) ──────────────────────────────────────────────────────────
+ReasonComputeGasExhausted                    ERR_COMPUTE_GAS_EXHAUSTED
+ReasonComputeTimeExhausted                   ERR_COMPUTE_TIME_EXHAUSTED
+ReasonConnectorContractDrift                 ERR_CONNECTOR_CONTRACT_DRIFT
+ReasonContinuityStale                        ERR_CONTINUITY_STALE
+ReasonDevFallbackPresent                     ERR_DEV_FALLBACK_PRESENT
+ReasonEmergencyCapsuleInvalid                ERR_EMERGENCY_CAPSULE_INVALID
+ReasonHardwareQuorumUnbound                  ERR_HARDWARE_QUORUM_UNBOUND
+ReasonHostProcessUnbound                     ERR_HOST_PROCESS_UNBOUND
+ReasonJurisdiction                           JURISDICTION_VIOLATION
+ReasonTenantIsolation                        TENANT_ISOLATION
+

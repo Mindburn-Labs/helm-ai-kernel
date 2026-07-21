@@ -252,6 +252,14 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 		slog.Warn("[guardian] no authority clock injected; falling back to wall clock (KERNEL_TCB §3) — inject WithClock in production")
 		g.clock = wallClock{}
 	}
+
+	if !taintEgressEnforcementEnabled() {
+		// Logged once here rather than per-decision: the check sits on the hot
+		// path, but a disabled security boundary must never be silent. This
+		// state contradicts TaintSafeEgress in proofs/GuardianPipeline.tla.
+		slog.Warn("[guardian] tainted-egress enforcement DISABLED by HELM_TAINT_TRACKING; TAINTED_DATA_EGRESS_DENY will not fire (contradicts proofs/GuardianPipeline.tla TaintSafeEgress)")
+	}
+
 	g.boundaryChain = []BoundaryInterceptor{
 		g.zeroidInterceptor,
 		NewTemporalInterceptor(g),
@@ -1143,9 +1151,22 @@ func stringContextValue(ctx map[string]any, keys ...string) (string, bool) {
 	return "", false
 }
 
-func taintTrackingEnabled() bool {
+// taintEgressEnforcementEnabled reports whether the built-in tainted-egress deny
+// is active. Taint *labelling* always runs; this gates only enforcement.
+//
+// Enforcement defaults to ON. proofs/GuardianPipeline.tla:52-53 states
+// TaintSafeEgress unconditionally, it is listed in Safety and enforced as an
+// INVARIANT in guardian.cfg, and it is model-checked on every PR. A default of
+// off left the implementation weaker than its own proof: with the variable
+// unset, the && at the call site short-circuited and TAINTED_DATA_EGRESS_DENY
+// never evaluated.
+//
+// Only an explicit "0" or "false" disables it — an unset or unparseable value
+// enforces, so a typo cannot silently open the boundary. Disabling is intended
+// for incident response and is logged once at construction.
+func taintEgressEnforcementEnabled() bool {
 	v := strings.TrimSpace(os.Getenv("HELM_TAINT_TRACKING"))
-	return v == "1" || strings.EqualFold(v, "true")
+	return !(v == "0" || strings.EqualFold(v, "false"))
 }
 
 func taintedEgressDenied(ctx map[string]interface{}, labels []string) bool {
@@ -1156,7 +1177,7 @@ func taintedEgressDenied(ctx map[string]interface{}, labels []string) bool {
 	// context was bound by a trusted transport/adapter boundary, never from
 	// caller-supplied arguments (otherwise any agent can self-approve
 	// PII/credential/secret egress).
-	if approved, ok := ctx["allow_tainted_egress"].(bool); ok && approved && trustedSecurityContext(ctx) {
+	if approved, ok := ctx[ContextAllowTaintedEgress].(bool); ok && approved && trustedSecurityContext(ctx) {
 		return false
 	}
 	destination, _ := ctx["destination"].(string)

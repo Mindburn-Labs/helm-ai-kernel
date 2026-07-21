@@ -31,7 +31,7 @@ ClawGuard's core operational move is deterministic enforcement at every tool-cal
 | --- | --- |
 | Task/tool boundary rule set | PRG/CEL requirements evaluated by Guardian |
 | Taint on tool-returned or external content | `Effect.Taint` and `AuthorizedExecutionIntent.Taint` |
-| Deterministic tool-call interception | Feature-flagged Guardian tainted-egress gate |
+| Deterministic tool-call interception | Guardian tainted-egress gate (enforced by default) |
 | Auditable enforcement | signed `DecisionRecord`, intent taint binding, TLA invariant |
 
 ## Runtime Contract
@@ -45,7 +45,7 @@ Callers may attach taint labels through `DecisionRequest.Context`:
 }
 ```
 
-When `HELM_TAINT_TRACKING=1`, Guardian denies outbound egress carrying sensitive taint (`pii`, `credential`, or `secret`) unless the context explicitly contains:
+Guardian denies outbound egress carrying sensitive taint (`pii`, `credential`, or `secret`) unless the context explicitly contains:
 
 ```json
 {
@@ -53,7 +53,35 @@ When `HELM_TAINT_TRACKING=1`, Guardian denies outbound egress carrying sensitive
 }
 ```
 
+and that context was bound by a trusted transport boundary. `allow_tainted_egress`
+is a reserved security-context key (`IsReservedSecurityContextKey`), so a transport
+that forwards caller arguments — the MCP server, for example — rejects it at the
+boundary rather than copying it into the decision context. Without that, an agent
+could pass the flag as a tool argument and self-approve its own egress on any
+transport that marks its context trusted.
+
 The decision remains fail-closed: denial uses `TAINTED_DATA_EGRESS_DENY`, and issued execution intents copy normalized taint labels from the effect they authorize.
+
+### Enforcement default
+
+Enforcement is **on by default**. `proofs/GuardianPipeline.tla` states `TaintSafeEgress`
+unconditionally and model-checks it on every PR, so a non-enforcing default left the
+implementation weaker than its own proof.
+
+`HELM_TAINT_TRACKING` now acts as an **opt-out**, intended for incident response:
+
+| Value | Enforcement |
+| --- | --- |
+| unset, `1`, `true`, or anything unrecognized | **enforced** |
+| `0` or `false` | disabled |
+
+An unrecognized value enforces so a typo cannot silently open the boundary. When
+enforcement is disabled, Guardian logs a warning once at construction naming the
+proof invariant it contradicts — a disabled security boundary is never silent.
+
+Taint *labelling* is unconditional and unaffected by this variable: labels are always
+propagated into `DecisionRequest.Context["taint"]` and the CEL input, so PRG rules can
+act on taint even where the built-in deny is disabled.
 
 ## CEL Helper
 

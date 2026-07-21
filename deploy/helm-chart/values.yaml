@@ -31,6 +31,8 @@ podSecurityContext:
   runAsUser: 65534
   runAsGroup: 65534
   fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   allowPrivilegeEscalation: false
@@ -38,6 +40,8 @@ securityContext:
   capabilities:
     drop:
       - ALL
+  seccompProfile:
+    type: RuntimeDefault
 
 service:
   type: ClusterIP

@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-21T15:06:49Z
+# Generated: 2026-07-21T16:19:12Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.

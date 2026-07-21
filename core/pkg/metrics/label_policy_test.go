@@ -42,10 +42,17 @@ var vecConstructors = map[string]bool{
 	"NewSummaryVec":   true,
 }
 
-// expositionLabelRe matches label names in hand-rolled Prometheus text
-// exposition format strings, e.g. `helm_tool_decisions{tool=%q}` — including
-// labels after the first one, e.g. `{tool=%q,correlation_id=%q}`.
-var expositionLabelRe = regexp.MustCompile(`[{,]\s*(\w+)=%`)
+// expositionBlockRe matches the brace-delimited label block of hand-rolled
+// Prometheus text exposition format strings, e.g. `helm_tool_decisions{tool=%q}`.
+// Requiring single-line braces keeps non-metric format strings (HTTP
+// challenge headers, debug output) and multi-line Go code blocks out of
+// the scan; an exposition label block never spans lines.
+var expositionBlockRe = regexp.MustCompile(`\{([^{}\n]*=\s*["']?%[^{}\n]*)\}`)
+
+// expositionLabelRe extracts label names inside a matched block — every
+// label whose value is a format verb, whether quoted by %q or by literal
+// quotes in the format string (`{tool=%q,correlation_id="%s"}`).
+var expositionLabelRe = regexp.MustCompile(`(\w+)\s*=\s*["']?%`)
 
 // TestNoProhibitedMetricLabels statically scans core/ for metric label
 // registrations — both prometheus *Vec constructors and hand-rolled
@@ -88,19 +95,22 @@ func TestNoProhibitedMetricLabels(t *testing.T) {
 		}
 
 		// Hand-rolled exposition strings: helm_metric{label=%q}.
-		for _, m := range expositionLabelRe.FindAllSubmatch(src, -1) {
-			label := string(m[1])
-			seenLabels++
-			if prohibitedMetricLabels[label] {
-				violations = append(violations, finding{pos: path, label: label})
+		for _, block := range expositionBlockRe.FindAllSubmatch(src, -1) {
+			for _, m := range expositionLabelRe.FindAllSubmatch(block[1], -1) {
+				label := string(m[1])
+				seenLabels++
+				if prohibitedMetricLabels[label] {
+					violations = append(violations, finding{pos: path, label: label})
+				}
 			}
 		}
 
 		// prometheus *Vec constructors: the []string label-name argument.
+		// A parse failure fails the gate: silently skipping a file would
+		// exempt its metric registrations from the scan.
 		f, err := parser.ParseFile(fset, path, src, 0)
 		if err != nil {
-			// Non-parsing Go files are someone else's build problem.
-			return nil //nolint:nilerr
+			return err
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)

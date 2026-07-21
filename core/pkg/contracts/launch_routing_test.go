@@ -897,10 +897,10 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 		SchemaVersion: contracts.LaunchProviderPayloadSetSchemaVersion, PayloadSetID: "payload-set-1",
 		TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1",
 		Entries: []contracts.LaunchProviderPayloadEntry{
-			{PlacementID: "placement-1", EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: profile.Actions[0].ActionURN, PayloadHash: launchRoutingHash("7")},
-			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: profile.Actions[1].ActionURN, PayloadHash: launchRoutingHash("8")},
-			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderRollback, ProviderActionURN: profile.Actions[2].ActionURN, PayloadHash: launchRoutingHash("9")},
-			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, PayloadHash: launchRoutingHash("a")},
+			{PlacementID: "placement-1", EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: profile.Actions[0].ActionURN, PayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeDeployProductionActivate))},
+			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: profile.Actions[1].ActionURN, PayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderProvision))},
+			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderRollback, ProviderActionURN: profile.Actions[2].ActionURN, PayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderRollback))},
+			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, PayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderTeardown))},
 		},
 	}
 	fxSnapshot := launchFXSnapshot("fx-1", "EUR", "EUR")
@@ -931,10 +931,10 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 		ProviderID: profile.ProviderID, ProviderAccountRef: "account:1", ProviderAccountHash: launchRoutingHash("1"), RegionID: region.RegionID, Jurisdiction: region.Jurisdiction, OfferingID: offering.OfferingID,
 		ProviderConnectorID: profile.ConnectorID, ProviderConnectorContractHash: profile.ConnectorContractHash,
 		ActionBindings: []contracts.LaunchRouteActionBinding{
-			{EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: profile.Actions[0].ActionURN, ProviderPayloadHash: launchRoutingHash("7")},
-			{EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: profile.Actions[1].ActionURN, ProviderPayloadHash: launchRoutingHash("8")},
-			{EffectID: contracts.EffectTypeProviderRollback, ProviderActionURN: profile.Actions[2].ActionURN, ProviderPayloadHash: launchRoutingHash("9")},
-			{EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, ProviderPayloadHash: launchRoutingHash("a")},
+			{EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: profile.Actions[0].ActionURN, ProviderPayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeDeployProductionActivate))},
+			{EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: profile.Actions[1].ActionURN, ProviderPayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderProvision))},
+			{EffectID: contracts.EffectTypeProviderRollback, ProviderActionURN: profile.Actions[2].ActionURN, ProviderPayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderRollback))},
+			{EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, ProviderPayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderTeardown))},
 		},
 		ResourceSubsetHash: resourceSubsetHash, ProviderPayloadSubsetHash: payloadSubsetHash,
 	}
@@ -980,6 +980,10 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 	resolver.payloads[payloads.PayloadSetID] = payloads
 	resolver.generated[route.GeneratedSpecRef] = route.GeneratedSpecHash
 	return launchRouteFixture{route: route, resolver: resolver, analysis: analysis, graph: graph, constraints: constraints, quote: quote, commercial: commercial, fxSnapshot: fxSnapshot, taxSnapshot: taxSnapshot, offer: offer, resources: resources, payloads: payloads, certification: certification}
+}
+
+func launchProviderPayloadFixture(effectID string) []byte {
+	return []byte(`{"effect_id":"` + effectID + `","fixture":"provider-payload"}`)
 }
 
 func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {

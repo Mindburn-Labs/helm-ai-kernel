@@ -3,6 +3,7 @@
 package contracts_test
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
@@ -40,7 +41,7 @@ func TestLaunchEffectAuthorizationEnvelopePreflightGrantsNoNetworkAuthority(t *t
 		finalized.Store(true)
 		return nil
 	}
-	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error {
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
 		networkStarted.Store(true)
 		return nil
 	}
@@ -105,7 +106,7 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsProviderAuthorityDrift(t *testi
 			mutateInput: func(input map[string]any) {
 				input["provider_payload_hash"] = launchHash("f")
 			},
-			expect: "action or payload",
+			expect: "exact provider payload",
 		},
 	}
 	for _, test := range tests {
@@ -284,7 +285,7 @@ func TestLaunchEffectAuthorizationEnvelopeConsumesPermitOnce(t *testing.T) {
 func TestLaunchEffectAuthorizationEnvelopeRejectsStartWithoutPermitCAS(t *testing.T) {
 	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
 	var networkStarted atomic.Bool
-	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error {
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
 		networkStarted.Store(true)
 		return nil
 	}
@@ -305,6 +306,97 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsStartWithoutPermitCAS(t *testin
 	}
 	if networkStarted.Load() {
 		t.Fatal("dispatch without a proven permit CAS crossed the network seam")
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopeRejectsDispatchByteDriftAtConnectorSeam(t *testing.T) {
+	tests := []struct {
+		name         string
+		fixtureIndex int
+		expect       string
+		mutate       func(*contracts.LaunchEffectDispatchRequest)
+	}{
+		{
+			name:         "request body",
+			fixtureIndex: 5,
+			expect:       "exact dispatch body",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.RequestBody[0] ^= 1
+			},
+		},
+		{
+			name:         "canonical arguments",
+			fixtureIndex: 5,
+			expect:       "exact dispatch arguments",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.ArgsC14N[0] ^= 1
+			},
+		},
+		{
+			name:         "provider payload",
+			fixtureIndex: 0,
+			expect:       "exact provider payload",
+			mutate: func(request *contracts.LaunchEffectDispatchRequest) {
+				request.ProviderPayload[0] ^= 1
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			envelope, ctx, _, _, _ := launchEffectAuthorizationFixtureAt(t, test.fixtureIndex)
+			request, err := ctx.ResolveDispatchRequest(ctx.Permit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx.ResolveDispatchRequest = func(contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
+				return request, nil
+			}
+			var networkStarted atomic.Bool
+			ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
+				networkStarted.Store(true)
+				return nil
+			}
+			ctx.FinalizeAndStartDispatch = func(
+				_ contracts.LaunchEffectDispatchFinalization,
+				validate func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+				start func() error,
+			) error {
+				if _, err := validate(); err != nil {
+					return err
+				}
+				test.mutate(&request)
+				return start()
+			}
+			err = contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx)
+			if err == nil || !strings.Contains(err.Error(), test.expect) {
+				t.Fatalf("dispatch %s drift error = %v, want %q", test.name, err, test.expect)
+			}
+			if networkStarted.Load() {
+				t.Fatal("changed dispatch bytes crossed the network seam")
+			}
+		})
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopePassesVerifiedPrivateDispatchCopy(t *testing.T) {
+	envelope, ctx, _, _ := launchArtifactAuthorizationFixture(t)
+	source, err := ctx.ResolveDispatchRequest(ctx.Permit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedBody := append([]byte(nil), source.RequestBody...)
+	ctx.ResolveDispatchRequest = func(contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
+		return source, nil
+	}
+	ctx.StartDispatch = func(_ contracts.LaunchEffectPermitBinding, request contracts.LaunchEffectDispatchRequest) error {
+		source.RequestBody[0] ^= 1
+		if !bytes.Equal(request.RequestBody, expectedBody) {
+			return fmt.Errorf("verified dispatch request aliased its mutable source buffer")
+		}
+		return nil
+	}
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("verified private dispatch copy rejected: %v", err)
 	}
 }
 
@@ -388,7 +480,7 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsStaleConnectorStartObservation(
 			observedAt := ctx.Now
 			ctx.ResolvePolicyEpoch = func(string, string) (string, error) { return policyEpoch, nil }
 			ctx.ResolveDispatchTime = func() (time.Time, error) { return observedAt, nil }
-			ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error {
+			ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
 				networkStarted.Store(true)
 				return nil
 			}
@@ -483,7 +575,7 @@ func TestLaunchEffectAuthorizationEnvelopeRechecksRevocableStateAtConnectorSeam(
 			var consumed atomic.Bool
 			var networkStarted atomic.Bool
 			test.stale(&ctx, &stale)
-			ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error {
+			ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
 				networkStarted.Store(true)
 				return nil
 			}
@@ -517,7 +609,7 @@ func TestLaunchEffectAuthorizationEnvelopeRechecksProviderCertificationAtConnect
 	envelope, ctx, _, _, routeFixture := launchEffectAuthorizationFixtureAt(t, 0)
 	var consumed atomic.Bool
 	var networkStarted atomic.Bool
-	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error {
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
 		networkStarted.Store(true)
 		return nil
 	}
@@ -562,7 +654,7 @@ func TestLaunchEffectAuthorizationEnvelopeAcceptsEquivalentAtomicTimestamps(t *t
 		}
 		return nil
 	}
-	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding) error { return nil }
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error { return nil }
 	ctx.FinalizeAndStartDispatch = func(
 		_ contracts.LaunchEffectDispatchFinalization,
 		validate func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
@@ -638,6 +730,17 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 	audience := "launch.dispatch"
 	trustRootID := "kernel-root-1"
 	authority, consumptionRef := launchApprovalAuthority(t, fixture.effectID, input, effectHash, now, principal, audience, trustRootID)
+	dispatchRequest := contracts.LaunchEffectDispatchRequest{
+		RequestBody: []byte(`{"effect_id":"` + fixture.effectID + `","mission_id":"mission-1"}`),
+		ArgsC14N:    []byte(`{"effect_id":"` + fixture.effectID + `","workspace_id":"workspace-1"}`),
+	}
+	if launchTestProviderMutation(fixture.effectID) {
+		dispatchRequest.ProviderPayload = launchProviderPayloadFixture(fixture.effectID)
+	}
+	expectedProviderPayloadHash := ""
+	if len(dispatchRequest.ProviderPayload) != 0 {
+		expectedProviderPayloadHash = canonicalize.ComputeArtifactHash(dispatchRequest.ProviderPayload)
+	}
 	envelope := contracts.LaunchEffectAuthorizationEnvelope{
 		SchemaVersion:           contracts.LaunchEffectEnvelopeSchemaVersion,
 		EffectID:                fixture.effectID,
@@ -681,8 +784,8 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 		ConnectorAuthorityRef:   authority.Grant.ConnectorAuthority.BindingRef,
 		ConnectorAuthorityHash:  authority.Grant.ConnectorAuthority.AuthorityHash,
 		ActionURN:               contract.ActionURN,
-		RequestBodyHash:         launchHash("1"),
-		ArgsC14NHash:            launchHash("2"),
+		RequestBodyHash:         canonicalize.ComputeArtifactHash(dispatchRequest.RequestBody),
+		ArgsC14NHash:            canonicalize.ComputeArtifactHash(dispatchRequest.ArgsC14N),
 		DispatchDeadline:        dispatchDeadline.Format(time.RFC3339Nano),
 		ReplayHint:              "single_use_permit",
 	}
@@ -734,10 +837,8 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 			}
 			return nil
 		},
-		ExpectedRequestBodyHash: envelope.RequestBodyHash,
-		ExpectedArgsC14NHash:    envelope.ArgsC14NHash,
-		ExpectedPolicyEpoch:     envelope.PolicyEpoch,
-		MaximumPermitTTL:        45 * time.Second,
+		ExpectedPolicyEpoch: envelope.PolicyEpoch,
+		MaximumPermitTTL:    45 * time.Second,
 		ResolveVerdictKey: func(kernelTrustRootID, signerKeyID string) (ed25519.PublicKey, error) {
 			if kernelTrustRootID != trustRootID || signerKeyID != envelope.KernelVerdictSignerKey {
 				return nil, fmt.Errorf("unknown verdict signer key")
@@ -753,6 +854,12 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 				return contracts.LaunchEffectPermitBinding{}, fmt.Errorf("permit binding not found")
 			}
 			return permit, nil
+		},
+		ResolveDispatchRequest: func(expected contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
+			if expected.EffectPermitRef != permit.EffectPermitRef || expected.EffectPermitHash != permit.EffectPermitHash {
+				return contracts.LaunchEffectDispatchRequest{}, fmt.Errorf("dispatch request permit binding mismatch")
+			}
+			return dispatchRequest, nil
 		},
 		ResolvePolicyEpoch: func(tenantID, workspaceID string) (string, error) {
 			if tenantID != envelope.TenantID || workspaceID != envelope.WorkspaceID {
@@ -779,6 +886,9 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 			if expected.Permit != permit || observation.ObservedAuthority != permit || observation.ObservedAt.Before(now) {
 				return fmt.Errorf("dispatch commit binding mismatch")
 			}
+			if observation.RequestBodyHash != permit.RequestBodyHash || observation.ArgsC14NHash != permit.ArgsC14NHash || observation.ProviderPayloadHash != expectedProviderPayloadHash {
+				return fmt.Errorf("dispatch commit payload binding mismatch")
+			}
 			return nil
 		},
 		FinalizeAndStartDispatch: func(
@@ -804,9 +914,12 @@ func launchEffectAuthorizationFixtureAtWithInputMutation(t *testing.T, fixtureIn
 			}
 			return start()
 		},
-		StartDispatch: func(expected contracts.LaunchEffectPermitBinding) error {
+		StartDispatch: func(expected contracts.LaunchEffectPermitBinding, request contracts.LaunchEffectDispatchRequest) error {
 			if expected != permit {
 				return fmt.Errorf("connector start permit binding mismatch")
+			}
+			if !bytes.Equal(request.RequestBody, dispatchRequest.RequestBody) || !bytes.Equal(request.ArgsC14N, dispatchRequest.ArgsC14N) || !bytes.Equal(request.ProviderPayload, dispatchRequest.ProviderPayload) {
+				return fmt.Errorf("connector start dispatch bytes mismatch")
 			}
 			return nil
 		},

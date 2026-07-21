@@ -1,0 +1,20 @@
+# Periodic re-attestation of the Boundary Enforcement Profile.
+#
+# Each tick re-runs helm-boundary-attest.service: MATCH and DRIFT both emit
+# hash-sealed attestation receipts (drift is evidence). Honest boundary: a
+# DRIFT detected here does NOT stop an already-running gateway — start-time
+# gating is the enforced path; continuous enforcement is not claimed. An
+# operator who wants drift to halt the gateway can add
+# OnFailure=helm-gateway-stop.service (their policy, their unit).
+
+[Unit]
+Description=Periodic HELM boundary posture re-attestation (drift evidence)
+Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/air-gap-appliance.md
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+Unit=helm-boundary-attest.service
+
+[Install]
+WantedBy=timers.target

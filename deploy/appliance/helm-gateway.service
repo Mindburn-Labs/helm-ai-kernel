@@ -1,0 +1,38 @@
+# HELM AI Kernel gateway — sealed-appliance reference unit.
+#
+# The gateway hard-requires a successful posture attestation before it
+# starts: helm-boundary-attest.service (a short-lived privileged oneshot)
+# exits non-zero on DRIFT or probe failure, and systemd then refuses to start
+# this unit. HELM compiles and attests; the OS enforces.
+#
+# Baseline hardening below mirrors the compiled profile defaults. The
+# compiled per-profile drop-in
+# (/etc/systemd/system/helm-gateway.service.d/50-helm-boundary.conf,
+# emitted by `helm-ai-kernel boundary profile compile`) extends and
+# overrides it, and the posture attestor verifies the LIVE values — editing
+# either file out from under the receipt fails closed at next attestation.
+
+[Unit]
+Description=HELM AI Kernel gateway (sealed appliance)
+Documentation=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/deployment/air-gap-appliance.md
+Requires=helm-boundary-attest.service
+After=helm-boundary-attest.service network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=HELM_DATA_DIR=/var/lib/helm
+ExecStart=/usr/local/bin/helm-ai-kernel server
+Restart=on-failure
+RestartSec=5
+
+# Fully unprivileged: no capabilities, hardened filesystem view.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/helm
+
+[Install]
+WantedBy=multi-user.target

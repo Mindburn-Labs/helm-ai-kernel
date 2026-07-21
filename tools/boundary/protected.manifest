@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-21T08:45:28Z
+# Generated: 2026-07-21T09:18:35Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -698,9 +698,9 @@ fcbe893d7a19528a30cbac8a06be634ac2677e5199af8a0b09b1820eba424d7e  protocols/json
 77c7f1102b0dc7ffedf4ced58b4d6b95213e40ff9925651bda47337fd3be0c59  protocols/json-schemas/authority/side_effect_authority_record.schema.json
 4abdd3bd202fe71f6337fd8c32fbfb05c89ba6f30ac801442f14f7bba37bad22  protocols/json-schemas/autonomy_envelope/v1.json
 5e3278db56ce4c9d48475efc54475cb2345870a7a30badce6df7beeabc66ced0  protocols/json-schemas/backpressure_policy/v1.json
-014f4db3b527f13f66687e0f887c5950b94a397ef14b987dc8daae906b96dcca  protocols/json-schemas/boundary/boundary_profile_input.v1.schema.json
+1898d8a648a0e64a06aa9ceb6c4f59b15f1f748a0ff5bd3ae9f94aabf4a2e8b7  protocols/json-schemas/boundary/boundary_profile_input.v1.schema.json
 5f1e37a958f601cd4f8a241f0c9ea1cc6d9e6f97013ccd6bad120b5cf7850136  protocols/json-schemas/boundary/extauthz.v1.schema.json
-d1b9a205538c13ad060d4f977a1d643a7401056b9a0277738f6f50afbebea744  protocols/json-schemas/boundary/posture_attestation.v1.schema.json
+6f0ead25e223c5f916c06708c13973c31340c0c7597cd171a07297dd8b1ba4cc  protocols/json-schemas/boundary/posture_attestation.v1.schema.json
 41510a546210825a7d1c1224ec0a803f9143c13d46fc8d62435e51e0c59c65cc  protocols/json-schemas/boundary/profile_compile_receipt.v1.schema.json
 b6eccc4adc6621d39c3ba1f411fb176a66b7ac4698e6c3bd8183da01e3b5a5e1  protocols/json-schemas/boundary/update_bundle_manifest.v1.schema.json
 b33cd57db21eb1fd4b89541107daa3bfd0c4ab94463f774a7385fadadaecd48e  protocols/json-schemas/business/escalation_policy.schema.json

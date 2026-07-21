@@ -17,6 +17,9 @@
     "observed_at",
     "record_hash"
   ],
+  "dependentRequired": {
+    "signature": ["signer_key_id"]
+  },
   "properties": {
     "schema_version": { "const": "posture_attestation.v1" },
     "attestation_id": { "$ref": "#/$defs/non_empty" },

@@ -186,6 +186,30 @@ func TestSchemasRejectWhatGoRejects(t *testing.T) {
 		}
 	})
 
+	t.Run("malformed cidrs", func(t *testing.T) {
+		for _, bad := range []string{"203.0.113.0", "not-a-cidr", "203.0.113.0/", "/24"} {
+			in := fixtureInput()
+			in.Egress.AllowedCIDRs = []string{bad}
+			if err := inputSchema.Validate(decode(in)); err == nil {
+				t.Fatalf("CIDR %q must be rejected by the schema", bad)
+			}
+		}
+	})
+
+	t.Run("signed attestation needs a signer key id", func(t *testing.T) {
+		attestationSchema := compileBoundarySchema(t, "posture_attestation.v1.schema.json")
+		compiled, posture := compiledFixture(t)
+		signed, err := Attest(compiled.Receipt, compiled.Files, proberFromExpected(posture, string(compiled.Files[nftFilePath])), testSigner(t), testAttestOptions())
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc := decode(signed)
+		delete(doc, "signer_key_id")
+		if err := attestationSchema.Validate(doc); err == nil {
+			t.Fatal("a signature without signer_key_id must be rejected by the schema")
+		}
+	})
+
 	t.Run("artifact path traversal", func(t *testing.T) {
 		compiled, _ := compiledFixture(t)
 		for _, bad := range []string{"../escape.conf", "systemd/../../etc/shadow", "a//b.conf", "/etc/shadow", "a/./b.conf", "back\\slash.conf"} {

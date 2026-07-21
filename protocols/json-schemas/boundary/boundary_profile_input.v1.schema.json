@@ -64,7 +64,14 @@
       "properties": {
         "allowed_domains": { "type": ["array", "null"], "items": { "$ref": "#/$defs/non_empty" } },
         "denied_domains": { "type": ["array", "null"], "items": { "$ref": "#/$defs/non_empty" } },
-        "allowed_cidrs": { "type": ["array", "null"], "items": { "$ref": "#/$defs/non_empty" } },
+        "allowed_cidrs": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string",
+            "pattern": "^(([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}|[0-9A-Fa-f:]+(:[0-9.]+)?/[0-9]{1,3})$",
+            "$comment": "IPv4 or IPv6 CIDR shape; the Go validator additionally parses it with net.ParseCIDR and fails closed on anything malformed."
+          }
+        },
         "allowed_protocols": {
           "type": ["array", "null"],
           "items": { "enum": ["https", "http", "grpc", "dns", "ntp", "ssh"] }

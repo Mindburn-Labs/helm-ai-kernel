@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -54,6 +56,31 @@ var expositionBlockRe = regexp.MustCompile(`\{([^{}\n]*=\s*["']?%[^{}\n]*)\}`)
 // quotes in the format string (`{tool=%q,correlation_id="%s"}`).
 var expositionLabelRe = regexp.MustCompile(`(\w+)\s*=\s*["']?%`)
 
+func scanDecodedExpositionStringLiterals(fset *token.FileSet, f *ast.File, report func(string, string)) error {
+	var unquoteErr error
+	ast.Inspect(f, func(n ast.Node) bool {
+		if unquoteErr != nil {
+			return false
+		}
+		basic, ok := n.(*ast.BasicLit)
+		if !ok || basic.Kind != token.STRING {
+			return true
+		}
+		value, err := strconv.Unquote(basic.Value)
+		if err != nil {
+			unquoteErr = fmt.Errorf("decode string literal at %s: %w", fset.Position(basic.Pos()), err)
+			return false
+		}
+		for _, block := range expositionBlockRe.FindAllStringSubmatch(value, -1) {
+			for _, match := range expositionLabelRe.FindAllStringSubmatch(block[1], -1) {
+				report(fset.Position(basic.Pos()).String(), match[1])
+			}
+		}
+		return true
+	})
+	return unquoteErr
+}
+
 // TestNoProhibitedMetricLabels statically scans core/ for metric label
 // registrations — both prometheus *Vec constructors and hand-rolled
 // exposition format strings — and fails when a label name is on the
@@ -94,22 +121,22 @@ func TestNoProhibitedMetricLabels(t *testing.T) {
 			return err
 		}
 
-		// Hand-rolled exposition strings: helm_metric{label=%q}.
-		for _, block := range expositionBlockRe.FindAllSubmatch(src, -1) {
-			for _, m := range expositionLabelRe.FindAllSubmatch(block[1], -1) {
-				label := string(m[1])
-				seenLabels++
-				if prohibitedMetricLabels[label] {
-					violations = append(violations, finding{pos: path, label: label})
-				}
-			}
-		}
-
 		// prometheus *Vec constructors: the []string label-name argument.
 		// A parse failure fails the gate: silently skipping a file would
 		// exempt its metric registrations from the scan.
 		f, err := parser.ParseFile(fset, path, src, 0)
 		if err != nil {
+			return err
+		}
+		// Hand-rolled exposition strings: helm_metric{label=%q}. Decode only
+		// Go string literals before applying the bounded scan so every legal Go
+		// escape form is covered without scanning comments or arbitrary source.
+		if err := scanDecodedExpositionStringLiterals(fset, f, func(pos, label string) {
+			seenLabels++
+			if prohibitedMetricLabels[label] {
+				violations = append(violations, finding{pos: pos, label: label})
+			}
+		}); err != nil {
 			return err
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
@@ -174,5 +201,34 @@ func TestNoProhibitedMetricLabels(t *testing.T) {
 
 	for _, v := range violations {
 		t.Errorf("prohibited metric label %q registered at %s (telemetry contract §6: request-scoped identity never becomes a metric label)", v.label, v.pos)
+	}
+}
+
+func TestDecodedExpositionStringLiteralsCatchEscapedQuotes(t *testing.T) {
+	tests := map[string]string{
+		"escaped quote": `package probe
+const metric = "helm_metric{correlation_id=\"%s\"}"`,
+		"hex quote": `package probe
+const metric = "helm_metric{correlation_id=\x22%s\x22}"`,
+	}
+
+	for name, source := range tests {
+		t.Run(name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, "probe.go", source, 0)
+			if err != nil {
+				t.Fatalf("parse probe source: %v", err)
+			}
+
+			var labels []string
+			if err := scanDecodedExpositionStringLiterals(fset, f, func(_ string, label string) {
+				labels = append(labels, label)
+			}); err != nil {
+				t.Fatalf("scan decoded literals: %v", err)
+			}
+			if !slices.Contains(labels, "correlation_id") {
+				t.Fatalf("decoded scanner labels = %v, want correlation_id", labels)
+			}
+		})
 	}
 }

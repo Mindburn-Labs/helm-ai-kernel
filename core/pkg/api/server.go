@@ -168,6 +168,12 @@ func (s *Server) registerRoutes() {
 // ServeHTTP implements http.Handler. It delegates through the otelhttp
 // wrapper so every request gets a server span before edge handling runs.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.edge == nil {
+		// Zero-value Server (struct literals in tests): no traced wrapper —
+		// serve the bare edge, matching pre-otelhttp behavior.
+		s.serveEdge(w, r)
+		return
+	}
 	s.edge.ServeHTTP(w, r)
 }
 

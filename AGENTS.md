@@ -14,3 +14,4 @@ Welcome to the **helm-ai-kernel** repository. This is the core, open-source exec
 2. Maintain strict zero-dependency boundaries on volatile commercial components.
 3. Every functional path must maintain green unit/integration tests and high coverage metrics.
 4. Treat RLM outputs as input evidence only. They become Kernel truth only when represented through existing verdict, receipt, ProofGraph, EvidencePack, contract, conformance, or verifier paths; do not add a separate RLM proof universe.
+5. When a workflow ruleset is pinned solely by SHA, GitHub emits `github.workflow_ref` as `<repository>/<path>@<workflow_sha>`. The release-permit verifier must accept this form only when the suffix exactly matches the validated `workflow_sha`; never restore a mutable `ref` for compatibility. Changes require matching- and mismatching-SHA regression tests plus a runtime permit check.

@@ -20,6 +20,16 @@ var (
 	reviewerPattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,127}$`)
 )
 
+func isWorkflowRefAllowed(workflowRef, workflowRepository, workflowPath, workflowSHA string) bool {
+	workflowIdentityPrefix := workflowRepository + "/" + workflowPath + "@"
+	if strings.HasPrefix(workflowRef, workflowIdentityPrefix) {
+		workflowRef = strings.TrimPrefix(workflowRef, workflowIdentityPrefix)
+	}
+	return workflowRef == workflowSHA ||
+		strings.HasPrefix(workflowRef, "refs/heads/") ||
+		strings.HasPrefix(workflowRef, "refs/tags/")
+}
+
 // Evaluate validates a two-provider review quorum and returns a deterministic
 // permit. A structurally invalid context is an error because no trustworthy
 // decision can be bound to it. Invalid, stale, missing, or denying reviews
@@ -191,13 +201,13 @@ func ValidateAllowPermit(permit Permit, trustedContext Context, contextSHA256 st
 		(!strings.HasSuffix(permit.WorkflowPath, ".yml") && !strings.HasSuffix(permit.WorkflowPath, ".yaml")) {
 		problems = append(problems, "workflow_path must name a GitHub Actions workflow")
 	}
-	workflowRef := permit.WorkflowRef
-	workflowIdentityPrefix := permit.WorkflowRepository + "/" + permit.WorkflowPath + "@"
-	if strings.HasPrefix(workflowRef, workflowIdentityPrefix) {
-		workflowRef = strings.TrimPrefix(workflowRef, workflowIdentityPrefix)
-	}
-	if !strings.HasPrefix(workflowRef, "refs/heads/") && !strings.HasPrefix(workflowRef, "refs/tags/") {
-		problems = append(problems, "workflow_ref must be a branch or tag ref")
+	if !isWorkflowRefAllowed(
+		permit.WorkflowRef,
+		permit.WorkflowRepository,
+		permit.WorkflowPath,
+		permit.WorkflowSHA,
+	) {
+		problems = append(problems, "workflow_ref must be a branch or tag ref or match workflow_sha")
 	}
 	if strings.EqualFold(permit.Repository, permit.WorkflowRepository) &&
 		(permit.WorkflowSHA == permit.HeadSHA || permit.WorkflowSHA == permit.MergeSHA) {
@@ -311,13 +321,13 @@ func validateContext(context Context) error {
 		(!strings.HasSuffix(context.WorkflowPath, ".yml") && !strings.HasSuffix(context.WorkflowPath, ".yaml")) {
 		problems = append(problems, "workflow_path must name a GitHub Actions workflow")
 	}
-	workflowRef := context.WorkflowRef
-	workflowIdentityPrefix := context.WorkflowRepository + "/" + context.WorkflowPath + "@"
-	if strings.HasPrefix(workflowRef, workflowIdentityPrefix) {
-		workflowRef = strings.TrimPrefix(workflowRef, workflowIdentityPrefix)
-	}
-	if !strings.HasPrefix(workflowRef, "refs/heads/") && !strings.HasPrefix(workflowRef, "refs/tags/") {
-		problems = append(problems, "workflow_ref must be a branch or tag ref")
+	if !isWorkflowRefAllowed(
+		context.WorkflowRef,
+		context.WorkflowRepository,
+		context.WorkflowPath,
+		context.WorkflowSHA,
+	) {
+		problems = append(problems, "workflow_ref must be a branch or tag ref or match workflow_sha")
 	}
 	if !hexSHA40Pattern.MatchString(context.WorkflowSHA) {
 		problems = append(problems, "workflow_sha must be a lowercase 40-character Git SHA")

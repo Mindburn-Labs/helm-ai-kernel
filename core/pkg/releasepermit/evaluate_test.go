@@ -138,6 +138,62 @@ func TestEvaluateAcceptsGitHubWorkflowRefIdentity(t *testing.T) {
 	}
 }
 
+func TestEvaluateAcceptsGitHubWorkflowSHAIdentity(t *testing.T) {
+	context := validContext()
+	context.WorkflowRef = context.WorkflowRepository + "/" + context.WorkflowPath + "@" + context.WorkflowSHA
+
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if permit.Decision != DecisionAllow {
+		t.Fatalf("Decision = %q, want %q; reasons = %#v", permit.Decision, DecisionAllow, permit.Reasons)
+	}
+}
+
+func TestWorkflowRefAllowsOnlyBoundSHA(t *testing.T) {
+	workflowIdentityPrefix := "Mindburn-Labs/.github/.github/workflows/ci.yml@"
+	tests := []struct {
+		name        string
+		workflowRef string
+		workflowSHA string
+		want        bool
+	}{
+		{
+			name:        "matching SHA",
+			workflowRef: workflowIdentityPrefix + testWorkflowSHA,
+			workflowSHA: testWorkflowSHA,
+			want:        true,
+		},
+		{
+			name:        "mismatched SHA",
+			workflowRef: workflowIdentityPrefix + testMergeSHA,
+			workflowSHA: testWorkflowSHA,
+			want:        false,
+		},
+		{
+			name:        "pull ref",
+			workflowRef: workflowIdentityPrefix + "refs/pull/42/merge",
+			workflowSHA: testWorkflowSHA,
+			want:        false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := isWorkflowRefAllowed(
+				test.workflowRef,
+				"Mindburn-Labs/.github",
+				".github/workflows/ci.yml",
+				test.workflowSHA,
+			)
+			if got != test.want {
+				t.Fatalf("isWorkflowRefAllowed() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestEvaluateRejectsMismatchedGitHubWorkflowRefIdentity(t *testing.T) {
 	context := validContext()
 	context.WorkflowRef = "Mindburn-Labs/other/.github/workflows/ci.yml@refs/heads/main"

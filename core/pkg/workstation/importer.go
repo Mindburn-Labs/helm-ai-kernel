@@ -391,6 +391,12 @@ func EvaluateEvent(profile contracts.WorkstationPolicyProfile, event ToolEvent) 
 	if taintedOperateEvent(event) {
 		return contracts.WorkstationVerdictDeny, "TAINTED_CONTEXT_REQUIRES_DENY", "tainted context cannot authorize operate-class effects"
 	}
+	// A command that cannot be statically analyzed is denied on that ground
+	// specifically, so the signed receipt states the real reason rather than
+	// the generic OPERATE_PERMISSIONS_EMPTY it would otherwise fall through to.
+	if event.Action == ActionShellUnanalyzable {
+		return contracts.WorkstationVerdictDeny, "SHELL_COMMAND_NOT_STATICALLY_ANALYZABLE", "shell command cannot be statically analyzed"
+	}
 	if event.EffectType == contracts.EffectTypeWorkstationFileWrite || event.EffectType == contracts.EffectTypeWorkstationFileDraft || event.Type == "file_write" || event.Type == "draft_edit" {
 		if !draftTargetAllowed(profile.Draft.WorkspaceRoots, event.Target) {
 			return contracts.WorkstationVerdictDeny, "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE", "draft target is outside the configured workspace scope"

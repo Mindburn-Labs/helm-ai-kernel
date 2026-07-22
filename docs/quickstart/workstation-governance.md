@@ -77,9 +77,24 @@ named in the receipt. `trusted` checks that this is the expected local signer.
 Both must be `true`. For a receipt moved to another machine, use
 `--trusted-public-key-file` with a public key obtained from a trusted channel.
 
-The installed hook has a deliberately narrow shell guard: it recognizes only
-selected literal destructive commands. It does not claim to parse every shell
-expansion, wrapper, or destructive tool.
+By default the installed hook has a deliberately narrow shell guard: it
+recognizes only selected literal destructive commands. It does not claim to
+parse every shell expansion, wrapper, or destructive tool, and a command it does
+not recognize proceeds with no verdict and no receipt.
+
+To invert that default so unrecognized commands are denied rather than passed,
+install with `--shell-mode=allowlist`:
+
+```bash
+helm-ai-kernel setup claude-code --shell-mode=allowlist --yes
+```
+
+In allowlist mode a command passes only if it is statically analyzable — no
+chaining, substitution, redirection, or nested shell — and maps to an action ID
+listed in the active profile's `Observe.AllowedActions`. Everything else is
+denied with a signed receipt. See
+[Workstation Governance](../reference/workstation-governance.md) for the full
+model and its limits.
 
 ## Prove An Escalation
 

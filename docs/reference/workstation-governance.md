@@ -90,10 +90,47 @@ helm-ai-kernel workstation enforce \
 
 `decide` emits a signed policy decision receipt. `enforce` emits the same receipt and exits with code `126` on `DENY`, which makes it usable from shell hooks or wrapper scripts. The bridge covers selected shell, network, MCP, file, memory, and recurring-loop classes; it is not a kernel driver, browser controller, or complete OS sandbox.
 
-The v0.7 shell guard is intentionally narrow. It recognizes only a small set
-of literal destructive command forms and does not interpret shell expansion,
-aliases, `eval`, wrappers, or every destructive tool. Treat it as a
-selected-effect guardrail, not a claim of comprehensive shell enforcement.
+### Shell classification modes
+
+The hook accepts `--shell-mode`, which selects the fail direction for `Bash`
+tool calls. The default is `denylist` through 0.7.x.
+
+`denylist` is the v0.7 shell guard. It is intentionally narrow: it recognizes
+only a small set of literal destructive command forms and does not interpret
+shell expansion, aliases, `eval`, wrappers, or every destructive tool. A
+command it does not recognize proceeds with no verdict and no receipt. Treat it
+as a selected-effect guardrail, not a claim of comprehensive shell enforcement.
+
+`allowlist` inverts that posture to match how the same hook already treats
+`mcp__` tools. A command is evaluated in two steps:
+
+1. If it is not statically analyzable — it chains, substitutes, redirects, spans
+   a newline, or spawns a nested shell — it is denied with reason code
+   `SHELL_COMMAND_NOT_STATICALLY_ANALYZABLE`. This check runs first, which is
+   what stops `git status && rm -rf /` on the chaining rather than accepting it
+   on its first two tokens.
+2. Otherwise the command is matched against a recognition list that maps it to
+   an action ID such as `git.status` or `shell.read`. It passes only if that ID
+   appears in the active profile's `Observe.AllowedActions`. Anything else is
+   routed to the policy engine and denied when no operate permission is granted.
+
+The default profile is already a usable allowlist — five read-only actions in
+`Observe`, an empty `Operate.Permissions` — so `allowlist` mode works before any
+profile is written. The hook reads `<data-dir>/policy/workstation.json` when
+present and falls back to that built-in default.
+
+What `allowlist` mode still does not establish: it classifies the *shape* of a
+command, not the behavior of the program that command starts. `go test` and
+`make build` are recognized because an operator put `shell.test` / `shell.build`
+in the profile, which is a statement that running the repository's own tooling
+is acceptable. Ambient configuration outside the command line — a
+`diff.external` git setting, for instance — is likewise outside what argv
+analysis can see.
+
+Migration: `0.7.x` ships `allowlist` as opt-in with `denylist` as the default,
+so no upgrade changes behavior. `0.8.0` flips the binary default to `allowlist`,
+which is what carries the change to installs whose baked hook command was never
+rewritten; `--shell-mode=denylist` remains the escape hatch.
 
 ## Operator workflow
 

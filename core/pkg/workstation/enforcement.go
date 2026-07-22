@@ -21,6 +21,12 @@ type DecisionOptions struct {
 	SigningSeed []byte
 }
 
+// ActionShellUnanalyzable marks a shell command the caller could not statically
+// analyze. It is an action value rather than a new effect type so existing
+// effect-type switches and receipt consumers keep working unchanged, while the
+// signed receipt still records why the command was refused.
+const ActionShellUnanalyzable = "shell_unanalyzable"
+
 func LoadPolicyProfileFile(path string) (contracts.WorkstationPolicyProfile, error) {
 	if strings.TrimSpace(path) == "" {
 		return DefaultObserveDraftProfile(), nil
@@ -164,6 +170,8 @@ func EffectDefaults(effectClass string) (effectType, effectMode, action, toolID 
 		return contracts.EffectTypeWorkstationPaymentInitiate, contracts.WorkstationEffectModeOperate, "payment_initiate", "payment.initiate"
 	case "shell-operate", "shell_operate":
 		return contracts.EffectTypeWorkstationShellCommand, contracts.WorkstationEffectModeOperate, "shell_operate", "shell"
+	case "shell-unanalyzable", "shell_unanalyzable":
+		return contracts.EffectTypeWorkstationShellCommand, contracts.WorkstationEffectModeOperate, ActionShellUnanalyzable, "shell"
 	case "file", "draft", "write":
 		return contracts.EffectTypeWorkstationFileWrite, contracts.WorkstationEffectModeDraft, "file_write", "workspace.write"
 	default:

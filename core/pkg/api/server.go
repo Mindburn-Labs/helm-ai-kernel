@@ -45,7 +45,7 @@ type Server struct {
 	lamport        uint64
 	mux            *http.ServeMux
 	edge           http.Handler // otelhttp-wrapped entry point (HELM-333)
-	allowedOrigins []string // CORS allowed origins (nil = no CORS headers)
+	allowedOrigins []string     // CORS allowed origins (nil = no CORS headers)
 	authenticator  Authenticator
 }
 

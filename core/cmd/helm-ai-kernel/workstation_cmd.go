@@ -122,11 +122,13 @@ func runWorkstationViewCmd(args []string, stdout, stderr io.Writer) int {
 		jsonOut              bool
 		dataDir              string
 		trustedPublicKeyFile string
+		trustedSignersFile   string
 	)
 	cmd.StringVar(&receiptPath, "receipt", "", "Agent Run Receipt or workstation import result JSON")
 	cmd.BoolVar(&jsonOut, "json", false, "Print summary JSON")
 	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
 	cmd.StringVar(&trustedPublicKeyFile, "trusted-public-key-file", "", "Path to caller-owned Ed25519 public key file")
+	cmd.StringVar(&trustedSignersFile, "trusted-signers-file", "", "Path to caller-owned versioned trusted signer store JSON")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -145,14 +147,14 @@ func runWorkstationViewCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "Error: receipt integrity check failed: %v\n", err)
 		return 1
 	}
-	trustedKey, trustAnchor, trustAnchorAvailable, err := resolveTrustedWorkstationPublicKey(dataDir, trustedPublicKeyFile)
+	trustedSigners, trustAnchor, trustAnchorAvailable, err := resolveTrustedWorkstationSigners(dataDir, trustedPublicKeyFile, trustedSignersFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: load trusted public key: %v\n", err)
 		return 1
 	}
 	signerTrusted := false
 	if trustAnchorAvailable {
-		signerTrusted, err = workstation.VerifyReceiptWithTrustedKey(result.Receipt, trustedKey)
+		signerTrusted, err = workstation.VerifyReceiptWithTrustedSigners(result.Receipt, trustedSigners)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: trusted receipt verification failed: %v\n", err)
 			return 1
@@ -209,7 +211,12 @@ func parseSigningSeedHex(seedHex string) ([]byte, error) {
 	if len(seed) != 32 {
 		return nil, fmt.Errorf("signing seed must decode to 32 bytes")
 	}
-	return seed, nil
+	for _, value := range seed {
+		if value != 0 {
+			return seed, nil
+		}
+	}
+	return nil, fmt.Errorf("signing seed must not be all zero")
 }
 
 func printWorkstationSummary(stdout io.Writer, summary map[string]any) {

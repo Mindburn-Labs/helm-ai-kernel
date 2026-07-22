@@ -256,6 +256,15 @@ func TestWorkstationViewSeparatesIntegrityFromTrustedSigner(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("trusted view exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
+
+	trustedSignersFile := filepath.Join(tmp, "trusted-signers.json")
+	writeTrustedSignerStore(t, trustedSignersFile, publicKey)
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "workstation", "view", "--receipt", receiptPath, "--trusted-signers-file", trustedSignersFile}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("trusted signer store view exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
 }
 
 func TestWorkstationViewRejectsRetiredSignerEvenWithExplicitKey(t *testing.T) {

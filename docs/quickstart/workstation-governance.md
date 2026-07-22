@@ -75,7 +75,9 @@ trusted: true
 `integrity` checks that the receipt has not been altered relative to the key
 named in the receipt. `trusted` checks that this is the expected local signer.
 Both must be `true`. For a receipt moved to another machine, use
-`--trusted-public-key-file` with a public key obtained from a trusted channel.
+`--trusted-public-key-file` with one public key obtained from a trusted
+channel, or `--trusted-signers-file` with the caller-owned rotation allowlist.
+Production verification requires one of those explicit sources.
 
 The installed hook has a deliberately narrow shell guard: it recognizes only
 selected literal destructive commands. It does not claim to parse every shell

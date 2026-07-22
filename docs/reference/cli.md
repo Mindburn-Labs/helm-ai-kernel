@@ -64,6 +64,7 @@ helm-ai-kernel boundary verify --record-id <record-id> --json
 helm-ai-kernel receipts tail --agent <agent-id>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json> --trusted-public-key-file <expected-ed25519-public-key>
+helm-ai-kernel workstation verify-decision --receipt <receipt.json> --trusted-signers-file <caller-owned-trust-store.json>
 ```
 
 `ALLOW`, `DENY`, and `ESCALATE` records include a reason code. `DENY` and
@@ -72,6 +73,8 @@ helm-ai-kernel workstation verify-decision --receipt <receipt.json> --trusted-pu
 Workstation verification exits successfully only when receipt integrity and
 the signer trust anchor both verify. A signature that validates against the
 key embedded in a receipt is not, by itself, proof of an expected signer.
+Production verification requires an explicit public-key or signer-store source;
+the local development anchor is never an implicit production fallback.
 
 ## OpenAI-Compatible Proxy
 

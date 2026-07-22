@@ -6,19 +6,34 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
 const (
 	workstationSigningKeyDirectory  = "keys"
 	workstationSigningSeedName      = "workstation-ed25519.seed"
 	workstationSigningPublicKeyName = "workstation-ed25519.pub"
+	workstationSignerTrustStoreV1   = "workstation-receipt-trust-store.v1"
 )
+
+type workstationSignerTrustStore struct {
+	Version string                        `json:"version"`
+	Signers []workstationSignerTrustEntry `json:"signers"`
+}
+
+type workstationSignerTrustEntry struct {
+	KeyID     string `json:"key_id"`
+	PublicKey string `json:"public_key"`
+}
 
 func workstationSigningSeedPath(dataDir string) string {
 	return filepath.Join(dataDir, workstationSigningKeyDirectory, workstationSigningSeedName)
@@ -185,7 +200,11 @@ func loadTrustedPublicKeyFile(path string) (ed25519.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	keyHex := strings.TrimPrefix(strings.TrimSpace(string(data)), "ed25519:")
+	return parseTrustedPublicKey(strings.TrimSpace(string(data)))
+}
+
+func parseTrustedPublicKey(value string) (ed25519.PublicKey, error) {
+	keyHex := strings.TrimPrefix(strings.TrimSpace(value), "ed25519:")
 	key, err := hex.DecodeString(keyHex)
 	if err != nil {
 		return nil, fmt.Errorf("trusted public key must be hex: %w", err)
@@ -194,6 +213,85 @@ func loadTrustedPublicKeyFile(path string) (ed25519.PublicKey, error) {
 		return nil, fmt.Errorf("trusted public key must decode to %d bytes", ed25519.PublicKeySize)
 	}
 	return ed25519.PublicKey(key), nil
+}
+
+func loadTrustedSignerStoreFile(path string) (workstation.TrustedSignerSet, error) {
+	data, err := readRegularFile(path, "trusted signer store")
+	if err != nil {
+		return workstation.TrustedSignerSet{}, err
+	}
+	var store workstationSignerTrustStore
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&store); err != nil {
+		return workstation.TrustedSignerSet{}, fmt.Errorf("decode trusted signer store: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return workstation.TrustedSignerSet{}, errors.New("trusted signer store must contain exactly one JSON object")
+	}
+	if store.Version != workstationSignerTrustStoreV1 || len(store.Signers) == 0 || len(store.Signers) > 64 {
+		return workstation.TrustedSignerSet{}, errors.New("trusted signer store version or size is invalid")
+	}
+	keys := make([]ed25519.PublicKey, 0, len(store.Signers))
+	for _, signer := range store.Signers {
+		key, err := parseTrustedPublicKey(signer.PublicKey)
+		if err != nil {
+			return workstation.TrustedSignerSet{}, err
+		}
+		if signer.KeyID != "ed25519:"+hex.EncodeToString(key) {
+			return workstation.TrustedSignerSet{}, errors.New("trusted signer key ID does not match its public key")
+		}
+		keys = append(keys, key)
+	}
+	trusted, err := workstation.NewTrustedSignerSet(keys)
+	if err != nil {
+		return workstation.TrustedSignerSet{}, fmt.Errorf("validate trusted signer store: %w", err)
+	}
+	return trusted, nil
+}
+
+func resolveTrustedWorkstationSigners(dataDir, trustedPublicKeyFile, trustedSignersFile string) (workstation.TrustedSignerSet, string, bool, error) {
+	if strings.TrimSpace(trustedPublicKeyFile) != "" && strings.TrimSpace(trustedSignersFile) != "" {
+		return workstation.TrustedSignerSet{}, "", false, errors.New("--trusted-public-key-file and --trusted-signers-file are mutually exclusive")
+	}
+	if strings.TrimSpace(trustedSignersFile) != "" {
+		trusted, err := loadTrustedSignerStoreFile(trustedSignersFile)
+		if err != nil {
+			return workstation.TrustedSignerSet{}, trustedSignersFile, false, err
+		}
+		return trusted, trustedSignersFile, true, nil
+	}
+	if strings.TrimSpace(trustedPublicKeyFile) != "" {
+		key, err := loadTrustedPublicKeyFile(trustedPublicKeyFile)
+		if err != nil {
+			return workstation.TrustedSignerSet{}, trustedPublicKeyFile, false, err
+		}
+		trusted, err := workstation.NewTrustedSignerSet([]ed25519.PublicKey{key})
+		if err != nil {
+			return workstation.TrustedSignerSet{}, trustedPublicKeyFile, false, err
+		}
+		return trusted, trustedPublicKeyFile, true, nil
+	}
+	if envBool("HELM_PRODUCTION") {
+		return workstation.TrustedSignerSet{}, "", false, errors.New("production mode requires --trusted-signers-file or --trusted-public-key-file")
+	}
+	dataDir, err := normalizedWorkstationDataDir(dataDir)
+	if err != nil {
+		return workstation.TrustedSignerSet{}, "", false, err
+	}
+	path := workstationSigningPublicKeyPath(dataDir)
+	key, err := loadTrustedPublicKeyFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return workstation.TrustedSignerSet{}, path, false, nil
+	}
+	if err != nil {
+		return workstation.TrustedSignerSet{}, path, false, err
+	}
+	trusted, err := workstation.NewTrustedSignerSet([]ed25519.PublicKey{key})
+	if err != nil {
+		return workstation.TrustedSignerSet{}, path, false, err
+	}
+	return trusted, path, true, nil
 }
 
 func resolveTrustedWorkstationPublicKey(dataDir, explicitPath string) (ed25519.PublicKey, string, bool, error) {

@@ -66,6 +66,45 @@ Older receipts made with the retired deterministic signer can still be read
 for integrity and migration, but are not trusted. Reissue them with the local
 signer rather than treating the legacy key as a trust root.
 
+### Approved signer sources and rotation
+
+Production mode (`HELM_PRODUCTION=1`) never creates a local signer or treats
+the adjacent local public-key file as a trust anchor. Signing requires an
+explicit `--signing-seed-file`; verification requires either an explicit
+`--trusted-signers-file` or the compatibility-only single
+`--trusted-public-key-file`. Missing, zero, malformed, unknown, or retired
+signer material fails closed.
+
+`--trusted-signers-file` is a caller-owned JSON allowlist. It carries public
+keys only, has version `workstation-receipt-trust-store.v1`, and rejects
+unknown fields, duplicate keys, key-ID substitution, and symlinks. A retired
+source-derived signer can never produce a trusted result:
+
+```json
+{
+  "version": "workstation-receipt-trust-store.v1",
+  "signers": [
+    {
+      "key_id": "ed25519:<public-key-hex>",
+      "public_key": "<public-key-hex>"
+    }
+  ]
+}
+```
+
+Deliver this public file through the deployment's approved configuration
+channel; the Kernel does not fetch it, generate it, or accept a receipt-bundled
+key as trust authority. For rotation, first distribute a store containing the
+current and replacement public keys, then switch the explicit signing seed,
+verify both receipt generations, and retain the old key for the required
+evidence-retention window. Remove a compromised key immediately after the
+replacement store is present; receipts from that key then remain readable for
+integrity but are no longer trusted.
+
+Local development keeps the single generated signer and adjacent public key as
+a migration-safe convenience. It is not available as an implicit production
+fallback.
+
 For a classified hook operation, failure to provision the local signer or
 persist a denial receipt results in an explicit hook denial. HELM does not
 substitute an unsigned or fabricated receipt. If it cannot write the hook

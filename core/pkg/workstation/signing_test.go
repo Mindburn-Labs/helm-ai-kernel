@@ -4,10 +4,12 @@ package workstation
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -98,6 +100,66 @@ func TestAgentRunReceiptTrustedKeyVerification(t *testing.T) {
 	}
 	if ok, err := VerifyReceiptWithTrustedKey(legacyResult.Receipt, legacyKey); err != nil || ok {
 		t.Fatalf("legacy agent receipt must remain untrusted = %v/%v, want false/nil", ok, err)
+	}
+}
+
+func TestReceiptSigningRejectsAllZeroSeed(t *testing.T) {
+	zeroSeed := make([]byte, ed25519.SeedSize)
+	profile := DefaultObserveDraftProfile()
+	request := decisionRequest("network", "https://forbidden.example")
+	if _, err := Decide(profile, request, DecisionOptions{SigningSeed: zeroSeed}); err == nil || !strings.Contains(err.Error(), "must not be all zero") {
+		t.Fatalf("zero seed decision error = %v, want all-zero rejection", err)
+	}
+	if _, err := ImportArtifactDir(filepath.Join(repoRoot(t), "fixtures", "workstation", "allowed-observe"), ImportOptions{SigningSeed: zeroSeed}); err == nil || !strings.Contains(err.Error(), "must not be all zero") {
+		t.Fatalf("zero seed import error = %v, want all-zero rejection", err)
+	}
+}
+
+func TestTrustedSignerSetSupportsOverlapAndRejectsUnknownSigner(t *testing.T) {
+	oldPublic, oldPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newPublic, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, attackerPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := DefaultObserveDraftProfile()
+	request := decisionRequest("network", "https://forbidden.example")
+	receipt, err := Decide(profile, request, DecisionOptions{SigningSeed: oldPrivate.Seed()})
+	if err != nil {
+		t.Fatalf("sign old receipt: %v", err)
+	}
+
+	overlap, err := NewTrustedSignerSet([]ed25519.PublicKey{oldPublic, newPublic})
+	if err != nil {
+		t.Fatalf("create overlap trust set: %v", err)
+	}
+	if ok, err := VerifyDecisionReceiptWithTrustedSigners(receipt, overlap); err != nil || !ok {
+		t.Fatalf("overlap trusted verification = %v/%v, want true/nil", ok, err)
+	}
+
+	newOnly, err := NewTrustedSignerSet([]ed25519.PublicKey{newPublic})
+	if err != nil {
+		t.Fatalf("create new-only trust set: %v", err)
+	}
+	if ok, err := VerifyDecisionReceiptWithTrustedSigners(receipt, newOnly); err != nil || ok {
+		t.Fatalf("retired overlap receipt verification = %v/%v, want false/nil", ok, err)
+	}
+
+	forged, err := Decide(profile, request, DecisionOptions{SigningSeed: attackerPrivate.Seed()})
+	if err != nil {
+		t.Fatalf("sign attacker receipt: %v", err)
+	}
+	if ok, err := VerifyDecisionReceiptSignature(forged); err != nil || !ok {
+		t.Fatalf("attacker receipt integrity = %v/%v, want true/nil", ok, err)
+	}
+	if ok, err := VerifyDecisionReceiptWithTrustedSigners(forged, overlap); err != nil || ok {
+		t.Fatalf("attacker trusted verification = %v/%v, want false/nil", ok, err)
 	}
 }
 

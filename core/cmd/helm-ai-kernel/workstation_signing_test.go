@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,6 +76,80 @@ func TestProductionWorkstationSigningRequiresExplicitSeedFile(t *testing.T) {
 	}
 	if len(seed) != ed25519.SeedSize {
 		t.Fatalf("explicit production seed length = %d, want %d", len(seed), ed25519.SeedSize)
+	}
+	if _, _, _, err := resolveTrustedWorkstationSigners(dataDir, "", ""); err == nil || !strings.Contains(err.Error(), "requires --trusted-signers-file") {
+		t.Fatalf("production implicit trust anchor error = %v, want explicit trust requirement", err)
+	}
+	publicKey := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	trustStore := filepath.Join(t.TempDir(), "trusted-signers.json")
+	writeTrustedSignerStore(t, trustStore, publicKey)
+	if _, gotPath, available, err := resolveTrustedWorkstationSigners(dataDir, "", trustStore); err != nil || !available || gotPath != trustStore {
+		t.Fatalf("explicit production trusted signer store = available=%v path=%q err=%v", available, gotPath, err)
+	}
+
+	zeroSeedFile := filepath.Join(t.TempDir(), "zero.seed")
+	if err := os.WriteFile(zeroSeedFile, []byte(strings.Repeat("0", ed25519.SeedSize*2)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveWorkstationSigningSeed(dataDir, "", zeroSeedFile); err == nil || !strings.Contains(err.Error(), "must not be all zero") {
+		t.Fatalf("zero production signer error = %v, want all-zero rejection", err)
+	}
+}
+
+func TestTrustedSignerStoreRejectsMismatchedOrDuplicateKeys(t *testing.T) {
+	seed := []byte("0123456789abcdef0123456789abcdef")
+	key := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	path := filepath.Join(t.TempDir(), "trusted-signers.json")
+	writeTrustedSignerStore(t, path, key)
+	if _, err := loadTrustedSignerStoreFile(path); err != nil {
+		t.Fatalf("load trusted signer store: %v", err)
+	}
+
+	badPath := filepath.Join(t.TempDir(), "mismatched-trusted-signers.json")
+	bad := workstationSignerTrustStore{Version: workstationSignerTrustStoreV1, Signers: []workstationSignerTrustEntry{{
+		KeyID: "ed25519:" + strings.Repeat("0", ed25519.PublicKeySize*2), PublicKey: hex.EncodeToString(key),
+	}}}
+	raw, err := json.Marshal(bad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(badPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadTrustedSignerStoreFile(badPath); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("mismatched trust store error = %v, want key-id rejection", err)
+	}
+
+	duplicatePath := filepath.Join(t.TempDir(), "duplicate-trusted-signers.json")
+	duplicate := workstationSignerTrustStore{Version: workstationSignerTrustStoreV1, Signers: []workstationSignerTrustEntry{
+		{KeyID: "ed25519:" + hex.EncodeToString(key), PublicKey: hex.EncodeToString(key)},
+		{KeyID: "ed25519:" + hex.EncodeToString(key), PublicKey: hex.EncodeToString(key)},
+	}}
+	raw, err = json.Marshal(duplicate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(duplicatePath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadTrustedSignerStoreFile(duplicatePath); err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("duplicate trust store error = %v, want duplicate rejection", err)
+	}
+}
+
+func writeTrustedSignerStore(t *testing.T, path string, keys ...ed25519.PublicKey) {
+	t.Helper()
+	store := workstationSignerTrustStore{Version: workstationSignerTrustStoreV1}
+	for _, key := range keys {
+		encoded := hex.EncodeToString(key)
+		store.Signers = append(store.Signers, workstationSignerTrustEntry{KeyID: "ed25519:" + encoded, PublicKey: encoded})
+	}
+	raw, err := json.Marshal(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

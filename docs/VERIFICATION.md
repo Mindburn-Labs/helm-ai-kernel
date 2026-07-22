@@ -43,8 +43,10 @@ helm-ai-kernel workstation verify-decision \
 This workstation command reports `integrity` and `trusted` independently.
 `integrity: true` alone only means the contents match the receipt's declared
 public key. A zero exit status requires `trusted: true` against the expected
-local key or an explicit `--trusted-public-key-file`; use the latter for a
-receipt copied between machines.
+local key or an explicit `--trusted-public-key-file`. During signer rotation,
+use `--trusted-signers-file` with the caller-owned multi-key allowlist. In
+production, use one of those explicit sources for every verification; a local
+development anchor is not a fallback.
 
 For an EvidencePack:
 

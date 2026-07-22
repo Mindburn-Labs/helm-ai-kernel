@@ -640,8 +640,8 @@ func signReceipt(receipt *contracts.AgentRunReceipt, seed []byte) error {
 	if len(seed) == 0 {
 		return errors.New("signing seed is required")
 	}
-	if len(seed) != ed25519.SeedSize {
-		return fmt.Errorf("signing seed must be %d bytes", ed25519.SeedSize)
+	if err := validateSigningSeed(seed); err != nil {
+		return err
 	}
 	priv := ed25519.NewKeyFromSeed(seed)
 	pub := priv.Public().(ed25519.PublicKey)
@@ -656,6 +656,18 @@ func signReceipt(receipt *contracts.AgentRunReceipt, seed []byte) error {
 	receipt.ReceiptHash = hex.EncodeToString(hash[:])
 	receipt.Signature = hex.EncodeToString(ed25519.Sign(priv, canonical))
 	return nil
+}
+
+func validateSigningSeed(seed []byte) error {
+	if len(seed) != ed25519.SeedSize {
+		return fmt.Errorf("signing seed must be %d bytes", ed25519.SeedSize)
+	}
+	for _, value := range seed {
+		if value != 0 {
+			return nil
+		}
+	}
+	return errors.New("signing seed must not be all zero")
 }
 
 // VerifyReceiptSignature checks receipt integrity against the public key embedded

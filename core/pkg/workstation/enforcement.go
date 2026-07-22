@@ -245,8 +245,8 @@ func signDecisionReceipt(receipt *contracts.WorkstationPolicyDecisionReceipt, se
 	if len(seed) == 0 {
 		return errors.New("signing seed is required")
 	}
-	if len(seed) != ed25519.SeedSize {
-		return fmt.Errorf("signing seed must be %d bytes", ed25519.SeedSize)
+	if err := validateSigningSeed(seed); err != nil {
+		return err
 	}
 	priv := ed25519.NewKeyFromSeed(seed)
 	pub := priv.Public().(ed25519.PublicKey)

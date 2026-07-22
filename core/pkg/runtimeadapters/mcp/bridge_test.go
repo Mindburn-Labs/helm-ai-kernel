@@ -220,6 +220,25 @@ func TestGovernedBridgeWithoutSigningSeedFailsClosed(t *testing.T) {
 	}
 }
 
+func TestGovernedBridgeWithAllZeroSigningSeedFailsClosed(t *testing.T) {
+	graph := proofgraph.NewGraph()
+	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: NewGovernedBridge(BridgeConfig{
+		Profile: operateProfile(), SigningSeed: make([]byte, 32), Now: fixedClock(),
+	})})
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+	resp, err := adapter.Intercept(context.Background(), &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "linear.get_issue", PrincipalID: "ve-assistant",
+	})
+	if err != nil {
+		t.Fatalf("intercept: %v", err)
+	}
+	if resp.Allowed || resp.DenyReason == nil || resp.DenyReason.Code != string(contracts.ReasonPDPError) {
+		t.Fatalf("expected all-zero signing seed to fail closed as PDP_ERROR, got %+v", resp)
+	}
+}
+
 // Smoke 3: a bounded write that policy allows is ESCALATED for approval, then
 // ALLOWED once approval evidence is bound to the request.
 func TestGovernedBridgeEscalatesThenAllowsWrite(t *testing.T) {

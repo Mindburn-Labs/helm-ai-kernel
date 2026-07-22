@@ -31,9 +31,12 @@ helm-ai-kernel workstation verify-decision \
 ```
 
 The command succeeds only when both `integrity` and `trusted` are true. To
-verify a copied receipt, pass `--trusted-public-key-file <path>` for the
-expected Ed25519 public key; do not accept a public key bundled by the receipt
-itself as the trust decision.
+verify a copied receipt, pass `--trusted-public-key-file <path>` for one
+expected Ed25519 public key, or `--trusted-signers-file <path>` for a
+versioned caller-owned allowlist during signer rotation. Do not accept a public
+key bundled by the receipt itself as the trust decision. In production,
+verification requires one of those explicit sources; it does not fall back to
+local signer state.
 
 ## Inspect Runtime Receipts
 

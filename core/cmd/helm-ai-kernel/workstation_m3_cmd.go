@@ -78,12 +78,13 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("workstation verify-decision", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var receiptPath, dataDir, trustedPublicKeyFile string
+	var receiptPath, dataDir, trustedPublicKeyFile, trustedSignersFile string
 	var jsonOut bool
 	cmd.StringVar(&receiptPath, "receipt", "", "Workstation policy decision receipt JSON")
 	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
 	cmd.StringVar(&dataDir, "data-dir", defaultSetupDataDir(), "Directory for HELM local signing state")
 	cmd.StringVar(&trustedPublicKeyFile, "trusted-public-key-file", "", "Path to caller-owned Ed25519 public key file")
+	cmd.StringVar(&trustedSignersFile, "trusted-signers-file", "", "Path to caller-owned versioned trusted signer store JSON")
 	if err := cmd.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
@@ -107,14 +108,14 @@ func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) in
 		_, _ = fmt.Fprintf(stderr, "Error: decision receipt integrity check failed: %v\n", err)
 		return 1
 	}
-	trustedKey, trustAnchor, trustAnchorAvailable, err := resolveTrustedWorkstationPublicKey(dataDir, trustedPublicKeyFile)
+	trustedSigners, trustAnchor, trustAnchorAvailable, err := resolveTrustedWorkstationSigners(dataDir, trustedPublicKeyFile, trustedSignersFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: load trusted public key: %v\n", err)
 		return 1
 	}
 	signerTrusted := false
 	if trustAnchorAvailable {
-		signerTrusted, err = workstation.VerifyDecisionReceiptWithTrustedKey(receipt, trustedKey)
+		signerTrusted, err = workstation.VerifyDecisionReceiptWithTrustedSigners(receipt, trustedSigners)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: trusted decision receipt verification failed: %v\n", err)
 			return 1

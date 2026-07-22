@@ -62,6 +62,18 @@ func TestHookPreToolDeniesDestructiveBashAndWritesReceipt(t *testing.T) {
 		t.Fatalf("verify-decision output missing trusted integrity: %s", stdout.String())
 	}
 
+	trustedSignersFile := filepath.Join(tmp, "trusted-signers.json")
+	writeTrustedSignerStore(t, trustedSignersFile, trustedKey)
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{"helm-ai-kernel", "workstation", "verify-decision", "--receipt", receipts[0], "--trusted-signers-file", trustedSignersFile}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("trusted signer store verify-decision exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "integrity: true") || !strings.Contains(stdout.String(), "trusted:   true") {
+		t.Fatalf("trusted signer store output missing trust separation: %s", stdout.String())
+	}
+
 	wrongKeyFile := filepath.Join(tmp, "wrong-trusted.pub")
 	if err := os.WriteFile(wrongKeyFile, []byte(strings.Repeat("f", 64)+"\n"), 0o644); err != nil {
 		t.Fatal(err)

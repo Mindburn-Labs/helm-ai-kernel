@@ -189,8 +189,11 @@ func runServerWithOptions(opts serverOptions) error {
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
 	// Stamp trace_id/span_id/correlation_id from ctx onto every record
-	// (HELM-333); requires *Context slog variants at call sites.
-	logger := slog.New(tracing.NewSlogHandler(slog.Default().Handler()))
+	// (HELM-333); requires *Context slog variants at call sites. The wrapped
+	// handler must be an explicit sink handler: wrapping the stdlib bridge
+	// (slog.Default().Handler()) and re-SetDefault-ing creates a log→slog→log
+	// cycle that deadlocks the first log.Printf at boot.
+	logger := slog.New(tracing.NewSlogHandler(slog.NewTextHandler(os.Stderr, nil)))
 	slog.SetDefault(logger)
 	dataDir := opts.DataDir
 	if dataDir == "" {

@@ -1,3 +1,6 @@
+// quantum_posture: GeneratedSpec approval tests exercise classical Ed25519
+// grant and consumption signatures only; they do not establish hybrid or
+// post-quantum approval support.
 package generatedspecapproval
 
 import (

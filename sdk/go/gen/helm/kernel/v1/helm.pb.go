@@ -258,8 +258,12 @@ type DecisionRecord struct {
 	PolicyRef          string                 `protobuf:"bytes,10,opt,name=policy_ref,json=policyRef,proto3" json:"policy_ref,omitempty"`
 	PolicyDecisionHash string                 `protobuf:"bytes,11,opt,name=policy_decision_hash,json=policyDecisionHash,proto3" json:"policy_decision_hash,omitempty"`
 	InputContext       []byte                 `protobuf:"bytes,12,opt,name=input_context,json=inputContext,proto3" json:"input_context,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Product request identity (X-Helm-Correlation-ID) this decision was made
+	// for — the stable join key across lifecycle events, receipts, and
+	// evidence. Optional; outside the decision signature until HELM-303.
+	CorrelationId string `protobuf:"bytes,13,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DecisionRecord) Reset() {
@@ -374,6 +378,13 @@ func (x *DecisionRecord) GetInputContext() []byte {
 		return x.InputContext
 	}
 	return nil
+}
+
+func (x *DecisionRecord) GetCorrelationId() string {
+	if x != nil {
+		return x.CorrelationId
+	}
+	return ""
 }
 
 type AuthorizedExecutionIntent struct {
@@ -494,8 +505,11 @@ type Receipt struct {
 	PayloadHash    string                 `protobuf:"bytes,14,opt,name=payload_hash,json=payloadHash,proto3" json:"payload_hash,omitempty"`
 	ReasonCode     ReasonCode             `protobuf:"varint,15,opt,name=reason_code,json=reasonCode,proto3,enum=helm.kernel.v1.ReasonCode" json:"reason_code,omitempty"`
 	Metadata       map[string]string      `protobuf:"bytes,16,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Product request identity (X-Helm-Correlation-ID) this receipt belongs
+	// to. Optional; outside the receipt signature until HELM-303.
+	CorrelationId string `protobuf:"bytes,17,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Receipt) Reset() {
@@ -638,6 +652,13 @@ func (x *Receipt) GetMetadata() map[string]string {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *Receipt) GetCorrelationId() string {
+	if x != nil {
+		return x.CorrelationId
+	}
+	return ""
 }
 
 type PDPRequest struct {
@@ -1246,7 +1267,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"effectType\x12\x1b\n" +
 	"\teffect_id\x18\x02 \x01(\tR\beffectId\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x12\x1b\n" +
-	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\xf1\x03\n" +
+	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x98\x04\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1262,7 +1283,8 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"policy_ref\x18\n" +
 	" \x01(\tR\tpolicyRef\x120\n" +
 	"\x14policy_decision_hash\x18\v \x01(\tR\x12policyDecisionHash\x12#\n" +
-	"\rinput_context\x18\f \x01(\fR\finputContext\"\xca\x02\n" +
+	"\rinput_context\x18\f \x01(\fR\finputContext\x12%\n" +
+	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +
@@ -1273,7 +1295,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1c\n" +
 	"\tsignature\x18\x06 \x01(\tR\tsignature\x12\"\n" +
 	"\rsigner_key_id\x18\a \x01(\tR\vsignerKeyId\x12\x1c\n" +
-	"\tprincipal\x18\b \x01(\tR\tprincipal\"\xab\x05\n" +
+	"\tprincipal\x18\b \x01(\tR\tprincipal\"\xd2\x05\n" +
 	"\aReceipt\x12'\n" +
 	"\x0freceipt_version\x18\x01 \x01(\tR\x0ereceiptVersion\x12\x1d\n" +
 	"\n" +
@@ -1294,7 +1316,8 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\fpayload_hash\x18\x0e \x01(\tR\vpayloadHash\x12;\n" +
 	"\vreason_code\x18\x0f \x01(\x0e2\x1a.helm.kernel.v1.ReasonCodeR\n" +
 	"reasonCode\x12A\n" +
-	"\bmetadata\x18\x10 \x03(\v2%.helm.kernel.v1.Receipt.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x10 \x03(\v2%.helm.kernel.v1.Receipt.MetadataEntryR\bmetadata\x12%\n" +
+	"\x0ecorrelation_id\x18\x11 \x01(\tR\rcorrelationId\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb6\x01\n" +

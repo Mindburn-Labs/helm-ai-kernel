@@ -4,8 +4,14 @@ import "time"
 
 // Receipt represents a proof of effect execution, linked to a decision.
 type Receipt struct {
-	ReceiptID           string            `json:"receipt_id"`
-	DecisionID          string            `json:"decision_id"`
+	ReceiptID  string `json:"receipt_id"`
+	DecisionID string `json:"decision_id"`
+	// CorrelationID is the product request identity (X-Helm-Correlation-ID)
+	// this receipt belongs to — the stable join key across lifecycle events,
+	// decisions, and evidence (pilot business-telemetry contract §2).
+	// NOTE: not covered by the receipt signature until HELM-303 resolves the
+	// signing-scope decision; treat as a recorded claim, not signed evidence.
+	CorrelationID       string            `json:"correlation_id,omitempty"`
 	EffectID            string            `json:"effect_id"`
 	ExternalReferenceID string            `json:"external_reference_id"`
 	Status              string            `json:"status"`

@@ -9,6 +9,11 @@
 //	GET  /api/v1/health         — Health check
 //
 // This server backs Python, TypeScript, and Rust SDKs.
+//
+// quantum_posture: receipts minted here carry a SHA-256 digest in the
+// signature field (hash chaining, not a signature scheme); authentication is
+// delegated to an injected Authenticator. No public-key and no post-quantum
+// primitives live in this file.
 package api
 
 import (
@@ -25,6 +30,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 )
 
 // Server is the HELM Governance REST API server.
@@ -55,18 +61,19 @@ type authenticatedPrincipalContextKey struct{}
 
 // ReceiptDTO stored in-memory / external schema.
 type ReceiptDTO struct {
-	ReceiptID    string         `json:"receipt_id"`
-	DecisionID   string         `json:"decision_id"`
-	EffectID     string         `json:"effect_id"`
-	Status       string         `json:"status"`
-	Timestamp    string         `json:"timestamp"`
-	ExecutorID   string         `json:"executor_id,omitempty"`
-	Signature    string         `json:"signature"`
-	PrevHash     string         `json:"prev_hash"`
-	LamportClock uint64         `json:"lamport_clock"`
-	DecisionHash string         `json:"decision_hash"`
-	ArgsHash     string         `json:"args_hash,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
+	ReceiptID     string         `json:"receipt_id"`
+	DecisionID    string         `json:"decision_id"`
+	CorrelationID string         `json:"correlation_id,omitempty"`
+	EffectID      string         `json:"effect_id"`
+	Status        string         `json:"status"`
+	Timestamp     string         `json:"timestamp"`
+	ExecutorID    string         `json:"executor_id,omitempty"`
+	Signature     string         `json:"signature"`
+	PrevHash      string         `json:"prev_hash"`
+	LamportClock  uint64         `json:"lamport_clock"`
+	DecisionHash  string         `json:"decision_hash"`
+	ArgsHash      string         `json:"args_hash,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
@@ -80,18 +87,19 @@ func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
 		}
 	}
 	return &ReceiptDTO{
-		ReceiptID:    r.ReceiptID,
-		DecisionID:   r.DecisionID,
-		EffectID:     r.EffectID,
-		Status:       r.Status,
-		Timestamp:    r.Timestamp.Format(time.RFC3339),
-		ExecutorID:   r.ExecutorID,
-		Signature:    r.Signature,
-		PrevHash:     r.PrevHash,
-		LamportClock: r.LamportClock,
-		DecisionHash: decHash,
-		ArgsHash:     r.ArgsHash,
-		Metadata:     r.Metadata,
+		ReceiptID:     r.ReceiptID,
+		DecisionID:    r.DecisionID,
+		CorrelationID: r.CorrelationID,
+		EffectID:      r.EffectID,
+		Status:        r.Status,
+		Timestamp:     r.Timestamp.Format(time.RFC3339),
+		ExecutorID:    r.ExecutorID,
+		Signature:     r.Signature,
+		PrevHash:      r.PrevHash,
+		LamportClock:  r.LamportClock,
+		DecisionHash:  decHash,
+		ArgsHash:      r.ArgsHash,
+		Metadata:      r.Metadata,
 	}
 }
 
@@ -158,17 +166,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, ao := range s.allowedOrigins {
 			if ao == "*" || ao == origin {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
+				// The response varies by Origin; without Vary a shared cache
+				// could reuse it across origins.
+				w.Header().Add("Vary", "Origin")
 				break
 			}
 		}
 	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Helm-Correlation-ID")
+	w.Header().Set("Access-Control-Expose-Headers", "X-Helm-Correlation-ID")
+	// Adopt-or-mint the product request identity at this external edge
+	// (telemetry contract §2.2): a valid inbound X-Helm-Correlation-ID is
+	// adopted, anything else is replaced with a minted ID, and the ID used
+	// is always echoed on the response — including OPTIONS preflight.
+	corr, _ := tracing.AdoptOrMintFromHeaders(r.Header)
+	ctx := tracing.WithCorrelationID(r.Context(), corr)
+	tracing.InjectHTTPHeaders(ctx, w.Header())
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	s.mux.ServeHTTP(w, r)
+	s.mux.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // ListenAndServe starts the API server with production-grade timeouts.
@@ -254,17 +273,23 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 
 	sig := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s:%d", receiptID, status, prevHash, lamport)))
 
+	correlationID := ""
+	if corr, ok := tracing.GetCorrelationID(r.Context()); ok {
+		correlationID = string(corr)
+	}
+
 	receipt := &contracts.Receipt{
-		ReceiptID:    receiptID,
-		DecisionID:   decisionID,
-		EffectID:     req.Tool,
-		Status:       status,
-		Timestamp:    time.Now().UTC(),
-		ExecutorID:   req.AgentID,
-		Signature:    hex.EncodeToString(sig[:]),
-		PrevHash:     prevHash,
-		LamportClock: lamport,
-		ArgsHash:     "sha256:" + hex.EncodeToString(argsHash[:]),
+		ReceiptID:     receiptID,
+		DecisionID:    decisionID,
+		CorrelationID: correlationID,
+		EffectID:      req.Tool,
+		Status:        status,
+		Timestamp:     time.Now().UTC(),
+		ExecutorID:    req.AgentID,
+		Signature:     hex.EncodeToString(sig[:]),
+		PrevHash:      prevHash,
+		LamportClock:  lamport,
+		ArgsHash:      "sha256:" + hex.EncodeToString(argsHash[:]),
 		Metadata: map[string]any{
 			"decision_hash": decResp.DecisionHash,
 			"principal_id":  principal.ID,

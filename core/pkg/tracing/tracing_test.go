@@ -175,7 +175,9 @@ func TestInjectHTTPHeaders_NoopWhenMissing(t *testing.T) {
 }
 
 func TestExtractHTTPHeaders_ReadsHeader(t *testing.T) {
-	want := tracing.CorrelationID("my-test-id")
+	// Only a canonically valid UUID is accepted (telemetry contract §2.2);
+	// free-form values are rejected as if absent — see correlation_test.go.
+	want := tracing.CorrelationID("d2f1c3a4-5b6e-4f70-8a91-b2c3d4e5f601")
 	headers := http.Header{}
 	headers.Set("X-Helm-Correlation-ID", string(want))
 

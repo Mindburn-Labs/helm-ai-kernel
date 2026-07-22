@@ -9,6 +9,10 @@ type EvidencePack struct {
 	PackID        string    `json:"pack_id"`
 	FormatVersion string    `json:"format_version"`
 	CreatedAt     time.Time `json:"created_at"`
+	// CorrelationID is the product request identity (X-Helm-Correlation-ID)
+	// joining this pack to its decision, receipts, and lifecycle events
+	// (pilot business-telemetry contract §2). Unsigned until HELM-303.
+	CorrelationID string `json:"correlation_id,omitempty"`
 
 	// Identity
 	Identity EvidencePackIdentity `json:"identity"`

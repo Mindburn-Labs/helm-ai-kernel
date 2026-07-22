@@ -1,3 +1,7 @@
+// quantum_posture: the proxy signs governance receipts with the kernel's
+// classical Ed25519 signer when --sign is enabled and hashes payloads with
+// SHA-256; no post-quantum primitives are used in this file.
+
 package main
 
 import (
@@ -527,19 +531,21 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 			// helm correlation_id — also used as gen_ai.tool.call.id so OTel traces
 			// and helm-ai-kernel receipts cross-reference 1:1.
-			corr := tracing.NewCorrelationID()
+			// Adopt-or-mint (telemetry contract §2.2): a valid inbound
+			// X-Helm-Correlation-ID is honoured so a caller can thread one
+			// product identity through the whole request path; anything
+			// else is replaced with a freshly minted ID.
+			corr, _ := tracing.AdoptOrMintFromHeaders(req.Header)
 			ctx := tracing.WithCorrelationID(req.Context(), corr)
 			ctx = context.WithValue(ctx, ctxKeyCorrelationID, string(corr))
 			ctx = context.WithValue(ctx, ctxKeyRequestModel, requestModel)
 
 			// Inject W3C traceparent so the upstream provider's traces (if any)
-			// link back into our governance trace tree.
+			// link back into our governance trace tree. InjectHTTPHeaders also
+			// sets the advisory X-Helm-Correlation-ID for upstreams that echo it.
 			helmotel.InjectTraceparent(ctx, req.Header)
 			tracing.InjectHTTPHeaders(ctx, req.Header)
 			ctx = context.WithValue(ctx, ctxKeyTraceparent, req.Header.Get("traceparent"))
-
-			// Set advisory header so upstreams that look for it can echo the id.
-			req.Header.Set("X-Helm-Correlation-ID", string(corr))
 
 			*req = *req.WithContext(ctx)
 

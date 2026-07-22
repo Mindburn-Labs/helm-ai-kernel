@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -23,7 +24,10 @@ func withSpanRecorder(t *testing.T) *tracetest.SpanRecorder {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
 	prev := otel.GetTracerProvider()
 	otel.SetTracerProvider(tp)
-	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prev)
+		_ = tp.Shutdown(context.Background())
+	})
 	return sr
 }
 

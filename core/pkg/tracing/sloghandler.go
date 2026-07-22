@@ -16,8 +16,9 @@ type slogHandler struct {
 
 // NewSlogHandler wraps h so records logged with a context are stamped with
 // the identity fields present in that context: correlation_id (product
-// identity, telemetry contract §2.2) and trace_id/span_id (W3C trace
-// context) when a recording span is active. Install it as the root handler.
+// identity, telemetry contract §2.2) and trace_id/span_id whenever the
+// context carries a valid W3C span context — recording or not, so a
+// propagated remote trace still joins the logs. Install it as the root handler.
 // Caveat: under an open WithGroup the stamped fields land inside that group;
 // keep identity-bearing loggers ungrouped.
 func NewSlogHandler(h slog.Handler) slog.Handler {

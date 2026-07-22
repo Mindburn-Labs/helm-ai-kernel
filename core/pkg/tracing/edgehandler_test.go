@@ -1,6 +1,7 @@
 package tracing_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,7 +18,10 @@ func TestWrapEdgeHandlerContinuesInboundTraceparent(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
 	prev := otel.GetTracerProvider()
 	otel.SetTracerProvider(tp)
-	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prev)
+		_ = tp.Shutdown(context.Background())
+	})
 
 	var innerSpan oteltrace.SpanContext
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

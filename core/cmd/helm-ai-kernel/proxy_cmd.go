@@ -573,6 +573,13 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			}
 		},
 		ModifyResponse: func(resp *http.Response) error {
+			// The correlation ID is a client-visible join key for both regular
+			// responses and SSE streams, which return before receipt creation.
+			correlationID, _ := resp.Request.Context().Value(ctxKeyCorrelationID).(string)
+			if correlationID != "" {
+				resp.Header.Set("X-Helm-Correlation-ID", correlationID)
+			}
+
 			// Detect SSE streaming response
 			contentType := resp.Header.Get("Content-Type")
 			isSSE := strings.Contains(contentType, "text/event-stream")
@@ -604,7 +611,6 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 			// Pull per-request governance state stashed by Director.
 			reqCtx := resp.Request.Context()
-			correlationID, _ := reqCtx.Value(ctxKeyCorrelationID).(string)
 			requestModel, _ := reqCtx.Value(ctxKeyRequestModel).(string)
 			traceparent, _ := reqCtx.Value(ctxKeyTraceparent).(string)
 
@@ -813,9 +819,6 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			resp.Header.Set("X-Helm-Output-Hash", rcpt.OutputHash)
 			resp.Header.Set("X-Helm-Lamport-Clock", fmt.Sprintf("%d", rcpt.LamportClock))
 			resp.Header.Set("X-Helm-Status", rcpt.Status)
-			if correlationID != "" {
-				resp.Header.Set("X-Helm-Correlation-ID", correlationID)
-			}
 			if traceparent != "" {
 				resp.Header.Set("traceparent", traceparent)
 			}

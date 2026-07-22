@@ -307,6 +307,9 @@ func runLocalDenyTamperProof(t *testing.T) redactedDenyTamperProof {
 	assertReceiptHeaders(t, resp.Header, "DENIED")
 
 	receipt := readLatestProxyReceipt(t, proxy.receiptsDir)
+	if receipt.CorrelationID != resp.Header.Get("X-Helm-Correlation-ID") {
+		t.Fatalf("correlation id mismatch: receipt=%s header=%s", receipt.CorrelationID, resp.Header.Get("X-Helm-Correlation-ID"))
+	}
 	if receipt.Status != "DENIED" {
 		t.Fatalf("deny receipt status = %s", receipt.Status)
 	}
@@ -340,6 +343,52 @@ func runLocalDenyTamperProof(t *testing.T) redactedDenyTamperProof {
 		SignaturePayloadChanged:       originalSignaturePayload != tamperedSignaturePayload,
 		SignaturePresent:              receipt.Signature != "",
 		ReceiptHashChangedAfterTamper: originalHash != tamperedHash,
+	}
+}
+
+func TestLiveProxyEchoesMintedCorrelationIDForSSE(t *testing.T) {
+	var upstreamCorrelationID string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+			return
+		}
+		if r.URL.Path != "/v1/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		upstreamCorrelationID = r.Header.Get("X-Helm-Correlation-ID")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl-sse\"}\n\n"))
+	}))
+	defer upstream.Close()
+
+	proxy := startLiveProxy(t, upstream.URL+"/v1", "fixture-key", "live-proxy-sse-fixture")
+	req, err := http.NewRequest(http.MethodPost, proxy.baseURL+"/v1/chat/completions", strings.NewReader(`{"model":"helm-local-sse-fixture","stream":true}`))
+	if err != nil {
+		t.Fatalf("build SSE request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Helm-Correlation-ID", "not-a-canonical-uuid")
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatalf("post SSE fixture through proxy: %v", err)
+	}
+	defer resp.Body.Close()
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatalf("read SSE response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("SSE fixture status = %d", resp.StatusCode)
+	}
+	correlationID := resp.Header.Get("X-Helm-Correlation-ID")
+	if correlationID == "" || correlationID == "not-a-canonical-uuid" {
+		t.Fatalf("SSE response did not echo a minted correlation id: %q", correlationID)
+	}
+	if correlationID != upstreamCorrelationID {
+		t.Fatalf("SSE correlation id mismatch: response=%s upstream=%s", correlationID, upstreamCorrelationID)
 	}
 }
 

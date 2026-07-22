@@ -1,3 +1,6 @@
+// quantum_posture: GeneratedSpec approval grants and consumption records use
+// classical Ed25519 signatures and SHA-256 content binding in this contract;
+// no hybrid or post-quantum approval assurance is claimed.
 package generatedspecapproval
 
 import (

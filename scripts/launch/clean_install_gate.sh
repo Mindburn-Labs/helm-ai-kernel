@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO="${HELM_LAUNCHPAD_GITHUB_REPO:-Mindburn-Labs/helm-ai-kernel}"
 RELEASE_TAG="v0.7.5"
-ARTIFACT_RUN_ID="26198407296"
+ARTIFACT_RUN_ID="30031231555"
 HOST_KIND="developer_macos"
 OUTPUT="$ROOT/docs/launchpad/clean_install_report.json"
 TRANSCRIPT_DIR="${TMPDIR:-/tmp}/helm-launchpad-clean-install"

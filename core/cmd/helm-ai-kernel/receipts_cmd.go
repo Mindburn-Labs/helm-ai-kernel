@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 func runReceiptsCmd(args []string, stdout, stderr io.Writer) int {
@@ -22,7 +24,7 @@ func runReceiptsCmd(args []string, stdout, stderr io.Writer) int {
 	case "tail":
 		return runReceiptsTailCmd(args[1:], stdout, stderr)
 	default:
-		_, _ = fmt.Fprintf(stderr, "Unknown receipts command: %s\n", args[0])
+		_ = cliui.WriteError(stderr, cliui.UsageErrorf("receipts", "unknown command: %s", args[0]))
 		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel receipts tail --agent <id> [--server <url>] [--since <cursor>] [--json] [--limit <n>]")
 		return 2
 	}
@@ -43,19 +45,19 @@ func runReceiptsTailCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&agentID, "agent", "", "Agent id to tail")
 	cmd.StringVar(&server, "server", "", "HELM server URL")
 	cmd.StringVar(&since, "since", "", "Receipt cursor")
-	cmd.BoolVar(&jsonOut, "json", false, "Print receipt JSON")
+	cmd.BoolVar(&jsonOut, "json", false, "Print receipt JSON (alias for --format=json)")
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 	cmd.IntVar(&limit, "limit", 100, "Maximum receipts per poll")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
+	jsonOut = jsonOut || formatFlag.IsJSON()
 	if cmd.NArg() > 0 {
-		_, _ = fmt.Fprintf(stderr, "Error: unexpected argument: %s\n", cmd.Arg(0))
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("receipts tail", "unexpected argument: %s", cmd.Arg(0)))
 	}
 	if strings.TrimSpace(agentID) == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --agent is required")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("receipts tail", "--agent is required"))
 	}
 	if server == "" {
 		server = os.Getenv("HELM_URL")
@@ -66,27 +68,23 @@ func runReceiptsTailCmd(args []string, stdout, stderr io.Writer) int {
 
 	tailURL, err := buildReceiptsTailURL(server, agentID, since, limit)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: invalid server URL: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "receipts tail", "invalid server URL"))
 	}
 
 	client := &http.Client{Timeout: 0}
 	req, err := http.NewRequest(http.MethodGet, tailURL, nil)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: cannot create request: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "receipts tail", "cannot create request"))
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	resp, err := client.Do(req)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: receipt stream unavailable: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "receipts tail", "receipt stream unavailable"))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		_, _ = fmt.Fprintf(stderr, "Error: receipt stream returned %d: %s\n", resp.StatusCode, strings.TrimSpace(string(body)))
-		return 1
+		return cliui.WriteError(stderr, cliui.Failf("receipts tail", "receipt stream returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
 	}
 
 	return streamReceipts(resp.Body, stdout, stderr, jsonOut)
@@ -130,8 +128,7 @@ func streamReceipts(body io.Reader, stdout, stderr io.Writer, jsonOut bool) int 
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: receipt stream interrupted: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "receipts tail", "receipt stream interrupted"))
 	}
 	return 0
 }

@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: AAT record signatures are optional classical Ed25519
+// (operator-supplied seed); chain integrity is classical-only and no
+// post-quantum assurance is claimed for this export/verify path.
+
 import (
 	"bufio"
 	"bytes"
@@ -11,6 +15,7 @@ import (
 	"io"
 	"os"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/audit"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
@@ -53,44 +58,37 @@ func runExportAATCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if inPath == "" || agentID == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --in and --agent-id are required (or use --verify)")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("export aat", "--in and --agent-id are required (or use --verify)"))
 	}
 
 	data, err := os.ReadFile(inPath)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: cannot read %s: %v\n", inPath, err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat", "cannot read %s", inPath))
 	}
 	var entries []*store.AuditEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: %s is not a JSON array of audit entries: %v\n", inPath, err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat", "%s is not a JSON array of audit entries", inPath))
 	}
 
 	var signer audit.AATSigner
 	if signKeyHex != "" {
 		seed, err := hex.DecodeString(signKeyHex)
 		if err != nil || len(seed) != ed25519.SeedSize {
-			_, _ = fmt.Fprintf(stderr, "Error: --sign-key must be a %d-byte hex Ed25519 seed\n", ed25519.SeedSize)
-			return 2
+			return cliui.WriteError(stderr, cliui.UsageErrorf("export aat", "--sign-key must be a %d-byte hex Ed25519 seed", ed25519.SeedSize))
 		}
 		signer, err = audit.NewEd25519AATSigner(ed25519.NewKeyFromSeed(seed))
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat", ""))
 		}
 	}
 
 	records, err := audit.ConvertEntriesToAAT(entries, agentID, signer)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat", ""))
 	}
 	jsonl, err := audit.MarshalAATJSONL(records)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat", ""))
 	}
 
 	if outPath == "" {
@@ -98,8 +96,7 @@ func runExportAATCmd(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if err := os.WriteFile(outPath, jsonl, 0600); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: cannot write %s: %v\n", outPath, err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat", "cannot write %s", outPath))
 	}
 	_, _ = fmt.Fprintf(stdout, "Exported %d AAT records to %s\n", len(records), outPath)
 	return 0
@@ -108,8 +105,7 @@ func runExportAATCmd(args []string, stdout, stderr io.Writer) int {
 func verifyAATFile(path string, stdout, stderr io.Writer) int {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: cannot read %s: %v\n", path, err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat --verify", "cannot read %s", path))
 	}
 	var records []audit.AATRecord
 	scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -123,18 +119,15 @@ func verifyAATFile(path string, stdout, stderr io.Writer) int {
 		}
 		var record audit.AATRecord
 		if err := json.Unmarshal(raw, &record); err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error: line %d is not a valid AAT record: %v\n", line, err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat --verify", "line %d is not a valid AAT record", line))
 		}
 		records = append(records, record)
 	}
 	if err := scanner.Err(); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: reading %s: %v\n", path, err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat --verify", "reading %s", path))
 	}
 	if err := audit.VerifyAATChain(records); err != nil {
-		_, _ = fmt.Fprintf(stderr, "AAT verification FAILED: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "", "AAT verification FAILED"))
 	}
 	_, _ = fmt.Fprintf(stdout, "AAT chain OK: %d records verified\n", len(records))
 	return 0

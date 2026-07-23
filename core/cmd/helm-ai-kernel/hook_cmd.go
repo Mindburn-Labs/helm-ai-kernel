@@ -1,3 +1,7 @@
+// quantum_posture: hook decision receipts are signed with the classical
+// Ed25519 workstation seed resolved via workstation_signing.go; no
+// post-quantum or hybrid primitives are used in this file.
+
 package main
 
 import (

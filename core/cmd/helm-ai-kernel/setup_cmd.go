@@ -1,3 +1,8 @@
+// quantum_posture: setup provisions and propagates the path to the classical
+// Ed25519 workstation signing seed (resolution and key handling live in
+// workstation_signing.go); crypto/rand is used only for install identifiers.
+// No post-quantum or hybrid primitives are used in this file.
+
 package main
 
 import (

@@ -23,17 +23,17 @@ This guide publishes no hosted HELM API base URL.
 Pin the mode and base URL together. Do not move an example between ports without
 starting the corresponding runtime.
 
-## Verified v0.7.4 Coordinates
+## Verified v0.7.5 Coordinates
 
 Run a clean registry check before copying these into a managed client estate.
-The following four coordinates are declared for the v0.7.4 release:
+The following four coordinates are declared for the v0.7.5 release:
 
 Source version claims are tied to the repository `VERSION` (`0.7.5` for this release).
 The matching Go subdirectory tag is `sdk/go/v0.7.5`.
 
 ```bash
-npm install @mindburn/helm-ai-kernel@0.7.4
-python -m pip install helm-sdk==0.7.4
+npm install @mindburn/helm-ai-kernel@0.7.5
+python -m pip install helm-sdk==0.7.5
 go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.5
 ```
 
@@ -47,7 +47,7 @@ The matching Java coordinate is `io.github.mindburnlabs:helm-sdk:0.7.5`:
 </dependency>
 ```
 
-Rust source and a v0.7.4 crate artifact exist under `sdk/rust/`, but public
+Rust source and a v0.7.5 crate artifact exist under `sdk/rust/`, but public
 registry discovery was inconsistent at the last review. Recheck the target
 registry before publishing `cargo add` as a supported install path.
 

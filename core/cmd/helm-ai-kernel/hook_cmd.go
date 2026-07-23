@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
@@ -176,14 +177,18 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 	switch {
 	case strings.EqualFold(tool, "Bash"):
 		command := inputString(payload.ToolInput, "command", "cmd")
-		if isDestructiveShellCommand(command) {
+		// Structural (AST-based) pre-flight classification. The classifier is
+		// advisory input only: it decides whether the command reaches the
+		// existing signed decision path; the permit/receipt verdict is still
+		// produced by workstation.Decide, fail-closed as before.
+		if scan := shellscan.Classify(command); scan.Decide {
 			return hookClassification{
 				ShouldDecide: true,
 				Class:        "shell-operate",
 				Target:       command,
 				Action:       "shell_operate",
 				ToolID:       "shell",
-				Reason:       "shell operation",
+				Reason:       "shell operation: " + scan.Reason,
 			}
 		}
 	case strings.HasPrefix(tool, "mcp__"):
@@ -260,33 +265,6 @@ func inputString(input map[string]any, keys ...string) string {
 		}
 	}
 	return ""
-}
-
-func isDestructiveShellCommand(command string) bool {
-	c := strings.ToLower(strings.TrimSpace(command))
-	if c == "" {
-		return false
-	}
-	needles := []string{
-		"rm -rf ",
-		"rm -fr ",
-		"rm -r ",
-		"git reset --hard",
-		"git clean -fd",
-		"git clean -xdf",
-		"mkfs",
-		"dd if=",
-		"kubectl delete",
-		"docker rm -f",
-		"drop table",
-		"truncate table",
-	}
-	for _, needle := range needles {
-		if strings.Contains(c, needle) || strings.HasPrefix(c, strings.TrimSpace(needle)) {
-			return true
-		}
-	}
-	return false
 }
 
 func sensitiveApplyPatchTarget(command string) string {

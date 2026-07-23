@@ -297,6 +297,82 @@ func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 	}
 }
 
+func TestHookPreToolDeniesEvasiveBashViaASTClassifier(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	// None of these hit the legacy needle list; the AST classifier must
+	// route them through the signed decision path, which denies by default.
+	evasive := []string{
+		"rm -r -f /tmp/helm-evasion",               // split flags
+		"sudo rm -rf /var/lib/helm-evasion",        // privilege wrapper
+		`bash -c "rm -rf /tmp/helm-evasion"`,       // shell -c wrapper
+		"cat targets.txt | xargs rm -rf",           // pipe into xargs
+		"echo ok && rm -rf /tmp/helm-evasion",      // chaining
+		"find /tmp/helm-evasion -delete",           // find -delete
+		"echo cm0gLXJmIC8= | base64 -d | sh",       // decode into shell
+		"echo SECRET=x >> .env",                    // sensitive redirect
+		"rm --recursive --force /tmp/helm-evasion", // long flags
+		"/bin/./rm -rf /tmp/helm-evasion",          // path obfuscation
+	}
+	for _, command := range evasive {
+		t.Run(command, func(t *testing.T) {
+			payload, err := json.Marshal(map[string]any{
+				"tool_name":  "Bash",
+				"tool_input": map[string]any{"command": command},
+				"session_id": "evasion",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, bytes.NewReader(payload), &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+				t.Fatalf("evasive command %q not denied, output = %s", command, stdout.String())
+			}
+		})
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != len(evasive) {
+		t.Fatalf("receipts = %d, want %d (one signed receipt per denied evasion)", len(receipts), len(evasive))
+	}
+}
+
+func TestHookPreToolStillAllowsBenignBashAfterASTClassifier(t *testing.T) {
+	tmp := t.TempDir()
+	benign := []string{
+		"git status --short",
+		"go build ./... && go vet ./...",
+		"git log --oneline | head -5",
+		`echo "today is $(date +%F)"`,
+		"npm run build",
+		"kubectl get pods -n prod",
+	}
+	for _, command := range benign {
+		t.Run(command, func(t *testing.T) {
+			payload, err := json.Marshal(map[string]any{
+				"tool_name":  "Bash",
+				"tool_input": map[string]any{"command": command},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp}, bytes.NewReader(payload), &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("benign command %q emitted approval output: %s", command, stdout.String())
+			}
+		})
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 0 {
+		t.Fatalf("benign commands wrote receipts: %v", receipts)
+	}
+}
+
 func restoreHookClock(t *testing.T) {
 	t.Helper()
 	old := hookNow

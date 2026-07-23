@@ -28,22 +28,22 @@ starting the corresponding runtime.
 Run a clean registry check before copying these into a managed client estate.
 The following four coordinates are declared for the v0.7.4 release:
 
-Source version claims are tied to the repository `VERSION` (`0.7.4` for this release).
-The matching Go subdirectory tag is `sdk/go/v0.7.4`.
+Source version claims are tied to the repository `VERSION` (`0.7.5` for this release).
+The matching Go subdirectory tag is `sdk/go/v0.7.5`.
 
 ```bash
 npm install @mindburn/helm-ai-kernel@0.7.4
 python -m pip install helm-sdk==0.7.4
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.4
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.5
 ```
 
-The matching Java coordinate is `io.github.mindburnlabs:helm-sdk:0.7.4`:
+The matching Java coordinate is `io.github.mindburnlabs:helm-sdk:0.7.5`:
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.7.4</version>
+  <version>0.7.5</version>
 </dependency>
 ```
 

@@ -30,8 +30,8 @@ helm-ai-kernel workstation verify-decision \
 
 This proves the receipt was not altered (`integrity_valid`). Whether the signer
 is *trusted* is reported separately (`signer_trusted`) and requires a persisted
-public key you obtained out of band; receipts signed by pre-v0.7.3 derivable
-seeds always remain untrusted.
+public key you obtained out of band; receipts signed by the legacy derivable
+seed (retired in the security patch line) always remain untrusted.
 
 No cloud account. No model key. No Docker. No production credentials.
 

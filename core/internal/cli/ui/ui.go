@@ -1,0 +1,273 @@
+// Package ui defines the shared I/O discipline for the helm-ai-kernel CLI.
+//
+// Convention (see docs/guides/cli-io-convention.md):
+//
+//   - Data goes to stdout (Streams.Data) and ONLY data: anything a pipeline
+//     may consume (JSON, tables, ids) must be parseable when stderr is
+//     discarded.
+//   - Chrome goes to stderr (Streams.Chrome): usage text, progress,
+//     warnings, prompts, and errors.
+//   - Errors are structured *CliError values rendered by FormatError /
+//     WriteError: one clean line, an optional remediation hint, and never a
+//     stack trace for user-facing errors.
+//   - Exit codes: 0 success, 1 operational failure, 2 usage error.
+//     Unknown errors fail closed to 1; unknown --format values are rejected.
+//
+// The helpers are additive and opt-in per command; existing flags, output
+// text, and exit codes are preserved unless a command explicitly migrates.
+package ui
+
+import (
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+// Exit codes used across the CLI. These match the historical kernel
+// convention (2 = usage error, 1 = operational failure) and must not change.
+const (
+	ExitOK      = 0
+	ExitFailure = 1
+	ExitUsage   = 2
+)
+
+// maxExitCode bounds codes accepted from a CliError. Anything outside
+// 1..maxExitCode fails closed to ExitFailure so a programming mistake can
+// never masquerade as success or as a shell-reserved status.
+const maxExitCode = 125
+
+// Streams pairs the two output channels of a command.
+type Streams struct {
+	// Data receives machine-consumable output (stdout).
+	Data io.Writer
+	// Chrome receives human scaffolding: usage, progress, warnings, errors (stderr).
+	Chrome io.Writer
+}
+
+// NewStreams builds a Streams from explicit writers (used by tests and by the
+// Run(args, stdout, stderr) dispatcher).
+func NewStreams(data, chrome io.Writer) Streams {
+	return Streams{Data: data, Chrome: chrome}
+}
+
+// Std returns the process streams.
+func Std() Streams {
+	return Streams{Data: os.Stdout, Chrome: os.Stderr}
+}
+
+// Format is the unified output-format convention: text|json.
+type Format string
+
+const (
+	FormatText Format = "text"
+	FormatJSON Format = "json"
+)
+
+// IsJSON reports whether the format selects JSON output.
+func (f Format) IsJSON() bool { return f == FormatJSON }
+
+// ParseFormat validates an explicit format string. Unknown values are
+// rejected (fail closed); there is no silent fallback to text.
+func ParseFormat(s string) (Format, error) {
+	switch Format(strings.ToLower(strings.TrimSpace(s))) {
+	case FormatText:
+		return FormatText, nil
+	case FormatJSON:
+		return FormatJSON, nil
+	default:
+		return "", fmt.Errorf("invalid --format %q: expected text|json", s)
+	}
+}
+
+// FormatFlag is a flag.Value for --format text|json. The default is FormatText.
+type FormatFlag struct {
+	Value Format
+}
+
+// NewFormatFlag returns a FormatFlag with the given default. An empty or
+// invalid default fails closed to FormatText.
+func NewFormatFlag(def Format) *FormatFlag {
+	if def != FormatJSON {
+		def = FormatText
+	}
+	return &FormatFlag{Value: def}
+}
+
+// String implements flag.Value.
+func (f *FormatFlag) String() string {
+	if f == nil || f.Value == "" {
+		return string(FormatText)
+	}
+	return string(f.Value)
+}
+
+// IsJSON reports whether the flag currently selects JSON output.
+func (f *FormatFlag) IsJSON() bool { return f != nil && f.Value.IsJSON() }
+
+// Set implements flag.Value, rejecting unknown formats.
+func (f *FormatFlag) Set(s string) error {
+	v, err := ParseFormat(s)
+	if err != nil {
+		return err
+	}
+	f.Value = v
+	return nil
+}
+
+// RegisterFormat adds a unified --format text|json flag to fs and returns
+// its handle. Commands that already use --format for a different meaning
+// (e.g. receipt format ids) must NOT call this; keep their existing flag.
+func RegisterFormat(fs *flag.FlagSet, def Format) *FormatFlag {
+	ff := NewFormatFlag(def)
+	fs.Var(ff, "format", "Output format: text|json")
+	return ff
+}
+
+// CliError is the structured command error. It carries a clean message, an
+// optional remediation hint, an optional wrapped cause, and an exit code.
+// It never exposes stack noise for user-facing failures.
+type CliError struct {
+	// Code is the process exit code (ExitUsage or ExitFailure for constructors).
+	Code int
+	// Op names the failing operation (e.g. "receipts tail"). Optional.
+	Op string
+	// Msg is the clean user-facing message.
+	Msg string
+	// Hint is an optional remediation line ("Did you mean", exact fix command).
+	Hint string
+	// Err is the optional wrapped cause.
+	Err error
+}
+
+// UsageErrorf builds a *CliError with exit code 2 (usage error).
+func UsageErrorf(op, format string, args ...any) *CliError {
+	return &CliError{Code: ExitUsage, Op: op, Msg: fmt.Sprintf(format, args...)}
+}
+
+// Failf builds a *CliError with exit code 1 (operational failure).
+func Failf(op, format string, args ...any) *CliError {
+	return &CliError{Code: ExitFailure, Op: op, Msg: fmt.Sprintf(format, args...)}
+}
+
+// Wrapf builds a *CliError wrapping a cause. A nil cause yields nil so call
+// sites can use `return ui.WriteError(w, ui.Wrapf(err, ...))` unconditionally.
+func Wrapf(err error, code int, op, format string, args ...any) *CliError {
+	if err == nil {
+		return nil
+	}
+	return &CliError{Code: code, Op: op, Msg: fmt.Sprintf(format, args...), Err: err}
+}
+
+// WithHint attaches a remediation hint and returns the error for chaining.
+func (e *CliError) WithHint(hint string) *CliError {
+	e.Hint = hint
+	return e
+}
+
+// Error returns the single-line form: "op: msg: cause" (empty segments skipped).
+func (e *CliError) Error() string {
+	parts := make([]string, 0, 3)
+	if e.Op != "" {
+		parts = append(parts, e.Op)
+	}
+	if e.Msg != "" {
+		parts = append(parts, e.Msg)
+	}
+	if e.Err != nil {
+		parts = append(parts, e.Err.Error())
+	}
+	return strings.Join(parts, ": ")
+}
+
+// Unwrap exposes the wrapped cause for errors.Is/As.
+func (e *CliError) Unwrap() error { return e.Err }
+
+// ExitCode maps an error to a process exit code. nil → 0; *CliError → its
+// code (sanitized, fail closed); anything else → ExitFailure.
+func ExitCode(err error) int {
+	if err == nil {
+		return ExitOK
+	}
+	var ce *CliError
+	if errors.As(err, &ce) {
+		if ce.Code >= ExitFailure && ce.Code <= maxExitCode {
+			return ce.Code
+		}
+		return ExitFailure
+	}
+	return ExitFailure
+}
+
+// FormatError renders err as clean chrome text: an "Error: ..." line plus an
+// optional "  hint: ..." line. Plain (non-CliError) errors are rendered
+// without op/hint decoration. No stack traces, ever.
+func FormatError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Error: ")
+	b.WriteString(err.Error())
+	var ce *CliError
+	if errors.As(err, &ce) && ce.Hint != "" {
+		b.WriteString("\n  hint: ")
+		b.WriteString(ce.Hint)
+	}
+	return b.String()
+}
+
+// errorEnvelope is the structured JSON error form for --format=json consumers.
+type errorEnvelope struct {
+	Error errorBody `json:"error"`
+}
+
+type errorBody struct {
+	Op      string `json:"op,omitempty"`
+	Message string `json:"message"`
+	Hint    string `json:"hint,omitempty"`
+	Code    int    `json:"code"`
+}
+
+// FormatErrorJSON renders err as a stable JSON envelope for machine consumers.
+func FormatErrorJSON(err error) string {
+	body := errorBody{Message: err.Error(), Code: ExitCode(err)}
+	var ce *CliError
+	if errors.As(err, &ce) {
+		body.Op = ce.Op
+		body.Hint = ce.Hint
+		body.Message = ce.Msg
+		if ce.Err != nil {
+			body.Message = ce.Msg + ": " + ce.Err.Error()
+		}
+	}
+	data, err := json.Marshal(errorEnvelope{Error: body})
+	if err != nil {
+		// Fail closed: envelope fields are plain strings, so this is unreachable
+		// in practice; degrade to an inline literal rather than dropping the error.
+		return `{"error":{"message":"error encoding failure","code":1}}`
+	}
+	return string(data)
+}
+
+// WriteError writes FormatError(err) plus a trailing newline to chrome and
+// returns the exit code for err, so handlers can `return ui.WriteError(...)`.
+// A nil err writes nothing and returns ExitOK.
+func WriteError(chrome io.Writer, err error) int {
+	if err == nil {
+		return ExitOK
+	}
+	_, _ = fmt.Fprintln(chrome, FormatError(err))
+	return ExitCode(err)
+}
+
+// WriteJSON encodes v as indented JSON to the data stream. It is the
+// standard way to emit --format=json payloads.
+func WriteJSON(data io.Writer, v any) error {
+	enc := json.NewEncoder(data)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}

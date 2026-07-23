@@ -728,6 +728,29 @@ func upsertHookConfig(path, matcher, command, allowedRoot string) error {
 	hooks := objectValue(root, "hooks")
 	pre := arrayValue(hooks, "PreToolUse")
 	if hookCommandPresent(pre, command) {
+		// Same hook identity: rewrite the stored command in place so a
+		// re-install with a new --signing-seed-file updates the config
+		// instead of silently keeping the old seed path.
+		key := hookCommandKey(command)
+		for _, item := range pre {
+			obj, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			hookItems, ok := obj["hooks"].([]any)
+			if !ok {
+				continue
+			}
+			for _, h := range hookItems {
+				hookObj, ok := h.(map[string]any)
+				if !ok {
+					continue
+				}
+				if hookCommandKey(hookCommandFromAny(h)) == key {
+					hookObj["command"] = command
+				}
+			}
+		}
 		return writeJSONObject(path, root, allowedRoot)
 	}
 	entry := map[string]any{
@@ -833,8 +856,11 @@ func arrayValue(root map[string]any, key string) []any {
 }
 
 // signingSeedFileArgPattern matches the optional --signing-seed-file segment
-// of an installed hook command, with its shell-quoted or bare argument.
-var signingSeedFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\S+)`)
+// of an installed hook command, with its shell-quoted or bare argument. The
+// argument alternation mirrors shellQuote output: a sequence of
+// single-quoted chunks, escaped quotes (the '\” idiom), and bare
+// non-space characters.
+var signingSeedFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
 
 // hookCommandKey reduces an installed hook command to its identity: the
 // signing-seed-file argument is a deployment detail, so `setup status` and

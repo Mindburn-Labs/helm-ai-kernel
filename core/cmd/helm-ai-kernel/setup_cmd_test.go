@@ -1436,3 +1436,40 @@ func TestHookCommandKeyIgnoresSigningSeedFileArgument(t *testing.T) {
 		t.Fatal("hook installed with seed-file flag not matched by flagless lookup")
 	}
 }
+
+func TestHookCommandKeyHandlesEscapedQuotesInSeedPath(t *testing.T) {
+	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
+	trickyPath := "/tmp/o'brien/seed.hex"
+	withSeed := base + " --signing-seed-file " + shellQuote(trickyPath)
+
+	if got := hookCommandKey(withSeed); got != base {
+		t.Fatalf("escaped-quote seed path not fully stripped:\n got %q\nwant %q", got, base)
+	}
+}
+
+func TestUpsertHookConfigUpdatesSeedFileOnReinstall(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "settings.json")
+	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
+	oldCmd := base + " --signing-seed-file '/keys/old.hex'"
+	newCmd := base + " --signing-seed-file '/keys/new.hex'"
+
+	if err := upsertHookConfig(path, "*", oldCmd, tmp); err != nil {
+		t.Fatalf("initial install: %v", err)
+	}
+	if err := upsertHookConfig(path, "*", newCmd, tmp); err != nil {
+		t.Fatalf("reinstall with rotated seed: %v", err)
+	}
+
+	root, err := readJSONObject(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(root)
+	if !strings.Contains(string(raw), "/keys/new.hex") {
+		t.Fatalf("reinstall did not update stored seed path: %s", raw)
+	}
+	if strings.Contains(string(raw), "/keys/old.hex") {
+		t.Fatalf("stale seed path survived reinstall: %s", raw)
+	}
+}

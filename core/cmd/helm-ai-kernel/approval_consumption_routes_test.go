@@ -248,15 +248,18 @@ func TestEffectReconciliationCandidatesRouteUsesVerifiedScopeAndNoEffectAuthorit
 	wantIdentity := approvalceremony.ConsumerIdentity{
 		Subject: "spiffe://helm/data-plane-a", TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "helm-data-plane",
 	}
+	raw := append([]byte(nil), response.Body.Bytes()...)
+	if strings.Contains(string(raw), "admission_json") {
+		t.Fatalf("reconciliation candidate response leaked generic admission storage: %s", raw)
+	}
 	var projection contracts.EffectReconciliationCandidates
-	if err := json.NewDecoder(response.Body).Decode(&projection); err != nil {
+	if err := json.Unmarshal(raw, &projection); err != nil {
 		t.Fatal(err)
 	}
 	if recorder.identity != wantIdentity || projection.Validate() != nil ||
 		projection.ExecutionAuthority != contracts.EffectDispositionExecutionAuthorityNone ||
 		response.Header().Get("Cache-Control") != "no-store" ||
-		response.Header().Get("X-Helm-Contract-Status") != "internal_non_production" ||
-		strings.Contains(response.Body.String(), "admission_json") {
+		response.Header().Get("X-Helm-Contract-Status") != "internal_non_production" {
 		t.Fatalf("identity=%+v projection=%+v headers=%v", recorder.identity, projection, response.Header())
 	}
 

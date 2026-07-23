@@ -430,6 +430,42 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		!activeIDs[admittedOnly.Admission.AdmissionID] {
 		t.Fatalf("ListActive() = %+v, %v", active, err)
 	}
+	// A second workload shares this tenant/workspace, so the FENCE-bound
+	// reconciliation listing must filter before exact identity verification.
+	otherConsumer := consumer
+	otherConsumer.Subject = "spiffe://helm/data-plane-b"
+	otherAdmitter, err := NewEffectReservationAdmitter(
+		runtimeStore,
+		staticConsumerProvider{identity: otherConsumer},
+		releaseRuntime,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherDispositions, err := NewEffectDispositionService(
+		runtimeStore,
+		staticConsumerProvider{identity: otherConsumer},
+		releaseRuntime,
+		dispositionVerifier,
+		approvalSigner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := effectReservationAdmissionFixture(t, approvalSigner, release, otherConsumer, "attempt-other-subject", now)
+	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, other)
+	if admitted, err := otherAdmitter.Admit(ctx, other); err != nil || admitted.State != EffectReservationStateAdmitted {
+		t.Fatalf("other subject Admit() = %+v, %v", admitted, err)
+	}
+	otherStartedMeta := EffectTransitionMeta{ConnectorExecutionRef: "github-request-other-subject", IntentRef: "intent-other-subject"}
+	if started, err := otherAdmitter.MarkStarted(ctx, other.Admission.AdmissionID, otherStartedMeta); err != nil || started.State != EffectReservationStateStarted {
+		t.Fatalf("other subject MarkStarted() = %+v, %v", started, err)
+	}
+	if uncertain, err := otherAdmitter.MarkUncertain(ctx, other.Admission.AdmissionID, EffectTransitionMeta{
+		ReasonCode: "CONNECTOR_ACK_MISSING", EffectRef: "effect-other-subject",
+	}); err != nil || uncertain.State != EffectReservationStateUncertain {
+		t.Fatalf("other subject MarkUncertain() = %+v, %v", uncertain, err)
+	}
 
 	third := effectReservationAdmissionFixture(t, approvalSigner, release, consumer, "attempt-c", now)
 	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, third)
@@ -542,6 +578,16 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		preRotationCandidates.Fence.ReceiptHash != fenceState.ReceiptHash ||
 		len(preRotationCandidates.Candidates) != 2 {
 		t.Fatalf("pre-rotation candidates = %+v", preRotationCandidates)
+	}
+	for _, candidate := range preRotationCandidates.Candidates {
+		if candidate.AdmissionID == other.Admission.AdmissionID {
+			t.Fatalf("foreign workload candidate leaked into caller projection: %+v", candidate)
+		}
+	}
+	otherCandidates, err := otherDispositions.ListReconciliationCandidates(ctx)
+	if err != nil || len(otherCandidates.Candidates) != 1 ||
+		otherCandidates.Candidates[0].AdmissionID != other.Admission.AdmissionID {
+		t.Fatalf("other workload reconciliation candidates = %+v, %v", otherCandidates, err)
 	}
 	firstCandidate := reconciliationCandidateForAdmission(t, preRotationCandidates, first.Admission.AdmissionID)
 	startClaimCandidate := reconciliationCandidateForAdmission(t, preRotationCandidates, startClaim.Admission.AdmissionID)

@@ -132,11 +132,14 @@ func queryCurrentEffectReconciliationReservations(
 		SELECT DISTINCT ON (admission_id) `+effectReservationColumns+`
 		FROM approval_effect_reservation_events
 		WHERE tenant_id = $1 AND workspace_id = $2
+			AND consumer_subject = $3 AND audience = $4
 		ORDER BY admission_id, sequence DESC
 	)
 	SELECT `+effectReservationColumns+` FROM current_events
 	WHERE state IN ('STARTED', 'UNCERTAIN')
-	ORDER BY occurred_at, admission_id`, identity.TenantID, identity.WorkspaceID)
+	ORDER BY occurred_at, admission_id`,
+		identity.TenantID, identity.WorkspaceID, identity.Subject, identity.Audience,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("list effect reconciliation candidates: %w", err)
 	}

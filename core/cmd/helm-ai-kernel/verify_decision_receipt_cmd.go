@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: decision-receipt verification uses classical Ed25519
+// bundle signatures; external receipts cap at
+// crypto_compatible_non_conformant and no post-quantum assurance is claimed.
+
 import (
 	"encoding/json"
 	"flag"
@@ -8,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/decisionreceipt"
 )
@@ -39,27 +44,23 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 		file = cmd.Arg(0)
 	}
 	if file == "" {
-		fmt.Fprintln(stderr, "Error: provide a receipt file (positional argument or --file)")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("verify decision-receipt", "provide a receipt file (positional argument or --file)"))
 	}
 	raw, err := os.ReadFile(file)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: read %s: %v\n", file, err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", "read %s", file))
 	}
 
 	report, err := decisionreceipt.Default().VerifyBundle(raw, format, publicKey)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", ""))
 	}
 
 	if jsonOutput {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(report); err != nil {
-			fmt.Fprintf(stderr, "Error: encode report: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", "encode report"))
 		}
 	} else {
 		status := "NOT VERIFIED"

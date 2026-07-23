@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
@@ -37,11 +38,13 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&egressRisk, "egress", false, "Include egress risk flag")
 	cmd.BoolVar(&identityRisk, "identity", false, "Include identity risk flag")
 	cmd.BoolVar(&listAll, "list", false, "List all effect types in catalog")
-	cmd.BoolVar(&jsonOutput, "json", false, "Output as JSON")
+	cmd.BoolVar(&jsonOutput, "json", false, "Output as JSON (alias for --format=json)")
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
+	jsonOutput = jsonOutput || formatFlag.IsJSON()
 
 	// List mode
 	if listAll {
@@ -63,7 +66,7 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if effect == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --effect or --list is required")
+		_ = cliui.WriteError(stderr, cliui.UsageErrorf("risk-summary", "--effect or --list is required"))
 		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel risk-summary --effect INFRA_DESTROY [--frozen] [--json]")
 		_, _ = fmt.Fprintln(stderr, "       helm-ai-kernel risk-summary --list [--json]")
 		return 2

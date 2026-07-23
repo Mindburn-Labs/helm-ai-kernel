@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effectgraph"
@@ -48,7 +49,7 @@ func runPlanCmd(args []string, stdout, stderr io.Writer) int {
 	case "transactions":
 		return runPlanTransactions(args[1:], stdout, stderr)
 	default:
-		_, _ = fmt.Fprintf(stderr, "Unknown plan subcommand: %s\n", args[0])
+		_ = cliui.WriteError(stderr, cliui.UsageErrorf("plan", "unknown subcommand: %s", args[0]))
 		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan <compile|evaluate|transactions> [options]")
 		return 2
 	}
@@ -87,22 +88,20 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 		// Read from file.
 		data, err := os.ReadFile(inputFile)
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error reading input file: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "plan compile", "reading input file"))
 		}
 		var input struct {
 			Steps []string `json:"steps"`
 		}
 		if err := json.Unmarshal(data, &input); err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error parsing input JSON: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "plan compile", "parsing input JSON"))
 		}
 		steps = input.Steps
 	} else if cmd.NArg() > 0 {
 		// Inline steps from remaining args.
 		steps = cmd.Args()
 	} else {
-		_, _ = fmt.Fprintln(stderr, "Error: provide --input <file> or inline step descriptions")
+		_ = cliui.WriteError(stderr, cliui.UsageErrorf("plan compile", "provide --input <file> or inline step descriptions"))
 		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan compile [--input file.json | step1 step2 ...]")
 		return 2
 	}
@@ -113,8 +112,7 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 		PlanName: planName,
 	})
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Compilation failed: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "compilation failed"))
 	}
 
 	// Print warnings.
@@ -125,14 +123,12 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	// Output plan.
 	data, err := json.MarshalIndent(result.Plan, "", "  ")
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error marshaling plan: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "marshaling plan"))
 	}
 
 	if outputFile != "" {
 		if err := os.WriteFile(outputFile, data, 0644); err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error writing output: %v\n", err)
-			return 1
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "writing output"))
 		}
 		_, _ = fmt.Fprintf(stderr, "Plan written to %s (%d steps, %d edges)\n",
 			outputFile, len(result.Plan.DAG.Nodes), len(result.Plan.DAG.Edges))
@@ -169,29 +165,24 @@ func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if planFile == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --plan is required")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("plan evaluate", "--plan is required"))
 	}
 	if !dryRun && policyFile == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --policy is required unless --dry-run is set")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("plan evaluate", "--policy is required unless --dry-run is set"))
 	}
 	if dryRun && policyFile != "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --policy and --dry-run are mutually exclusive")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("plan evaluate", "--policy and --dry-run are mutually exclusive"))
 	}
 
 	// Read plan.
 	data, err := os.ReadFile(planFile)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error reading plan file: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "plan evaluate", "reading plan file"))
 	}
 
 	var plan contracts.PlanSpec
 	if err := json.Unmarshal(data, &plan); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error parsing plan JSON: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "plan evaluate", "parsing plan JSON"))
 	}
 
 	var policy effectgraph.PolicyEvaluator
@@ -200,13 +191,11 @@ func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 	} else {
 		rules, loadErr := loadPlanPolicy(policyFile, &plan)
 		if loadErr != nil {
-			_, _ = fmt.Fprintf(stderr, "Error loading policy: %v\n", loadErr)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(loadErr, cliui.ExitUsage, "plan evaluate", "loading policy"))
 		}
 		signer, signerErr := helmcrypto.NewEd25519Signer("plan-evaluate")
 		if signerErr != nil {
-			_, _ = fmt.Fprintf(stderr, "Error creating Guardian signer: %v\n", signerErr)
-			return 1
+			return cliui.WriteError(stderr, cliui.Wrapf(signerErr, cliui.ExitFailure, "plan evaluate", "creating Guardian signer"))
 		}
 		guard := guardian.NewGuardian(signer, rules, nil)
 		policy = effectgraph.NewGuardianAdapter(guard)
@@ -218,8 +207,7 @@ func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 		Actor: actor,
 	})
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Evaluation failed: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan evaluate", "evaluation failed"))
 	}
 
 	// Summary to stderr.
@@ -231,14 +219,12 @@ func runPlanEvaluate(args []string, stdout, stderr io.Writer) int {
 	// Full result to stdout/file.
 	outData, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error marshaling result: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan evaluate", "marshaling result"))
 	}
 
 	if outputFile != "" {
 		if err := os.WriteFile(outputFile, outData, 0644); err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error writing output: %v\n", err)
-			return 1
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan evaluate", "writing output"))
 		}
 	} else {
 		_, _ = fmt.Fprintln(stdout, string(outData))

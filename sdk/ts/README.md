@@ -86,4 +86,4 @@ and sandbox grants attached to HELM-native receipts and EvidencePacks.
 
 ## Release Notes
 
-`0.7.5` adds the Boundary Enforcement Profile to the kernel and retains the OpenAPI client surface and protobuf message bindings.
+`0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the OpenAPI client surface and protobuf message bindings.

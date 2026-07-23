@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/actioninbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
@@ -115,10 +116,19 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	if !classification.ShouldDecide {
 		return 0
 	}
+	if tripped, runLength := recordHookDoomLoop(opts, payload, classification, stderr); tripped {
+		return emitHookDenyOrFail(stdout, stderr, doomLoopSteeringText(classification, runLength))
+	}
 	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: local receipt signer is unavailable")
+		return emitHookDenyOrFail(stdout, stderr, failClosedSteeringText(
+			"HELM denied operation: local receipt signer is unavailable",
+			actioninbox.ReasonSignerUnavailable,
+			"HELM cannot sign a local decision receipt, so the operation fails closed.",
+			"Do not retry until the signer is fixed. Run `helm-ai-kernel doctor` or `helm-ai-kernel setup`, or pass --signing-seed-file.",
+			"Escalate to the human operator; signer repair is an operator action, not an agent action.",
+		))
 	}
 	if receipt.Verdict != contracts.WorkstationVerdictDeny {
 		return 0
@@ -126,9 +136,45 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
-		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: receipt persistence is unavailable")
+		return emitHookDenyOrFail(stdout, stderr, failClosedSteeringText(
+			"HELM denied operation: receipt persistence is unavailable",
+			actioninbox.ReasonReceiptPersistence,
+			"HELM cannot persist the signed decision receipt, so the operation fails closed.",
+			"Do not retry until receipt storage is fixed; check the data directory is writable.",
+			"Escalate to the human operator; storage repair is an operator action, not an agent action.",
+		))
 	}
-	return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s)", classification.Reason, receipt.ReasonCode, receiptPath))
+	feedback := actioninbox.DenyFeedbackFor(receipt.ReasonCode, receipt.CreatedAt)
+	return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s) %s",
+		classification.Reason, receipt.ReasonCode, receiptPath, actioninbox.RenderSteeringText(feedback)))
+}
+
+// failClosedSteeringText keeps the operator-facing prefix intact (tests and
+// runbooks grep for it) and appends model-actionable steering guidance.
+func failClosedSteeringText(prefix, code, explanation, remediation, escalation string) string {
+	return prefix + " " + actioninbox.RenderSteeringText(actioninbox.DenialRecord{
+		SchemaVersion: actioninbox.DenyFeedbackSchemaVersion,
+		ReasonCode:    code,
+		Explanation:   explanation,
+		Remediation:   remediation,
+		Escalation:    escalation,
+		DecidedAt:     hookNow(),
+	})
+}
+
+// doomLoopSteeringText renders the circuit-breaker denial. The breaker only
+// ever adds denials on top of the policy decision path; it never authorizes.
+func doomLoopSteeringText(classification hookClassification, runLength int) string {
+	d := actioninbox.DenialRecord{
+		SchemaVersion: actioninbox.DenyFeedbackSchemaVersion,
+		ReasonCode:    actioninbox.ReasonDoomLoopDetected,
+		Explanation: fmt.Sprintf("The identical call (%s via %s) has been attempted %d consecutive times in this session without progress; the doom-loop circuit breaker forced an escalation.",
+			classification.Action, classification.ToolID, runLength),
+		Remediation: "Stop retrying the identical call. Change the approach, gather the missing information, or abandon the attempt.",
+		Escalation:  "Ask the human operator to review the repeated attempts and either take over or reset the circuit breaker by changing the approach.",
+		DecidedAt:   hookNow(),
+	}
+	return "HELM denied " + classification.Reason + ": " + actioninbox.RenderSteeringText(d)
 }
 
 func emitHookDenyOrFail(stdout, stderr io.Writer, reason string) int {
@@ -150,6 +196,110 @@ func writeHookDeny(stdout io.Writer, reason string) error {
 
 func printHookUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--signing-seed-file PATH]")
+}
+
+// hookDoomLoopFile is the on-disk circuit-breaker state for the pre-tool
+// hook. The hook process is stateless between invocations, so the identical-
+// call run is persisted per session under the HELM data dir. The state is
+// advisory evidence for the breaker only; losing it never weakens the base
+// policy decision path, which remains fail-closed on its own.
+type hookDoomLoopFile struct {
+	Sessions map[string]*hookDoomLoopSession `json:"sessions"`
+}
+
+type hookDoomLoopSession struct {
+	LastSignature string     `json:"last_signature"`
+	RunLength     int        `json:"run_length"`
+	Tripped       bool       `json:"tripped"`
+	TripCount     int        `json:"trip_count,omitempty"`
+	LastTrippedAt *time.Time `json:"last_tripped_at,omitempty"`
+}
+
+// recordHookDoomLoop counts consecutive identical classified calls for the
+// session and reports whether the circuit breaker has tripped. Identical
+// means the same normalized tool/action/target signature. The hook observes
+// attempts, not settled results, which is strictly more conservative than
+// the settled-call semantics of the control-plane breaker.
+func recordHookDoomLoop(opts hookOptions, payload preToolPayload, classification hookClassification, stderr io.Writer) (bool, int) {
+	if strings.TrimSpace(opts.DataDir) == "" {
+		// No local state dir (e.g. HOME-less environment): the breaker is
+		// disabled rather than writing state into the caller's CWD.
+		return false, 0
+	}
+	signature := actioninbox.SignatureFor(classification.ToolID, classification.Action, classification.Target)
+	sessionID := strings.TrimSpace(payload.SessionID)
+	if sessionID == "" {
+		sessionID = "_default"
+	}
+	path := filepath.Join(opts.DataDir, "state", "hook-doomloop.json")
+	state := loadHookDoomLoopState(path, stderr)
+	sess, ok := state.Sessions[sessionID]
+	if !ok {
+		sess = &hookDoomLoopSession{}
+		state.Sessions[sessionID] = sess
+	}
+	if sess.LastSignature == signature {
+		sess.RunLength++
+	} else {
+		sess.LastSignature = signature
+		sess.RunLength = 1
+	}
+	if sess.RunLength >= actioninbox.DefaultDoomLoopThreshold && !sess.Tripped {
+		sess.Tripped = true
+		sess.TripCount++
+		now := hookNow()
+		sess.LastTrippedAt = &now
+	}
+	if err := saveHookDoomLoopState(path, state); err != nil {
+		// Best-effort persistence: the base policy decision path is
+		// unaffected and remains fail-closed; log and continue.
+		fmt.Fprintf(stderr, "hook pre-tool: persist doom-loop state: %v\n", err)
+	}
+	return sess.Tripped, sess.RunLength
+}
+
+func loadHookDoomLoopState(path string, stderr io.Writer) *hookDoomLoopFile {
+	state := &hookDoomLoopFile{Sessions: map[string]*hookDoomLoopSession{}}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return state
+	}
+	if err := json.Unmarshal(raw, state); err != nil || state.Sessions == nil {
+		fmt.Fprintf(stderr, "hook pre-tool: doom-loop state unreadable, starting fresh: %v\n", err)
+		return &hookDoomLoopFile{Sessions: map[string]*hookDoomLoopSession{}}
+	}
+	return state
+}
+
+func saveHookDoomLoopState(path string, state *hookDoomLoopFile) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".hook-doomloop-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(raw); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {

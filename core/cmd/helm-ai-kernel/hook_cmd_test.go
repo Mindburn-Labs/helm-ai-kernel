@@ -297,6 +297,119 @@ func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 	}
 }
 
+func TestHookPreToolDenyIncludesModelActionableFeedback(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-feedback","cwd":"/repo"}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	var out hookDecisionOutput
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("hook output JSON: %v\n%s", err, stdout.String())
+	}
+	reason := out.HookSpecificOutput.PermissionDecisionReason
+	for _, want := range []string{
+		"[INBOX_KERNEL_POLICY_DENY]",
+		"kernel=OPERATE_PERMISSIONS_EMPTY",
+		"Remediation:",
+		"Escalation:",
+		"Do not retry",
+	} {
+		if !strings.Contains(reason, want) {
+			t.Fatalf("deny reason missing %q:\n%s", want, reason)
+		}
+	}
+}
+
+func TestHookPreToolFailClosedDenyIncludesSteeringCode(t *testing.T) {
+	tmp := t.TempDir()
+	keyDir := filepath.Join(tmp, workstationSigningKeyDirectory)
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(workstationSigningSeedPath(tmp), []byte(strings.Repeat("0", 64)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"},"session_id":"s-signer"}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "signer is unavailable") {
+		t.Fatalf("operator-facing prefix lost: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "[INBOX_SIGNER_UNAVAILABLE]") || !strings.Contains(stdout.String(), "Remediation:") {
+		t.Fatalf("fail-closed deny missing steering feedback: %s", stdout.String())
+	}
+}
+
+func TestHookPreToolDoomLoopBreakerTripsOnIdenticalAttempts(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-loop","cwd":"/repo"}`
+
+	// First two identical attempts: ordinary policy deny with kernel code.
+	for i := 1; i <= 2; i++ {
+		var stdout, stderr bytes.Buffer
+		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("attempt %d exit = %d stderr = %s", i, code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "OPERATE_PERMISSIONS_EMPTY") {
+			t.Fatalf("attempt %d should be a policy deny, got %s", i, stdout.String())
+		}
+		if strings.Contains(stdout.String(), "INBOX_DOOM_LOOP_DETECTED") {
+			t.Fatalf("attempt %d must not trip the breaker yet: %s", i, stdout.String())
+		}
+	}
+
+	// Third identical attempt: circuit breaker forces escalation.
+	preTripReceipts := len(globReceipts(t, tmp))
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("tripped exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "INBOX_DOOM_LOOP_DETECTED") {
+		t.Fatalf("third identical attempt must trip the breaker: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Stop retrying the identical call") {
+		t.Fatalf("doom-loop deny missing steering remediation: %s", stdout.String())
+	}
+
+	// The breaker short-circuits before policy evaluation, so the tripped
+	// attempt must not produce a new decision receipt.
+	if receipts := globReceipts(t, tmp); len(receipts) != preTripReceipts {
+		t.Fatalf("tripped attempt wrote receipts: before=%d after=%v", preTripReceipts, receipts)
+	}
+
+	// Breaker state is persisted per session under the data dir.
+	statePath := filepath.Join(tmp, "state", "hook-doomloop.json")
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read doom-loop state: %v", err)
+	}
+	if !strings.Contains(string(raw), `"tripped":true`) || !strings.Contains(string(raw), "s-loop") {
+		t.Fatalf("doom-loop state missing trip record: %s", raw)
+	}
+
+	// A different session is unaffected by the tripped session.
+	other := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-other","cwd":"/repo"}`
+	stdout.Reset()
+	stderr.Reset()
+	code = runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(other), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("other session exit = %d stderr = %s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "INBOX_DOOM_LOOP_DETECTED") {
+		t.Fatalf("breaker leaked across sessions: %s", stdout.String())
+	}
+}
+
 func restoreHookClock(t *testing.T) {
 	t.Helper()
 	old := hookNow

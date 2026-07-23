@@ -138,11 +138,14 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	// as the edge tracing and the console (unset = no exporter). Without this
 	// gate the default localhost:4317 exporter dials a collector that doesn't
 	// exist and logs an export failure every 15s.
-	if endpoint := otlpEndpointFromEnv(); endpoint == "" {
+	if endpoint, insecure := otlpEndpointFromEnv(); endpoint == "" {
 		logger.Info("Observability init skipped (no OTLP endpoint configured)")
 	} else {
 		obsCfg := observability.DefaultConfig()
 		obsCfg.OTLPEndpoint = endpoint
+		if insecure {
+			obsCfg.Insecure = true
+		}
 		obs, err := observability.New(ctx, obsCfg)
 		if err != nil {
 			logger.Warn("Observability init failed", "error", err)
@@ -388,10 +391,14 @@ func evidenceSigningSeedFromEnv() (string, bool, error) {
 
 // otlpEndpointFromEnv returns the OTLP gRPC target from the standard
 // OTEL_EXPORTER_OTLP_ENDPOINT variable, or "" when unset. The env value may
-// carry a URL scheme; the gRPC exporters want host:port.
-func otlpEndpointFromEnv() string {
-	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+// carry a URL scheme; the gRPC exporters want host:port, and an explicit
+// http:// scheme means a plaintext collector, so it must flip the connection
+// to insecure rather than be silently dropped.
+func otlpEndpointFromEnv() (endpoint string, insecure bool) {
+	endpoint = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	if rest, ok := strings.CutPrefix(endpoint, "http://"); ok {
+		return strings.TrimSuffix(rest, "/"), true
+	}
 	endpoint = strings.TrimPrefix(endpoint, "https://")
-	endpoint = strings.TrimPrefix(endpoint, "http://")
-	return strings.TrimSuffix(endpoint, "/")
+	return strings.TrimSuffix(endpoint, "/"), false
 }

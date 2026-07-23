@@ -347,7 +347,9 @@ func runLocalDenyTamperProof(t *testing.T) redactedDenyTamperProof {
 }
 
 func TestLiveProxyEchoesMintedCorrelationIDForSSE(t *testing.T) {
-	var upstreamCorrelationID string
+	// Handler goroutine → test goroutine handoff; a plain shared variable
+	// here is a data race under -race.
+	upstreamCorrelationIDs := make(chan string, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" || r.URL.Path == "/health" {
 			w.Header().Set("Content-Type", "application/json")
@@ -358,7 +360,10 @@ func TestLiveProxyEchoesMintedCorrelationIDForSSE(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		upstreamCorrelationID = r.Header.Get("X-Helm-Correlation-ID")
+		select {
+		case upstreamCorrelationIDs <- r.Header.Get("X-Helm-Correlation-ID"):
+		default:
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl-sse\"}\n\n"))
 	}))
@@ -386,6 +391,12 @@ func TestLiveProxyEchoesMintedCorrelationIDForSSE(t *testing.T) {
 	correlationID := resp.Header.Get("X-Helm-Correlation-ID")
 	if correlationID == "" || correlationID == "not-a-canonical-uuid" {
 		t.Fatalf("SSE response did not echo a minted correlation id: %q", correlationID)
+	}
+	var upstreamCorrelationID string
+	select {
+	case upstreamCorrelationID = <-upstreamCorrelationIDs:
+	case <-time.After(5 * time.Second):
+		t.Fatal("upstream never received the chat completion request")
 	}
 	if correlationID != upstreamCorrelationID {
 		t.Fatalf("SSE correlation id mismatch: response=%s upstream=%s", correlationID, upstreamCorrelationID)

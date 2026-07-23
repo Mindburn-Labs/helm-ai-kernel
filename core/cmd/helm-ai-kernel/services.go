@@ -134,13 +134,22 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	logger.Info("subsystem ready", "component", " Config loaded")
 
 	// --- 2. Observability ---
-	obsCfg := observability.DefaultConfig()
-	obs, err := observability.New(ctx, obsCfg)
-	if err != nil {
-		logger.Warn("Observability init skipped (no OTLP endpoint)", "error", err)
+	// Inert unless an OTLP endpoint is explicitly configured — same posture
+	// as the edge tracing and the console (unset = no exporter). Without this
+	// gate the default localhost:4317 exporter dials a collector that doesn't
+	// exist and logs an export failure every 15s.
+	if endpoint := otlpEndpointFromEnv(); endpoint == "" {
+		logger.Info("Observability init skipped (no OTLP endpoint configured)")
 	} else {
-		s.Observability = obs
-		logger.Info("subsystem ready", "component", " Observability provider initialized")
+		obsCfg := observability.DefaultConfig()
+		obsCfg.OTLPEndpoint = endpoint
+		obs, err := observability.New(ctx, obsCfg)
+		if err != nil {
+			logger.Warn("Observability init failed", "error", err)
+		} else {
+			s.Observability = obs
+			logger.Info("subsystem ready", "component", " Observability provider initialized")
+		}
 	}
 
 	// --- 3. Authorization ---
@@ -203,10 +212,11 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	// Pack execution is fail-closed until a PackVerifier (trust.PackLoader
 	// with TUF roots) is configured; the nil verifier is that explicit
 	// posture, not an oversight — Run refuses with ERR_PACK_TRUST_UNVERIFIED.
-	s.Sandbox, err = sandbox.NewWasiSandboxWithVerifier(ctx, artStore, sandboxConfig, nil)
+	wasiSandbox, err := sandbox.NewWasiSandboxWithVerifier(ctx, artStore, sandboxConfig, nil)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox init: %w", err)
 	}
+	s.Sandbox = wasiSandbox
 	logger.Info("subsystem ready", "component", " Sandbox initialized (pack execution fail-closed: no PackVerifier configured)")
 
 	// --- 7. Boundary ---
@@ -374,4 +384,14 @@ func evidenceSigningSeedFromEnv() (string, bool, error) {
 		return "", false, fmt.Errorf("production mode requires EVIDENCE_SIGNING_KEY")
 	}
 	return "helm-evidence-bundle", true, nil
+}
+
+// otlpEndpointFromEnv returns the OTLP gRPC target from the standard
+// OTEL_EXPORTER_OTLP_ENDPOINT variable, or "" when unset. The env value may
+// carry a URL scheme; the gRPC exporters want host:port.
+func otlpEndpointFromEnv() string {
+	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	return strings.TrimSuffix(endpoint, "/")
 }

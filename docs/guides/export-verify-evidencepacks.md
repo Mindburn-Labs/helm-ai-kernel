@@ -22,7 +22,9 @@ helm-ai-kernel workstation verify-decision \
 ```
 
 Integrity (`integrity_valid`) and signer trust (`signer_trusted`) are separate
-verdicts: trust requires the workstation public key pinned out of band — see
+verdicts: trust is evaluated against the local `--data-dir` workstation key by
+default; `--trusted-public-key-file` is the out-of-band pin for copied
+receipts — see
 [local signer and trusted verification](../reference/workstation-governance.md#local-signer-and-trusted-verification).
 Pre-v0.7.3 derivable-seed receipts remain untrusted.
 

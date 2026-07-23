@@ -37,8 +37,9 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
-Integrity and signer trust are separate verdicts here — trust needs the
-workstation public key pinned out of band
+Integrity and signer trust are separate verdicts here — trust is checked
+against the local `--data-dir` workstation key by default, with
+`--trusted-public-key-file` as the out-of-band pin for copied receipts
 ([details](reference/workstation-governance.md#local-signer-and-trusted-verification));
 pre-v0.7.3 derivable-seed receipts remain untrusted.
 

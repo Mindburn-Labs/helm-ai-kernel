@@ -28,10 +28,12 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
-This proves the receipt was not altered (`integrity_valid`). Whether the signer
-is *trusted* is reported separately (`signer_trusted`) and requires a persisted
-public key you obtained out of band; receipts signed by the legacy derivable
-seed (retired in the security patch line) always remain untrusted.
+This proves the receipt was not altered (`integrity_valid`). Signer trust is a
+separate verdict (`signer_trusted`), evaluated against an expected workstation
+public key — by default the one in your local `--data-dir`; for receipts copied
+from another machine, pin the signer's key out of band with
+`--trusted-public-key-file`. Receipts signed by the legacy derivable seed
+(retired in the security patch line) always remain untrusted.
 
 No cloud account. No model key. No Docker. No production credentials.
 
@@ -45,9 +47,9 @@ No cloud account. No model key. No Docker. No production credentials.
 | Run approved work | `ALLOW` | receipt + evidence |
 | Export a review bundle | verify offline | EvidencePack |
 
-¹ The hook's shell guard matches an intentionally narrow, documented list of
-destructive command patterns — it is not a general shell analyzer. See
-[the guard's scope](docs/reference/workstation-governance.md).
+¹ The hook's shell guard matches an intentionally narrow set of destructive
+command patterns — it is not a general shell analyzer. See
+[the guard's scope](docs/reference/workstation-governance.md#enforcement-bridge).
 
 HELM only governs effects that reach its boundary. For example, evals showed
 network egress blocks firing when an agent actually dispatched a LAN or

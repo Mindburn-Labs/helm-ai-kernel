@@ -8,7 +8,7 @@ Typed Rust client for the retained HELM kernel API.
 cargo add helm-sdk
 ```
 
-Package metadata declares crate version `0.7.4` in `Cargo.toml`; verify registry
+Package metadata declares crate version `0.7.5` in `Cargo.toml`; verify registry
 state before publishing a pinned install claim.
 
 ## Local Development
@@ -54,4 +54,4 @@ runtime query is provided.
 
 ## Release Notes
 
-`0.7.4` adds the Boundary Enforcement Profile to the kernel and retains the OpenAPI client surface and optional protobuf codegen.
+`0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the OpenAPI client surface and optional protobuf codegen.

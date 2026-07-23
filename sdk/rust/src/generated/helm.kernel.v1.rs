@@ -37,17 +37,22 @@ pub struct DecisionRecord {
     pub policy_decision_hash: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "12")]
     pub input_context: ::prost::alloc::vec::Vec<u8>,
+    /// Product request identity (X-Helm-Correlation-ID) this decision was made
+    /// for — the stable join key across lifecycle events, receipts, and
+    /// evidence. Optional; outside the decision signature until HELM-303.
+    #[prost(string, tag = "13")]
+    pub correlation_id: ::prost::alloc::string::String,
     /// JSON-encoded typed ThreatScanRef covered by the decision signature
-    #[prost(bytes = "vec", tag = "13")]
+    #[prost(bytes = "vec", tag = "14")]
     pub threat_scan: ::prost::alloc::vec::Vec<u8>,
     /// legacy primary signature profile
-    #[prost(string, tag = "14")]
+    #[prost(string, tag = "15")]
     pub signature_type: ::prost::alloc::string::String,
     /// signature over the threat-bound decision preimage
-    #[prost(string, tag = "15")]
+    #[prost(string, tag = "16")]
     pub threat_scan_signature: ::prost::alloc::string::String,
     /// explicit threat-v1 rollout profile
-    #[prost(string, tag = "16")]
+    #[prost(string, tag = "17")]
     pub threat_scan_signature_type: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -106,6 +111,10 @@ pub struct Receipt {
         ::prost::alloc::string::String,
         ::prost::alloc::string::String,
     >,
+    /// Product request identity (X-Helm-Correlation-ID) this receipt belongs
+    /// to. Optional; outside the receipt signature until HELM-303.
+    #[prost(string, tag = "17")]
+    pub correlation_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PdpRequest {

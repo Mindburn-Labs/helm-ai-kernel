@@ -1,3 +1,5 @@
+// quantum_posture: authorization vectors exercise classical RSA/JWKS JWT
+// validation only; they do not claim or provide post-quantum authentication.
 package mcp
 
 // Conformance vectors for the MCP 2026-07-28 release candidate
@@ -109,9 +111,7 @@ func TestMCP20260728AuthorizationSEPVectors(t *testing.T) {
 			approvedTools = append(approvedTools, "rc."+vector.ID)
 		}
 	}
-	if _, err := registry.Approve(ctx, ApprovalDecision{ServerID: "srv-rc", ApproverID: "user:reviewer", ApprovalReceiptID: "approval-rc", Reason: "authz vector fixture", ToolNames: approvedTools}); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
+	seedVerifiedApprovalFixture(t, registry, ApprovalDecision{ServerID: "srv-rc", ApproverID: "user:reviewer", ApprovalReceiptID: "approval-rc", Reason: "authz vector fixture", ToolNames: approvedTools})
 
 	// Shared gateway fixture for discovery vectors.
 	gateway := NewGateway(catalog, GatewayConfig{AuthMode: "oauth", BaseURL: "https://resource.example"})

@@ -55,13 +55,15 @@ helm-ai-kernel mcp authorize-call \
 ```
 
 An unknown or unapproved server returns `ESCALATE`. The authorization check does
-not dispatch the tool call. Use the approval loop in
+not dispatch the tool call. Opaque CLI or API approval fields cannot change that
+result; a credential-verifying integration must record approval before the
+server can leave quarantine. See the escalation walkthrough in
 [Quickstart](/quickstart#see-an-escalation), then rerun the original configured
 call path.
 
-## Scan Before Approval
+## Scan Quarantined Servers
 
-Use the local MCP risk scanner before granting a new server/tool bundle:
+Use the local MCP risk scanner to inspect a new server/tool bundle:
 
 ```bash
 mkdir -p out
@@ -77,19 +79,12 @@ does not dispatch, approve, or resume a tool call.
 
 ## Effect Scope
 
-Approvals are local, receipt-backed, TTL-bound, and revocable. HELM rejects
-wildcard tool approvals and overlong side-effect approvals.
+Approval metadata is not self-authenticating. The current CLI and API reject
+opaque local approval assertions; only a credential-verifying integration may
+create a TTL-bound, revocable approval record.
 
-For side-effect tools, approve the effect explicitly:
-
-```bash
-helm-ai-kernel mcp approve \
-  --server-id deploy-tools \
-  --tools deploy.preview \
-  --effects side_effect \
-  --ttl 15m \
-  --reason "preview deploy for local validation"
-```
+Side-effect tools therefore stay denied or escalated until that integration is
+available and has issued a verified, scope-bound approval.
 
 ## Revoke
 
@@ -100,6 +95,7 @@ helm-ai-kernel mcp revoke \
 ```
 
 Revoked and expired grants fail closed on the next configured evaluation.
+Revocation does not create new authority.
 
 ## Inspect And Prove
 
@@ -128,7 +124,8 @@ helm-ai-kernel verify \
 
 The source-owned proof covers configuration generation, quarantine, scoped
 authorization, expiry, revocation, no-dispatch behavior, receipts, and offline
-verification. Before a live client rollout, separately prove:
+verification. Approval remains unavailable until a credential-verifying
+integration is configured. Before a live client rollout, separately prove:
 
 - the native client loaded the generated configuration;
 - the intended policy graph is wired into the selected MCP runtime;

@@ -1,6 +1,8 @@
 """HELM SDK for Python."""
 
 from .client import (
+    ApprovalCeremonyTransitionAction,
+    ApprovalVerificationUnavailableError,
     EvidenceEnvelopeExportRequest,
     EvidenceEnvelopeManifest,
     HelmApiError,
@@ -8,6 +10,7 @@ from .client import (
     MCPQuarantineRecord,
     MCPRegistryApprovalRequest,
     MCPRegistryDiscoverRequest,
+    MCPRegistryPathApprovalRequest,
     NegativeBoundaryVector,
     SandboxBackendProfile,
     SandboxGrant,
@@ -37,11 +40,14 @@ VerificationChecks = VerificationResultChecks
 __all__ = [
     "HelmClient",
     "HelmApiError",
+    "ApprovalVerificationUnavailableError",
+    "ApprovalCeremonyTransitionAction",
     "EvidenceEnvelopeExportRequest",
     "EvidenceEnvelopeManifest",
     "NegativeBoundaryVector",
     "MCPRegistryDiscoverRequest",
     "MCPRegistryApprovalRequest",
+    "MCPRegistryPathApprovalRequest",
     "MCPQuarantineRecord",
     "SandboxBackendProfile",
     "SandboxGrant",

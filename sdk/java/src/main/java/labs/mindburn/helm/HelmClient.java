@@ -51,6 +51,20 @@ public class HelmClient {
         }
     }
 
+    private static HelmApiException approvalVerificationUnavailable() {
+        return new HelmApiException(
+                503,
+                "approval verification unavailable",
+                "APPROVAL_VERIFICATION_UNAVAILABLE");
+    }
+
+    private static HelmApiException mcpApprovalVerificationUnavailable() {
+        return new HelmApiException(
+                503,
+                "MCP approval verification unavailable",
+                "MCP_APPROVAL_VERIFICATION_UNAVAILABLE");
+    }
+
     public static class EvidenceEnvelopeExportRequest {
         public String manifest_id;
         public String envelope;
@@ -128,6 +142,16 @@ public class HelmClient {
         public String approver_id;
         public String approval_receipt_id;
         public String reason;
+        public List<String> tool_names;
+        public List<String> effects;
+    }
+
+    public static class MCPRegistryPathApprovalRequest {
+        public String approver_id;
+        public String approval_receipt_id;
+        public String reason;
+        public List<String> tool_names;
+        public List<String> effects;
     }
 
     public static class MCPQuarantineRecord {
@@ -433,12 +457,9 @@ public class HelmClient {
         return send(r, MCPQuarantineRecord.class);
     }
 
-    /** POST /api/v1/mcp/registry/approve */
+    /** Always fails closed until a credential verifier can bind MCP approval evidence. */
     public MCPQuarantineRecord approveMcpServer(MCPRegistryApprovalRequest req) {
-        HttpRequest r = this.req("POST", "/api/v1/mcp/registry/approve")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
-                .build();
-        return send(r, MCPQuarantineRecord.class);
+        throw mcpApprovalVerificationUnavailable();
     }
 
     public MCPQuarantineRecord getMcpRegistryRecord(String serverId) {
@@ -446,10 +467,8 @@ public class HelmClient {
         return send(r, MCPQuarantineRecord.class);
     }
 
-    public MCPQuarantineRecord approveMcpRegistryRecord(String serverId, MCPRegistryApprovalRequest req) {
-        HttpRequest r = this.req("POST", "/api/v1/mcp/registry/" + encode(serverId) + "/approve")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
-        return send(r, MCPQuarantineRecord.class);
+    public MCPQuarantineRecord approveMcpRegistryRecord(String serverId, MCPRegistryPathApprovalRequest req) {
+        throw mcpApprovalVerificationUnavailable();
     }
 
     public MCPQuarantineRecord revokeMcpRegistryRecord(String serverId, String reason) {
@@ -566,6 +585,9 @@ public class HelmClient {
     }
 
     public JsonElement transitionApprovalCeremony(String approvalId, String action, Object req) {
+        if ("approve".equals(action)) {
+            throw approvalVerificationUnavailable();
+        }
         HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/" + encode(action))
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
         return sendJson(r);
@@ -577,10 +599,11 @@ public class HelmClient {
         return send(r, ApprovalWebAuthnChallenge.class);
     }
 
-    public JsonElement assertApprovalWebAuthnChallenge(String approvalId, ApprovalWebAuthnAssertion req) {
-        HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/webauthn/assert")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
-        return sendJson(r);
+    /**
+     * Always fails closed until the server can verify and bind credential assertions.
+     */
+    public void assertApprovalWebAuthnChallenge(String approvalId, ApprovalWebAuthnAssertion req) {
+        throw approvalVerificationUnavailable();
     }
 
     public JsonElement listBudgetCeilings() {

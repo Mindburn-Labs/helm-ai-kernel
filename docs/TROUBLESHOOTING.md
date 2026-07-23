@@ -51,11 +51,10 @@ Inspect pending escalations:
 helm-ai-kernel mcp pending --json
 ```
 
-`ESCALATE` means HELM blocked the action and wrote a receipt. Approve only the
-exact server, tool, effect, TTL, and reason you intend to allow, then rerun the
-original action.
-
-Use the approval loop in [Quickstart](/quickstart#see-an-escalation).
+`ESCALATE` means HELM blocked the action and wrote a receipt. The bundled MCP
+CLI and API cannot resolve it with local approval metadata; keep the action
+blocked. Rerun only after a credential-verifying integration has recorded a
+scope-bound approval, and only as a new evaluation.
 
 ## Approval Did Not Work
 

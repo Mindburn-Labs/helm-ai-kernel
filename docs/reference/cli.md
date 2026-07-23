@@ -32,17 +32,17 @@ helm-ai-kernel setup --client cursor --print-config
 Setup writes local client configuration and draft policy artifacts. It does not
 approve tools.
 
-## MCP Approval Commands
+## MCP Quarantine Commands
 
-Quickstart owns the full approval loop and rerun rule. Use these commands when
-you need the reference form:
+Quickstart owns the current quarantine behavior. A credential-verifying MCP
+approval integration is not configured, so local approval assertions fail
+closed and cannot create executable authority.
 
 | Command | Purpose |
 | --- | --- |
 | `helm-ai-kernel mcp authorize-call --server-id <id> --tool-name <tool>` | Evaluate one MCP tool call before dispatch. |
-| `helm-ai-kernel mcp approve --server-id <id> --tools <csv> --ttl 15m --reason <text>` | Approve an exact local server/tool scope. |
-| `helm-ai-kernel mcp approve --server-id <id> --tools <csv> --effects side_effect --ttl 15m --reason <text>` | Approve a side-effect tool scope. |
-| `helm-ai-kernel mcp revoke --server-id <id> --reason <text>` | Revoke a local approval. |
+| `helm-ai-kernel mcp approve ...` | Returns `MCP approval verification unavailable`; it does not create a grant. |
+| `helm-ai-kernel mcp revoke --server-id <id> --reason <text>` | Revoke a previously verified or legacy approval. |
 | `helm-ai-kernel mcp pending --json` | List servers or tools still awaiting approval. |
 | `helm-ai-kernel mcp receipts --json` | List local MCP boundary records. |
 | `helm-ai-kernel mcp get --server-id <id> --json` | Inspect one MCP server record. |

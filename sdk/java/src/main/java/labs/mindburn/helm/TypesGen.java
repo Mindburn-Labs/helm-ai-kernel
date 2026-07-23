@@ -4656,7 +4656,7 @@ public static class ApproveLaunchpadMcpToolsRequest {
   private String serverId;
 
   public static final String JSON_PROPERTY_TOOLS = "tools";
-  private List<String> tools = new ArrayList<>();
+  private List<String> tools;
 
   public static final String JSON_PROPERTY_TTL = "ttl";
   private String ttl;
@@ -4679,9 +4679,9 @@ public static class ApproveLaunchpadMcpToolsRequest {
    * Get serverId
    * @return serverId
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_SERVER_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getServerId() {
     return serverId;
@@ -4689,7 +4689,7 @@ public static class ApproveLaunchpadMcpToolsRequest {
 
 
   @JsonProperty(JSON_PROPERTY_SERVER_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setServerId(String serverId) {
     this.serverId = serverId;
   }
@@ -4712,9 +4712,9 @@ public static class ApproveLaunchpadMcpToolsRequest {
    * Get tools
    * @return tools
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_TOOLS)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public List<String> getTools() {
     return tools;
@@ -4722,7 +4722,7 @@ public static class ApproveLaunchpadMcpToolsRequest {
 
 
   @JsonProperty(JSON_PROPERTY_TOOLS)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setTools(List<String> tools) {
     this.tools = tools;
   }
@@ -4762,9 +4762,9 @@ public static class ApproveLaunchpadMcpToolsRequest {
    * Get reason
    * @return reason
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_REASON)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getReason() {
     return reason;
@@ -4772,7 +4772,7 @@ public static class ApproveLaunchpadMcpToolsRequest {
 
 
   @JsonProperty(JSON_PROPERTY_REASON)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setReason(String reason) {
     this.reason = reason;
   }
@@ -4971,9 +4971,9 @@ public static class AssertApprovalWebAuthnChallengeRequest {
    * Get challengeId
    * @return challengeId
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_CHALLENGE_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getChallengeId() {
     return challengeId;
@@ -4981,7 +4981,7 @@ public static class AssertApprovalWebAuthnChallengeRequest {
 
 
   @JsonProperty(JSON_PROPERTY_CHALLENGE_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setChallengeId(String challengeId) {
     this.challengeId = challengeId;
   }
@@ -4996,9 +4996,9 @@ public static class AssertApprovalWebAuthnChallengeRequest {
    * Get actor
    * @return actor
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_ACTOR)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getActor() {
     return actor;
@@ -5006,7 +5006,7 @@ public static class AssertApprovalWebAuthnChallengeRequest {
 
 
   @JsonProperty(JSON_PROPERTY_ACTOR)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setActor(String actor) {
     this.actor = actor;
   }
@@ -5021,9 +5021,9 @@ public static class AssertApprovalWebAuthnChallengeRequest {
    * Get assertion
    * @return assertion
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_ASSERTION)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getAssertion() {
     return assertion;
@@ -5031,7 +5031,7 @@ public static class AssertApprovalWebAuthnChallengeRequest {
 
 
   @JsonProperty(JSON_PROPERTY_ASSERTION)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setAssertion(String assertion) {
     this.assertion = assertion;
   }
@@ -45808,8 +45808,6 @@ public static class MCPQuarantineRecord {
 
     QUARANTINED("quarantined"),
 
-    APPROVED("approved"),
-
     REVOKED("revoked"),
 
     EXPIRED("expired");
@@ -46419,13 +46417,15 @@ public static class MCPQuarantineRecord {
 
 
 /**
- * MCPRegistryApprovalRequest
+ * Optional, ignored approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
  */
 @JsonPropertyOrder({
   MCPRegistryApprovalRequest.JSON_PROPERTY_SERVER_ID,
   MCPRegistryApprovalRequest.JSON_PROPERTY_APPROVER_ID,
   MCPRegistryApprovalRequest.JSON_PROPERTY_APPROVAL_RECEIPT_ID,
-  MCPRegistryApprovalRequest.JSON_PROPERTY_REASON
+  MCPRegistryApprovalRequest.JSON_PROPERTY_REASON,
+  MCPRegistryApprovalRequest.JSON_PROPERTY_TOOL_NAMES,
+  MCPRegistryApprovalRequest.JSON_PROPERTY_EFFECTS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class MCPRegistryApprovalRequest {
@@ -46441,6 +46441,12 @@ public static class MCPRegistryApprovalRequest {
   public static final String JSON_PROPERTY_REASON = "reason";
   private String reason;
 
+  public static final String JSON_PROPERTY_TOOL_NAMES = "tool_names";
+  private List<String> toolNames;
+
+  public static final String JSON_PROPERTY_EFFECTS = "effects";
+  private List<String> effects;
+
   public MCPRegistryApprovalRequest() {
   }
 
@@ -46453,9 +46459,9 @@ public static class MCPRegistryApprovalRequest {
    * Get serverId
    * @return serverId
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_SERVER_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getServerId() {
     return serverId;
@@ -46463,7 +46469,7 @@ public static class MCPRegistryApprovalRequest {
 
 
   @JsonProperty(JSON_PROPERTY_SERVER_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setServerId(String serverId) {
     this.serverId = serverId;
   }
@@ -46478,9 +46484,9 @@ public static class MCPRegistryApprovalRequest {
    * Get approverId
    * @return approverId
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_APPROVER_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getApproverId() {
     return approverId;
@@ -46488,7 +46494,7 @@ public static class MCPRegistryApprovalRequest {
 
 
   @JsonProperty(JSON_PROPERTY_APPROVER_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setApproverId(String approverId) {
     this.approverId = approverId;
   }
@@ -46503,9 +46509,9 @@ public static class MCPRegistryApprovalRequest {
    * Get approvalReceiptId
    * @return approvalReceiptId
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_APPROVAL_RECEIPT_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getApprovalReceiptId() {
     return approvalReceiptId;
@@ -46513,7 +46519,7 @@ public static class MCPRegistryApprovalRequest {
 
 
   @JsonProperty(JSON_PROPERTY_APPROVAL_RECEIPT_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setApprovalReceiptId(String approvalReceiptId) {
     this.approvalReceiptId = approvalReceiptId;
   }
@@ -46544,6 +46550,72 @@ public static class MCPRegistryApprovalRequest {
   }
 
 
+  public MCPRegistryApprovalRequest toolNames(List<String> toolNames) {
+    this.toolNames = toolNames;
+    return this;
+  }
+
+  public MCPRegistryApprovalRequest addToolNamesItem(String toolNamesItem) {
+    if (this.toolNames == null) {
+      this.toolNames = new ArrayList<>();
+    }
+    this.toolNames.add(toolNamesItem);
+    return this;
+  }
+
+   /**
+   * Get toolNames
+   * @return toolNames
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOOL_NAMES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getToolNames() {
+    return toolNames;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOOL_NAMES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setToolNames(List<String> toolNames) {
+    this.toolNames = toolNames;
+  }
+
+
+  public MCPRegistryApprovalRequest effects(List<String> effects) {
+    this.effects = effects;
+    return this;
+  }
+
+  public MCPRegistryApprovalRequest addEffectsItem(String effectsItem) {
+    if (this.effects == null) {
+      this.effects = new ArrayList<>();
+    }
+    this.effects.add(effectsItem);
+    return this;
+  }
+
+   /**
+   * Get effects
+   * @return effects
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getEffects() {
+    return effects;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffects(List<String> effects) {
+    this.effects = effects;
+  }
+
+
   /**
    * Return true if this MCPRegistryApprovalRequest object is equal to o.
    */
@@ -46559,12 +46631,14 @@ public static class MCPRegistryApprovalRequest {
     return Objects.equals(this.serverId, mcPRegistryApprovalRequest.serverId) &&
         Objects.equals(this.approverId, mcPRegistryApprovalRequest.approverId) &&
         Objects.equals(this.approvalReceiptId, mcPRegistryApprovalRequest.approvalReceiptId) &&
-        Objects.equals(this.reason, mcPRegistryApprovalRequest.reason);
+        Objects.equals(this.reason, mcPRegistryApprovalRequest.reason) &&
+        Objects.equals(this.toolNames, mcPRegistryApprovalRequest.toolNames) &&
+        Objects.equals(this.effects, mcPRegistryApprovalRequest.effects);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(serverId, approverId, approvalReceiptId, reason);
+    return Objects.hash(serverId, approverId, approvalReceiptId, reason, toolNames, effects);
   }
 
   @Override
@@ -46575,6 +46649,8 @@ public static class MCPRegistryApprovalRequest {
     sb.append("    approverId: ").append(toIndentedString(approverId)).append("\n");
     sb.append("    approvalReceiptId: ").append(toIndentedString(approvalReceiptId)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    toolNames: ").append(toIndentedString(toolNames)).append("\n");
+    sb.append("    effects: ").append(toIndentedString(effects)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -46640,6 +46716,24 @@ public static class MCPRegistryApprovalRequest {
     // add `reason` to the URL query string
     if (getReason() != null) {
       joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tool_names` to the URL query string
+    if (getToolNames() != null) {
+      for (int i = 0; i < getToolNames().size(); i++) {
+        joiner.add(String.format("%stool_names%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getToolNames().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `effects` to the URL query string
+    if (getEffects() != null) {
+      for (int i = 0; i < getEffects().size(); i++) {
+        joiner.add(String.format("%seffects%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEffects().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
     }
 
     return joiner.toString();
@@ -47056,6 +47150,310 @@ public static class MCPRegistryDiscoverRequest {
  * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
  *
  * The version of the OpenAPI document: 0.7.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * Optional, ignored path-scoped approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
+ */
+@JsonPropertyOrder({
+  MCPRegistryPathApprovalRequest.JSON_PROPERTY_APPROVER_ID,
+  MCPRegistryPathApprovalRequest.JSON_PROPERTY_APPROVAL_RECEIPT_ID,
+  MCPRegistryPathApprovalRequest.JSON_PROPERTY_REASON,
+  MCPRegistryPathApprovalRequest.JSON_PROPERTY_TOOL_NAMES,
+  MCPRegistryPathApprovalRequest.JSON_PROPERTY_EFFECTS
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class MCPRegistryPathApprovalRequest {
+  public static final String JSON_PROPERTY_APPROVER_ID = "approver_id";
+  private String approverId;
+
+  public static final String JSON_PROPERTY_APPROVAL_RECEIPT_ID = "approval_receipt_id";
+  private String approvalReceiptId;
+
+  public static final String JSON_PROPERTY_REASON = "reason";
+  private String reason;
+
+  public static final String JSON_PROPERTY_TOOL_NAMES = "tool_names";
+  private List<String> toolNames;
+
+  public static final String JSON_PROPERTY_EFFECTS = "effects";
+  private List<String> effects;
+
+  public MCPRegistryPathApprovalRequest() {
+  }
+
+  public MCPRegistryPathApprovalRequest approverId(String approverId) {
+    this.approverId = approverId;
+    return this;
+  }
+
+   /**
+   * Get approverId
+   * @return approverId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_APPROVER_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getApproverId() {
+    return approverId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_APPROVER_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setApproverId(String approverId) {
+    this.approverId = approverId;
+  }
+
+
+  public MCPRegistryPathApprovalRequest approvalReceiptId(String approvalReceiptId) {
+    this.approvalReceiptId = approvalReceiptId;
+    return this;
+  }
+
+   /**
+   * Get approvalReceiptId
+   * @return approvalReceiptId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_APPROVAL_RECEIPT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getApprovalReceiptId() {
+    return approvalReceiptId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_APPROVAL_RECEIPT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setApprovalReceiptId(String approvalReceiptId) {
+    this.approvalReceiptId = approvalReceiptId;
+  }
+
+
+  public MCPRegistryPathApprovalRequest reason(String reason) {
+    this.reason = reason;
+    return this;
+  }
+
+   /**
+   * Get reason
+   * @return reason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReason() {
+    return reason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReason(String reason) {
+    this.reason = reason;
+  }
+
+
+  public MCPRegistryPathApprovalRequest toolNames(List<String> toolNames) {
+    this.toolNames = toolNames;
+    return this;
+  }
+
+  public MCPRegistryPathApprovalRequest addToolNamesItem(String toolNamesItem) {
+    if (this.toolNames == null) {
+      this.toolNames = new ArrayList<>();
+    }
+    this.toolNames.add(toolNamesItem);
+    return this;
+  }
+
+   /**
+   * Get toolNames
+   * @return toolNames
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOOL_NAMES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getToolNames() {
+    return toolNames;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOOL_NAMES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setToolNames(List<String> toolNames) {
+    this.toolNames = toolNames;
+  }
+
+
+  public MCPRegistryPathApprovalRequest effects(List<String> effects) {
+    this.effects = effects;
+    return this;
+  }
+
+  public MCPRegistryPathApprovalRequest addEffectsItem(String effectsItem) {
+    if (this.effects == null) {
+      this.effects = new ArrayList<>();
+    }
+    this.effects.add(effectsItem);
+    return this;
+  }
+
+   /**
+   * Get effects
+   * @return effects
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getEffects() {
+    return effects;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECTS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffects(List<String> effects) {
+    this.effects = effects;
+  }
+
+
+  /**
+   * Return true if this MCPRegistryPathApprovalRequest object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    MCPRegistryPathApprovalRequest mcPRegistryPathApprovalRequest = (MCPRegistryPathApprovalRequest) o;
+    return Objects.equals(this.approverId, mcPRegistryPathApprovalRequest.approverId) &&
+        Objects.equals(this.approvalReceiptId, mcPRegistryPathApprovalRequest.approvalReceiptId) &&
+        Objects.equals(this.reason, mcPRegistryPathApprovalRequest.reason) &&
+        Objects.equals(this.toolNames, mcPRegistryPathApprovalRequest.toolNames) &&
+        Objects.equals(this.effects, mcPRegistryPathApprovalRequest.effects);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(approverId, approvalReceiptId, reason, toolNames, effects);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class MCPRegistryPathApprovalRequest {\n");
+    sb.append("    approverId: ").append(toIndentedString(approverId)).append("\n");
+    sb.append("    approvalReceiptId: ").append(toIndentedString(approvalReceiptId)).append("\n");
+    sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    toolNames: ").append(toIndentedString(toolNames)).append("\n");
+    sb.append("    effects: ").append(toIndentedString(effects)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `approver_id` to the URL query string
+    if (getApproverId() != null) {
+      joiner.add(String.format("%sapprover_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getApproverId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `approval_receipt_id` to the URL query string
+    if (getApprovalReceiptId() != null) {
+      joiner.add(String.format("%sapproval_receipt_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getApprovalReceiptId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason` to the URL query string
+    if (getReason() != null) {
+      joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tool_names` to the URL query string
+    if (getToolNames() != null) {
+      for (int i = 0; i < getToolNames().size(); i++) {
+        joiner.add(String.format("%stool_names%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getToolNames().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `effects` to the URL query string
+    if (getEffects() != null) {
+      for (int i = 0; i < getEffects().size(); i++) {
+        joiner.add(String.format("%seffects%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEffects().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.4
  *
  *
  * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
@@ -53387,6 +53785,322 @@ public static class PreflightLaunchpadImport202Response {
  * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
  *
  * The version of the OpenAPI document: 0.7.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * ProblemDetail
+ */
+@JsonPropertyOrder({
+  ProblemDetail.JSON_PROPERTY_TYPE,
+  ProblemDetail.JSON_PROPERTY_TITLE,
+  ProblemDetail.JSON_PROPERTY_STATUS,
+  ProblemDetail.JSON_PROPERTY_DETAIL,
+  ProblemDetail.JSON_PROPERTY_INSTANCE,
+  ProblemDetail.JSON_PROPERTY_TRACE_ID
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class ProblemDetail {
+  public static final String JSON_PROPERTY_TYPE = "type";
+  private URI type;
+
+  public static final String JSON_PROPERTY_TITLE = "title";
+  private String title;
+
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private Integer status;
+
+  public static final String JSON_PROPERTY_DETAIL = "detail";
+  private String detail;
+
+  public static final String JSON_PROPERTY_INSTANCE = "instance";
+  private String instance;
+
+  public static final String JSON_PROPERTY_TRACE_ID = "trace_id";
+  private String traceId;
+
+  public ProblemDetail() {
+  }
+
+  public ProblemDetail type(URI type) {
+    this.type = type;
+    return this;
+  }
+
+   /**
+   * Get type
+   * @return type
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public URI getType() {
+    return type;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setType(URI type) {
+    this.type = type;
+  }
+
+
+  public ProblemDetail title(String title) {
+    this.title = title;
+    return this;
+  }
+
+   /**
+   * Get title
+   * @return title
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TITLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getTitle() {
+    return title;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TITLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setTitle(String title) {
+    this.title = title;
+  }
+
+
+  public ProblemDetail status(Integer status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * Get status
+   * @return status
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Integer getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setStatus(Integer status) {
+    this.status = status;
+  }
+
+
+  public ProblemDetail detail(String detail) {
+    this.detail = detail;
+    return this;
+  }
+
+   /**
+   * Get detail
+   * @return detail
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DETAIL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getDetail() {
+    return detail;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DETAIL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDetail(String detail) {
+    this.detail = detail;
+  }
+
+
+  public ProblemDetail instance(String instance) {
+    this.instance = instance;
+    return this;
+  }
+
+   /**
+   * Get instance
+   * @return instance
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_INSTANCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getInstance() {
+    return instance;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_INSTANCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setInstance(String instance) {
+    this.instance = instance;
+  }
+
+
+  public ProblemDetail traceId(String traceId) {
+    this.traceId = traceId;
+    return this;
+  }
+
+   /**
+   * Get traceId
+   * @return traceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TRACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTraceId() {
+    return traceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TRACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTraceId(String traceId) {
+    this.traceId = traceId;
+  }
+
+
+  /**
+   * Return true if this ProblemDetail object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ProblemDetail problemDetail = (ProblemDetail) o;
+    return Objects.equals(this.type, problemDetail.type) &&
+        Objects.equals(this.title, problemDetail.title) &&
+        Objects.equals(this.status, problemDetail.status) &&
+        Objects.equals(this.detail, problemDetail.detail) &&
+        Objects.equals(this.instance, problemDetail.instance) &&
+        Objects.equals(this.traceId, problemDetail.traceId);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(type, title, status, detail, instance, traceId);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class ProblemDetail {\n");
+    sb.append("    type: ").append(toIndentedString(type)).append("\n");
+    sb.append("    title: ").append(toIndentedString(title)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    detail: ").append(toIndentedString(detail)).append("\n");
+    sb.append("    instance: ").append(toIndentedString(instance)).append("\n");
+    sb.append("    traceId: ").append(toIndentedString(traceId)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `type` to the URL query string
+    if (getType() != null) {
+      joiner.add(String.format("%stype%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `title` to the URL query string
+    if (getTitle() != null) {
+      joiner.add(String.format("%stitle%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTitle()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `status` to the URL query string
+    if (getStatus() != null) {
+      joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `detail` to the URL query string
+    if (getDetail() != null) {
+      joiner.add(String.format("%sdetail%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDetail()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `instance` to the URL query string
+    if (getInstance() != null) {
+      joiner.add(String.format("%sinstance%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getInstance()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `trace_id` to the URL query string
+    if (getTraceId() != null) {
+      joiner.add(String.format("%strace_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTraceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.4
  *
  *
  * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).

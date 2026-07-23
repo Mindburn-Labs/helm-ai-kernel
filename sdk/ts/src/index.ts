@@ -16,6 +16,7 @@ export type {
   ChatCompletionWithReceipt,
   McpQuarantineRecord,
   McpRegistryApprovalRequest,
+  McpRegistryPathApprovalRequest,
   McpRegistryDiscoverRequest,
   NegativeBoundaryVector,
   SandboxBackendProfile,

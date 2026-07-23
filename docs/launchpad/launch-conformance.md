@@ -3,6 +3,9 @@ title: Launchpad Launch Conformance Review Oracle
 last_reviewed: 2026-06-24
 ---
 
+<!-- quantum_posture: this oracle checks existing cosign/signature evidence;
+it does not itself implement or claim post-quantum cryptographic controls. -->
+
 # Launchpad Launch Conformance Review Oracle
 
 This is the PR-review oracle for Launchpad changes that can affect
@@ -36,8 +39,9 @@ bar. Do not use `--version` smoke evidence as F2 coverage.
   parity, healthcheck definition, EvidencePack export, and offline verification.
 - Networked runs require a launch-scoped egress receipt before `RUNNING`.
   Non-catalog destinations must fail closed.
-- MCP unknown servers and tools remain quarantined until a scoped approval
-  receipt exists. Side-effect tools require approval receipts.
+- MCP unknown servers and tools remain quarantined until a credential-verified
+  scoped approval receipt exists. Opaque local approval requests do not satisfy
+  this requirement; side-effect tools therefore remain blocked.
 - Runtime setup failures are `RUNTIME_REPAIR_REQUIRED`, `PLAN_DENY`, or
   `PLAN_ESCALATE`; they are never counted as `ATTACK_BLOCKED`.
 - OpenClaw/Hermes docs and public claims continue to name only the supported
@@ -78,7 +82,7 @@ promotion evidence for `oss_supported` apps.
 | CPI policy conflict | `ESCALATE` / `ESCALATED` | `ERR_LAUNCHPAD_POLICY_CONFLICT` | CPI output with conflict result hash, ActionIR, escalation evidence. No runtime start. |
 | CPI escalates requested side effects | `ESCALATE` / `ESCALATED` | `ERR_LAUNCHPAD_CPI_ESCALATE` | CPI output, ActionIR, escalation evidence. No runtime start. |
 | CPI denies requested side effects | `DENY` / `DENIED` | `ERR_LAUNCHPAD_POLICY_DENY` | CPI output, ActionIR, denial evidence. No runtime start. |
-| Unknown MCP server or tool | `ESCALATE` | `ERR_MCP_SERVER_QUARANTINED` | MCP quarantine decision and no side-effect dispatch unless approval receipt exists. |
+| Unknown MCP server or tool | `ESCALATE` | `ERR_MCP_SERVER_QUARANTINED` | MCP quarantine decision and no side-effect dispatch unless a credential-verified approval receipt exists. |
 | Runtime starts without required egress receipt | `ALLOW` plan, run becomes `REPAIR_REQUIRED` | Runtime repair required | Runtime failure receipt, runtime environment evidence, EvidencePack. No `RUNNING` state. |
 | Healthcheck fails after runtime start | `ALLOW` plan, run becomes `REPAIR_REQUIRED` | Runtime repair required | Healthcheck failure receipt, runtime environment evidence, EvidencePack, teardown expectation. |
 

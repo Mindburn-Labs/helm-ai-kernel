@@ -3,6 +3,7 @@ package boundary
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -118,12 +119,11 @@ func TestSurfaceRegistryApprovalEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expired, err := registry.TransitionApproval(expiring.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt", "reviewed")
-	if err != nil {
-		t.Fatal(err)
+	if _, err := registry.TransitionApproval(expiring.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt", "reviewed"); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("expired approval error = %v, want %v", err, ErrApprovalVerificationUnavailable)
 	}
-	if expired.State != contracts.ApprovalCeremonyExpired {
-		t.Fatalf("expired approval state = %s", expired.State)
+	if got := registry.approvals[expiring.ApprovalID]; got.State != contracts.ApprovalCeremonyPending {
+		t.Fatalf("expired approval mutated to %s", got.State)
 	}
 
 	breakGlass, err := registry.PutApproval(contracts.ApprovalCeremony{
@@ -139,8 +139,8 @@ func TestSurfaceRegistryApprovalEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := registry.TransitionApproval(breakGlass.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "", ""); err == nil {
-		t.Fatal("break-glass approval without receipt and reason should fail")
+	if _, err := registry.TransitionApproval(breakGlass.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "", ""); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("break-glass approval error = %v, want %v", err, ErrApprovalVerificationUnavailable)
 	}
 
 	challenge, err := registry.CreateApprovalChallenge("approval-bootstrap", "", 0)
@@ -200,6 +200,23 @@ func TestSurfaceRegistryDurableObjectFamilies(t *testing.T) {
 	}
 	if len(registry.ListMCPServers()) == 0 {
 		t.Fatal("expected MCP server list")
+	}
+	opaque, err := registry.PutMCPServer(mcppkg.ServerQuarantineRecord{
+		ServerID:          "mcp-opaque-approved",
+		State:             mcppkg.QuarantineApproved,
+		ApprovedBy:        "user:opaque",
+		ApprovalReceiptID: "opaque-receipt",
+		ApprovedToolNames: []string{"read_file"},
+		ApprovedEffects:   []string{"read"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opaque.State != mcppkg.QuarantineQuarantined || opaque.ApprovedBy != "" || opaque.ApprovalReceiptID != "" {
+		t.Fatalf("opaque approval persisted as authority: %+v", opaque)
+	}
+	if got, ok := registry.GetMCPServer(opaque.ServerID); !ok || got.State != mcppkg.QuarantineQuarantined {
+		t.Fatalf("opaque approval read as authority: (%+v,%v)", got, ok)
 	}
 
 	if _, err := registry.PutSandboxGrant(contracts.SandboxGrant{}); err == nil {

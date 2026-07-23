@@ -599,25 +599,25 @@ impl ApprovalRequest {
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ApproveLaunchpadMcpToolsRequest {
-    #[serde(rename = "server_id")]
-    pub server_id: String,
-    #[serde(rename = "tools")]
-    pub tools: Vec<String>,
+    #[serde(rename = "server_id", skip_serializing_if = "Option::is_none")]
+    pub server_id: Option<String>,
+    #[serde(rename = "tools", skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<String>>,
     #[serde(rename = "ttl", skip_serializing_if = "Option::is_none")]
     pub ttl: Option<String>,
-    #[serde(rename = "reason")]
-    pub reason: String,
+    #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     #[serde(rename = "approver", skip_serializing_if = "Option::is_none")]
     pub approver: Option<String>,
 }
 
 impl ApproveLaunchpadMcpToolsRequest {
-    pub fn new(server_id: String, tools: Vec<String>, reason: String) -> ApproveLaunchpadMcpToolsRequest {
+    pub fn new() -> ApproveLaunchpadMcpToolsRequest {
         ApproveLaunchpadMcpToolsRequest {
-            server_id,
-            tools,
+            server_id: None,
+            tools: None,
             ttl: None,
-            reason,
+            reason: None,
             approver: None,
         }
     }
@@ -636,12 +636,12 @@ impl ApproveLaunchpadMcpToolsRequest {
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AssertApprovalWebAuthnChallengeRequest {
-    #[serde(rename = "challenge_id")]
-    pub challenge_id: String,
-    #[serde(rename = "actor")]
-    pub actor: String,
-    #[serde(rename = "assertion")]
-    pub assertion: String,
+    #[serde(rename = "challenge_id", skip_serializing_if = "Option::is_none")]
+    pub challenge_id: Option<String>,
+    #[serde(rename = "actor", skip_serializing_if = "Option::is_none")]
+    pub actor: Option<String>,
+    #[serde(rename = "assertion", skip_serializing_if = "Option::is_none")]
+    pub assertion: Option<String>,
     #[serde(rename = "receipt_id", skip_serializing_if = "Option::is_none")]
     pub receipt_id: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
@@ -649,11 +649,11 @@ pub struct AssertApprovalWebAuthnChallengeRequest {
 }
 
 impl AssertApprovalWebAuthnChallengeRequest {
-    pub fn new(challenge_id: String, actor: String, assertion: String) -> AssertApprovalWebAuthnChallengeRequest {
+    pub fn new() -> AssertApprovalWebAuthnChallengeRequest {
         AssertApprovalWebAuthnChallengeRequest {
-            challenge_id,
-            actor,
-            assertion,
+            challenge_id: None,
+            actor: None,
+            assertion: None,
             receipt_id: None,
             reason: None,
         }
@@ -5663,8 +5663,6 @@ pub enum McpQuarantineRecordState {
     Discovered,
     #[serde(rename = "quarantined")]
     Quarantined,
-    #[serde(rename = "approved")]
-    Approved,
     #[serde(rename = "revoked")]
     Revoked,
     #[serde(rename = "expired")]
@@ -5688,25 +5686,33 @@ impl Default for McpQuarantineRecordState {
  */
 
 
+/// McpRegistryApprovalRequest : Optional, ignored approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct McpRegistryApprovalRequest {
-    #[serde(rename = "server_id")]
-    pub server_id: String,
-    #[serde(rename = "approver_id")]
-    pub approver_id: String,
-    #[serde(rename = "approval_receipt_id")]
-    pub approval_receipt_id: String,
+    #[serde(rename = "server_id", skip_serializing_if = "Option::is_none")]
+    pub server_id: Option<String>,
+    #[serde(rename = "approver_id", skip_serializing_if = "Option::is_none")]
+    pub approver_id: Option<String>,
+    #[serde(rename = "approval_receipt_id", skip_serializing_if = "Option::is_none")]
+    pub approval_receipt_id: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(rename = "tool_names", skip_serializing_if = "Option::is_none")]
+    pub tool_names: Option<Vec<String>>,
+    #[serde(rename = "effects", skip_serializing_if = "Option::is_none")]
+    pub effects: Option<Vec<String>>,
 }
 
 impl McpRegistryApprovalRequest {
-    pub fn new(server_id: String, approver_id: String, approval_receipt_id: String) -> McpRegistryApprovalRequest {
+    /// Optional, ignored approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
+    pub fn new() -> McpRegistryApprovalRequest {
         McpRegistryApprovalRequest {
-            server_id,
-            approver_id,
-            approval_receipt_id,
+            server_id: None,
+            approver_id: None,
+            approval_receipt_id: None,
             reason: None,
+            tool_names: None,
+            effects: None,
         }
     }
 }
@@ -5780,6 +5786,45 @@ impl Default for McpRegistryDiscoverRequestRisk {
  * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
  *
  * The version of the OpenAPI document: 0.7.5
+ *
+ * Generated by: https://openapi-generator.tech
+ */
+
+
+/// McpRegistryPathApprovalRequest : Optional, ignored path-scoped approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub struct McpRegistryPathApprovalRequest {
+    #[serde(rename = "approver_id", skip_serializing_if = "Option::is_none")]
+    pub approver_id: Option<String>,
+    #[serde(rename = "approval_receipt_id", skip_serializing_if = "Option::is_none")]
+    pub approval_receipt_id: Option<String>,
+    #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(rename = "tool_names", skip_serializing_if = "Option::is_none")]
+    pub tool_names: Option<Vec<String>>,
+    #[serde(rename = "effects", skip_serializing_if = "Option::is_none")]
+    pub effects: Option<Vec<String>>,
+}
+
+impl McpRegistryPathApprovalRequest {
+    /// Optional, ignored path-scoped approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
+    pub fn new() -> McpRegistryPathApprovalRequest {
+        McpRegistryPathApprovalRequest {
+            approver_id: None,
+            approval_receipt_id: None,
+            reason: None,
+            tool_names: None,
+            effects: None,
+        }
+    }
+}
+
+/*
+ * HELM Kernel API
+ *
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.4
  *
  * Generated by: https://openapi-generator.tech
  */
@@ -6875,6 +6920,46 @@ impl PreflightLaunchpadImport202Response {
  * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
  *
  * The version of the OpenAPI document: 0.7.5
+ *
+ * Generated by: https://openapi-generator.tech
+ */
+
+
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProblemDetail {
+    #[serde(rename = "type")]
+    pub r#type: String,
+    #[serde(rename = "title")]
+    pub title: String,
+    #[serde(rename = "status")]
+    pub status: i32,
+    #[serde(rename = "detail", skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(rename = "instance", skip_serializing_if = "Option::is_none")]
+    pub instance: Option<String>,
+    #[serde(rename = "trace_id", skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+}
+
+impl ProblemDetail {
+    pub fn new(r#type: String, title: String, status: i32) -> ProblemDetail {
+        ProblemDetail {
+            r#type,
+            title,
+            status,
+            detail: None,
+            instance: None,
+            trace_id: None,
+        }
+    }
+}
+
+/*
+ * HELM Kernel API
+ *
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.4
  *
  * Generated by: https://openapi-generator.tech
  */

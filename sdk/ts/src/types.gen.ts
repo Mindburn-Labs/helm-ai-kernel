@@ -1387,13 +1387,13 @@ export interface ApproveLaunchpadMcpToolsRequest {
      * @type {string}
      * @memberof ApproveLaunchpadMcpToolsRequest
      */
-    server_id: string;
+    server_id?: string;
     /**
      *
      * @type {Array<string>}
      * @memberof ApproveLaunchpadMcpToolsRequest
      */
-    tools: Array<string>;
+    tools?: Array<string>;
     /**
      *
      * @type {string}
@@ -1405,7 +1405,7 @@ export interface ApproveLaunchpadMcpToolsRequest {
      * @type {string}
      * @memberof ApproveLaunchpadMcpToolsRequest
      */
-    reason: string;
+    reason?: string;
     /**
      *
      * @type {string}
@@ -1418,9 +1418,6 @@ export interface ApproveLaunchpadMcpToolsRequest {
  * Check if a given object implements the ApproveLaunchpadMcpToolsRequest interface.
  */
 export function instanceOfApproveLaunchpadMcpToolsRequest(value: object): boolean {
-    if (!('server_id' in value)) return false;
-    if (!('tools' in value)) return false;
-    if (!('reason' in value)) return false;
     return true;
 }
 
@@ -1434,10 +1431,10 @@ export function ApproveLaunchpadMcpToolsRequestFromJSONTyped(json: any, ignoreDi
     }
     return {
 
-        'server_id': json['server_id'],
-        'tools': json['tools'],
+        'server_id': json['server_id'] == null ? undefined : json['server_id'],
+        'tools': json['tools'] == null ? undefined : json['tools'],
         'ttl': json['ttl'] == null ? undefined : json['ttl'],
-        'reason': json['reason'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
         'approver': json['approver'] == null ? undefined : json['approver'],
     };
 }
@@ -1481,19 +1478,19 @@ export interface AssertApprovalWebAuthnChallengeRequest {
      * @type {string}
      * @memberof AssertApprovalWebAuthnChallengeRequest
      */
-    challenge_id: string;
+    challenge_id?: string;
     /**
      *
      * @type {string}
      * @memberof AssertApprovalWebAuthnChallengeRequest
      */
-    actor: string;
+    actor?: string;
     /**
      *
      * @type {string}
      * @memberof AssertApprovalWebAuthnChallengeRequest
      */
-    assertion: string;
+    assertion?: string;
     /**
      *
      * @type {string}
@@ -1512,9 +1509,6 @@ export interface AssertApprovalWebAuthnChallengeRequest {
  * Check if a given object implements the AssertApprovalWebAuthnChallengeRequest interface.
  */
 export function instanceOfAssertApprovalWebAuthnChallengeRequest(value: object): boolean {
-    if (!('challenge_id' in value)) return false;
-    if (!('actor' in value)) return false;
-    if (!('assertion' in value)) return false;
     return true;
 }
 
@@ -1528,9 +1522,9 @@ export function AssertApprovalWebAuthnChallengeRequestFromJSONTyped(json: any, i
     }
     return {
 
-        'challenge_id': json['challenge_id'],
-        'actor': json['actor'],
-        'assertion': json['assertion'],
+        'challenge_id': json['challenge_id'] == null ? undefined : json['challenge_id'],
+        'actor': json['actor'] == null ? undefined : json['actor'],
+        'assertion': json['assertion'] == null ? undefined : json['assertion'],
         'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
         'reason': json['reason'] == null ? undefined : json['reason'],
     };
@@ -13560,7 +13554,6 @@ export type MCPQuarantineRecordRiskEnum = typeof MCPQuarantineRecordRiskEnum[key
 export const MCPQuarantineRecordStateEnum = {
     Discovered: 'discovered',
     Quarantined: 'quarantined',
-    Approved: 'approved',
     Revoked: 'revoked',
     Expired: 'expired'
 } as const;
@@ -13643,7 +13636,7 @@ export function MCPQuarantineRecordToJSON(value?: MCPQuarantineRecord | null): a
  */
 
 /**
- *
+ * Optional, ignored approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
  * @export
  * @interface MCPRegistryApprovalRequest
  */
@@ -13653,34 +13646,43 @@ export interface MCPRegistryApprovalRequest {
      * @type {string}
      * @memberof MCPRegistryApprovalRequest
      */
-    server_id: string;
+    server_id?: string;
     /**
      *
      * @type {string}
      * @memberof MCPRegistryApprovalRequest
      */
-    approver_id: string;
+    approver_id?: string;
     /**
      *
      * @type {string}
      * @memberof MCPRegistryApprovalRequest
      */
-    approval_receipt_id: string;
+    approval_receipt_id?: string;
     /**
      *
      * @type {string}
      * @memberof MCPRegistryApprovalRequest
      */
     reason?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPRegistryApprovalRequest
+     */
+    tool_names?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPRegistryApprovalRequest
+     */
+    effects?: Array<string>;
 }
 
 /**
  * Check if a given object implements the MCPRegistryApprovalRequest interface.
  */
 export function instanceOfMCPRegistryApprovalRequest(value: object): boolean {
-    if (!('server_id' in value)) return false;
-    if (!('approver_id' in value)) return false;
-    if (!('approval_receipt_id' in value)) return false;
     return true;
 }
 
@@ -13694,10 +13696,12 @@ export function MCPRegistryApprovalRequestFromJSONTyped(json: any, ignoreDiscrim
     }
     return {
 
-        'server_id': json['server_id'],
-        'approver_id': json['approver_id'],
-        'approval_receipt_id': json['approval_receipt_id'],
+        'server_id': json['server_id'] == null ? undefined : json['server_id'],
+        'approver_id': json['approver_id'] == null ? undefined : json['approver_id'],
+        'approval_receipt_id': json['approval_receipt_id'] == null ? undefined : json['approval_receipt_id'],
         'reason': json['reason'] == null ? undefined : json['reason'],
+        'tool_names': json['tool_names'] == null ? undefined : json['tool_names'],
+        'effects': json['effects'] == null ? undefined : json['effects'],
     };
 }
 
@@ -13711,6 +13715,8 @@ export function MCPRegistryApprovalRequestToJSON(value?: MCPRegistryApprovalRequ
         'approver_id': value['approver_id'],
         'approval_receipt_id': value['approval_receipt_id'],
         'reason': value['reason'],
+        'tool_names': value['tool_names'],
+        'effects': value['effects'],
     };
 }
 
@@ -13833,6 +13839,97 @@ export function MCPRegistryDiscoverRequestToJSON(value?: MCPRegistryDiscoverRequ
         'tool_names': value['tool_names'],
         'risk': value['risk'],
         'reason': value['reason'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ * Optional, ignored path-scoped approval metadata. This endpoint returns verification-unavailable before evaluating a payload and cannot create executable authority until a credential verifier is configured.
+ * @export
+ * @interface MCPRegistryPathApprovalRequest
+ */
+export interface MCPRegistryPathApprovalRequest {
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryPathApprovalRequest
+     */
+    approver_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryPathApprovalRequest
+     */
+    approval_receipt_id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MCPRegistryPathApprovalRequest
+     */
+    reason?: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPRegistryPathApprovalRequest
+     */
+    tool_names?: Array<string>;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof MCPRegistryPathApprovalRequest
+     */
+    effects?: Array<string>;
+}
+
+/**
+ * Check if a given object implements the MCPRegistryPathApprovalRequest interface.
+ */
+export function instanceOfMCPRegistryPathApprovalRequest(value: object): boolean {
+    return true;
+}
+
+export function MCPRegistryPathApprovalRequestFromJSON(json: any): MCPRegistryPathApprovalRequest {
+    return MCPRegistryPathApprovalRequestFromJSONTyped(json, false);
+}
+
+export function MCPRegistryPathApprovalRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): MCPRegistryPathApprovalRequest {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'approver_id': json['approver_id'] == null ? undefined : json['approver_id'],
+        'approval_receipt_id': json['approval_receipt_id'] == null ? undefined : json['approval_receipt_id'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
+        'tool_names': json['tool_names'] == null ? undefined : json['tool_names'],
+        'effects': json['effects'] == null ? undefined : json['effects'],
+    };
+}
+
+export function MCPRegistryPathApprovalRequestToJSON(value?: MCPRegistryPathApprovalRequest | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'approver_id': value['approver_id'],
+        'approval_receipt_id': value['approval_receipt_id'],
+        'reason': value['reason'],
+        'tool_names': value['tool_names'],
+        'effects': value['effects'],
     };
 }
 
@@ -15793,6 +15890,108 @@ export function PreflightLaunchpadImport202ResponseToJSON(value?: PreflightLaunc
         'import': LaunchpadImportRecordToJSON(value['_import']),
         'preflight': ImportPreflightResultToJSON(value['preflight']),
         'cli_equivalent': value['cli_equivalent'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ *
+ * @export
+ * @interface ProblemDetail
+ */
+export interface ProblemDetail {
+    /**
+     *
+     * @type {string}
+     * @memberof ProblemDetail
+     */
+    type: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ProblemDetail
+     */
+    title: string;
+    /**
+     *
+     * @type {number}
+     * @memberof ProblemDetail
+     */
+    status: number;
+    /**
+     *
+     * @type {string}
+     * @memberof ProblemDetail
+     */
+    detail?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ProblemDetail
+     */
+    instance?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ProblemDetail
+     */
+    trace_id?: string;
+}
+
+/**
+ * Check if a given object implements the ProblemDetail interface.
+ */
+export function instanceOfProblemDetail(value: object): boolean {
+    if (!('type' in value)) return false;
+    if (!('title' in value)) return false;
+    if (!('status' in value)) return false;
+    return true;
+}
+
+export function ProblemDetailFromJSON(json: any): ProblemDetail {
+    return ProblemDetailFromJSONTyped(json, false);
+}
+
+export function ProblemDetailFromJSONTyped(json: any, ignoreDiscriminator: boolean): ProblemDetail {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'type': json['type'],
+        'title': json['title'],
+        'status': json['status'],
+        'detail': json['detail'] == null ? undefined : json['detail'],
+        'instance': json['instance'] == null ? undefined : json['instance'],
+        'trace_id': json['trace_id'] == null ? undefined : json['trace_id'],
+    };
+}
+
+export function ProblemDetailToJSON(value?: ProblemDetail | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'type': value['type'],
+        'title': value['title'],
+        'status': value['status'],
+        'detail': value['detail'],
+        'instance': value['instance'],
+        'trace_id': value['trace_id'],
     };
 }
 

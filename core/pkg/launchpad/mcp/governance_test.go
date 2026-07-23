@@ -7,13 +7,14 @@ import (
 
 func scopedServer() ServerRecord {
 	return ServerRecord{
-		ServerID:   "srv",
-		LaunchID:   "launch-1",
-		AppID:      "openclaw",
-		Principal:  "test.operator",
-		PolicyHash: "sha256:policy",
-		Approved:   true,
-		SchemaPins: map[string]string{"read": "sha256:read", "write": "sha256:write"},
+		ServerID:           "srv",
+		LaunchID:           "launch-1",
+		AppID:              "openclaw",
+		Principal:          "test.operator",
+		PolicyHash:         "sha256:policy",
+		Approved:           true,
+		credentialVerified: true,
+		SchemaPins:         map[string]string{"read": "sha256:read", "write": "sha256:write"},
 	}
 }
 
@@ -33,6 +34,15 @@ func TestUnknownServerQuarantines(t *testing.T) {
 	decision := Authorize(ServerRecord{}, CallRequest{ServerID: "unknown", ToolName: "write"})
 	if decision.Verdict != "ESCALATE" {
 		t.Fatalf("expected ESCALATE, got %s", decision.Verdict)
+	}
+}
+
+func TestOpaqueApprovedServerRemainsQuarantinedWithoutVerifier(t *testing.T) {
+	record := scopedServer()
+	record.credentialVerified = false
+	decision := Authorize(record, scopedRequest("read", "sha256:read"))
+	if decision.Verdict != "ESCALATE" || decision.Reason != "ERR_MCP_APPROVAL_VERIFICATION_UNAVAILABLE" {
+		t.Fatalf("opaque approval must fail closed, got %#v", decision)
 	}
 }
 

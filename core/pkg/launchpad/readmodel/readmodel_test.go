@@ -333,7 +333,7 @@ func TestMCPThreatReviews(t *testing.T) {
 	if reviews[1].State != "quarantined" || reviews[1].ProofStatus != "proven" || reviews[1].Publisher != "https://example.test/mcp" {
 		t.Fatalf("mcp review = %+v, want proven quarantined review with metadata", reviews[1])
 	}
-	if len(reviews[1].FixActions) != 1 || !strings.Contains(reviews[1].CLIEquivalent, "mcp-mcp") {
+	if len(reviews[1].FixActions) != 1 || reviews[1].CLIEquivalent != "helm-ai-kernel mcp pending --json" {
 		t.Fatalf("mcp review actions = %+v cli=%q", reviews[1].FixActions, reviews[1].CLIEquivalent)
 	}
 }

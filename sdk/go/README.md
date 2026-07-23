@@ -97,7 +97,7 @@ func main() {
 | `ListConformanceVectors()` | `GET /api/v1/conformance/vectors` |
 | `ListMCPRegistry()` | `GET /api/v1/mcp/registry` |
 | `DiscoverMCPServer(req)` | `POST /api/v1/mcp/registry` |
-| `ApproveMCPServer(req)` | `POST /api/v1/mcp/registry/approve` |
+| `ApproveMCPServer(req)` | Fails closed locally until credential verification is integrated; opaque metadata is never submitted. |
 | `GetBoundaryStatus()` | `GET /api/v1/boundary/status` |
 | `ListBoundaryCapabilities()` | `GET /api/v1/boundary/capabilities` |
 | `ListBoundaryRecords(query)` | `GET /api/v1/boundary/records` |

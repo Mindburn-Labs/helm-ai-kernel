@@ -1,5 +1,8 @@
 # Launchpad Security Review
 
+<!-- quantum_posture: this review references artifact signatures and receipts;
+it documents existing controls and makes no post-quantum security claim. -->
+
 Status: Launchpad v1 local-container review passes for OpenClaw and Hermes from
 workflow `26198407296`. OpenCode and Kilo Code are `verify_only`; `--version`
 smoke checks do not count as live-agent F2 coverage. The `v0.5.9`
@@ -61,8 +64,8 @@ clean-install gate remains the package/install release gate.
 - [KEEP] Live conformance tests exercise Docker-backed runtime startup and app
   healthchecks.
 - [KEEP] MCP governance tests quarantine unknown servers/tools, require schema
-  pins, deny schema drift, require approval receipts for side-effect tools, and
-  block revoked tools.
+  pins, deny schema drift, reject opaque approval assertions for side-effect
+  tools until credential verification exists, and block revoked tools.
 - [KEEP] MCP mediation proof tests cover stdio, HTTP JSON-RPC,
   `/mcp/v1/execute`, SSE primer behavior, generated client configs, MCPB
   packaging, pre-executor schema denial, side-effect approval denial,

@@ -15,7 +15,7 @@ agent proposes action
 -> HELM evaluates policy, approval state, and effect scope
 -> ALLOW: action may dispatch
 -> DENY: action is blocked
--> ESCALATE: action is blocked until a scoped approval exists
+-> ESCALATE: action is blocked until a credential-verifying source records a scoped approval
 -> receipt and EvidencePack material can be verified offline
 ```
 
@@ -49,7 +49,7 @@ pre-v0.7.3 derivable-seed receipts remain untrusted.
 | --- | --- | --- |
 | Agent gateway | Routes actions before side effects run | verdict and receipt |
 | Policy authoring | Defines allowed, denied, and escalated effects | policy ref in receipt |
-| Scoped approval | Narrows an `ESCALATE` path | approval and revocation receipts |
+| Scoped approval | Narrows an `ESCALATE` path when a source-owned verifier is configured | approval and revocation receipts |
 | EvidencePack | Moves proof between machines | offline verifier result |
 | Category pages | Explain adjacent tools without superiority claims | cited public evidence |
 
@@ -57,8 +57,8 @@ pre-v0.7.3 derivable-seed receipts remain untrusted.
 
 - HELM only governs effects routed through an adapter, wrapper, hook, proxy, or
   API route.
-- `ESCALATE` is not permission to continue. Approve the exact scope, then rerun
-  the original action.
+- `ESCALATE` is not permission to continue. A source-owned verifier must issue
+  any required approval before the original action can be rerun.
 - Receipts prove the evaluated action and verdict. They do not prove every
   tool outside the boundary was governed.
 - EvidencePacks are portable proof bundles, not marketing screenshots.

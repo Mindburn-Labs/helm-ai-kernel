@@ -32,11 +32,11 @@ helm-ai-kernel verify --bundle /tmp/helm-mcp-proof/public_mcp_proof/evidencepack
 | Scenario | Expected boundary result |
 | --- | --- |
 | `malicious_unknown_mcp` | Unknown or malicious MCP server returns `ESCALATE` with no dispatch. |
-| `prompt_injected_tool_output` | Tool-output instruction cannot trigger a side effect without an approval receipt. |
-| `excessive_agency` | Destructive autonomous action returns `DENY` before dispatch. |
+| `prompt_injected_tool_output` | Tool-output instruction cannot turn opaque approval metadata into a dispatch grant. |
+| `excessive_agency` | Destructive autonomous action stays quarantined without credential-verified approval evidence. |
 | `confused_deputy_scope_mismatch` | Launch or principal scope mismatch returns `DENY`. |
-| `missing_schema_pin` | Approved server without a pinned tool schema returns `ESCALATE`. |
-| `schema_drift` | Caller schema hash mismatch returns `DENY`. |
+| `missing_schema_pin` | Opaque approved status stays quarantined before schema evaluation. |
+| `schema_drift` | Caller-supplied schema metadata cannot bypass credential verification or schema pinning. |
 | `replay_reordering_attempt` | Replay or reordering attempt is marked invalid and returns `DENY`. |
 
 Every scenario must emit `dispatched=false`, a receipt under

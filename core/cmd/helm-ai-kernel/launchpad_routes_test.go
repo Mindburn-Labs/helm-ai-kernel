@@ -12,44 +12,39 @@ import (
 	"time"
 
 	launchsession "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
+	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
 
-func TestLaunchpadMCPApprovalRequiresScopedExpiringTools(t *testing.T) {
-	valid := httptest.NewRecorder()
-	handleLaunchpadMCPApproval(valid, httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/mcp/approvals", strings.NewReader(`{
+func TestLaunchpadMCPApprovalFailsClosedWithoutCredentialVerifier(t *testing.T) {
+	for name, payload := range map[string]string{
+		"well_formed": `{
 		"server_id":"srv-1",
 		"tools":["write","read","write"],
 		"ttl":"15m",
 		"reason":"operator reviewed MCP server",
 		"approver":"operator"
-	}`)))
-	if valid.Code != http.StatusCreated {
-		t.Fatalf("valid approval status=%d body=%s", valid.Code, valid.Body.String())
-	}
-	var body map[string]any
-	if err := json.Unmarshal(valid.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	approval := body["approval"].(map[string]any)
-	if approval["expires_at"] == "manual-revocation" || approval["tool_scope_hash"] == "" {
-		t.Fatalf("approval missing concrete expiry or scope hash: %#v", approval)
-	}
-	tools := approval["tool_names"].([]any)
-	if len(tools) != 2 || tools[0] != "read" || tools[1] != "write" {
-		t.Fatalf("tools not normalized and scoped: %#v", tools)
-	}
-
-	for name, payload := range map[string]string{
-		"bad_ttl":       `{"server_id":"srv-1","tools":["write"],"ttl":"never","reason":"reviewed"}`,
-		"nonpositive":   `{"server_id":"srv-1","tools":["write"],"ttl":"0s","reason":"reviewed"}`,
-		"wildcard_tool": `{"server_id":"srv-1","tools":["*"],"ttl":"15m","reason":"reviewed"}`,
-		"blank_tool":    `{"server_id":"srv-1","tools":[" "],"ttl":"15m","reason":"reviewed"}`,
+		}`,
+		"opaque_metadata": `{"server_id":"srv-1","tools":["write"],"ttl":"15m","reason":"reviewed"}`,
+		"empty_object":    `{}`,
+		"malformed_json":  `{"server_id":`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			handleLaunchpadMCPApproval(rec, httptest.NewRequest(http.MethodPost, "/api/v1/launchpad/mcp/approvals", strings.NewReader(payload)))
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("expected bad request, got %d body=%s", rec.Code, rec.Body.String())
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Fatalf("expected unavailable, got %d body=%s", rec.Code, rec.Body.String())
+			}
+			if contentType := rec.Header().Get("Content-Type"); !strings.Contains(contentType, "application/problem+json") {
+				t.Fatalf("content type = %q", contentType)
+			}
+			var problem struct {
+				Detail string `json:"detail"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
+				t.Fatal(err)
+			}
+			if problem.Detail != mcppkg.ErrApprovalVerificationUnavailable.Error() {
+				t.Fatalf("detail=%q", problem.Detail)
 			}
 		})
 	}

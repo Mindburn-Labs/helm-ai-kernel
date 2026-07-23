@@ -18,12 +18,12 @@ For MCP and boundary decisions, HELM records:
 - reason code
 - server id, tool name, and effect scope when available
 - receipt path
-- approval hint for resolvable escalations
+- an explicit no-dispatch warning when MCP approval verification is unavailable
 - policy epoch and record hash
 
-Approvals and revocations also write receipts. A later evaluation must fail
-closed when an approval is expired, revoked, or outside its server, tool, or
-effect scope.
+Decisions and revocations write receipts. The bundled MCP approval CLI and API
+are unavailable until credential verification is integrated, so opaque approval
+metadata cannot write an approval receipt or make a later evaluation dispatch.
 
 ## Inspect Local Receipts
 
@@ -71,11 +71,12 @@ Start with these fields:
 | `verdict` | `ALLOW`, `DENY`, or `ESCALATE` |
 | `reason_code` | Why the boundary returned that verdict |
 | `receipt_path` | Local file written for the decision |
-| `approval_command` | Scoped command to run when the verdict is `ESCALATE` |
+| `approval_command` | Reserved for a credential-verified approval integration; omitted while verification is unavailable |
 | `record_hash` | Tamper-evidence handle for the boundary record |
 
-An `ESCALATE` receipt is not permission to continue. Approve the exact scope,
-then rerun the original action so HELM evaluates it again.
+An `ESCALATE` receipt is not permission to continue. The bundled MCP approval
+surface remains unavailable until credential verification is integrated, so the
+server stays quarantined and the original action must not be rerun as allowed.
 
 ## Export Evidence
 

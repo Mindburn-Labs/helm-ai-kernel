@@ -3,11 +3,14 @@ package boundary
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	_ "modernc.org/sqlite"
 )
 
@@ -54,85 +57,174 @@ func TestSurfaceRegistryVerifyRecordDetectsTamper(t *testing.T) {
 	}
 }
 
-func TestApprovalTransitionSealsCeremony(t *testing.T) {
+func TestApprovalTransitionFailsClosedWithoutVerifier(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })
 
-	approval, err := registry.TransitionApproval("approval-bootstrap", contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt-1", "reviewed")
-	if err != nil {
-		t.Fatal(err)
+	if _, err := registry.TransitionApproval("approval-bootstrap", contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt-1", "reviewed"); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("approval error = %v, want %v", err, ErrApprovalVerificationUnavailable)
 	}
-	if approval.State != contracts.ApprovalCeremonyAllowed || approval.CeremonyHash == "" {
-		t.Fatalf("unexpected approval: %+v", approval)
+	approval := registry.approvals["approval-bootstrap"]
+	if approval.State != contracts.ApprovalCeremonyPending {
+		t.Fatalf("approval state = %q, want pending", approval.State)
+	}
+	if len(approval.Approvers) != 0 || approval.ReceiptID != "" {
+		t.Fatalf("approval persisted unverified evidence: %+v", approval)
 	}
 }
 
-func TestApprovalTransitionEnforcesQuorumAndTimelock(t *testing.T) {
+func TestPutApprovalFailsClosedWhenAllowedWithoutVerifier(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })
-	approval, err := registry.PutApproval(contracts.ApprovalCeremony{
-		ApprovalID:    "approval-quorum",
-		Subject:       "mcp:srv",
+
+	forged := contracts.ApprovalCeremony{
+		ApprovalID:    "approval-forged",
+		Subject:       "mcp:billing",
 		Action:        "mcp.approve",
-		State:         contracts.ApprovalCeremonyPending,
-		RequestedBy:   "agent:test",
-		Quorum:        2,
-		TimelockUntil: now.Add(time.Minute),
+		State:         contracts.ApprovalCeremonyAllowed,
+		RequestedBy:   "agent:untrusted",
+		AuthMethod:    "passkey",
+		AssertionHash: "sha256:opaque-assertion",
+		ReceiptID:     "rcpt-forged",
 		CreatedAt:     now,
 		UpdatedAt:     now,
+	}
+	if _, err := registry.PutApproval(forged); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("put approval error = %v, want %v", err, ErrApprovalVerificationUnavailable)
+	}
+	if _, ok := registry.approvals[forged.ApprovalID]; ok {
+		t.Fatalf("forged allowed approval persisted: %+v", registry.approvals[forged.ApprovalID])
+	}
+
+	bootstrap := registry.approvals["approval-bootstrap"]
+	bootstrap.State = contracts.ApprovalCeremonyAllowed
+	bootstrap.AuthMethod = "passkey"
+	bootstrap.AssertionHash = "sha256:opaque-assertion"
+	bootstrap.ReceiptID = "rcpt-forged"
+	if _, err := registry.PutApproval(bootstrap); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("replacement approval error = %v, want %v", err, ErrApprovalVerificationUnavailable)
+	}
+	persisted := registry.approvals["approval-bootstrap"]
+	if persisted.State != contracts.ApprovalCeremonyPending || persisted.AuthMethod != "" || persisted.AssertionHash != "" || persisted.ReceiptID != "" {
+		t.Fatalf("bootstrap approval mutated by forged write: %+v", persisted)
+	}
+}
+
+func TestLoadSnapshotFailsClosedForLegacyAllowedApprovals(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	allowed := contracts.ApprovalCeremony{
+		ApprovalID:       "approval-legacy",
+		Subject:          "mcp:billing",
+		Action:           "mcp.approve",
+		State:            contracts.ApprovalCeremonyAllowed,
+		RequestedBy:      "agent:legacy",
+		Approvers:        []string{"user:opaque"},
+		AuthMethod:       "passkey",
+		ChallengeID:      "challenge-opaque",
+		ChallengeHash:    "sha256:challenge",
+		AssertionHash:    "sha256:assertion",
+		ReceiptID:        "receipt-opaque",
+		BoundaryRecordID: "record-opaque",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	sealed, err := allowed.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := json.Marshal(surfaceRegistrySnapshot{
+		Version: 2,
+		Approvals: map[string]contracts.ApprovalCeremony{
+			sealed.ApprovalID: sealed,
+		},
+		MCPServers: map[string]mcppkg.ServerQuarantineRecord{
+			"mcp-legacy": {
+				ServerID:          "mcp-legacy",
+				State:             mcppkg.QuarantineApproved,
+				ApprovedBy:        "user:opaque",
+				ApprovalReceiptID: "receipt-opaque",
+			},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	approval, err = registry.TransitionApproval(approval.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt-1", "reviewed")
-	if err != nil {
+	registry := newSurfaceRegistry(func() time.Time { return now })
+	if err := registry.loadSnapshot(snapshot); err != nil {
 		t.Fatal(err)
 	}
-	if approval.State != contracts.ApprovalCeremonyPending {
-		t.Fatalf("timelocked approval should remain pending: %+v", approval)
+	approvals := registry.ListApprovals()
+	if len(approvals) != 1 {
+		t.Fatalf("approval count = %d, want 1", len(approvals))
 	}
-
-	later := now.Add(2 * time.Minute)
-	registry.now = func() time.Time { return later }
-	approval, err = registry.TransitionApproval(approval.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt-1", "reviewed")
-	if err != nil {
-		t.Fatal(err)
+	approval := approvals[0]
+	if approval.State != contracts.ApprovalCeremonyPending || approval.Reason != ErrApprovalVerificationUnavailable.Error() {
+		t.Fatalf("legacy approval state = %+v", approval)
 	}
-	if approval.State != contracts.ApprovalCeremonyPending || len(approval.Approvers) != 1 {
-		t.Fatalf("approval should remain pending until quorum: %+v", approval)
+	if len(approval.Approvers) != 0 || approval.AuthMethod != "" || approval.ChallengeID != "" || approval.ChallengeHash != "" || approval.AssertionHash != "" || approval.ReceiptID != "" || approval.BoundaryRecordID != "" {
+		t.Fatalf("legacy approval retained opaque evidence: %+v", approval)
 	}
-	approval, err = registry.TransitionApproval(approval.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:bob", "rcpt-2", "reviewed")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if approval.State != contracts.ApprovalCeremonyAllowed {
-		t.Fatalf("approval should activate after quorum: %+v", approval)
+	mcpRecord, ok := registry.GetMCPServer("mcp-legacy")
+	if !ok || mcpRecord.State != mcppkg.QuarantineQuarantined || mcpRecord.ApprovedBy != "" || mcpRecord.ApprovalReceiptID != "" {
+		t.Fatalf("legacy MCP approval retained authority: (%+v,%v)", mcpRecord, ok)
 	}
 }
 
-func TestApprovalChallengeAssertionBindsPasskeyEvidence(t *testing.T) {
+func TestApprovalTransitionAllowsDenialWithoutVerifier(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry := NewSurfaceRegistry(func() time.Time { return now })
+	approval, err := registry.TransitionApproval("approval-bootstrap", contracts.ApprovalCeremonyDenied, "user:alice", "rcpt-1", "reviewed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approval.State != contracts.ApprovalCeremonyDenied || len(approval.Approvers) != 1 || approval.ReceiptID != "rcpt-1" {
+		t.Fatalf("denied approval = %+v", approval)
+	}
+}
+
+func TestApprovalChallengeAssertionFailsClosedWithoutVerifier(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })
 	challenge, err := registry.CreateApprovalChallenge("approval-bootstrap", "passkey", time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
-	approval, err := registry.AssertApprovalChallenge(contracts.ApprovalWebAuthnAssertion{
+	assertUnavailable := func(t *testing.T, assertion contracts.ApprovalWebAuthnAssertion) {
+		t.Helper()
+		if _, err := registry.AssertApprovalChallenge(assertion); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+			t.Fatalf("assertion error = %v, want %v", err, ErrApprovalVerificationUnavailable)
+		}
+		approval := registry.approvals["approval-bootstrap"]
+		if approval.State != contracts.ApprovalCeremonyPending {
+			t.Fatalf("approval state = %q, want pending", approval.State)
+		}
+		if approval.AuthMethod != "" || approval.ChallengeID != "" || approval.ChallengeHash != "" || approval.AssertionHash != "" {
+			t.Fatalf("approval claimed unverified passkey evidence: %+v", approval)
+		}
+		persisted := registry.challenges[challenge.ChallengeID]
+		if persisted.Verified || persisted.AssertionHash != "" {
+			t.Fatalf("challenge claimed verification: %+v", persisted)
+		}
+	}
+
+	assertion := contracts.ApprovalWebAuthnAssertion{
 		ChallengeID: challenge.ChallengeID,
 		Actor:       "user:alice",
-		Assertion:   "signed-client-data",
+		Assertion:   "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0.valid-looking-opaque-signature",
 		ReceiptID:   "rcpt-passkey",
 		Reason:      "passkey assertion",
+	}
+	t.Run("valid-looking opaque assertion", func(t *testing.T) {
+		assertUnavailable(t, assertion)
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if approval.State != contracts.ApprovalCeremonyAllowed || approval.AuthMethod != "passkey" {
-		t.Fatalf("passkey approval not bound: %+v", approval)
-	}
-	if approval.ChallengeHash == "" || approval.AssertionHash == "" {
-		t.Fatalf("challenge/assertion hashes missing: %+v", approval)
-	}
+	t.Run("repeated request", func(t *testing.T) {
+		assertUnavailable(t, assertion)
+	})
+
+	now = now.Add(2 * time.Minute)
+	t.Run("expired challenge", func(t *testing.T) {
+		assertUnavailable(t, assertion)
+	})
 }
 
 func TestFileBackedSurfaceRegistryPersistsRecords(t *testing.T) {

@@ -723,36 +723,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		var req struct {
-			ServerID          string   `json:"server_id"`
-			ApproverID        string   `json:"approver_id"`
-			ApprovalReceiptID string   `json:"approval_receipt_id"`
-			Reason            string   `json:"reason"`
-			ToolNames         []string `json:"tool_names"`
-			Effects           []string `json:"effects"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid MCP approval request")
-			return
-		}
-		record, err := mcpQuarantine.Approve(r.Context(), mcppkg.ApprovalDecision{
-			ServerID:          req.ServerID,
-			ApproverID:        req.ApproverID,
-			ApprovalReceiptID: req.ApprovalReceiptID,
-			ApprovedAt:        time.Now().UTC(),
-			Reason:            req.Reason,
-			ToolNames:         req.ToolNames,
-			Effects:           req.Effects,
-		})
-		if err != nil {
-			api.WriteBadRequest(w, err.Error())
-			return
-		}
-		if _, err := surfaces.PutMCPServer(record); err != nil {
-			api.WriteInternal(w, err)
-			return
-		}
-		writeContractJSON(w, http.StatusOK, record)
+		// Approval is deliberately unavailable until a credential verifier can
+		// bind the evidence. Do not parse opaque caller metadata first: it must
+		// never influence an approval result or change the public 503 contract.
+		api.WriteError(w, http.StatusServiceUnavailable, "MCP approval verification unavailable", mcppkg.ErrApprovalVerificationUnavailable.Error())
 	}))
 
 	mux.HandleFunc("/api/v1/mcp/registry/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -776,35 +750,9 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			}
 			writeContractJSON(w, http.StatusOK, record)
 		case action == "approve" && r.Method == http.MethodPost:
-			var req struct {
-				ApproverID        string   `json:"approver_id"`
-				ApprovalReceiptID string   `json:"approval_receipt_id"`
-				Reason            string   `json:"reason"`
-				ToolNames         []string `json:"tool_names"`
-				Effects           []string `json:"effects"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				api.WriteBadRequest(w, "Invalid MCP approval request")
-				return
-			}
-			record, err := mcpQuarantine.Approve(r.Context(), mcppkg.ApprovalDecision{
-				ServerID:          serverID,
-				ApproverID:        req.ApproverID,
-				ApprovalReceiptID: req.ApprovalReceiptID,
-				ApprovedAt:        time.Now().UTC(),
-				Reason:            req.Reason,
-				ToolNames:         req.ToolNames,
-				Effects:           req.Effects,
-			})
-			if err != nil {
-				api.WriteBadRequest(w, err.Error())
-				return
-			}
-			if _, err := surfaces.PutMCPServer(record); err != nil {
-				api.WriteInternal(w, err)
-				return
-			}
-			writeContractJSON(w, http.StatusOK, record)
+			// See the collection endpoint: the disabled path-scoped variant must
+			// reject without parsing or trusting caller-provided approval fields.
+			api.WriteError(w, http.StatusServiceUnavailable, "MCP approval verification unavailable", mcppkg.ErrApprovalVerificationUnavailable.Error())
 		case action == "revoke" && r.Method == http.MethodPost:
 			var req struct {
 				Reason string `json:"reason"`
@@ -858,7 +806,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			State:               string(record.State),
 			ToolCount:           len(record.ToolNames),
 			Findings:            []string{"unknown MCP server defaults to quarantine", "schema pins required before call-time dispatch"},
-			RecommendedAction:   "approve or revoke after review",
+			RecommendedAction:   "keep quarantined or revoke; credential verification is required before approval",
 			QuarantineRecordID:  record.ServerID,
 			RequiresApproval:    true,
 			SchemaPinRequired:   true,
@@ -1216,17 +1164,9 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		if action == "webauthn/assert" {
-			var req contracts.ApprovalWebAuthnAssertion
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				api.WriteBadRequest(w, "Invalid WebAuthn assertion request")
-				return
-			}
-			approval, err := surfaces.AssertApprovalChallenge(req)
-			if err != nil {
-				api.WriteBadRequest(w, err.Error())
-				return
-			}
-			writeContractJSON(w, http.StatusOK, approval)
+			// The assertion surface is disabled until a verifier exists. It must
+			// not parse or persist a raw assertion as a prerequisite for its 503.
+			api.WriteError(w, http.StatusServiceUnavailable, "Approval verification unavailable", boundarypkg.ErrApprovalVerificationUnavailable.Error())
 			return
 		}
 		var req struct {
@@ -1249,6 +1189,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		approval, err := surfaces.TransitionApproval(approvalID, state, req.Actor, req.ReceiptID, req.Reason)
 		if err != nil {
+			if errors.Is(err, boundarypkg.ErrApprovalVerificationUnavailable) {
+				api.WriteError(w, http.StatusServiceUnavailable, "Approval verification unavailable", err.Error())
+				return
+			}
 			api.WriteBadRequest(w, err.Error())
 			return
 		}
@@ -1349,6 +1293,7 @@ func contractReceipts(ctx context.Context, svc *Services, sessionID string, limi
 
 func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegistry, records []mcppkg.ServerQuarantineRecord) {
 	for _, record := range records {
+		record = mcppkg.FailClosedUnverifiedApproval(record)
 		_, _ = registry.Discover(ctx, mcppkg.DiscoverServerRequest{
 			ServerID:     record.ServerID,
 			Name:         record.Name,
@@ -1361,19 +1306,6 @@ func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegist
 			Reason:       record.Reason,
 		})
 		switch record.State {
-		case mcppkg.QuarantineApproved:
-			if record.ApprovedBy != "" && record.ApprovalReceiptID != "" {
-				_, _ = registry.Approve(ctx, mcppkg.ApprovalDecision{
-					ServerID:          record.ServerID,
-					ApproverID:        record.ApprovedBy,
-					ApprovalReceiptID: record.ApprovalReceiptID,
-					ApprovedAt:        record.ApprovedAt,
-					ExpiresAt:         record.ExpiresAt,
-					Reason:            record.Reason,
-					ToolNames:         record.ApprovedToolNames,
-					Effects:           record.ApprovedEffects,
-				})
-			}
 		case mcppkg.QuarantineRevoked:
 			_, _ = registry.Revoke(ctx, record.ServerID, record.Reason, record.RevokedAt)
 		}

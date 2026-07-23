@@ -41,7 +41,7 @@ MCP claims require proof that every advertised path reaches the governed
 executor before dispatch: stdio, HTTP JSON-RPC, `/mcp/v1/execute`, generated
 client configs, MCPB/plugin packaging, and subprocess wrapper profiles. The
 proof harness must include negative cases for unknown tools, schema drift,
-side-effect tools without approval receipts, and unapproved servers.
+side-effect tools without credential-verified approval receipts, and unapproved servers.
 
 WebSocket MCP is not a supported Launchpad transport. Any future WebSocket path
 must be added to the mediation proof harness before it appears in public claims.

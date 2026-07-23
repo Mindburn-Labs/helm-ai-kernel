@@ -34,6 +34,21 @@ func TestSetupNoArgsPrintsChooser(t *testing.T) {
 	}
 }
 
+func TestSetupHookCommandIncludesExplicitSigningSeedFile(t *testing.T) {
+	opts := setupOptions{
+		Target:          "codex",
+		DataDir:         "/tmp/helm-data",
+		SigningSeedFile: "/private/approved/workstation.seed",
+	}
+	command := setupHookCommand(opts, "/usr/local/bin/helm-ai-kernel")
+	if !strings.Contains(command, "--signing-seed-file '/private/approved/workstation.seed'") {
+		t.Fatalf("hook command did not preserve explicit signer source: %s", command)
+	}
+	if removal := setupUninstallCommand(opts); !strings.Contains(removal, "--signing-seed-file '/private/approved/workstation.seed'") {
+		t.Fatalf("uninstall command did not preserve explicit signer source: %s", removal)
+	}
+}
+
 func TestSetupJSONSupportMatrix(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"helm-ai-kernel", "setup", "--json"}, &stdout, &stderr)
@@ -1385,5 +1400,76 @@ func markCodexProjectTrusted(t *testing.T, home, workspace string) {
 	body := "[projects.\"" + abs + "\"]\ntrust_level = \"trusted\"\n"
 	if err := os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSetupNormalizesRelativeSigningSeedFile(t *testing.T) {
+	var stderr bytes.Buffer
+	opts, code := parseSetupInstallArgs([]string{"claude-code", "--yes", "--data-dir", t.TempDir(), "--signing-seed-file", "rel/seed.hex"}, &stderr)
+	if code != 0 {
+		t.Fatalf("parse exit = %d stderr=%s", code, stderr.String())
+	}
+	if !filepath.IsAbs(opts.SigningSeedFile) {
+		t.Fatalf("SigningSeedFile = %q, want absolute (relative paths bake a cwd-dependent hook command)", opts.SigningSeedFile)
+	}
+}
+
+func TestHookCommandKeyIgnoresSigningSeedFileArgument(t *testing.T) {
+	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
+	withSeed := base + " --signing-seed-file '/home/op/keys/seed.hex'"
+	withBareSeed := base + " --signing-seed-file /home/op/keys/seed.hex"
+
+	if hookCommandKey(withSeed) != hookCommandKey(base) {
+		t.Fatalf("quoted seed-file arg changes hook identity:\n%q\n%q", hookCommandKey(withSeed), hookCommandKey(base))
+	}
+	if hookCommandKey(withBareSeed) != hookCommandKey(base) {
+		t.Fatalf("bare seed-file arg changes hook identity")
+	}
+	if hookCommandKey(base) != base {
+		t.Fatalf("command without the flag must be unchanged, got %q", hookCommandKey(base))
+	}
+
+	// status/remove parity: a hook installed WITH the flag is found by a
+	// lookup command built WITHOUT it.
+	pre := []any{map[string]any{"hooks": []any{map[string]any{"command": withSeed}}}}
+	if !hookCommandPresent(pre, base) {
+		t.Fatal("hook installed with seed-file flag not matched by flagless lookup")
+	}
+}
+
+func TestHookCommandKeyHandlesEscapedQuotesInSeedPath(t *testing.T) {
+	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
+	trickyPath := "/tmp/o'brien/seed.hex"
+	withSeed := base + " --signing-seed-file " + shellQuote(trickyPath)
+
+	if got := hookCommandKey(withSeed); got != base {
+		t.Fatalf("escaped-quote seed path not fully stripped:\n got %q\nwant %q", got, base)
+	}
+}
+
+func TestUpsertHookConfigUpdatesSeedFileOnReinstall(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "settings.json")
+	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
+	oldCmd := base + " --signing-seed-file '/keys/old.hex'"
+	newCmd := base + " --signing-seed-file '/keys/new.hex'"
+
+	if err := upsertHookConfig(path, "*", oldCmd, tmp); err != nil {
+		t.Fatalf("initial install: %v", err)
+	}
+	if err := upsertHookConfig(path, "*", newCmd, tmp); err != nil {
+		t.Fatalf("reinstall with rotated seed: %v", err)
+	}
+
+	root, err := readJSONObject(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(root)
+	if !strings.Contains(string(raw), "/keys/new.hex") {
+		t.Fatalf("reinstall did not update stored seed path: %s", raw)
+	}
+	if strings.Contains(string(raw), "/keys/old.hex") {
+		t.Fatalf("stale seed path survived reinstall: %s", raw)
 	}
 }

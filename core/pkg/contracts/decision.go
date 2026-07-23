@@ -2,6 +2,9 @@
 // protection depends on the configured classical, ML-DSA, or hybrid verifier.
 package contracts
 
+// quantum_posture: signed threat evidence uses an explicit algorithm-specific
+// threat-v1 profile and makes no post-quantum certification claim.
+
 import (
 	"fmt"
 	"time"
@@ -52,6 +55,12 @@ type DecisionRecord struct {
 	Reason         string         `json:"reason"`                  // Human-readable explanation
 	ReasonCode     string         `json:"reason_code,omitempty"`   // Machine-readable registry code
 	InputContext   map[string]any `json:"input_context,omitempty"` // For explainability
+	// ThreatScan is typed evidence covered by the versioned threat signature.
+	// Signature remains a legacy-preimage signature for rolling-upgrade
+	// compatibility; upgraded verifiers require both when ThreatScan is present.
+	ThreatScan              *ThreatScanRef `json:"threat_scan,omitempty"`
+	ThreatScanSignature     string         `json:"threat_scan_signature,omitempty"`
+	ThreatScanSignatureType string         `json:"threat_scan_signature_type,omitempty"`
 	// Session Risk Memory fields bind trajectory-level authorization state to the signed decision.
 	TrajectoryRiskScore    float64 `json:"trajectory_risk_score,omitempty"`
 	SessionCentroidHash    string  `json:"session_centroid_hash,omitempty"`

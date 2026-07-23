@@ -135,6 +135,17 @@ func WithThreatScanner(ts *threatscan.Scanner) GuardianOption {
 	return func(g *Guardian) { g.threatScanner = ts }
 }
 
+// WithSemanticThreatEscalation configures the only verdict authority exposed
+// to semantic similarity: a deterministic ESCALATE threshold in basis points.
+// Invalid values leave semantic assessment advisory-only.
+func WithSemanticThreatEscalation(thresholdBP int) GuardianOption {
+	return func(g *Guardian) {
+		if thresholdBP >= 1 && thresholdBP <= 10000 {
+			g.semanticEscalationThresholdBP = thresholdBP
+		}
+	}
+}
+
 // WithDelegationStore injects the delegation session store.
 func WithDelegationStore(ds identity.DelegationStore) GuardianOption {
 	return func(g *Guardian) { g.delegationStore = ds }
@@ -177,35 +188,36 @@ func WithSafeDepController(controller *safedep.Controller) GuardianOption {
 
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
-	signer            crypto.Signer
-	prg               *prg.Graph
-	pe                *prg.PolicyEngine
-	registry          *pkg_artifact.Registry
-	clock             Clock
-	tracker           BudgetGate
-	auditLog          *AuditLog
-	temporal          *TemporalGuardian
-	envFprint         string                  // Boot-sequence fingerprint for DecisionRecords
-	pdp               pdp.PolicyDecisionPoint // Optional pluggable policy backend
-	snapshotStore     policyreconcile.PolicySnapshotStore
-	snapshotScope     policyreconcile.PolicyScope
-	complianceChecker ComplianceChecker            // Optional compliance pre-check
-	freezeCtrl        *kernel.FreezeController     // Global kill-switch
-	scopedStopReader  kernel.ScopedStopReader      // Tenant/workspace dispatch fence
-	agentKillSwitch   *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
-	contextGuard      *kernel.ContextGuard         // Environment mismatch detection
-	isolationChecker  *identity.IsolationChecker   // Agent credential reuse detection
-	egressChecker     *firewall.EgressChecker      // Network egress enforcement
-	threatScanner     *threatscan.Scanner          // Canonical threat signal scanner
-	delegationStore   identity.DelegationStore     // Delegation session store (§Gate 5)
-	behavioralScorer  *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
-	privilegeResolver PrivilegeResolver            // Privilege tier resolver
-	sessionRiskMemory *SessionRiskMemory           // Deterministic trajectory authorization gate
-	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
-	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
-	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
-	safeDepController *safedep.Controller          // Safe Deprecation emergency release plane
-	boundaryChain     []BoundaryInterceptor        // Cached request interceptors
+	signer                        crypto.Signer
+	prg                           *prg.Graph
+	pe                            *prg.PolicyEngine
+	registry                      *pkg_artifact.Registry
+	clock                         Clock
+	tracker                       BudgetGate
+	auditLog                      *AuditLog
+	temporal                      *TemporalGuardian
+	envFprint                     string                  // Boot-sequence fingerprint for DecisionRecords
+	pdp                           pdp.PolicyDecisionPoint // Optional pluggable policy backend
+	snapshotStore                 policyreconcile.PolicySnapshotStore
+	snapshotScope                 policyreconcile.PolicyScope
+	complianceChecker             ComplianceChecker            // Optional compliance pre-check
+	freezeCtrl                    *kernel.FreezeController     // Global kill-switch
+	scopedStopReader              kernel.ScopedStopReader      // Tenant/workspace dispatch fence
+	agentKillSwitch               *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
+	contextGuard                  *kernel.ContextGuard         // Environment mismatch detection
+	isolationChecker              *identity.IsolationChecker   // Agent credential reuse detection
+	egressChecker                 *firewall.EgressChecker      // Network egress enforcement
+	threatScanner                 *threatscan.Scanner          // Canonical threat signal scanner
+	semanticEscalationThresholdBP int                          // Optional ESCALATE-only semantic policy
+	delegationStore               identity.DelegationStore     // Delegation session store (§Gate 5)
+	behavioralScorer              *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
+	privilegeResolver             PrivilegeResolver            // Privilege tier resolver
+	sessionRiskMemory             *SessionRiskMemory           // Deterministic trajectory authorization gate
+	otel                          *OTelInstrumentation         // Optional OTel tracing & metrics
+	warmLeaseMgr                  *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
+	zeroidInterceptor             *ZeroIDInterceptor           // ZeroID identity validator
+	safeDepController             *safedep.Controller          // Safe Deprecation emergency release plane
+	boundaryChain                 []BoundaryInterceptor        // Cached request interceptors
 }
 
 // ZeroID returns the registered ZeroIDInterceptor.
@@ -472,6 +484,11 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 		"artifacts": artifacts,
 		"timestamp": g.clock.Now().Unix(),
 		"taint":     contracts.NormalizeTaintLabels(effect.Taint),
+	}
+	if decision.ThreatScan != nil {
+		// Expose only Guardian-owned typed evidence at the stable CEL path
+		// input.threat_scan; never project caller context into this field.
+		input[ContextThreatScan] = decision.ThreatScan.PolicyContext()
 	}
 
 	valid, err := g.pe.EvaluateRequirementSet(rule, input)
@@ -1014,11 +1031,13 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			decision.RiskAccumulationWindow = eCtx.SessionRiskSnapshot.RiskAccumulationWindow
 		}
 
-		if eCtx.ThreatScanResult != nil && eCtx.ThreatScanResult.FindingCount > 0 {
+		if eCtx.ThreatScanResult != nil && (eCtx.ThreatScanResult.FindingCount > 0 || eCtx.ThreatScanResult.Semantic != nil) {
 			if decision.InputContext == nil {
 				decision.InputContext = make(map[string]any)
 			}
-			decision.InputContext["threat_scan"] = eCtx.ThreatScanResult.Ref()
+			ref := eCtx.ThreatScanResult.Ref()
+			decision.InputContext[ContextThreatScan] = ref.PolicyContext()
+			decision.ThreatScan = &ref
 		}
 
 		if eCtx.PDPBackend != "" {

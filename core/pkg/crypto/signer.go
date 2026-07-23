@@ -116,14 +116,27 @@ func (s *Ed25519Signer) Verify(message []byte, signature []byte) bool {
 
 // SignDecision signs a DecisionRecord
 func (s *Ed25519Signer) SignDecision(d *contracts.DecisionRecord) error {
-	// Canonicalize for signing
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
-	sig, err := s.Sign([]byte(payload))
+	legacyPayload, threatPayload, err := decisionSigningPayloads(d)
 	if err != nil {
 		return err
 	}
-	d.Signature = sig
+	legacySignature, err := s.Sign([]byte(legacyPayload))
+	if err != nil {
+		return err
+	}
+	threatSignature := ""
+	if threatPayload != "" {
+		threatSignature, err = s.Sign([]byte(threatPayload))
+		if err != nil {
+			return err
+		}
+	}
+	d.Signature = legacySignature
+	d.ThreatScanSignature = threatSignature
 	d.SignatureType = SigPrefixEd25519 + SigSeparator + s.KeyID
+	if threatSignature != "" {
+		d.ThreatScanSignatureType = SigPrefixEd25519ThreatV1 + SigSeparator + s.KeyID
+	}
 	return nil
 }
 
@@ -161,8 +174,15 @@ func (s *Ed25519Signer) VerifyDecision(d *contracts.DecisionRecord) (bool, error
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
-	return Verify(s.PublicKey(), d.Signature, []byte(payload))
+	legacyPayload, threatPayload, err := decisionVerificationPayloads(d, SigPrefixEd25519, SigPrefixEd25519ThreatV1)
+	if err != nil {
+		return false, err
+	}
+	valid, err := Verify(s.PublicKey(), d.Signature, []byte(legacyPayload))
+	if err != nil || !valid || threatPayload == "" {
+		return valid, err
+	}
+	return Verify(s.PublicKey(), d.ThreatScanSignature, []byte(threatPayload))
 }
 
 func (s *Ed25519Signer) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, error) {

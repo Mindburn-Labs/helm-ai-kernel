@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestRunRiskSummaryJSON(t *testing.T) {
@@ -73,6 +75,10 @@ func TestRunThreatScanJSON(t *testing.T) {
 	if payload["finding_count"] != float64(2) {
 		t.Fatalf("finding_count = %v, want 2", payload["finding_count"])
 	}
+	classes := threatClasses(t, payload)
+	if !classes[string(contracts.ThreatClassPromptInjection)] || !classes[string(contracts.ThreatClassSoftwarePublish)] {
+		t.Fatalf("required literal classes missing: %v", classes)
+	}
 	if payload["max_severity"] != "CRITICAL" {
 		t.Fatalf("max_severity = %v, want CRITICAL", payload["max_severity"])
 	}
@@ -110,6 +116,27 @@ func TestRunThreatScanReadsStdin(t *testing.T) {
 	if payload["finding_count"] != float64(1) {
 		t.Fatalf("finding_count = %v, want 1", payload["finding_count"])
 	}
+	if !threatClasses(t, payload)[string(contracts.ThreatClassPromptInjection)] {
+		t.Fatal("prompt-injection literal class missing")
+	}
+}
+
+func threatClasses(t *testing.T, payload map[string]any) map[string]bool {
+	t.Helper()
+	findings, ok := payload["findings"].([]any)
+	if !ok {
+		t.Fatalf("findings missing from payload: %v", payload)
+	}
+	classes := make(map[string]bool, len(findings))
+	for _, raw := range findings {
+		finding, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("invalid finding: %v", raw)
+		}
+		class, _ := finding["class"].(string)
+		classes[class] = true
+	}
+	return classes
 }
 
 func TestRunThreatTestJSON(t *testing.T) {

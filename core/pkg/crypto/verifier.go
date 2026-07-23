@@ -2,6 +2,9 @@
 // protection is provided or claimed by this implementation.
 package crypto
 
+// quantum_posture: classical Ed25519 decision verification binds threat
+// evidence and makes no post-quantum claim.
+
 import (
 	"crypto/ed25519"
 	"encoding/hex"
@@ -58,12 +61,25 @@ func (v *Ed25519Verifier) VerifyDecision(d *contracts.DecisionRecord) (bool, err
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	legacyPayload, threatPayload, err := decisionVerificationPayloads(d, SigPrefixEd25519, SigPrefixEd25519ThreatV1)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(d.Signature)
 	if err != nil {
 		return false, err
 	}
-	return v.Verify([]byte(payload), sig), nil
+	if !v.Verify([]byte(legacyPayload), sig) {
+		return false, nil
+	}
+	if threatPayload == "" {
+		return true, nil
+	}
+	threatSignature, err := hex.DecodeString(d.ThreatScanSignature)
+	if err != nil {
+		return false, err
+	}
+	return v.Verify([]byte(threatPayload), threatSignature), nil
 }
 
 func (v *Ed25519Verifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, error) {

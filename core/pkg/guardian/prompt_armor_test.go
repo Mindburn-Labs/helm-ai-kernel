@@ -2,6 +2,7 @@ package guardian
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -67,7 +68,18 @@ func TestGuardianPreToolCallDeniesPromptArmorToolHijack(t *testing.T) {
 	if decision.ReasonCode != string(contracts.ReasonPromptInjectionDetected) {
 		t.Fatalf("expected %s, got %s", contracts.ReasonPromptInjectionDetected, decision.ReasonCode)
 	}
-	if decision.InputContext == nil || decision.InputContext["threat_scan"] == nil {
+	if decision.InputContext == nil || decision.InputContext[ContextThreatScan] == nil {
 		t.Fatal("expected threat scan reference in denied decision context")
+	}
+	policyContext, ok := decision.InputContext[ContextThreatScan].(map[string]any)
+	if !ok {
+		t.Fatalf("deny context threat scan has type %T, want flattened policy context", decision.InputContext[ContextThreatScan])
+	}
+	if decision.ThreatScan == nil {
+		t.Fatal("expected typed threat scan in denied decision")
+	}
+	wantPolicyContext := decision.ThreatScan.PolicyContext()
+	if !reflect.DeepEqual(policyContext, wantPolicyContext) {
+		t.Fatalf("deny context and signed threat evidence diverged: context=%#v signed=%#v", policyContext, wantPolicyContext)
 	}
 }

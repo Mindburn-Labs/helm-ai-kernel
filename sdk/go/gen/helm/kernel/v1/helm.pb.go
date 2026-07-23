@@ -261,9 +261,13 @@ type DecisionRecord struct {
 	// Product request identity (X-Helm-Correlation-ID) this decision was made
 	// for — the stable join key across lifecycle events, receipts, and
 	// evidence. Optional; outside the decision signature until HELM-303.
-	CorrelationId string `protobuf:"bytes,13,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CorrelationId           string `protobuf:"bytes,13,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	ThreatScan              []byte `protobuf:"bytes,14,opt,name=threat_scan,json=threatScan,proto3" json:"threat_scan,omitempty"`                                            // JSON-encoded typed ThreatScanRef covered by the decision signature
+	SignatureType           string `protobuf:"bytes,15,opt,name=signature_type,json=signatureType,proto3" json:"signature_type,omitempty"`                                   // legacy primary signature profile
+	ThreatScanSignature     string `protobuf:"bytes,16,opt,name=threat_scan_signature,json=threatScanSignature,proto3" json:"threat_scan_signature,omitempty"`               // signature over the threat-bound decision preimage
+	ThreatScanSignatureType string `protobuf:"bytes,17,opt,name=threat_scan_signature_type,json=threatScanSignatureType,proto3" json:"threat_scan_signature_type,omitempty"` // explicit threat-v1 rollout profile
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *DecisionRecord) Reset() {
@@ -383,6 +387,34 @@ func (x *DecisionRecord) GetInputContext() []byte {
 func (x *DecisionRecord) GetCorrelationId() string {
 	if x != nil {
 		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetThreatScan() []byte {
+	if x != nil {
+		return x.ThreatScan
+	}
+	return nil
+}
+
+func (x *DecisionRecord) GetSignatureType() string {
+	if x != nil {
+		return x.SignatureType
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetThreatScanSignature() string {
+	if x != nil {
+		return x.ThreatScanSignature
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetThreatScanSignatureType() string {
+	if x != nil {
+		return x.ThreatScanSignatureType
 	}
 	return ""
 }
@@ -1267,7 +1299,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"effectType\x12\x1b\n" +
 	"\teffect_id\x18\x02 \x01(\tR\beffectId\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x12\x1b\n" +
-	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x98\x04\n" +
+	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\xd1\x05\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1284,7 +1316,12 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	" \x01(\tR\tpolicyRef\x120\n" +
 	"\x14policy_decision_hash\x18\v \x01(\tR\x12policyDecisionHash\x12#\n" +
 	"\rinput_context\x18\f \x01(\fR\finputContext\x12%\n" +
-	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\"\xca\x02\n" +
+	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\x12\x1f\n" +
+	"\vthreat_scan\x18\x0e \x01(\fR\n" +
+	"threatScan\x12%\n" +
+	"\x0esignature_type\x18\x0f \x01(\tR\rsignatureType\x122\n" +
+	"\x15threat_scan_signature\x18\x10 \x01(\tR\x13threatScanSignature\x12;\n" +
+	"\x1athreat_scan_signature_type\x18\x11 \x01(\tR\x17threatScanSignatureType\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +

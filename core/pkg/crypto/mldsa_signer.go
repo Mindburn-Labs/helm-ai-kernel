@@ -79,13 +79,27 @@ func (s *MLDSASigner) Verify(message []byte, signature []byte) bool {
 
 // SignDecision signs a DecisionRecord using ML-DSA-65.
 func (s *MLDSASigner) SignDecision(d *contracts.DecisionRecord) error {
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
-	sig, err := s.Sign([]byte(payload))
+	legacyPayload, threatPayload, err := decisionSigningPayloads(d)
 	if err != nil {
 		return err
 	}
-	d.Signature = sig
+	legacySignature, err := s.Sign([]byte(legacyPayload))
+	if err != nil {
+		return err
+	}
+	threatSignature := ""
+	if threatPayload != "" {
+		threatSignature, err = s.Sign([]byte(threatPayload))
+		if err != nil {
+			return err
+		}
+	}
+	d.Signature = legacySignature
+	d.ThreatScanSignature = threatSignature
 	d.SignatureType = SigPrefixMLDSA65 + SigSeparator + s.keyID
+	if threatSignature != "" {
+		d.ThreatScanSignatureType = SigPrefixMLDSA65ThreatV1 + SigSeparator + s.keyID
+	}
 	return nil
 }
 
@@ -123,12 +137,25 @@ func (s *MLDSASigner) VerifyDecision(d *contracts.DecisionRecord) (bool, error) 
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	legacyPayload, threatPayload, err := decisionVerificationPayloads(d, SigPrefixMLDSA65, SigPrefixMLDSA65ThreatV1)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(d.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(s.publicKey, []byte(payload), nil, sig), nil
+	if !mldsa65.Verify(s.publicKey, []byte(legacyPayload), nil, sig) {
+		return false, nil
+	}
+	if threatPayload == "" {
+		return true, nil
+	}
+	threatSignature, err := hex.DecodeString(d.ThreatScanSignature)
+	if err != nil {
+		return false, fmt.Errorf("invalid threat signature hex: %w", err)
+	}
+	return mldsa65.Verify(s.publicKey, []byte(threatPayload), nil, threatSignature), nil
 }
 
 // VerifyIntent verifies an AuthorizedExecutionIntent signature using ML-DSA-65.

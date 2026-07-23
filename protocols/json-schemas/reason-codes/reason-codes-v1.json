@@ -359,6 +359,13 @@
       "since": "1.2.0"
     },
     {
+      "code": "SEMANTIC_THREAT_REVIEW_REQUIRED",
+      "applies_to": ["ESCALATE"],
+      "domain": "threat",
+      "description": "Tenant policy requires human review for an advisory semantic threat similarity signal",
+      "since": "1.3.0"
+    },
+    {
       "code": "ERR_TON_ACTON_UNKNOWN_COMMAND",
       "applies_to": ["DENY"],
       "domain": "connector.ton.acton",

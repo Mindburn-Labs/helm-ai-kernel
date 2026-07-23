@@ -2,6 +2,9 @@
 // configured; it does not upgrade classical identities or external edges.
 package crypto
 
+// quantum_posture: ML-DSA decision verification uses an explicit threat-v1
+// dual-signature rollout profile without making a certification claim.
+
 import (
 	"encoding/hex"
 	"fmt"
@@ -38,12 +41,25 @@ func (v *MLDSAVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error
 	if d.Signature == "" {
 		return false, fmt.Errorf("missing signature")
 	}
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	legacyPayload, threatPayload, err := decisionVerificationPayloads(d, SigPrefixMLDSA65, SigPrefixMLDSA65ThreatV1)
+	if err != nil {
+		return false, err
+	}
 	sig, err := hex.DecodeString(d.Signature)
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(v.publicKey, []byte(payload), nil, sig), nil
+	if !mldsa65.Verify(v.publicKey, []byte(legacyPayload), nil, sig) {
+		return false, nil
+	}
+	if threatPayload == "" {
+		return true, nil
+	}
+	threatSignature, err := hex.DecodeString(d.ThreatScanSignature)
+	if err != nil {
+		return false, fmt.Errorf("invalid threat signature hex: %w", err)
+	}
+	return mldsa65.Verify(v.publicKey, []byte(threatPayload), nil, threatSignature), nil
 }
 
 // VerifyIntent verifies an AuthorizedExecutionIntent signature using ML-DSA-65.

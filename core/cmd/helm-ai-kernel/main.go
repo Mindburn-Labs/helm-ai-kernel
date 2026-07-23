@@ -193,7 +193,7 @@ func runServerWithOptions(opts serverOptions) error {
 	// handler must be an explicit sink handler: wrapping the stdlib bridge
 	// (slog.Default().Handler()) and re-SetDefault-ing creates a log→slog→log
 	// cycle that deadlocks the first log.Printf at boot.
-	logger := slog.New(tracing.NewSlogHandler(slog.NewTextHandler(os.Stderr, nil)))
+	logger := slog.New(tracing.NewSlogHandler(slog.NewTextHandler(opts.Stderr, nil)))
 	slog.SetDefault(logger)
 	dataDir := opts.DataDir
 	if dataDir == "" {

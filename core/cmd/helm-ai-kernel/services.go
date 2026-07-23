@@ -396,9 +396,13 @@ func evidenceSigningSeedFromEnv() (string, bool, error) {
 // to insecure rather than be silently dropped.
 func otlpEndpointFromEnv() (endpoint string, insecure bool) {
 	endpoint = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
-	if rest, ok := strings.CutPrefix(endpoint, "http://"); ok {
-		return strings.TrimSuffix(rest, "/"), true
+	endpoint, insecure = strings.CutPrefix(endpoint, "http://")
+	if !insecure {
+		endpoint = strings.TrimPrefix(endpoint, "https://")
 	}
-	endpoint = strings.TrimPrefix(endpoint, "https://")
-	return strings.TrimSuffix(endpoint, "/"), false
+	// URL forms may carry a path/query; the gRPC exporters want pure host:port.
+	if host, _, ok := strings.Cut(endpoint, "/"); ok {
+		endpoint = host
+	}
+	return endpoint, insecure
 }

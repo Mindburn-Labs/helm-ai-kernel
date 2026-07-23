@@ -38,6 +38,7 @@
     {
       "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
       "action_urn": "urn:helm:connector:digitalocean:apps:activate",
+      "provider_destination_hash": "sha256:5db33dd6ca70c91fe47ee4fd7e6e6d71d584fda042e42d49a51f6471ecaf1711",
       "reconciliation_mode": "OPERATION_POLL",
       "idempotency_mode": "RECONCILE_BEFORE_RETRY",
       "supported_transition_classes": ["RELEASE_CUTOVER", "RESOURCE_STATE_TRANSITION"],
@@ -46,6 +47,7 @@
     {
       "effect_id": "PROVIDER_PROVISION",
       "action_urn": "urn:helm:connector:digitalocean:apps:create",
+      "provider_destination_hash": "sha256:5db33dd6ca70c91fe47ee4fd7e6e6d71d584fda042e42d49a51f6471ecaf1711",
       "reconciliation_mode": "OPERATION_POLL",
       "idempotency_mode": "RECONCILE_BEFORE_RETRY",
       "supported_transition_classes": [],
@@ -54,6 +56,7 @@
     {
       "effect_id": "PROVIDER_ROLLBACK",
       "action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
+      "provider_destination_hash": "sha256:5db33dd6ca70c91fe47ee4fd7e6e6d71d584fda042e42d49a51f6471ecaf1711",
       "reconciliation_mode": "OPERATION_POLL",
       "idempotency_mode": "COMPARE_AND_SET",
       "supported_transition_classes": [],
@@ -62,6 +65,7 @@
     {
       "effect_id": "PROVIDER_TEARDOWN",
       "action_urn": "urn:helm:connector:digitalocean:apps:delete",
+      "provider_destination_hash": "sha256:5db33dd6ca70c91fe47ee4fd7e6e6d71d584fda042e42d49a51f6471ecaf1711",
       "reconciliation_mode": "READ_AFTER_WRITE",
       "idempotency_mode": "RECONCILE_BEFORE_RETRY",
       "supported_transition_classes": [],

@@ -196,6 +196,7 @@ type LaunchProviderPayloadEntry struct {
 	PlacementID       string `json:"placement_id"`
 	EffectID          string `json:"effect_id"`
 	ProviderActionURN string `json:"provider_action_urn"`
+	DestinationHash   string `json:"provider_destination_hash"`
 	PayloadHash       string `json:"payload_hash"`
 }
 
@@ -499,7 +500,7 @@ func ValidateLaunchProviderPayloadSet(value LaunchProviderPayloadSet) error {
 	previous := ""
 	for _, entry := range value.Entries {
 		key := launchTupleKey(entry.PlacementID, entry.EffectID, entry.ProviderActionURN)
-		if entry.PlacementID == "" || entry.EffectID == "" || entry.ProviderActionURN == "" || key <= previous || !validLaunchSHA256(entry.PayloadHash) {
+		if entry.PlacementID == "" || entry.EffectID == "" || entry.ProviderActionURN == "" || key <= previous || !validLaunchSHA256(entry.DestinationHash) || !validLaunchSHA256(entry.PayloadHash) {
 			return errors.New("launch provider payload entries must be complete, unique, and sorted")
 		}
 		previous = key

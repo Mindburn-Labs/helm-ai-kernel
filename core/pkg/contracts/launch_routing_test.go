@@ -104,6 +104,12 @@ func TestWorkloadKindsAndRelationshipsAreProviderExtensible(t *testing.T) {
 	if err := contracts.ValidateLaunchProviderCapabilityProfile(profile); err != nil {
 		t.Fatalf("provider-specific workload capability was rejected: %v", err)
 	}
+	missingDestination := profile
+	missingDestination.Actions = append([]contracts.LaunchProviderAction(nil), profile.Actions...)
+	missingDestination.Actions[0].ProviderDestinationHash = ""
+	if err := contracts.ValidateLaunchProviderCapabilityProfile(missingDestination); err == nil {
+		t.Fatal("provider profile action without a certified destination was accepted")
+	}
 	if _, err := contracts.ProjectLaunchBlueprint(graph, launchConstraintSet()); err == nil || !strings.Contains(err.Error(), "non-portable") {
 		t.Fatalf("clean-room fork copied unregistered vendor semantics: %v", err)
 	}
@@ -347,6 +353,7 @@ func TestRouteRejectsPayloadForUnknownPlacement(t *testing.T) {
 		PlacementID:       "placement-z",
 		EffectID:          contracts.EffectTypeProviderProvision,
 		ProviderActionURN: profile.Actions[1].ActionURN,
+		DestinationHash:   profile.Actions[1].ProviderDestinationHash,
 		PayloadHash:       launchRoutingHash("9"),
 	})
 	payloadHash, err := contracts.DeriveLaunchProviderPayloadSetHash(fixture.payloads)
@@ -357,6 +364,15 @@ func TestRouteRejectsPayloadForUnknownPlacement(t *testing.T) {
 	fixture.resolver.payloads[fixture.payloads.PayloadSetID] = fixture.payloads
 	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "unknown route placement") {
 		t.Fatalf("payload for an unapproved placement was not rejected: %v", err)
+	}
+}
+
+func TestRouteRejectsDestinationNotBoundToCertifiedProviderProfile(t *testing.T) {
+	profile := launchProviderProfile("cloud", "connector", "eu-1", "app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "cloud")
+	fixture := singleLaunchRouteFixture(t, profile, false)
+	fixture.route.Placements[0].ActionBindings[0].ProviderDestinationHash = canonicalize.ComputeArtifactHash([]byte("https://api.other-cloud.invalid/v1"))
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err == nil || !strings.Contains(err.Error(), "provider profile") {
+		t.Fatalf("destination outside certified provider profile was not rejected: %v", err)
 	}
 }
 
@@ -897,10 +913,10 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 		SchemaVersion: contracts.LaunchProviderPayloadSetSchemaVersion, PayloadSetID: "payload-set-1",
 		TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1",
 		Entries: []contracts.LaunchProviderPayloadEntry{
-			{PlacementID: "placement-1", EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: profile.Actions[0].ActionURN, PayloadHash: launchRoutingHash("7")},
-			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: profile.Actions[1].ActionURN, PayloadHash: launchRoutingHash("8")},
-			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderRollback, ProviderActionURN: profile.Actions[2].ActionURN, PayloadHash: launchRoutingHash("9")},
-			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, PayloadHash: launchRoutingHash("a")},
+			{PlacementID: "placement-1", EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: profile.Actions[0].ActionURN, DestinationHash: profile.Actions[0].ProviderDestinationHash, PayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeDeployProductionActivate))},
+			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: profile.Actions[1].ActionURN, DestinationHash: profile.Actions[1].ProviderDestinationHash, PayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderProvision))},
+			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderRollback, ProviderActionURN: profile.Actions[2].ActionURN, DestinationHash: profile.Actions[2].ProviderDestinationHash, PayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderRollback))},
+			{PlacementID: "placement-1", EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, DestinationHash: profile.Actions[3].ProviderDestinationHash, PayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderTeardown))},
 		},
 	}
 	fxSnapshot := launchFXSnapshot("fx-1", "EUR", "EUR")
@@ -931,10 +947,10 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 		ProviderID: profile.ProviderID, ProviderAccountRef: "account:1", ProviderAccountHash: launchRoutingHash("1"), RegionID: region.RegionID, Jurisdiction: region.Jurisdiction, OfferingID: offering.OfferingID,
 		ProviderConnectorID: profile.ConnectorID, ProviderConnectorContractHash: profile.ConnectorContractHash,
 		ActionBindings: []contracts.LaunchRouteActionBinding{
-			{EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: profile.Actions[0].ActionURN, ProviderPayloadHash: launchRoutingHash("7")},
-			{EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: profile.Actions[1].ActionURN, ProviderPayloadHash: launchRoutingHash("8")},
-			{EffectID: contracts.EffectTypeProviderRollback, ProviderActionURN: profile.Actions[2].ActionURN, ProviderPayloadHash: launchRoutingHash("9")},
-			{EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, ProviderPayloadHash: launchRoutingHash("a")},
+			{EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: profile.Actions[0].ActionURN, ProviderDestinationHash: profile.Actions[0].ProviderDestinationHash, ProviderPayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeDeployProductionActivate))},
+			{EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: profile.Actions[1].ActionURN, ProviderDestinationHash: profile.Actions[1].ProviderDestinationHash, ProviderPayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderProvision))},
+			{EffectID: contracts.EffectTypeProviderRollback, ProviderActionURN: profile.Actions[2].ActionURN, ProviderDestinationHash: profile.Actions[2].ProviderDestinationHash, ProviderPayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderRollback))},
+			{EffectID: contracts.EffectTypeProviderTeardown, ProviderActionURN: profile.Actions[3].ActionURN, ProviderDestinationHash: profile.Actions[3].ProviderDestinationHash, ProviderPayloadHash: canonicalize.ComputeArtifactHash(launchProviderPayloadFixture(contracts.EffectTypeProviderTeardown))},
 		},
 		ResourceSubsetHash: resourceSubsetHash, ProviderPayloadSubsetHash: payloadSubsetHash,
 	}
@@ -982,6 +998,14 @@ func singleLaunchRouteFixture(t *testing.T, profile contracts.LaunchProviderCapa
 	return launchRouteFixture{route: route, resolver: resolver, analysis: analysis, graph: graph, constraints: constraints, quote: quote, commercial: commercial, fxSnapshot: fxSnapshot, taxSnapshot: taxSnapshot, offer: offer, resources: resources, payloads: payloads, certification: certification}
 }
 
+func launchProviderPayloadFixture(effectID string) []byte {
+	return []byte(`{"effect_id":"` + effectID + `","fixture":"provider-payload"}`)
+}
+
+func launchProviderDestinationFixture(providerID string) string {
+	return "https://api." + providerID + ".invalid/v1"
+}
+
 func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {
 	t.Helper()
 	graph := contracts.LaunchWorkloadGraph{
@@ -1012,10 +1036,10 @@ func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {
 	payloads := contracts.LaunchProviderPayloadSet{
 		SchemaVersion: contracts.LaunchProviderPayloadSetSchemaVersion, PayloadSetID: "payloads-multi", TenantID: "tenant-1", WorkspaceID: "workspace-1", MissionID: "mission-1",
 		Entries: []contracts.LaunchProviderPayloadEntry{
-			{PlacementID: "placement-a", EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: webProfile.Actions[0].ActionURN, PayloadHash: launchRoutingHash("b")},
-			{PlacementID: "placement-a", EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: webProfile.Actions[1].ActionURN, PayloadHash: launchRoutingHash("c")},
-			{PlacementID: "placement-b", EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: dbProfile.Actions[0].ActionURN, PayloadHash: launchRoutingHash("d")},
-			{PlacementID: "placement-b", EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: dbProfile.Actions[1].ActionURN, PayloadHash: launchRoutingHash("e")},
+			{PlacementID: "placement-a", EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: webProfile.Actions[0].ActionURN, DestinationHash: webProfile.Actions[0].ProviderDestinationHash, PayloadHash: launchRoutingHash("b")},
+			{PlacementID: "placement-a", EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: webProfile.Actions[1].ActionURN, DestinationHash: webProfile.Actions[1].ProviderDestinationHash, PayloadHash: launchRoutingHash("c")},
+			{PlacementID: "placement-b", EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: dbProfile.Actions[0].ActionURN, DestinationHash: dbProfile.Actions[0].ProviderDestinationHash, PayloadHash: launchRoutingHash("d")},
+			{PlacementID: "placement-b", EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: dbProfile.Actions[1].ActionURN, DestinationHash: dbProfile.Actions[1].ProviderDestinationHash, PayloadHash: launchRoutingHash("e")},
 		},
 	}
 	webResourceHash, _ := contracts.DeriveLaunchResourceSubsetHash(resources, "placement-a")
@@ -1023,8 +1047,8 @@ func multiLaunchRouteFixture(t *testing.T) launchRouteFixture {
 	webPayloadHash, _ := contracts.DeriveLaunchProviderPayloadSubsetHash(payloads, "placement-a")
 	dbPayloadHash, _ := contracts.DeriveLaunchProviderPayloadSubsetHash(payloads, "placement-b")
 	placements := []contracts.LaunchRoutePlacement{
-		{PlacementID: "placement-a", WorkloadNodeIDs: []string{"api"}, ProviderProfileRef: webProfile.ProfileID, ProviderProfileHash: webProfileHash, ProviderID: webProfile.ProviderID, ProviderAccountRef: "account:web", ProviderAccountHash: launchRoutingHash("1"), RegionID: "eu-edge", Jurisdiction: "EU", OfferingID: "app", ProviderConnectorID: webProfile.ConnectorID, ProviderConnectorContractHash: webProfile.ConnectorContractHash, ActionBindings: []contracts.LaunchRouteActionBinding{{EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: webProfile.Actions[0].ActionURN, ProviderPayloadHash: launchRoutingHash("b")}, {EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: webProfile.Actions[1].ActionURN, ProviderPayloadHash: launchRoutingHash("c")}}, ResourceSubsetHash: webResourceHash, ProviderPayloadSubsetHash: webPayloadHash},
-		{PlacementID: "placement-b", WorkloadNodeIDs: []string{"database"}, ProviderProfileRef: dbProfile.ProfileID, ProviderProfileHash: dbProfileHash, ProviderID: dbProfile.ProviderID, ProviderAccountRef: "account:data", ProviderAccountHash: launchRoutingHash("2"), RegionID: "eu-data", Jurisdiction: "EU", OfferingID: "postgres", ProviderConnectorID: dbProfile.ConnectorID, ProviderConnectorContractHash: dbProfile.ConnectorContractHash, ActionBindings: []contracts.LaunchRouteActionBinding{{EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: dbProfile.Actions[0].ActionURN, ProviderPayloadHash: launchRoutingHash("d")}, {EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: dbProfile.Actions[1].ActionURN, ProviderPayloadHash: launchRoutingHash("e")}}, ResourceSubsetHash: dbResourceHash, ProviderPayloadSubsetHash: dbPayloadHash},
+		{PlacementID: "placement-a", WorkloadNodeIDs: []string{"api"}, ProviderProfileRef: webProfile.ProfileID, ProviderProfileHash: webProfileHash, ProviderID: webProfile.ProviderID, ProviderAccountRef: "account:web", ProviderAccountHash: launchRoutingHash("1"), RegionID: "eu-edge", Jurisdiction: "EU", OfferingID: "app", ProviderConnectorID: webProfile.ConnectorID, ProviderConnectorContractHash: webProfile.ConnectorContractHash, ActionBindings: []contracts.LaunchRouteActionBinding{{EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: webProfile.Actions[0].ActionURN, ProviderDestinationHash: webProfile.Actions[0].ProviderDestinationHash, ProviderPayloadHash: launchRoutingHash("b")}, {EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: webProfile.Actions[1].ActionURN, ProviderDestinationHash: webProfile.Actions[1].ProviderDestinationHash, ProviderPayloadHash: launchRoutingHash("c")}}, ResourceSubsetHash: webResourceHash, ProviderPayloadSubsetHash: webPayloadHash},
+		{PlacementID: "placement-b", WorkloadNodeIDs: []string{"database"}, ProviderProfileRef: dbProfile.ProfileID, ProviderProfileHash: dbProfileHash, ProviderID: dbProfile.ProviderID, ProviderAccountRef: "account:data", ProviderAccountHash: launchRoutingHash("2"), RegionID: "eu-data", Jurisdiction: "EU", OfferingID: "postgres", ProviderConnectorID: dbProfile.ConnectorID, ProviderConnectorContractHash: dbProfile.ConnectorContractHash, ActionBindings: []contracts.LaunchRouteActionBinding{{EffectID: contracts.EffectTypeDeployProductionActivate, ProviderActionURN: dbProfile.Actions[0].ActionURN, ProviderDestinationHash: dbProfile.Actions[0].ProviderDestinationHash, ProviderPayloadHash: launchRoutingHash("d")}, {EffectID: contracts.EffectTypeProviderProvision, ProviderActionURN: dbProfile.Actions[1].ActionURN, ProviderDestinationHash: dbProfile.Actions[1].ProviderDestinationHash, ProviderPayloadHash: launchRoutingHash("e")}}, ResourceSubsetHash: dbResourceHash, ProviderPayloadSubsetHash: dbPayloadHash},
 	}
 	edgeHash, _ := contracts.DeriveLaunchWorkloadEdgeHash(graph.Edges[0])
 	webOffer := launchOfferSnapshot(webProfile.ProviderID, "offer-edge", "account:web", launchRoutingHash("1"), webProfile.TermsEvidenceHash, contracts.LaunchCreditNone, 0)
@@ -1139,10 +1163,10 @@ func launchProviderProfile(provider, connector, region, offering string, workloa
 		SchemaVersion: contracts.LaunchProviderProfileSchemaVersion, ProfileID: provider + "-candidate", ProviderID: provider, ConnectorID: connector, ConnectorContractHash: launchRoutingHash("d"), ProfileVersion: "candidate-1", ProfileStatus: contracts.LaunchProviderProfileCandidate,
 		Regions: []contracts.LaunchProviderRegion{{RegionID: region, Jurisdiction: "EU", ResidencyTags: []string{"eu"}, Offerings: []contracts.LaunchProviderOffering{{OfferingID: offering, SupportedWorkloads: workloads, SupportedCapabilities: capabilities, SupportedLifecycles: lifecycles}}}},
 		Actions: []contracts.LaunchProviderAction{
-			{EffectID: contracts.EffectTypeDeployProductionActivate, ActionURN: "urn:test:" + urnPrefix + ":activate", ReconciliationMode: "OPERATION_POLL", IdempotencyMode: "RECONCILE_BEFORE_RETRY", SupportedTransitionClasses: []string{contracts.LaunchTransitionReleaseCutover, contracts.LaunchTransitionResourceState}, SupportedCompensationClasses: []string{}},
-			{EffectID: contracts.EffectTypeProviderProvision, ActionURN: "urn:test:" + urnPrefix + ":provision", ReconciliationMode: "OPERATION_POLL", IdempotencyMode: "RECONCILE_BEFORE_RETRY", SupportedTransitionClasses: []string{}, SupportedCompensationClasses: []string{}},
-			{EffectID: contracts.EffectTypeProviderRollback, ActionURN: "urn:test:" + urnPrefix + ":rollback", ReconciliationMode: "OPERATION_POLL", IdempotencyMode: "COMPARE_AND_SET", SupportedTransitionClasses: []string{}, SupportedCompensationClasses: []string{contracts.LaunchCompensationReleaseRollback, contracts.LaunchCompensationResourceRestore}},
-			{EffectID: contracts.EffectTypeProviderTeardown, ActionURN: "urn:test:" + urnPrefix + ":teardown", ReconciliationMode: "READ_AFTER_WRITE", IdempotencyMode: "RECONCILE_BEFORE_RETRY", SupportedTransitionClasses: []string{}, SupportedCompensationClasses: []string{}},
+			{EffectID: contracts.EffectTypeDeployProductionActivate, ActionURN: "urn:test:" + urnPrefix + ":activate", ProviderDestinationHash: canonicalize.ComputeArtifactHash([]byte(launchProviderDestinationFixture(provider))), ReconciliationMode: "OPERATION_POLL", IdempotencyMode: "RECONCILE_BEFORE_RETRY", SupportedTransitionClasses: []string{contracts.LaunchTransitionReleaseCutover, contracts.LaunchTransitionResourceState}, SupportedCompensationClasses: []string{}},
+			{EffectID: contracts.EffectTypeProviderProvision, ActionURN: "urn:test:" + urnPrefix + ":provision", ProviderDestinationHash: canonicalize.ComputeArtifactHash([]byte(launchProviderDestinationFixture(provider))), ReconciliationMode: "OPERATION_POLL", IdempotencyMode: "RECONCILE_BEFORE_RETRY", SupportedTransitionClasses: []string{}, SupportedCompensationClasses: []string{}},
+			{EffectID: contracts.EffectTypeProviderRollback, ActionURN: "urn:test:" + urnPrefix + ":rollback", ProviderDestinationHash: canonicalize.ComputeArtifactHash([]byte(launchProviderDestinationFixture(provider))), ReconciliationMode: "OPERATION_POLL", IdempotencyMode: "COMPARE_AND_SET", SupportedTransitionClasses: []string{}, SupportedCompensationClasses: []string{contracts.LaunchCompensationReleaseRollback, contracts.LaunchCompensationResourceRestore}},
+			{EffectID: contracts.EffectTypeProviderTeardown, ActionURN: "urn:test:" + urnPrefix + ":teardown", ProviderDestinationHash: canonicalize.ComputeArtifactHash([]byte(launchProviderDestinationFixture(provider))), ReconciliationMode: "READ_AFTER_WRITE", IdempotencyMode: "RECONCILE_BEFORE_RETRY", SupportedTransitionClasses: []string{}, SupportedCompensationClasses: []string{}},
 		},
 		PricingEvidenceRef: "fixture://" + provider + "/pricing", PricingEvidenceHash: launchRoutingHash("a"), TermsEvidenceRef: "fixture://" + provider + "/terms", TermsEvidenceHash: launchRoutingHash("b"), RetrievedAt: "2026-07-19T00:00:00Z", ExpiresAt: "2026-07-20T00:00:00Z",
 	}

@@ -450,6 +450,15 @@ func validateLaunchEffectFixedSemantics(typeID string, input map[string]any) err
 			return errors.New("launch provider effect certification hash is invalid")
 		}
 	}
+	if launchEffectIsProviderMutation(typeID) {
+		if !launchInputNonEmptyString(input, "provider_offering_id") {
+			return errors.New("launch provider mutation offering is missing")
+		}
+		destinationHash, ok := input["provider_destination_hash"].(string)
+		if !ok || !validLaunchSHA256(destinationHash) {
+			return errors.New("launch provider mutation destination hash is invalid")
+		}
+	}
 	switch typeID {
 	case EffectTypeProviderProvision:
 		if !launchInputNonEmptyString(input, "provider") ||

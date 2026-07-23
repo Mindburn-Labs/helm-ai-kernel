@@ -412,10 +412,11 @@ func providerActionLaunchInput(effectID string, ordinal int, actionURN string, f
 	input := providerLaunchInput(effectID, ordinal, map[string]any{
 		"workload_graph_ref": "workload-graph-1", "workload_graph_hash": launchHash("2"),
 		"route_binding_ref": "route-1", "route_binding_hash": launchHash("3"), "route_placement_id": "placement-1",
+		"provider_offering_id":            "app-platform",
 		"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": launchHash("4"),
 		"provider_certification_ref": "do-certification-1", "provider_certification_hash": launchHash("5"),
 		"provider_connector_id": contracts.LaunchConnectorDigitalOcean, "provider_connector_contract_hash": launchHash("5"),
-		"provider_action_urn": actionURN, "provider_payload_hash": launchHash("6"),
+		"provider_action_urn": actionURN, "provider_destination_hash": launchHash("d"), "provider_payload_hash": launchHash("6"),
 		"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": launchHash("0"),
 		"resource_graph_ref": "resource-graph-1", "resource_graph_hash": launchHash("7"),
 	})
@@ -431,12 +432,12 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeProviderProvision,
 			schema:    "effects/launch/provider_provision.v1.json",
-			goldenKey: "sha256:f921f17d52f89b73f421fe1e0e916ac7f60ee9c658c5cca9c580f8643cbf6f9e",
+			goldenKey: "sha256:4d0f9f802ce906ec6cf444457b19aa2afcbb45ff028c3c4bd20930c266be6b2c",
 			input: providerLaunchInput(contracts.EffectTypeProviderProvision, 1, map[string]any{
 				"repository_analysis_ref": "analysis-1", "repository_analysis_hash": h("0"), "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("1"),
-				"route_binding_ref": "route-1", "route_binding_hash": h("2"), "route_placement_id": "placement-1", "provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("3"),
+				"route_binding_ref": "route-1", "route_binding_hash": h("2"), "route_placement_id": "placement-1", "provider_offering_id": "app-platform", "provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("3"),
 				"provider_certification_ref": "do-certification-1", "provider_certification_hash": h("4"),
-				"provider_connector_id": contracts.LaunchConnectorDigitalOcean, "provider_connector_contract_hash": h("4"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanProvision, "provider_payload_hash": h("5"),
+				"provider_connector_id": contracts.LaunchConnectorDigitalOcean, "provider_connector_contract_hash": h("4"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanProvision, "provider_destination_hash": h("d"), "provider_payload_hash": h("5"),
 				"resource_graph_hash": h("6"),
 				"billing_cadence":     "MONTHLY", "commitment_term": "MONTH_TO_MONTH", "gross_cap_currency": "EUR", "gross_cap_minor": 1200, "gross_exposure_minor": 1200,
 				"generated_spec_hash": h("7"), "route_quote_ref": "route-quote-1", "route_quote_hash": h("8"), "constraint_set_hash": h("9"),
@@ -449,7 +450,7 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeDeployProductionActivate,
 			schema:    "effects/launch/deploy_production_activate.v1.json",
-			goldenKey: "sha256:ede0de2921f564f59eea19913fc8f1eb2dc9e2a199ccf0ed55067306e5c6715c",
+			goldenKey: "sha256:503807511de64e5e0584d5d42b534b1b540eb48033e1f9f56fb41ecd21b49a1d",
 			input: providerActionLaunchInput(contracts.EffectTypeDeployProductionActivate, 2, contracts.LaunchProviderActionDigitalOceanActivate, map[string]any{
 				"activation_class": contracts.LaunchTransitionReleaseCutover, "exposure_kind": "ENDPOINT",
 				"source_state_ref": "deployment-state-1", "source_state_hash": h("3"), "target_state_ref": "deployment-state-2", "target_state_hash": h("4"),
@@ -485,7 +486,7 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeProviderRollback,
 			schema:    "effects/launch/provider_rollback.v1.json",
-			goldenKey: "sha256:82defc4ae5cc59802de3bd2d5825fc23b5641196ea330ffae0c1bc03f7b5aa84",
+			goldenKey: "sha256:316a4cd6253bacbb3a61bb29dd8d283a0f743f9ecd10260e0e435db9b0036701",
 			input: providerActionLaunchInput(contracts.EffectTypeProviderRollback, 3, contracts.LaunchProviderActionDigitalOceanRollback, map[string]any{
 				"origin_activation_receipt_ref": "activation-receipt-1", "origin_activation_receipt_hash": h("f"), "resource_ownership_hash": h("2"),
 				"compensation_class": contracts.LaunchCompensationReleaseRollback, "source_state_ref": "deployment-state-2", "source_state_hash": h("4"), "target_state_ref": "deployment-state-1", "target_state_hash": h("6"),
@@ -498,7 +499,7 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeProviderTeardown,
 			schema:    "effects/launch/provider_teardown.v1.json",
-			goldenKey: "sha256:e69036f831cbb2cf2b5886a84001b1c743de1ea42a0b35b2d16b482d1f755040",
+			goldenKey: "sha256:262e39c8119b6930f4b5f68cab9c9fa06876367c0d577b5724434c375ebb8bcd",
 			input: providerActionLaunchInput(contracts.EffectTypeProviderTeardown, 4, contracts.LaunchProviderActionDigitalOceanTeardown, map[string]any{
 				"resource_ownership_hash": h("2"), "observed_state_hash": h("3"), "dependency_snapshot_hash": h("4"),
 				"resource_empty_evidence_hash": h("5"), "retention_clearance_hash": h("6"), "backup_clearance_hash": h("7"), "billing_exposure_snapshot_hash": h("8"),

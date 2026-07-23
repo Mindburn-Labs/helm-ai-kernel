@@ -1402,3 +1402,37 @@ func markCodexProjectTrusted(t *testing.T, home, workspace string) {
 		t.Fatal(err)
 	}
 }
+
+func TestSetupNormalizesRelativeSigningSeedFile(t *testing.T) {
+	var stderr bytes.Buffer
+	opts, code := parseSetupInstallArgs([]string{"claude-code", "--yes", "--data-dir", t.TempDir(), "--signing-seed-file", "rel/seed.hex"}, &stderr)
+	if code != 0 {
+		t.Fatalf("parse exit = %d stderr=%s", code, stderr.String())
+	}
+	if !filepath.IsAbs(opts.SigningSeedFile) {
+		t.Fatalf("SigningSeedFile = %q, want absolute (relative paths bake a cwd-dependent hook command)", opts.SigningSeedFile)
+	}
+}
+
+func TestHookCommandKeyIgnoresSigningSeedFileArgument(t *testing.T) {
+	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
+	withSeed := base + " --signing-seed-file '/home/op/keys/seed.hex'"
+	withBareSeed := base + " --signing-seed-file /home/op/keys/seed.hex"
+
+	if hookCommandKey(withSeed) != hookCommandKey(base) {
+		t.Fatalf("quoted seed-file arg changes hook identity:\n%q\n%q", hookCommandKey(withSeed), hookCommandKey(base))
+	}
+	if hookCommandKey(withBareSeed) != hookCommandKey(base) {
+		t.Fatalf("bare seed-file arg changes hook identity")
+	}
+	if hookCommandKey(base) != base {
+		t.Fatalf("command without the flag must be unchanged, got %q", hookCommandKey(base))
+	}
+
+	// status/remove parity: a hook installed WITH the flag is found by a
+	// lookup command built WITHOUT it.
+	pre := []any{map[string]any{"hooks": []any{map[string]any{"command": withSeed}}}}
+	if !hookCommandPresent(pre, base) {
+		t.Fatal("hook installed with seed-file flag not matched by flagless lookup")
+	}
+}

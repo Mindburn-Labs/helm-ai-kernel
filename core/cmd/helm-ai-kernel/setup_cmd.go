@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -374,6 +375,14 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 	}
 	if abs, err := filepath.Abs(opts.DataDir); err == nil {
 		opts.DataDir = abs
+	}
+	// The seed-file path gets baked into the installed hook command, which
+	// later runs from an arbitrary working directory — a relative path would
+	// resolve against that directory and fail the signer.
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		if abs, err := filepath.Abs(opts.SigningSeedFile); err == nil {
+			opts.SigningSeedFile = abs
+		}
 	}
 	if opts.Workspace == "" {
 		workspace, err := os.Getwd()
@@ -759,7 +768,7 @@ func removeHookConfig(path, command, allowedRoot string) error {
 		}
 		keptHooks := make([]any, 0, len(hookItems))
 		for _, h := range hookItems {
-			if hookCommandFromAny(h) != command {
+			if hookCommandKey(hookCommandFromAny(h)) != hookCommandKey(command) {
 				keptHooks = append(keptHooks, h)
 			}
 		}
@@ -818,7 +827,20 @@ func arrayValue(root map[string]any, key string) []any {
 	return []any{}
 }
 
+// signingSeedFileArgPattern matches the optional --signing-seed-file segment
+// of an installed hook command, with its shell-quoted or bare argument.
+var signingSeedFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\S+)`)
+
+// hookCommandKey reduces an installed hook command to its identity: the
+// signing-seed-file argument is a deployment detail, so `setup status` and
+// `setup remove` must match the hook whether or not (and with whichever path
+// form) the flag was passed on their own invocation.
+func hookCommandKey(command string) string {
+	return signingSeedFileArgPattern.ReplaceAllString(command, "")
+}
+
 func hookCommandPresent(pre []any, command string) bool {
+	key := hookCommandKey(command)
 	for _, item := range pre {
 		obj, ok := item.(map[string]any)
 		if !ok {
@@ -829,7 +851,7 @@ func hookCommandPresent(pre []any, command string) bool {
 			continue
 		}
 		for _, h := range hooks {
-			if hookCommandFromAny(h) == command {
+			if hookCommandKey(hookCommandFromAny(h)) == key {
 				return true
 			}
 		}

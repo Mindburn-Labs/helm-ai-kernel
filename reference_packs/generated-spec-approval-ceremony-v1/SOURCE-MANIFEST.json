@@ -1,0 +1,18 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/generated-spec-approval-ceremony-v1",
+  "pinning_authority": "reference_packs/generated-spec-approval-ceremony-v1/vectors.json",
+  "verifier": "reference_packs/generated-spec-approval-ceremony-v1/verify_vectors.py",
+  "immutable_payloads": [
+    {"file": "challenge.c14n.json", "sha256": "0084ddc24000c89f9d53d4296541a332462cfb821835c16c96caf66e44bde80f"},
+    {"file": "grant.c14n.json", "sha256": "6991d8483f359be2f1cb1e14be17d1b7fca15d3556d0398f9a77183570eaf2fa"},
+    {"file": "consumption.c14n.json", "sha256": "67d3b04994babdb00265e4f8a8b59d852eb1cd3093924630806ce659cdf68569"},
+    {"file": "grant_signing_payload.c14n.json", "sha256": "6e5a1ec6553dea0972b010a51d0db7cfa023223649c2d312430703ad22d2a02c"},
+    {"file": "consumption_signing_payload.c14n.json", "sha256": "40c574d46e8b8b3a554e22d9cc3ed0b4d99848a44a840e738109c090ed7b5e85"},
+    {"file": "lifecycle.c14n.json", "sha256": "7322d0ed52cc1865213fccb6698dbd8719932667cb32974d847cddf05930d3b0"}
+  ],
+  "purpose": "Deterministic source-contract/parity pack for the GeneratedSpec approval ceremony foundation. It checks canonical hashes, immutable challenge-grant-consumption bindings, pinned classical Ed25519 envelopes, expiry, and the test-only single-use lifecycle path.",
+  "replay_boundary": "The Go fixture executes a second consume and requires transition_conflict. The Python verifier checks the declared state path only; neither is durable replay, concurrency, or recovery proof.",
+  "boundaries": "This pack is not Postgres durability, RLS/FENCE/CAS, runtime transport, Control Plane atomic reviewed-to-approved projection, workload identity, client load, release, or production proof.",
+  "$comment": "quantum_posture: classical_ed25519_only. vectors.json is the hash-pinning authority. The pack deliberately names its test-only memory-store lifecycle boundary and makes no post-quantum or production-authority claim."
+}

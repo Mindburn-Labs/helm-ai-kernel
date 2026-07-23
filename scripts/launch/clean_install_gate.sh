@@ -19,7 +19,7 @@ Usage: scripts/launch/clean_install_gate.sh [options]
 
 Options:
   --release-tag <tag>       Release tag to validate (default: v0.7.5)
-  --artifact-run-id <id>    Launchpad artifact workflow run (default: 26198407296)
+  --artifact-run-id <id>    Launchpad artifact workflow run (default: 30031231555)
   --host-kind <kind>        developer_macos or github_macos_runner
   --output <path>           Redacted JSON report path
   --transcript-dir <path>   Directory for redacted command output and audit inputs

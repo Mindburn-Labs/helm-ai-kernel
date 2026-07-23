@@ -4,7 +4,9 @@
 
 HELM sits between Claude Code, Codex, MCP tools, shell commands, and other agent
 actions. It decides `ALLOW`, `DENY`, or `ESCALATE`, then writes a signed receipt
-you can verify later.
+you can verify later. Verification checks signature integrity out of the box;
+trusting *who* signed is a separate, explicit step — see
+[local signer and trusted verification](docs/reference/workstation-governance.md#local-signer-and-trusted-verification).
 
 ![HELM AI Kernel: one boundary, one decision, one receipt](docs/assets/readme-boundary-preview.png)
 
@@ -26,17 +28,26 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
+This proves the receipt was not altered (`integrity_valid`). Whether the signer
+is *trusted* is reported separately (`signer_trusted`) and requires a persisted
+public key you obtained out of band; receipts signed by pre-v0.7.3 derivable
+seeds always remain untrusted.
+
 No cloud account. No model key. No Docker. No production credentials.
 
 ## What It Does
 
 | Agent tries to... | HELM does this | Proof |
 | --- | --- | --- |
-| Run a destructive shell command | `DENY` | signed receipt |
+| Run a destructive shell command¹ | `DENY` | signed receipt |
 | Use an unknown MCP tool | `ESCALATE` | quarantine record |
 | Read protected secrets | `DENY` | fail-closed receipt |
 | Run approved work | `ALLOW` | receipt + evidence |
 | Export a review bundle | verify offline | EvidencePack |
+
+¹ The hook's shell guard matches an intentionally narrow, documented list of
+destructive command patterns — it is not a general shell analyzer. See
+[the guard's scope](docs/reference/workstation-governance.md).
 
 HELM only governs effects that reach its boundary. For example, evals showed
 network egress blocks firing when an agent actually dispatched a LAN or
@@ -50,7 +61,8 @@ alongside HELM.
 Agent asks: delete the production database
 HELM sees: protected data + irreversible action
 HELM says: DENY
-You get:  a signed receipt you can verify offline
+You get:  a signed receipt you can verify offline (integrity always;
+          signer trust once you've pinned the workstation public key)
 ```
 
 ## Where To Go Next

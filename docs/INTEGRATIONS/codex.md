@@ -60,6 +60,11 @@ helm-ai-kernel workstation verify-decision \
 ```
 
 Tampered receipts return a non-zero exit and fail signature verification.
+That is the **integrity** check only: whether the signer is *trusted* is a
+separate verdict (`signer_trusted`) needing the workstation public key pinned
+out of band — see
+[local signer and trusted verification](../reference/workstation-governance.md#local-signer-and-trusted-verification).
+Receipts signed with pre-v0.7.3 derivable seeds remain untrusted.
 
 ## Source Truth
 

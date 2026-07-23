@@ -92,6 +92,11 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
+This checks signature **integrity**; signer **trust** (`signer_trusted`) is a
+separate verdict that needs an out-of-band pinned workstation public key — see
+[local signer and trusted verification](reference/workstation-governance.md#local-signer-and-trusted-verification).
+Pre-v0.7.3 derivable-seed receipts remain untrusted.
+
 For EvidencePacks:
 
 ```bash

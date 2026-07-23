@@ -21,6 +21,11 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
+Integrity (`integrity_valid`) and signer trust (`signer_trusted`) are separate
+verdicts: trust requires the workstation public key pinned out of band — see
+[local signer and trusted verification](../reference/workstation-governance.md#local-signer-and-trusted-verification).
+Pre-v0.7.3 derivable-seed receipts remain untrusted.
+
 ## HTTP Evidence Routes
 
 The OpenAPI contract owns the HTTP evidence export and verification routes.

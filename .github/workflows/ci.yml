@@ -212,6 +212,22 @@ jobs:
       - name: Test Java SDK
         run: make test-sdk-java
 
+  sdk-drift:
+    name: SDK regenerate-and-diff gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.12"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+      - name: Manifest unit tests
+        run: make test-sdk-manifest
+      - name: Regenerate SDKs and fail on drift
+        run: make sdk-gen-check
+
   contract-drift:
     runs-on: ubuntu-latest
     steps:

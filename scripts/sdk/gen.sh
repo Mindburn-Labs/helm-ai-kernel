@@ -1,17 +1,32 @@
 #!/usr/bin/env bash
 # HELM SDK Type Generator
 # Generates typed models from api/openapi/helm.openapi.yaml into each SDK.
-# Uses openapi-generator-cli via Docker (pinned version).
+# Uses openapi-generator-cli via Docker, pinned by digest for deterministic
+# output. Post-generation patches are patch-as-assertion: every patch that is
+# expected to apply hard-fails when its anchor is missing, so generator or
+# spec drift breaks the build loudly instead of corrupting SDKs silently.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SPEC="$PROJECT_ROOT/api/openapi/helm.openapi.yaml"
-GENERATOR_IMAGE="openapitools/openapi-generator-cli:v7.4.0"
+# Digest-pinned generator. Override only for controlled upgrades:
+#   HELM_OPENAPI_GENERATOR_IMAGE=<image> bash scripts/sdk/gen.sh
+GENERATOR_IMAGE="${HELM_OPENAPI_GENERATOR_IMAGE:-openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a}"
+
+fail() {
+    echo "❌ $*" >&2
+    exit 1
+}
 
 if [ ! -f "$SPEC" ]; then
-    echo "❌ OpenAPI spec not found: $SPEC"
-    exit 1
+    fail "OpenAPI spec not found: $SPEC"
+fi
+command -v docker >/dev/null 2>&1 || fail "docker is required to run the pinned generator"
+command -v python3 >/dev/null 2>&1 || fail "python3 is required for post-generation patches"
+command -v gofmt >/dev/null 2>&1 || fail "gofmt is required for the Go SDK output"
+if [ -n "${HELM_OPENAPI_GENERATOR_IMAGE:-}" ]; then
+    echo "⚠️  generator image overridden via HELM_OPENAPI_GENERATOR_IMAGE: $GENERATOR_IMAGE"
 fi
 
 echo "HELM SDK Generator"
@@ -31,16 +46,17 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
     --global-property=models 2>/dev/null
 
 # Extract only the model types
-if [ -d "$PROJECT_ROOT/.gen_tmp/ts/models" ]; then
-    cat > "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'HEADER'
+[ -d "$PROJECT_ROOT/.gen_tmp/ts/models" ] || fail "[ts] generator produced no models directory — refusing to keep stale output"
+cat > "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'HEADER'
 // AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
 // Regenerate: bash scripts/sdk/gen.sh
 
 HEADER
-    for f in "$PROJECT_ROOT/.gen_tmp/ts/models/"*.ts; do
-        [ -f "$f" ] && cat "$f" >> "$PROJECT_ROOT/sdk/ts/src/types.gen.ts"
-    done
-    python3 - "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'PY'
+for f in "$PROJECT_ROOT/.gen_tmp/ts/models/"*.ts; do
+    [ -f "$f" ] && cat "$f" >> "$PROJECT_ROOT/sdk/ts/src/types.gen.ts"
+done
+[ -s "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" ] || fail "[ts] generator produced an empty model set"
+python3 - "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'PY'
 from pathlib import Path
 import sys
 
@@ -73,12 +89,16 @@ const instanceOfnumber = (value: any): value is number => typeof value === 'numb
 
 """
 marker = "// Regenerate: bash scripts/sdk/gen.sh\n\n"
+if marker not in s:
+    raise SystemExit("ts patch failed: header marker missing; generated header changed unexpectedly")
 s = s.replace(marker, marker + helpers, 1)
 
 def replace_one(s: str, signature: str, body: str) -> str:
+    # Patch-as-assertion: a missing anchor means the generator output changed
+    # underneath us; fail loudly instead of shipping an unpatched SDK.
     start = s.find(signature)
     if start == -1:
-        return s
+        raise SystemExit(f"ts patch did not apply: signature not found: {signature[:90]}")
     brace = s.find("{", start)
     depth = 0
     end = brace
@@ -144,12 +164,14 @@ s = replace_one(
 )
 
 if "export type ReasonCode = HelmErrorErrorReasonCodeEnum;" not in s:
+    if "HelmErrorErrorReasonCodeEnum" not in s:
+        raise SystemExit("ts patch failed: HelmErrorErrorReasonCodeEnum missing; cannot add ReasonCode alias")
     s += "\nexport type ReasonCode = HelmErrorErrorReasonCodeEnum;\n"
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
-fi
 echo "  [ts] ✅ sdk/ts/src/types.gen.ts"
+python3 "$SCRIPT_DIR/manifest.py" write "$PROJECT_ROOT/sdk/ts" "$GENERATOR_IMAGE" "$SPEC" "src/types.gen.ts"
 
 # ── Python ────────────────────────────────────────────
 echo "  [py] Generating types..."
@@ -160,8 +182,8 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
     --additional-properties=packageName=helm_sdk,projectName=helm \
     --global-property=models 2>/dev/null
 
-if [ -d "$PROJECT_ROOT/.gen_tmp/python/helm_sdk/models" ]; then
-    cat > "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'HEADER'
+[ -d "$PROJECT_ROOT/.gen_tmp/python/helm_sdk/models" ] || fail "[py] generator produced no models directory — refusing to keep stale output"
+cat > "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'HEADER'
 # AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
 # Regenerate: bash scripts/sdk/gen.sh
 
@@ -173,16 +195,18 @@ from typing import Annotated, Any, ClassVar, Dict, List, Literal, Optional, Set,
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr, ValidationError, field_validator
 HEADER
-    for f in "$PROJECT_ROOT/.gen_tmp/python/helm_sdk/models/"*.py; do
-        [ -f "$f" ] && grep -v "^from\|^import\|^#" "$f" >> "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" 2>/dev/null || true
-    done
-    python3 - "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'PY'
+for f in "$PROJECT_ROOT/.gen_tmp/python/helm_sdk/models/"*.py; do
+    [ -f "$f" ] && grep -v "^from\|^import\|^#" "$f" >> "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" 2>/dev/null || true
+done
+python3 - "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
 
+# Patch-as-assertion: every expected enum-validator @classmethod injection is
+# tracked and verified; a renamed model or validator hard-fails the build.
 classmethod_validators = {
     "AccountEntitlements": {"plan_validate_enum"},
     "AccountSession": {"plan_validate_enum"},
@@ -202,6 +226,7 @@ classmethod_validators = {
     "OnboardingStep": {"id_validate_enum", "status_validate_enum", "verdict_validate_enum"},
     "Receipt": {"signature_profile_validate_enum"},
 }
+applied_validators: dict[str, set[str]] = {}
 lines = s.splitlines()
 out = []
 current_class = None
@@ -214,7 +239,16 @@ for i, line in enumerate(lines):
         method_name = next_line.strip().split("(", 1)[0].removeprefix("def ")
         if method_name in classmethod_validators[current_class]:
             out.append(f"{line[:len(line) - len(line.lstrip())]}@classmethod")
+            applied_validators.setdefault(current_class, set()).add(method_name)
 s = "\n".join(out)
+
+for class_name, expected_methods in classmethod_validators.items():
+    applied_methods = applied_validators.get(class_name, set())
+    if applied_methods != expected_methods:
+        raise SystemExit(
+            f"py patch did not apply: {class_name} expected @classmethod validators "
+            f"{sorted(expected_methods)}, applied {sorted(applied_methods)}"
+        )
 
 receipt_public_key_set = (
     '            "signature_algorithm": obj.get("signature_algorithm"),\n'
@@ -222,6 +256,8 @@ receipt_public_key_set = (
     '            "timestamp": obj.get("timestamp"),'
 )
 if '"public_key_set": obj.get("public_key_set")' not in s:
+    if s.count(receipt_public_key_set) != 1:
+        raise SystemExit("py patch did not apply: expected exactly one Receipt from_dict anchor for public_key_set")
     s = s.replace(
         receipt_public_key_set,
         '            "signature_algorithm": obj.get("signature_algorithm"),\n'
@@ -246,8 +282,8 @@ s = s.replace(
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
-fi
 echo "  [py] ✅ sdk/python/helm_sdk/types_gen.py"
+python3 "$SCRIPT_DIR/manifest.py" write "$PROJECT_ROOT/sdk/python" "$GENERATOR_IMAGE" "$SPEC" "helm_sdk/types_gen.py"
 
 # ── Go ────────────────────────────────────────────────
 echo "  [go] Generating types..."
@@ -258,8 +294,8 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
     --additional-properties=packageName=client \
     --global-property=models 2>/dev/null
 
-if [ -d "$PROJECT_ROOT/.gen_tmp/go" ]; then
-    cat > "$PROJECT_ROOT/sdk/go/client/types_gen.go" <<'HEADER'
+[ -d "$PROJECT_ROOT/.gen_tmp/go" ] || fail "[go] generator produced no output directory — refusing to keep stale output"
+cat > "$PROJECT_ROOT/sdk/go/client/types_gen.go" <<'HEADER'
 // AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
 // Regenerate: bash scripts/sdk/gen.sh
 
@@ -272,55 +308,58 @@ import (
     "time"
 )
 HEADER
-    GO_SKIP_MODELS=(
-        model_agent_identity_profile.go
-        model_approval_ceremony.go
-        model_approval_web_authn_assertion.go
-        model_approval_web_authn_challenge.go
-        model_authz_health.go
-        model_authz_snapshot.go
-        model_boundary_capability_summary.go
-        model_boundary_checkpoint.go
-        model_boundary_record_verification.go
-        model_boundary_status.go
-        model_budget_ceiling.go
-        model_coexistence_capability_manifest.go
-        model_evidence_envelope_export_request.go
-        model_evidence_envelope_manifest.go
-        model_evidence_envelope_payload.go
-        model_evidence_envelope_verification.go
-        model_execution_boundary_record.go
-        model_mcp_authorization_profile.go
-        model_mcp_authorize_call_request.go
-        model_mcp_quarantine_record.go
-        model_mcp_registry_approval_request.go
-        model_mcp_registry_discover_request.go
-        model_mcp_scan_request.go
-        model_mcp_scan_result.go
-        model_negative_boundary_vector.go
-        model_sandbox_backend_profile.go
-        model_sandbox_grant.go
-        model_sandbox_preflight_request.go
-        model_sandbox_preflight_result.go
-        model_telemetry_export_request.go
-        model_telemetry_export_result.go
-        model_telemetry_o_tel_config.go
-    )
-    should_skip_go_model() {
-        local base="$1"
-        for skip in "${GO_SKIP_MODELS[@]}"; do
-            if [ "$base" = "$skip" ]; then
-                return 0
-            fi
-        done
-        return 1
-    }
-    for f in "$PROJECT_ROOT/.gen_tmp/go/model_"*.go; do
-        if [ -f "$f" ] && ! should_skip_go_model "$(basename "$f")"; then
-            sed '/^package /d;/^import/,/^)/d' "$f" >> "$PROJECT_ROOT/sdk/go/client/types_gen.go" 2>/dev/null || true
+GO_SKIP_MODELS=(
+    model_agent_identity_profile.go
+    model_approval_ceremony.go
+    model_approval_web_authn_assertion.go
+    model_approval_web_authn_challenge.go
+    model_authz_health.go
+    model_authz_snapshot.go
+    model_boundary_capability_summary.go
+    model_boundary_checkpoint.go
+    model_boundary_record_verification.go
+    model_boundary_status.go
+    model_budget_ceiling.go
+    model_coexistence_capability_manifest.go
+    model_evidence_envelope_export_request.go
+    model_evidence_envelope_manifest.go
+    model_evidence_envelope_payload.go
+    model_evidence_envelope_verification.go
+    model_execution_boundary_record.go
+    model_mcp_authorization_profile.go
+    model_mcp_authorize_call_request.go
+    model_mcp_quarantine_record.go
+    model_mcp_registry_approval_request.go
+    model_mcp_registry_discover_request.go
+    model_mcp_scan_request.go
+    model_mcp_scan_result.go
+    model_negative_boundary_vector.go
+    model_sandbox_backend_profile.go
+    model_sandbox_grant.go
+    model_sandbox_preflight_request.go
+    model_sandbox_preflight_result.go
+    model_telemetry_export_request.go
+    model_telemetry_export_result.go
+    model_telemetry_o_tel_config.go
+)
+should_skip_go_model() {
+    local base="$1"
+    for skip in "${GO_SKIP_MODELS[@]}"; do
+        if [ "$base" = "$skip" ]; then
+            return 0
         fi
     done
-    python3 - "$PROJECT_ROOT/sdk/go/client/types_gen.go" <<'PY'
+    return 1
+}
+GO_MODEL_COUNT=0
+for f in "$PROJECT_ROOT/.gen_tmp/go/model_"*.go; do
+    if [ -f "$f" ] && ! should_skip_go_model "$(basename "$f")"; then
+        sed '/^package /d;/^import/,/^)/d' "$f" >> "$PROJECT_ROOT/sdk/go/client/types_gen.go" 2>/dev/null || true
+        GO_MODEL_COUNT=$((GO_MODEL_COUNT + 1))
+    fi
+done
+[ "$GO_MODEL_COUNT" -gt 0 ] || fail "[go] generator produced zero model files"
+python3 - "$PROJECT_ROOT/sdk/go/client/types_gen.go" <<'PY'
 from pathlib import Path
 import sys
 
@@ -328,9 +367,9 @@ path = Path(sys.argv[1])
 s = path.read_text()
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
-    gofmt -w "$PROJECT_ROOT/sdk/go/client/types_gen.go"
-fi
-echo "  [go] ✅ sdk/go/client/types_gen.go"
+gofmt -w "$PROJECT_ROOT/sdk/go/client/types_gen.go"
+echo "  [go] ✅ sdk/go/client/types_gen.go ($GO_MODEL_COUNT models)"
+python3 "$SCRIPT_DIR/manifest.py" write "$PROJECT_ROOT/sdk/go" "$GENERATOR_IMAGE" "$SPEC" "client/types_gen.go"
 
 # ── Rust ──────────────────────────────────────────────
 echo "  [rs] Generating types..."
@@ -341,14 +380,14 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
     --additional-properties=packageName=helm_sdk \
     --global-property=models 2>/dev/null
 
-if [ -d "$PROJECT_ROOT/.gen_tmp/rust/src/models" ]; then
-    cat > "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'HEADER'
+[ -d "$PROJECT_ROOT/.gen_tmp/rust/src/models" ] || fail "[rs] generator produced no models directory — refusing to keep stale output"
+cat > "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'HEADER'
 // AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
 // Regenerate: bash scripts/sdk/gen.sh
 
 use serde::{Deserialize, Serialize};
 HEADER
-    python3 - "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" "$PROJECT_ROOT/.gen_tmp/rust/src/models" <<'PY'
+python3 - "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" "$PROJECT_ROOT/.gen_tmp/rust/src/models" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -374,93 +413,42 @@ def render(path: Path) -> tuple[str, str]:
     return (symbol_match.group(1) if symbol_match else path.stem), s
 
 snippets = [render(path) for path in models_dir.glob("*.rs")]
+if not snippets:
+    raise SystemExit("rs generation failed: generator produced zero model files")
 with out_path.open("a", encoding="utf-8") as out:
     for _, s in sorted(snippets, key=lambda item: item[0]):
         out.write(s)
         out.write("\n")
 PY
-    python3 - "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'PY'
+python3 - "$PROJECT_ROOT/sdk/rust/src/types_gen.rs" <<'PY'
 from pathlib import Path
-import re
 import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
+
+# Cosmetic normalizations (safe no-ops when the generator changes shape).
 s = s.replace("/// \n", "///\n")
 s = s.replace("models::", "")
 s = s.replace(', with = "::serde_with::rust::double_option"', "")
 
-s = s.replace("pub r#type: Type,", "pub r#type: ErrorType,")
-s = s.replace(
-    "pub fn new(message: String, r#type: Type, code: String, reason_code: ReasonCode) -> HelmErrorError",
-    "pub fn new(message: String, r#type: ErrorType, code: String, reason_code: ReasonCode) -> HelmErrorError",
-)
-s = re.sub(
-    r'pub enum Type \{\n    #\[serde\(rename = "invalid_request"\)\]\n    InvalidRequest,\n    #\[serde\(rename = "authentication_error"\)\]\n    AuthenticationError,\n    #\[serde\(rename = "permission_denied"\)\]\n    PermissionDenied,\n    #\[serde\(rename = "not_found"\)\]\n    NotFound,\n    #\[serde\(rename = "internal_error"\)\]\n    InternalError,\n\}\n\nimpl Default for Type \{\n    fn default\(\) -> Type \{\n        Self::InvalidRequest\n    \}\n\}',
-    'pub enum ErrorType {\n    #[serde(rename = "invalid_request")]\n    InvalidRequest,\n    #[serde(rename = "authentication_error")]\n    AuthenticationError,\n    #[serde(rename = "permission_denied")]\n    PermissionDenied,\n    #[serde(rename = "not_found")]\n    NotFound,\n    #[serde(rename = "internal_error")]\n    InternalError,\n}\n\nimpl Default for ErrorType {\n    fn default() -> ErrorType {\n        Self::InvalidRequest\n    }\n}',
-    s,
-    count=1,
-)
+# Patch-as-assertion postconditions: the per-struct enum rename in render()
+# must leave no bare colliding enum names behind. If a future spec or
+# generator version reintroduces `Type` / `Verdict` / `Jsonrpc` collisions,
+# fail here instead of emitting uncompilable Rust.
+for collision in ("pub enum Type {", "pub enum Verdict {", "pub enum Jsonrpc {"):
+    if collision in s:
+        raise SystemExit(f"rs postcondition failed: bare {collision!r} survived rendering")
 
-s = s.replace("pub verdict: Verdict,\n    /// Null for ALLOW.", "pub verdict: GovernanceVerdict,\n    /// Null for ALLOW.")
-s = s.replace(
-    "pub fn new(decision_id: String, effect_id: String, verdict: Verdict) -> GovernanceDecision",
-    "pub fn new(decision_id: String, effect_id: String, verdict: GovernanceVerdict) -> GovernanceDecision",
-)
-s = re.sub(
-    r'pub enum Verdict \{\n    #\[serde\(rename = "ALLOW"\)\]\n    Allow,\n    #\[serde\(rename = "DENY"\)\]\n    Deny,\n    #\[serde\(rename = "ESCALATE"\)\]\n    Escalate,\n\}\n\nimpl Default for Verdict \{\n    fn default\(\) -> Verdict \{\n        Self::Allow\n    \}\n\}',
-    'pub enum GovernanceVerdict {\n    #[serde(rename = "ALLOW")]\n    Allow,\n    #[serde(rename = "DENY")]\n    Deny,\n    #[serde(rename = "ESCALATE")]\n    Escalate,\n}\n\nimpl Default for GovernanceVerdict {\n    fn default() -> GovernanceVerdict {\n        Self::Allow\n    }\n}',
-    s,
-    count=1,
-)
-
-jsonrpc_block = '''///
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Jsonrpc {
-    #[serde(rename = "2.0")]
-    Variant2Period0,
-}
-
-impl Default for Jsonrpc {
-    fn default() -> Jsonrpc {
-        Self::Variant2Period0
-    }
-}
-'''
-pos = s.find("pub struct McpjsonrpcResponse")
-if pos != -1:
-    dup = s.find(jsonrpc_block, pos)
-    if dup != -1:
-        s = s[:dup] + "// Duplicate Jsonrpc enum removed (canonical def above)\n" + s[dup + len(jsonrpc_block):]
-
-verdict_block = '''///
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Verdict {
-    #[serde(rename = "PASS")]
-    Pass,
-    #[serde(rename = "FAIL")]
-    Fail,
-}
-
-impl Default for Verdict {
-    fn default() -> Verdict {
-        Self::Pass
-    }
-}
-'''
-pos = s.find("pub struct VerificationResult")
-if pos != -1:
-    dup = s.find(verdict_block, pos)
-    if dup != -1:
-        s = s[:dup] + "// Duplicate Verdict enum removed (canonical def above)\n" + s[dup + len(verdict_block):]
-
-if "pub type ReasonCode = HelmErrorErrorReasonCode;" not in s and "pub enum HelmErrorErrorReasonCode" in s:
+if "pub type ReasonCode = HelmErrorErrorReasonCode;" not in s:
+    if "pub enum HelmErrorErrorReasonCode" not in s:
+        raise SystemExit("rs patch failed: HelmErrorErrorReasonCode missing; cannot add ReasonCode alias")
     s += "\npub type ReasonCode = HelmErrorErrorReasonCode;\n"
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
-fi
 echo "  [rs] ✅ sdk/rust/src/types_gen.rs"
+python3 "$SCRIPT_DIR/manifest.py" write "$PROJECT_ROOT/sdk/rust" "$GENERATOR_IMAGE" "$SPEC" "src/types_gen.rs"
 
 # ── Java ──────────────────────────────────────────────
 echo "  [java] Generating types..."
@@ -472,10 +460,12 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PROJECT_ROOT:/work" -w /work "$G
     --global-property=models 2>/dev/null
 
 JAVA_OUT="$PROJECT_ROOT/sdk/java/src/main/java/labs/mindburn/helm"
-if [ -d "$PROJECT_ROOT/.gen_tmp/java/src/main/java" ]; then
-    shopt -s nullglob
-    mkdir -p "$JAVA_OUT"
-    cat > "$JAVA_OUT/TypesGen.java" <<'HEADER'
+[ -d "$PROJECT_ROOT/.gen_tmp/java/src/main/java" ] || fail "[java] generator produced no output directory — refusing to keep stale output"
+shopt -s nullglob
+mkdir -p "$JAVA_OUT"
+JAVA_MODELS=("$PROJECT_ROOT/.gen_tmp/java/src/main/java/labs/mindburn/helm/models/"*.java)
+[ "${#JAVA_MODELS[@]}" -gt 0 ] || fail "[java] generator produced zero model files"
+cat > "$JAVA_OUT/TypesGen.java" <<'HEADER'
 // AUTO-GENERATED from api/openapi/helm.openapi.yaml — DO NOT EDIT
 // Regenerate: bash scripts/sdk/gen.sh
 
@@ -537,10 +527,10 @@ static class JSON {
 }
 
 HEADER
-    # Extract class bodies from generated models
-    for f in "$PROJECT_ROOT/.gen_tmp/java/src/main/java/labs/mindburn/helm/models/"*.java; do
-        [ -f "$f" ] && sed '/^package /d;/^import/d' "$f" >> "$JAVA_OUT/TypesGen.java" 2>/dev/null || true
-    done
+# Extract class bodies from generated models
+for f in "${JAVA_MODELS[@]}"; do
+    sed '/^package /d;/^import/d' "$f" >> "$JAVA_OUT/TypesGen.java" 2>/dev/null || true
+done
 python3 - "$JAVA_OUT/TypesGen.java" <<'PY'
 from pathlib import Path
 import re
@@ -548,35 +538,53 @@ import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
-s = re.sub(
+
+def must_replace(text: str, old: str, new: str, label: str, min_count: int = 1) -> str:
+    # Patch-as-assertion: every rewrite below is required for TypesGen.java to
+    # compile as a single combined interface. A missing anchor means the
+    # generator output changed; fail loudly instead of shipping a broken SDK.
+    count = text.count(old)
+    if count < min_count:
+        raise SystemExit(
+            f"java patch did not apply ({label}): expected at least {min_count} occurrence(s), found {count}"
+        )
+    return text.replace(old, new)
+
+s, generated_count = re.subn(
     r'@javax\.annotation\.Generated\(value = "org\.openapitools\.codegen\.languages\.JavaClientCodegen", date = "[^"]+", comments = "Generator version: ([^"]+)"\)',
     r'@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: \1")',
     s,
 )
-s = s.replace("public class ", "public static class ")
-s = s.replace("Map<String, Object>.class", "Map.class")
-s = s.replace("List<SandboxBackendProfile>.class", "List.class")
-s = s.replace("getActualInstance() instanceof List<SandboxBackendProfile>", "getActualInstance() instanceof List")
-s = s.replace("((SandboxBackendProfile)getActualInstance()).get(i)", "((List<SandboxBackendProfile>)getActualInstance()).get(i)")
-s = s.replace("getMap<String, Object>()", "getMap()")
-s = s.replace("getList<SandboxBackendProfile>()", "getSandboxBackendProfiles()")
-s = s.replace("public List<SandboxBackendProfile> getSandboxBackendProfiles() throws ClassCastException", "@SuppressWarnings(\"unchecked\")\n    public List<SandboxBackendProfile> getSandboxBackendProfiles() throws ClassCastException")
-s = s.replace("public Map<String, Object> getMap() throws ClassCastException", "public Map<String, Object> getMapStringObject() throws ClassCastException")
-s = s.replace(
+if generated_count == 0:
+    raise SystemExit("java patch did not apply (strip @Generated date): no annotations matched")
+s = must_replace(s, "public class ", "public static class ", "nest model classes")
+s = must_replace(s, "Map<String, Object>.class", "Map.class", "erase Map class literal")
+s = must_replace(s, "List<SandboxBackendProfile>.class", "List.class", "erase List class literal")
+s = must_replace(s, "getActualInstance() instanceof List<SandboxBackendProfile>", "getActualInstance() instanceof List", "erase instanceof check")
+s = must_replace(s, "((SandboxBackendProfile)getActualInstance()).get(i)", "((List<SandboxBackendProfile>)getActualInstance()).get(i)", "cast list element access")
+s = must_replace(s, "getMap<String, Object>()", "getMap()", "rename map accessor call site")
+s = must_replace(s, "getList<SandboxBackendProfile>()", "getSandboxBackendProfiles()", "rename list accessor call site")
+s = must_replace(s, "public List<SandboxBackendProfile> getSandboxBackendProfiles() throws ClassCastException", "@SuppressWarnings(\"unchecked\")\n    public List<SandboxBackendProfile> getSandboxBackendProfiles() throws ClassCastException", "suppress unchecked list accessor")
+s = must_replace(s, "public Map<String, Object> getMap() throws ClassCastException", "public Map<String, Object> getMapStringObject() throws ClassCastException", "rename map accessor declaration")
+s = must_replace(
+    s,
     "if (getActualInstance() instanceof Map<String, Object>) {\n        if (getActualInstance() != null) {",
     "@SuppressWarnings(\"unchecked\")\n    Map<String, Object> _mapInstance = (getActualInstance() instanceof Map) ? (Map<String, Object>) getActualInstance() : null;\n    if (_mapInstance != null) {\n        if (getActualInstance() != null) {",
+    "erase union map branch",
 )
-s = s.replace("getActualInstance().get(_key),", "((Map<String, Object>)getActualInstance()).get(_key),")
-s = s.replace(
+s = must_replace(s, "getActualInstance().get(_key),", "((Map<String, Object>)getActualInstance()).get(_key),", "cast map key access")
+s = must_replace(
+    s,
     "// TODO: there is no validation against JSON schema constraints",
     "// Union matching here does not enforce full JSON schema constraints.",
+    "rewrite union validation note",
 )
 s = s + "\n}\n"
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
-    shopt -u nullglob
-fi
-echo "  [java] ✅ sdk/java/src/.../TypesGen.java"
+shopt -u nullglob
+echo "  [java] ✅ sdk/java/src/.../TypesGen.java (${#JAVA_MODELS[@]} models)"
+python3 "$SCRIPT_DIR/manifest.py" write "$PROJECT_ROOT/sdk/java" "$GENERATOR_IMAGE" "$SPEC" "src/main/java/labs/mindburn/helm/TypesGen.java"
 
 # ── Cleanup ───────────────────────────────────────────
 rm -rf "$PROJECT_ROOT/.gen_tmp"

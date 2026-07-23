@@ -11,7 +11,9 @@ import "time"
 type PackChannel string
 
 const (
-	PackChannelCore       PackChannel = "core"
+	PackChannelCore PackChannel = "core"
+	// PackChannelIndividual is a legacy add-on manifest channel, distinct from
+	// hosted account plan IDs. Keep it so existing signed manifests round-trip.
 	PackChannelIndividual PackChannel = "individual"
 	PackChannelCommunity  PackChannel = "community"
 	PackChannelTeams      PackChannel = "teams"

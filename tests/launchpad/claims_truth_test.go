@@ -46,7 +46,7 @@ func TestLaunchpadClaimsReflectContractFirstSupportLevels(t *testing.T) {
 	requireContains(t, cleanGate, "VERIFY_ONLY_APPS=(opencode kilocode)")
 	requireContains(t, cleanGate, "--include-candidates")
 	requireContains(t, cleanGate, `RELEASE_TAG="`+releaseTag+`"`)
-	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="26198407296"`)
+	requireContains(t, cleanGate, `ARTIFACT_RUN_ID="30031231555"`)
 	requireContains(t, cleanGate, "output, status, commands_path")
 	requireNotContains(t, cleanGate, "status = sys.stdin.read()", "scripts/launch/clean_install_gate.sh")
 	requireContains(t, cleanGate, `"supported_apps": ["openclaw", "hermes"]`)

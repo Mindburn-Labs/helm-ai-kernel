@@ -416,12 +416,18 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		recovered.Outcome != contracts.ConnectorEffectOutcomeNotApplied || recovered.EffectRef != "" {
 		t.Fatalf("direct completed reservation = %+v, %v", recovered, err)
 	}
+	admittedOnly := effectReservationAdmissionFixture(t, approvalSigner, release, consumer, "attempt-admitted-only", now)
+	persistDispatchAdmissionForEffectTest(t, ctx, ownerDB, admittedOnly)
+	if admitted, err := admitter.Admit(ctx, admittedOnly); err != nil || admitted.State != EffectReservationStateAdmitted {
+		t.Fatalf("admitted-only reservation = %+v, %v", admitted, err)
+	}
 	active, err := admitter.ListActive(ctx)
 	activeIDs := map[string]bool{}
 	for _, event := range active {
 		activeIDs[event.Admission.Admission.AdmissionID] = true
 	}
-	if err != nil || len(active) != 2 || !activeIDs[first.Admission.AdmissionID] || !activeIDs[startClaim.Admission.AdmissionID] {
+	if err != nil || len(active) != 3 || !activeIDs[first.Admission.AdmissionID] || !activeIDs[startClaim.Admission.AdmissionID] ||
+		!activeIDs[admittedOnly.Admission.AdmissionID] {
 		t.Fatalf("ListActive() = %+v, %v", active, err)
 	}
 
@@ -525,6 +531,42 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	if err != nil || !fenced {
 		t.Fatalf("active disposition FENCE = %+v fenced=%t error=%v", fenceState, fenced, err)
 	}
+	preRotationCandidates, err := dispositions.ListReconciliationCandidates(ctx)
+	if err != nil {
+		t.Fatalf("ListReconciliationCandidates() before disposition = %v", err)
+	}
+	if preRotationCandidates.ExecutionAuthority != contracts.EffectDispositionExecutionAuthorityNone ||
+		preRotationCandidates.Fence.CommandID != fenceState.CommandID ||
+		preRotationCandidates.Fence.CommandHash != fenceState.CommandHash ||
+		preRotationCandidates.Fence.Epoch != fenceState.Epoch ||
+		preRotationCandidates.Fence.ReceiptHash != fenceState.ReceiptHash ||
+		len(preRotationCandidates.Candidates) != 2 {
+		t.Fatalf("pre-rotation candidates = %+v", preRotationCandidates)
+	}
+	firstCandidate := reconciliationCandidateForAdmission(t, preRotationCandidates, first.Admission.AdmissionID)
+	startClaimCandidate := reconciliationCandidateForAdmission(t, preRotationCandidates, startClaim.Admission.AdmissionID)
+	if firstCandidate.ReservationState != string(EffectReservationStateUncertain) ||
+		startClaimCandidate.ReservationState != string(EffectReservationStateUncertain) ||
+		firstCandidate.NextDispositionSequence != 1 || firstCandidate.PreviousReceiptHash != "" ||
+		startClaimCandidate.NextDispositionSequence != 1 || startClaimCandidate.PreviousReceiptHash != "" {
+		t.Fatalf("pre-rotation candidate chain = first:%+v start-claim:%+v", firstCandidate, startClaimCandidate)
+	}
+	for _, candidate := range preRotationCandidates.Candidates {
+		if candidate.AdmissionID == admittedOnly.Admission.AdmissionID || candidate.ReservationState == string(EffectReservationStateAdmitted) {
+			t.Fatalf("ADMITTED reservation leaked into reconciliation candidates: %+v", candidate)
+		}
+	}
+	wrongScopeConsumer := consumer
+	wrongScopeConsumer.WorkspaceID = "workspace-wrong-candidate-scope"
+	wrongScopeDispositions, err := NewEffectDispositionService(
+		runtimeStore, staticConsumerProvider{identity: wrongScopeConsumer}, releaseRuntime, dispositionVerifier, approvalSigner,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wrongScopeDispositions.ListReconciliationCandidates(ctx); !errors.Is(err, ErrEffectDispositionRequiresFence) {
+		t.Fatalf("wrong-scope reconciliation candidates error = %v", err)
+	}
 	if historicalClose, err := closer.Recover(ctx, directCloseAdmission.Admission.AdmissionID); err != nil ||
 		historicalClose.Receipt.ReceiptHash != directCloseHash {
 		t.Fatalf("recover pre-FENCE close after FENCE = %+v, %v", historicalClose, err)
@@ -583,6 +625,14 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 		listedDispositions[1].Receipt.ReceiptHash != secondDisposition.Receipt.ReceiptHash {
 		t.Fatalf("ListForEffect dispositions = %+v, %v", listedDispositions, err)
 	}
+	candidatesAfterChain, err := dispositions.ListReconciliationCandidates(ctx)
+	if err != nil {
+		t.Fatalf("ListReconciliationCandidates() after chain = %v", err)
+	}
+	firstCandidate = reconciliationCandidateForAdmission(t, candidatesAfterChain, first.Admission.AdmissionID)
+	if firstCandidate.NextDispositionSequence != 3 || firstCandidate.PreviousReceiptHash != secondDisposition.Receipt.ReceiptHash {
+		t.Fatalf("chained reconciliation candidate = %+v", firstCandidate)
+	}
 	type dispositionRaceResult struct {
 		record EffectDispositionRecord
 		err    error
@@ -629,6 +679,21 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 	newFenceState, fenceReplayed, err := stopStore.Fence(ctx, newFenceCommand, approvalTestFenceAcknowledgement())
 	if err != nil || fenceReplayed {
 		t.Fatalf("advance disposition FENCE = %+v replayed=%t error=%v", newFenceState, fenceReplayed, err)
+	}
+	postRotationCandidates, err := dispositions.ListReconciliationCandidates(ctx)
+	if err != nil {
+		t.Fatalf("ListReconciliationCandidates() after FENCE rotation = %v", err)
+	}
+	if postRotationCandidates.Fence.CommandID != newFenceState.CommandID ||
+		postRotationCandidates.Fence.CommandHash != newFenceState.CommandHash ||
+		postRotationCandidates.Fence.Epoch != newFenceState.Epoch ||
+		postRotationCandidates.Fence.ReceiptHash != newFenceState.ReceiptHash ||
+		postRotationCandidates.Fence.ReceiptHash == preRotationCandidates.Fence.ReceiptHash {
+		t.Fatalf("current FENCE candidate projection = %+v", postRotationCandidates.Fence)
+	}
+	firstCandidate = reconciliationCandidateForAdmission(t, postRotationCandidates, first.Admission.AdmissionID)
+	if firstCandidate.NextDispositionSequence != 4 || firstCandidate.PreviousReceiptHash != thirdDisposition.Receipt.ReceiptHash {
+		t.Fatalf("post-rotation candidate chain = %+v", firstCandidate)
 	}
 	forgedDispositionEnvelope := effectDispositionTestEnvelope(
 		t, dispositionSigner, startClaimUncertain, newFenceState, 1, "",
@@ -854,6 +919,21 @@ func (v staticEffectEvidencePackVerifier) VerifyEffectEvidencePack(
 		return ErrEffectCloseConflict
 	}
 	return nil
+}
+
+func reconciliationCandidateForAdmission(
+	t *testing.T,
+	projection contracts.EffectReconciliationCandidates,
+	admissionID string,
+) contracts.EffectReconciliationCandidate {
+	t.Helper()
+	for _, candidate := range projection.Candidates {
+		if candidate.AdmissionID == admissionID {
+			return candidate
+		}
+	}
+	t.Fatalf("candidate for admission %q is absent from %+v", admissionID, projection)
+	return contracts.EffectReconciliationCandidate{}
 }
 
 func effectReservationAdmissionFixture(

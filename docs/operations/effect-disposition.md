@@ -1,7 +1,7 @@
 ---
 title: Signed Active-Work Disposition
 status: internal-foundation
-last_reviewed: 2026-07-18
+last_reviewed: 2026-07-23
 ---
 
 # Signed active-work disposition
@@ -45,7 +45,10 @@ When both `HELM_APPROVAL_CONSUMPTION_ENABLED=1` and
   envelope; and
 - `POST /internal/v1/effect-dispositions/recover` with a strict `command_id`
   JSON body for tenant/workspace scoped recovery of the committed signed
-  record.
+  record; and
+- `GET /internal/v1/effect-dispositions/reconciliation-candidates` for a
+  source-owned, tenant/workspace-scoped snapshot that contains no caller
+  tuple or effect authority.
 
 Both routes use the existing JWKS workload boundary and require the distinct
 `HELM_EFFECT_DISPOSITION_SCOPE` capability (default
@@ -64,6 +67,37 @@ key ref, canonical Ed25519 public key, enabled state, and UTC key lifetime;
 command keys additionally bind the exact workload audience. Multiple entries
 support explicit overlapping key rotation. HTTP error bodies are sanitized and
 unsigned statuses remain transport evidence only, never disposition authority.
+
+## Source reconciliation candidate projection
+
+`effect-reconciliation-candidates.v1` is an internal read projection for a
+later Control Plane `RECONCILE_SOURCE` command. Its only scope input is the
+authenticated workload token; query parameters are rejected, and it never
+accepts a FENCE, tenant, workspace, reservation, or connector tuple from the
+caller.
+
+Within one tenant/workspace transaction, the Kernel acquires the shared FENCE
+lock, rereads and integrity-checks the current FENCE, rereads the current
+reservation heads, verifies their signed admission and release authorities,
+and re-verifies every existing disposition chain record. The result includes:
+
+- the current FENCE command ID/hash, epoch, and receipt hash;
+- only an eligible `STARTED` or `UNCERTAIN` reservation's immutable
+  admission, connector, execution, intent, idempotency, effect, head, and
+  chain-position bindings; and
+- its next disposition sequence and immediate predecessor receipt hash.
+
+`ADMITTED` is deliberately absent: it is a no-command, non-start state. An
+`UNCERTAIN` row is included only when its durable execution and intent
+references are sufficient to construct a valid later command. The response
+always has `execution_authority: NONE`; it does not start, reconcile, cancel,
+compensate, or authorize any connector effect. It also does not expose the
+generic reservation or admission storage payload.
+
+The projection is a snapshot, not a permit. A later signed command must still
+be accepted by `EffectDispositionService.Record`, which takes the same lock
+and rejects a rotated FENCE, changed reservation head, stale chain position,
+or changed source bindings.
 
 The environment values are compact JSON. Replace the example keys, identities,
 and lifetimes with deployment-owned values; keep historical verification keys
@@ -204,10 +238,11 @@ make docs-coverage
 make docs-truth
 ```
 
-The PostgreSQL proof covers no-FENCE rejection, chained dispositions, exact and
+The PostgreSQL proof covers no-FENCE rejection, scoped candidate projection,
+`ADMITTED` exclusion, current-FENCE rotation, chained dispositions, exact and
 conflicting replay, recovery, listing, concurrent single-winner insertion,
-stale-FENCE rejection, expiry, forced-RLS isolation, append-only rejection, and
-mandatory current-FENCE non-`HOLD` disposition binding at close. Direct
+stale-FENCE rejection, expiry, forced-RLS isolation, append-only rejection,
+and mandatory current-FENCE non-`HOLD` disposition binding at close. Direct
 wrong-scope insert and delete attempts are rejected. These are local and CI
 proofs, including rejection of a structurally valid but cryptographically
 forged row at both successor append and close. They are not deployed or

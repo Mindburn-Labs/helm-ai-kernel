@@ -48,9 +48,11 @@ type fakeApprovalDispatchAdmitter struct {
 
 type fakeEffectDispositionRecorder struct {
 	record       approvalceremony.EffectDispositionRecord
+	projection   contracts.EffectReconciliationCandidates
 	err          error
 	recordCalls  int
 	recoverCalls int
+	listCalls    int
 	identity     approvalceremony.ConsumerIdentity
 	envelope     contracts.EffectDispositionCommandEnvelope
 	commandID    string
@@ -68,6 +70,12 @@ func (f *fakeEffectDispositionRecorder) Recover(ctx context.Context, commandID s
 	f.identity, _ = (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
 	f.commandID = commandID
 	return f.record, f.err
+}
+
+func (f *fakeEffectDispositionRecorder) ListReconciliationCandidates(ctx context.Context) (contracts.EffectReconciliationCandidates, error) {
+	f.listCalls++
+	f.identity, _ = (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+	return f.projection, f.err
 }
 
 func (a *fakeApprovalDispatchAdmitter) Claim(ctx context.Context, request approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error) {
@@ -220,6 +228,54 @@ func TestEffectDispositionRoutesUseVerifiedWorkloadScopeAndRecoverSignedRecord(t
 	}
 }
 
+func TestEffectReconciliationCandidatesRouteUsesVerifiedScopeAndNoEffectAuthority(t *testing.T) {
+	recorder := &fakeEffectDispositionRecorder{projection: effectReconciliationCandidatesRouteProjection(t)}
+	runtime := &approvalConsumptionRuntime{
+		disposition:          recorder,
+		dispositionValidator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(5 * time.Minute)},
+		audience:             "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+	}
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, runtime)
+
+	request := httptest.NewRequest(http.MethodGet, effectReconciliationCandidatesPath, nil)
+	request.Header.Set("Authorization", "Bearer workload-token")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || recorder.listCalls != 1 || recorder.recordCalls != 0 || recorder.recoverCalls != 0 {
+		t.Fatalf("status=%d list=%d record=%d recover=%d body=%s", response.Code, recorder.listCalls, recorder.recordCalls, recorder.recoverCalls, response.Body.String())
+	}
+	wantIdentity := approvalceremony.ConsumerIdentity{
+		Subject: "spiffe://helm/data-plane-a", TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "helm-data-plane",
+	}
+	var projection contracts.EffectReconciliationCandidates
+	if err := json.NewDecoder(response.Body).Decode(&projection); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.identity != wantIdentity || projection.Validate() != nil ||
+		projection.ExecutionAuthority != contracts.EffectDispositionExecutionAuthorityNone ||
+		response.Header().Get("Cache-Control") != "no-store" ||
+		response.Header().Get("X-Helm-Contract-Status") != "internal_non_production" ||
+		strings.Contains(response.Body.String(), "admission_json") {
+		t.Fatalf("identity=%+v projection=%+v headers=%v", recorder.identity, projection, response.Header())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, effectReconciliationCandidatesPath+"?tenant_id=attacker", nil)
+	request.Header.Set("Authorization", "Bearer workload-token")
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || recorder.listCalls != 1 {
+		t.Fatalf("caller tuple status=%d list=%d body=%s", response.Code, recorder.listCalls, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, effectReconciliationCandidatesPath, nil)
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized || recorder.listCalls != 1 {
+		t.Fatalf("missing token status=%d list=%d body=%s", response.Code, recorder.listCalls, response.Body.String())
+	}
+}
+
 func TestEffectDispositionRoutesAreAbsentWhenDisabled(t *testing.T) {
 	mux := http.NewServeMux()
 	registerApprovalGrantConsumptionRoutes(mux, &approvalConsumptionRuntime{})
@@ -230,6 +286,12 @@ func TestEffectDispositionRoutesAreAbsentWhenDisabled(t *testing.T) {
 	response = postApprovalConsumptionRoute(t, mux, effectDispositionRecoverPath, `{"command_id":"command-a"}`, "workload-token")
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("disabled disposition recovery route status=%d body=%s", response.Code, response.Body.String())
+	}
+	request := httptest.NewRequest(http.MethodGet, effectReconciliationCandidatesPath, nil)
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("disabled reconciliation candidate route status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -725,4 +787,36 @@ func effectDispositionRouteRecord(t *testing.T) approvalceremony.EffectDispositi
 		Command: envelope, Fence: fence, Receipt: receipt,
 		SignatureAlgorithm: approvalceremony.GrantSignatureEd25519, Signature: strings.Repeat("b", 128), CreatedAt: now,
 	}
+}
+
+func effectReconciliationCandidatesRouteProjection(t *testing.T) contracts.EffectReconciliationCandidates {
+	t.Helper()
+	record := effectDispositionRouteRecord(t)
+	command := record.Command.Command
+	projection := contracts.EffectReconciliationCandidates{
+		SchemaVersion:      contracts.EffectReconciliationCandidatesSchemaV1,
+		ContractVersion:    contracts.EffectReconciliationCandidatesContractV1,
+		ExecutionAuthority: contracts.EffectDispositionExecutionAuthorityNone,
+		TenantID:           command.TenantID,
+		WorkspaceID:        command.WorkspaceID,
+		Audience:           command.Audience,
+		Fence: contracts.EffectReconciliationFence{
+			CommandID: record.Fence.CommandID, CommandHash: record.Fence.CommandHash,
+			Epoch: record.Fence.Epoch, ReceiptHash: record.Fence.ReceiptHash,
+		},
+		Candidates: []contracts.EffectReconciliationCandidate{{
+			AdmissionID: command.AdmissionID, AttemptID: command.AttemptID,
+			ReservationSequence: command.ReservationSequence, ReservationHeadHash: command.ReservationHeadHash,
+			ReservationState: command.ReservationState,
+			ConnectorID:      command.ConnectorID, ConnectorVersion: command.ConnectorVersion,
+			ConnectorAction: command.ConnectorAction, ConnectorExecutionRef: command.ConnectorExecutionRef,
+			ProofSessionRef: command.ProofSessionRef, IntentRef: command.IntentRef, EffectRef: command.EffectRef,
+			IdempotencyKeyHash: command.IdempotencyKeyHash, EffectHash: command.EffectHash,
+			NextDispositionSequence: 2, PreviousReceiptHash: record.Receipt.ReceiptHash,
+		}},
+	}
+	if err := projection.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	return projection
 }

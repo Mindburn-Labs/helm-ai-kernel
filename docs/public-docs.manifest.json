@@ -91,6 +91,15 @@
       "sensitivity": "public"
     },
     {
+      "slug": "agent-permission-modes",
+      "title": "Agent Permission Modes",
+      "section": "guide",
+      "source_path": "docs/AGENT_PERMISSION_MODES.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/agent-permission-modes",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "integrations/openai-compatible-proxy",
       "title": "OpenAI Proxy",
       "section": "integrations",

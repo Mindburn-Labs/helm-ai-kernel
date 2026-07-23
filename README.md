@@ -57,6 +57,12 @@ non-allowlisted HTTPS request. Prompt-only manipulation, model refusal, or an
 agent that never attempts the tool call needs model, app, and sandbox controls
 alongside HELM.
 
+Coverage differs by effect class. The v0.7 shell guard is a selected-effect
+guardrail: it recognizes a small set of literal destructive command forms and
+does not interpret shell expansion, aliases, `eval`, or wrappers. See
+[Workstation governance](docs/reference/workstation-governance.md) for the
+per-class boundary.
+
 ## One Example
 
 ```text
@@ -76,6 +82,7 @@ You get:  a signed receipt you can verify offline (integrity always;
 | Local AI-agent risk audit | [Agent Risk Scan](docs/reference/agent-risk-scan.md) |
 | CLI commands | [CLI reference](docs/reference/cli.md) |
 | Security model | [Execution security model](docs/EXECUTION_SECURITY_MODEL.md) |
+| Why not just an approval prompt | [Agent permission modes](docs/AGENT_PERMISSION_MODES.md) |
 | MCP tool quarantine | [MCP integration](docs/INTEGRATIONS/mcp.md) |
 | Client implementation handoff | [Implementation partner handoff](docs/guides/implementation-partner.md) |
 | Evidence verification | [Verification](docs/VERIFICATION.md) |
@@ -135,7 +142,7 @@ orchestrator, cloud control plane, or observability tool.
 
 | Category | Examples | What They Do | Where They Stop | HELM AI Kernel |
 | --- | --- | --- | --- | --- |
-| **Agent permission modes** | Claude Code Auto Mode | Let agents work faster with fewer prompts. | Permission automation is not execution governance. | **HELM makes every governed action produce a verdict and proof.** |
+| **Agent permission modes** | Claude Code Auto Mode | Let agents work faster with fewer prompts. | [Permission automation is not execution governance](docs/AGENT_PERMISSION_MODES.md). | **HELM makes every governed action produce a verdict and proof.** |
 | **Model-vendor agents** | OpenAI Agents, ChatGPT Agent, Claude agents | Provide agent runtimes, tools, guardrails, and HITL flows. | They are tied to their own agent stack and do not create neutral execution evidence. | **HELM is model-neutral: any agent can route actions through the same boundary.** |
 | **Coding agents** | GitHub Copilot, Devin, Cursor, Replit Agent | Write, edit, test, and ship code faster. | They optimize developer productivity, not cross-runtime authority. | **HELM governs what the agent is allowed to execute.** |
 | **Agent orchestration** | LangGraph, CrewAI, AutoGen, n8n | Decide what agents should do next. | Orchestration chooses attempts; it does not prove authorization. | **HELM decides whether the attempted action may happen.** |

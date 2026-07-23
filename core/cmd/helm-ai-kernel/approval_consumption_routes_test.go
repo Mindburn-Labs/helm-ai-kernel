@@ -39,21 +39,26 @@ type fakeApprovalGrantConsumer struct {
 
 type fakeApprovalDispatchAdmitter struct {
 	record       approvalceremony.DispatchAdmissionRecord
+	active       []approvalceremony.EffectReservationEvent
 	err          error
 	claimCalls   int
 	recoverCalls int
+	listCalls    int
 	identity     approvalceremony.ConsumerIdentity
 	request      approvalceremony.DispatchAdmissionRequest
 }
 
 type fakeEffectDispositionRecorder struct {
 	record       approvalceremony.EffectDispositionRecord
+	listed       map[string][]approvalceremony.EffectDispositionRecord
 	err          error
 	recordCalls  int
 	recoverCalls int
+	listCalls    int
 	identity     approvalceremony.ConsumerIdentity
 	envelope     contracts.EffectDispositionCommandEnvelope
 	commandID    string
+	admissionID  string
 }
 
 func (f *fakeEffectDispositionRecorder) Record(ctx context.Context, envelope contracts.EffectDispositionCommandEnvelope) (approvalceremony.EffectDispositionRecord, error) {
@@ -70,6 +75,13 @@ func (f *fakeEffectDispositionRecorder) Recover(ctx context.Context, commandID s
 	return f.record, f.err
 }
 
+func (f *fakeEffectDispositionRecorder) ListForEffect(ctx context.Context, admissionID string) ([]approvalceremony.EffectDispositionRecord, error) {
+	f.listCalls++
+	f.identity, _ = (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+	f.admissionID = admissionID
+	return append([]approvalceremony.EffectDispositionRecord(nil), f.listed[admissionID]...), f.err
+}
+
 func (a *fakeApprovalDispatchAdmitter) Claim(ctx context.Context, request approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error) {
 	a.claimCalls++
 	a.capture(ctx, request)
@@ -80,6 +92,12 @@ func (a *fakeApprovalDispatchAdmitter) Recover(ctx context.Context, request appr
 	a.recoverCalls++
 	a.capture(ctx, request)
 	return a.record, a.err
+}
+
+func (a *fakeApprovalDispatchAdmitter) ListActive(ctx context.Context) ([]approvalceremony.EffectReservationEvent, error) {
+	a.listCalls++
+	a.identity, _ = (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+	return append([]approvalceremony.EffectReservationEvent(nil), a.active...), a.err
 }
 
 func (a *fakeApprovalDispatchAdmitter) capture(ctx context.Context, request approvalceremony.DispatchAdmissionRequest) {
@@ -220,6 +238,94 @@ func TestEffectDispositionRoutesUseVerifiedWorkloadScopeAndRecoverSignedRecord(t
 	}
 }
 
+func TestEffectDispositionCandidateRouteListsOnlyReconciliationCandidates(t *testing.T) {
+	record := effectDispositionRouteRecord(t)
+	started := effectReservationCandidateEvent(t, approvalceremony.EffectReservationStateStarted, "")
+	admitted := effectReservationCandidateEvent(t, approvalceremony.EffectReservationStateAdmitted, "")
+	admitter := &fakeApprovalDispatchAdmitter{active: []approvalceremony.EffectReservationEvent{started, admitted}}
+	recorder := &fakeEffectDispositionRecorder{
+		record: record,
+		listed: map[string][]approvalceremony.EffectDispositionRecord{
+			started.Admission.Admission.AdmissionID: {record},
+		},
+	}
+	runtime := &approvalConsumptionRuntime{
+		reservations: admitter, disposition: recorder,
+		dispositionValidator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(5 * time.Minute)},
+		stops:                &fakeApprovalScopedStopReader{fenced: true, state: record.Fence},
+		audience:             "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+	}
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, runtime)
+
+	request := httptest.NewRequest(http.MethodGet, effectDispositionCandidatesPath, nil)
+	request.Header.Set("Authorization", "Bearer workload-token")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if admitter.listCalls != 1 || recorder.listCalls != 1 || recorder.admissionID != started.Admission.Admission.AdmissionID {
+		t.Fatalf("list calls admitter=%d recorder=%d admission=%q", admitter.listCalls, recorder.listCalls, recorder.admissionID)
+	}
+	wantIdentity := approvalceremony.ConsumerIdentity{
+		Subject: "spiffe://helm/data-plane-a", TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "helm-data-plane",
+	}
+	if admitter.identity != wantIdentity || recorder.identity != wantIdentity {
+		t.Fatalf("identities admitter=%+v recorder=%+v", admitter.identity, recorder.identity)
+	}
+	var payload effectDispositionCandidateListResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Fence == nil || payload.Fence.CommandID != record.Fence.CommandID || len(payload.Candidates) != 1 {
+		t.Fatalf("payload=%+v", payload)
+	}
+	candidate := payload.Candidates[0]
+	headHash, err := approvalceremony.EffectReservationHeadHash(started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if candidate.Reservation.Admission.Admission.AdmissionID != started.Admission.Admission.AdmissionID ||
+		candidate.ReservationHeadHash != headHash ||
+		candidate.PreviousReceiptHash != record.Receipt.ReceiptHash ||
+		candidate.NextDispositionSequence != record.Receipt.DispositionSequence+1 ||
+		len(candidate.Dispositions) != 1 ||
+		response.Header().Get("Cache-Control") != "no-store" ||
+		response.Header().Get("X-Helm-Contract-Status") != "internal_non_production" {
+		t.Fatalf("candidate=%+v headers=%v", candidate, response.Header())
+	}
+}
+
+func TestEffectDispositionCandidateRouteReturnsEmptyWhenScopeIsNotFenced(t *testing.T) {
+	started := effectReservationCandidateEvent(t, approvalceremony.EffectReservationStateStarted, "")
+	admitter := &fakeApprovalDispatchAdmitter{active: []approvalceremony.EffectReservationEvent{started}}
+	recorder := &fakeEffectDispositionRecorder{listed: map[string][]approvalceremony.EffectDispositionRecord{}}
+	runtime := &approvalConsumptionRuntime{
+		reservations: admitter, disposition: recorder,
+		dispositionValidator: fakeApprovalConsumerTokenValidator{claims: approvalConsumerRouteClaims(5 * time.Minute)},
+		stops:                &fakeApprovalScopedStopReader{},
+		audience:             "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+	}
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, runtime)
+
+	request := httptest.NewRequest(http.MethodGet, effectDispositionCandidatesPath, nil)
+	request.Header.Set("Authorization", "Bearer workload-token")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var payload effectDispositionCandidateListResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Fence != nil || len(payload.Candidates) != 1 || payload.Candidates[0].PreviousReceiptHash != "" || payload.Candidates[0].NextDispositionSequence != 1 {
+		t.Fatalf("payload=%+v", payload)
+	}
+}
+
 func TestEffectDispositionRoutesAreAbsentWhenDisabled(t *testing.T) {
 	mux := http.NewServeMux()
 	registerApprovalGrantConsumptionRoutes(mux, &approvalConsumptionRuntime{})
@@ -230,6 +336,13 @@ func TestEffectDispositionRoutesAreAbsentWhenDisabled(t *testing.T) {
 	response = postApprovalConsumptionRoute(t, mux, effectDispositionRecoverPath, `{"command_id":"command-a"}`, "workload-token")
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("disabled disposition recovery route status=%d body=%s", response.Code, response.Body.String())
+	}
+	request := httptest.NewRequest(http.MethodGet, effectDispositionCandidatesPath, nil)
+	request.Header.Set("Authorization", "Bearer workload-token")
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("disabled disposition candidate route status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -725,4 +838,85 @@ func effectDispositionRouteRecord(t *testing.T) approvalceremony.EffectDispositi
 		Command: envelope, Fence: fence, Receipt: receipt,
 		SignatureAlgorithm: approvalceremony.GrantSignatureEd25519, Signature: strings.Repeat("b", 128), CreatedAt: now,
 	}
+}
+
+func effectReservationCandidateEvent(t *testing.T, state approvalceremony.EffectReservationState, reason string) approvalceremony.EffectReservationEvent {
+	t.Helper()
+	admission := approvalDispatchAdmissionRouteRecord(t)
+	authority, err := (contracts.ConnectorReleaseAuthority{
+		SchemaVersion: contracts.ConnectorReleaseAuthoritySchemaV1, ContractVersion: contracts.ConnectorReleaseAuthorityContractV1,
+		AuthorityID: admission.Admission.ConnectorAuthority.ReleaseAuthorityID, SigningKeyRef: "release-key-a",
+		Algorithm: contracts.ConnectorReleaseAuthorityAlgorithmV1, RegistryRevision: admission.Admission.ConnectorAuthority.ReleaseRegistryRevision,
+		ScopeKind:   contracts.ConnectorReleaseAuthorityScopeGlobal,
+		ConnectorID: admission.Admission.ConnectorAuthority.ConnectorID, ConnectorVersion: admission.Admission.ConnectorAuthority.ConnectorVersion,
+		State: contracts.ConnectorReleaseAuthorityStateCertified, ConnectorExecutorKind: admission.Admission.ConnectorAuthority.ConnectorExecutorKind,
+		ConnectorBinaryHash:     admission.Admission.ConnectorAuthority.ConnectorBinaryHash,
+		ConnectorSignatureRef:   admission.Admission.ConnectorAuthority.ConnectorSignatureRef,
+		ConnectorSignerID:       admission.Admission.ConnectorAuthority.ConnectorSignerID,
+		ConnectorSignatureHash:  admission.Admission.ConnectorAuthority.ConnectorSignatureHash,
+		ConnectorSandboxProfile: admission.Admission.ConnectorAuthority.ConnectorSandboxProfile,
+		ConnectorDriftPolicyRef: admission.Admission.ConnectorAuthority.ConnectorDriftPolicyRef,
+		CertificationRef:        admission.Admission.ConnectorAuthority.CertificationRef,
+		CertificationHash:       admission.Admission.ConnectorAuthority.CertificationHash,
+		CertificationAuthority:  admission.Admission.ConnectorAuthority.CertificationAuthority,
+		SignedAt:                admission.Admission.IssuedAt.Add(-time.Second), ValidFrom: admission.Admission.IssuedAt.Add(-time.Second),
+		ValidUntil: testTimePointer(admission.Admission.IssuedAt.Add(time.Hour)),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectorAuthority := admission.Admission.ConnectorAuthority
+	connectorAuthority.ReleaseAuthorityHash = authority.AuthorityHash
+	connectorAuthority, err = connectorAuthority.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission.Admission.ConnectorAuthority = connectorAuthority
+	admission.Admission, err = admission.Admission.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := approvalceremony.EffectReservationEvent{
+		Admission: admission,
+		ReleaseAuthority: contracts.ConnectorReleaseAuthorityEnvelope{
+			Authority: authority,
+			Signature: strings.Repeat("a", 128),
+		},
+		ReleaseObservedAt: authority.ValidFrom,
+		AdmittedAt:        admission.Admission.IssuedAt,
+		OccurredAt:        admission.Admission.IssuedAt,
+	}
+	switch state {
+	case approvalceremony.EffectReservationStateAdmitted:
+		event.Sequence = 1
+		event.State = state
+	case approvalceremony.EffectReservationStateStarted:
+		startedAt := admission.Admission.IssuedAt.Add(2 * time.Second)
+		event.Sequence = 2
+		event.State = state
+		event.OccurredAt = startedAt
+		event.StartedAt = testTimePointer(startedAt)
+		event.ConnectorExecutionRef = "github-request-a"
+	case approvalceremony.EffectReservationStateUncertain:
+		startedAt := admission.Admission.IssuedAt.Add(2 * time.Second)
+		resolvedAt := startedAt.Add(time.Second)
+		event.Sequence = 3
+		event.State = state
+		event.OccurredAt = resolvedAt
+		event.StartedAt = testTimePointer(startedAt)
+		event.ResolvedAt = testTimePointer(resolvedAt)
+		event.ConnectorExecutionRef = "github-request-a"
+		event.ReasonCode = reason
+	default:
+		t.Fatalf("unsupported test state %s", state)
+	}
+	if err := event.Validate(); err != nil {
+		t.Fatalf("effect reservation candidate event invalid: %v", err)
+	}
+	return event
+}
+
+func testTimePointer(value time.Time) *time.Time {
+	value = value.UTC().Truncate(time.Microsecond)
+	return &value
 }

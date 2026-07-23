@@ -28,6 +28,7 @@ const (
 	approvalDispatchAdmissionRecoverPath = "/internal/v1/approval-grants/recover-dispatch-admission"
 	effectDispositionPath                = "/internal/v1/effect-dispositions"
 	effectDispositionRecoverPath         = "/internal/v1/effect-dispositions/recover"
+	effectDispositionCandidatesPath      = "/internal/v1/effect-dispositions/candidates"
 	approvalGrantConsumptionMaxBody      = 32 << 10
 	approvalConsumptionReasonHeader      = "X-Helm-Reason-Code"
 	approvalConsumptionFencedReason      = "EMERGENCY_STOP_FENCED"
@@ -46,9 +47,14 @@ type approvalDispatchAdmitter interface {
 	Recover(context.Context, approvalceremony.DispatchAdmissionRequest) (approvalceremony.DispatchAdmissionRecord, error)
 }
 
+type effectReservationLister interface {
+	ListActive(context.Context) ([]approvalceremony.EffectReservationEvent, error)
+}
+
 type effectDispositionRecorder interface {
 	Record(context.Context, contracts.EffectDispositionCommandEnvelope) (approvalceremony.EffectDispositionRecord, error)
 	Recover(context.Context, string) (approvalceremony.EffectDispositionRecord, error)
+	ListForEffect(context.Context, string) ([]approvalceremony.EffectDispositionRecord, error)
 }
 
 type approvalConsumerTokenValidator interface {
@@ -58,6 +64,7 @@ type approvalConsumerTokenValidator interface {
 type approvalConsumptionRuntime struct {
 	consumer             approvalGrantConsumer
 	admitter             approvalDispatchAdmitter
+	reservations         effectReservationLister
 	validator            approvalConsumerTokenValidator
 	dispatchValidator    approvalConsumerTokenValidator
 	disposition          effectDispositionRecorder
@@ -95,6 +102,19 @@ type approvalDispatchAdmissionResponse struct {
 	AdmissionSignature          string                              `json:"admission_signature"`
 }
 
+type effectDispositionCandidate struct {
+	Reservation             approvalceremony.EffectReservationEvent    `json:"reservation"`
+	ReservationHeadHash     string                                     `json:"reservation_head_hash"`
+	PreviousReceiptHash     string                                     `json:"previous_receipt_hash,omitempty"`
+	NextDispositionSequence uint64                                     `json:"next_disposition_sequence"`
+	Dispositions            []approvalceremony.EffectDispositionRecord `json:"dispositions"`
+}
+
+type effectDispositionCandidateListResponse struct {
+	Fence      *kernel.FenceState           `json:"fence,omitempty"`
+	Candidates []effectDispositionCandidate `json:"candidates"`
+}
+
 func registerApprovalGrantConsumptionRoutes(mux *http.ServeMux, runtime *approvalConsumptionRuntime) {
 	if mux == nil || runtime == nil {
 		return
@@ -106,6 +126,7 @@ func registerApprovalGrantConsumptionRoutes(mux *http.ServeMux, runtime *approva
 	if runtime.disposition != nil {
 		mux.HandleFunc(effectDispositionPath, runtime.protectDisposition(runtime.handleEffectDispositionRecord))
 		mux.HandleFunc(effectDispositionRecoverPath, runtime.protectDisposition(runtime.handleEffectDispositionRecover))
+		mux.HandleFunc(effectDispositionCandidatesPath, runtime.protectDisposition(runtime.handleEffectDispositionCandidates))
 	}
 }
 
@@ -187,6 +208,70 @@ func (runtime *approvalConsumptionRuntime) handleEffectDispositionRecover(w http
 		return
 	}
 	writeEffectDispositionRecord(w, record)
+}
+
+func (runtime *approvalConsumptionRuntime) handleEffectDispositionCandidates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		api.WriteMethodNotAllowed(w)
+		return
+	}
+	if runtime == nil || runtime.reservations == nil || runtime.disposition == nil || runtime.stops == nil {
+		api.WriteError(w, http.StatusServiceUnavailable, "Effect disposition unavailable", "durable disposition authority is not configured")
+		return
+	}
+	identity, err := (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(r.Context())
+	if err != nil {
+		writeApprovalConsumptionError(w, errApprovalConsumptionStopUnverified)
+		return
+	}
+	fence, fenced, err := runtime.stops.IsFenced(r.Context(), kernel.StopScope{
+		TenantID: identity.TenantID, WorkspaceID: identity.WorkspaceID,
+	})
+	if err != nil {
+		writeApprovalConsumptionError(w, errApprovalConsumptionStopUnverified)
+		return
+	}
+	response := effectDispositionCandidateListResponse{Candidates: []effectDispositionCandidate{}}
+	if fenced {
+		response.Fence = &fence
+	}
+	active, err := runtime.reservations.ListActive(r.Context())
+	if err != nil {
+		writeEffectDispositionError(w, err)
+		return
+	}
+	for _, reservation := range active {
+		if reservation.State != approvalceremony.EffectReservationStateStarted &&
+			reservation.State != approvalceremony.EffectReservationStateUncertain {
+			continue
+		}
+		headHash, err := approvalceremony.EffectReservationHeadHash(reservation)
+		if err != nil {
+			writeEffectDispositionError(w, err)
+			return
+		}
+		dispositions, err := runtime.disposition.ListForEffect(r.Context(), reservation.Admission.Admission.AdmissionID)
+		if err != nil {
+			writeEffectDispositionError(w, err)
+			return
+		}
+		candidate := effectDispositionCandidate{
+			Reservation:             reservation,
+			ReservationHeadHash:     headHash,
+			NextDispositionSequence: 1,
+			Dispositions:            dispositions,
+		}
+		if n := len(dispositions); n > 0 {
+			last := dispositions[n-1]
+			candidate.PreviousReceiptHash = last.Receipt.ReceiptHash
+			candidate.NextDispositionSequence = last.Receipt.DispositionSequence + 1
+		}
+		response.Candidates = append(response.Candidates, candidate)
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Helm-Contract-Status", "internal_non_production")
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func writeEffectDispositionRecord(w http.ResponseWriter, record approvalceremony.EffectDispositionRecord) {

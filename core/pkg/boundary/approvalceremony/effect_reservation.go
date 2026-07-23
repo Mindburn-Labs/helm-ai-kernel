@@ -174,6 +174,10 @@ func effectReservationHasCloseMetadata(e EffectReservationEvent) bool {
 		e.Outcome != "" || e.EvidencePackRef != "" || e.EvidencePackHash != "" || e.ReconciliationRef != ""
 }
 
+func EffectReservationHeadHash(event EffectReservationEvent) (string, error) {
+	return effectReservationHeadHash(event)
+}
+
 // EffectTransitionMeta supplies bounded evidence references for a durable
 // lifecycle transition. Empty references never stand in for proof.
 type EffectTransitionMeta struct {

@@ -222,6 +222,7 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 	})
 	var disposition effectDispositionRecorder
 	var dispositionValidator approvalConsumerTokenValidator
+	var reservations effectReservationLister
 	if config.DispositionEnabled {
 		commandVerifier, err := approvalceremony.NewEd25519EffectDispositionCommandVerifier(config.DispositionKeys)
 		if err != nil {
@@ -241,6 +242,12 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 		if err != nil {
 			return nil, fmt.Errorf("initialize effect disposition service: %w", err)
 		}
+		reservations, err = approvalceremony.NewEffectReservationAdmitter(
+			store, approvalceremony.ContextConsumerIdentityProvider{}, releaseStore,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("initialize approval effect reservation lister: %w", err)
+		}
 		dispositionValidator = mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
 			JWKSURL: config.JWKSURL, Issuer: config.Issuer, Audience: config.Audience,
 			Resource: config.Resource, Scopes: []string{config.DispositionScope},
@@ -248,7 +255,7 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 	}
 	return &approvalConsumptionRuntime{
 		consumer: consumer, admitter: admitter, validator: validator, dispatchValidator: dispatchValidator,
-		disposition: disposition, dispositionValidator: dispositionValidator,
+		reservations: reservations, disposition: disposition, dispositionValidator: dispositionValidator,
 		stops: stops, audience: config.Audience,
 		maxTokenTTL: config.MaxTokenTTL,
 	}, nil

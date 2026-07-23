@@ -1,5 +1,8 @@
 package approvalceremony
 
+// quantum_posture: tests classical SHA-256 reconciliation-fence receipt
+// integrity; no hybrid or post-quantum claim.
+
 import (
 	"crypto/sha256"
 	"encoding/hex"

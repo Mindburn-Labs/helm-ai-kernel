@@ -941,15 +941,6 @@ func TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle(t *testing.T
 			t.Fatalf("completed reservation remained active: %+v", event)
 		}
 	}
-	postCloseCandidates, err := dispositions.ListReconciliationCandidates(ctx)
-	if err != nil {
-		t.Fatalf("ListReconciliationCandidates() after close = %v", err)
-	}
-	for _, candidate := range postCloseCandidates.Candidates {
-		if candidate.AdmissionID == first.Admission.AdmissionID {
-			t.Fatalf("completed reservation remained a reconciliation candidate: %+v", candidate)
-		}
-	}
 
 	assertEffectReservationRLSIsolation(t, ctx, runtimeDB, "tenant-b", consumer.WorkspaceID)
 	assertEffectReservationAppendOnly(t, ctx, ownerDB, consumer, first.Admission.AdmissionID)

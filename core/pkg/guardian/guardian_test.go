@@ -277,7 +277,14 @@ func TestGuardian_SignDecision(t *testing.T) {
 		err := subject.SignDecision(ctx, decision, effect, nil, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "DENY", decision.Verdict)
-		assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.Reason)
+		assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.ReasonCode)
+		// The deny reason names the unmet requirement, its false expression,
+		// and the available input.* fields so the author can reach ALLOW.
+		assert.Contains(t, decision.Reason, string(contracts.ReasonMissingRequirement))
+		assert.Contains(t, decision.Reason, "check-budget")
+		assert.Contains(t, decision.Reason, `expression "input.effect.params.budget_id != \"\"" evaluated to false`)
+		assert.Contains(t, decision.Reason, "available input.* fields:")
+		assert.Contains(t, decision.Reason, "effect (object)")
 	})
 
 	t.Run("Fail: Signer Error", func(t *testing.T) {

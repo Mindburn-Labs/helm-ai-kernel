@@ -1,9 +1,14 @@
 package labs.mindburn.helm;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
-import com.google.gson.reflect.TypeToken;
 import labs.mindburn.helm.TypesGen.*;
+import org.openapitools.jackson.nullable.JsonNullableModule;
 
 import java.io.IOException;
 import java.net.URI;
@@ -18,12 +23,17 @@ import java.util.List;
 
 /**
  * Typed Java client for the HELM kernel API.
- * Uses java.net.http (JDK 11+) and Gson. Zero framework deps.
+ * Uses java.net.http (JDK 11+). Typed request/response bodies are serialized
+ * with Jackson so generated {@link TypesGen} models honor their
+ * {@code @JsonProperty} wire names and restore typed getters on decode.
+ * Gson is retained only for the untyped {@link JsonElement} pass-through
+ * methods. Zero framework deps.
  */
 public class HelmClient {
     private final String baseUrl;
     private final HttpClient httpClient;
     private final Gson gson;
+    private final ObjectMapper mapper;
     private final String apiKey;
 
     public HelmClient(String baseUrl) {
@@ -34,9 +44,22 @@ public class HelmClient {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.apiKey = apiKey;
         this.gson = new Gson();
+        this.mapper = createObjectMapper();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
+    }
+
+    /**
+     * ObjectMapper configured for the generated {@link TypesGen} models.
+     * Unknown properties are tolerated for forward compatibility.
+     */
+    static ObjectMapper createObjectMapper() {
+        ObjectMapper m = new ObjectMapper();
+        m.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        m.registerModule(new JavaTimeModule());
+        m.registerModule(new JsonNullableModule());
+        return m;
     }
 
     /** Thrown when the HELM API returns a non-2xx response. */
@@ -184,33 +207,46 @@ public class HelmClient {
         return b;
     }
 
+    private String toJson(Object value) {
+        try {
+            return mapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("failed to serialize HELM request body", e);
+        }
+    }
+
+    private HelmApiException apiError(int status, String body) {
+        HelmError err = null;
+        try {
+            err = mapper.readValue(body, HelmError.class);
+        } catch (Exception ignored) {
+            // Non-JSON error bodies fall through to the raw-body message.
+        }
+        return new HelmApiException(
+                status,
+                err != null && err.getError() != null ? err.getError().getMessage() : body,
+                err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
+    }
+
     private <T> T send(HttpRequest request, Class<T> type) {
         try {
             HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() >= 400) {
-                HelmError err = gson.fromJson(resp.body(), HelmError.class);
-                throw new HelmApiException(
-                        resp.statusCode(),
-                        err != null && err.getError() != null ? err.getError().getMessage() : resp.body(),
-                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
+                throw apiError(resp.statusCode(), resp.body());
             }
-            return gson.fromJson(resp.body(), type);
+            return mapper.readValue(resp.body(), type);
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("HELM API request failed", e);
         }
     }
 
-    private <T> T sendList(HttpRequest request, TypeToken<T> typeToken) {
+    private <T> T sendList(HttpRequest request, TypeReference<T> typeRef) {
         try {
             HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() >= 400) {
-                HelmError err = gson.fromJson(resp.body(), HelmError.class);
-                throw new HelmApiException(
-                        resp.statusCode(),
-                        err != null && err.getError() != null ? err.getError().getMessage() : resp.body(),
-                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
+                throw apiError(resp.statusCode(), resp.body());
             }
-            return gson.fromJson(resp.body(), typeToken.getType());
+            return mapper.readValue(resp.body(), typeRef);
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("HELM API request failed", e);
         }
@@ -220,11 +256,7 @@ public class HelmClient {
         try {
             HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() >= 400) {
-                HelmError err = gson.fromJson(resp.body(), HelmError.class);
-                throw new HelmApiException(
-                        resp.statusCode(),
-                        err != null && err.getError() != null ? err.getError().getMessage() : resp.body(),
-                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
+                throw apiError(resp.statusCode(), resp.body());
             }
             return gson.fromJson(resp.body(), JsonElement.class);
         } catch (IOException | InterruptedException e) {
@@ -235,7 +267,7 @@ public class HelmClient {
     /** POST /v1/chat/completions */
     public ChatCompletionResponse chatCompletions(ChatCompletionRequest req) {
         HttpRequest r = req("POST", "/v1/chat/completions")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
                 .build();
         return send(r, ChatCompletionResponse.class);
     }
@@ -243,7 +275,7 @@ public class HelmClient {
     /** POST /api/v1/evaluate */
     public JsonElement evaluateDecision(Object req) {
         HttpRequest r = this.req("POST", "/api/v1/evaluate")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
                 .build();
         return sendJson(r);
     }
@@ -251,7 +283,7 @@ public class HelmClient {
     /** POST /api/v1/kernel/approve */
     public Receipt approveIntent(ApprovalRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/kernel/approve")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
                 .build();
         return send(r, Receipt.class);
     }
@@ -260,7 +292,7 @@ public class HelmClient {
     public List<Session> listSessions() {
         HttpRequest r = req("GET", "/api/v1/proofgraph/sessions")
                 .GET().build();
-        return sendList(r, new TypeToken<List<Session>>() {
+        return sendList(r, new TypeReference<List<Session>>() {
         });
     }
 
@@ -268,7 +300,7 @@ public class HelmClient {
     public List<Receipt> getReceipts(String sessionId) {
         HttpRequest r = req("GET", "/api/v1/proofgraph/sessions/" + sessionId + "/receipts")
                 .GET().build();
-        return sendList(r, new TypeToken<List<Receipt>>() {
+        return sendList(r, new TypeReference<List<Receipt>>() {
         });
     }
 
@@ -281,7 +313,7 @@ public class HelmClient {
 
     /** POST /api/v1/evidence/export — returns raw bytes */
     public byte[] exportEvidence(String sessionId) {
-        String body = gson.toJson(new java.util.HashMap<String, String>() {{
+        String body = toJson(new java.util.HashMap<String, String>() {{
             put("session_id", sessionId);
             put("format", "tar.gz");
         }});
@@ -291,11 +323,7 @@ public class HelmClient {
         try {
             HttpResponse<byte[]> resp = httpClient.send(r, HttpResponse.BodyHandlers.ofByteArray());
             if (resp.statusCode() >= 400) {
-                HelmError err = gson.fromJson(new String(resp.body()), HelmError.class);
-                throw new HelmApiException(
-                        resp.statusCode(),
-                        err != null && err.getError() != null ? err.getError().getMessage() : "export failed",
-                        err != null && err.getError() != null ? String.valueOf(err.getError().getReasonCode()) : "ERROR_INTERNAL");
+                throw apiError(resp.statusCode(), new String(resp.body(), StandardCharsets.UTF_8));
             }
             return resp.body();
         } catch (IOException | InterruptedException e) {
@@ -306,7 +334,7 @@ public class HelmClient {
     /** POST /api/v1/evidence/verify */
     public VerificationResult verifyEvidence(byte[] bundle) {
         // Send as JSON with base64-encoded bundle for simplicity
-        String body = gson.toJson(java.util.Map.of("bundle_b64",
+        String body = toJson(java.util.Map.of("bundle_b64",
                 java.util.Base64.getEncoder().encodeToString(bundle)));
         HttpRequest r = req("POST", "/api/v1/evidence/verify")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -316,7 +344,7 @@ public class HelmClient {
 
     /** POST /api/v1/replay/verify */
     public VerificationResult replayVerify(byte[] bundle) {
-        String body = gson.toJson(java.util.Map.of("bundle_b64",
+        String body = toJson(java.util.Map.of("bundle_b64",
                 java.util.Base64.getEncoder().encodeToString(bundle)));
         HttpRequest r = req("POST", "/api/v1/replay/verify")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -327,7 +355,7 @@ public class HelmClient {
     /** POST /api/v1/evidence/envelopes */
     public EvidenceEnvelopeManifest createEvidenceEnvelopeManifest(EvidenceEnvelopeExportRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/evidence/envelopes")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
                 .build();
         return send(r, EvidenceEnvelopeManifest.class);
     }
@@ -389,7 +417,7 @@ public class HelmClient {
     /** POST /api/v1/conformance/run */
     public ConformanceResult conformanceRun(ConformanceRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/conformance/run")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
                 .build();
         return send(r, ConformanceResult.class);
     }
@@ -405,7 +433,7 @@ public class HelmClient {
     public List<NegativeBoundaryVector> listNegativeConformanceVectors() {
         HttpRequest r = req("GET", "/api/v1/conformance/negative")
                 .GET().build();
-        return sendList(r, new TypeToken<List<NegativeBoundaryVector>>() {
+        return sendList(r, new TypeReference<List<NegativeBoundaryVector>>() {
         });
     }
 
@@ -421,14 +449,14 @@ public class HelmClient {
     public List<MCPQuarantineRecord> listMcpRegistry() {
         HttpRequest r = req("GET", "/api/v1/mcp/registry")
                 .GET().build();
-        return sendList(r, new TypeToken<List<MCPQuarantineRecord>>() {
+        return sendList(r, new TypeReference<List<MCPQuarantineRecord>>() {
         });
     }
 
     /** POST /api/v1/mcp/registry */
     public MCPQuarantineRecord discoverMcpServer(MCPRegistryDiscoverRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/mcp/registry")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
                 .build();
         return send(r, MCPQuarantineRecord.class);
     }
@@ -436,7 +464,7 @@ public class HelmClient {
     /** POST /api/v1/mcp/registry/approve */
     public MCPQuarantineRecord approveMcpServer(MCPRegistryApprovalRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/mcp/registry/approve")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
                 .build();
         return send(r, MCPQuarantineRecord.class);
     }
@@ -448,19 +476,19 @@ public class HelmClient {
 
     public MCPQuarantineRecord approveMcpRegistryRecord(String serverId, MCPRegistryApprovalRequest req) {
         HttpRequest r = this.req("POST", "/api/v1/mcp/registry/" + encode(serverId) + "/approve")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return send(r, MCPQuarantineRecord.class);
     }
 
     public MCPQuarantineRecord revokeMcpRegistryRecord(String serverId, String reason) {
         HttpRequest r = this.req("POST", "/api/v1/mcp/registry/" + encode(serverId) + "/revoke")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(java.util.Map.of("reason", reason)))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(java.util.Map.of("reason", reason)))).build();
         return send(r, MCPQuarantineRecord.class);
     }
 
     public JsonElement scanMcpServer(Object req) {
         HttpRequest r = this.req("POST", "/api/v1/mcp/scan")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
@@ -470,13 +498,13 @@ public class HelmClient {
 
     public JsonElement putMcpAuthProfile(String profileId, Object profile) {
         HttpRequest r = this.req("PUT", "/api/v1/mcp/auth-profiles/" + encode(profileId))
-                .PUT(HttpRequest.BodyPublishers.ofString(gson.toJson(profile))).build();
+                .PUT(HttpRequest.BodyPublishers.ofString(toJson(profile))).build();
         return sendJson(r);
     }
 
     public JsonElement authorizeMcpCall(Object req) {
         HttpRequest r = this.req("POST", "/api/v1/mcp/authorize-call")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
@@ -484,7 +512,7 @@ public class HelmClient {
     public List<SandboxBackendProfile> listSandboxBackendProfiles() {
         HttpRequest r = req("GET", "/api/v1/sandbox/grants/inspect")
                 .GET().build();
-        return sendList(r, new TypeToken<List<SandboxBackendProfile>>() {
+        return sendList(r, new TypeReference<List<SandboxBackendProfile>>() {
         });
     }
 
@@ -513,7 +541,7 @@ public class HelmClient {
 
     public SandboxGrant createSandboxGrant(Object req) {
         HttpRequest r = this.req("POST", "/api/v1/sandbox/grants")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return send(r, SandboxGrant.class);
     }
 
@@ -529,7 +557,7 @@ public class HelmClient {
 
     public JsonElement preflightSandboxGrant(Object req) {
         HttpRequest r = this.req("POST", "/api/v1/sandbox/preflight")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
@@ -543,7 +571,7 @@ public class HelmClient {
 
     public JsonElement checkAuthz(Object req) {
         HttpRequest r = this.req("POST", "/api/v1/authz/check")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
@@ -561,25 +589,25 @@ public class HelmClient {
 
     public JsonElement createApprovalCeremony(Object req) {
         HttpRequest r = this.req("POST", "/api/v1/approvals")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
     public JsonElement transitionApprovalCeremony(String approvalId, String action, Object req) {
         HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/" + encode(action))
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
     public ApprovalWebAuthnChallenge createApprovalWebAuthnChallenge(String approvalId, Object req) {
         HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/webauthn/challenge")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return send(r, ApprovalWebAuthnChallenge.class);
     }
 
     public JsonElement assertApprovalWebAuthnChallenge(String approvalId, ApprovalWebAuthnAssertion req) {
         HttpRequest r = this.req("POST", "/api/v1/approvals/" + encode(approvalId) + "/webauthn/assert")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
@@ -589,7 +617,7 @@ public class HelmClient {
 
     public JsonElement putBudgetCeiling(String budgetId, Object req) {
         HttpRequest r = this.req("PUT", "/api/v1/budgets/" + encode(budgetId))
-                .PUT(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .PUT(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
@@ -603,7 +631,7 @@ public class HelmClient {
 
     public JsonElement exportTelemetry(Object req) {
         HttpRequest r = this.req("POST", "/api/v1/telemetry/export")
-                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req))).build();
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(req))).build();
         return sendJson(r);
     }
 
@@ -611,10 +639,18 @@ public class HelmClient {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    /** GET /healthz */
+    /** GET /healthz — returns the raw plain-text body. */
     public String health() {
         HttpRequest r = req("GET", "/healthz").GET().build();
-        return send(r, String.class);
+        try {
+            HttpResponse<String> resp = httpClient.send(r, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 400) {
+                throw apiError(resp.statusCode(), resp.body());
+            }
+            return resp.body();
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException("HELM API request failed", e);
+        }
     }
 
     /** GET /version */

@@ -89,6 +89,23 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+- Java SDK: repaired generated-model JSON mapping across non-evaluator
+  endpoints. `HelmClient` now serializes typed request/response bodies with
+  Jackson so generated `@JsonProperty` wire names are honored and typed
+  getters are restored after decode; Gson remains only for the untyped
+  `JsonElement` pass-through methods. Generated models for
+  `additionalProperties` schemas no longer extend `HashMap<String, Object>`
+  (which made serializers treat the whole model as a bare map); undeclared
+  properties round-trip via `putAdditionalProperty` /
+  `getAdditionalProperties()`. Code that consumed those models as a `Map`
+  must migrate to the typed accessors. Verified by new real HTTP loopback
+  tests (`HelmClientLoopbackTest`) covering chat completions, approvals and
+  receipts, ProofGraph sessions, conformance, MCP registry, sandbox grants,
+  evaluation requests, error reason codes, and additional-properties models.
+  The Java SDK remains a source-available client; no published or
+  conformance-certified artifact is claimed until tagged release evidence
+  exists.
+
 ## [0.7.4] - 2026-07-21
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.4>.

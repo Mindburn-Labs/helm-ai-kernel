@@ -9025,7 +9025,7 @@ public static class BuildStrategy {
   CapabilityGraph.JSON_PROPERTY_CONFIDENCE_REASON
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class CapabilityGraph extends HashMap<String, Object> {
+public static class CapabilityGraph {
   public static final String JSON_PROPERTY_CAPABILITIES = "capabilities";
   private List<String> capabilities;
 
@@ -9549,20 +9549,18 @@ public static class CapabilityGraph extends HashMap<String, Object> {
         Objects.equals(this.adapterMatches, capabilityGraph.adapterMatches) &&
         Objects.equals(this.confidence, capabilityGraph.confidence) &&
         Objects.equals(this.confidenceReason, capabilityGraph.confidenceReason)&&
-        Objects.equals(this.additionalProperties, capabilityGraph.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, capabilityGraph.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(capabilities, modules, frameworks, secrets, oauth, ports, buildSignals, runtimeSignals, policySignals, securitySignals, adapterMatches, confidence, confidenceReason, super.hashCode(), additionalProperties);
+    return Objects.hash(capabilities, modules, frameworks, secrets, oauth, ports, buildSignals, runtimeSignals, policySignals, securitySignals, adapterMatches, confidence, confidenceReason, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class CapabilityGraph {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    capabilities: ").append(toIndentedString(capabilities)).append("\n");
     sb.append("    modules: ").append(toIndentedString(modules)).append("\n");
     sb.append("    frameworks: ").append(toIndentedString(frameworks)).append("\n");
@@ -14570,7 +14568,7 @@ public static class ConsoleBootstrapWorkspace {
   ConsoleCapabilities.JSON_PROPERTY_TIER_GATE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class ConsoleCapabilities extends HashMap<String, Object> {
+public static class ConsoleCapabilities {
   public static final String JSON_PROPERTY_ENTITLEMENTS = "entitlements";
   private List<String> entitlements = new ArrayList<>();
 
@@ -14753,20 +14751,18 @@ public static class ConsoleCapabilities extends HashMap<String, Object> {
         Objects.equals(this.version, consoleCapabilities.version) &&
         Objects.equals(this.source, consoleCapabilities.source) &&
         Objects.equals(this.tierGate, consoleCapabilities.tierGate)&&
-        Objects.equals(this.additionalProperties, consoleCapabilities.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, consoleCapabilities.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(entitlements, version, source, tierGate, super.hashCode(), additionalProperties);
+    return Objects.hash(entitlements, version, source, tierGate, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class ConsoleCapabilities {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    entitlements: ").append(toIndentedString(entitlements)).append("\n");
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    source: ").append(toIndentedString(source)).append("\n");
@@ -18317,7 +18313,7 @@ public static class DetectedFramework {
   DetectedModule.JSON_PROPERTY_BUILD_STRATEGY
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class DetectedModule extends HashMap<String, Object> {
+public static class DetectedModule {
   public static final String JSON_PROPERTY_PATH = "path";
   private String path;
 
@@ -18537,20 +18533,18 @@ public static class DetectedModule extends HashMap<String, Object> {
         Objects.equals(this.manifests, detectedModule.manifests) &&
         Objects.equals(this.entrypoints, detectedModule.entrypoints) &&
         Objects.equals(this.buildStrategy, detectedModule.buildStrategy)&&
-        Objects.equals(this.additionalProperties, detectedModule.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, detectedModule.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(path, kind, manifests, entrypoints, buildStrategy, super.hashCode(), additionalProperties);
+    return Objects.hash(path, kind, manifests, entrypoints, buildStrategy, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class DetectedModule {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    path: ").append(toIndentedString(path)).append("\n");
     sb.append("    kind: ").append(toIndentedString(kind)).append("\n");
     sb.append("    manifests: ").append(toIndentedString(manifests)).append("\n");
@@ -19683,7 +19677,7 @@ public static class EntitlementCapabilities {
   EntitlementDecision.JSON_PROPERTY_EXPIRES_AT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class EntitlementDecision extends HashMap<String, Object> {
+public static class EntitlementDecision {
   public static final String JSON_PROPERTY_ALLOWED = "allowed";
   private Boolean allowed;
 
@@ -20133,20 +20127,18 @@ public static class EntitlementDecision extends HashMap<String, Object> {
         Objects.equals(this.decisionRef, entitlementDecision.decisionRef) &&
         Objects.equals(this.source, entitlementDecision.source) &&
         Objects.equals(this.expiresAt, entitlementDecision.expiresAt)&&
-        Objects.equals(this.additionalProperties, entitlementDecision.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, entitlementDecision.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(allowed, userState, requiredCapability, reasonCode, reason, upgradeReason, limit, used, remaining, decisionRef, source, expiresAt, super.hashCode(), additionalProperties);
+    return Objects.hash(allowed, userState, requiredCapability, reasonCode, reason, upgradeReason, limit, used, remaining, decisionRef, source, expiresAt, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class EntitlementDecision {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    allowed: ").append(toIndentedString(allowed)).append("\n");
     sb.append("    userState: ").append(toIndentedString(userState)).append("\n");
     sb.append("    requiredCapability: ").append(toIndentedString(requiredCapability)).append("\n");
@@ -25091,7 +25083,7 @@ public static class GUIActionReceipt {
   GeneratedAppSpecCandidate.JSON_PROPERTY_PROMOTION_REQUIREMENTS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class GeneratedAppSpecCandidate extends HashMap<String, Object> {
+public static class GeneratedAppSpecCandidate {
   public static final String JSON_PROPERTY_CANDIDATE_ID = "candidate_id";
   private String candidateId;
 
@@ -25274,20 +25266,18 @@ public static class GeneratedAppSpecCandidate extends HashMap<String, Object> {
         Objects.equals(this.trusted, generatedAppSpecCandidate.trusted) &&
         Objects.equals(this.appSpec, generatedAppSpecCandidate.appSpec) &&
         Objects.equals(this.promotionRequirements, generatedAppSpecCandidate.promotionRequirements)&&
-        Objects.equals(this.additionalProperties, generatedAppSpecCandidate.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, generatedAppSpecCandidate.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(candidateId, trusted, appSpec, promotionRequirements, super.hashCode(), additionalProperties);
+    return Objects.hash(candidateId, trusted, appSpec, promotionRequirements, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class GeneratedAppSpecCandidate {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    candidateId: ").append(toIndentedString(candidateId)).append("\n");
     sb.append("    trusted: ").append(toIndentedString(trusted)).append("\n");
     sb.append("    appSpec: ").append(toIndentedString(appSpec)).append("\n");
@@ -29624,7 +29614,7 @@ public static class HelmErrorError {
   ImportEvidenceLedger.JSON_PROPERTY_OFFLINE_VERIFY_COMMAND
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class ImportEvidenceLedger extends HashMap<String, Object> {
+public static class ImportEvidenceLedger {
   public static final String JSON_PROPERTY_STATUS = "status";
   private String status;
 
@@ -29968,20 +29958,18 @@ public static class ImportEvidenceLedger extends HashMap<String, Object> {
         Objects.equals(this.licenseRef, importEvidenceLedger.licenseRef) &&
         Objects.equals(this.policyRefs, importEvidenceLedger.policyRefs) &&
         Objects.equals(this.offlineVerifyCommand, importEvidenceLedger.offlineVerifyCommand)&&
-        Objects.equals(this.additionalProperties, importEvidenceLedger.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, importEvidenceLedger.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(status, receiptRefs, evidencePackRefs, sbomRef, vulnerabilityScanRef, provenanceRef, licenseRef, policyRefs, offlineVerifyCommand, super.hashCode(), additionalProperties);
+    return Objects.hash(status, receiptRefs, evidencePackRefs, sbomRef, vulnerabilityScanRef, provenanceRef, licenseRef, policyRefs, offlineVerifyCommand, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class ImportEvidenceLedger {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    receiptRefs: ").append(toIndentedString(receiptRefs)).append("\n");
     sb.append("    evidencePackRefs: ").append(toIndentedString(evidencePackRefs)).append("\n");
@@ -30127,7 +30115,7 @@ public static class ImportEvidenceLedger extends HashMap<String, Object> {
   ImportPreflightResult.JSON_PROPERTY_EVIDENCE_LEDGER
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class ImportPreflightResult extends HashMap<String, Object> {
+public static class ImportPreflightResult {
   public static final String JSON_PROPERTY_IMPORT_ID = "import_id";
   private String importId;
 
@@ -30347,20 +30335,18 @@ public static class ImportPreflightResult extends HashMap<String, Object> {
         Objects.equals(this.checks, importPreflightResult.checks) &&
         Objects.equals(this.blockedReasons, importPreflightResult.blockedReasons) &&
         Objects.equals(this.evidenceLedger, importPreflightResult.evidenceLedger)&&
-        Objects.equals(this.additionalProperties, importPreflightResult.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, importPreflightResult.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(importId, status, checks, blockedReasons, evidenceLedger, super.hashCode(), additionalProperties);
+    return Objects.hash(importId, status, checks, blockedReasons, evidenceLedger, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class ImportPreflightResult {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    importId: ").append(toIndentedString(importId)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    checks: ").append(toIndentedString(checks)).append("\n");
@@ -30483,7 +30469,7 @@ public static class ImportPreflightResult extends HashMap<String, Object> {
   LaunchRecipe.JSON_PROPERTY_CLI_EQUIVALENT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchRecipe extends HashMap<String, Object> {
+public static class LaunchRecipe {
   public static final String JSON_PROPERTY_IMPORT_ID = "import_id";
   private String importId;
 
@@ -30835,20 +30821,18 @@ public static class LaunchRecipe extends HashMap<String, Object> {
         Objects.equals(this.promotionState, launchRecipe.promotionState) &&
         Objects.equals(this.promotionRequirements, launchRecipe.promotionRequirements) &&
         Objects.equals(this.cliEquivalent, launchRecipe.cliEquivalent)&&
-        Objects.equals(this.additionalProperties, launchRecipe.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchRecipe.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(importId, generatedAt, detectionOrder, buildStrategy, targetPlans, generatedAppSpecs, promotionState, promotionRequirements, cliEquivalent, super.hashCode(), additionalProperties);
+    return Objects.hash(importId, generatedAt, detectionOrder, buildStrategy, targetPlans, generatedAppSpecs, promotionState, promotionRequirements, cliEquivalent, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchRecipe {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    importId: ").append(toIndentedString(importId)).append("\n");
     sb.append("    generatedAt: ").append(toIndentedString(generatedAt)).append("\n");
     sb.append("    detectionOrder: ").append(toIndentedString(detectionOrder)).append("\n");
@@ -31023,7 +31007,7 @@ public static class LaunchRecipe extends HashMap<String, Object> {
   LaunchpadApp.JSON_PROPERTY_STATUS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadApp extends HashMap<String, Object> {
+public static class LaunchpadApp {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
 
@@ -31966,20 +31950,18 @@ public static class LaunchpadApp extends HashMap<String, Object> {
         Objects.equals(this.entitlementDecision, launchpadApp.entitlementDecision) &&
         Objects.equals(this.actionStates, launchpadApp.actionStates) &&
         Objects.equals(this.status, launchpadApp.status)&&
-        Objects.equals(this.additionalProperties, launchpadApp.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadApp.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, appId, name, version, ociRef, immutableDigest, ossSupported, availability, redistribution, installStrategy, riskClass, blockedReason, requiredSecrets, modelGatewayEnv, declaredCapabilities, mcpServers, filesystemNeeds, networkNeeds, healthcheck, teardownRecipe, evidenceProfile, policyRef, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, status, super.hashCode(), additionalProperties);
+    return Objects.hash(id, appId, name, version, ociRef, immutableDigest, ossSupported, availability, redistribution, installStrategy, riskClass, blockedReason, requiredSecrets, modelGatewayEnv, declaredCapabilities, mcpServers, filesystemNeeds, networkNeeds, healthcheck, teardownRecipe, evidenceProfile, policyRef, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, status, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadApp {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    appId: ").append(toIndentedString(appId)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
@@ -32268,7 +32250,7 @@ public static class LaunchpadApp extends HashMap<String, Object> {
   LaunchpadAppStatus.JSON_PROPERTY_PROOF_STATUS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadAppStatus extends HashMap<String, Object> {
+public static class LaunchpadAppStatus {
   public static final String JSON_PROPERTY_STATE = "state";
   private String state;
 
@@ -32596,20 +32578,18 @@ public static class LaunchpadAppStatus extends HashMap<String, Object> {
         Objects.equals(this.lastRunId, launchpadAppStatus.lastRunId) &&
         Objects.equals(this.lastEvidencepackRef, launchpadAppStatus.lastEvidencepackRef) &&
         Objects.equals(this.proofStatus, launchpadAppStatus.proofStatus)&&
-        Objects.equals(this.additionalProperties, launchpadAppStatus.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadAppStatus.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(state, verdict, reasonCode, humanSummary, missingSecrets, quarantinedMcp, lastRunId, lastEvidencepackRef, proofStatus, super.hashCode(), additionalProperties);
+    return Objects.hash(state, verdict, reasonCode, humanSummary, missingSecrets, quarantinedMcp, lastRunId, lastEvidencepackRef, proofStatus, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadAppStatus {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    state: ").append(toIndentedString(state)).append("\n");
     sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
     sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
@@ -32745,7 +32725,7 @@ public static class LaunchpadAppStatus extends HashMap<String, Object> {
   LaunchpadFixAction.JSON_PROPERTY_DESCRIPTION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadFixAction extends HashMap<String, Object> {
+public static class LaunchpadFixAction {
   public static final String JSON_PROPERTY_LABEL = "label";
   private String label;
 
@@ -32891,20 +32871,18 @@ public static class LaunchpadFixAction extends HashMap<String, Object> {
     return Objects.equals(this.label, launchpadFixAction.label) &&
         Objects.equals(this.cli, launchpadFixAction.cli) &&
         Objects.equals(this.description, launchpadFixAction.description)&&
-        Objects.equals(this.additionalProperties, launchpadFixAction.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadFixAction.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(label, cli, description, super.hashCode(), additionalProperties);
+    return Objects.hash(label, cli, description, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadFixAction {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    label: ").append(toIndentedString(label)).append("\n");
     sb.append("    cli: ").append(toIndentedString(cli)).append("\n");
     sb.append("    description: ").append(toIndentedString(description)).append("\n");
@@ -33013,7 +32991,7 @@ public static class LaunchpadFixAction extends HashMap<String, Object> {
   LaunchpadGateResult.JSON_PROPERTY_FIX_ACTIONS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadGateResult extends HashMap<String, Object> {
+public static class LaunchpadGateResult {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
 
@@ -33552,20 +33530,18 @@ public static class LaunchpadGateResult extends HashMap<String, Object> {
         Objects.equals(this.receiptRequired, launchpadGateResult.receiptRequired) &&
         Objects.equals(this.cliEquivalent, launchpadGateResult.cliEquivalent) &&
         Objects.equals(this.fixActions, launchpadGateResult.fixActions)&&
-        Objects.equals(this.additionalProperties, launchpadGateResult.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadGateResult.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, group, label, verdict, reasonCode, receiptRef, proofgraphNode, evidenceRefs, summary, why, proofStatus, rawDetailRef, rawProofRef, receiptRequired, cliEquivalent, fixActions, super.hashCode(), additionalProperties);
+    return Objects.hash(id, group, label, verdict, reasonCode, receiptRef, proofgraphNode, evidenceRefs, summary, why, proofStatus, rawDetailRef, rawProofRef, receiptRequired, cliEquivalent, fixActions, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadGateResult {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    group: ").append(toIndentedString(group)).append("\n");
     sb.append("    label: ").append(toIndentedString(label)).append("\n");
@@ -33755,7 +33731,7 @@ public static class LaunchpadGateResult extends HashMap<String, Object> {
   LaunchpadImportRecord.JSON_PROPERTY_EVIDENCE_LEDGER
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadImportRecord extends HashMap<String, Object> {
+public static class LaunchpadImportRecord {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
 
@@ -34147,20 +34123,18 @@ public static class LaunchpadImportRecord extends HashMap<String, Object> {
         Objects.equals(this.launchRecipe, launchpadImportRecord.launchRecipe) &&
         Objects.equals(this.preflight, launchpadImportRecord.preflight) &&
         Objects.equals(this.evidenceLedger, launchpadImportRecord.evidenceLedger)&&
-        Objects.equals(this.additionalProperties, launchpadImportRecord.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadImportRecord.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, state, createdAt, updatedAt, request, sourceSnapshot, capabilityGraph, launchRecipe, preflight, evidenceLedger, super.hashCode(), additionalProperties);
+    return Objects.hash(id, state, createdAt, updatedAt, request, sourceSnapshot, capabilityGraph, launchRecipe, preflight, evidenceLedger, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadImportRecord {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    state: ").append(toIndentedString(state)).append("\n");
     sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
@@ -34510,7 +34484,7 @@ public static class LaunchpadImportRequest {
   LaunchpadMCPServer.JSON_PROPERTY_RECEIPT_REF
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadMCPServer extends HashMap<String, Object> {
+public static class LaunchpadMCPServer {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
 
@@ -34780,20 +34754,18 @@ public static class LaunchpadMCPServer extends HashMap<String, Object> {
         Objects.equals(this.riskClass, launchpadMCPServer.riskClass) &&
         Objects.equals(this.tools, launchpadMCPServer.tools) &&
         Objects.equals(this.receiptRef, launchpadMCPServer.receiptRef)&&
-        Objects.equals(this.additionalProperties, launchpadMCPServer.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadMCPServer.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, endpoint, transport, status, riskClass, tools, receiptRef, super.hashCode(), additionalProperties);
+    return Objects.hash(id, endpoint, transport, status, riskClass, tools, receiptRef, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadMCPServer {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    endpoint: ").append(toIndentedString(endpoint)).append("\n");
     sb.append("    transport: ").append(toIndentedString(transport)).append("\n");
@@ -34925,7 +34897,7 @@ public static class LaunchpadMCPServer extends HashMap<String, Object> {
   LaunchpadMatrixCell.JSON_PROPERTY_ACTION_STATES
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadMatrixCell extends HashMap<String, Object> {
+public static class LaunchpadMatrixCell {
   public static final String JSON_PROPERTY_APP_ID = "app_id";
   private String appId;
 
@@ -35303,20 +35275,18 @@ public static class LaunchpadMatrixCell extends HashMap<String, Object> {
         Objects.equals(this.upgradeReason, launchpadMatrixCell.upgradeReason) &&
         Objects.equals(this.entitlementDecision, launchpadMatrixCell.entitlementDecision) &&
         Objects.equals(this.actionStates, launchpadMatrixCell.actionStates)&&
-        Objects.equals(this.additionalProperties, launchpadMatrixCell.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadMatrixCell.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(appId, substrateId, launchable, verdict, reason, availability, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, super.hashCode(), additionalProperties);
+    return Objects.hash(appId, substrateId, launchable, verdict, reason, availability, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadMatrixCell {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    appId: ").append(toIndentedString(appId)).append("\n");
     sb.append("    substrateId: ").append(toIndentedString(substrateId)).append("\n");
     sb.append("    launchable: ").append(toIndentedString(launchable)).append("\n");
@@ -35678,7 +35648,7 @@ public static class LaunchpadPlanRequest {
   LaunchpadPlanResponse.JSON_PROPERTY_ACTION_STATES
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadPlanResponse extends HashMap<String, Object> {
+public static class LaunchpadPlanResponse {
   public static final String JSON_PROPERTY_LAUNCH_ID = "launch_id";
   private String launchId;
 
@@ -36114,20 +36084,18 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
         Objects.equals(this.upgradeReason, launchpadPlanResponse.upgradeReason) &&
         Objects.equals(this.entitlementDecision, launchpadPlanResponse.entitlementDecision) &&
         Objects.equals(this.actionStates, launchpadPlanResponse.actionStates)&&
-        Objects.equals(this.additionalProperties, launchpadPlanResponse.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadPlanResponse.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(launchId, appId, substrateId, state, kernelVerdict, reason, reasonCode, planHash, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, super.hashCode(), additionalProperties);
+    return Objects.hash(launchId, appId, substrateId, state, kernelVerdict, reason, reasonCode, planHash, userState, requiredCapability, upgradeReason, entitlementDecision, actionStates, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadPlanResponse {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    launchId: ").append(toIndentedString(launchId)).append("\n");
     sb.append("    appId: ").append(toIndentedString(appId)).append("\n");
     sb.append("    substrateId: ").append(toIndentedString(substrateId)).append("\n");
@@ -36291,7 +36259,7 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
   LaunchpadPolicySimulation.JSON_PROPERTY_FIX_ACTIONS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadPolicySimulation extends HashMap<String, Object> {
+public static class LaunchpadPolicySimulation {
   public static final String JSON_PROPERTY_APP_ID = "app_id";
   private String appId;
 
@@ -36701,20 +36669,18 @@ public static class LaunchpadPolicySimulation extends HashMap<String, Object> {
         Objects.equals(this.proofStatus, launchpadPolicySimulation.proofStatus) &&
         Objects.equals(this.cliEquivalent, launchpadPolicySimulation.cliEquivalent) &&
         Objects.equals(this.fixActions, launchpadPolicySimulation.fixActions)&&
-        Objects.equals(this.additionalProperties, launchpadPolicySimulation.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadPolicySimulation.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(appId, verdict, reasonCode, plainEnglish, structured, diff, raw, receiptRef, proofStatus, cliEquivalent, fixActions, super.hashCode(), additionalProperties);
+    return Objects.hash(appId, verdict, reasonCode, plainEnglish, structured, diff, raw, receiptRef, proofStatus, cliEquivalent, fixActions, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadPolicySimulation {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    appId: ").append(toIndentedString(appId)).append("\n");
     sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
     sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
@@ -36892,7 +36858,7 @@ public static class LaunchpadPolicySimulation extends HashMap<String, Object> {
   LaunchpadRun.JSON_PROPERTY_RUNTIME_HANDLES
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadRun extends HashMap<String, Object> {
+public static class LaunchpadRun {
   public static final String JSON_PROPERTY_LAUNCH_ID = "launch_id";
   private String launchId;
 
@@ -37563,20 +37529,18 @@ public static class LaunchpadRun extends HashMap<String, Object> {
         Objects.equals(this.verificationCommand, launchpadRun.verificationCommand) &&
         Objects.equals(this.teardownCommand, launchpadRun.teardownCommand) &&
         Objects.equals(this.runtimeHandles, launchpadRun.runtimeHandles)&&
-        Objects.equals(this.additionalProperties, launchpadRun.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadRun.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(launchId, runId, appId, substrateId, state, kernelVerdict, reason, reasonCode, planHash, launchplanHash, installReceiptRef, launchReceiptRef, healthReceiptRef, teardownReceiptRef, evidencePackRefs, secretGrantRefs, startReceiptRefs, verificationCommand, teardownCommand, runtimeHandles, super.hashCode(), additionalProperties);
+    return Objects.hash(launchId, runId, appId, substrateId, state, kernelVerdict, reason, reasonCode, planHash, launchplanHash, installReceiptRef, launchReceiptRef, healthReceiptRef, teardownReceiptRef, evidencePackRefs, secretGrantRefs, startReceiptRefs, verificationCommand, teardownCommand, runtimeHandles, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadRun {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    launchId: ").append(toIndentedString(launchId)).append("\n");
     sb.append("    runId: ").append(toIndentedString(runId)).append("\n");
     sb.append("    appId: ").append(toIndentedString(appId)).append("\n");
@@ -37793,7 +37757,7 @@ public static class LaunchpadRun extends HashMap<String, Object> {
   LaunchpadRunDetail.JSON_PROPERTY_OFFLINE_VERIFICATION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadRunDetail extends HashMap<String, Object> {
+public static class LaunchpadRunDetail {
   public static final String JSON_PROPERTY_RUN = "run";
   private LaunchpadRun run;
 
@@ -38050,20 +38014,18 @@ public static class LaunchpadRunDetail extends HashMap<String, Object> {
         Objects.equals(this.gates, launchpadRunDetail.gates) &&
         Objects.equals(this.events, launchpadRunDetail.events) &&
         Objects.equals(this.offlineVerification, launchpadRunDetail.offlineVerification)&&
-        Objects.equals(this.additionalProperties, launchpadRunDetail.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadRunDetail.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(run, app, instance, gates, events, offlineVerification, super.hashCode(), additionalProperties);
+    return Objects.hash(run, app, instance, gates, events, offlineVerification, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadRunDetail {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    run: ").append(toIndentedString(run)).append("\n");
     sb.append("    app: ").append(toIndentedString(app)).append("\n");
     sb.append("    instance: ").append(toIndentedString(instance)).append("\n");
@@ -38203,7 +38165,7 @@ public static class LaunchpadRunDetail extends HashMap<String, Object> {
   LaunchpadRunEvent.JSON_PROPERTY_CREATED_AT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadRunEvent extends HashMap<String, Object> {
+public static class LaunchpadRunEvent {
   public static final String JSON_PROPERTY_RUN_ID = "run_id";
   private String runId;
 
@@ -38713,20 +38675,18 @@ public static class LaunchpadRunEvent extends HashMap<String, Object> {
         Objects.equals(this.cliEquivalent, launchpadRunEvent.cliEquivalent) &&
         Objects.equals(this.fixActions, launchpadRunEvent.fixActions) &&
         Objects.equals(this.createdAt, launchpadRunEvent.createdAt)&&
-        Objects.equals(this.additionalProperties, launchpadRunEvent.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadRunEvent.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(runId, stage, verdict, reasonCode, receiptRef, proofgraphNode, evidenceRefs, rawPayloadRef, humanSummary, why, proofStatus, receiptRequired, cliEquivalent, fixActions, createdAt, super.hashCode(), additionalProperties);
+    return Objects.hash(runId, stage, verdict, reasonCode, receiptRef, proofgraphNode, evidenceRefs, rawPayloadRef, humanSummary, why, proofStatus, receiptRequired, cliEquivalent, fixActions, createdAt, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadRunEvent {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    runId: ").append(toIndentedString(runId)).append("\n");
     sb.append("    stage: ").append(toIndentedString(stage)).append("\n");
     sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
@@ -38912,7 +38872,7 @@ public static class LaunchpadRunEvent extends HashMap<String, Object> {
   LaunchpadRuntimeInstance.JSON_PROPERTY_CLI_EQUIVALENT
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadRuntimeInstance extends HashMap<String, Object> {
+public static class LaunchpadRuntimeInstance {
   public static final String JSON_PROPERTY_RUN_ID = "run_id";
   private String runId;
 
@@ -39335,20 +39295,18 @@ public static class LaunchpadRuntimeInstance extends HashMap<String, Object> {
         Objects.equals(this.teardownCommand, launchpadRuntimeInstance.teardownCommand) &&
         Objects.equals(this.sandboxGrant, launchpadRuntimeInstance.sandboxGrant) &&
         Objects.equals(this.cliEquivalent, launchpadRuntimeInstance.cliEquivalent)&&
-        Objects.equals(this.additionalProperties, launchpadRuntimeInstance.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadRuntimeInstance.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(runId, containerId, launchplanHash, state, verdict, activeGrants, receiptRefs, evidencepackRef, offlineVerifyCommand, teardownCommand, sandboxGrant, cliEquivalent, super.hashCode(), additionalProperties);
+    return Objects.hash(runId, containerId, launchplanHash, state, verdict, activeGrants, receiptRefs, evidencepackRef, offlineVerifyCommand, teardownCommand, sandboxGrant, cliEquivalent, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadRuntimeInstance {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    runId: ").append(toIndentedString(runId)).append("\n");
     sb.append("    containerId: ").append(toIndentedString(containerId)).append("\n");
     sb.append("    launchplanHash: ").append(toIndentedString(launchplanHash)).append("\n");
@@ -39514,7 +39472,7 @@ public static class LaunchpadRuntimeInstance extends HashMap<String, Object> {
   LaunchpadSandboxGrant.JSON_PROPERTY_PROOF_STATUS
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadSandboxGrant extends HashMap<String, Object> {
+public static class LaunchpadSandboxGrant {
   public static final String JSON_PROPERTY_BACKEND_PROFILE = "backend_profile";
   private String backendProfile;
 
@@ -39916,20 +39874,18 @@ public static class LaunchpadSandboxGrant extends HashMap<String, Object> {
         Objects.equals(this.policyEpoch, launchpadSandboxGrant.policyEpoch) &&
         Objects.equals(this.grantHash, launchpadSandboxGrant.grantHash) &&
         Objects.equals(this.proofStatus, launchpadSandboxGrant.proofStatus)&&
-        Objects.equals(this.additionalProperties, launchpadSandboxGrant.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadSandboxGrant.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(backendProfile, runtime, runtimeVersion, imageDigest, filesystemPreopens, networkPolicy, env, resourceLimits, policyEpoch, grantHash, proofStatus, super.hashCode(), additionalProperties);
+    return Objects.hash(backendProfile, runtime, runtimeVersion, imageDigest, filesystemPreopens, networkPolicy, env, resourceLimits, policyEpoch, grantHash, proofStatus, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadSandboxGrant {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    backendProfile: ").append(toIndentedString(backendProfile)).append("\n");
     sb.append("    runtime: ").append(toIndentedString(runtime)).append("\n");
     sb.append("    runtimeVersion: ").append(toIndentedString(runtimeVersion)).append("\n");
@@ -40091,7 +40047,7 @@ public static class LaunchpadSandboxGrant extends HashMap<String, Object> {
   LaunchpadSecretGrant.JSON_PROPERTY_VALUE_ENV
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadSecretGrant extends HashMap<String, Object> {
+public static class LaunchpadSecretGrant {
   public static final String JSON_PROPERTY_NAME = "name";
   private String name;
 
@@ -40411,20 +40367,18 @@ public static class LaunchpadSecretGrant extends HashMap<String, Object> {
         Objects.equals(this.grantRef, launchpadSecretGrant.grantRef) &&
         Objects.equals(this.receiptRef, launchpadSecretGrant.receiptRef) &&
         Objects.equals(this.valueEnv, launchpadSecretGrant.valueEnv)&&
-        Objects.equals(this.additionalProperties, launchpadSecretGrant.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadSecretGrant.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, required, provider, scope, status, launchImpact, grantRef, receiptRef, valueEnv, super.hashCode(), additionalProperties);
+    return Objects.hash(name, required, provider, scope, status, launchImpact, grantRef, receiptRef, valueEnv, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadSecretGrant {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("    required: ").append(toIndentedString(required)).append("\n");
     sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
@@ -40559,7 +40513,7 @@ public static class LaunchpadSecretGrant extends HashMap<String, Object> {
   LaunchpadSubstrate.JSON_PROPERTY_BLOCKED_REASON
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class LaunchpadSubstrate extends HashMap<String, Object> {
+public static class LaunchpadSubstrate {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;
 
@@ -40792,20 +40746,18 @@ public static class LaunchpadSubstrate extends HashMap<String, Object> {
         Objects.equals(this.availability, launchpadSubstrate.availability) &&
         Objects.equals(this.defaultDryRun, launchpadSubstrate.defaultDryRun) &&
         Objects.equals(this.blockedReason, launchpadSubstrate.blockedReason)&&
-        Objects.equals(this.additionalProperties, launchpadSubstrate.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, launchpadSubstrate.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, kind, availability, defaultDryRun, blockedReason, super.hashCode(), additionalProperties);
+    return Objects.hash(id, name, kind, availability, defaultDryRun, blockedReason, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class LaunchpadSubstrate {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("    kind: ").append(toIndentedString(kind)).append("\n");
@@ -59064,7 +59016,7 @@ public static class SourceFileSummary {
   SourceSnapshot.JSON_PROPERTY_API_SOURCE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class SourceSnapshot extends HashMap<String, Object> {
+public static class SourceSnapshot {
   public static final String JSON_PROPERTY_REPO_URL = "repo_url";
   private String repoUrl;
 
@@ -59450,20 +59402,18 @@ public static class SourceSnapshot extends HashMap<String, Object> {
         Objects.equals(this.fetchedAt, sourceSnapshot.fetchedAt) &&
         Objects.equals(this.files, sourceSnapshot.files) &&
         Objects.equals(this.apiSource, sourceSnapshot.apiSource)&&
-        Objects.equals(this.additionalProperties, sourceSnapshot.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, sourceSnapshot.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(repoUrl, provider, owner, repo, ref, commit, licenseSpdx, licenseState, fetchedAt, files, apiSource, super.hashCode(), additionalProperties);
+    return Objects.hash(repoUrl, provider, owner, repo, ref, commit, licenseSpdx, licenseState, fetchedAt, files, apiSource, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class SourceSnapshot {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    repoUrl: ").append(toIndentedString(repoUrl)).append("\n");
     sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
     sb.append("    owner: ").append(toIndentedString(owner)).append("\n");
@@ -60217,7 +60167,7 @@ public static class TamperPublicDemoReceiptRequest {
   TargetPlan.JSON_PROPERTY_REASON
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class TargetPlan extends HashMap<String, Object> {
+public static class TargetPlan {
   public static final String JSON_PROPERTY_TARGET_ID = "target_id";
   private String targetId;
 
@@ -60648,20 +60598,18 @@ public static class TargetPlan extends HashMap<String, Object> {
         Objects.equals(this.rollback, targetPlan.rollback) &&
         Objects.equals(this.risk, targetPlan.risk) &&
         Objects.equals(this.reason, targetPlan.reason)&&
-        Objects.equals(this.additionalProperties, targetPlan.additionalProperties) &&
-        super.equals(o);
+        Objects.equals(this.additionalProperties, targetPlan.additionalProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(targetId, kind, substrateId, deployable, requiresApproval, commands, artifacts, secretsBackend, healthcheck, rollback, risk, reason, super.hashCode(), additionalProperties);
+    return Objects.hash(targetId, kind, substrateId, deployable, requiresApproval, commands, artifacts, secretsBackend, healthcheck, rollback, risk, reason, additionalProperties);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class TargetPlan {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
     sb.append("    targetId: ").append(toIndentedString(targetId)).append("\n");
     sb.append("    kind: ").append(toIndentedString(kind)).append("\n");
     sb.append("    substrateId: ").append(toIndentedString(substrateId)).append("\n");

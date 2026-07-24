@@ -4,11 +4,16 @@ Typed Java client for the retained HELM kernel API.
 
 ## Package Status
 
-Package metadata in this source tree targets the future Maven Central
-coordinate `io.github.mindburnlabs:helm-sdk:0.7.5`. This source target does not
-claim that remote artifacts have been published; verify Maven Central or the
-published version-status evidence before using the coordinate. After the
-tag-driven release completes, the dependency declaration is:
+The sources in this tree are available in the repository and pass
+`make test-sdk-java` (including real HTTP loopback tests) and
+`make sdk-openapi-check`. That source availability is not a published or
+conformance-certified artifact: package metadata in this source tree targets
+the future Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.7.5`,
+and no claim is made that remote artifacts have been published or that the
+full endpoint surface is conformance-certified until tagged release evidence
+exists. Verify Maven Central or the published version-status evidence before
+using the coordinate. After the tag-driven release completes, the dependency
+declaration is:
 
 ```xml
 <dependency>
@@ -26,8 +31,26 @@ mvn -q test package
 
 ## Generated Sources
 
-`TypesGen.java` is generated from `api/openapi/helm.openapi.yaml`. Protobuf
-bindings under `src/main/java/helm/**` are generated from `protocols/proto/`.
+`TypesGen.java` is generated from `api/openapi/helm.openapi.yaml` by
+`scripts/sdk/gen.sh`; do not hand-edit it. Protobuf bindings under
+`src/main/java/helm/**` are generated from `protocols/proto/`.
+
+## JSON Mapping
+
+Typed request/response bodies are serialized with Jackson
+(`jackson-databind`), honoring the generated `@JsonProperty` wire names and
+restoring typed getters on decode. Gson is retained only for the untyped
+`JsonElement` pass-through methods. `HelmClient.health()` returns the raw
+plain-text `/healthz` body.
+
+Models generated from schemas with `additionalProperties: true` no longer
+extend `HashMap<String, Object>` (a `Map` superclass makes JSON serializers
+treat the whole model as a bare map and drop the declared accessor-backed
+fields). They are plain beans whose undeclared properties round-trip through
+`putAdditionalProperty(key, value)` / `getAdditionalProperty(key)` /
+`getAdditionalProperties()`. Migration: code that used these models as a
+`Map` (lookup, iteration, `put`) must switch to the typed accessors plus the
+additional-properties container.
 
 ## Usage
 

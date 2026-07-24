@@ -23,7 +23,7 @@ flowchart LR
 | Python | `sdk/python/helm_sdk/` | `helm-sdk` | First-class local example under `examples/python_sdk/` | `make test-sdk-py` |
 | TypeScript / JavaScript | `sdk/ts/src/` | `@mindburn/helm-ai-kernel` | First-class local example under `examples/ts_sdk/` | `make test-sdk-ts` |
 | Rust | `sdk/rust/src/` | `helm-sdk` | Source-backed SDK package | `make test-sdk-rust` |
-| Java | `sdk/java/src/main/java/` | `io.github.mindburnlabs:helm-sdk` | Published Maven Central package; source-backed SDK | `make test-sdk-java` |
+| Java | `sdk/java/src/main/java/` | `io.github.mindburnlabs:helm-sdk` | Source-backed SDK package | `make test-sdk-java` |
 
 ## What Is Covered
 

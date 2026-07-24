@@ -4,6 +4,10 @@
 # Uses openapi-generator-cli via Docker (pinned version).
 set -euo pipefail
 
+# Pin collation so model-file glob ordering (and therefore concatenation
+# order in the combined generated outputs) is identical on every host.
+export LC_ALL=C
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SPEC="$PROJECT_ROOT/api/openapi/helm.openapi.yaml"
@@ -570,6 +574,21 @@ s = s.replace("getActualInstance().get(_key),", "((Map<String, Object>)getActual
 s = s.replace(
     "// TODO: there is no validation against JSON schema constraints",
     "// Union matching here does not enforce full JSON schema constraints.",
+)
+# additionalProperties models must not extend HashMap: with a Map superclass,
+# Jackson (and Gson) serialize the model as a bare map and bypass the declared
+# accessor-backed fields, so documented fields never reach the wire and typed
+# getters are never restored on decode. The generated classes keep their
+# @JsonAnyGetter/@JsonAnySetter additionalProperties container, so undeclared
+# properties still round-trip.
+s = s.replace(" extends HashMap<String, Object> {", " {")
+s = re.sub(r" &&\n        super\.equals\(o\);", ";", s)
+s = s.replace(", super.hashCode()", "")
+s = re.sub(
+    r'^\s*sb\.append\("    "\)\.append\(toIndentedString\(super\.toString\(\)\)\)\.append\("\\n"\);\n',
+    "",
+    s,
+    flags=re.M,
 )
 s = s + "\n}\n"
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")

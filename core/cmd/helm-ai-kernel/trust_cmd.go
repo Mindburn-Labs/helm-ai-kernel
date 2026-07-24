@@ -92,10 +92,10 @@ func runTrustEUListStatus(args []string, stdout, stderr io.Writer) int {
 	if fixture != "" {
 		data, err := os.ReadFile(fixture)
 		if err != nil {
-			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "trust eu-list status", "cannot read LOTL fixture %s", fixture))
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "trust eu-list status", "cannot read LOTL fixture %s", fixture), formatFlag.Value)
 		}
 		if err := list.LoadFromBytes(data); err != nil {
-			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "trust eu-list status", "cannot parse LOTL fixture %s", fixture))
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "trust eu-list status", "cannot parse LOTL fixture %s", fixture), formatFlag.Value)
 		}
 	} else if !offline {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)

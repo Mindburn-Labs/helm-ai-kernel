@@ -66,7 +66,7 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if effect == "" {
-		_ = cliui.WriteError(stderr, cliui.UsageErrorf("risk-summary", "--effect or --list is required"))
+		_ = cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("risk-summary", "--effect or --list is required"), formatFlag.Value)
 		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel risk-summary --effect INFRA_DESTROY [--frozen] [--json]")
 		_, _ = fmt.Fprintln(stderr, "       helm-ai-kernel risk-summary --list [--json]")
 		return 2

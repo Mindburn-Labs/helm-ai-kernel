@@ -5,6 +5,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -259,6 +261,14 @@ const (
 	hookDoomLoopLockWait = 2 * time.Second
 )
 
+// hookSessionKey maps a client-supplied session ID to a fixed-size state
+// key (sha256 hex). This bounds JSON map-key size regardless of ID length
+// and keeps raw client identifiers out of the persisted state.
+func hookSessionKey(sessionID string) string {
+	sum := sha256.Sum256([]byte("helm-hook-doomloop-session\x00" + sessionID))
+	return hex.EncodeToString(sum[:])
+}
+
 // recordDenied counts one settled denial for the signature and reports
 // whether the breaker has latched for THIS signature, plus the current run
 // length. Only settled denials count; allowed calls never trip the breaker.
@@ -326,6 +336,11 @@ func recordHookDoomLoopOutcome(opts hookOptions, payload preToolPayload, classif
 		// same rule as DenyCascade: empty session never collides.
 		return false, 0
 	}
+	// The session ID is client-supplied and unauthenticated; map it to a
+	// fixed-size key so oversized IDs cannot bloat the persisted state
+	// (keys are always 64 hex chars, preserving the bounded-state
+	// guarantee) and raw client identifiers are never written to disk.
+	sessionKey := hookSessionKey(sessionID)
 	statePath := filepath.Join(opts.DataDir, "state", "hook-doomloop.json")
 	unlock, ok := acquireHookDoomLoopLock(statePath+".lock", stderr)
 	if !ok {
@@ -336,7 +351,7 @@ func recordHookDoomLoopOutcome(opts hookOptions, payload preToolPayload, classif
 	now := hookNow()
 	state := loadHookDoomLoopState(statePath, stderr)
 	pruneHookDoomLoopSessions(state, now)
-	sess, ok := state.Sessions[sessionID]
+	sess, ok := state.Sessions[sessionKey]
 	if !ok || sess == nil {
 		if !denied {
 			// No recorded run for this session and nothing to reset:
@@ -344,7 +359,7 @@ func recordHookDoomLoopOutcome(opts hookOptions, payload preToolPayload, classif
 			return false, 0
 		}
 		sess = &hookDoomLoopSession{}
-		state.Sessions[sessionID] = sess
+		state.Sessions[sessionKey] = sess
 	}
 	sess.LastSeenAt = now
 	var trippedB bool

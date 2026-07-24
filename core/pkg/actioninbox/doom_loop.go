@@ -10,16 +10,24 @@ import (
 // identical settled tool calls in a row is treated as a doom loop.
 const DefaultDoomLoopThreshold = 3
 
+// DefaultDoomLoopMaxTripped bounds the latch map so a long-lived process
+// cannot grow breaker memory without bound via distinct tripped calls.
+// Eviction is deterministic (lexicographically smallest signature); an
+// evicted signature simply re-trips after another threshold run.
+const DefaultDoomLoopMaxTripped = 64
+
 // DoomLoopBreaker is a circuit breaker against agents retrying an identical
 // call forever. After threshold consecutive identical signatures, it trips
 // and stays tripped for that signature until a different signature is
 // observed. Tripping only ever forces an ask/escalation; it never authorizes
-// anything, so the breaker is fail-closed by construction.
+// anything, so the breaker is fail-closed by construction. The latch map is
+// bounded (DefaultDoomLoopMaxTripped, deterministic eviction).
 //
 // The zero value is unusable; construct via NewDoomLoopBreaker.
 type DoomLoopBreaker struct {
-	mu        sync.Mutex
-	threshold int
+	mu         sync.Mutex
+	threshold  int
+	maxTripped int
 	// tail holds the most recent consecutive identical-signature run.
 	lastSignature string
 	runLength     int
@@ -34,8 +42,9 @@ func NewDoomLoopBreaker(threshold int) *DoomLoopBreaker {
 		threshold = DefaultDoomLoopThreshold
 	}
 	return &DoomLoopBreaker{
-		threshold: threshold,
-		tripped:   make(map[string]bool),
+		threshold:  threshold,
+		maxTripped: DefaultDoomLoopMaxTripped,
+		tripped:    make(map[string]bool),
 	}
 }
 
@@ -63,6 +72,18 @@ func (b *DoomLoopBreaker) Record(signature string) bool {
 		b.runLength = 1
 	}
 	if b.runLength >= b.threshold {
+		if !b.tripped[signature] && len(b.tripped) >= b.maxTripped {
+			// Bounded latch: evict the deterministic victim (smallest
+			// key); an evicted signature re-trips after another
+			// threshold run.
+			victim := ""
+			for k := range b.tripped {
+				if victim == "" || k < victim {
+					victim = k
+				}
+			}
+			delete(b.tripped, victim)
+		}
 		b.tripped[signature] = true
 	}
 	return b.tripped[signature]

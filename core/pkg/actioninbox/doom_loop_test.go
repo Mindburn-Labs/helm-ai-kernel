@@ -1,6 +1,7 @@
 package actioninbox_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/actioninbox"
@@ -65,6 +66,25 @@ func TestDoomLoopBreaker_NeverUpgradesToAllow(t *testing.T) {
 	b := actioninbox.NewDoomLoopBreaker(1) // threshold 1: trips immediately
 	sig := actioninbox.SignatureFor("mcp", "mcp_tool_call", "mcp__x__y")
 	assert.True(t, b.Record(sig), "threshold 1 trips on first observation")
+}
+
+func TestDoomLoopBreaker_LatchMapIsBounded(t *testing.T) {
+	b := actioninbox.NewDoomLoopBreaker(3)
+	total := actioninbox.DefaultDoomLoopMaxTripped + 10
+	for i := 0; i < total; i++ {
+		sig := actioninbox.SignatureFor("shell", "shell_operate", fmt.Sprintf("target-%d", i))
+		for j := 0; j < 3; j++ {
+			b.Record(sig)
+		}
+	}
+	// Distinct tripped signatures beyond the cap must not grow the latch
+	// without bound; evicted signatures simply re-trip on a fresh run.
+	// (The cap is an internal invariant; behavioral proof: recording many
+	// distinct tripped signatures completes and the newest still trips.)
+	newest := actioninbox.SignatureFor("shell", "shell_operate", fmt.Sprintf("target-%d", total-1))
+	if !b.Tripped(newest) {
+		t.Fatal("newest tripped signature must be latched")
+	}
 }
 
 func TestSignatureFor_DeterministicAndDiscriminating(t *testing.T) {

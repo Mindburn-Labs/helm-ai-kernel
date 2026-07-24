@@ -398,8 +398,11 @@ func TestHookPreToolDoomLoopBreakerTripsOnIdenticalAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read doom-loop state: %v", err)
 	}
-	if !strings.Contains(string(raw), `"tripped_signatures"`) || !strings.Contains(string(raw), "s-loop") {
+	if !strings.Contains(string(raw), `"tripped_signatures"`) || !strings.Contains(string(raw), hookSessionKey("s-loop")) {
 		t.Fatalf("doom-loop state missing per-signature trip record: %s", raw)
+	}
+	if strings.Contains(string(raw), "s-loop") {
+		t.Fatalf("raw client session ID must not be persisted: %s", raw)
 	}
 
 	// A different session is unaffected by the tripped session.
@@ -620,6 +623,38 @@ func TestHookDoomLoopPrune(t *testing.T) {
 	}
 }
 
+// TestHookSessionKeyBoundsIdentifiers is the regression test for the
+// unbounded-session-identifier finding: arbitrarily long client-supplied
+// session IDs map to a fixed-size state key, and oversized IDs never
+// appear in the persisted state.
+func TestHookSessionKeyBoundsIdentifiers(t *testing.T) {
+	long := strings.Repeat("x", 1<<20) // 1 MiB client-supplied ID
+	key := hookSessionKey(long)
+	if len(key) != 64 {
+		t.Fatalf("session key length = %d, want 64 hex chars", len(key))
+	}
+	if key == hookSessionKey(long+"y") {
+		t.Fatal("distinct session IDs must map to distinct keys")
+	}
+
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	payload := preToolPayload{ToolName: "Bash", SessionID: long}
+	classification := hookClassification{ToolID: "shell", Action: "shell_operate", Target: "rm -rf /big"}
+	var stderr bytes.Buffer
+	recordHookDoomLoopOutcome(hookOptions{DataDir: tmp}, payload, classification, true, &stderr)
+	raw, err := os.ReadFile(filepath.Join(tmp, "state", "hook-doomloop.json"))
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if len(raw) > 1<<16 {
+		t.Fatalf("state bloated by oversized session ID: %d bytes", len(raw))
+	}
+	if strings.Contains(string(raw), long[:64]) {
+		t.Fatal("raw oversized session ID must not be persisted")
+	}
+}
+
 // TestHookDoomLoopConcurrentRecordsNoLostUpdates is the regression test for
 // the state race: parallel hook invocations must serialize through the lock
 // so no settled-denial record is lost.
@@ -655,7 +690,7 @@ func TestHookDoomLoopConcurrentRecordsNoLostUpdates(t *testing.T) {
 	if err := json.Unmarshal(raw, &state); err != nil {
 		t.Fatalf("parse state: %v", err)
 	}
-	sess := state.Sessions["s-race"]
+	sess := state.Sessions[hookSessionKey("s-race")]
 	if sess == nil {
 		t.Fatalf("session missing after concurrent records: %s", raw)
 	}

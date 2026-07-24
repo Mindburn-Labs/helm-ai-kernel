@@ -789,7 +789,7 @@ func TestSetupClaudeProjectPreservesSymlinkedHookConfig(t *testing.T) {
 	assertSetupSymlinkTarget(t, link, target, 0o600, "hook pre-tool --client claude-code")
 	assertNoSetupTempFiles(t, filepath.Dir(link), targetDir)
 
-	if err := removeSetupHook(opts, bin); err != nil {
+	if err := removeSetupHook(opts); err != nil {
 		t.Fatalf("remove symlinked Claude hook: %v", err)
 	}
 	assertSetupSymlinkTarget(t, link, target, 0o600, "")
@@ -839,7 +839,7 @@ func TestSetupCodexProjectPreservesSymlinkedConfigFiles(t *testing.T) {
 	assertSetupSymlinkTarget(t, hookLink, hookTarget, 0o600, "hook pre-tool --client codex")
 	assertNoSetupTempFiles(t, filepath.Dir(configLink), targetDir)
 
-	if err := removeSetupHook(opts, bin); err != nil {
+	if err := removeSetupHook(opts); err != nil {
 		t.Fatalf("remove symlinked Codex hook config: %v", err)
 	}
 	if err := removeSetupMCP(opts); err != nil {
@@ -1001,7 +1001,7 @@ func TestSetupUserScopePreservesExternalHookSymlinks(t *testing.T) {
 				t.Fatalf("install user hook through external symlink: %v", err)
 			}
 			assertSetupSymlinkTarget(t, link, managed, 0o600, "hook pre-tool --client "+target)
-			if err := removeSetupHook(opts, bin); err != nil {
+			if err := removeSetupHook(opts); err != nil {
 				t.Fatalf("remove user hook through external symlink: %v", err)
 			}
 			assertSetupSymlinkTarget(t, link, managed, 0o600, "")

@@ -27,6 +27,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 )
 
 // ArgScanFinding represents a single suspicious pattern detected in a tool-call argument.
@@ -75,21 +77,24 @@ func WithArgScanClock(clock func() time.Time) ArgScanOption {
 func defaultArgPatterns() []argPattern {
 	return []argPattern{
 		{
+			// The three shell patterns are defined in core/pkg/shellscan and
+			// shared, so argument scanning and raw shell-command analysis cannot
+			// drift apart on what counts as a metacharacter.
 			Name:     "shell_metachar",
 			Severity: DocScanSeverityHigh,
-			Regex:    regexp.MustCompile("[;&|`]|\\$\\(|\\$\\{|\\x00|>\\||<\\("),
+			Regex:    shellscan.ShellMetachar,
 			Desc:     "Shell metacharacter (;&|` $() ${} NUL redirect process-substitution) in tool argument",
 		},
 		{
 			Name:     "command_substitution_backtick",
 			Severity: DocScanSeverityCritical,
-			Regex:    regexp.MustCompile("`[^`]*`"),
+			Regex:    shellscan.CommandSubstitutionBacktick,
 			Desc:     "Backtick command substitution in tool argument",
 		},
 		{
 			Name:     "shell_payload_common",
 			Severity: DocScanSeverityCritical,
-			Regex:    regexp.MustCompile(`(?i)(^|[\s;&|])(sh|bash|zsh|ksh|dash)\s+(-c\s+|<\()`),
+			Regex:    shellscan.ShellPayloadCommon,
 			Desc:     "Shell spawn with -c or process-substitution payload in tool argument",
 		},
 		{

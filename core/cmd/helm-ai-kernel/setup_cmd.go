@@ -49,6 +49,7 @@ type setupOptions struct {
 	NoQuickstart    bool
 	DataDir         string
 	SigningSeedFile string
+	ShellMode       string
 }
 
 type setupSummary struct {
@@ -224,7 +225,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
-	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
+	summary.HookInstalled = setupHookInstalled(summary.HookConfigPath)
 	if opts.Target == "codex" && opts.Scope == "project" && (summary.MCPInstalled || summary.HookInstalled) {
 		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
 	}
@@ -260,7 +261,7 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if !opts.DryRun {
-		if err := removeSetupHook(opts, summary.BinaryPath); err != nil {
+		if err := removeSetupHook(opts); err != nil {
 			fmt.Fprintf(stderr, "setup remove: remove hook: %v\n", err)
 			return 1
 		}
@@ -305,6 +306,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Install without starting the blocking Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	fs.StringVar(&opts.ShellMode, "shell-mode", "", "Shell classification baked into the hook: denylist (default) or allowlist")
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
@@ -365,6 +367,14 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 	}
 	if opts.Scope == "user" && opts.WorkspaceSet {
 		fmt.Fprintln(stderr, "setup: --workspace is only valid with --scope project")
+		return opts, 2
+	}
+	// Empty means "bake no flag", which leaves the hook on its own default.
+	switch mode := strings.ToLower(strings.TrimSpace(opts.ShellMode)); mode {
+	case "", shellModeDenylist, shellModeAllowlist:
+		opts.ShellMode = mode
+	default:
+		fmt.Fprintf(stderr, "setup: --shell-mode must be %s or %s, got %q\n", shellModeDenylist, shellModeAllowlist, opts.ShellMode)
 		return opts, 2
 	}
 	if opts.DataDir == "" {
@@ -623,8 +633,8 @@ func installSetupHook(opts setupOptions, bin string) error {
 	return upsertHookConfig(setupHookConfigPath(opts), setupHookMatcher(opts.Target), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
 }
 
-func removeSetupHook(opts setupOptions, bin string) error {
-	return removeHookConfig(setupHookConfigPath(opts), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
+func removeSetupHook(opts setupOptions) error {
+	return removeHookConfig(setupHookConfigPath(opts), setupPrivateFileRoot(opts))
 }
 
 func setupMCPInstalled(opts setupOptions, path, bin string) bool {
@@ -649,7 +659,7 @@ func setupMCPInstalled(opts setupOptions, path, bin string) bool {
 	}
 }
 
-func setupHookInstalled(opts setupOptions, path, bin string) bool {
+func setupHookInstalled(path string) bool {
 	root, err := readJSONObject(path)
 	if err != nil {
 		return false
@@ -658,7 +668,13 @@ func setupHookInstalled(opts setupOptions, path, bin string) bool {
 	if !ok {
 		return false
 	}
-	return hookCommandPresent(arrayValue(hooks, "PreToolUse"), setupHookCommand(opts, bin))
+	found := false
+	forEachHookCommand(arrayValue(hooks, "PreToolUse"), func(_ map[string]any, command string) {
+		if isHelmHookCommand(command) {
+			found = true
+		}
+	})
+	return found
 }
 
 func setupQuickstartProfile(target string) string {
@@ -714,6 +730,13 @@ func setupHookCommand(opts setupOptions, bin string) string {
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		command += " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
 	}
+	// Emitted only when the operator asks for it. Through 0.7.x the hook's own
+	// default is denylist, so a flagless command line keeps existing behavior;
+	// 0.8.0 flips that binary default, which is what carries the change to
+	// installs whose baked command was never rewritten.
+	if mode := strings.ToLower(strings.TrimSpace(opts.ShellMode)); mode != "" {
+		command += " --shell-mode=" + mode
+	}
 	return command
 }
 
@@ -729,8 +752,9 @@ func upsertHookConfig(path, matcher, command, allowedRoot string) error {
 	pre := arrayValue(hooks, "PreToolUse")
 	if hookCommandPresent(pre, command) {
 		// Same hook identity: rewrite the stored command in place so a
-		// re-install with a new --signing-seed-file updates the config
-		// instead of silently keeping the old seed path.
+		// re-install with changed deployment flags (a new --signing-seed-file
+		// or an added --shell-mode) updates the config instead of silently
+		// keeping the old command line.
 		key := hookCommandKey(command)
 		for _, item := range pre {
 			obj, ok := item.(map[string]any)
@@ -769,7 +793,7 @@ func upsertHookConfig(path, matcher, command, allowedRoot string) error {
 	return writeJSONObject(path, root, allowedRoot)
 }
 
-func removeHookConfig(path, command, allowedRoot string) error {
+func removeHookConfig(path, allowedRoot string) error {
 	if _, err := privateFileWritePath(path, allowedRoot); err != nil {
 		return err
 	}
@@ -796,7 +820,7 @@ func removeHookConfig(path, command, allowedRoot string) error {
 		}
 		keptHooks := make([]any, 0, len(hookItems))
 		for _, h := range hookItems {
-			if hookCommandKey(hookCommandFromAny(h)) != hookCommandKey(command) {
+			if !isHelmHookCommand(hookCommandFromAny(h)) {
 				keptHooks = append(keptHooks, h)
 			}
 		}
@@ -862,12 +886,17 @@ func arrayValue(root map[string]any, key string) []any {
 // non-space characters.
 var signingSeedFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
 
+// shellModeArgPattern matches the optional --shell-mode segment of an
+// installed hook command (baked as --shell-mode=<mode>).
+var shellModeArgPattern = regexp.MustCompile(` --shell-mode(?:=[^\s]+| [^\s]+)`)
+
 // hookCommandKey reduces an installed hook command to its identity: the
-// signing-seed-file argument is a deployment detail, so `setup status` and
-// `setup remove` must match the hook whether or not (and with whichever path
-// form) the flag was passed on their own invocation.
+// signing-seed-file and shell-mode arguments are deployment details, so
+// `setup status` and `setup remove` must match the hook whether or not (and
+// with whichever value) those flags were baked into its command line.
 func hookCommandKey(command string) string {
-	return signingSeedFileArgPattern.ReplaceAllString(command, "")
+	key := signingSeedFileArgPattern.ReplaceAllString(command, "")
+	return shellModeArgPattern.ReplaceAllString(key, "")
 }
 
 func hookCommandPresent(pre []any, command string) bool {
@@ -888,6 +917,40 @@ func hookCommandPresent(pre []any, command string) bool {
 		}
 	}
 	return false
+}
+
+// helmHookCommandMarker identifies a HELM PreToolUse hook independently of the
+// flags baked into its command line.
+//
+// Identity must not depend on the exact string: when a release adds a flag to
+// the baked command (0.8.0 emitting --shell-mode), exact matching would treat
+// the new command as a different hook — installing a second entry beside the
+// old one so both fire, and leaving the old one behind on uninstall.
+const helmHookCommandMarker = " hook pre-tool"
+
+func isHelmHookCommand(command string) bool {
+	return strings.Contains(command, helmHookCommandMarker)
+}
+
+func forEachHookCommand(pre []any, fn func(hook map[string]any, command string)) {
+	for _, item := range pre {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooks, ok := obj["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, h := range hooks {
+			hookObj, ok := h.(map[string]any)
+			if !ok {
+				continue
+			}
+			command, _ := hookObj["command"].(string)
+			fn(hookObj, command)
+		}
+	}
 }
 
 func hookCommandFromAny(v any) string {

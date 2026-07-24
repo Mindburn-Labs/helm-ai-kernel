@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -15,7 +16,22 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
+)
+
+// Shell classification modes.
+//
+// denylist is the 0.7.x behavior: a command is allowed unless it matches a
+// destructive substring. It is the default through 0.7.x so upgrades do not
+// break, and remains available afterwards as the escape hatch.
+//
+// allowlist inverts the posture to match how the same hook already treats
+// mcp__ tools — recognized read-only commands pass, everything else is routed
+// to the policy engine and denied.
+const (
+	shellModeDenylist  = "denylist"
+	shellModeAllowlist = "allowlist"
 )
 
 var (
@@ -28,6 +44,7 @@ type hookOptions struct {
 	DataDir         string
 	SigningSeedFile string
 	JSON            bool
+	ShellMode       string
 }
 
 type preToolPayload struct {
@@ -92,6 +109,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	fs.BoolVar(&opts.JSON, "json", false, "Reserved for structured diagnostics")
+	fs.StringVar(&opts.ShellMode, "shell-mode", shellModeDenylist, "Shell classification: denylist (default) or allowlist")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -101,6 +119,15 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		return 2
 	}
 	opts.Client = client
+	switch mode := strings.ToLower(strings.TrimSpace(opts.ShellMode)); mode {
+	case shellModeDenylist, shellModeAllowlist:
+		opts.ShellMode = mode
+	default:
+		// Exit 2 blocks the tool call, so an unreadable configuration fails
+		// closed rather than silently reverting to the permissive mode.
+		fmt.Fprintf(stderr, "hook pre-tool: unknown --shell-mode %q (want %s or %s)\n", opts.ShellMode, shellModeDenylist, shellModeAllowlist)
+		return 2
+	}
 	if strings.TrimSpace(opts.DataDir) != "" {
 		if abs, err := filepath.Abs(opts.DataDir); err == nil {
 			opts.DataDir = abs
@@ -111,11 +138,20 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return 2
 	}
-	classification := classifyPreToolPayload(payload)
+	// Loaded before classification because allowlist mode needs the profile's
+	// Observe.AllowedActions to decide whether to ask. A load failure denies —
+	// it is reported separately from a signer failure, which the single
+	// downstream error message used to misattribute.
+	profile, err := loadHookPolicyProfile(opts.DataDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
+		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: workstation policy profile is unavailable")
+	}
+	classification := classifyPreToolPayload(payload, opts.ShellMode, profile)
 	if !classification.ShouldDecide {
 		return 0
 	}
-	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
+	receipt, err := buildHookDecisionReceipt(opts, payload, classification, profile)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: local receipt signer is unavailable")
@@ -171,21 +207,31 @@ func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
 	return payload, nil
 }
 
-func classifyPreToolPayload(payload preToolPayload) hookClassification {
+// loadHookPolicyProfile reads the workstation profile from the data directory,
+// falling back to the built-in observe/draft default when no file is present.
+//
+// The default is already a usable allowlist — five read-only actions in Observe
+// and an empty Operate.Permissions that denies everything else — so allowlist
+// mode works before a user edits anything.
+func loadHookPolicyProfile(dataDir string) (contracts.WorkstationPolicyProfile, error) {
+	if strings.TrimSpace(dataDir) == "" {
+		return workstation.LoadPolicyProfileFile("")
+	}
+	path := filepath.Join(dataDir, "policy", "workstation.json")
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return workstation.LoadPolicyProfileFile("")
+		}
+		return contracts.WorkstationPolicyProfile{}, fmt.Errorf("stat policy profile %s: %w", path, err)
+	}
+	return workstation.LoadPolicyProfileFile(path)
+}
+
+func classifyPreToolPayload(payload preToolPayload, shellMode string, profile contracts.WorkstationPolicyProfile) hookClassification {
 	tool := strings.TrimSpace(payload.ToolName)
 	switch {
 	case strings.EqualFold(tool, "Bash"):
-		command := inputString(payload.ToolInput, "command", "cmd")
-		if isDestructiveShellCommand(command) {
-			return hookClassification{
-				ShouldDecide: true,
-				Class:        "shell-operate",
-				Target:       command,
-				Action:       "shell_operate",
-				ToolID:       "shell",
-				Reason:       "shell operation",
-			}
-		}
+		return classifyShellCommand(inputString(payload.ToolInput, "command", "cmd"), shellMode, profile)
 	case strings.HasPrefix(tool, "mcp__"):
 		if isHelmSelfMCPTool(tool) {
 			return hookClassification{}
@@ -220,14 +266,65 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 	return hookClassification{}
 }
 
-func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classification hookClassification) (*contracts.WorkstationPolicyDecisionReceipt, error) {
+// classifyShellCommand decides whether a Bash call needs a policy decision.
+//
+// The two modes differ in fail direction, which is the whole point of the flag:
+// denylist asks only about commands it recognizes as destructive, so anything
+// unrecognized proceeds unrecorded; allowlist asks about everything it cannot
+// establish as permitted.
+func classifyShellCommand(command, shellMode string, profile contracts.WorkstationPolicyProfile) hookClassification {
+	operate := hookClassification{
+		ShouldDecide: true,
+		Class:        "shell-operate",
+		Target:       command,
+		Action:       "shell_operate",
+		ToolID:       "shell",
+		Reason:       "shell operation",
+	}
+
+	if !strings.EqualFold(shellMode, shellModeAllowlist) {
+		if isDestructiveShellCommand(command) {
+			return operate
+		}
+		return hookClassification{}
+	}
+
+	// Ordering is load-bearing. The metacharacter check runs before allowlist
+	// matching so that "git status && rm -rf /" is rejected on the chaining
+	// rather than accepted on its first two tokens. Because this runs first,
+	// ClassifyReadOnly only ever sees a single simple command.
+	if !shellscan.StaticallyAnalyzable(command) {
+		return hookClassification{
+			ShouldDecide: true,
+			Class:        "shell-unanalyzable",
+			Target:       command,
+			Action:       workstation.ActionShellUnanalyzable,
+			ToolID:       "shell",
+			Reason:       "shell command that cannot be statically analyzed",
+		}
+	}
+	if action, ok := shellscan.ClassifyReadOnly(command); ok && observeActionAllowed(profile, action) {
+		return hookClassification{}
+	}
+	return operate
+}
+
+// observeActionAllowed bridges shellscan's action IDs to the profile's
+// Observe.AllowedActions. Before this existed the field was populated by the
+// profile constructor and read by nothing.
+func observeActionAllowed(profile contracts.WorkstationPolicyProfile, action string) bool {
+	for _, allowed := range profile.Observe.AllowedActions {
+		if strings.EqualFold(strings.TrimSpace(allowed), action) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classification hookClassification, profile contracts.WorkstationPolicyProfile) (*contracts.WorkstationPolicyDecisionReceipt, error) {
 	effectType, effectMode, defaultAction, defaultTool := workstation.EffectDefaults(classification.Class)
 	action := firstNonEmptyString(classification.Action, defaultAction)
 	toolID := firstNonEmptyString(classification.ToolID, payload.ToolName, defaultTool)
-	profile, err := workstation.LoadPolicyProfileFile("")
-	if err != nil {
-		return nil, err
-	}
 	req := contracts.WorkstationDecisionRequest{
 		RunID:        firstNonEmptyString(payload.SessionID, "hook-pre-tool"),
 		ActorID:      "agent.local",

@@ -498,7 +498,11 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 		lamport = *v
 	}
 	// Mirrors crypto.CanonicalizeReceipt — receipt_id:decision_id:effect_id:
-	// status:output_hash:prev_hash:lamport_clock:args_hash.
+	// status:output_hash:prev_hash:lamport_clock:args_hash — and, when the
+	// document declares signature_version "receipt.v5" (HELM-303), the V5
+	// tail: :receipt.v5:verdict:reason_code:policy_hash:session_id
+	// (crypto.CanonicalizeReceiptV5). Unknown versions fail verification
+	// rather than fall back to a preimage the signer never produced.
 	payload := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
 		firstString(document, "receipt_id"),
 		firstString(document, "decision_id"),
@@ -509,6 +513,19 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 		lamport,
 		firstString(document, "args_hash"),
 	)
+	switch sigVersion := firstString(document, "signature_version"); sigVersion {
+	case "":
+		// legacy V4 — payload as built
+	case "receipt.v5":
+		payload = fmt.Sprintf("%s:%s:%s:%s:%s:%s", payload, sigVersion,
+			firstString(document, "verdict"),
+			firstString(document, "reason_code"),
+			firstString(document, "policy_hash"),
+			firstString(document, "session_id"),
+		)
+	default:
+		return false
+	}
 	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
 }
 

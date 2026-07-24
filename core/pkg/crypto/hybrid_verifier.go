@@ -62,7 +62,10 @@ func (v *HybridVerifier) Verify(message []byte, signature []byte) bool {
 
 // VerifyDecision verifies a hybrid-signed DecisionRecord.
 func (v *HybridVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error) {
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	payload, perr := DecisionVerifyPayload(d)
+	if perr != nil {
+		return false, perr
+	}
 	return v.verifyEnvelope([]byte(payload), d.Signature)
 }
 
@@ -78,7 +81,10 @@ func (v *HybridVerifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (b
 // VerifyReceipt verifies a hybrid-signed Receipt over the canonical receipt
 // preimage (same preimage as the classical profile).
 func (v *HybridVerifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	payload, perr := ReceiptVerifyPayload(r)
+	if perr != nil {
+		return false, perr
+	}
 	return v.verifyEnvelope([]byte(payload), r.Signature)
 }
 
@@ -171,7 +177,10 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 	default:
 		return profile, false, fmt.Errorf("unsupported receipt signature algorithm %q", r.SignatureAlgorithm)
 	}
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
+	payload, perr := ReceiptVerifyPayload(r)
+	if perr != nil {
+		return profile, false, perr
+	}
 
 	switch profile {
 	case ReceiptProfileHybrid:

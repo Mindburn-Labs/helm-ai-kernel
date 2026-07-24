@@ -35,10 +35,17 @@ func TestSigner_Integrity(t *testing.T) {
 		t.Error("Valid decision rejected")
 	}
 
-	// 3. Verify Tampered
+	// HELM-303 (preimage V2): the machine-readable ReasonCode is attested;
+	// free-text Reason deliberately is NOT (prose is prohibited from export
+	// and must not be the signed claim).
 	decision.Reason = "I changed this"
+	valid, err = signer.VerifyDecision(decision)
+	if err != nil || !valid {
+		t.Error("Reason is not part of the V2 preimage; mutating it must not invalidate")
+	}
+	decision.ReasonCode = "TAMPERED_CODE"
 	valid, _ = signer.VerifyDecision(decision)
 	if valid {
-		t.Error("Tampered decision accepted")
+		t.Error("Tampered ReasonCode accepted")
 	}
 }

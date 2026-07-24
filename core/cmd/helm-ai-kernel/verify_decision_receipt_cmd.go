@@ -36,7 +36,7 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&format, "format", "", "Format id (e.g. helm_external.v1); empty = auto-detect")
 	cmd.StringVar(&publicKey, "public-key", "", "Trusted Ed25519 public key hex. Without it, a bundle-disclosed key caps the result at crypto_compatible_non_conformant")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output the DecisionReport as JSON")
-	if code, ok := cliui.ParseFlags(cmd, reorderFlagsFirst(args, map[string]bool{"file": true, "format": true, "public-key": true}), stderr, "verify decision-receipt"); !ok {
+	if code, ok := cliui.ParseFlags(cmd, reorderFlagsFirst(args, map[string]bool{"file": true, "format": true, "public-key": true}), stderr, "verify decision-receipt", cliui.FormatText); !ok {
 		return code
 	}
 	// --format is taken by the receipt format id (documented collision

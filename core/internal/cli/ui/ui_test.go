@@ -251,6 +251,9 @@ func TestRequestedFormatGolden(t *testing.T) {
 		{[]string{"--bogus", "--json"}, FormatJSON}, // mode survives unknown flags
 		{[]string{"--format", "yaml"}, FormatText},  // invalid value fails closed to default
 		{[]string{"--effect", "X"}, FormatText},
+		{[]string{"json"}, FormatText},                           // positional never flips mode
+		{[]string{"--effect", "json", "--bogus"}, FormatText},    // flag value never flips mode
+		{[]string{"--", "--json"}, FormatText},                   // after -- everything is positional
 		{[]string{"--format=json", "--format=text"}, FormatText}, // last wins, like flag
 	}
 	for i, tc := range cases {
@@ -264,7 +267,7 @@ func TestParseFlagsJSONModeParseError(t *testing.T) {
 	fs := flag.NewFlagSet("risk-summary", flag.ContinueOnError)
 	RegisterFormat(fs, FormatText)
 	var chrome bytes.Buffer
-	code, ok := ParseFlags(fs, []string{"--format=json", "--bogus"}, &chrome, "risk-summary")
+	code, ok := ParseFlags(fs, []string{"--format=json", "--bogus"}, &chrome, "risk-summary", FormatText)
 	if ok || code != ExitUsage {
 		t.Fatalf("code=%d ok=%v", code, ok)
 	}
@@ -284,7 +287,7 @@ func TestParseFlagsTextModeAndHelp(t *testing.T) {
 	fs := flag.NewFlagSet("risk-summary", flag.ContinueOnError)
 	RegisterFormat(fs, FormatText)
 	var chrome bytes.Buffer
-	code, ok := ParseFlags(fs, []string{"--bogus"}, &chrome, "risk-summary")
+	code, ok := ParseFlags(fs, []string{"--bogus"}, &chrome, "risk-summary", FormatText)
 	if ok || code != ExitUsage {
 		t.Fatalf("code=%d ok=%v", code, ok)
 	}
@@ -296,7 +299,7 @@ func TestParseFlagsTextModeAndHelp(t *testing.T) {
 	fs = flag.NewFlagSet("risk-summary", flag.ContinueOnError)
 	RegisterFormat(fs, FormatText)
 	chrome.Reset()
-	code, ok = ParseFlags(fs, []string{"-h"}, &chrome, "risk-summary")
+	code, ok = ParseFlags(fs, []string{"-h"}, &chrome, "risk-summary", FormatText)
 	if ok || code != ExitUsage {
 		t.Fatalf("-h code=%d ok=%v", code, ok)
 	}
@@ -308,7 +311,7 @@ func TestParseFlagsTextModeAndHelp(t *testing.T) {
 	fs = flag.NewFlagSet("risk-summary", flag.ContinueOnError)
 	ff := RegisterFormat(fs, FormatText)
 	chrome.Reset()
-	if code, ok = ParseFlags(fs, []string{"--format=json"}, &chrome, "risk-summary"); !ok || code != ExitOK {
+	if code, ok = ParseFlags(fs, []string{"--format=json"}, &chrome, "risk-summary", FormatText); !ok || code != ExitOK {
 		t.Fatalf("success code=%d ok=%v", code, ok)
 	}
 	if !ff.IsJSON() || chrome.Len() != 0 {

@@ -40,7 +40,7 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&jsonOutput, "json", false, "Output as JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if code, ok := cliui.ParseFlags(cmd, args, stderr, "risk-summary"); !ok {
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "risk-summary", cliui.FormatText); !ok {
 		return code
 	}
 	jsonOutput = jsonOutput || formatFlag.IsJSON()

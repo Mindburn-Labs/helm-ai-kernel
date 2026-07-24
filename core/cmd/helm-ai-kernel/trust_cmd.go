@@ -77,7 +77,7 @@ func runTrustEUListStatus(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&endpoint, "endpoint", "", "Override the LOTL endpoint URL")
 	cmd.IntVar(&timeoutSec, "timeout", 30, "Seconds to wait for the LOTL fetch")
 
-	if code, ok := cliui.ParseFlags(cmd, args, stderr, "trust eu-list status"); !ok {
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "trust eu-list status", cliui.FormatText); !ok {
 		return code
 	}
 	jsonOut = jsonOut || formatFlag.IsJSON()

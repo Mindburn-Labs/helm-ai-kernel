@@ -301,11 +301,19 @@ func WriteJSON(data io.Writer, v any) error {
 
 // RequestedFormat best-effort scans raw CLI args for an explicit output-mode
 // selection (--format=<v> | --format <v> | --json[=bool]) so a flag-parse
-// error can still be rendered in the mode the user asked for. Invalid or
+// error can still be rendered in the mode the user asked for. Only
+// dash-prefixed tokens are considered, so positional arguments or flag
+// values that happen to equal "json" never flip the mode. Invalid or
 // missing values fail closed to def.
 func RequestedFormat(args []string, def Format) Format {
 	f := def
 	for i := 0; i < len(args); i++ {
+		if args[i] == "--" {
+			break // everything after the terminator is positional
+		}
+		if !strings.HasPrefix(args[i], "-") || args[i] == "-" {
+			continue
+		}
 		name := strings.TrimLeft(args[i], "-")
 		switch {
 		case name == "json":
@@ -334,19 +342,21 @@ func RequestedFormat(args []string, def Format) Format {
 
 // ParseFlags parses args with the flag package's own diagnostics suppressed
 // and renders failures through the single formatter in the user's requested
-// output mode (RequestedFormat) — keeping JSON-mode stderr exactly one
-// document even when the failure is a malformed flag. It returns (0, true)
-// on success. On failure it has already written the error to chrome and
-// returns (ExitUsage, false), so commands use:
+// output mode (RequestedFormat seeded with def) — keeping JSON-mode stderr
+// exactly one document even when the failure is a malformed flag. def must
+// be the command's own default output mode: FormatText for ordinary
+// commands, FormatJSON for JSON-only commands such as plan compile (whose
+// --json defaults to true). It returns (0, true) on success. On failure it
+// has already written the error to chrome and returns (ExitUsage, false):
 //
-//	if code, ok := cliui.ParseFlags(cmd, args, stderr, "risk-summary"); !ok {
+//	if code, ok := cliui.ParseFlags(cmd, args, stderr, "risk-summary", cliui.FormatText); !ok {
 //		return code
 //	}
 //
 // -h/--help reproduces the flag package's historical usage dump on chrome
 // (always text) and returns the same exit code (2) as the previous direct
 // `cmd.Parse` + `return 2` pattern.
-func ParseFlags(fs *flag.FlagSet, args []string, chrome io.Writer, op string) (int, bool) {
+func ParseFlags(fs *flag.FlagSet, args []string, chrome io.Writer, op string, def Format) (int, bool) {
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -355,7 +365,7 @@ func ParseFlags(fs *flag.FlagSet, args []string, chrome io.Writer, op string) (i
 			fs.PrintDefaults()
 			return ExitUsage, false
 		}
-		return WriteErrorFormat(chrome, UsageErrorf(op, "%s", err), RequestedFormat(args, FormatText)), false
+		return WriteErrorFormat(chrome, UsageErrorf(op, "%s", err), RequestedFormat(args, def)), false
 	}
 	return ExitOK, true
 }

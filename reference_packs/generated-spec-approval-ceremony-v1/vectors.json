@@ -62,6 +62,11 @@
       "id": "single_use_replay",
       "mutation": "replay_second_consume",
       "expected_error": "transition_conflict"
+    },
+    {
+      "id": "quorum_not_verified",
+      "mutation": "set_challenge_quorum_above_approvers_and_reseal",
+      "expected_error": "quorum_not_verified"
     }
   ]
 }

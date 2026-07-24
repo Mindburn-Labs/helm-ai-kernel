@@ -141,6 +141,8 @@ def verify_grant(grant, challenge):
     require_hash(grant, "grant_hash", "grant_hash_mismatch")
     if not grant.get("approver_principal_ids") or grant["requesting_principal_id"] in grant["approver_principal_ids"]:
         raise VectorError("contract_mismatch", "grant approvers are invalid")
+    if len(set(grant["approver_principal_ids"])) != len(grant["approver_principal_ids"]):
+        raise VectorError("contract_mismatch", "grant approvers must be unique")
     if len(grant["approver_principal_ids"]) < challenge["quorum"]:
         raise VectorError("quorum_not_verified", "grant approver count is below challenge quorum")
     issued_at = parse_time(grant["issued_at"])
@@ -254,6 +256,9 @@ def verify_vector(index, root, mutation=None):
     elif mutation == "set_challenge_quorum_above_approvers_and_reseal":
         challenge["quorum"] = len(grant["approver_principal_ids"]) + 1
         reseal(challenge, "challenge_hash")
+    elif mutation == "duplicate_grant_approver_and_reseal":
+        grant["approver_principal_ids"] = grant["approver_principal_ids"] + grant["approver_principal_ids"][:1]
+        reseal(grant, "grant_hash")
     elif mutation is not None:
         raise VectorError("unknown_mutation", mutation)
 

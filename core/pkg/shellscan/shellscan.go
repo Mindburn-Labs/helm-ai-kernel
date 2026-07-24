@@ -266,9 +266,12 @@ func resolveWord(w *syntax.Word) wordTok {
 var valueFlags = map[string]map[string]bool{
 	"sudo": {
 		"-u": true, "-g": true, "-h": true, "-p": true, "-C": true, "-T": true,
+		"-D": true, "-U": true, "-t": true,
 		"--user": true, "--group": true, "--host": true, "--prompt": true,
 		"--chdir": true, "--role": true, "--type": true, "--close-from": true,
+		"--other-user": true, "--command-timeout": true,
 	},
+	"exec":   {"-a": true},
 	"nice":   {"-n": true, "--adjustment": true},
 	"stdbuf": {"-i": true, "-o": true, "-e": true, "--input": true, "--output": true, "--error": true},
 	"xargs": {
@@ -358,30 +361,44 @@ var shellNames = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "ash": true,
 }
 
-// scanShellScriptFlag locates the script operand of a shell's -c flag,
-// honoring combined short-flag clusters (-lc), attached values (-cCMD),
-// value-taking flags (bash -O), long flags with values (--init-file,
-// --rcfile), and "--" end-of-options. It returns the script word, whether a
-// -c flag was found, and whether scanning hit something unresolvable (a
-// dynamic word in flag position, or -c with no operand at all).
-func scanShellScriptFlag(rest []wordTok) (script wordTok, found, ambiguous bool) {
+// shellLongValueFlags are shell long flags that consume the next token.
+var shellLongValueFlags = map[string]bool{
+	"--init-file": true, "--rcfile": true, "--emulate": true,
+}
+
+// scanShellScriptFlag analyzes a shell invocation's arguments. It locates
+// the script operand of a -c flag, honoring combined short-flag clusters
+// (-lc), attached values (-cCMD), value-taking flags (-o option, bash -O
+// shopt, long flags with values), "--" end-of-options, and -s/stdin mode.
+//
+// Returns: the -c script word (found), whether the shell will read commands
+// from stdin because no static script source exists (stdin), whether scanning
+// hit an unresolvable word (ambiguous), and whether a positional script file
+// was seen (positional).
+func scanShellScriptFlag(rest []wordTok) (script wordTok, found, stdin, ambiguous, positional bool) {
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
 		if tok.dynamic {
-			return wordTok{}, false, true
+			return wordTok{}, false, false, true, false
 		}
 		if tok.text == "--" {
-			return wordTok{}, false, false // options end; -c after -- is a positional name
+			if i+1 < len(rest) {
+				return wordTok{}, false, false, false, true // positional after --
+			}
+			return wordTok{}, false, true, false, false
+		}
+		if tok.text == "--help" || tok.text == "--version" {
+			// Prints and exits; treat like a benign positional.
+			return wordTok{}, false, false, false, true
 		}
 		if strings.HasPrefix(tok.text, "--") {
-			// Long flags: only --init-file/--rcfile take a separate value.
-			if tok.text == "--init-file" || tok.text == "--rcfile" {
+			if shellLongValueFlags[tok.text] {
 				i++
 			}
 			continue
 		}
 		if !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
-			return wordTok{}, false, false // first positional (script file)
+			return wordTok{}, false, false, false, true // script file positional
 		}
 		cluster := tok.text[1:]
 		for j := 0; j < len(cluster); j++ {
@@ -389,14 +406,18 @@ func scanShellScriptFlag(rest []wordTok) (script wordTok, found, ambiguous bool)
 			case 'c':
 				if j+1 < len(cluster) {
 					// Attached payload: bash -cCMD (e.g. -c'rm -rf /').
-					return wordTok{text: cluster[j+1:]}, true, false
+					return wordTok{text: cluster[j+1:]}, true, false, false, false
 				}
 				if i+1 < len(rest) {
-					return rest[i+1], true, false
+					return rest[i+1], true, false, false, false
 				}
-				return wordTok{}, true, true // -c with no operand: reads stdin
-			case 'O':
-				// bash -O shopt_option: value is attached or the next token.
+				return wordTok{}, false, true, false, false // -c with no operand: stdin
+			case 's':
+				// -s reads commands from standard input: opaque.
+				return wordTok{}, false, true, false, false
+			case 'o', 'O':
+				// -o option-name / bash -O shopt_option: value is attached
+				// or the next token.
 				if j+1 == len(cluster) {
 					i++
 				}
@@ -404,7 +425,7 @@ func scanShellScriptFlag(rest []wordTok) (script wordTok, found, ambiguous bool)
 			}
 		}
 	}
-	return wordTok{}, false, false
+	return wordTok{}, false, true, false, false // no script source: stdin
 }
 
 func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
@@ -516,7 +537,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				return
 			}
 			args = rest[commandIdx:]
-		case name == "nice" || name == "nohup" || name == "time" || name == "command" || name == "builtin" || name == "stdbuf" || name == "setsid":
+		case name == "nice" || name == "nohup" || name == "time" || name == "command" || name == "builtin" || name == "stdbuf" || name == "setsid" || name == "exec":
 			c.signal(SignalEnvWrapper)
 			args = dropWrapperFlags(name, args[1:])
 			via = joinVia(via, name)
@@ -557,12 +578,8 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			c.signal(SignalShellInvocation)
 			c.sawShell = true
 			rest := args[1:]
-			script, found, ambiguous := scanShellScriptFlag(rest)
+			script, found, stdin, ambiguous, _ := scanShellScriptFlag(rest)
 			switch {
-			case found && ambiguous:
-				// `bash -c` with no operand reads commands from stdin: opaque.
-				c.decide(name + " -c without an inline payload reads from stdin (fail-closed)")
-				return
 			case ambiguous:
 				c.decide(name + " wrapper arguments cannot be resolved statically")
 				return
@@ -571,6 +588,12 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				return
 			case found:
 				c.classifyString(script.text, joinVia(via, name+" -c"), depth+1)
+				return
+			case stdin:
+				// No static script source: the shell reads commands from
+				// stdin (bare `bash`, `bash -s`, `bash -c` without operand,
+				// curl ... | bash). Opaque → fail closed.
+				c.decide(name + " reads commands from standard input (fail-closed)")
 				return
 			default:
 				// `bash script.sh`: script contents are opaque but running a

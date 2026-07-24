@@ -365,3 +365,26 @@ func TestCLIPlanCompileParseErrorIsEnvelope(t *testing.T) {
 		t.Fatalf("text default drifted: code=%d stderr=%q", code, stderr)
 	}
 }
+
+// --- Regression: value-position tokens never select the mode (round-7 P2) --
+
+func TestCLIValuePositionTokenNeverSelectsFormat(t *testing.T) {
+	// Reviewer's exact example: the second --format token is consumed as the
+	// --effect value, so JSON (from the first --format=json) wins and the
+	// parse failure renders as one envelope document.
+	code, stdout, stderr := runCLI(t, "risk-summary", "--format=json", "--effect", "--format=text", "--bogus")
+	if code != 2 {
+		t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, stderr)
+
+	// Symmetric: a selector swallowed as a value must NOT flip to JSON.
+	code, _, stderr = runCLI(t, "risk-summary", "--effect", "--json", "--bogus")
+	if code != 2 {
+		t.Fatalf("code=%d want 2", code)
+	}
+	if !strings.HasPrefix(stderr, "Error: risk-summary: flag provided but not defined") {
+		t.Fatalf("expected text parse error, got %q", stderr)
+	}
+}

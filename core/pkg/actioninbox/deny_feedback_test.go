@@ -208,6 +208,36 @@ func TestEnqueue_StoresDeepCopyOfDenial(t *testing.T) {
 	assert.Equal(t, "caller-owned", got.Denial.Feedback)
 }
 
+func TestContext_GetAndEnqueueReturnDeepCopy(t *testing.T) {
+	store := actioninbox.NewInMemoryInboxStore()
+	ctx := context.Background()
+
+	item := newTestItem("item-1", "mgr-1")
+	item.ContentHash = "hash-A"
+	item.Context = map[string]any{actioninbox.SessionContextKey: "sess-1"}
+	require.NoError(t, store.Enqueue(ctx, item))
+
+	// Mutating the caller's context after Enqueue must not rewrite the
+	// stored session identity (cascade-scoping regression).
+	item.Context[actioninbox.SessionContextKey] = "sess-tampered"
+
+	other := newTestItem("item-2", "mgr-1")
+	other.ContentHash = "hash-A"
+	other.Context = map[string]any{actioninbox.SessionContextKey: "sess-1"}
+	require.NoError(t, store.Enqueue(ctx, other))
+
+	// Mutating the context returned by Get must not corrupt the store
+	// either.
+	got, err := store.Get(ctx, "item-1")
+	require.NoError(t, err)
+	got.Context[actioninbox.SessionContextKey] = "sess-tampered"
+
+	cascaded, err := store.DenyCascade(ctx, "item-1", "no", "principal-1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"item-2"}, cascaded,
+		"cascade scoping must use the stored session_id, not caller-mutated aliases")
+}
+
 func TestDenyCascade_EmptySessionNeverCollides(t *testing.T) {
 	store := actioninbox.NewInMemoryInboxStore()
 	ctx := context.Background()

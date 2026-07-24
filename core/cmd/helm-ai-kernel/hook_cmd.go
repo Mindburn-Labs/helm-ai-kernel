@@ -245,6 +245,11 @@ const (
 	// hookDoomLoopMaxSessions bounds the state file (oldest LastSeenAt is
 	// evicted first).
 	hookDoomLoopMaxSessions = 128
+	// hookDoomLoopMaxTrippedSignatures bounds the per-session latch map so
+	// the persisted state cannot grow without bound. Eviction is
+	// deterministic (lexicographically smallest signature); an evicted
+	// signature simply re-trips after another threshold run of denials.
+	hookDoomLoopMaxTrippedSignatures = 64
 	// hookDoomLoopLockWait bounds how long a hook waits for the state lock
 	// before giving up (the breaker is advisory; the policy path proceeds).
 	hookDoomLoopLockWait = 2 * time.Second
@@ -265,6 +270,18 @@ func (s *hookDoomLoopSession) recordDenied(signature string, now time.Time) (boo
 			s.TrippedSignatures = map[string]bool{}
 		}
 		if !s.TrippedSignatures[signature] {
+			if len(s.TrippedSignatures) >= hookDoomLoopMaxTrippedSignatures {
+				// Bounded latch map: evict the deterministic victim
+				// (smallest key). An evicted signature re-trips after
+				// another threshold run of consecutive denials.
+				victim := ""
+				for k := range s.TrippedSignatures {
+					if victim == "" || k < victim {
+						victim = k
+					}
+				}
+				delete(s.TrippedSignatures, victim)
+			}
 			s.TrippedSignatures[signature] = true
 			s.TripCount++
 			s.LastTrippedAt = &now

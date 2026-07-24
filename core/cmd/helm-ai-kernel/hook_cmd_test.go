@@ -491,6 +491,35 @@ func TestHookDoomLoopOutcomeLogic(t *testing.T) {
 	}
 }
 
+// TestHookDoomLoopTrippedSignaturesBounded is the regression test for the
+// unbounded-state finding: the per-session latch map is capped, so many
+// distinct tripped signatures cannot grow the persisted state without
+// bound. Eviction is deterministic and an evicted signature re-trips.
+func TestHookDoomLoopTrippedSignaturesBounded(t *testing.T) {
+	now := time.Unix(1000, 0).UTC()
+	sess := &hookDoomLoopSession{}
+
+	total := hookDoomLoopMaxTrippedSignatures + 10
+	for i := 0; i < total; i++ {
+		sig := actioninbox.SignatureFor("shell", "shell_operate", fmt.Sprintf("target-%03d", i))
+		for j := 0; j < actioninbox.DefaultDoomLoopThreshold; j++ {
+			sess.recordDenied(sig, now)
+		}
+		if len(sess.TrippedSignatures) > hookDoomLoopMaxTrippedSignatures {
+			t.Fatalf("latch map exceeded cap after %d trips: %d", i+1, len(sess.TrippedSignatures))
+		}
+	}
+	if len(sess.TrippedSignatures) != hookDoomLoopMaxTrippedSignatures {
+		t.Fatalf("latch map = %d, want cap %d", len(sess.TrippedSignatures), hookDoomLoopMaxTrippedSignatures)
+	}
+
+	// The most recently tripped signature must still be latched.
+	last := actioninbox.SignatureFor("shell", "shell_operate", fmt.Sprintf("target-%03d", total-1))
+	if !sess.TrippedSignatures[last] {
+		t.Fatal("newest trip must be latched")
+	}
+}
+
 // TestHookDoomLoopPrune covers TTL expiry and the session cap.
 func TestHookDoomLoopPrune(t *testing.T) {
 	now := time.Unix(100000, 0).UTC()

@@ -24,13 +24,22 @@ func NewInMemoryInboxStore() *InMemoryInboxStore {
 }
 
 // copyItem deep-copies an inbox item, including the structured denial
-// record. Shallow copies would alias the stored Denial pointer, letting
-// callers mutate denial evidence (audit corruption) or race the store.
+// record and the context map. Shallow copies would alias the stored Denial
+// pointer (letting callers mutate denial evidence) and the Context map
+// (letting callers rewrite session_id after Enqueue/Get and corrupt
+// DenyCascade same-session scoping).
 func copyItem(item *InboxItem) *InboxItem {
 	val := *item
 	if item.Denial != nil {
 		d := *item.Denial
 		val.Denial = &d
+	}
+	if item.Context != nil {
+		ctx := make(map[string]any, len(item.Context))
+		for k, v := range item.Context {
+			ctx[k] = v
+		}
+		val.Context = ctx
 	}
 	return &val
 }

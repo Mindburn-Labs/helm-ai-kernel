@@ -209,6 +209,9 @@ func (s *memoryStore) update(ctx context.Context, tenantID, workspaceID, approva
 	if !ok {
 		return Record{}, ErrNotFound
 	}
+	if err := record.validate(); err != nil {
+		return Record{}, err
+	}
 	if err := mutate(&record); err != nil {
 		return Record{}, err
 	}

@@ -344,6 +344,9 @@ func TestStoredEnvelopesRequirePinnedSignatureVerification(t *testing.T) {
 		if _, err := fixture.service.ConsumeGrant(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, generatedspecapproval.ErrSignatureRejected) {
 			t.Fatalf("ConsumeGrant(tampered stored grant) error = %v, want signature rejection", err)
 		}
+		if _, err := fixture.service.Get(ctx, granted.ApprovalID); !errors.Is(err, generatedspecapproval.ErrSignatureRejected) {
+			t.Fatalf("Get(tampered stored grant) error = %v, want signature rejection", err)
+		}
 	})
 
 	t.Run("consumption", func(t *testing.T) {
@@ -359,6 +362,35 @@ func TestStoredEnvelopesRequirePinnedSignatureVerification(t *testing.T) {
 		})
 		if _, err := fixture.service.RecoverGrantConsumption(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, generatedspecapproval.ErrSignatureRejected) {
 			t.Fatalf("RecoverGrantConsumption(tampered stored consumption) error = %v, want signature rejection", err)
+		}
+	})
+}
+
+func TestTransitionsRejectCorruptedPersistedState(t *testing.T) {
+	t.Run("invalid pre-state", func(t *testing.T) {
+		fixture := newCeremonyFixture(t)
+		ctx := context.Background()
+		hold, err := fixture.service.BeginHold(ctx, fixture.binding.BindingRef)
+		if err != nil {
+			t.Fatalf("BeginHold() error = %v", err)
+		}
+		fixture.mutate(hold.ApprovalID, func(record *Record) {
+			record.UpdatedAt = record.CreatedAt.Add(-time.Minute)
+		})
+		if _, err := fixture.service.Deny(ctx, hold.ApprovalID); !errors.Is(err, ErrInvalidRecord) {
+			t.Fatalf("Deny(corrupted pre-state) error = %v, want invalid record", err)
+		}
+	})
+
+	t.Run("assertion not bound to challenge", func(t *testing.T) {
+		fixture := newCeremonyFixture(t)
+		ctx := context.Background()
+		quorum := fixture.toQuorum(t, ctx)
+		fixture.mutate(quorum.ApprovalID, func(record *Record) {
+			record.Assertions[0].ChallengeHash = testHash("9")
+		})
+		if _, err := fixture.service.IssueGrant(ctx, quorum.ApprovalID); !errors.Is(err, ErrInvalidRecord) {
+			t.Fatalf("IssueGrant(unbound assertion) error = %v, want invalid record", err)
 		}
 	})
 }

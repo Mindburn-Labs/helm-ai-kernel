@@ -523,6 +523,19 @@ func (s *Service) get(ctx context.Context, tenantID, workspaceID, approvalID str
 	if err := record.validate(); err != nil {
 		return Record{}, err
 	}
+	// The persistence seam is untrusted: re-verify pinned envelope integrity
+	// and signatures before any caller can act on stored grant or consumption
+	// data. Record.validate() only checks syntax and lifecycle consistency.
+	if record.SignedGrant != nil {
+		if err := s.verifier.VerifyGrantSignature(*record.SignedGrant); err != nil {
+			return Record{}, err
+		}
+		if record.SignedConsumption != nil {
+			if err := s.verifier.VerifyConsumption(*record.SignedConsumption, *record.SignedGrant); err != nil {
+				return Record{}, err
+			}
+		}
+	}
 	return record, nil
 }
 
@@ -633,6 +646,16 @@ func (r Record) validate() error {
 	if r.Challenge != nil {
 		if err := validateChallenge(r); err != nil {
 			return err
+		}
+	}
+	if len(r.Assertions) > 0 {
+		if r.Challenge == nil {
+			return invalidRecord("assertions require a stored challenge")
+		}
+		for _, assertion := range r.Assertions {
+			if err := assertion.Validate(); err != nil || assertion.ChallengeID != r.Challenge.ChallengeID || assertion.ChallengeHash != r.Challenge.ChallengeHash {
+				return invalidRecord("assertion is invalid or not bound to the stored challenge")
+			}
 		}
 	}
 	if r.ExpiresAt != nil && !isUTC(*r.ExpiresAt) {

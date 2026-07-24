@@ -459,6 +459,33 @@ func TestHookPreToolDoomLoopLatchIsPerSignature(t *testing.T) {
 	}
 }
 
+// TestHookPreToolDoomLoopSkipsSessionlessPayloads is the regression test
+// for the session-collision finding: payloads without a session ID must
+// not be bucketed together — the breaker records nothing and never trips,
+// so unrelated sessionless invocations cannot false-trip each other.
+func TestHookPreToolDoomLoopSkipsSessionlessPayloads(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"cwd":"/repo"}`
+
+	for i := 1; i <= 4; i++ {
+		var stdout, stderr bytes.Buffer
+		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("attempt %d exit = %d stderr = %s", i, code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+			t.Fatalf("attempt %d must still be policy-denied: %s", i, stdout.String())
+		}
+		if strings.Contains(stdout.String(), "INBOX_DOOM_LOOP_DETECTED") {
+			t.Fatalf("sessionless attempt %d must never trip the breaker: %s", i, stdout.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(tmp, "state", "hook-doomloop.json")); !os.IsNotExist(err) {
+		t.Fatalf("sessionless payloads must not create breaker state: %v", err)
+	}
+}
+
 // TestHookDoomLoopOutcomeLogic unit-tests the pure settled-outcome logic:
 // only settled denials count, allowed calls reset the run and can never
 // trip, and the latch is per signature.

@@ -315,7 +315,12 @@ func recordHookDoomLoopOutcome(opts hookOptions, payload preToolPayload, classif
 	signature := actioninbox.SignatureFor(classification.ToolID, classification.Action, classification.Target)
 	sessionID := strings.TrimSpace(payload.SessionID)
 	if sessionID == "" {
-		sessionID = "_default"
+		// No session identity: unrelated invocations must never share a
+		// breaker bucket (a shared "_default" key would let one session's
+		// denials falsely trip another's). Without a session ID the
+		// breaker cannot attribute the run, so it stays out of the way —
+		// same rule as DenyCascade: empty session never collides.
+		return false, 0
 	}
 	statePath := filepath.Join(opts.DataDir, "state", "hook-doomloop.json")
 	unlock, ok := acquireHookDoomLoopLock(statePath+".lock", stderr)

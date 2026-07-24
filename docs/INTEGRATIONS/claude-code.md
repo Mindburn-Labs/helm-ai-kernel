@@ -79,7 +79,8 @@ HELM denied <class>: <KERNEL_REASON_CODE> (receipt: <path>) [INBOX_KERNEL_POLICY
   `~/.helm-ai-kernel/state/` (bounded, lock-serialized); it is advisory
   steering on top of the authoritative policy path — the session ID is
   client-supplied and unauthenticated, so the breaker is not a security
-  boundary.
+  boundary. Payloads without a session ID are not tracked, so unrelated
+  sessionless invocations can never false-trip each other.
 - Fail-closed infrastructure denials carry their own codes:
   `[INBOX_SIGNER_UNAVAILABLE]`, `[INBOX_RECEIPT_PERSISTENCE_UNAVAILABLE]`.
 

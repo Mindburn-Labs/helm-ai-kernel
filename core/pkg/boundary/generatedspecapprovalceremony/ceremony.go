@@ -405,6 +405,13 @@ func (s *Service) ConsumeGrant(ctx context.Context, approvalID, grantID, grantHa
 			if consumedBy != identity.Subject || !consumedAt.Equal(now) {
 				return generatedspecapproval.SignedConsumption{}, fmt.Errorf("%w: consumption identity or timestamp mismatch", ErrConsumerUnavailable)
 			}
+			// Field pins alone cannot stop a store that alters unchecked grant
+			// fields or the signature envelope, so re-verify the exact grant
+			// being consumed through the pinned verifier at the pinned
+			// consumption time before signing anything.
+			if err := s.verifier.VerifyGrant(signed, consumedAt); err != nil {
+				return generatedspecapproval.SignedConsumption{}, err
+			}
 			consumption, err := generatedspecapproval.NewConsumption(signed.Grant, consumedBy, consumedAt)
 			if err != nil {
 				return generatedspecapproval.SignedConsumption{}, err

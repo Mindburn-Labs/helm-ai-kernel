@@ -245,6 +245,19 @@ func TestConsumeGrantSealerPinsCallerScope(t *testing.T) {
 			t.Fatalf("ConsumeGrant(substituted grant) error = %v, want consumer rejection", err)
 		}
 	})
+
+	t.Run("forged signature envelope", func(t *testing.T) {
+		fixture := newCeremonyFixture(t)
+		ctx := context.Background()
+		granted := fixture.toGrant(t, ctx)
+		grant := granted.SignedGrant.Grant
+		svc := newTamperedService(t, fixture, func(signed *generatedspecapproval.SignedGrant, _ *string, _ *time.Time) {
+			signed.Signature = strings.Repeat("0", 128)
+		})
+		if _, err := svc.ConsumeGrant(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, generatedspecapproval.ErrSignatureRejected) {
+			t.Fatalf("ConsumeGrant(forged signature envelope) error = %v, want signature rejection", err)
+		}
+	})
 }
 
 func TestDenyFencesAnIssuedGrant(t *testing.T) {

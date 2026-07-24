@@ -261,17 +261,47 @@ func resolveWord(w *syntax.Word) wordTok {
 	return wordTok{text: b.String(), dynamic: dynamic}
 }
 
-// valueFlags lists wrapper flags that consume the following token as a value.
+// valueFlags lists wrapper flags that consume a value (short and long forms;
+// long forms also match their --flag=value attached spelling).
 var valueFlags = map[string]map[string]bool{
-	"sudo":   {"-u": true, "-g": true, "-h": true, "-p": true, "-C": true, "-T": true},
-	"nice":   {"-n": true},
-	"stdbuf": {"-i": true, "-o": true, "-e": true},
-	"xargs":  {"-I": true, "-L": true, "-n": true, "-P": true, "-s": true, "-d": true, "-E": true, "-a": true},
+	"sudo": {
+		"-u": true, "-g": true, "-h": true, "-p": true, "-C": true, "-T": true,
+		"--user": true, "--group": true, "--host": true, "--prompt": true,
+		"--chdir": true, "--role": true, "--type": true, "--close-from": true,
+	},
+	"nice":   {"-n": true, "--adjustment": true},
+	"stdbuf": {"-i": true, "-o": true, "-e": true, "--input": true, "--output": true, "--error": true},
+	"xargs": {
+		"-I": true, "-L": true, "-n": true, "-P": true, "-s": true, "-d": true, "-E": true, "-a": true,
+		"--replace": true, "--max-lines": true, "--max-args": true, "--max-procs": true,
+		"--max-chars": true, "--delimiter": true, "--eof": true, "--arg-file": true,
+	},
+}
+
+// noValueLongFlags lists wrapper long flags known to take no value. Unknown
+// long flags are treated as ambiguous (they may consume the next token) and
+// route to the decision path.
+var noValueLongFlags = map[string]map[string]bool{
+	"sudo": {
+		"--login": true, "--shell": true, "--edit": true, "--background": true,
+		"--preserve-env": true, "--non-interactive": true, "--validate": true,
+		"--reset-timestamp": true, "--remove-timestamp": true, "--kill": true,
+		"--update": true, "--stdin": true, "--help": true, "--version": true,
+	},
+	"xargs": {
+		"--interactive": true, "--verbose": true, "--exit": true, "--null": true,
+		"--no-run-if-empty": true, "--open-tty": true, "--show-limits": true,
+	},
+	"setsid": {"--ctty": true, "--fork": true, "--wait": true},
 }
 
 // dropWrapperFlags removes leading flag tokens (and their values) from args.
+// It returns nil when the flag sequence cannot be resolved statically —
+// dynamic words or unrecognized long flags in flag position are ambiguous
+// because they may hide the wrapped command or its flags.
 func dropWrapperFlags(cmd string, args []wordTok) []wordTok {
 	vals := valueFlags[cmd]
+	novals := noValueLongFlags[cmd]
 	i := 0
 	for i < len(args) {
 		tok := args[i]
@@ -279,17 +309,42 @@ func dropWrapperFlags(cmd string, args []wordTok) []wordTok {
 			i++
 			break
 		}
-		if tok.dynamic && tok.text == "" {
-			// Fully dynamic word in flag position: cannot rule out a wrapped
-			// command; treat remaining as unclassifiable by returning nil.
+		if tok.dynamic {
 			return nil
 		}
 		if !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
 			break
 		}
-		if vals[tok.text] {
-			i += 2
-			continue
+		if strings.HasPrefix(tok.text, "--") {
+			name := tok.text
+			attached := false
+			if idx := strings.Index(name, "="); idx >= 0 {
+				name, attached = name[:idx], true
+			}
+			if vals[name] {
+				if attached {
+					i++
+				} else {
+					i += 2
+				}
+				continue
+			}
+			if novals[name] {
+				i++
+				continue
+			}
+			return nil // unknown long flag may consume the next token
+		}
+		// Short-flag cluster: a value-taking flag consumes the rest of the
+		// cluster or, when last, the next token.
+		cluster := tok.text[1:]
+		for j := 0; j < len(cluster); j++ {
+			if vals["-"+string(cluster[j])] {
+				if j+1 == len(cluster) {
+					i++
+				}
+				break
+			}
 		}
 		i++
 	}
@@ -552,7 +607,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			return
 		}
 		if args == nil {
-			c.decide(fmt.Sprintf("wrapper %q hides a dynamic command word", via))
+			c.decide(fmt.Sprintf("wrapper %q arguments cannot be resolved statically (fail-closed)", via))
 			return
 		}
 	}
@@ -641,7 +696,12 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok) {
 	case cmd.Name == "git":
 		c.matchGit(args)
 	case cmd.Name == "kubectl":
-		if sub, ok := firstSubcommand(args[1:], kubectlValueFlags); ok && sub == "delete" {
+		sub, dynamic, found := firstSubcommand(args[1:], kubectlValueFlags)
+		if dynamic {
+			c.decide("kubectl with a dynamic subcommand (fail-closed)")
+			return
+		}
+		if found && sub == "delete" {
 			c.decide("kubectl delete")
 		}
 	case cmd.Name == "docker":
@@ -702,18 +762,22 @@ var dockerValueFlags = map[string]bool{
 }
 
 // firstSubcommand finds the first positional token, skipping flags and the
-// values of known value-flags.
-func firstSubcommand(args []wordTok, vals map[string]bool) (string, bool) {
+// values of known value-flags. dynamic is true when scanning hit a word that
+// cannot be resolved statically (the subcommand may be hidden).
+func firstSubcommand(args []wordTok, vals map[string]bool) (sub string, dynamic, found bool) {
 	for i := 0; i < len(args); i++ {
 		tok := args[i]
 		if tok.dynamic {
-			return "", false
+			return "", true, false
 		}
 		if tok.text == "--" {
 			if i+1 < len(args) && !args[i+1].dynamic {
-				return args[i+1].text, true
+				return args[i+1].text, false, true
 			}
-			return "", false
+			if i+1 < len(args) {
+				return "", true, false
+			}
+			return "", false, false
 		}
 		if strings.HasPrefix(tok.text, "-") && tok.text != "-" {
 			if vals[tok.text] {
@@ -721,27 +785,29 @@ func firstSubcommand(args []wordTok, vals map[string]bool) (string, bool) {
 			}
 			continue
 		}
-		return tok.text, true
+		return tok.text, false, true
 	}
-	return "", false
+	return "", false, false
 }
 
 func (c *collector) matchGit(args []wordTok) {
-	sub, ok := firstSubcommand(args[1:], gitValueFlags)
-	if !ok {
-		for _, tok := range args[1:] {
-			if tok.dynamic {
-				c.decide("git invocation with a dynamic subcommand")
-				return
-			}
-		}
+	sub, dynamic, found := firstSubcommand(args[1:], gitValueFlags)
+	if dynamic {
+		c.decide("git invocation with a dynamic subcommand (fail-closed)")
+		return
+	}
+	if !found {
 		return
 	}
 	rest := args[1:]
 	switch sub {
 	case "reset":
 		for _, tok := range rest {
-			if !tok.dynamic && tok.text == "--hard" {
+			if tok.dynamic {
+				c.decide("git reset with unresolvable flags (fail-closed)")
+				return
+			}
+			if tok.text == "--hard" {
 				c.decide("git reset --hard")
 				return
 			}
@@ -749,7 +815,11 @@ func (c *collector) matchGit(args []wordTok) {
 	case "clean":
 		force, dirs := false, false
 		for _, tok := range rest {
-			if tok.dynamic || !strings.HasPrefix(tok.text, "-") || tok.text == "--" {
+			if tok.dynamic {
+				c.decide("git clean with unresolvable flags (fail-closed)")
+				return
+			}
+			if !strings.HasPrefix(tok.text, "-") || tok.text == "--" {
 				continue
 			}
 			if tok.text == "--force" {
@@ -775,15 +845,23 @@ func (c *collector) matchGit(args []wordTok) {
 }
 
 func (c *collector) matchDocker(args []wordTok) {
-	sub, ok := firstSubcommand(args[1:], dockerValueFlags)
-	if !ok {
+	sub, dynamic, found := firstSubcommand(args[1:], dockerValueFlags)
+	if dynamic {
+		c.decide("docker invocation with a dynamic subcommand (fail-closed)")
+		return
+	}
+	if !found {
 		return
 	}
 	rest := args[1:]
 	isRm := sub == "rm"
 	if sub == "container" {
-		next, nextOK := firstSubcommand(rest[indexOfToken(rest, "container")+1:], nil)
-		if nextOK && next == "rm" {
+		next, nextDynamic, nextFound := firstSubcommand(rest[indexOfToken(rest, "container")+1:], nil)
+		if nextDynamic {
+			c.decide("docker container with a dynamic subcommand (fail-closed)")
+			return
+		}
+		if nextFound && next == "rm" {
 			isRm = true
 		}
 	}
@@ -792,7 +870,8 @@ func (c *collector) matchDocker(args []wordTok) {
 	}
 	for _, tok := range rest {
 		if tok.dynamic {
-			continue
+			c.decide("docker rm with unresolvable flags (fail-closed)")
+			return
 		}
 		if tok.text == "--force" {
 			c.decide("docker rm --force")
@@ -837,7 +916,10 @@ func (c *collector) matchFind(args []wordTok) {
 					break
 				}
 				if p.dynamic {
-					continue
+					// A dynamic word inside the exec payload may hide the
+					// executed command or its flags; fail closed.
+					c.decide("find " + tok.text + " with a dynamic payload (fail-closed)")
+					return
 				}
 				if !isRm && path.Base(p.text) == "rm" {
 					isRm = true

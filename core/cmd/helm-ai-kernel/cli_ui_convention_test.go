@@ -388,3 +388,27 @@ func TestCLIValuePositionTokenNeverSelectsFormat(t *testing.T) {
 		t.Fatalf("expected text parse error, got %q", stderr)
 	}
 }
+
+// --- Regression: command-aware scan end to end (round-8 P2) -----------------
+
+func TestCLIUnknownValueFlagNameDoesNotConsumeSelector(t *testing.T) {
+	// P2 FORMAT_SCAN_NOT_COMMAND_AWARE: --agent is not a risk-summary flag,
+	// so the flag package stops there and the trailing --format=json still
+	// selects the envelope for the parse error.
+	code, stdout, stderr := runCLI(t, "risk-summary", "--agent", "--format=json")
+	if code != 2 {
+		t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, stderr)
+
+	// On receipts tail, --agent IS a value flag: it consumes --format=json,
+	// so the (earlier) unknown-flag error renders in the text default.
+	code, _, stderr = runCLI(t, "receipts", "tail", "--bogus2", "--agent", "--format=json")
+	if code != 2 {
+		t.Fatalf("code=%d want 2", code)
+	}
+	if !strings.HasPrefix(stderr, "Error: receipts tail: flag provided but not defined") {
+		t.Fatalf("expected text parse error, got %q", stderr)
+	}
+}

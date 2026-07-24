@@ -299,43 +299,32 @@ func WriteJSON(data io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
-// ValueFlags is the shared table of flags that consume the following token
-// as their value (string/int/uint flags, as opposed to bools). It covers the
-// commands migrated to the cli/ui convention; follow-up migrations extend it
-// as they adopt ParseFlags. RequestedFormat uses it to never interpret a
-// consumed value position as a format selector.
-var ValueFlags = map[string]bool{
-	// receipts tail
-	"agent": true, "server": true, "since": true, "limit": true,
-	// risk-summary
-	"effect": true,
-	// verify entry / decision-receipt
-	"entry": true, "proof": true, "file": true, "public-key": true,
-	// trust eu-list status
-	"fixture": true, "endpoint": true, "timeout": true,
-	// plan compile / evaluate
-	"input": true, "output": true, "name": true, "plan": true, "policy": true, "actor": true,
-	// export aat
-	"in": true, "out": true, "agent-id": true, "sign-key": true, "verify": true,
-	// log (translog)
-	"leaf-hash": true, "data-dir": true, "size": true, "index": true,
-	"old-size": true, "new-size": true, "root": true, "old-root": true, "new-root": true,
-	// scan
-	"path": true, "from-receipts": true, "cohort": true, "salt-file": true,
-	"risk-envelope": true, "preview": true, "evidence-pack": true, "upload-url": true,
-	// --format itself is value-taking; it is handled as a selector before this table.
-	"format": true,
+// ValueFlagNames derives the set of value-taking flags (anything that is not
+// a bool flag) from the command's OWN FlagSet, using the flag package's
+// boolFlag convention. The scan is command-aware by construction: a name
+// that is not registered on this command never consumes the following token.
+func ValueFlagNames(fs *flag.FlagSet) map[string]bool {
+	names := map[string]bool{}
+	fs.VisitAll(func(fl *flag.Flag) {
+		if bf, ok := fl.Value.(interface{ IsBoolFlag() bool }); !ok || !bf.IsBoolFlag() {
+			names[fl.Name] = true
+		}
+	})
+	return names
 }
 
 // RequestedFormat best-effort scans raw CLI args for an explicit output-mode
 // selection (--format=<v> | --format <v> | --json[=bool]) so a flag-parse
 // error can still be rendered in the mode the user asked for. The scan is
-// flag-aware: it stops at the `--` terminator, ignores bare positionals, and
-// skips the value positions of known value-taking flags (ValueFlags), so a
-// token consumed as another flag's value (e.g. `--effect --format=text`)
-// never flips the mode. The last selector in a valid flag position wins,
-// matching the flag package. Invalid or missing values fail closed to def.
-func RequestedFormat(args []string, def Format) Format {
+// flag-aware and command-aware: it stops at the `--` terminator, ignores
+// bare positionals, and skips the value positions of the command's own
+// value-taking flags (valueFlags, see ValueFlagNames), so a token consumed
+// as another flag's value (e.g. `--effect --format=text`) never flips the
+// mode — while a value-flag name belonging to a DIFFERENT command (unknown
+// here) does not consume anything, matching the flag package's
+// stop-at-first-undefined-flag behavior. The last selector in a valid flag
+// position wins. Invalid or missing values fail closed to def.
+func RequestedFormat(args []string, def Format, valueFlags map[string]bool) Format {
 	f := def
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--" {
@@ -365,7 +354,7 @@ func RequestedFormat(args []string, def Format) Format {
 			if v, err := ParseFormat(strings.TrimPrefix(name, "format=")); err == nil {
 				f = v
 			}
-		case ValueFlags[name] && !strings.Contains(name, "="):
+		case valueFlags[name]:
 			i++ // the next token is this flag's value, never a selector
 		}
 	}
@@ -397,7 +386,7 @@ func ParseFlags(fs *flag.FlagSet, args []string, chrome io.Writer, op string, de
 			fs.PrintDefaults()
 			return ExitUsage, false
 		}
-		return WriteErrorFormat(chrome, UsageErrorf(op, "%s", err), RequestedFormat(args, def)), false
+		return WriteErrorFormat(chrome, UsageErrorf(op, "%s", err), RequestedFormat(args, def, ValueFlagNames(fs))), false
 	}
 	return ExitOK, true
 }

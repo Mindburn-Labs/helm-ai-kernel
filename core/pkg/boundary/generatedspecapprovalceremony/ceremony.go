@@ -456,6 +456,15 @@ func (s *Service) verify(ctx context.Context, record Record, assertions []contra
 	if record.Challenge == nil {
 		return generatedspecapproval.VerifiedApprovalRef{}, ErrTransitionConflict
 	}
+	// A persisted challenge must still honor the configured per-issuance TTL.
+	// IssueChallenge sets ExpiresAt = IssuedAt + ChallengeTTL (clamped only to
+	// MaxChallengeLifetime), so a larger span means the stored challenge was
+	// resealed with an extended expiry. The verifier's MaxChallengeTTL option
+	// spans the full hold-to-expiry lifetime, so it cannot catch that tampering
+	// on its own.
+	if record.Challenge.ExpiresAt.Sub(record.Challenge.IssuedAt) > s.config.ChallengeTTL {
+		return generatedspecapproval.VerifiedApprovalRef{}, fmt.Errorf("%w: persisted challenge ttl exceeds configured challenge ttl", generatedspecapproval.ErrVerificationFailed)
+	}
 	trust, err := s.loadAuthority(ctx, record.Binding)
 	if err != nil {
 		return generatedspecapproval.VerifiedApprovalRef{}, err

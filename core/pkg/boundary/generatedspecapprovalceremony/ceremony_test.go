@@ -124,6 +124,36 @@ func TestVerifyQuorumRejectsRequesterAndChallengeMismatch(t *testing.T) {
 	})
 }
 
+func TestVerifyQuorumRejectsResealedChallengeBeyondConfiguredTTL(t *testing.T) {
+	fixture := newCeremonyFixture(t)
+	ctx := context.Background()
+	challenged := fixture.toChallenge(t, ctx)
+
+	// Simulate a store-level reseal that extends the persisted challenge expiry
+	// past the configured per-issuance ChallengeTTL while keeping the challenge
+	// inside its maximum lifetime, then verify with assertions bound to the
+	// resealed hash. Verification must still reject the extended TTL.
+	var resealed contracts.GeneratedSpecApprovalChallenge
+	fixture.mutate(challenged.ApprovalID, func(record *Record) {
+		updated := *record.Challenge
+		updated.ExpiresAt = updated.IssuedAt.Add(fixture.config.ChallengeTTL + time.Minute)
+		sealed, sealErr := updated.Seal()
+		if sealErr != nil {
+			t.Errorf("Seal() error = %v", sealErr)
+			return
+		}
+		record.Challenge = &sealed
+		record.ExpiresAt = &sealed.ExpiresAt
+		resealed = sealed
+	})
+	if resealed.ChallengeHash == challenged.Challenge.ChallengeHash {
+		t.Fatal("resealed challenge must carry a new challenge hash")
+	}
+	if _, err := fixture.service.VerifyQuorum(ctx, challenged.ApprovalID, []contracts.GeneratedSpecApprovalAssertion{fixture.assertion(t, resealed)}); !errors.Is(err, generatedspecapproval.ErrVerificationFailed) {
+		t.Fatalf("VerifyQuorum(resealed challenge) error = %v, want verification failure", err)
+	}
+}
+
 func TestConsumeRejectsWrongConsumerAndReplay(t *testing.T) {
 	fixture := newCeremonyFixture(t)
 	ctx := context.Background()

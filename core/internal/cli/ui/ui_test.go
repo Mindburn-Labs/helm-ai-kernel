@@ -266,7 +266,7 @@ func TestRequestedFormatGolden(t *testing.T) {
 		{[]string{"--format=json", "--format=text"}, FormatText}, // last wins, like flag
 	}
 	for i, tc := range cases {
-		if got := RequestedFormat(tc.args, FormatText, vf("effect", "format")); got != tc.want {
+		if got := RequestedFormat(tc.args, FormatText, vf("effect", "format"), true); got != tc.want {
 			t.Fatalf("case %d %v: got %q want %q", i, tc.args, got, tc.want)
 		}
 	}
@@ -349,7 +349,7 @@ func TestRequestedFormatSkipsFlagValues(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := RequestedFormat(tc.args, FormatText, vf("effect", "format", "agent")); got != tc.want {
+			if got := RequestedFormat(tc.args, FormatText, vf("effect", "format", "agent"), true); got != tc.want {
 				t.Fatalf("RequestedFormat(%v) = %q, want %q", tc.args, got, tc.want)
 			}
 		})
@@ -379,11 +379,46 @@ func TestRequestedFormatCommandAware(t *testing.T) {
 	riskFlags := vf("effect", "format") // risk-summary has NO --agent
 	// --agent is undefined on risk-summary: the flag package stops there, so
 	// the trailing --format=json is a valid selector position and wins.
-	if got := RequestedFormat([]string{"--agent", "--format=json"}, FormatText, riskFlags); got != FormatJSON {
+	if got := RequestedFormat([]string{"--agent", "--format=json"}, FormatText, riskFlags, true); got != FormatJSON {
 		t.Fatalf("cross-command name consumed a token: got %q", got)
 	}
 	// But on receipts tail, --agent IS a value flag and consumes the selector.
-	if got := RequestedFormat([]string{"--agent", "--format=json"}, FormatText, vf("agent", "format")); got != FormatText {
+	if got := RequestedFormat([]string{"--agent", "--format=json"}, FormatText, vf("agent", "format"), true); got != FormatText {
 		t.Fatalf("own value flag failed to consume: got %q", got)
+	}
+}
+
+// --- Regression: collision-exception --format (permit round-9 P2) ----------
+
+func TestParseFlagsCollisionFormatNotSelector(t *testing.T) {
+	// verify decision-receipt registers --format as a STRING (receipt format
+	// id), so it must never act as an output selector: --json stays in force.
+	fs := flag.NewFlagSet("verify decision-receipt", flag.ContinueOnError)
+	var formatID string
+	var jsonOut bool
+	fs.StringVar(&formatID, "format", "", "receipt format id")
+	fs.BoolVar(&jsonOut, "json", false, "")
+	var chrome bytes.Buffer
+	code, ok := ParseFlags(fs, []string{"--json", "--format", "text", "--bogus"}, &chrome, "verify decision-receipt", FormatText)
+	if ok || code != ExitUsage {
+		t.Fatalf("code=%d ok=%v", code, ok)
+	}
+	got := strings.TrimSpace(chrome.String())
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(got), &doc); err != nil {
+		t.Fatalf("collision --format misread as selector; not JSON: %v\n%s", err, got)
+	}
+
+	// And with a RegisterFormat-registered --format, it IS the selector.
+	fs2 := flag.NewFlagSet("risk-summary", flag.ContinueOnError)
+	RegisterFormat(fs2, FormatText)
+	chrome.Reset()
+	code, ok = ParseFlags(fs2, []string{"--format=json", "--bogus"}, &chrome, "risk-summary", FormatText)
+	if ok || code != ExitUsage {
+		t.Fatalf("code=%d ok=%v", code, ok)
+	}
+	got = strings.TrimSpace(chrome.String())
+	if err := json.Unmarshal([]byte(got), &doc); err != nil {
+		t.Fatalf("selector --format not honored: %v\n%s", err, got)
 	}
 }

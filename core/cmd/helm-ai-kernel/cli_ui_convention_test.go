@@ -412,3 +412,32 @@ func TestCLIUnknownValueFlagNameDoesNotConsumeSelector(t *testing.T) {
 		t.Fatalf("expected text parse error, got %q", stderr)
 	}
 }
+
+// --- Regression: round-9 P2s ------------------------------------------------
+
+func TestCLIDecisionReceiptFormatIDNotSelector(t *testing.T) {
+	// P2 FORMAT_COLLISION_PARSE_ERROR_MODE: on verify decision-receipt,
+	// --format is a receipt id; --json is the only output selector.
+	code, stdout, stderr := runCLI(t, "verify", "decision-receipt", "--json", "--format", "text", "--bogus")
+	if code != 2 {
+		t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, stderr)
+}
+
+func TestCLIPlanCompileFalseAliasKeepsEnvelope(t *testing.T) {
+	// P2 PLAN_COMPILE_FALSE_ALIAS_TEXT_ERRORS: --json=false cannot deselect
+	// the envelope on a JSON-only command.
+	for _, args := range [][]string{
+		{"compile", "--json=false"},
+		{"compile", "--json=false", "--format=text"},
+	} {
+		code, stdout, stderr := runCLI(t, "plan", args...)
+		if code != 2 {
+			t.Fatalf("%v: code=%d want 2 (stderr=%s)", args, code, stderr)
+		}
+		assertCleanStdout(t, stdout)
+		assertSingleJSONDocument(t, stderr)
+	}
+}

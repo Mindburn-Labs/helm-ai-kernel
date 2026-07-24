@@ -5,12 +5,60 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+const (
+	CampaignPublicKeyEnv                 = "HELM_BOUNTY_CAMPAIGN_PUBLIC_KEY_HEX"
+	CampaignIDEnv                        = "HELM_BOUNTY_CAMPAIGN_ID"
+	CampaignRunIDEnv                     = "HELM_BOUNTY_RUN_ID"
+	VerifiedEvidenceIndexHashEnv         = "HELM_BOUNTY_VERIFIED_EVIDENCE_INDEX_HASH"
+	VerifiedEvidenceMerkleRootEnv        = "HELM_BOUNTY_VERIFIED_EVIDENCE_MERKLE_ROOT"
+	VerifiedEvidenceEntryCountEnv        = "HELM_BOUNTY_VERIFIED_EVIDENCE_ENTRY_COUNT"
+	AllowVerifiedConformanceSignatureEnv = "HELM_BOUNTY_ALLOW_VERIFIED_CONFORMANCE_SIGNATURE"
 )
 
 // RunAll executes all 10 mandatory adversarial suites against an EvidencePack.
-// Returns an aggregate result. Any single suite failure means overall failure.
+// It preserves the original single-argument API and reads the campaign trust
+// root only from the operator-controlled environment. Signature-dependent
+// suites fail closed when the variable is absent or invalid; explicit callers
+// should use RunAllWithOptions.
 func RunAll(evidenceDir string) *AggregateResult {
-	suites := AllSuites()
+	verifiedEntryCount, err := strconv.Atoi(strings.TrimSpace(os.Getenv(VerifiedEvidenceEntryCountEnv)))
+	if err != nil {
+		verifiedEntryCount = -1
+	}
+	allowVerifiedConformanceSignature, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(AllowVerifiedConformanceSignatureEnv)))
+	if err != nil {
+		allowVerifiedConformanceSignature = false
+	}
+	return RunAllWithOptions(evidenceDir, VerificationOptions{
+		CampaignPublicKeyHex:              os.Getenv(CampaignPublicKeyEnv),
+		CampaignID:                        os.Getenv(CampaignIDEnv),
+		RunID:                             os.Getenv(CampaignRunIDEnv),
+		VerifiedEvidenceIndexHash:         os.Getenv(VerifiedEvidenceIndexHashEnv),
+		VerifiedEvidenceMerkleRoot:        os.Getenv(VerifiedEvidenceMerkleRootEnv),
+		VerifiedEvidenceEntryCount:        verifiedEntryCount,
+		AllowVerifiedConformanceSignature: allowVerifiedConformanceSignature,
+	})
+}
+
+// RunAllWithOptions executes every suite against an external campaign trust
+// root. Evidence stored inside the candidate pack never establishes trust.
+func RunAllWithOptions(evidenceDir string, opts VerificationOptions) *AggregateResult {
+	suites := AllSuitesWithOptions(opts)
+	workspace, cleanup, workspaceErr := newCoverageMutationWorkspace(evidenceDir, opts)
+	defer cleanup()
+	coverage := unavailableCoverageResult(opts, workspaceErr)
+	baselineResults := make(map[string]*SuiteResult, len(suites))
+	if workspaceErr == nil {
+		coverage, baselineResults = evaluateCoverageInWorkspace(workspace, opts)
+	}
+	coverageBySuite := make(map[string]CoverageCheck, len(coverage.Checks))
+	for _, check := range coverage.Checks {
+		coverageBySuite[check.SuiteID] = check
+	}
 	aggregate := &AggregateResult{
 		EvidenceDir: evidenceDir,
 		Pass:        true,
@@ -18,7 +66,23 @@ func RunAll(evidenceDir string) *AggregateResult {
 	}
 
 	for _, suite := range suites {
-		result := suite.Run(evidenceDir)
+		result := baselineResults[suite.ID]
+		if result == nil {
+			result = &SuiteResult{SuiteID: suite.ID, Name: suite.Name, Pass: true}
+		}
+		check, covered := coverageBySuite[suite.ID]
+		if !covered {
+			check = CoverageCheck{SuiteID: suite.ID, Reason: "missing: mandatory coverage check is not registered"}
+		}
+		if !check.Covered && result.Pass {
+			result.Pass = false
+			result.TestResults = append(result.TestResults, TestResult{
+				TestID: suite.ID + "-COVERAGE",
+				Name:   "Positive-control and mutation coverage",
+				Pass:   false,
+				Reason: check.Reason,
+			})
+		}
 		aggregate.Suites = append(aggregate.Suites, result)
 		if !result.Pass {
 			aggregate.Pass = false

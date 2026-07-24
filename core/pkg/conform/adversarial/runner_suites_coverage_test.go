@@ -1,19 +1,26 @@
 package adversarial
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
 
-func TestRunAllEmptyEvidencePassesAndWritesReport(t *testing.T) {
+var _ func(string) *AggregateResult = RunAll
+
+func TestRunAllEmptyEvidenceFailsClosedAndWritesReport(t *testing.T) {
 	dir := t.TempDir()
 
-	result := RunAll(dir)
-	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
-		t.Fatalf("empty evidence result = %+v, want all suites passing", result)
+	writeCoverageIndex(t, dir)
+	result := RunAllWithOptions(dir, campaignVerificationOptionsForPack(t, dir, ""))
+	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 || len(result.Suites) != 10 {
+		t.Fatalf("empty evidence result = %+v, want all suites rejected for missing positive controls", result)
 	}
 	if result.EvidenceDir != dir {
 		t.Fatalf("evidence dir = %q, want %q", result.EvidenceDir, dir)
@@ -30,8 +37,8 @@ func TestRunAllEmptyEvidencePassesAndWritesReport(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("decode report: %v", err)
 	}
-	if !decoded.Pass || decoded.PassedSuites != 10 {
-		t.Fatalf("decoded report = %+v, want passing aggregate", decoded)
+	if decoded.Pass || decoded.FailedSuites != 10 {
+		t.Fatalf("decoded report = %+v, want fail-closed aggregate", decoded)
 	}
 
 	filePath := filepath.Join(t.TempDir(), "not-a-directory")
@@ -43,11 +50,53 @@ func TestRunAllEmptyEvidencePassesAndWritesReport(t *testing.T) {
 	}
 }
 
+func TestRunAllAcceptsCompletePositiveControls(t *testing.T) {
+	dir := t.TempDir()
+	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	opts := campaignVerificationOptionsForPack(t, dir, publicKeyHex)
+
+	result := RunAllWithOptions(dir, opts)
+	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 || len(result.Suites) != 10 {
+		t.Fatalf("complete evidence result = %+v, want all suites passing", result)
+	}
+	t.Setenv(CampaignPublicKeyEnv, publicKeyHex)
+	t.Setenv(CampaignIDEnv, testCampaignID)
+	t.Setenv(CampaignRunIDEnv, testCampaignRunID)
+	t.Setenv(VerifiedEvidenceIndexHashEnv, opts.VerifiedEvidenceIndexHash)
+	t.Setenv(VerifiedEvidenceMerkleRootEnv, opts.VerifiedEvidenceMerkleRoot)
+	t.Setenv(VerifiedEvidenceEntryCountEnv, strconv.Itoa(opts.VerifiedEvidenceEntryCount))
+	result = RunAll(dir)
+	if !result.Pass || result.PassedSuites != 10 || result.FailedSuites != 0 {
+		t.Fatalf("environment-bound RunAll result = %+v, want all suites passing", result)
+	}
+}
+
+func TestRunAllFailsClosedWithoutExternallyVerifiedEvidenceRoots(t *testing.T) {
+	dir := t.TempDir()
+	publicKeyHex := writePassingCoverageArtifacts(t, dir)
+	t.Setenv(CampaignPublicKeyEnv, publicKeyHex)
+	t.Setenv(CampaignIDEnv, testCampaignID)
+	t.Setenv(CampaignRunIDEnv, testCampaignRunID)
+	t.Setenv(VerifiedEvidenceIndexHashEnv, "")
+	t.Setenv(VerifiedEvidenceMerkleRootEnv, "")
+	t.Setenv(VerifiedEvidenceEntryCountEnv, "")
+
+	result := RunAll(dir)
+	if result.Pass || result.PassedSuites != 0 || result.FailedSuites != 10 {
+		t.Fatalf("unbound environment result=%+v, want all suites to fail closed", result)
+	}
+	for _, suite := range result.Suites {
+		if len(suite.TestResults) != 1 || !strings.Contains(suite.TestResults[0].Reason, "verified EvidencePack index hash") {
+			t.Fatalf("suite=%+v, want explicit missing external root reason", suite)
+		}
+	}
+}
+
 func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	dir := t.TempDir()
 	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
 	tapesDir := filepath.Join(dir, "08_TAPES")
-	toolsDir := filepath.Join(dir, "10_TOOLS")
+	toolsDir := filepath.Join(dir, "99_EXT", "adversarial", "tools")
 	for _, path := range []string{receiptsDir, tapesDir, toolsDir} {
 		if err := os.MkdirAll(path, 0o750); err != nil {
 			t.Fatalf("mkdir %s: %v", path, err)
@@ -55,9 +104,10 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	}
 
 	writeJSON(t, filepath.Join(receiptsDir, "001_budget_exhausted.json"), map[string]any{
-		"seq":         1,
-		"action_type": "budget_exhausted",
-		"tenant_id":   "tenant-a",
+		"seq":                 1,
+		"action_type":         "budget_exhausted",
+		"budget_snapshot_ref": "budget-1",
+		"tenant_id":           "tenant-a",
 	})
 	writeJSON(t, filepath.Join(receiptsDir, "003_effect_without_policy.json"), map[string]any{
 		"seq":                   3,
@@ -70,6 +120,7 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 	writeJSON(t, filepath.Join(receiptsDir, "004_budget_decrement.json"), map[string]any{
 		"seq":                   4,
 		"action_type":           "budget_decrement",
+		"budget_snapshot_ref":   "budget-1",
 		"tenant_id":             "tenant-a",
 		"parent_receipt_hashes": []string{"parent-fork"},
 	})
@@ -89,7 +140,8 @@ func TestRunAllDetectsAdversarialEvidenceFailures(t *testing.T) {
 		"last_good_seq": 4,
 	})
 
-	result := RunAll(dir)
+	writeCoverageIndex(t, dir)
+	result := RunAllWithOptions(dir, campaignVerificationOptionsForPack(t, dir, ""))
 	if result.Pass || result.FailedSuites != 10 || result.PassedSuites != 0 {
 		t.Fatalf("bad evidence result = %+v, want all suites failing", result)
 	}
@@ -149,6 +201,29 @@ func TestAdversarialSuiteHelpers(t *testing.T) {
 	}
 }
 
+func TestAuthorizationOutcomeRequiresExplicitAllow(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		actionType string
+		receipt    map[string]any
+		want       bool
+	}{
+		{name: "policy applied without verdict", actionType: "policy_decision", receipt: map[string]any{"status": "APPLIED"}},
+		{name: "approval applied without verdict", actionType: "approval_action", receipt: map[string]any{"status": "APPLIED"}},
+		{name: "policy applied allow", actionType: "policy_decision", receipt: map[string]any{"status": "APPLIED", "verdict": "ALLOW"}, want: true},
+		{name: "approval applied approved", actionType: "approval_action", receipt: map[string]any{"status": "APPLIED", "verdict": "APPROVED"}, want: true},
+		{name: "policy applied approval verdict", actionType: "policy_decision", receipt: map[string]any{"status": "APPLIED", "verdict": "APPROVED"}},
+		{name: "direct allow contradicted", actionType: "policy_decision", receipt: map[string]any{"status": "ALLOW", "verdict": "DENY"}},
+		{name: "direct approved", actionType: "approval_action", receipt: map[string]any{"status": "APPROVED"}, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := authorizationReceiptAccepted(test.receipt, test.actionType); got != test.want {
+				t.Fatalf("authorizationReceiptAccepted() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestIndividualSuitePassingBranches(t *testing.T) {
 	dir := t.TempDir()
 	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
@@ -171,6 +246,381 @@ func TestIndividualSuitePassingBranches(t *testing.T) {
 	}
 	if result := adv09ReceiptEmissionPanicHijack().Run(dir); result.Pass || result.TestResults[0].Reason != "panic record unreadable" {
 		t.Fatalf("ADV-09 unreadable panic result = %+v, want fail", result)
+	}
+}
+
+func TestPanicEvidenceCannotBeShadowedByCanonicalRecord(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(filepath.Join(dir, "06_LOGS"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(dir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 99})
+	writeJSON(t, filepath.Join(dir, "panic.json"), map[string]any{"last_good_seq": 1})
+	writeJSON(t, filepath.Join(receiptsDir, "002.json"), map[string]any{"seq": 2})
+
+	result := adv09ReceiptEmissionPanicHijack().Run(dir)
+	if result.Pass || !strings.Contains(result.TestResults[0].Reason, "receipts emitted after panic") {
+		t.Fatalf("shadowed panic result = %+v, want restrictive boundary failure", result)
+	}
+}
+
+func TestPanicBoundaryRejectsUnsequencedReceipts(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(filepath.Join(dir, "06_LOGS"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(dir, "06_LOGS", "receipt_emission_panic.json"), map[string]any{"last_good_seq": 1})
+	writeJSON(t, filepath.Join(receiptsDir, "unknown.json"), map[string]any{"action_type": "effect_attempt"})
+	if result := adv09ReceiptEmissionPanicHijack().Run(dir); result.Pass || !strings.Contains(result.TestResults[0].Reason, "invalid sequence") {
+		t.Fatalf("unsequenced receipt passed panic boundary: %+v", result)
+	}
+}
+
+func TestReceiptSequenceRejectsDuplicateAndMissingValues(t *testing.T) {
+	for name, seqs := range map[string][]any{
+		"duplicate":       {1, 1},
+		"missing":         {1, nil},
+		"missing genesis": {2, 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+			if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			for index, seq := range seqs {
+				receipt := map[string]any{"action_type": "noop"}
+				if seq != nil {
+					receipt["seq"] = seq
+				}
+				writeJSON(t, filepath.Join(receiptsDir, fmt.Sprintf("%03d.json", index)), receipt)
+			}
+			if result := adv01ReceiptGapInjection().Run(dir); result.Pass || result.TestResults[0].Reason != "RECEIPT_GAP_DETECTED" {
+				t.Fatalf("ADV-01 accepted %s sequence: %+v", name, result)
+			}
+		})
+	}
+}
+
+func TestCryptographicSuitesRejectForgeryAndPostHocAuthorization(t *testing.T) {
+	t.Run("tool manifest tamper", func(t *testing.T) {
+		dir := t.TempDir()
+		publicKeyHex := writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "99_EXT", "adversarial", "tools", "tool.json")
+		var manifest map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &manifest) != nil {
+			t.Fatalf("read tool manifest: %v", err)
+		}
+		manifest["name"] = "forged-tool"
+		writeJSON(t, path, manifest)
+		if result := adv08ToolManifestForge(campaignVerificationOptions(publicKeyHex)).Run(dir); result.Pass {
+			t.Fatalf("tampered tool manifest passed: %+v", result)
+		}
+	})
+
+	t.Run("post-hoc policy", func(t *testing.T) {
+		dir := t.TempDir()
+		privateKey, publicKeyHex := campaignTestKey()
+		receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+		if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		effect := map[string]any{"receipt_id": "effect", "receipt_hash": "effect", "seq": 1, "campaign_id": testCampaignID, "run_id": testCampaignRunID, "action_type": "effect_attempt", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
+		policy := map[string]any{"receipt_id": "policy", "receipt_hash": "policy", "seq": 2, "campaign_id": testCampaignID, "run_id": testCampaignRunID, "action_type": "policy_decision", "status": "ALLOW", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"effect"}}
+		writeJSON(t, filepath.Join(receiptsDir, "001.json"), effect)
+		writeJSON(t, filepath.Join(receiptsDir, "002.json"), signCampaignDocument(t, policy, "campaign_signatures", campaignReceiptSignatureDomain, privateKey))
+		if result := adv02PolicyBypass(campaignVerificationOptions(publicKeyHex)).Run(dir); result.Pass {
+			t.Fatalf("post-hoc policy passed: %+v", result)
+		}
+	})
+
+	t.Run("cross-campaign replay", func(t *testing.T) {
+		dir := t.TempDir()
+		privateKey, publicKeyHex := campaignTestKey()
+		receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+		if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		policy := map[string]any{"receipt_id": "policy-id", "receipt_hash": "policy-hash", "seq": 1, "campaign_id": "campaign:old", "run_id": "run:old", "action_type": "policy_decision", "status": "ALLOW", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
+		effect := map[string]any{"receipt_id": "effect-id", "receipt_hash": "effect-hash", "seq": 2, "campaign_id": testCampaignID, "run_id": testCampaignRunID, "action_type": "effect_attempt", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"policy-id"}}
+		writeJSON(t, filepath.Join(receiptsDir, "001.json"), signCampaignDocument(t, policy, "campaign_signatures", campaignReceiptSignatureDomain, privateKey))
+		writeJSON(t, filepath.Join(receiptsDir, "002.json"), effect)
+		if result := adv02PolicyBypass(campaignVerificationOptions(publicKeyHex)).Run(dir); result.Pass {
+			t.Fatalf("authorization replayed across campaign/run boundary: %+v", result)
+		}
+	})
+
+	t.Run("receipt id ancestry alias", func(t *testing.T) {
+		dir := t.TempDir()
+		privateKey, publicKeyHex := campaignTestKey()
+		receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+		if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		policy := map[string]any{"receipt_id": "policy-id", "receipt_hash": "policy-hash", "seq": 1, "campaign_id": testCampaignID, "run_id": testCampaignRunID, "action_type": "policy_decision", "status": "ALLOW", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"genesis"}}
+		effect := map[string]any{"receipt_id": "effect-id", "receipt_hash": "effect-hash", "seq": 2, "campaign_id": testCampaignID, "run_id": testCampaignRunID, "action_type": "effect_attempt", "decision_id": "decision-1", "tenant_id": "tenant-1", "envelope_id": "envelope-1", "envelope_hash": "sha256:envelope", "parent_receipt_hashes": []string{"policy-id"}}
+		writeJSON(t, filepath.Join(receiptsDir, "001.json"), signCampaignDocument(t, policy, "campaign_signatures", campaignReceiptSignatureDomain, privateKey))
+		writeJSON(t, filepath.Join(receiptsDir, "002.json"), effect)
+		if result := adv02PolicyBypass(campaignVerificationOptions(publicKeyHex)).Run(dir); !result.Pass {
+			t.Fatalf("valid receipt_id ancestry alias was rejected: %+v", result)
+		}
+	})
+
+	t.Run("cross-tenant authorization", func(t *testing.T) {
+		dir := t.TempDir()
+		privateKey, publicKeyHex := campaignTestKey()
+		_ = writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "02_PROOFGRAPH", "receipts", "001.json")
+		var policy map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &policy) != nil {
+			t.Fatalf("read policy receipt: %v", err)
+		}
+		policy["tenant_id"] = "tenant-b"
+		policy = signCampaignDocument(t, policy, "campaign_signatures", campaignReceiptSignatureDomain, privateKey)
+		writeJSON(t, path, policy)
+		if result := adv02PolicyBypass(campaignVerificationOptions(publicKeyHex)).Run(dir); result.Pass {
+			t.Fatalf("cross-tenant policy passed: %+v", result)
+		}
+	})
+
+	t.Run("tape value tamper", func(t *testing.T) {
+		dir := t.TempDir()
+		_ = writePassingCoverageArtifacts(t, dir)
+		path := filepath.Join(dir, "08_TAPES", "entry_001.json")
+		var entry map[string]any
+		data, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(data, &entry) != nil {
+			t.Fatalf("read tape entry: %v", err)
+		}
+		entry["value"] = "Zm9yZ2Vk"
+		writeJSON(t, path, entry)
+		if result := adv06TapeReplayTamper().Run(dir); result.Pass {
+			t.Fatalf("tampered tape passed: %+v", result)
+		}
+	})
+}
+
+func TestMalformedTapeAndMissingTenantFailClosed(t *testing.T) {
+	t.Run("malformed tape beside valid tape", func(t *testing.T) {
+		dir := t.TempDir()
+		tapesDir := filepath.Join(dir, "08_TAPES")
+		if err := os.MkdirAll(tapesDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		value := []byte("valid")
+		digest := sha256.Sum256(value)
+		writeJSON(t, filepath.Join(tapesDir, "entry_001.json"), map[string]any{"value": value, "value_hash": hex.EncodeToString(digest[:]), "data_class": "internal"})
+		if err := os.WriteFile(filepath.Join(tapesDir, "entry_002.json"), []byte("{"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if result := adv06TapeReplayTamper().Run(dir); result.Pass {
+			t.Fatalf("malformed tape passed beside valid tape: %+v", result)
+		}
+	})
+
+	t.Run("unknown tape data class", func(t *testing.T) {
+		dir := t.TempDir()
+		tapesDir := filepath.Join(dir, "08_TAPES")
+		if err := os.MkdirAll(tapesDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		value := []byte("classified")
+		digest := sha256.Sum256(value)
+		writeJSON(t, filepath.Join(tapesDir, "entry_001.json"), map[string]any{"value": value, "value_hash": hex.EncodeToString(digest[:]), "data_class": "invented-class"})
+		if result := adv06TapeReplayTamper().Run(dir); result.Pass {
+			t.Fatalf("unknown tape data class passed: %+v", result)
+		}
+		if coverage := tapeCoverage(dir); coverage.Covered {
+			t.Fatalf("unknown tape data class satisfied ADV-06 coverage: %+v", coverage)
+		}
+	})
+
+	t.Run("missing tenant", func(t *testing.T) {
+		dir := t.TempDir()
+		receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+		if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{"seq": 1, "action_type": "noop"})
+		if result := adv07TenantCrossleak().Run(dir); result.Pass {
+			t.Fatalf("receipt without tenant passed: %+v", result)
+		}
+	})
+}
+
+func TestBudgetBoundaryUsesExplicitScope(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	exhaustedPath := filepath.Join(receiptsDir, "999.json")
+	decrementPath := filepath.Join(receiptsDir, "001.json")
+	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_snapshot_ref": "budget-a"})
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_snapshot_ref": "budget-b"})
+
+	if result := adv04BudgetOverdraft().Run(dir); !result.Pass {
+		t.Fatalf("unrelated budget decrement was treated as overdraft: %+v", result)
+	}
+	coverage := budgetBoundaryCoverage([]map[string]interface{}{loadReceipt(exhaustedPath), loadReceipt(decrementPath)})
+	if coverage.Covered {
+		t.Fatalf("unrelated budgets satisfied ADV-04 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "budget_snapshot_ref": "budget-a"})
+	if result := adv04BudgetOverdraft().Run(dir); result.Pass || result.TestResults[0].Reason != "BUDGET_OVERDRAFT" {
+		t.Fatalf("same-budget overdraft was accepted: %+v", result)
+	}
+	writeJSON(t, decrementPath, map[string]any{"seq": 1, "action_type": "budget_decrement", "budget_snapshot_ref": "budget-a"})
+	if result := adv04BudgetOverdraft().Run(dir); result.Pass || result.TestResults[0].Reason != "BUDGET_OVERDRAFT" {
+		t.Fatalf("same-sequence budget boundary was accepted: %+v", result)
+	}
+
+	writeJSON(t, exhaustedPath, map[string]any{"seq": 1, "action_type": "budget_exhausted", "budget_id": "budget-a"})
+	writeJSON(t, decrementPath, map[string]any{"seq": 2, "action_type": "budget_decrement", "decision_id": "budget-a"})
+	if result := adv04BudgetOverdraft().Run(dir); result.Pass || result.TestResults[0].Reason != "budget boundary contains an unscoped or unsequenced receipt" {
+		t.Fatalf("mixed fallback scope keys bypassed budget boundary: %+v", result)
+	}
+	coverage = budgetBoundaryCoverage([]map[string]interface{}{loadReceipt(exhaustedPath), loadReceipt(decrementPath)})
+	if coverage.Covered {
+		t.Fatalf("mixed fallback scope keys satisfied ADV-04 coverage: %+v", coverage)
+	}
+}
+
+func TestReceiptSequenceIgnoresFilenameOrder(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(receiptsDir, "999.json"), map[string]any{"seq": 1})
+	writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{"seq": 2})
+	if result := adv01ReceiptGapInjection().Run(dir); !result.Pass {
+		t.Fatalf("contiguous receipts were rejected because filenames were reordered: %+v", result)
+	}
+}
+
+func TestDAGRejectsDanglingAndSelfParents(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	parentPath := filepath.Join(receiptsDir, "001.json")
+	childPath := filepath.Join(receiptsDir, "002.json")
+	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 1, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"missing"}})
+	receipts := []map[string]interface{}{loadReceipt(parentPath), loadReceipt(childPath)}
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("dangling parent passed ADV-03: %+v", result)
+	}
+	if coverage := proofGraphParentCoverage(receipts); coverage.Covered {
+		t.Fatalf("dangling parent satisfied ADV-03 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"child"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("self parent passed ADV-03: %+v", result)
+	}
+
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"parent-id"}})
+	receipts[1] = loadReceipt(childPath)
+	if result := adv03DAGFork().Run(dir); !result.Pass {
+		t.Fatalf("resolved parent edge failed ADV-03: %+v", result)
+	}
+	if coverage := proofGraphParentCoverage(receipts); !coverage.Covered {
+		t.Fatalf("resolved parent edge did not satisfy ADV-03 coverage: %+v", coverage)
+	}
+	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 2, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 1, "parent_receipt_hashes": []string{"parent-id"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("future parent edge passed ADV-03: %+v", result)
+	}
+	receipts[0], receipts[1] = loadReceipt(parentPath), loadReceipt(childPath)
+	if coverage := proofGraphParentCoverage(receipts); coverage.Covered {
+		t.Fatalf("future parent edge satisfied ADV-03 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 1, "parent_receipt_hashes": []string{"child"}})
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"parent-id"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("cyclic parent graph passed ADV-03: %+v", result)
+	}
+	writeJSON(t, parentPath, map[string]any{"receipt_id": "parent-id", "receipt_hash": "parent-hash", "seq": 1, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, filepath.Join(receiptsDir, "003.json"), map[string]any{"receipt_id": "sibling", "receipt_hash": "sibling", "seq": 3, "parent_receipt_hashes": []string{"parent-hash"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("same parent referenced through id and hash aliases passed ADV-03: %+v", result)
+	}
+}
+
+func TestDAGRejectsReceiptIdentityCollisions(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{"receipt_id": "receipt-a", "receipt_hash": "shared-hash", "seq": 1, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, filepath.Join(receiptsDir, "002.json"), map[string]any{"receipt_id": "receipt-b", "receipt_hash": "shared-hash", "seq": 2, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, filepath.Join(receiptsDir, "003.json"), map[string]any{"receipt_id": "receipt-c", "receipt_hash": "receipt-c", "seq": 3, "parent_receipt_hashes": []string{"receipt-a"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("colliding receipt identities passed ADV-03: %+v", result)
+	}
+}
+
+func TestDAGRejectsDisconnectedAndMultipleRootProofGraphs(t *testing.T) {
+	dir := t.TempDir()
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	rootPath := filepath.Join(receiptsDir, "001.json")
+	childPath := filepath.Join(receiptsDir, "002.json")
+	strayPath := filepath.Join(receiptsDir, "003.json")
+	writeJSON(t, rootPath, map[string]any{"receipt_id": "root", "receipt_hash": "root", "seq": 1, "parent_receipt_hashes": []string{"genesis"}})
+	writeJSON(t, childPath, map[string]any{"receipt_id": "child", "receipt_hash": "child", "seq": 2, "parent_receipt_hashes": []string{"root"}})
+	writeJSON(t, strayPath, map[string]any{"receipt_id": "stray", "receipt_hash": "stray", "seq": 3})
+
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("disconnected receipt without parents passed ADV-03: %+v", result)
+	}
+	receipts := []map[string]interface{}{loadReceipt(rootPath), loadReceipt(childPath), loadReceipt(strayPath)}
+	if coverage := proofGraphParentCoverage(receipts); coverage.Covered {
+		t.Fatalf("disconnected receipt satisfied ADV-03 coverage: %+v", coverage)
+	}
+
+	writeJSON(t, strayPath, map[string]any{"receipt_id": "stray", "receipt_hash": "stray", "seq": 3, "parent_receipt_hashes": []string{"genesis"}})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("multiple-root proof graph passed ADV-03: %+v", result)
+	}
+	receipts[2] = loadReceipt(strayPath)
+	if coverage := proofGraphParentCoverage(receipts); coverage.Covered {
+		t.Fatalf("multiple-root proof graph satisfied ADV-03 coverage: %+v", coverage)
+	}
+}
+
+func TestDAGRejectsEmptyAndMalformedParentSets(t *testing.T) {
+	dir := t.TempDir()
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("empty proof graph passed ADV-03: %+v", result)
+	}
+
+	receiptsDir := filepath.Join(dir, "02_PROOFGRAPH", "receipts")
+	if err := os.MkdirAll(receiptsDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(receiptsDir, "001.json"), map[string]any{"receipt_id": "root", "receipt_hash": "root", "seq": 1, "parent_receipt_hashes": "genesis"})
+	if result := adv03DAGFork().Run(dir); result.Pass {
+		t.Fatalf("malformed parent set passed ADV-03: %+v", result)
 	}
 }
 

@@ -2,10 +2,12 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	githubconnector "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/github"
+	linearconnector "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/linear"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcpcore "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
@@ -460,6 +463,70 @@ func TestGovernedBridgeDispatchesThroughConnector(t *testing.T) {
 	}
 	if resp.Result == nil {
 		t.Error("expected dispatched output in Result")
+	}
+}
+
+func TestGovernedBridgeMintsLinearScopedPermits(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		switch {
+		case strings.Contains(payload.Query, "query Issue("):
+			_, _ = w.Write([]byte(`{"data":{"issue":{"id":"issue-1","title":"Bug","description":"Fix it","priorityLabel":"High","state":{"name":"Todo"},"assignee":null,"createdAt":"2026-07-08T12:00:00Z","updatedAt":"2026-07-08T12:00:00Z"}}}`))
+		case strings.Contains(payload.Query, "mutation IssueCreate"):
+			_, _ = w.Write([]byte(`{"data":{"issueCreate":{"success":true,"issue":{"id":"issue-2","identifier":"ENG-2"}}}}`))
+		default:
+			http.Error(w, "unexpected operation", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	connector := linearconnector.NewConnector(linearconnector.Config{BaseURL: server.URL, Token: "lin_api_test"})
+	approvals := NewMemoryApprovalStore()
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{
+		Profile:   operateProfile(),
+		Connector: connector,
+		Approvals: approvals,
+	}))
+	graph := proofgraph.NewGraph()
+	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: bridge})
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+
+	read := &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "linear.get_issue",
+		Arguments: map[string]any{"issue_id": "issue-1"}, PrincipalID: "ve-assistant",
+	}
+	for i := 0; i < 2; i++ {
+		resp, err := adapter.Intercept(context.Background(), read)
+		if err != nil || !resp.Allowed || resp.Result == nil {
+			t.Fatalf("linear read %d did not dispatch: %v %+v", i+1, err, resp.DenyReason)
+		}
+	}
+
+	write := &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "linear.create_issue",
+		Arguments: map[string]any{"team_id": "team-1", "title": "Ship it"}, PrincipalID: "ve-assistant",
+	}
+	inputHash, err := canonicalize.CanonicalHash(write)
+	if err != nil {
+		t.Fatalf("hash write: %v", err)
+	}
+	approvals.Grant(inputHash, ApprovalEvidence{ApproverID: "ivan", ApprovalHash: "approval-1", GrantedScope: write.ToolName})
+	resp, err := adapter.Intercept(context.Background(), write)
+	if err != nil || !resp.Allowed || resp.Result == nil {
+		t.Fatalf("linear write did not dispatch: %v %+v", err, resp.DenyReason)
+	}
+	if requests != 3 {
+		t.Fatalf("Linear server received %d requests, want 3", requests)
 	}
 }
 

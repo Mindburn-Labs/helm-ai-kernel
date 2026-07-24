@@ -391,16 +391,18 @@ func TestConnectorExecuteSuccessWithLocalGraphQL(t *testing.T) {
 	conn := NewConnector(Config{BaseURL: server.URL, Token: "lin_api_test"})
 	conn.client.httpClient = server.Client()
 	ctx := context.Background()
-	permit := validPermit()
 
-	created, err := conn.Execute(ctx, permit, "linear.create_issue", map[string]any{
+	createParams := map[string]any{
 		"team_id":     "team-1",
 		"title":       "Bug",
 		"description": "Fix it",
 		"priority":    "High",
 		"assignee_id": "user-1",
 		"label_ids":   []string{"label-1"},
-	})
+	}
+	createPermit := permitFor("linear.create_issue", "nonce-core-create", allowedParamsForTool("linear.create_issue")...)
+	bindPermitResource(createPermit, createParams)
+	created, err := conn.Execute(ctx, createPermit, "linear.create_issue", createParams)
 	if err != nil {
 		t.Fatalf("create execute: %v", err)
 	}
@@ -408,14 +410,17 @@ func TestConnectorExecuteSuccessWithLocalGraphQL(t *testing.T) {
 		t.Fatalf("unexpected create result: %+v", created)
 	}
 
-	updated, err := conn.Execute(ctx, permit, "linear.update_issue", map[string]any{
+	updateParams := map[string]any{
 		"issue_id":    "issue-1",
 		"title":       "New",
 		"description": "New description",
 		"state":       "state-1",
 		"priority":    "Low",
 		"assignee_id": "user-2",
-	})
+	}
+	updatePermit := permitFor("linear.update_issue", "nonce-core-update", allowedParamsForTool("linear.update_issue")...)
+	bindPermitResource(updatePermit, updateParams)
+	updated, err := conn.Execute(ctx, updatePermit, "linear.update_issue", updateParams)
 	if err != nil {
 		t.Fatalf("update execute: %v", err)
 	}
@@ -423,7 +428,10 @@ func TestConnectorExecuteSuccessWithLocalGraphQL(t *testing.T) {
 		t.Fatalf("unexpected update result: %+v", updated)
 	}
 
-	got, err := conn.Execute(ctx, permit, "linear.get_issue", map[string]any{"issue_id": "issue-1"})
+	getParams := map[string]any{"issue_id": "issue-1"}
+	getPermit := permitFor("linear.get_issue", "nonce-core-get", allowedParamsForTool("linear.get_issue")...)
+	bindPermitResource(getPermit, getParams)
+	got, err := conn.Execute(ctx, getPermit, "linear.get_issue", getParams)
 	if err != nil {
 		t.Fatalf("get execute: %v", err)
 	}
@@ -431,7 +439,10 @@ func TestConnectorExecuteSuccessWithLocalGraphQL(t *testing.T) {
 		t.Fatalf("unexpected get result: %+v", got)
 	}
 
-	listed, err := conn.Execute(ctx, permit, "linear.list_issues", map[string]any{"team_id": "team-1", "state": "Todo"})
+	listParams := map[string]any{"team_id": "team-1", "state": "Todo"}
+	listPermit := permitFor("linear.list_issues", "nonce-core-list", allowedParamsForTool("linear.list_issues")...)
+	bindPermitResource(listPermit, listParams)
+	listed, err := conn.Execute(ctx, listPermit, "linear.list_issues", listParams)
 	if err != nil {
 		t.Fatalf("list execute: %v", err)
 	}
@@ -439,7 +450,10 @@ func TestConnectorExecuteSuccessWithLocalGraphQL(t *testing.T) {
 		t.Fatalf("unexpected list result: %+v", listed)
 	}
 
-	comment, err := conn.Execute(ctx, permit, "linear.add_comment", map[string]any{"issue_id": "issue-1", "body": "Working"})
+	commentParams := map[string]any{"issue_id": "issue-1", "body": "Working"}
+	commentPermit := permitFor("linear.add_comment", "nonce-core-comment", allowedParamsForTool("linear.add_comment")...)
+	bindPermitResource(commentPermit, commentParams)
+	comment, err := conn.Execute(ctx, commentPermit, "linear.add_comment", commentParams)
 	if err != nil {
 		t.Fatalf("comment execute: %v", err)
 	}
@@ -454,10 +468,31 @@ func TestConnectorExecuteSuccessWithLocalGraphQL(t *testing.T) {
 
 func TestExecuteCanonicalHashError(t *testing.T) {
 	conn := NewConnector(Config{Token: "lin_api_test"})
-	permit := validPermit()
-	_, err := conn.Execute(context.Background(), permit, "linear.list_issues", map[string]any{"bad": func() {}})
+	permit := permitFor("linear.list_issues", "nonce-hash-error", "team_id", "bad")
+	params := map[string]any{"team_id": "team-1", "bad": func() {}}
+	bindPermitResource(permit, params)
+	_, err := conn.Execute(context.Background(), permit, "linear.list_issues", params)
 	if err == nil || !strings.Contains(err.Error(), "canonical hash of params") {
 		t.Fatalf("expected canonical hash error, got %v", err)
+	}
+}
+
+func TestClientDoesNotRetryMutations(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		http.Error(w, "ambiguous failure", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	client := NewClientWithToken(server.URL, "lin_api_test")
+	client.httpClient = server.Client()
+	err := client.doGraphQL(context.Background(), "mutation CommentCreate { commentCreate { success } }", nil, nil)
+	if err == nil {
+		t.Fatal("expected mutation failure")
+	}
+	if requests != 1 {
+		t.Fatalf("mutation was retried %d times; ambiguous writes must be attempted once", requests)
 	}
 }
 

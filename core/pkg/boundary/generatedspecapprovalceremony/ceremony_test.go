@@ -193,6 +193,60 @@ func TestConsumeRejectsWrongConsumerAndReplay(t *testing.T) {
 	}
 }
 
+func TestConsumeGrantSealerPinsCallerScope(t *testing.T) {
+	newTamperedService := func(t *testing.T, fixture *ceremonyFixture, tamper func(*generatedspecapproval.SignedGrant, *string, *time.Time)) *Service {
+		t.Helper()
+		svc, err := newService(
+			tamperedSealerStore{Store: fixture.store, tamper: tamper},
+			bindingStub{binding: fixture.binding}, fixture.authority, fixture.control, fixture.consumer,
+			fixture.signer, fixture.verifier, func() time.Time { return fixture.now },
+			bytes.NewReader(bytes.Repeat([]byte{0x42}, 256)), fixture.config)
+		if err != nil {
+			t.Fatalf("newService() error = %v", err)
+		}
+		return svc
+	}
+
+	t.Run("substituted consumer", func(t *testing.T) {
+		fixture := newCeremonyFixture(t)
+		ctx := context.Background()
+		granted := fixture.toGrant(t, ctx)
+		grant := granted.SignedGrant.Grant
+		svc := newTamperedService(t, fixture, func(_ *generatedspecapproval.SignedGrant, consumedBy *string, _ *time.Time) {
+			*consumedBy = "spiffe://helm/control-plane-mallory"
+		})
+		if _, err := svc.ConsumeGrant(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrConsumerUnavailable) {
+			t.Fatalf("ConsumeGrant(substituted consumer) error = %v, want consumer rejection", err)
+		}
+	})
+
+	t.Run("substituted timestamp", func(t *testing.T) {
+		fixture := newCeremonyFixture(t)
+		ctx := context.Background()
+		granted := fixture.toGrant(t, ctx)
+		grant := granted.SignedGrant.Grant
+		svc := newTamperedService(t, fixture, func(_ *generatedspecapproval.SignedGrant, _ *string, consumedAt *time.Time) {
+			*consumedAt = consumedAt.Add(-time.Minute)
+		})
+		if _, err := svc.ConsumeGrant(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrConsumerUnavailable) {
+			t.Fatalf("ConsumeGrant(substituted timestamp) error = %v, want consumer rejection", err)
+		}
+	})
+
+	t.Run("substituted grant", func(t *testing.T) {
+		fixture := newCeremonyFixture(t)
+		ctx := context.Background()
+		granted := fixture.toGrant(t, ctx)
+		grant := granted.SignedGrant.Grant
+		svc := newTamperedService(t, fixture, func(signed *generatedspecapproval.SignedGrant, _ *string, _ *time.Time) {
+			signed.Grant.Nonce = strings.Repeat("f", 64)
+		})
+		if _, err := svc.ConsumeGrant(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrConsumerUnavailable) {
+			t.Fatalf("ConsumeGrant(substituted grant) error = %v, want consumer rejection", err)
+		}
+	})
+}
+
 func TestDenyFencesAnIssuedGrant(t *testing.T) {
 	fixture := newCeremonyFixture(t)
 	ctx := context.Background()
@@ -319,6 +373,7 @@ type ceremonyFixture struct {
 	consumer   *consumerStub
 	service    *Service
 	verifier   *generatedspecapproval.Ed25519Verifier
+	signer     crypto.Signer
 	privateKey ed25519.PrivateKey
 	keyID      string
 }
@@ -365,6 +420,7 @@ func newCeremonyFixture(t *testing.T) *ceremonyFixture {
 	if err != nil {
 		t.Fatalf("NewEd25519Signer() error = %v", err)
 	}
+	fixture.signer = signer
 	fixture.verifier, err = generatedspecapproval.NewEd25519Verifier(signer.PublicKeyBytes(), fixture.config.SigningKeyRef, fixture.config.KernelTrustRootID)
 	if err != nil {
 		t.Fatalf("NewEd25519Verifier() error = %v", err)
@@ -466,6 +522,22 @@ type consumerStub struct{ identity ConsumerIdentity }
 
 func (s *consumerStub) LoadConsumerIdentity(context.Context) (ConsumerIdentity, error) {
 	return s.identity, nil
+}
+
+// tamperedSealerStore wraps a Store and rewrites the arguments handed to the
+// consumption sealer, simulating a store that tries to use the sealer as a
+// signing oracle for a substituted grant, consumer, or timestamp.
+type tamperedSealerStore struct {
+	Store
+	tamper func(*generatedspecapproval.SignedGrant, *string, *time.Time)
+}
+
+func (s tamperedSealerStore) ConsumeGrant(ctx context.Context, tenantID, workspaceID, approvalID, grantID, grantHash, nonce, consumedBy, audience string, verifier GrantSignatureVerifier, consumedAt time.Time, seal ConsumptionSealer) (Record, error) {
+	return s.Store.ConsumeGrant(ctx, tenantID, workspaceID, approvalID, grantID, grantHash, nonce, consumedBy, audience, verifier, consumedAt,
+		func(signed generatedspecapproval.SignedGrant, by string, at time.Time) (generatedspecapproval.SignedConsumption, error) {
+			s.tamper(&signed, &by, &at)
+			return seal(signed, by, at)
+		})
 }
 
 func assertChallengeBinding(t *testing.T, binding Binding, challenge contracts.GeneratedSpecApprovalChallenge) {

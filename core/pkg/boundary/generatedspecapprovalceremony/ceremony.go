@@ -392,8 +392,18 @@ func (s *Service) ConsumeGrant(ctx context.Context, approvalID, grantID, grantHa
 	now := s.now()
 	return s.store.ConsumeGrant(ctx, identity.TenantID, identity.WorkspaceID, approvalID, grantID, grantHash, nonce, identity.Subject, identity.Audience, s.verifier, now,
 		func(signed generatedspecapproval.SignedGrant, consumedBy string, consumedAt time.Time) (generatedspecapproval.SignedConsumption, error) {
-			if signed.Grant.Audience != identity.Audience {
-				return generatedspecapproval.SignedConsumption{}, fmt.Errorf("%w: signed grant workload scope mismatch", ErrConsumerUnavailable)
+			// The store controls the sealer arguments, so pin every one of them:
+			// the grant must be the caller-named grant in the verified tenant,
+			// workspace, and audience scope, and the consumer and timestamp must
+			// be the service-verified identity and service time. Anything less
+			// would let a store substitute arguments and use this closure as a
+			// signing oracle for an authentic consumption receipt.
+			if signed.Grant.GrantID != grantID || signed.Grant.GrantHash != grantHash || signed.Grant.Nonce != nonce ||
+				signed.Grant.TenantID != identity.TenantID || signed.Grant.WorkspaceID != identity.WorkspaceID || signed.Grant.Audience != identity.Audience {
+				return generatedspecapproval.SignedConsumption{}, fmt.Errorf("%w: signed grant does not match the requested consumption scope", ErrConsumerUnavailable)
+			}
+			if consumedBy != identity.Subject || !consumedAt.Equal(now) {
+				return generatedspecapproval.SignedConsumption{}, fmt.Errorf("%w: consumption identity or timestamp mismatch", ErrConsumerUnavailable)
 			}
 			consumption, err := generatedspecapproval.NewConsumption(signed.Grant, consumedBy, consumedAt)
 			if err != nil {
@@ -707,7 +717,7 @@ func validateGrantRecord(record Record) error {
 		return invalidRecord("grant: " + err.Error())
 	}
 	sealed, err := grant.Seal()
-	if err != nil || sealed.GrantHash != grant.GrantHash || !validSignature(record.SignedGrant.Signature) || record.SignedGrant.Algorithm != generatedspecapproval.SignatureAlgorithmEd25519 || !record.UpdatedAt.Equal(grant.IssuedAt) && record.State == StateGrantIssued {
+	if err != nil || sealed.GrantHash != grant.GrantHash || !validSignature(record.SignedGrant.Signature) || record.SignedGrant.Algorithm != generatedspecapproval.SignatureAlgorithmEd25519 || (!record.UpdatedAt.Equal(grant.IssuedAt) && record.State == StateGrantIssued) {
 		return invalidRecord("signed grant integrity is invalid")
 	}
 	challenge := *record.Challenge

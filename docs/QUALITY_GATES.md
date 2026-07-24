@@ -37,7 +37,7 @@ make quality-impact
 
 | Profile | Command | Purpose |
 | --- | --- | --- |
-| PR | `make quality-pr` | Fast documentation, hygiene, Go, TCB, boundary, fixture, and impacted SDK/UI checks. |
+| PR | `make quality-pr` | Fast documentation, hygiene, Go, TCB, boundary, fixture, contract-breaking, and impacted SDK/UI checks. |
 | Merge | `make quality-merge` | Full retained-surface gate with race tests, SDKs, contracts, deployment smoke, and release smoke. |
 | Release | `make quality-release` | Release-readiness gate plus reproducible binaries, SBOM, VEX, Cosign bundle verification when available, and release smoke. |
 | Nightly | `make quality-nightly` | Advisory mutation, flake, vulnerability, runbook, migration, dependency hygiene, schema, and benchmark checks. |
@@ -88,3 +88,9 @@ If a generated contract gate fails, regenerate the relevant output and commit
 the drift only when the source contract changed intentionally. If a runbook or
 migration coverage gate fails, either add the missing operational coverage or
 document why the surface is not part of the retained OSS lifecycle.
+
+Contract-breaking checks resolve the remote base explicitly and fail closed if
+that base, `oasdiff`, or `buf` is unavailable. A detected incompatibility is
+blocking; mutable pull-request metadata and label-style environment input do
+not override it. The retained major-version policy is source-controlled and is
+not evidence that a release is otherwise approved.

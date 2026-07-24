@@ -20,6 +20,7 @@
         "ts-sdk",
         "rust-sdk",
         "java-sdk",
+        "contract-breaking-self-test",
         "proto-breaking",
         "openapi-breaking"
       ]
@@ -50,6 +51,7 @@
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
+        "contract-breaking-self-test",
         "proto-breaking",
         "deployment-smoke",
         "release-smoke"
@@ -81,6 +83,7 @@
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
+        "contract-breaking-self-test",
         "proto-breaking",
         "benchmark-report",
         "release-readiness",
@@ -121,6 +124,7 @@
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
+        "contract-breaking-self-test",
         "proto-breaking"
       ]
     },
@@ -463,6 +467,21 @@
       "paths": [
         "protocols/policy-schema/**",
         "buf.yaml",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "contract-breaking-self-test",
+      "title": "Contract breaking gate regression test",
+      "description": "Proves unavailable bases and differ execution failures fail closed, while mutable label-style input cannot override a break.",
+      "command": "make test-contract-breaking",
+      "timeout_seconds": 120,
+      "paths": [
+        ".github/workflows/ci.yml",
+        "scripts/ci/contract_breaking.sh",
+        "scripts/ci/test_contract_breaking.sh",
+        "scripts/ci/quality-gates.json",
+        "scripts/ci/quality.py",
         "Makefile"
       ]
     },

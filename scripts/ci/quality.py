@@ -26,6 +26,7 @@ EXPECTED_GATE_IDS = {
     "boundary-manifest",
     "quantum-crypto-inventory",
     "codegen-drift",
+    "contract-breaking-self-test",
     "proto-breaking",
     "json-schemas",
     "sdk-openapi-check",

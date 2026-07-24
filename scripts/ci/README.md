@@ -19,6 +19,12 @@ Active tooling surface for the `helm-ai-kernel` project.
   `scripts/ci/quality-gates.json`.
 - `make quality-list` lists registered quality profiles and gates.
 - `make quality-explain CHECK=<gate-id>` explains one registered check.
+- `make test-contract-breaking` runs hermetic regression coverage for the
+  contract gate: unavailable base refs and differ failures must fail closed,
+  and label-style environment input cannot bypass a detected incompatibility.
+- `make openapi-breaking` and `make proto-breaking` resolve and verify the
+  remote base before comparison; neither command treats an unavailable base or
+  differ execution failure as a passing new-contract case.
 - `make docker-smoke` builds the headless image and verifies the Docker runtime
   can evaluate, persist receipts, export/verify evidence, replay-verify, and
   survive restart with a stable root key.

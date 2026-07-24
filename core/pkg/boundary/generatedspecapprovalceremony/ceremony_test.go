@@ -1,3 +1,6 @@
+// quantum_posture: GeneratedSpec approval ceremony tests exercise classical
+// Ed25519 ceremony and grant signatures only; they do not establish hybrid or
+// post-quantum ceremony support.
 package generatedspecapprovalceremony
 
 import (

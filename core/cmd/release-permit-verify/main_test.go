@@ -72,11 +72,15 @@ func TestVerifyPermitFileRejectsTamperedPermit(t *testing.T) {
 	}
 }
 
-func TestVerifyPermitFileAcceptsReducerPermitAgainstTrustedContext(t *testing.T) {
-	contextContent := []byte(validContextJSON())
+func TestVerifyPermitFileAcceptsSHAWorkflowRefAgainstTrustedContext(t *testing.T) {
 	var context releasepermit.Context
-	if err := json.Unmarshal(contextContent, &context); err != nil {
+	if err := json.Unmarshal([]byte(validContextJSON()), &context); err != nil {
 		t.Fatalf("decode context fixture: %v", err)
+	}
+	context.WorkflowRef = context.WorkflowRepository + "/" + context.WorkflowPath + "@" + context.WorkflowSHA
+	contextContent, err := json.Marshal(context)
+	if err != nil {
+		t.Fatalf("encode context fixture: %v", err)
 	}
 	contextDigest := sha256.Sum256(contextContent)
 	contextSHA256 := hex.EncodeToString(contextDigest[:])

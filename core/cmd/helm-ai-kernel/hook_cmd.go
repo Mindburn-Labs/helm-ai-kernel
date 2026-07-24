@@ -114,6 +114,10 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	}
 	classification := classifyPreToolPayload(payload)
 	if !classification.ShouldDecide {
+		// Unclassified calls are safe/successful operations: they count as
+		// progress and break any consecutive-denial run, so denials
+		// separated by successful work are never falsely "consecutive".
+		recordHookDoomLoopOutcome(opts, payload, classification, false, stderr)
 		return 0
 	}
 	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
@@ -334,6 +338,11 @@ func recordHookDoomLoopOutcome(opts hookOptions, payload preToolPayload, classif
 	pruneHookDoomLoopSessions(state, now)
 	sess, ok := state.Sessions[sessionID]
 	if !ok || sess == nil {
+		if !denied {
+			// No recorded run for this session and nothing to reset:
+			// avoid creating breaker state for never-denied sessions.
+			return false, 0
+		}
 		sess = &hookDoomLoopSession{}
 		state.Sessions[sessionID] = sess
 	}

@@ -459,6 +459,51 @@ func TestHookPreToolDoomLoopLatchIsPerSignature(t *testing.T) {
 	}
 }
 
+// TestHookPreToolDoomLoopSafeCallsBreakTheRun is the regression test for
+// the false-consecutive finding: identical denials separated by successful
+// unclassified (safe) calls must NOT count as consecutive, so the breaker
+// cannot trip on non-consecutive denials.
+func TestHookPreToolDoomLoopSafeCallsBreakTheRun(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	deny := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-gap","cwd":"/repo"}`
+	safe := `{"tool_name":"Bash","tool_input":{"command":"git status --short"},"session_id":"s-gap","cwd":"/repo"}`
+
+	run := func(payload string) string {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+		}
+		return stdout.String()
+	}
+
+	// Denial, successful safe work, denial, successful safe work, denial:
+	// three identical denials but never consecutive — no trip allowed.
+	run(deny)
+	if out := run(safe); out != "" {
+		t.Fatalf("safe call must not emit output: %s", out)
+	}
+	run(deny)
+	if out := run(safe); out != "" {
+		t.Fatalf("safe call must not emit output: %s", out)
+	}
+	out := run(deny)
+	if strings.Contains(out, "INBOX_DOOM_LOOP_DETECTED") {
+		t.Fatalf("denials separated by successful work must not trip the breaker: %s", out)
+	}
+
+	// And a genuinely consecutive triple in the same session still trips.
+	for i := 0; i < 2; i++ {
+		run(deny)
+	}
+	out = run(deny)
+	if !strings.Contains(out, "INBOX_DOOM_LOOP_DETECTED") {
+		t.Fatalf("consecutive identical denials must still trip: %s", out)
+	}
+}
+
 // TestHookPreToolDoomLoopSkipsSessionlessPayloads is the regression test
 // for the session-collision finding: payloads without a session ID must
 // not be bucketed together — the breaker records nothing and never trips,

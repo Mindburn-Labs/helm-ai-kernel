@@ -1,11 +1,12 @@
-//go:build !windows
+//go:build unix
 
 package main
 
 import (
 	"os"
-	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // hookDoomLoopFlock serializes doom-loop state updates with an flock(2)
@@ -21,16 +22,16 @@ func hookDoomLoopFlock(lockPath string, deadline time.Time) (unlock func(), held
 		return nil, false, err
 	}
 	for {
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err = unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB)
 		if err == nil {
 			return func() {
-				_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+				_ = unix.Flock(int(f.Fd()), unix.LOCK_UN)
 				_ = f.Close()
 			}, true, nil
 		}
-		if err != syscall.EWOULDBLOCK || time.Now().After(deadline) {
+		if err != unix.EWOULDBLOCK || time.Now().After(deadline) {
 			_ = f.Close()
-			if err == syscall.EWOULDBLOCK {
+			if err == unix.EWOULDBLOCK {
 				return nil, false, nil
 			}
 			return nil, false, err

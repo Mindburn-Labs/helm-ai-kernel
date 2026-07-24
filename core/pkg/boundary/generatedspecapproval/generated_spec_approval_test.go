@@ -112,6 +112,24 @@ func TestIssueGrantRejectsModifiedVerifierResult(t *testing.T) {
 	}
 }
 
+func TestIssueGrantAcceptsSameInstantVerificationAndIssuance(t *testing.T) {
+	fixture := newApprovalFixture(t)
+	// The verifier stamps VerifiedAt with nanosecond precision while the
+	// issuer canonicalizes its clock to microseconds; issuance within the
+	// same microsecond as verification must not be rejected as preceding it.
+	verified, err := VerifyGeneratedSpecQuorum(fixture.challenge, []contracts.GeneratedSpecApprovalAssertion{fixture.assertion}, fixture.store, fixture.options, fixture.now.Add(500*time.Nanosecond))
+	if err != nil {
+		t.Fatalf("VerifyGeneratedSpecQuorum() error = %v", err)
+	}
+	kernelSigner, err := crypto.NewEd25519Signer("generated-spec-kernel")
+	if err != nil {
+		t.Fatalf("NewEd25519Signer() error = %v", err)
+	}
+	if _, err := IssueGrant(fixture.challenge, verified, "grant-a", fixture.nonce("b"), kernelSigner, fixture.issuerConfig(), fixture.now.Add(999*time.Nanosecond)); err != nil {
+		t.Fatalf("IssueGrant() rejected same-instant issuance after verification: %v", err)
+	}
+}
+
 type approvalFixture struct {
 	challenge contracts.GeneratedSpecApprovalChallenge
 	assertion contracts.GeneratedSpecApprovalAssertion

@@ -47,7 +47,10 @@ func IssueGrant(
 	if err := validateVerifiedApproval(challenge, verified); err != nil {
 		return SignedGrant{}, err
 	}
-	if now.Before(verified.VerifiedAt) {
+	// Compare at the grant's canonical microsecond precision: the verifier
+	// preserves nanoseconds in VerifiedAt, so a mixed-precision comparison
+	// would reject same-instant verification followed by issuance.
+	if now.Before(verified.VerifiedAt.UTC().Truncate(time.Microsecond)) {
 		return SignedGrant{}, errors.New("grant issuance precedes verified quorum")
 	}
 	if challenge.ServerIdentity != config.ServerIdentity {

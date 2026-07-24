@@ -82,6 +82,9 @@ if [ -f "$POLICIES" ]; then
         function esc(s) {
             gsub(/\\/, "\\\\", s)
             gsub(/"/, "\\\"", s)
+            gsub(/\t/, "\\t", s)
+            gsub(/\r/, "\\r", s)
+            gsub(/\n/, "\\n", s)
             return s
         }
         function flush() {
@@ -93,6 +96,10 @@ if [ -f "$POLICIES" ]; then
             }
             if (!(status in valid_status)) {
                 print "::warning::generate_vex.sh: skipping policies.yaml entry " cve " with invalid status " status > "/dev/stderr"
+                return
+            }
+            if (status == "not_affected" && justification == "") {
+                print "::warning::generate_vex.sh: skipping policies.yaml entry " cve ": not_affected requires a justification (see policies.yaml schema)" > "/dev/stderr"
                 return
             }
             obj = "{\"vulnerability\":{\"name\":\"" esc(cve) "\"},\"timestamp\":\"" ts "\",\"products\":[{\"@id\":\"" purl "\"}],\"status\":\"" esc(status) "\""

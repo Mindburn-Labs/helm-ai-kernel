@@ -1,0 +1,77 @@
+{
+  "$comment": "Deterministic source-contract/parity vectors for the GeneratedSpec approval ceremony foundation. They do not prove durable persistence, runtime transport, Control Plane approval, or production authority. quantum_posture: classical Ed25519 only; no hybrid or post-quantum claim.",
+  "schema_version": "generated-spec-approval-ceremony-vectors.v1",
+  "contract_version": "2026-07-22",
+  "quantum_posture": "classical_ed25519_only",
+  "verification_time": "2026-07-23T12:01:01Z",
+  "challenge": {
+    "canonical": "challenge.c14n.json",
+    "sha256": "sha256:0084ddc24000c89f9d53d4296541a332462cfb821835c16c96caf66e44bde80f"
+  },
+  "grant": {
+    "canonical": "grant.c14n.json",
+    "sha256": "sha256:6991d8483f359be2f1cb1e14be17d1b7fca15d3556d0398f9a77183570eaf2fa",
+    "signing_payload": {
+      "canonical": "grant_signing_payload.c14n.json",
+      "sha256": "sha256:6e5a1ec6553dea0972b010a51d0db7cfa023223649c2d312430703ad22d2a02c"
+    },
+    "public_key": "ed25519:a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "signature": "ed25519:6c66c45e056cc77d416c14663156b7c85a0067a1b62dab3bb1b9bd666b3bf85b393dabf54fa1fb5c8bcd3a47cbb2689f7bd2a9030449fa3fbc2af42eeefd680b"
+  },
+  "consumption": {
+    "canonical": "consumption.c14n.json",
+    "sha256": "sha256:67d3b04994babdb00265e4f8a8b59d852eb1cd3093924630806ce659cdf68569",
+    "signing_payload": {
+      "canonical": "consumption_signing_payload.c14n.json",
+      "sha256": "sha256:40c574d46e8b8b3a554e22d9cc3ed0b4d99848a44a840e738109c090ed7b5e85"
+    },
+    "public_key": "ed25519:a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "signature": "ed25519:4c0e0a502c0559dbbd81a362a62ccf1b285a22ed5e633ce7b601c16faf7e2297d45ec81174d9409774db30c85d55163d40996ed221d24cc706f21e11577d5f0d"
+  },
+  "lifecycle": {
+    "canonical": "lifecycle.c14n.json",
+    "sha256": "sha256:7322d0ed52cc1865213fccb6698dbd8719932667cb32974d847cddf05930d3b0"
+  },
+  "negative_vectors": [
+    {
+      "id": "challenge_binding_tamper",
+      "mutation": "set_challenge_policy_epoch_to_tampered",
+      "expected_error": "challenge_hash_mismatch"
+    },
+    {
+      "id": "grant_binding_tamper",
+      "mutation": "set_grant_generated_spec_hash_to_tampered",
+      "expected_error": "grant_hash_mismatch"
+    },
+    {
+      "id": "consumption_grant_substitution",
+      "mutation": "set_consumption_grant_id_to_grant_b_and_reseal",
+      "expected_error": "consumption_binding_rejected"
+    },
+    {
+      "id": "expiry_boundary",
+      "mutation": "set_verification_time_to_grant_expiry",
+      "expected_error": "inactive_grant"
+    },
+    {
+      "id": "grant_signature_tamper",
+      "mutation": "flip_grant_signature_last_bit",
+      "expected_error": "signature_rejected"
+    },
+    {
+      "id": "single_use_replay",
+      "mutation": "replay_second_consume",
+      "expected_error": "transition_conflict"
+    },
+    {
+      "id": "quorum_not_verified",
+      "mutation": "set_challenge_quorum_above_approvers_and_reseal",
+      "expected_error": "quorum_not_verified"
+    },
+    {
+      "id": "duplicate_approver",
+      "mutation": "duplicate_grant_approver_and_reseal",
+      "expected_error": "contract_mismatch"
+    }
+  ]
+}

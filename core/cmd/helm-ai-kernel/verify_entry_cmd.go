@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: single-entry verification checks SHA-256 Merkle inclusion
+// and passes SD-JWT presentations through unverified; all primitives are
+// classical and no post-quantum assurance is claimed for this path.
+
 import (
 	"encoding/json"
 	"flag"
@@ -8,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
 )
 
@@ -28,7 +33,6 @@ import (
 // Exit codes: 0 = entry verified · 1 = verification failed · 2 = runtime error.
 func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("verify-entry", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		entryPath  string
@@ -37,25 +41,29 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 	)
 	cmd.StringVar(&entryPath, "entry", "", "Manifest entry path to verify (e.g. receipts/decision-001.json)")
 	cmd.StringVar(&proofPath, "proof", "", "Path to the inclusion-proof JSON artifact")
-	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON (alias for --format=json)")
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "verify entry", cliui.FormatText); !ok {
+		return code
+	}
+	jsonOutput = jsonOutput || formatFlag.IsJSON()
+	// Errors follow the effective output mode (legacy --json included).
+	errFormat := cliui.FormatText
+	if jsonOutput {
+		errFormat = cliui.FormatJSON
 	}
 	if proofPath == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --proof <file> is required for single-entry verification")
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("verify entry", "--proof <file> is required for single-entry verification"), errFormat)
 	}
 
 	data, err := os.ReadFile(proofPath)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: cannot read proof: %v\n", err)
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify entry", "cannot read proof"), errFormat)
 	}
 	var proof evidencepack.InclusionProof
 	if err := json.Unmarshal(data, &proof); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: invalid proof JSON: %v\n", err)
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify entry", "invalid proof JSON"), errFormat)
 	}
 
 	// If --entry is supplied, it MUST match the proof's bound entry. This stops a

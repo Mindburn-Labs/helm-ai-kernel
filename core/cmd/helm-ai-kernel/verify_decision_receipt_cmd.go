@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: decision-receipt verification uses classical Ed25519
+// bundle signatures; external receipts cap at
+// crypto_compatible_non_conformant and no post-quantum assurance is claimed.
+
 import (
 	"encoding/json"
 	"flag"
@@ -8,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/decisionreceipt"
 )
@@ -21,7 +26,6 @@ import (
 //	[--public-key <hex>] [--json]
 func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("verify decision-receipt", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 	var (
 		file       string
 		format     string
@@ -32,34 +36,37 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&format, "format", "", "Format id (e.g. helm_external.v1); empty = auto-detect")
 	cmd.StringVar(&publicKey, "public-key", "", "Trusted Ed25519 public key hex. Without it, a bundle-disclosed key caps the result at crypto_compatible_non_conformant")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output the DecisionReport as JSON")
-	if err := cmd.Parse(reorderFlagsFirst(args, map[string]bool{"file": true, "format": true, "public-key": true})); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, reorderFlagsFirst(args, map[string]bool{"file": true, "format": true, "public-key": true}), stderr, "verify decision-receipt", cliui.FormatText); !ok {
+		return code
+	}
+	// --format is taken by the receipt format id (documented collision
+	// exception), so --json is the output-mode selector here and errors
+	// follow it.
+	errFormat := cliui.FormatText
+	if jsonOutput {
+		errFormat = cliui.FormatJSON
 	}
 	if file == "" && cmd.NArg() > 0 {
 		file = cmd.Arg(0)
 	}
 	if file == "" {
-		fmt.Fprintln(stderr, "Error: provide a receipt file (positional argument or --file)")
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("verify decision-receipt", "provide a receipt file (positional argument or --file)"), errFormat)
 	}
 	raw, err := os.ReadFile(file)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: read %s: %v\n", file, err)
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", "read %s", file), errFormat)
 	}
 
 	report, err := decisionreceipt.Default().VerifyBundle(raw, format, publicKey)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", ""), errFormat)
 	}
 
 	if jsonOutput {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(report); err != nil {
-			fmt.Fprintf(stderr, "Error: encode report: %v\n", err)
-			return 2
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", "encode report"), errFormat)
 		}
 	} else {
 		status := "NOT VERIFIED"

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
 )
 
@@ -64,8 +65,7 @@ func runTranslogCmd(args []string, stdout, stderr io.Writer) int {
 	case "verify-consistency":
 		return runTranslogVerifyConsistency(args[1:], stdout, stderr)
 	default:
-		_, _ = fmt.Fprintf(stderr, "Unknown log subcommand: %s\n", args[0])
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("log", "unknown subcommand: %s", args[0]).WithHint("append|sth|prove|verify-inclusion|verify-consistency"))
 	}
 }
 
@@ -78,23 +78,19 @@ func runTranslogAppend(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *leafHashHex == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --leaf-hash is required")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("log append", "--leaf-hash is required"))
 	}
 	leafInput, err := hex.DecodeString(*leafHashHex)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: --leaf-hash is not valid hex: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "log append", "--leaf-hash is not valid hex"))
 	}
 	l, err := openTranslog(translogDataDir(*dataDir))
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error opening transparency log: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log append", "opening transparency log"))
 	}
 	index, err := l.Append(leafInput)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error appending leaf: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log append", "appending leaf"))
 	}
 	leaf := translog.LeafHash(leafInput)
 	out := map[string]any{
@@ -116,8 +112,7 @@ func runTranslogSTH(args []string, stdout, stderr io.Writer) int {
 	dir := translogDataDir(*dataDir)
 	l, err := openTranslog(dir)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error opening transparency log: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log sth", "opening transparency log"))
 	}
 	treeSize := *size
 	if treeSize == 0 {
@@ -125,19 +120,16 @@ func runTranslogSTH(args []string, stdout, stderr io.Writer) int {
 	}
 	root, err := l.Root(treeSize)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error computing root: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log sth", "computing root"))
 	}
 	signer, err := loadOrGenerateSignerWithDataDir(dir)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error loading signer: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log sth", "loading signer"))
 	}
 	logID := translog.LogIDFromPublicKey(signer.PublicKeyBytes())
 	sth, err := translog.SignTreeHead(signer, logID, treeSize, root, time.Now())
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error signing tree head: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log sth", "signing tree head"))
 	}
 	return printTranslogJSON(stdout, stderr, sth)
 }
@@ -162,8 +154,7 @@ func runTranslogProve(args []string, stdout, stderr io.Writer) int {
 
 	l, err := openTranslog(translogDataDir(*dataDir))
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error opening transparency log: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log prove", "opening transparency log"))
 	}
 
 	switch {
@@ -174,8 +165,7 @@ func runTranslogProve(args []string, stdout, stderr io.Writer) int {
 		}
 		proof, err := l.ConsistencyProof(*oldSize, ns)
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error building consistency proof: %v\n", err)
-			return 1
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log prove", "building consistency proof"))
 		}
 		return printTranslogJSON(stdout, stderr, proof)
 	case indexSet:
@@ -185,13 +175,11 @@ func runTranslogProve(args []string, stdout, stderr io.Writer) int {
 		}
 		proof, err := l.InclusionProof(*index, ts)
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error building inclusion proof: %v\n", err)
-			return 1
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log prove", "building inclusion proof"))
 		}
 		return printTranslogJSON(stdout, stderr, proof)
 	default:
-		_, _ = fmt.Fprintln(stderr, "Error: pass --index for an inclusion proof or --old-size for a consistency proof")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("log prove", "pass --index for an inclusion proof or --old-size for a consistency proof"))
 	}
 }
 
@@ -204,17 +192,14 @@ func runTranslogVerifyInclusion(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *proofPath == "" || *root == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --proof and --root are required")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("log verify-inclusion", "--proof and --root are required"))
 	}
 	var proof translog.InclusionProof
 	if err := readTranslogJSON(*proofPath, &proof); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error reading proof: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "log verify-inclusion", "reading proof"))
 	}
 	if err := translog.VerifyInclusion(&proof, *root); err != nil {
-		_, _ = fmt.Fprintf(stderr, "INVALID: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "", "INVALID"))
 	}
 	_, _ = fmt.Fprintf(stdout, "OK: leaf %d is included in tree of size %d under root %s\n", proof.LeafIndex, proof.TreeSize, *root)
 	return 0
@@ -230,13 +215,11 @@ func runTranslogVerifyConsistency(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *proofPath == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --proof is required")
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("log verify-consistency", "--proof is required"))
 	}
 	var proof translog.ConsistencyProof
 	if err := readTranslogJSON(*proofPath, &proof); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error reading proof: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "log verify-consistency", "reading proof"))
 	}
 	if *oldRoot != "" {
 		proof.OldRoot = *oldRoot
@@ -245,8 +228,7 @@ func runTranslogVerifyConsistency(args []string, stdout, stderr io.Writer) int {
 		proof.NewRoot = *newRoot
 	}
 	if err := translog.VerifyConsistency(&proof); err != nil {
-		_, _ = fmt.Fprintf(stderr, "INVALID: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "", "INVALID"))
 	}
 	_, _ = fmt.Fprintf(stdout, "OK: tree of size %d is a consistent append-only extension of tree of size %d\n", proof.NewSize, proof.OldSize)
 	return 0
@@ -263,8 +245,7 @@ func readTranslogJSON(path string, v any) error {
 func printTranslogJSON(stdout, stderr io.Writer, v any) int {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error encoding output: %v\n", err)
-		return 1
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "log", "encoding output"))
 	}
 	_, _ = fmt.Fprintln(stdout, string(data))
 	return 0

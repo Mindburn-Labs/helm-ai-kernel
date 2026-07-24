@@ -565,14 +565,79 @@ func TestHookDoomLoopConcurrentRecordsNoLostUpdates(t *testing.T) {
 	if !sess.TrippedSignatures[sig] {
 		t.Fatalf("breaker must be latched after %d identical denials", workers)
 	}
-	if left := filepath.Join(tmp, "state", "hook-doomloop.json.lock"); fileExists(left) {
-		t.Fatalf("lock file left behind: %s", left)
+}
+
+// TestHookDoomLoopNullSessionState is the regression test for the
+// null-session panic: valid state JSON carrying "sessions":{"s":null} must
+// be sanitized on load and must never crash a classified hook invocation.
+func TestHookDoomLoopNullSessionState(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	stateDir := filepath.Join(tmp, "state")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "hook-doomloop.json"),
+		[]byte(`{"sessions":{"bad":null,"s-x":{"last_signature":"a","run_length":5,"last_seen_at":"1970-01-01T00:00:00Z"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load + prune must not panic on the null entry.
+	var stderr bytes.Buffer
+	state := loadHookDoomLoopState(filepath.Join(stateDir, "hook-doomloop.json"), &stderr)
+	pruneHookDoomLoopSessions(state, time.Unix(100000, 0).UTC())
+
+	// A full outcome record over the poisoned file must not panic and must
+	// keep functioning (null entry dropped, new session recorded).
+	opts := hookOptions{DataDir: tmp}
+	payload := preToolPayload{ToolName: "Bash", SessionID: "s-x"}
+	classification := hookClassification{ToolID: "shell", Action: "shell_operate", Target: "rm -rf /null"}
+	tripped, run := recordHookDoomLoopOutcome(opts, payload, classification, true, &stderr)
+	if tripped || run != 1 {
+		t.Fatalf("record over poisoned state: tripped=%v run=%d, want false/1", tripped, run)
+	}
+
+	// And the end-to-end hook path must still emit its denial.
+	hookPayload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-null"}`
+	var stdout, hookStderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(hookPayload), &stdout, &hookStderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, hookStderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+		t.Fatalf("hook must still deny over poisoned state: %s", stdout.String())
 	}
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
+// TestHookDoomLoopFlockMutualExclusion covers the lock ownership fix: while
+// one holder holds the OS lock, a second acquisition within its deadline
+// must report busy (not delete the live holder's lock); after release,
+// acquisition succeeds again.
+func TestHookDoomLoopFlockMutualExclusion(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "hook-doomloop.json.lock")
+
+	unlock, held, err := hookDoomLoopFlock(lockPath, time.Now().Add(time.Second))
+	if err != nil || !held {
+		t.Fatalf("first acquire: held=%v err=%v", held, err)
+	}
+
+	// A second acquirer must not steal or delete the live lock.
+	_, held2, err2 := hookDoomLoopFlock(lockPath, time.Now().Add(150*time.Millisecond))
+	if err2 != nil {
+		t.Fatalf("second acquire err: %v", err2)
+	}
+	if held2 {
+		t.Fatal("second acquire must report busy while the first holder is live")
+	}
+
+	unlock()
+
+	// After release the lock is acquirable again (no stale state).
+	unlock3, held3, err3 := hookDoomLoopFlock(lockPath, time.Now().Add(time.Second))
+	if err3 != nil || !held3 {
+		t.Fatalf("re-acquire after release: held=%v err=%v", held3, err3)
+	}
+	unlock3()
 }
 
 func restoreHookClock(t *testing.T) {

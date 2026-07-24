@@ -171,6 +171,43 @@ func TestDenyCascade_WithoutContentHashDoesNotGuess(t *testing.T) {
 	assert.Equal(t, actioninbox.StatusPending, got.Status)
 }
 
+func TestDenialRecord_GetReturnsDeepCopy(t *testing.T) {
+	store := actioninbox.NewInMemoryInboxStore()
+	ctx := context.Background()
+
+	require.NoError(t, store.Enqueue(ctx, newTestItem("item-1", "mgr-1")))
+	require.NoError(t, store.Deny(ctx, "item-1", "original feedback", "principal-1"))
+
+	// Mutating the record returned by Get must not corrupt stored denial
+	// evidence (aliasing regression).
+	got, err := store.Get(ctx, "item-1")
+	require.NoError(t, err)
+	require.NotNil(t, got.Denial)
+	got.Denial.Feedback = "tampered"
+	got.Denial.ReasonCode = "tampered-code"
+
+	again, err := store.Get(ctx, "item-1")
+	require.NoError(t, err)
+	assert.Equal(t, "original feedback", again.Denial.Feedback)
+	assert.Equal(t, actioninbox.ReasonHumanRejected, again.Denial.ReasonCode)
+}
+
+func TestEnqueue_StoresDeepCopyOfDenial(t *testing.T) {
+	store := actioninbox.NewInMemoryInboxStore()
+	ctx := context.Background()
+
+	item := newTestItem("item-1", "mgr-1")
+	item.Denial = &actioninbox.DenialRecord{Feedback: "caller-owned"}
+	require.NoError(t, store.Enqueue(ctx, item))
+
+	// Mutating the caller's record after Enqueue must not leak into the
+	// store.
+	item.Denial.Feedback = "mutated-after-enqueue"
+	got, err := store.Get(ctx, "item-1")
+	require.NoError(t, err)
+	assert.Equal(t, "caller-owned", got.Denial.Feedback)
+}
+
 func TestDenyCascade_EmptySessionNeverCollides(t *testing.T) {
 	store := actioninbox.NewInMemoryInboxStore()
 	ctx := context.Background()

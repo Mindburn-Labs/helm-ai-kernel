@@ -23,6 +23,18 @@ func NewInMemoryInboxStore() *InMemoryInboxStore {
 	}
 }
 
+// copyItem deep-copies an inbox item, including the structured denial
+// record. Shallow copies would alias the stored Denial pointer, letting
+// callers mutate denial evidence (audit corruption) or race the store.
+func copyItem(item *InboxItem) *InboxItem {
+	val := *item
+	if item.Denial != nil {
+		d := *item.Denial
+		val.Denial = &d
+	}
+	return &val
+}
+
 func (s *InMemoryInboxStore) Enqueue(ctx context.Context, item *InboxItem) error {
 	if item == nil {
 		return fmt.Errorf("actioninbox: item must not be nil")
@@ -39,9 +51,9 @@ func (s *InMemoryInboxStore) Enqueue(ctx context.Context, item *InboxItem) error
 	}
 
 	// Store a copy to prevent external mutation.
-	val := *item
+	val := copyItem(item)
 	val.Status = StatusPending
-	s.items[item.ItemID] = &val
+	s.items[item.ItemID] = val
 	return nil
 }
 
@@ -64,8 +76,7 @@ func (s *InMemoryInboxStore) Get(ctx context.Context, itemID string) (*InboxItem
 		s.mu.RLock()
 	}
 
-	val := *item
-	return &val, nil
+	return copyItem(item), nil
 }
 
 func (s *InMemoryInboxStore) ListPending(ctx context.Context, managerID string, limit int) ([]*InboxItem, error) {
@@ -79,8 +90,7 @@ func (s *InMemoryInboxStore) ListPending(ctx context.Context, managerID string, 
 			if !item.ExpiresAt.IsZero() && time.Now().After(item.ExpiresAt) {
 				continue
 			}
-			val := *item
-			result = append(result, &val)
+			result = append(result, copyItem(item))
 			if limit > 0 && len(result) >= limit {
 				break
 			}

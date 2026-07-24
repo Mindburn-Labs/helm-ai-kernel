@@ -245,9 +245,6 @@ const (
 	// hookDoomLoopMaxSessions bounds the state file (oldest LastSeenAt is
 	// evicted first).
 	hookDoomLoopMaxSessions = 128
-	// hookDoomLoopLockStaleAfter is the age at which a leftover lock file
-	// from a crashed hook process is reclaimed.
-	hookDoomLoopLockStaleAfter = 60 * time.Second
 	// hookDoomLoopLockWait bounds how long a hook waits for the state lock
 	// before giving up (the breaker is advisory; the policy path proceeds).
 	hookDoomLoopLockWait = 2 * time.Second
@@ -314,7 +311,7 @@ func recordHookDoomLoopOutcome(opts hookOptions, payload preToolPayload, classif
 	state := loadHookDoomLoopState(statePath, stderr)
 	pruneHookDoomLoopSessions(state, now)
 	sess, ok := state.Sessions[sessionID]
-	if !ok {
+	if !ok || sess == nil {
 		sess = &hookDoomLoopSession{}
 		state.Sessions[sessionID] = sess
 	}
@@ -336,9 +333,10 @@ func recordHookDoomLoopOutcome(opts hookOptions, payload preToolPayload, classif
 
 // pruneHookDoomLoopSessions drops sessions idle beyond the TTL and evicts
 // the oldest sessions beyond the cap, keeping the state file bounded.
+// Nil session entries (defensive: valid JSON can carry nulls) are dropped.
 func pruneHookDoomLoopSessions(state *hookDoomLoopFile, now time.Time) {
 	for id, sess := range state.Sessions {
-		if sess.LastSeenAt.IsZero() || now.Sub(sess.LastSeenAt) > hookDoomLoopStateTTL {
+		if sess == nil || sess.LastSeenAt.IsZero() || now.Sub(sess.LastSeenAt) > hookDoomLoopStateTTL {
 			delete(state.Sessions, id)
 		}
 	}
@@ -346,6 +344,10 @@ func pruneHookDoomLoopSessions(state *hookDoomLoopFile, now time.Time) {
 		var oldestID string
 		var oldest time.Time
 		for id, sess := range state.Sessions {
+			if sess == nil {
+				oldestID = id
+				break
+			}
 			if oldestID == "" || sess.LastSeenAt.Before(oldest) {
 				oldestID, oldest = id, sess.LastSeenAt
 			}
@@ -354,37 +356,27 @@ func pruneHookDoomLoopSessions(state *hookDoomLoopFile, now time.Time) {
 	}
 }
 
-// acquireHookDoomLoopLock takes the state lock as an O_CREATE|O_EXCL marker
-// file, reclaiming stale locks from crashed processes. On acquisition
-// failure it reports ok=false; callers must treat the breaker update as
-// skipped (advisory) and continue on the authoritative policy path.
+// acquireHookDoomLoopLock takes the state lock as an OS-level advisory
+// lock (flock / LockFileEx). The OS releases it on process exit, so a
+// crashed holder can never leave a stale lock and no age-based reclaim can
+// ever delete a live holder's lock. On contention past hookDoomLoopLockWait
+// it reports ok=false; callers must treat the breaker update as skipped
+// (advisory) and continue on the authoritative policy path.
 func acquireHookDoomLoopLock(lockPath string, stderr io.Writer) (unlock func(), ok bool) {
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: doom-loop lock dir: %v\n", err)
 		return nil, false
 	}
-	deadline := time.Now().Add(hookDoomLoopLockWait)
-	for {
-		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err == nil {
-			fmt.Fprintf(f, "%d\n", os.Getpid())
-			_ = f.Close()
-			return func() { _ = os.Remove(lockPath) }, true
-		}
-		if !os.IsExist(err) {
-			fmt.Fprintf(stderr, "hook pre-tool: doom-loop lock: %v\n", err)
-			return nil, false
-		}
-		if info, serr := os.Stat(lockPath); serr == nil && time.Since(info.ModTime()) > hookDoomLoopLockStaleAfter {
-			_ = os.Remove(lockPath)
-			continue
-		}
-		if time.Now().After(deadline) {
-			fmt.Fprintf(stderr, "hook pre-tool: doom-loop state lock busy; skipping breaker update\n")
-			return nil, false
-		}
-		time.Sleep(10 * time.Millisecond)
+	unlock, held, err := hookDoomLoopFlock(lockPath, time.Now().Add(hookDoomLoopLockWait))
+	if err != nil {
+		fmt.Fprintf(stderr, "hook pre-tool: doom-loop lock: %v\n", err)
+		return nil, false
 	}
+	if !held {
+		fmt.Fprintf(stderr, "hook pre-tool: doom-loop state lock busy; skipping breaker update\n")
+		return nil, false
+	}
+	return unlock, true
 }
 
 func loadHookDoomLoopState(path string, stderr io.Writer) *hookDoomLoopFile {
@@ -396,6 +388,13 @@ func loadHookDoomLoopState(path string, stderr io.Writer) *hookDoomLoopFile {
 	if err := json.Unmarshal(raw, state); err != nil || state.Sessions == nil {
 		fmt.Fprintf(stderr, "hook pre-tool: doom-loop state unreadable, starting fresh: %v\n", err)
 		return &hookDoomLoopFile{Sessions: map[string]*hookDoomLoopSession{}}
+	}
+	// Valid JSON can still carry null session values ("sessions":{"s":null});
+	// drop them so no later traversal can dereference a nil session.
+	for id, sess := range state.Sessions {
+		if sess == nil {
+			delete(state.Sessions, id)
+		}
 	}
 	return state
 }

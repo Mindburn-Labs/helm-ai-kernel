@@ -202,6 +202,9 @@ func (c *collector) classifyRedirect(r *syntax.Redirect) {
 	}
 	tok := resolveWord(r.Word)
 	if tok.dynamic {
+		// A write redirect whose target cannot be resolved statically may
+		// point at a protected file ($TARGET=.env); fail closed.
+		c.decide("write redirect with an unresolvable target (fail-closed)")
 		return
 	}
 	target := strings.ToLower(tok.text)
@@ -261,7 +264,6 @@ func resolveWord(w *syntax.Word) wordTok {
 // valueFlags lists wrapper flags that consume the following token as a value.
 var valueFlags = map[string]map[string]bool{
 	"sudo":   {"-u": true, "-g": true, "-h": true, "-p": true, "-C": true, "-T": true},
-	"env":    {"-u": true, "-C": true, "-S": true},
 	"nice":   {"-n": true},
 	"stdbuf": {"-i": true, "-o": true, "-e": true},
 	"xargs":  {"-I": true, "-L": true, "-n": true, "-P": true, "-s": true, "-d": true, "-E": true, "-a": true},
@@ -301,6 +303,55 @@ var shellNames = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "ash": true,
 }
 
+// scanShellScriptFlag locates the script operand of a shell's -c flag,
+// honoring combined short-flag clusters (-lc), attached values (-cCMD),
+// value-taking flags (bash -O), long flags with values (--init-file,
+// --rcfile), and "--" end-of-options. It returns the script word, whether a
+// -c flag was found, and whether scanning hit something unresolvable (a
+// dynamic word in flag position, or -c with no operand at all).
+func scanShellScriptFlag(rest []wordTok) (script wordTok, found, ambiguous bool) {
+	for i := 0; i < len(rest); i++ {
+		tok := rest[i]
+		if tok.dynamic {
+			return wordTok{}, false, true
+		}
+		if tok.text == "--" {
+			return wordTok{}, false, false // options end; -c after -- is a positional name
+		}
+		if strings.HasPrefix(tok.text, "--") {
+			// Long flags: only --init-file/--rcfile take a separate value.
+			if tok.text == "--init-file" || tok.text == "--rcfile" {
+				i++
+			}
+			continue
+		}
+		if !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
+			return wordTok{}, false, false // first positional (script file)
+		}
+		cluster := tok.text[1:]
+		for j := 0; j < len(cluster); j++ {
+			switch cluster[j] {
+			case 'c':
+				if j+1 < len(cluster) {
+					// Attached payload: bash -cCMD (e.g. -c'rm -rf /').
+					return wordTok{text: cluster[j+1:]}, true, false
+				}
+				if i+1 < len(rest) {
+					return rest[i+1], true, false
+				}
+				return wordTok{}, true, true // -c with no operand: reads stdin
+			case 'O':
+				// bash -O shopt_option: value is attached or the next token.
+				if j+1 == len(cluster) {
+					i++
+				}
+				j = len(cluster) // value consumes the rest of the cluster
+			}
+		}
+	}
+	return wordTok{}, false, false
+}
+
 func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 	for len(args) > 0 {
 		head := args[0]
@@ -322,17 +373,94 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			args = dropWrapperFlags("sudo", args[1:])
 			via = joinVia(via, name)
 		case name == "env":
+			c.signal(SignalEnvWrapper)
+			via = joinVia(via, "env")
 			rest := args[1:]
-			for len(rest) > 0 && !rest[0].dynamic && strings.Contains(rest[0].text, "=") && !strings.HasPrefix(rest[0].text, "-") {
-				rest = rest[1:] // VAR=value prefix assignments
+			commandIdx := -1
+			for i := 0; i < len(rest); i++ {
+				tok := rest[i]
+				if tok.dynamic {
+					c.decide("env wrapper arguments cannot be resolved statically")
+					return
+				}
+				if tok.text == "--" {
+					commandIdx = i + 1
+					break
+				}
+				if strings.HasPrefix(tok.text, "--") {
+					switch {
+					case tok.text == "--help" || tok.text == "--version":
+						c.record(Command{Name: "env", Via: via, Prefix: "env"})
+						return
+					case tok.text == "--ignore-environment" || tok.text == "--null":
+						// flag without a value
+					case tok.text == "--unset" || tok.text == "--chdir":
+						i++ // value is the next token
+					case strings.HasPrefix(tok.text, "--unset=") || strings.HasPrefix(tok.text, "--chdir="):
+						// attached value
+					case tok.text == "--split-string" || strings.HasPrefix(tok.text, "--split-string="):
+						payload := ""
+						if tok.text == "--split-string" {
+							if i+1 >= len(rest) || rest[i+1].dynamic {
+								c.decide("env --split-string with an unresolvable payload")
+								return
+							}
+							payload = rest[i+1].text
+						} else {
+							payload = strings.TrimPrefix(tok.text, "--split-string=")
+						}
+						// env -S splits the payload into command + args.
+						c.classifyString(payload, joinVia(via, "env -S"), depth+1)
+						return
+					default:
+						c.decide("env with unrecognized flag " + tok.text + " (fail-closed)")
+						return
+					}
+					continue
+				}
+				if strings.HasPrefix(tok.text, "-") && tok.text != "-" {
+					// Short-flag cluster: -i/-0 take no value; -u/-C take a
+					// value (attached or next token); -S payload is a command line.
+					cluster := tok.text[1:]
+					for j := 0; j < len(cluster); j++ {
+						switch cluster[j] {
+						case 'i', '0':
+						case 'u', 'C':
+							if j+1 == len(cluster) {
+								i++ // value is the next token
+							}
+							j = len(cluster) // value consumes the rest of the cluster
+						case 'S':
+							payload := ""
+							if j+1 < len(cluster) {
+								payload = cluster[j+1:]
+							} else if i+1 < len(rest) && !rest[i+1].dynamic {
+								payload = rest[i+1].text
+							} else {
+								c.decide("env -S with an unresolvable payload")
+								return
+							}
+							c.classifyString(payload, joinVia(via, "env -S"), depth+1)
+							return
+						default:
+							c.decide(fmt.Sprintf("env with unrecognized flag -%c (fail-closed)", cluster[j]))
+							return
+						}
+					}
+					continue
+				}
+				if strings.Contains(tok.text, "=") {
+					continue // VAR=value assignment
+				}
+				commandIdx = i
+				break
 			}
-			if len(rest) == 0 {
+			if commandIdx < 0 || commandIdx >= len(rest) {
+				// Bare env (prints the environment): nothing executes.
 				c.record(Command{Name: "env", Via: via, Prefix: "env"})
 				return
 			}
-			c.signal(SignalEnvWrapper)
-			args = dropWrapperFlags("env", rest)
-			via = joinVia(via, "env")
+			args = rest[commandIdx:]
 		case name == "nice" || name == "nohup" || name == "time" || name == "command" || name == "builtin" || name == "stdbuf" || name == "setsid":
 			c.signal(SignalEnvWrapper)
 			args = dropWrapperFlags(name, args[1:])
@@ -373,22 +501,21 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 		case shellNames[name]:
 			c.signal(SignalShellInvocation)
 			c.sawShell = true
-			scriptIdx, scriptArg := -1, wordTok{}
 			rest := args[1:]
-			for i := 0; i < len(rest); i++ {
-				if rest[i].text == "-c" {
-					if i+1 < len(rest) {
-						scriptIdx, scriptArg = i, rest[i+1]
-					}
-					break
-				}
-			}
+			script, found, ambiguous := scanShellScriptFlag(rest)
 			switch {
-			case scriptIdx >= 0 && scriptArg.dynamic:
+			case found && ambiguous:
+				// `bash -c` with no operand reads commands from stdin: opaque.
+				c.decide(name + " -c without an inline payload reads from stdin (fail-closed)")
+				return
+			case ambiguous:
+				c.decide(name + " wrapper arguments cannot be resolved statically")
+				return
+			case found && script.dynamic:
 				c.decide(name + " -c with a dynamic payload")
 				return
-			case scriptIdx >= 0:
-				c.classifyString(scriptArg.text, joinVia(via, name+" -c"), depth+1)
+			case found:
+				c.classifyString(script.text, joinVia(via, name+" -c"), depth+1)
 				return
 			default:
 				// `bash script.sh`: script contents are opaque but running a

@@ -11,6 +11,37 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
+var (
+	publicDocsDemoRunFixture = &publicDocsExampleFixture{
+		SourceTest:              "core/cmd/helm-ai-kernel/demo_routes_test.go#TestDemoRunVerifyAndTamper",
+		RequestContentType:      "application/json",
+		Literal:                 map[string]any{"action_id": "export_customer_list", "policy_id": "agent_tool_call_boundary"},
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	}
+	publicDocsDemoVerifyFixture = &publicDocsExampleFixture{
+		SourceTest:         "core/cmd/helm-ai-kernel/demo_routes_test.go#TestDemoRunVerifyAndTamper",
+		RequestContentType: "application/json",
+		Bindings: map[string]publicDocsResponseBind{
+			"receipt":               publicDocsResponseBinding(http.MethodPost, "/api/demo/run", "$.receipt"),
+			"expected_receipt_hash": publicDocsResponseBinding(http.MethodPost, "/api/demo/run", "$.proof_refs.receipt_hash"),
+		},
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	}
+	publicDocsDemoTamperFixture = &publicDocsExampleFixture{
+		SourceTest:         "core/cmd/helm-ai-kernel/demo_routes_test.go#TestDemoRunVerifyAndTamper",
+		RequestContentType: "application/json",
+		Literal:            map[string]any{"mutation": "flip_verdict"},
+		Bindings: map[string]publicDocsResponseBind{
+			"receipt":               publicDocsResponseBinding(http.MethodPost, "/api/demo/run", "$.receipt"),
+			"expected_receipt_hash": publicDocsResponseBinding(http.MethodPost, "/api/demo/run", "$.proof_refs.receipt_hash"),
+		},
+		WantStatus:              http.StatusOK,
+		WantResponseContentType: "application/json",
+	}
+)
+
 func TestDemoRunVerifyAndTamper(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("demo-test")
 	if err != nil {
@@ -21,8 +52,9 @@ func TestDemoRunVerifyAndTamper(t *testing.T) {
 	mux := http.NewServeMux()
 	registerDemoRoutes(mux, svc)
 
-	runBody := []byte(`{"action_id":"export_customer_list","policy_id":"agent_tool_call_boundary"}`)
+	runBody := publicDocsExampleFixtureJSON(t, publicDocsDemoRunFixture, nil)
 	runReq := httptest.NewRequest(http.MethodPost, "/api/demo/run", bytes.NewReader(runBody))
+	runReq.Header.Set("Content-Type", "application/json")
 	runRec := httptest.NewRecorder()
 	mux.ServeHTTP(runRec, runReq)
 	if runRec.Code != http.StatusOK {
@@ -54,8 +86,9 @@ func TestDemoRunVerifyAndTamper(t *testing.T) {
 	}
 
 	expectedHash := runPayload.ProofRefs["receipt_hash"]
-	verifyBody, _ := json.Marshal(map[string]any{"receipt": runPayload.Receipt, "expected_receipt_hash": expectedHash})
+	verifyBody := publicDocsExampleFixtureJSON(t, publicDocsDemoVerifyFixture, map[string]any{"receipt": runPayload.Receipt, "expected_receipt_hash": expectedHash})
 	verifyReq := httptest.NewRequest(http.MethodPost, "/api/demo/verify", bytes.NewReader(verifyBody))
+	verifyReq.Header.Set("Content-Type", "application/json")
 	verifyRec := httptest.NewRecorder()
 	mux.ServeHTTP(verifyRec, verifyReq)
 	if verifyRec.Code != http.StatusOK {
@@ -72,8 +105,9 @@ func TestDemoRunVerifyAndTamper(t *testing.T) {
 		t.Fatalf("verify did not bind signature and receipt hash: %s", verifyRec.Body.String())
 	}
 
-	tamperBody, _ := json.Marshal(map[string]any{"receipt": runPayload.Receipt, "expected_receipt_hash": expectedHash, "mutation": "flip_verdict"})
+	tamperBody := publicDocsExampleFixtureJSON(t, publicDocsDemoTamperFixture, map[string]any{"receipt": runPayload.Receipt, "expected_receipt_hash": expectedHash})
 	tamperReq := httptest.NewRequest(http.MethodPost, "/api/demo/tamper", bytes.NewReader(tamperBody))
+	tamperReq.Header.Set("Content-Type", "application/json")
 	tamperRec := httptest.NewRecorder()
 	mux.ServeHTTP(tamperRec, tamperReq)
 	if tamperRec.Code != http.StatusOK {

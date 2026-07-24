@@ -88,6 +88,9 @@ paths:
       description: |
         Public health endpoint for the self-hostable HELM AI Kernel proof console.
         Includes build and version metadata used by deployment smoke tests.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       responses:
         '200':
           description: Public demo service health
@@ -114,6 +117,13 @@ paths:
         Evaluates a sample action through the HELM AI Kernel guardian path and emits
         a signed receipt. The scenario is sandboxed and dispatches no external
         side effects.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/demo_routes_test.go#TestDemoRunVerifyAndTamper
+        request:
+          content_type: application/json
+          literal:
+            action_id: export_customer_list
+            policy_id: agent_tool_call_boundary
       requestBody:
         required: true
         content:
@@ -171,6 +181,25 @@ paths:
       operationId: verifyPublicDemoReceipt
       tags: [demo]
       summary: Verify a HELM AI Kernel demo receipt
+      description: |
+        Checks the signed demo receipt returned by `/api/demo/run` against its
+        expected receipt hash. It verifies only the supplied sandbox receipt and
+        dispatches no external work.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/demo_routes_test.go#TestDemoRunVerifyAndTamper
+        request:
+          content_type: application/json
+          bindings:
+            receipt:
+              from_response:
+                method: POST
+                path: /api/demo/run
+                json_path: $.receipt
+            expected_receipt_hash:
+              from_response:
+                method: POST
+                path: /api/demo/run
+                json_path: $.proof_refs.receipt_hash
       requestBody:
         required: true
         content:
@@ -210,6 +239,27 @@ paths:
       operationId: tamperPublicDemoReceipt
       tags: [demo]
       summary: Tamper with a demo receipt and verify that validation fails
+      description: |
+        Creates a deliberately mutated copy of a demo receipt and returns the
+        expected verification failure. It is a sandbox test route and does not
+        alter durable receipts or dispatch external work.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/demo_routes_test.go#TestDemoRunVerifyAndTamper
+        request:
+          content_type: application/json
+          literal:
+            mutation: flip_verdict
+          bindings:
+            receipt:
+              from_response:
+                method: POST
+                path: /api/demo/run
+                json_path: $.receipt
+            expected_receipt_hash:
+              from_response:
+                method: POST
+                path: /api/demo/run
+                json_path: $.proof_refs.receipt_hash
       requestBody:
         required: true
         content:
@@ -259,6 +309,13 @@ paths:
         When the opt-in scoped emergency-stop fence is enabled, this
         unauthenticated route returns 503 until an authenticated adapter can
         bind tenant and workspace scope.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/subsystems_openai_test.go#TestGovernedOpenAIProxyUnavailableWhenScopedFenceEnabled
+        request:
+          content_type: application/json
+          literal:
+            model: gpt-test
+            messages: []
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyHeader'
       requestBody:
@@ -361,6 +418,17 @@ paths:
       operationId: evaluateDecision
       tags: [console]
       summary: Evaluate a governed intent and emit a receipt
+      description: |
+        Evaluates a tenant- and principal-bound request at the configured local
+        boundary. The decision is recorded as a governed receipt; a denied or
+        unavailable boundary prevents execution.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/receipt_routes_test.go#TestPublicDocsEvaluateExampleExercisesLocalRuntime
+        request:
+          content_type: application/json
+          literal:
+            action: EXECUTE_TOOL
+            resource: local.echo
       security:
         - AdminBearerAuth: []
       parameters:
@@ -405,6 +473,13 @@ paths:
       operationId: listReceipts
       tags: [console]
       summary: List durable receipts
+      description: |
+        Lists receipt records visible to the authenticated tenant and principal
+        bindings. Use `limit`, `since`, and `agent` to page or filter the local
+        receipt stream; the response reports cursor metadata.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       security:
         - AdminBearerAuth: []
       parameters:
@@ -440,6 +515,13 @@ paths:
       operationId: tailReceipts
       tags: [console]
       summary: Tail durable receipts as server-sent events
+      description: |
+        Streams receipt events for the authenticated tenant and principal
+        bindings using server-sent events. The stream is read-only; use filters
+        to limit records and the receipt lookup route for a specific record.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       security:
         - AdminBearerAuth: []
       parameters:
@@ -475,6 +557,9 @@ paths:
       operationId: getConsoleReceipt
       tags: [console]
       summary: Get a receipt by ID
+      description: |
+        Returns one receipt record visible to the authenticated tenant and
+        principal bindings. It does not resolve a record outside that scope.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -483,7 +568,10 @@ paths:
         - name: receipt_id
           in: path
           required: true
-          schema: { type: string }
+          schema: { type: string, example: rcpt-test }
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       responses:
         '200':
           description: Receipt detail
@@ -1954,6 +2042,13 @@ paths:
       operationId: getBoundaryStatus
       tags: [boundary]
       summary: Read execution-boundary health and authority status
+      description: |
+        Reports local boundary health and authority components, including the
+        PDP, MCP firewall, receipt store, and signer. It is evidence for the
+        configured local runtime, not a hosted-service availability claim.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       security:
         - AdminBearerAuth: []
       parameters:
@@ -2238,6 +2333,13 @@ paths:
       description: |
         Exports a deterministic .tar.gz containing all receipts, ProofGraph nodes, and metadata.
         Same content always produces same SHA-256.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestEvidenceExportAndVerifyRoundTrip
+        request:
+          content_type: application/json
+          literal:
+            session_id: agent.test
+            format: tar.gz
       parameters:
         - $ref: '#/components/parameters/HelmTenantIDHeader'
         - $ref: '#/components/parameters/HelmPrincipalIDHeader'
@@ -2272,9 +2374,18 @@ paths:
       description: |
         Verifies signatures, causal chain, and policy compliance.
         Works offline — no network calls made during verification.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestEvidenceExportAndVerifyRoundTrip
+        request:
+          content_type: application/octet-stream
+          file: evidence-pack.tar.gz
       requestBody:
         required: true
         content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
           multipart/form-data:
             schema:
               type: object
@@ -3024,6 +3135,9 @@ paths:
         policy-not-ready, stale policy, PDP outage, direct bypass, schema drift,
         malformed arguments, missing credentials, sandbox overgrant, blocked
         egress, and deny receipt emission behavior.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       responses:
         '200':
           description: Negative conformance vector list
@@ -3040,6 +3154,12 @@ paths:
       operationId: listMcpRegistry
       tags: [mcp]
       summary: List quarantined and approved MCP servers
+      description: |
+        Lists quarantine and approval records held by the local MCP boundary.
+        This read endpoint does not approve a server or dispatch a tool call.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request: {}
       security:
         - AdminBearerAuth: []
       responses:
@@ -3210,6 +3330,20 @@ paths:
       operationId: scanMcpServer
       tags: [mcp]
       summary: Scan and quarantine an MCP server or tool bundle
+      description: |
+        Scans an MCP server or tool bundle and records a quarantine assessment.
+        It does not approve or dispatch an upstream tool call; approval requires
+        the separate governed authorization path.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestPublicDocsExamplesExerciseLocalRuntime
+        request:
+          content_type: application/json
+          literal:
+            server_id: docs-example-mcp
+            name: docs example MCP server
+            transport: stdio
+            endpoint: stdio://docs-example
+            tool_names: [local.echo]
       security:
         - AdminBearerAuth: []
       requestBody:
@@ -3284,6 +3418,18 @@ paths:
       operationId: authorizeMcpCall
       tags: [mcp]
       summary: Authorize an MCP tools/call before upstream dispatch
+      description: |
+        Evaluates an MCP `tools/call` at the local boundary before upstream
+        dispatch. A missing or quarantined server, schema pin, or policy approval
+        fails closed; only an ALLOW record permits the caller to proceed.
+      x-helm-docs-example:
+        source_test: core/cmd/helm-ai-kernel/contract_routes_test.go#TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow
+        request:
+          content_type: application/json
+          literal:
+            server_id: api-fixture
+            tool_name: local.missing
+            args_hash: sha256:unknown-tool
       security:
         - AdminBearerAuth: []
       requestBody:
@@ -6332,7 +6478,10 @@ components:
   # ── Responses ───────────────────────────────────────
   responses:
     HelmError:
-      description: HELM error response
+      description: >-
+        Structured HELM error envelope. Inspect `error.type`, `error.code`, and
+        `error.reason_code` to identify the failure category; correct the request
+        or boundary state before retrying. This response does not authorize an effect.
       content:
         application/json:
           schema:

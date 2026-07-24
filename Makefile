@@ -1,4 +1,4 @@
-.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -113,7 +113,7 @@ verify-presentation:
 
 test-all: test test-sdk-py test-sdk-ts test-sdk-rust test-sdk-java verify-fixtures
 
-test-platform: test verify-fixtures docs-coverage docs-truth
+test-platform: test verify-fixtures docs-coverage docs-truth docs-openapi-parity
 
 bench:
 	cd core && go test -bench=. -benchmem -count=3 ./pkg/crypto/ ./pkg/store/ ./pkg/guardian/ ./benchmarks/
@@ -121,7 +121,7 @@ bench:
 bench-report:
 	cd core && go test -v -run TestOverheadReport -count=1 ./benchmarks/
 
-lint: docs-coverage docs-truth
+lint: docs-coverage docs-truth docs-openapi-parity
 	cd core && go vet ./...
 	cd core && test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
 
@@ -141,7 +141,7 @@ docker-verify:
 	docker build -f core/Dockerfile.api -t helm-ai-kernel:verify-core-api .
 	docker build -f oss-fuzz/Dockerfile -t helm-ai-kernel:verify-oss-fuzz oss-fuzz
 
-release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify conformance-release-gate deployment-smoke release-smoke
+release-readiness: version-drift verify-boundary docs-truth docs-openapi-parity test-sdk-go-standalone proto-lint proto-breaking docker-verify conformance-release-gate deployment-smoke release-smoke
 	@echo "✅ Release readiness gate passed"
 
 crucible: build
@@ -315,7 +315,7 @@ release-binaries:
 	cp bin/helm-ai-kernel-windows-amd64.exe bin/helm-windows-amd64.exe
 	cd bin && shasum -a 256 helm-ai-kernel-* helm-linux-* helm-darwin-* helm-windows-* > SHA256SUMS.txt
 
-release-assets: release-binaries-reproducible mcp-pack sbom vex
+release-assets:
 	bash scripts/release/stage_release_assets.sh
 
 build-release: release-assets
@@ -409,13 +409,16 @@ verify-boundary:
 clean:
 	rm -rf bin/ dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json
 
-.PHONY: docs-coverage docs-truth
+.PHONY: docs-coverage docs-truth docs-openapi-parity
 
 docs-coverage:
 	python3 scripts/check_documentation_coverage.py
 
 docs-truth:
 	python3 scripts/check_documentation_truth.py
+
+docs-openapi-parity:
+	cd core && go test ./cmd/helm-ai-kernel -run 'Test(RuntimeRouteRegistryMatchesOpenAPI|PublicDocsOpenAPIContract)' -count=1
 
 .PHONY: launchpad-promotion-check
 launchpad-promotion-check:

@@ -223,3 +223,13 @@ func TestWriteErrorFormatGolden(t *testing.T) {
 		t.Fatalf("nil error wrote %q", chrome.String())
 	}
 }
+
+// --- Regression: envelope message with empty-Msg wrap (permit round-4 P3) --
+
+func TestFormatErrorJSONEmptyMsgWrap(t *testing.T) {
+	got := FormatErrorJSON(Wrapf(errors.New("bundle digest mismatch"), ExitUsage, "verify decision-receipt", ""))
+	want := `{"error":{"op":"verify decision-receipt","message":"bundle digest mismatch","code":2}}`
+	if got != want {
+		t.Fatalf("empty-Msg envelope drifted:\n got: %s\nwant: %s", got, want)
+	}
+}

@@ -29,6 +29,9 @@ func (s *memoryStore) CreateHold(ctx context.Context, record Record) (Record, er
 	if err := ctx.Err(); err != nil {
 		return Record{}, err
 	}
+	if record.State != StateHoldPending {
+		return Record{}, ErrTransitionConflict
+	}
 	if err := record.validate(); err != nil {
 		return Record{}, err
 	}

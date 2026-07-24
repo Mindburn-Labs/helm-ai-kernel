@@ -557,7 +557,7 @@ func (s *Service) randomHex(size int) (string, error) {
 func (s *Service) randomBytes(size int) ([]byte, error) {
 	raw := make([]byte, size)
 	if _, err := io.ReadFull(s.random, raw); err != nil {
-		return nil, fmt.Errorf("generate generated spec approval ceremony randomness: %w", err)
+		return nil, fmt.Errorf("generated spec approval ceremony randomness: %w", err)
 	}
 	return raw, nil
 }

@@ -154,6 +154,20 @@ func TestVerifyQuorumRejectsResealedChallengeBeyondConfiguredTTL(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreCreateHoldRejectsNonHoldRecords(t *testing.T) {
+	fixture := newCeremonyFixture(t)
+	ctx := context.Background()
+	hold, err := fixture.service.BeginHold(ctx, fixture.binding.BindingRef)
+	if err != nil {
+		t.Fatalf("BeginHold() error = %v", err)
+	}
+	hold.ApprovalID = "approval-forged"
+	hold.State = StateChallengeIssued
+	if _, err := fixture.store.CreateHold(ctx, hold); !errors.Is(err, ErrTransitionConflict) {
+		t.Fatalf("CreateHold(non-hold record) error = %v, want transition conflict", err)
+	}
+}
+
 func TestConsumeRejectsWrongConsumerAndReplay(t *testing.T) {
 	fixture := newCeremonyFixture(t)
 	ctx := context.Background()

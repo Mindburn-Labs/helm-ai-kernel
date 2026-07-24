@@ -318,3 +318,31 @@ func TestParseFlagsTextModeAndHelp(t *testing.T) {
 		t.Fatalf("success side effects wrong: ff=%v chrome=%q", ff.Value, chrome.String())
 	}
 }
+
+// --- Regression: flag-value-aware scan (permit round-7 P2) -----------------
+
+func TestRequestedFormatSkipsFlagValues(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want Format
+	}{
+		{"reviewer example", []string{"--format=json", "--effect", "--format=text", "--bogus"}, FormatJSON},
+		{"selector as effect value", []string{"--effect", "--format=json", "--bogus"}, FormatText},
+		{"json as effect value", []string{"--effect", "--json", "--bogus"}, FormatText},
+		{"selector after value flag", []string{"--effect", "INFRA_DESTROY", "--format=json"}, FormatJSON},
+		{"embedded value not skipped", []string{"--effect=INFRA_DESTROY", "--format=json"}, FormatJSON},
+		{"last valid selector wins", []string{"--format=text", "--effect", "X", "--format=json"}, FormatJSON},
+		{"value flag at end no panic", []string{"--effect"}, FormatText},
+		{"format value consumed not selector", []string{"--format", "--json"}, FormatText}, // --json is format's value: invalid, fails closed
+		{"agent value then json", []string{"--agent", "--format=json"}, FormatText},
+		{"json after agent value", []string{"--agent", "a1", "--json"}, FormatJSON},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RequestedFormat(tc.args, FormatText); got != tc.want {
+				t.Fatalf("RequestedFormat(%v) = %q, want %q", tc.args, got, tc.want)
+			}
+		})
+	}
+}

@@ -1068,11 +1068,12 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
-	if record.Verdict == contracts.VerdictEscalate {
-		record.DecisionReceiptPath = localMCPReceiptPath(record.RecordID)
-		if record.ReasonCode == contracts.ReasonApprovalRequired {
-			record.ApprovalCommand = mcpApprovalCommand(*serverID, *toolName, *effect)
-		}
+	// Every verdict gets a receipt path and, where a remediation exists, the
+	// exact next-step command, so the human output shape is identical for
+	// ALLOW, DENY, and ESCALATE.
+	record.DecisionReceiptPath = localMCPReceiptPath(record.RecordID)
+	if record.ReasonCode == contracts.ReasonApprovalRequired || record.ReasonCode == contracts.ReasonApprovalTimeout {
+		record.ApprovalCommand = mcpApprovalCommand(*serverID, *toolName, *effect)
 	}
 	sealed, err := surfaces.PutRecord(record)
 	if err != nil {
@@ -1080,10 +1081,8 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	record = sealed
-	if record.Verdict == contracts.VerdictEscalate {
-		record.DecisionReceiptPath = writeLocalMCPReceipt(record.RecordID, "decision", record)
-		_, _ = surfaces.PutRecord(record)
-	}
+	record.DecisionReceiptPath = writeLocalMCPReceipt(record.RecordID, "decision", record)
+	_, _ = surfaces.PutRecord(record)
 	exitCode := 0
 	if record.Verdict != contracts.VerdictAllow {
 		exitCode = 1
@@ -1092,19 +1091,42 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		_ = writeSurfaceJSON(stdout, record)
 		return exitCode
 	}
-	if record.Verdict == contracts.VerdictEscalate {
-		fmt.Fprintln(stdout, "HELM ESCALATE")
-		fmt.Fprintf(stdout, "decision: %s\n", record.RecordID)
-		fmt.Fprintf(stdout, "reason: %s\n", mcpEscalationReason(record))
-		fmt.Fprintf(stdout, "receipt: %s\n", record.DecisionReceiptPath)
-		if record.ApprovalCommand != "" {
-			fmt.Fprintln(stdout, "approve:")
-			fmt.Fprintf(stdout, "  %s\n", record.ApprovalCommand)
-		}
-		return exitCode
+	fmt.Fprintf(stdout, "HELM %s\n", record.Verdict)
+	fmt.Fprintf(stdout, "decision: %s\n", record.RecordID)
+	fmt.Fprintf(stdout, "reason: %s\n", mcpVerdictReason(record))
+	fmt.Fprintf(stdout, "receipt: %s\n", record.DecisionReceiptPath)
+	if nextStep := mcpAuthorizeCallNextStep(record, catalog, *serverID, *toolName); nextStep != "" {
+		fmt.Fprintln(stdout, "next:")
+		fmt.Fprintf(stdout, "  %s\n", nextStep)
 	}
-	fmt.Fprintf(stdout, "MCP authorization verdict=%s reason=%s record=%s\n", record.Verdict, record.ReasonCode, record.RecordID)
 	return exitCode
+}
+
+// mcpAuthorizeCallNextStep returns the exact command that moves the call
+// toward ALLOW, or "" when there is no single next step (ALLOW already
+// reached, or the fix is not a CLI command).
+func mcpAuthorizeCallNextStep(record contracts.ExecutionBoundaryRecord, catalog *mcppkg.ToolCatalog, serverID, toolName string) string {
+	if record.ApprovalCommand != "" {
+		return record.ApprovalCommand
+	}
+	if record.ReasonCode != contracts.ReasonSchemaViolation {
+		return ""
+	}
+	tool, ok := catalog.Lookup(toolName)
+	if !ok || (tool.ServerID != "" && tool.ServerID != serverID) {
+		// The tool is not in the local catalog, so there is no schema to pin;
+		// the caller must supply one explicitly.
+		return "helm-ai-kernel mcp authorize-call --server-id " + shellToken(serverID) +
+			" --tool-name " + shellToken(toolName) +
+			" --tool-schema-json '<tool JSON Schema>' --pinned-schema-hash <hash>"
+	}
+	hash, err := mcppkg.ToolSchemaHash(tool)
+	if err != nil {
+		return ""
+	}
+	return "helm-ai-kernel mcp authorize-call --server-id " + shellToken(serverID) +
+		" --tool-name " + shellToken(toolName) +
+		" --pinned-schema-hash " + shellToken(hash)
 }
 
 func mcpApprovalCommand(serverID, toolName, effect string) string {
@@ -1136,12 +1158,27 @@ func shellDoubleQuote(value string) string {
 	return `"` + escaped + `"`
 }
 
-func mcpEscalationReason(record contracts.ExecutionBoundaryRecord) string {
-	if record.ReasonCode == contracts.ReasonApprovalRequired {
+// mcpVerdictReason renders the human reason line for any authorize-call
+// verdict, so DENY is as legible as ESCALATE.
+func mcpVerdictReason(record contracts.ExecutionBoundaryRecord) string {
+	switch record.ReasonCode {
+	case contracts.ReasonApprovalRequired:
+		if record.Verdict == contracts.VerdictDeny {
+			return "tool is outside the approved scope for this MCP server"
+		}
 		return "unknown MCP server requires approval"
-	}
-	if record.ReasonCode == contracts.ReasonSchemaViolation {
+	case contracts.ReasonApprovalTimeout:
+		return "MCP server approval expired or was revoked"
+	case contracts.ReasonSchemaViolation:
+		if record.Verdict == contracts.VerdictDeny {
+			return "pinned schema hash does not match the tool's current schema"
+		}
 		return "MCP tool schema requires approval or pinning"
+	case contracts.ReasonInsufficientPrivilege:
+		return "granted scopes do not cover the tool's required scopes"
+	}
+	if record.Verdict == contracts.VerdictAllow {
+		return "approved scope, schema pin, and policy checks passed"
 	}
 	if record.ReasonCode != "" {
 		return string(record.ReasonCode)

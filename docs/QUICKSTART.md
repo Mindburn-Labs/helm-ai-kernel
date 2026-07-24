@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-07-10
+last_reviewed: 2026-07-24
 ---
 
 # Quickstart
@@ -82,20 +82,21 @@ Ask HELM to authorize a local MCP action before dispatch:
 
 ```bash
 helm-ai-kernel mcp authorize-call \
-  --server-id helm-demo-shell \
-  --tool-name pwd
+  --server-id helm-governance \
+  --tool-name file_read
 ```
 
-Expected client message:
+Every verdict prints the same shape: verdict, decision id, reason, receipt
+path, and — where a remediation exists — the exact next-step command.
 
 ```text
 HELM ESCALATE
 decision: mcp-boundary-...
 reason: unknown MCP server requires approval
-receipt: ~/.helm-ai-kernel/receipts/mcp/...
-approve:
-  helm-ai-kernel mcp approve --server-id helm-demo-shell \
-    --tools "pwd" \
+receipt: data/receipts/mcp/...
+next:
+  helm-ai-kernel mcp approve --server-id helm-governance \
+    --tools "file_read" \
     --ttl 15m \
     --reason 'read-only repo inspection for local dev'
 ```
@@ -107,21 +108,65 @@ Approve a narrow read-only grant:
 
 ```bash
 helm-ai-kernel mcp approve \
-  --server-id helm-demo-shell \
-  --tools "pwd,ls,cat" \
+  --server-id helm-governance \
+  --tools "file_read" \
   --ttl 15m \
   --reason "read-only repo inspection for local dev"
 ```
 
-Then rerun the original action. HELM evaluates again against the approval,
-schema, policy, and effect scope. Approval does not silently resume the blocked
-action.
+Then rerun the original action. The approval covers the server and tool, so
+the check advances to the next gate: the tool's schema must be pinned so a
+server-side schema change cannot silently rewrite what the tool does.
+
+```text
+HELM ESCALATE
+decision: mcp-boundary-...
+reason: MCP tool schema requires approval or pinning
+receipt: data/receipts/mcp/...
+next:
+  helm-ai-kernel mcp authorize-call --server-id helm-governance \
+    --tool-name file_read --pinned-schema-hash sha256:...
+```
+
+Pin the schema by rerunning with the printed hash:
+
+```bash
+helm-ai-kernel mcp authorize-call \
+  --server-id helm-governance \
+  --tool-name file_read \
+  --pinned-schema-hash sha256:...
+```
+
+```text
+HELM ALLOW
+decision: mcp-boundary-...
+reason: approved scope, schema pin, and policy checks passed
+receipt: data/receipts/mcp/...
+```
+
+A call outside the approved scope fails closed with the same shape — receipt
+path plus the approval command that would widen the scope:
+
+```text
+HELM DENY
+decision: mcp-boundary-...
+reason: tool is outside the approved scope for this MCP server
+receipt: data/receipts/mcp/...
+next:
+  helm-ai-kernel mcp approve --server-id helm-governance \
+    --tools "file_write" --ttl 15m --reason '...'
+```
+
+Approval does not silently resume the blocked action: HELM evaluates again
+against the approval, schema pin, policy, and effect scope on every call. See
+[Deny Reason Codes](guides/deny-reason-codes.md) for what each reason code
+means and the step that resolves it.
 
 Revoke the grant:
 
 ```bash
 helm-ai-kernel mcp revoke \
-  --server-id helm-demo-shell \
+  --server-id helm-governance \
   --reason "inspection finished"
 ```
 

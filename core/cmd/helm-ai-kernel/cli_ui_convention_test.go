@@ -129,13 +129,86 @@ func TestCLIErrorHintGolden(t *testing.T) {
 // --- data/chrome split on success paths -----------------------------------
 
 func TestCLIVerifyEntryFormatFlagJSON(t *testing.T) {
-	// Missing proof file must fail before any data emission.
+	// Missing proof file must fail before any data emission; under
+	// --format=json the error is the structured envelope on stderr.
 	code, stdout, stderr := runCLI(t, "verify", "--entry", "receipts/x.json", "--proof", "/nonexistent/proof.json", "--format=json")
 	if code != 2 {
 		t.Fatalf("code=%d", code)
 	}
 	assertCleanStdout(t, stdout)
-	if !strings.HasPrefix(stderr, "Error: verify entry: cannot read proof: ") {
+	if !strings.HasPrefix(stderr, `{"error":{"op":"verify entry","message":"cannot read proof: `) {
 		t.Fatalf("wrapped error drifted: %q", stderr)
+	}
+}
+
+// --- Regression: plan compile --format (permit blocker P2) -----------------
+
+func TestCLIPlanCompileFormatFlag(t *testing.T) {
+	// --format=json must be accepted and produce the PlanSpec JSON on stdout.
+	code, stdout, stderr := runCLI(t, "plan", "compile", "--format=json", "step-one", "step-two")
+	if code != 0 {
+		t.Fatalf("plan compile --format=json code=%d stderr=%s", code, stderr)
+	}
+	var plan map[string]any
+	if err := json.Unmarshal([]byte(stdout), &plan); err != nil {
+		t.Fatalf("stdout not PlanSpec JSON: %v\n%s", err, stdout)
+	}
+
+	// --json keeps working as the alias with an equivalent payload (the
+	// PlanSpec carries a generated id and timestamp, so compare structure).
+	codeB, outB, _ := runCLI(t, "plan", "compile", "--json", "step-one", "step-two")
+	if codeB != 0 {
+		t.Fatalf("plan compile --json code=%d", codeB)
+	}
+	var planB map[string]any
+	if err := json.Unmarshal([]byte(outB), &planB); err != nil {
+		t.Fatalf("--json stdout not PlanSpec JSON: %v", err)
+	}
+	nodesA := plan["dag"].(map[string]any)["nodes"].([]any)
+	nodesB := planB["dag"].(map[string]any)["nodes"].([]any)
+	if len(nodesA) != len(nodesB) || len(nodesA) != 2 {
+		t.Fatalf("alias payloads diverged: --format=%d nodes, --json=%d nodes", len(nodesA), len(nodesB))
+	}
+
+	// Unknown format values are still rejected fail-closed.
+	code, stdout, stderr = runCLI(t, "plan", "compile", "--format=yaml", "step-one")
+	if code != 2 {
+		t.Fatalf("unknown --format accepted: code=%d", code)
+	}
+	assertCleanStdout(t, stdout)
+	if !strings.Contains(stderr, "expected text|json") {
+		t.Fatalf("stderr missing format guidance: %q", stderr)
+	}
+}
+
+// --- Golden: JSON error envelope under --format=json (permit advisory P3) --
+
+func TestCLIJSONErrorEnvelopeWired(t *testing.T) {
+	code, stdout, stderr := runCLI(t, "risk-summary", "--format=json")
+	if code != 2 {
+		t.Fatalf("code=%d want 2", code)
+	}
+	assertCleanStdout(t, stdout)
+	want := `{"error":{"op":"risk-summary","message":"--effect or --list is required","code":2}}`
+	firstLine, _, _ := strings.Cut(stderr, "\n")
+	if firstLine != want {
+		t.Fatalf("envelope drifted:\n got: %q\nwant: %q", firstLine, want)
+	}
+
+	// Text mode (no --format) keeps the human form.
+	_, _, stderr = runCLI(t, "risk-summary")
+	firstLine, _, _ = strings.Cut(stderr, "\n")
+	if firstLine != "Error: risk-summary: --effect or --list is required" {
+		t.Fatalf("text form drifted: %q", firstLine)
+	}
+
+	// verify entry emits the envelope for operational errors too.
+	code, stdout, stderr = runCLI(t, "verify", "--entry", "receipts/x.json", "--proof", "/nonexistent/proof.json", "--format=json")
+	if code != 2 {
+		t.Fatalf("code=%d want 2", code)
+	}
+	assertCleanStdout(t, stdout)
+	if !strings.HasPrefix(stderr, `{"error":{"op":"verify entry","message":"cannot read proof: `) {
+		t.Fatalf("verify entry envelope drifted: %q", stderr)
 	}
 }

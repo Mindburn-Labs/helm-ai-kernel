@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,10 +12,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 // writeMountedServePolicyFixture writes a serve policy plus reference pack in
@@ -188,5 +191,99 @@ func TestDeployedMCPGatewayEnforcesReconciledSnapshot(t *testing.T) {
 	body = callTool(t, "file_write", map[string]any{"path": filepath.Join(dir, "denied.txt"), "content": "x"})
 	if !strings.Contains(body, "Access Denied") {
 		t.Fatalf("tool outside the pack was not fail-closed: %s", body)
+	}
+}
+
+// TestMCPGatewayDecisionsPersistQueryableReceipts covers HELM-363: every
+// governed decision through the MCP gateway — ALLOW and DENY — must persist a
+// signed receipt into the same store /api/v1/receipts reads.
+func TestMCPGatewayDecisionsPersistQueryableReceipts(t *testing.T) {
+	dir := t.TempDir()
+	policyPath, _ := writeMountedServePolicyFixture(t, dir, `{
+  "pack_id": "runtime-pack",
+  "version": 1,
+  "runtime_actions": [
+    {"action": "file_read", "expression": "true"}
+  ]
+}`)
+
+	source := policyreconcile.NewMountedFileSource(policyPath, policyreconcile.DefaultScope)
+	policyStore := policyreconcile.NewAtomicSnapshotStore()
+	reconciler := newMountedPolicyReconciler(t, source, policyStore)
+	if status, err := reconciler.Reconcile(context.Background(), policyreconcile.DefaultScope); err != nil || !status.Updated {
+		t.Fatalf("initial reconcile: status=%+v err=%v", status, err)
+	}
+
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	receiptStore, err := store.NewSQLiteReceiptStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &Services{ReceiptStore: receiptStore, ReceiptSigner: signer}
+
+	guard := guardian.NewGuardian(signer, nil, nil, guardian.WithPolicySnapshots(policyStore, policyreconcile.DefaultScope))
+	gateway, err := newLocalMCPGatewayWithEvaluator(mcppkg.GatewayConfig{}, &receiptPersistingEvaluator{svc: svc, inner: guard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+
+	callTool := func(t *testing.T, name string, args map[string]any) string {
+		t.Helper()
+		payload, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "tools/call",
+			"params":  map[string]any{"name": name, "arguments": args},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(payload)))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("tools/call %s returned status %d: %s", name, recorder.Code, recorder.Body.String())
+		}
+		return recorder.Body.String()
+	}
+
+	target := filepath.Join(dir, "allowed.txt")
+	if err := os.WriteFile(target, []byte("helm-363-allow"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if body := callTool(t, "file_read", map[string]any{"path": target}); !strings.Contains(body, "helm-363-allow") {
+		t.Fatalf("expected ALLOW for pack-declared file_read: %s", body)
+	}
+	if body := callTool(t, "file_write", map[string]any{"path": filepath.Join(dir, "denied.txt"), "content": "x"}); !strings.Contains(body, "Access Denied") {
+		t.Fatalf("expected DENY for file_write: %s", body)
+	}
+
+	// The same read path /api/v1/receipts uses.
+	receipts, err := receiptStore.ListSince(context.Background(), 0, 10)
+	if err != nil {
+		t.Fatalf("list receipts: %v", err)
+	}
+	verdicts := map[string]string{}
+	for _, receipt := range receipts {
+		resource, _ := receipt.Metadata["resource"].(string)
+		verdicts[resource] = receipt.Status
+		if receipt.Signature == "" {
+			t.Fatalf("receipt %s is unsigned", receipt.ReceiptID)
+		}
+	}
+	if verdicts["file_read"] != string(contracts.VerdictAllow) {
+		t.Fatalf("missing ALLOW receipt for file_read: %+v", verdicts)
+	}
+	if verdicts["file_write"] != string(contracts.VerdictDeny) {
+		t.Fatalf("missing DENY receipt for file_write: %+v", verdicts)
 	}
 }

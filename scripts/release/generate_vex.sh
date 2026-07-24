@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Generate per-release OpenVEX 0.2.0 statements for every CVE listed in
-# the current CycloneDX SBOM (sbom.json).
+# Generate the per-release OpenVEX 0.2.0 document from the maintainer-triaged
+# entries in release/vex/policies.yaml. It does not (yet) cross-reference the
+# CycloneDX SBOM (sbom.json): ids absent from policies.yaml stay absent from
+# the document, i.e. implicitly "under_investigation".
 #
 # Default disposition for newly seen CVEs is "under_investigation"; project
 # maintainers override per-CVE statements via release/vex/policies.yaml when
@@ -102,7 +104,7 @@ if [ -f "$POLICIES" ]; then
                 print "::warning::generate_vex.sh: skipping policies.yaml entry " cve ": not_affected requires a justification (see policies.yaml schema)" > "/dev/stderr"
                 return
             }
-            obj = "{\"vulnerability\":{\"name\":\"" esc(cve) "\"},\"timestamp\":\"" ts "\",\"products\":[{\"@id\":\"" purl "\"}],\"status\":\"" esc(status) "\""
+            obj = "{\"vulnerability\":{\"name\":\"" esc(cve) "\"},\"timestamp\":\"" esc(ts) "\",\"products\":[{\"@id\":\"" esc(purl) "\"}],\"status\":\"" esc(status) "\""
             if (justification != "") obj = obj ",\"justification\":\"" esc(justification) "\""
             if (statement != "") obj = obj ",\"status_notes\":\"" esc(statement) "\""
             obj = obj "}"

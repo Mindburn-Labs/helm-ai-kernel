@@ -49,17 +49,22 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	jsonOutput = jsonOutput || formatFlag.IsJSON()
+	// Errors follow the effective output mode (legacy --json included).
+	errFormat := cliui.FormatText
+	if jsonOutput {
+		errFormat = cliui.FormatJSON
+	}
 	if proofPath == "" {
-		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("verify entry", "--proof <file> is required for single-entry verification"), formatFlag.Value)
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("verify entry", "--proof <file> is required for single-entry verification"), errFormat)
 	}
 
 	data, err := os.ReadFile(proofPath)
 	if err != nil {
-		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify entry", "cannot read proof"), formatFlag.Value)
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify entry", "cannot read proof"), errFormat)
 	}
 	var proof evidencepack.InclusionProof
 	if err := json.Unmarshal(data, &proof); err != nil {
-		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify entry", "invalid proof JSON"), formatFlag.Value)
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify entry", "invalid proof JSON"), errFormat)
 	}
 
 	// If --entry is supplied, it MUST match the proof's bound entry. This stops a

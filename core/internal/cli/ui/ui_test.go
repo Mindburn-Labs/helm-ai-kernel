@@ -237,6 +237,15 @@ func TestFormatErrorJSONEmptyMsgWrap(t *testing.T) {
 
 // --- Golden: RequestedFormat + ParseFlags (permit round-5 P2) --------------
 
+// vf builds a value-flag set for scanner tests.
+func vf(names ...string) map[string]bool {
+	m := map[string]bool{}
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
+
 func TestRequestedFormatGolden(t *testing.T) {
 	cases := []struct {
 		args []string
@@ -257,7 +266,7 @@ func TestRequestedFormatGolden(t *testing.T) {
 		{[]string{"--format=json", "--format=text"}, FormatText}, // last wins, like flag
 	}
 	for i, tc := range cases {
-		if got := RequestedFormat(tc.args, FormatText); got != tc.want {
+		if got := RequestedFormat(tc.args, FormatText, vf("effect", "format")); got != tc.want {
 			t.Fatalf("case %d %v: got %q want %q", i, tc.args, got, tc.want)
 		}
 	}
@@ -340,9 +349,41 @@ func TestRequestedFormatSkipsFlagValues(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := RequestedFormat(tc.args, FormatText); got != tc.want {
+			if got := RequestedFormat(tc.args, FormatText, vf("effect", "format", "agent")); got != tc.want {
 				t.Fatalf("RequestedFormat(%v) = %q, want %q", tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+// --- Regression: command-aware scan (permit round-8 P2) --------------------
+
+func TestValueFlagNamesDerivesFromFlagSet(t *testing.T) {
+	fs := flag.NewFlagSet("risk-summary", flag.ContinueOnError)
+	var effect string
+	var list, jsonOut bool
+	fs.StringVar(&effect, "effect", "", "")
+	fs.BoolVar(&list, "list", false, "")
+	fs.BoolVar(&jsonOut, "json", false, "")
+	RegisterFormat(fs, FormatText)
+	names := ValueFlagNames(fs)
+	if !names["effect"] || !names["format"] {
+		t.Fatalf("value flags missing: %v", names)
+	}
+	if names["list"] || names["json"] {
+		t.Fatalf("bool flags misclassified: %v", names)
+	}
+}
+
+func TestRequestedFormatCommandAware(t *testing.T) {
+	riskFlags := vf("effect", "format") // risk-summary has NO --agent
+	// --agent is undefined on risk-summary: the flag package stops there, so
+	// the trailing --format=json is a valid selector position and wins.
+	if got := RequestedFormat([]string{"--agent", "--format=json"}, FormatText, riskFlags); got != FormatJSON {
+		t.Fatalf("cross-command name consumed a token: got %q", got)
+	}
+	// But on receipts tail, --agent IS a value flag and consumes the selector.
+	if got := RequestedFormat([]string{"--agent", "--format=json"}, FormatText, vf("agent", "format")); got != FormatText {
+		t.Fatalf("own value flag failed to consume: got %q", got)
 	}
 }

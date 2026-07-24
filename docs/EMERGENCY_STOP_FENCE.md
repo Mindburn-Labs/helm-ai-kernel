@@ -23,17 +23,50 @@ present:
 - a durable Kernel database;
 - a Control Plane that implements the shared `emergency-stop-fence.v1`
   contract and persists its own command ledger/outbox;
-- `HELM_EMERGENCY_STOP_COMMAND_AUDIENCE`, unique to this Kernel deployment;
+- `HELM_EMERGENCY_STOP_COMMAND_AUDIENCE`, the current audience unique to this
+  Kernel deployment;
 - `HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS`, a comma-separated
-  `key_id=hex-ed25519-public-key` keyring; and
+  `key_id=hex-ed25519-public-key` active keyring; and
 - `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_WORKSPACE_ID`, each pinned to
   the deployed scope; and
 - a service credential for the fixed internal Kernel route.
 
-Multiple keyring entries are permitted only for an intentional signing-key
-rotation overlap. The command signs its `audience` and `key_id`, so a command
-for one deployment cannot be replayed to another deployment that uses a
-different audience.
+Multiple active-keyring entries are permitted only for an intentional
+signing-key rotation overlap. The command signs its `audience` and `key_id`,
+so a command for one deployment cannot be replayed to another deployment that
+uses a different audience by default.
+
+For a deliberate command key or audience rotation, an operator may additionally
+pin prior command identities in
+`HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING`:
+
+```json
+{
+  "keyring_version": "emergency-stop-fence-command-replay-keyring.v1",
+  "keys": [
+    {
+      "command_key_id": "cp-before-rotation",
+      "command_audience": "kernel-before-rotation",
+      "command_public_key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ]
+}
+```
+
+Each entry binds one exact key ID, audience, and Ed25519 public key. The
+Kernel never re-signs a queued command; it accepts only its original signature
+under that exact authority. Unknown or mismatched old audiences/keys are
+forbidden. A key ID may span an active and prior audience only when its public
+key is identical; duplicate key-ID/audience pairs or conflicting public
+material reject configuration. Remove prior entries only after the Control
+Plane has drained or otherwise reconciled its signed command outbox.
+
+For the bundled Helm chart, set the JSON directly through
+`helm.emergencyStop.commandReplayKeyring`, or source it from the existing
+command-authority Secret by setting
+`helm.emergencyStop.commandReplayKeyringSecretKey`. The two chart inputs are
+mutually exclusive; a Secret-backed replay keyring requires
+`helm.emergencyStop.existingSecret`.
 
 ## Kernel contract behavior
 

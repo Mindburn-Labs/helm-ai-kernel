@@ -16,6 +16,7 @@ ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
+REPLAY_KEYRING='{"keyring_version":"emergency-stop-fence-command-replay-keyring.v1","keys":[{"command_key_id":"cp-stop-before-rotation","command_audience":"kernel-before-rotation","command_public_key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}'
 RENDER_DIR="${HELM_CHART_RENDER_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-chart.XXXXXX")}"
 
 cleanup() {
@@ -92,6 +93,7 @@ assert_contains "$default_rendered" "value: \"system-admin\""
 assert_contains "$default_rendered" "value: \"0\""
 assert_not_contains "$default_rendered" "HELM_EMERGENCY_STOP_COMMAND_AUDIENCE"
 assert_not_contains "$default_rendered" "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS"
+assert_not_contains "$default_rendered" "HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING"
 assert_contains "$default_rendered" "automountServiceAccountToken: false"
 assert_not_contains "$default_rendered" "HELM_POLICY_TRUST_PUBLIC_KEY"
 assert_not_contains "$default_rendered" "checksum/config"
@@ -111,6 +113,41 @@ assert_contains "$emergency_stop_rendered" "value: \"1\""
 assert_contains "$emergency_stop_rendered" "HELM_EMERGENCY_STOP_COMMAND_AUDIENCE"
 assert_contains "$emergency_stop_rendered" "kernel-qa"
 assert_contains "$emergency_stop_rendered" "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS"
+
+emergency_stop_replay_direct_rendered="$RENDER_DIR/rendered-emergency-stop-replay-direct.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.emergencyStop.enabled=true \
+    --set helm.emergencyStop.audience=kernel-qa \
+    --set helm.emergencyStop.commandPublicKeys=cp-stop-qa=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    --set-literal helm.emergencyStop.commandReplayKeyring="$REPLAY_KEYRING" >"$emergency_stop_replay_direct_rendered"
+assert_contains "$emergency_stop_replay_direct_rendered" "HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING"
+assert_contains "$emergency_stop_replay_direct_rendered" "emergency-stop-fence-command-replay-keyring.v1"
+assert_contains "$emergency_stop_replay_direct_rendered" "cp-stop-before-rotation"
+
+emergency_stop_replay_secret_rendered="$RENDER_DIR/rendered-emergency-stop-replay-secret.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.emergencyStop.enabled=true \
+    --set helm.emergencyStop.audience=kernel-qa \
+    --set helm.emergencyStop.existingSecret=helm-emergency-stop-authority \
+    --set helm.emergencyStop.commandReplayKeyringSecretKey=HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING >"$emergency_stop_replay_secret_rendered"
+assert_contains "$emergency_stop_replay_secret_rendered" "HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING"
+assert_contains "$emergency_stop_replay_secret_rendered" "name: helm-emergency-stop-authority"
+assert_contains "$emergency_stop_replay_secret_rendered" "key: HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING"
+
+emergency_stop_replay_ambiguous_log="$RENDER_DIR/emergency-stop-replay-ambiguous.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.emergencyStop.enabled=true \
+    --set helm.emergencyStop.audience=kernel-qa \
+    --set helm.emergencyStop.existingSecret=helm-emergency-stop-authority \
+    --set helm.emergencyStop.commandReplayKeyringSecretKey=HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING \
+    --set-literal helm.emergencyStop.commandReplayKeyring="$REPLAY_KEYRING" >"$RENDER_DIR/emergency-stop-replay-ambiguous.yaml" 2>"$emergency_stop_replay_ambiguous_log"; then
+    echo "::error::emergency-stop render with direct and secret replay keyrings unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$emergency_stop_replay_ambiguous_log" "commandReplayKeyring and commandReplayKeyringSecretKey are mutually exclusive"
 
 emergency_stop_missing_authority_log="$RENDER_DIR/emergency-stop-missing-authority.log"
 if helm_runner template "$RELEASE" "$CHART" \

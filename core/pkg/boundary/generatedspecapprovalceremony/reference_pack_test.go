@@ -169,6 +169,7 @@ func buildGeneratedSpecApprovalCeremonyReferencePack(t *testing.T) map[string][]
 			{ID: "expiry_boundary", Mutation: "set_verification_time_to_grant_expiry", ExpectedError: "inactive_grant"},
 			{ID: "grant_signature_tamper", Mutation: "flip_grant_signature_last_bit", ExpectedError: "signature_rejected"},
 			{ID: "single_use_replay", Mutation: "replay_second_consume", ExpectedError: "transition_conflict"},
+			{ID: "quorum_not_verified", Mutation: "set_challenge_quorum_above_approvers_and_reseal", ExpectedError: "quorum_not_verified"},
 		},
 	}
 	indexJSON, err := json.MarshalIndent(index, "", "  ")

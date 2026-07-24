@@ -24,7 +24,7 @@ var testSalt = bytes.Repeat([]byte{0x08}, riskenvelope.SaltBytes)
 
 func TestScanProjectionPreviewsAndPackOmitRawInputs(t *testing.T) {
 	root := fixtureRoot(t)
-	envelope, err := Scan(root, BuildOptions{
+	result, err := ScanWithEvidence(root, BuildOptions{
 		Salt:   testSalt,
 		Cohort: riskenvelope.CohortRepos1To10,
 		Now:    time.Date(2026, 6, 30, 16, 0, 0, 0, time.UTC),
@@ -32,6 +32,7 @@ func TestScanProjectionPreviewsAndPackOmitRawInputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
+	envelope := result.Envelope
 	if err := envelope.Validate(); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
@@ -55,10 +56,10 @@ func TestScanProjectionPreviewsAndPackOmitRawInputs(t *testing.T) {
 		t.Fatalf("html: %v", err)
 	}
 	pack := filepath.Join(t.TempDir(), "pack.tar")
-	if err := WriteEvidencePack(pack, envelope, map[string][]byte{
+	if err := WriteEvidencePack(pack, result, map[string][]byte{
 		"preview/report.md":   md,
 		"preview/report.html": html,
-	}); err != nil {
+	}, EvidencePackOptions{DataDir: t.TempDir(), Now: envelope.GeneratedAt}); err != nil {
 		t.Fatalf("write pack: %v", err)
 	}
 	packBytes, err := os.ReadFile(pack)
@@ -86,20 +87,23 @@ func TestScanProjectionPreviewsAndPackOmitRawInputs(t *testing.T) {
 }
 
 func TestEvidencePackTarIsDeterministicAndLimited(t *testing.T) {
-	envelope, err := Scan(fixtureRoot(t), BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+	result, err := ScanWithEvidence(fixtureRoot(t), BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
+	envelope := result.Envelope
 	md, _ := RenderMarkdown(envelope)
 	html, _ := RenderHTML(envelope)
 	previews := map[string][]byte{"preview/report.html": html, "preview/report.md": md}
 
 	first := filepath.Join(t.TempDir(), "a.tar")
 	second := filepath.Join(t.TempDir(), "b.tar")
-	if err := WriteEvidencePack(first, envelope, previews); err != nil {
+	dataDir := t.TempDir()
+	packOpts := EvidencePackOptions{DataDir: dataDir, Now: fixedTime()}
+	if err := WriteEvidencePack(first, result, previews, packOpts); err != nil {
 		t.Fatalf("write first: %v", err)
 	}
-	if err := WriteEvidencePack(second, envelope, previews); err != nil {
+	if err := WriteEvidencePack(second, result, previews, packOpts); err != nil {
 		t.Fatalf("write second: %v", err)
 	}
 	firstBytes, _ := os.ReadFile(first)
@@ -110,12 +114,18 @@ func TestEvidencePackTarIsDeterministicAndLimited(t *testing.T) {
 
 	names := tarNames(t, firstBytes)
 	want := []string{
-		"preview/report.html",
-		"preview/report.md",
-		"privacy-manifest.json",
-		"risk-envelope.json",
-		"schema-validation.json",
-		"source-pack-hash.json",
+		"00_INDEX.json",
+		"04_EXPORTS/previews/report.html",
+		"04_EXPORTS/previews/report.md",
+		"04_EXPORTS/privacy-manifest.json",
+		"04_EXPORTS/risk-envelope.json",
+		"04_EXPORTS/scan-manifest.json",
+		"04_EXPORTS/schema-validation.json",
+		"04_EXPORTS/source-pack-hash.json",
+		"04_EXPORTS/source-projection-summary.json",
+		"07_ATTESTATIONS/evidence_pack.sig",
+		"09_SCHEMAS/risk-envelope.v1.reference.json",
+		"09_SCHEMAS/risk-scan-manifest.v1.json",
 	}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("pack names mismatch\ngot:  %#v\nwant: %#v", names, want)

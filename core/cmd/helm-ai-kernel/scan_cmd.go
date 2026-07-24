@@ -38,6 +38,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		receiptsPath string
 		cohort       string
 		saltFile     string
+		dataDir      string
 		envelopePath string
 		evidencePack string
 		upload       bool
@@ -49,6 +50,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&receiptsPath, "from-receipts", "", "Project workstation observe/decision receipts from this directory")
 	cmd.StringVar(&cohort, "cohort", string(riskenvelope.CohortUnknown), "Cohort bucket: unknown|1-10repos|11-50repos|51-200repos|201plusrepos")
 	cmd.StringVar(&saltFile, "salt-file", "", "Local-only pseudonym salt file (default: user config dir)")
+	cmd.StringVar(&dataDir, "data-dir", "", "HELM local directory for the local scan evidence seal")
 	cmd.StringVar(&envelopePath, "risk-envelope", "", "Write anonymized RiskEnvelope JSON")
 	cmd.Var(&previews, "preview", "Write local preview (.md or .html); may be repeated")
 	cmd.StringVar(&evidencePack, "evidence-pack", "", "Write anonymized scan EvidencePack tar")
@@ -80,11 +82,11 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		Cohort: riskenvelope.CohortBucket(cohort),
 		Now:    time.Now().UTC(),
 	}
-	var envelope riskenvelope.RiskEnvelope
+	var result riskscan.ScanResult
 	if strings.TrimSpace(receiptsPath) != "" {
-		envelope, err = riskscan.ScanReceipts(receiptsPath, opts)
+		result, err = riskscan.ScanReceiptsWithEvidence(receiptsPath, opts)
 	} else {
-		envelope, err = riskscan.Scan(rootPath, opts)
+		result, err = riskscan.ScanWithEvidence(rootPath, opts)
 	}
 	if err != nil {
 		if errors.Is(err, riskscan.ErrScanCoverageIncomplete) {
@@ -94,6 +96,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Error scanning declared input: %v\n", err)
 		return 2
 	}
+	envelope := result.Envelope
 	body, err := riskscan.EnvelopeJSON(envelope)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error building risk envelope: %v\n", err)
@@ -120,7 +123,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		previewPayloads[packName] = payload
 	}
 	if evidencePack != "" {
-		if err := riskscan.WriteEvidencePack(evidencePack, envelope, previewPayloads); err != nil {
+		if err := riskscan.WriteEvidencePack(evidencePack, result, previewPayloads, riskscan.EvidencePackOptions{DataDir: dataDir, Now: opts.Now}); err != nil {
 			fmt.Fprintf(stderr, "Error writing evidence pack: %v\n", err)
 			return 2
 		}

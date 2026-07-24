@@ -111,4 +111,10 @@ jobs:
             --head "$branch"; then
             exit 0
           fi
-          echo "::warning::Catalog refresh branch was pushed as ${branch}, but this workflow token could not create a PR. Open the PR manually from the pushed branch."
+          if existing_pr="$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // ""')" && [ -n "$existing_pr" ]; then
+            echo "Catalog refresh PR already exists: ${existing_pr}"
+            exit 0
+          fi
+          echo "::error::Catalog refresh could not create a PR; removing the run-owned branch ${branch}."
+          git push origin --delete "$branch" || echo "::warning::Could not remove orphaned branch ${branch}."
+          exit 1

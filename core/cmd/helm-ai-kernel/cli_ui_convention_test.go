@@ -280,3 +280,30 @@ func TestCLITextModeKeepsHumanErrorForm(t *testing.T) {
 		t.Fatalf("usage lines missing in text mode: %q", stderr)
 	}
 }
+
+// --- Regression: decision-receipt JSON-mode errors (permit round-4 P2) -----
+
+func TestCLIDecisionReceiptJSONErrorEnvelope(t *testing.T) {
+	// P2 DECISION_RECEIPT_JSON_ERRORS_TEXT: --json selects the envelope even
+	// though --format is the receipt-format-id collision exception.
+	code, stdout, stderr := runCLI(t, "verify", "decision-receipt", "--json")
+	if code != 2 {
+		t.Fatalf("code=%d want 2", code)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, stderr)
+
+	// Read failure under --json is also a single envelope document.
+	code, stdout, stderr = runCLI(t, "verify", "decision-receipt", "--json", "/nonexistent/receipt.json")
+	if code != 2 {
+		t.Fatalf("code=%d want 2", code)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, stderr)
+
+	// Text mode keeps the human form.
+	_, _, stderr = runCLI(t, "verify", "decision-receipt")
+	if !strings.HasPrefix(stderr, "Error: verify decision-receipt: provide a receipt file") {
+		t.Fatalf("text form drifted: %q", stderr)
+	}
+}

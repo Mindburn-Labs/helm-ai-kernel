@@ -40,27 +40,34 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 	if err := cmd.Parse(reorderFlagsFirst(args, map[string]bool{"file": true, "format": true, "public-key": true})); err != nil {
 		return 2
 	}
+	// --format is taken by the receipt format id (documented collision
+	// exception), so --json is the output-mode selector here and errors
+	// follow it.
+	errFormat := cliui.FormatText
+	if jsonOutput {
+		errFormat = cliui.FormatJSON
+	}
 	if file == "" && cmd.NArg() > 0 {
 		file = cmd.Arg(0)
 	}
 	if file == "" {
-		return cliui.WriteError(stderr, cliui.UsageErrorf("verify decision-receipt", "provide a receipt file (positional argument or --file)"))
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("verify decision-receipt", "provide a receipt file (positional argument or --file)"), errFormat)
 	}
 	raw, err := os.ReadFile(file)
 	if err != nil {
-		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", "read %s", file))
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", "read %s", file), errFormat)
 	}
 
 	report, err := decisionreceipt.Default().VerifyBundle(raw, format, publicKey)
 	if err != nil {
-		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", ""))
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", ""), errFormat)
 	}
 
 	if jsonOutput {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(report); err != nil {
-			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", "encode report"))
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", "encode report"), errFormat)
 		}
 	} else {
 		status := "NOT VERIFIED"

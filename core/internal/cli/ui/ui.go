@@ -244,9 +244,17 @@ func FormatErrorJSON(err error) string {
 	if errors.As(err, &ce) {
 		body.Op = ce.Op
 		body.Hint = ce.Hint
-		body.Message = ce.Msg
-		if ce.Err != nil {
+		// Join non-empty segments only: an empty Msg (Wrapf with an empty
+		// format) must not yield a leading ": ".
+		switch {
+		case ce.Msg != "" && ce.Err != nil:
 			body.Message = ce.Msg + ": " + ce.Err.Error()
+		case ce.Msg != "":
+			body.Message = ce.Msg
+		case ce.Err != nil:
+			body.Message = ce.Err.Error()
+		default:
+			body.Message = ce.Op
 		}
 	}
 	data, err := json.Marshal(errorEnvelope{Error: body})

@@ -148,6 +148,16 @@ var decideCases = []struct {
 	{"regression-shell-bare-stdin", "bash", "standard input"},
 	{"regression-exec-wrapper", `exec bash -c 'rm -r -f /tmp/x'`, "recursive rm"},
 	{"regression-exec-direct", "exec rm -rf /tmp/x", "recursive rm"},
+
+	// Regression: P1 WRAPPER_SHORT_VALUE_BYPASS — unknown wrapper short
+	// flags must not be assumed valueless; they route to the decision path.
+	// (-R/--role genuinely takes a value, so it is modeled accurately.)
+	{"regression-sudo-role-value", "sudo -R / rm --recursive --force /tmp/x", "recursive rm"},
+	{"regression-sudo-unknown-short", "sudo -X foo rm -rf /tmp/x", "cannot be resolved statically"},
+	{"regression-sudo-unknown-short-attached", "sudo -Xfoo rm -rf /tmp/x", "cannot be resolved statically"},
+	{"regression-nice-unknown-short", "nice -z rm -rf /tmp/x", "cannot be resolved statically"},
+	{"regression-xargs-unknown-short", "printf 'a\\n' | xargs -Z rm -rf", "cannot be resolved statically"},
+	{"regression-shell-nonposix-flag", `bash -9 -c 'rm -rf /tmp/x'`, "cannot be resolved statically"},
 }
 
 // passCases are commands that must still pass through without a decision —
@@ -176,6 +186,8 @@ var passCases = []struct {
 	{"safe-sh-script-arg", "sh build.sh --fast"},
 	{"safe-sudo-ls", "sudo ls /root"},
 	{"safe-sudo-preserve-env", "sudo --preserve-env ls /root"},
+	{"safe-sudo-E-ls", "sudo -E ls /root"},
+	{"safe-xargs-null", "printf 'a\\0' | xargs -0 echo"},
 	{"safe-empty", "   "},
 	{"safe-base64-encode", "echo hello | base64"},
 	{"safe-xargs-echo", "echo a b | xargs echo"},

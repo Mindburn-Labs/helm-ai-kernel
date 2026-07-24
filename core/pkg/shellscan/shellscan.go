@@ -266,7 +266,7 @@ func resolveWord(w *syntax.Word) wordTok {
 var valueFlags = map[string]map[string]bool{
 	"sudo": {
 		"-u": true, "-g": true, "-h": true, "-p": true, "-C": true, "-T": true,
-		"-D": true, "-U": true, "-t": true,
+		"-D": true, "-U": true, "-t": true, "-R": true,
 		"--user": true, "--group": true, "--host": true, "--prompt": true,
 		"--chdir": true, "--role": true, "--type": true, "--close-from": true,
 		"--other-user": true, "--command-timeout": true,
@@ -274,11 +274,28 @@ var valueFlags = map[string]map[string]bool{
 	"exec":   {"-a": true},
 	"nice":   {"-n": true, "--adjustment": true},
 	"stdbuf": {"-i": true, "-o": true, "-e": true, "--input": true, "--output": true, "--error": true},
+	"time":   {"-f": true, "-o": true, "--format": true, "--output": true},
 	"xargs": {
 		"-I": true, "-L": true, "-n": true, "-P": true, "-s": true, "-d": true, "-E": true, "-a": true,
+		"-i": true, "-l": true, // deprecated aliases of -I / -L (take values)
 		"--replace": true, "--max-lines": true, "--max-args": true, "--max-procs": true,
 		"--max-chars": true, "--delimiter": true, "--eof": true, "--arg-file": true,
 	},
+}
+
+// noValueShortFlags lists wrapper short flags known to take no value.
+// Unknown short flags are NOT assumed valueless: they may consume the next
+// token, so they are treated as ambiguous and route to the decision path.
+var noValueShortFlags = map[string]map[string]bool{
+	"sudo": {
+		"-A": true, "-b": true, "-E": true, "-e": true, "-H": true, "-i": true,
+		"-k": true, "-K": true, "-l": true, "-n": true, "-P": true, "-S": true,
+		"-s": true, "-v": true, "-V": true,
+	},
+	"xargs":  {"-0": true, "-p": true, "-t": true, "-v": true, "-x": true, "-r": true, "-o": true},
+	"setsid": {"-f": true, "-w": true, "-c": true},
+	"time":   {"-p": true, "-a": true, "-v": true, "-q": true},
+	"exec":   {"-l": true, "-c": true},
 }
 
 // noValueLongFlags lists wrapper long flags known to take no value. Unknown
@@ -305,6 +322,7 @@ var noValueLongFlags = map[string]map[string]bool{
 func dropWrapperFlags(cmd string, args []wordTok) []wordTok {
 	vals := valueFlags[cmd]
 	novals := noValueLongFlags[cmd]
+	shortNovals := noValueShortFlags[cmd]
 	i := 0
 	for i < len(args) {
 		tok := args[i]
@@ -339,15 +357,21 @@ func dropWrapperFlags(cmd string, args []wordTok) []wordTok {
 			return nil // unknown long flag may consume the next token
 		}
 		// Short-flag cluster: a value-taking flag consumes the rest of the
-		// cluster or, when last, the next token.
+		// cluster or, when last, the next token. Unknown short flags are NOT
+		// assumed valueless (WRAPPER_SHORT_VALUE_BYPASS): they are ambiguous.
 		cluster := tok.text[1:]
 		for j := 0; j < len(cluster); j++ {
-			if vals["-"+string(cluster[j])] {
+			key := "-" + string(cluster[j])
+			if vals[key] {
 				if j+1 == len(cluster) {
 					i++
 				}
-				break
+				break // value consumes the rest of the cluster
 			}
+			if shortNovals[key] {
+				continue
+			}
+			return nil
 		}
 		i++
 	}
@@ -422,6 +446,14 @@ func scanShellScriptFlag(rest []wordTok) (script wordTok, found, stdin, ambiguou
 					i++
 				}
 				j = len(cluster) // value consumes the rest of the cluster
+			default:
+				// POSIX single-letter shell options are valueless, so
+				// letters are safe to skip. Anything that is not a letter
+				// (digits, punctuation) is not a standard shell option and
+				// may be a value-taking extension: ambiguous, fail closed.
+				if !((cluster[j] >= 'a' && cluster[j] <= 'z') || (cluster[j] >= 'A' && cluster[j] <= 'Z')) {
+					return wordTok{}, false, false, true, false
+				}
 			}
 		}
 	}
@@ -545,7 +577,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			c.signal(SignalEnvWrapper)
 			args = dropWrapperFlags("xargs", args[1:])
 			via = joinVia(via, "xargs")
-			if len(args) == 0 {
+			if args != nil && len(args) == 0 {
 				c.decide("xargs invokes a command supplied only at runtime")
 				return
 			}

@@ -238,9 +238,23 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		mcpGateway *mcppkg.Gateway
 		err        error
 	)
-	if svc.ReceiptSigner != nil {
+	switch {
+	case svc.Guardian != nil:
+		// The deployed gateway enforces the reconciled policy authority
+		// (snapshot-bound Guardian). A standalone boot-time guardian would
+		// keep an empty fail-closed graph forever, so reference-pack
+		// runtime_actions compiled by the reconciler would never reach the
+		// MCP enforcement path.
+		var evaluator mcppkg.PolicyEvaluator = svc.Guardian
+		if svc.ReceiptStore != nil && svc.ReceiptSigner != nil {
+			// Every governed gateway decision (ALLOW and DENY) persists a
+			// signed receipt into the same store /api/v1/receipts reads.
+			evaluator = &receiptPersistingEvaluator{svc: svc, inner: evaluator}
+		}
+		mcpGateway, err = newLocalMCPGatewayWithEvaluator(mcppkg.GatewayConfig{}, evaluator)
+	case svc.ReceiptSigner != nil:
 		mcpGateway, err = newConfiguredLocalMCPGatewayWithSigner(mcppkg.GatewayConfig{}, svc.ReceiptSigner)
-	} else {
+	default:
 		mcpGateway, err = newLocalMCPGateway()
 	}
 	if err != nil {

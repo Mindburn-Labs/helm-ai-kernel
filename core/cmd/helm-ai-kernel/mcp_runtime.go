@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/a2a"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
@@ -73,11 +74,22 @@ func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph
 	if policyGraph == nil {
 		policyGraph = prg.NewGraph()
 	}
+	return newLocalMCPRuntimeWithEvaluator(guardian.NewGuardian(signer, policyGraph, nil))
+}
+
+// newLocalMCPRuntimeWithEvaluator builds the local MCP runtime whose governance
+// decisions come from evaluator. Wiring the kernel's snapshot-bound Guardian
+// lets the deployed gateway enforce the currently reconciled policy authority
+// (including reference-pack runtime_actions) instead of a static boot-time
+// graph that never sees reconciler updates.
+func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+	if evaluator == nil {
+		return nil, nil, fmt.Errorf("mcp policy evaluator is required")
+	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
 	catalog.RegisterGovernanceTools()
-	guard := guardian.NewGuardian(signer, policyGraph, nil)
-	firewall := mcppkg.NewGovernanceFirewall(guard, catalog)
+	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog)
 
 	return catalog, mcppkg.ToolExecutor(firewall.WrapToolHandler(runLocalMCPTool)), nil
 }
@@ -102,6 +114,45 @@ func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer hel
 	}
 
 	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+}
+
+// newLocalMCPGatewayWithEvaluator builds the MCP gateway on an existing
+// governance evaluator (typically the kernel Guardian bound to the reconciled
+// policy snapshot store).
+func newLocalMCPGatewayWithEvaluator(cfg mcppkg.GatewayConfig, evaluator mcppkg.PolicyEvaluator) (*mcppkg.Gateway, error) {
+	catalog, executor, err := newLocalMCPRuntimeWithEvaluator(evaluator)
+	if err != nil {
+		return nil, err
+	}
+
+	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+}
+
+// receiptPersistingEvaluator persists a signed, queryable receipt for every
+// governed MCP gateway decision — ALLOW and DENY — into the kernel receipt
+// store that /api/v1/receipts reads. Persistence is fail-closed: a decision
+// that cannot be receipted surfaces as a governance error and blocks the
+// call, matching the /api/v1/evaluate route and the transparency-anchor
+// posture.
+type receiptPersistingEvaluator struct {
+	svc   *Services
+	inner mcppkg.PolicyEvaluator
+}
+
+func (e *receiptPersistingEvaluator) EvaluateDecision(ctx context.Context, req guardian.DecisionRequest) (*contracts.DecisionRecord, error) {
+	decision, err := e.inner.EvaluateDecision(ctx, req)
+	if err != nil || decision == nil {
+		return decision, err
+	}
+	if err := persistDecisionReceipt(ctx, e.svc, decision, req.Principal, []byte(req.Action+":"+req.Resource), map[string]any{
+		"source":   "mcp.gateway",
+		"action":   req.Action,
+		"resource": req.Resource,
+		"reason":   decision.Reason,
+	}); err != nil {
+		return nil, fmt.Errorf("persist gateway decision receipt: %w", err)
+	}
+	return decision, nil
 }
 
 func runLocalMCPTool(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {

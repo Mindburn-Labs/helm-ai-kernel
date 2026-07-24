@@ -300,7 +300,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if !hasAllOAuthScopes(r.Context(), tool.RequiredScopes) {
+	if !g.hasRequiredScopes(r.Context(), tool) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
@@ -515,7 +515,7 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if !ok {
 			return writeError(-32602, fmt.Sprintf("tool %q not found", req.Name))
 		}
-		if !hasAllOAuthScopes(ctx, tool.RequiredScopes) {
+		if !g.hasRequiredScopes(ctx, tool) {
 			return writeError(-32001, fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Name, strings.Join(tool.RequiredScopes, ", ")))
 		}
 		if _, err := ValidateToolArguments(tool, req.Arguments); err != nil {
@@ -551,6 +551,20 @@ func (g *Gateway) authMode() string {
 		return "none"
 	}
 	return g.config.AuthMode
+}
+
+// hasRequiredScopes enforces a tool's OAuth scopes only when the gateway runs
+// an OAuth channel that can actually convey them. In every other auth mode
+// (none, static-header) no client can present scopes, so demanding them made
+// scoped tools permanently unreachable while the gateway advertised
+// auth_mode: none. Skipping the scope gate does not bypass governance: the
+// executor still evaluates every call against the fail-closed policy
+// authority, which remains the enforcement boundary.
+func (g *Gateway) hasRequiredScopes(ctx context.Context, tool ToolRef) bool {
+	if g.authMode() != "oauth" {
+		return true
+	}
+	return hasAllOAuthScopes(ctx, tool.RequiredScopes)
 }
 
 func findToolRef(c Catalog, name string) (ToolRef, bool) {

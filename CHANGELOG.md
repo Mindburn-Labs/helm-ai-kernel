@@ -89,6 +89,18 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+- Fixed the deployed MCP gateway to enforce the reconciled policy snapshot, so
+  mounted reference-pack `runtime_actions` compile into ALLOW rules on the
+  served enforcement path instead of staying fail-closed `NO_POLICY_DEFINED`
+  (HELM-362).
+- Fixed the deployed MCP gateway to persist a signed receipt for every governed
+  decision (ALLOW and DENY) into the same store `GET /api/v1/receipts` reads
+  (HELM-363).
+- Fixed MCP OAuth scope enforcement to apply only when the gateway runs an
+  OAuth channel; with `auth_mode: none` the scoped governance tools
+  (`helm.verify`, `helm.evaluate`) are reachable and policy remains the
+  fail-closed enforcement boundary (HELM-364).
+
 ## [0.7.4] - 2026-07-21
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.4>.

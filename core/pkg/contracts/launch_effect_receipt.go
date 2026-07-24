@@ -714,7 +714,11 @@ func launchEvidenceRefDependsOnReceipt(receipt LaunchEffectReceipt, ref string) 
 		"sha256:" + receipt.ReceiptID,
 		"sha256:" + receipt.PreviousReceiptID,
 	} {
-		if forbidden != "" && launchConstantEqual(ref, forbidden) {
+		// Compare case-insensitively: URI schemes are case-insensitive, so an
+		// exact-match check would let SHA256:<receipt-id> evade the guard.
+		// Receipt IDs and hashes are canonical lowercase, so lowercasing the
+		// reference cannot create false positives.
+		if forbidden != "" && launchConstantEqual(lower, strings.ToLower(forbidden)) {
 			return true
 		}
 	}
@@ -739,7 +743,9 @@ func verifyLaunchReceiptChainEvidence(chain []LaunchEffectReceipt, dags []Launch
 	for index, dag := range dags {
 		for _, node := range dag.Nodes {
 			for _, artifactRef := range node.ArtifactRefs {
-				if _, found := forbidden[artifactRef]; found {
+				// URI schemes are case-insensitive; normalize before lookup so
+				// SHA256:<receipt-id> cannot evade the chain-wide guard.
+				if _, found := forbidden[strings.ToLower(artifactRef)]; found {
 					return fmt.Errorf("launch effect receipt revision %d evidence DAG depends on a receipt in its own chain", chain[index].ReceiptRevision)
 				}
 			}

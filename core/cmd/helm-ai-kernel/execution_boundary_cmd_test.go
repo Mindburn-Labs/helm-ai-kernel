@@ -210,11 +210,102 @@ func TestRunMCPAuthorizeCallEscalateHumanMessage(t *testing.T) {
 		"decision: mcp-boundary-",
 		"reason: unknown MCP server requires approval",
 		"receipt:",
-		"approve:",
+		"next:",
 		"helm-ai-kernel mcp approve --server-id shell-mcp-server --tools \"pwd\" --ttl 15m --reason 'read-only repo inspection for local dev'",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunMCPAuthorizeCallDenyHumanMessageUnifiedShape(t *testing.T) {
+	// Approved server, but "ls" is outside the approved tool scope: the DENY
+	// must carry the same shape as ESCALATE (verdict, decision, reason,
+	// receipt, next-step command) instead of a bare one-liner.
+	var seedOut, seedErr bytes.Buffer
+	if code := runMCPAuthorizeCall([]string{
+		"--server-id", "srv-cli-deny-shape",
+		"--tool-name", "pwd",
+		"--approved",
+		"--json",
+	}, &seedOut, &seedErr); code == 2 {
+		t.Fatalf("seed approval failed: %s", seedErr.String())
+	}
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "srv-cli-deny-shape",
+		"--tool-name", "ls",
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"HELM DENY",
+		"decision: mcp-boundary-",
+		"reason: tool is outside the approved scope for this MCP server",
+		"receipt:",
+		"next:",
+		"helm-ai-kernel mcp approve --server-id srv-cli-deny-shape --tools \"ls\"",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunMCPAuthorizeCallSchemaPinNextStepHumanMessage(t *testing.T) {
+	// Approved server + catalog tool + no schema pin: the ESCALATE must print
+	// the exact authorize-call rerun command with the schema hash filled in,
+	// and following that command must reach ALLOW.
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "helm-governance",
+		"--tool-name", "file_read",
+		"--approved",
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"HELM ESCALATE",
+		"reason: MCP tool schema requires approval or pinning",
+		"receipt:",
+		"next:",
+		"helm-ai-kernel mcp authorize-call --server-id helm-governance --tool-name file_read --pinned-schema-hash sha256:",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+
+	// Following the printed next step reaches ALLOW in the unified shape.
+	catalog := mcppkg.NewToolCatalog()
+	catalog.RegisterCommonTools()
+	tool, ok := catalog.Lookup("file_read")
+	if !ok {
+		t.Fatal("file_read missing from common catalog")
+	}
+	hash, err := mcppkg.ToolSchemaHash(tool)
+	if err != nil {
+		t.Fatalf("schema hash: %v", err)
+	}
+	var allowOut, allowErr bytes.Buffer
+	allowCode := runMCPAuthorizeCall([]string{
+		"--server-id", "helm-governance",
+		"--tool-name", "file_read",
+		"--approved",
+		"--pinned-schema-hash", hash,
+	}, &allowOut, &allowErr)
+	if allowCode != 0 {
+		t.Fatalf("exit code = %d stderr=%s stdout=%s", allowCode, allowErr.String(), allowOut.String())
+	}
+	allow := allowOut.String()
+	for _, want := range []string{"HELM ALLOW", "decision: mcp-boundary-", "reason:", "receipt:"} {
+		if !strings.Contains(allow, want) {
+			t.Fatalf("output missing %q:\n%s", want, allow)
 		}
 	}
 }

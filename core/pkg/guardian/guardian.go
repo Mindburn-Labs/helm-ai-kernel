@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -474,7 +476,7 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 		"taint":     contracts.NormalizeTaintLabels(effect.Taint),
 	}
 
-	valid, err := g.pe.EvaluateRequirementSet(rule, input)
+	valid, failures, err := g.pe.EvaluateRequirementSetDetail(rule, input)
 	if err != nil {
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonPRGEvalError)
@@ -485,7 +487,7 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 	if !valid {
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonMissingRequirement)
-		decision.Reason = string(contracts.ReasonMissingRequirement)
+		decision.Reason = missingRequirementReason(failures, input)
 		g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
 		return g.signer.SignDecision(decision)
 	}
@@ -1194,6 +1196,60 @@ func toMap(v any) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// missingRequirementReason builds the actionable deny reason for a PRG rule
+// that evaluated to false. It names each unmet requirement (and its CEL
+// expression when one exists) and lists the input.* fields the policy author
+// can reference, so a deny is a fix instruction rather than a dead end.
+func missingRequirementReason(failures []prg.RequirementFailure, input map[string]interface{}) string {
+	var b strings.Builder
+	b.WriteString(string(contracts.ReasonMissingRequirement))
+	b.WriteString(": policy requirement not met")
+	if len(failures) > 0 {
+		parts := make([]string, 0, len(failures))
+		for _, f := range failures {
+			if f.Expression != "" {
+				parts = append(parts, fmt.Sprintf("%s (expression %q evaluated to false)", f.ID, f.Expression))
+			} else {
+				parts = append(parts, f.ID)
+			}
+		}
+		b.WriteString("; unmet requirement(s): ")
+		b.WriteString(strings.Join(parts, ", "))
+	}
+	if len(input) > 0 {
+		fields := make([]string, 0, len(input))
+		for name, value := range input {
+			fields = append(fields, fmt.Sprintf("%s (%s)", name, inputFieldType(value)))
+		}
+		sort.Strings(fields)
+		b.WriteString("; available input.* fields: ")
+		b.WriteString(strings.Join(fields, ", "))
+	}
+	return b.String()
+}
+
+// inputFieldType names the JSON-level type of an input.* field value so a
+// policy author can see, for example, that input.effect is an object and not
+// a string.
+func inputFieldType(value any) string {
+	switch value.(type) {
+	case map[string]interface{}:
+		return "object"
+	case string:
+		return "string"
+	case bool:
+		return "bool"
+	case nil:
+		return "null"
+	default:
+		rv := reflect.ValueOf(value)
+		if rv.IsValid() && (rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array) {
+			return "array"
+		}
+		return "number"
+	}
 }
 
 // OutputScanResult describes the outcome of post-execution output scanning.

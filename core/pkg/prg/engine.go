@@ -122,27 +122,52 @@ func (pe *PolicyEngine) warmRequirements(reqs []Requirement) error {
 	return nil
 }
 
-// EvaluateRequirementSet recursively evaluates a RequirementSet against the input.
-func (pe *PolicyEngine) EvaluateRequirementSet(rs RequirementSet, input map[string]interface{}) (bool, error) {
-	if len(rs.Requirements) == 0 && len(rs.Children) == 0 {
-		return true, nil
-	}
-
-	leafResults, err := pe.evaluateLeaves(rs.Requirements, input)
-	if err != nil {
-		return false, err
-	}
-
-	childResults, err := pe.evaluateChildren(rs.Children, input)
-	if err != nil {
-		return false, err
-	}
-
-	return combineResults(rs.Logic, append(leafResults, childResults...))
+// RequirementFailure identifies a leaf requirement that evaluated to false
+// during EvaluateRequirementSetDetail. It exists so a deny verdict can name
+// the specific unmet requirement instead of a bare MISSING_REQUIREMENT code.
+type RequirementFailure struct {
+	ID         string
+	Expression string
 }
 
-func (pe *PolicyEngine) evaluateLeaves(reqs []Requirement, input map[string]interface{}) ([]bool, error) {
+// EvaluateRequirementSet recursively evaluates a RequirementSet against the input.
+func (pe *PolicyEngine) EvaluateRequirementSet(rs RequirementSet, input map[string]interface{}) (bool, error) {
+	valid, _, err := pe.EvaluateRequirementSetDetail(rs, input)
+	return valid, err
+}
+
+// EvaluateRequirementSetDetail evaluates like EvaluateRequirementSet but also
+// returns every leaf requirement that evaluated to false. The failure list is
+// only meaningful when the overall result is false; callers use it to build
+// actionable deny reasons.
+func (pe *PolicyEngine) EvaluateRequirementSetDetail(rs RequirementSet, input map[string]interface{}) (bool, []RequirementFailure, error) {
+	if len(rs.Requirements) == 0 && len(rs.Children) == 0 {
+		return true, nil, nil
+	}
+
+	leafResults, leafFailures, err := pe.evaluateLeaves(rs.Requirements, input)
+	if err != nil {
+		return false, nil, err
+	}
+
+	childResults, childFailures, err := pe.evaluateChildren(rs.Children, input)
+	if err != nil {
+		return false, nil, err
+	}
+
+	valid, err := combineResults(rs.Logic, append(leafResults, childResults...))
+	if err != nil {
+		return false, nil, err
+	}
+	if valid {
+		return true, nil, nil
+	}
+	return false, append(leafFailures, childFailures...), nil
+}
+
+func (pe *PolicyEngine) evaluateLeaves(reqs []Requirement, input map[string]interface{}) ([]bool, []RequirementFailure, error) {
 	results := make([]bool, 0, len(reqs))
+	var failures []RequirementFailure
 	activation := map[string]interface{}{"input": input, "taint": input["taint"]}
 
 	for _, req := range reqs {
@@ -154,18 +179,21 @@ func (pe *PolicyEngine) evaluateLeaves(reqs []Requirement, input map[string]inte
 				var err error
 				prog, err = pe.programForExpression(expression)
 				if err != nil {
-					return nil, fmt.Errorf("compile error in req %s: %w", req.ID, err)
+					return nil, nil, fmt.Errorf("compile error in req %s: %w", req.ID, err)
 				}
 			}
 			out, _, err := prog.Eval(activation)
 			if err != nil {
-				return nil, fmt.Errorf("eval error in req %s: %w", req.ID, err)
+				return nil, nil, fmt.Errorf("eval error in req %s: %w", req.ID, err)
 			}
 			val, ok := out.Value().(bool)
 			if !ok {
-				return nil, fmt.Errorf("req %s did not return bool", req.ID)
+				return nil, nil, fmt.Errorf("req %s did not return bool", req.ID)
 			}
 			results = append(results, val)
+			if !val {
+				failures = append(failures, RequirementFailure{ID: req.ID, Expression: req.Expression})
+			}
 			continue
 		}
 
@@ -174,6 +202,7 @@ func (pe *PolicyEngine) evaluateLeaves(reqs []Requirement, input map[string]inte
 			artifacts, ok := input["artifacts"].([]*pkg_artifact.ArtifactEnvelope)
 			if !ok {
 				results = append(results, false)
+				failures = append(failures, RequirementFailure{ID: req.ID})
 				continue
 			}
 			found := false
@@ -184,25 +213,32 @@ func (pe *PolicyEngine) evaluateLeaves(reqs []Requirement, input map[string]inte
 				}
 			}
 			results = append(results, found)
+			if !found {
+				failures = append(failures, RequirementFailure{ID: req.ID})
+			}
 			continue
 		}
 
 		// No expression and no artifact type = always pass (open policy)
 		results = append(results, true)
 	}
-	return results, nil
+	return results, failures, nil
 }
 
-func (pe *PolicyEngine) evaluateChildren(children []RequirementSet, input map[string]interface{}) ([]bool, error) {
+func (pe *PolicyEngine) evaluateChildren(children []RequirementSet, input map[string]interface{}) ([]bool, []RequirementFailure, error) {
 	results := make([]bool, 0, len(children))
+	var failures []RequirementFailure
 	for _, child := range children {
-		val, err := pe.EvaluateRequirementSet(child, input)
+		val, childFailures, err := pe.EvaluateRequirementSetDetail(child, input)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		results = append(results, val)
+		if !val {
+			failures = append(failures, childFailures...)
+		}
 	}
-	return results, nil
+	return results, failures, nil
 }
 
 func combineResults(logic LogicOperator, results []bool) (bool, error) {

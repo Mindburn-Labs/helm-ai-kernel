@@ -111,6 +111,24 @@ var decideCases = []struct {
 	{"regression-dynamic-redirect-out", `echo SECRET=x > "$TARGET"`, "unresolvable"},
 	{"regression-dynamic-redirect-append", `echo SECRET=x >> $TARGET`, "unresolvable"},
 	{"regression-dynamic-redirect-subshell", "cat payload > $(mktemp /tmp/x.XXXX)", "unresolvable"},
+
+	// Regression: P1 DYNAMIC_DESTRUCTIVE_ARGS_FAIL_OPEN — dynamic tokens in
+	// subcommand/flag position of destructive families must fail closed.
+	{"regression-kubectl-dynamic-sub", `kubectl "$(printf delete)" namespace prod`, "dynamic subcommand"},
+	{"regression-docker-dynamic-sub", `docker "$(printf rm)" -f c1`, "dynamic subcommand"},
+	{"regression-docker-dynamic-rm-flag", `docker rm "$(printf %s -f)" c1`, "unresolvable flags"},
+	{"regression-git-reset-dynamic-flag", `git reset "$(printf %s --hard)"`, "unresolvable flags"},
+	{"regression-git-clean-dynamic-flag", `git clean "$(printf %s -fd)"`, "unresolvable flags"},
+	{"regression-find-exec-dynamic-payload", `find . -exec "$(printf 'rm -rf')" {} +`, "dynamic payload"},
+
+	// Regression: P1 WRAPPER_VALUE_FLAG_BYPASS — wrapper long flags that
+	// consume values must be modeled; unknown long flags fail closed.
+	{"regression-sudo-long-user", "sudo --user root rm --recursive --force /tmp/x", "recursive rm"},
+	{"regression-sudo-long-user-attached", "sudo --user=root rm -rf /tmp/x", "recursive rm"},
+	{"regression-sudo-unknown-long-flag", "sudo --mystery root rm -rf /tmp/x", "cannot be resolved statically"},
+	{"regression-sudo-dynamic-flag", "sudo $SUDOFLAGS rm -rf /tmp/x", "cannot be resolved statically"},
+	{"regression-xargs-long-maxargs", "printf 'a\\n' | xargs --max-args=1 rm -rf", "recursive rm"},
+	{"regression-nice-long-adjustment", "nice --adjustment 10 rm -rf /tmp/x", "recursive rm"},
 }
 
 // passCases are commands that must still pass through without a decision —
@@ -138,6 +156,7 @@ var passCases = []struct {
 	{"safe-bash-script", "bash scripts/deploy.sh"},
 	{"safe-sh-script-arg", "sh build.sh --fast"},
 	{"safe-sudo-ls", "sudo ls /root"},
+	{"safe-sudo-preserve-env", "sudo --preserve-env ls /root"},
 	{"safe-empty", "   "},
 	{"safe-base64-encode", "echo hello | base64"},
 	{"safe-xargs-echo", "echo a b | xargs echo"},

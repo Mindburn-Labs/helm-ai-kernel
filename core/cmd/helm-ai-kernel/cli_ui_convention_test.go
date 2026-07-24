@@ -307,3 +307,41 @@ func TestCLIDecisionReceiptJSONErrorEnvelope(t *testing.T) {
 		t.Fatalf("text form drifted: %q", stderr)
 	}
 }
+
+// --- Regression: JSON-mode flag parse errors (permit round-5 P2) -----------
+
+func TestCLIJSONModeFlagParseErrorIsEnvelope(t *testing.T) {
+	cases := []struct {
+		name string
+		cmd  string
+		args []string
+	}{
+		{"risk-summary format then bad flag", "risk-summary", []string{"--format=json", "--bogus"}},
+		{"risk-summary bad flag then format", "risk-summary", []string{"--bogus", "--format=json"}},
+		{"risk-summary legacy json", "risk-summary", []string{"--json", "--bogus"}},
+		{"plan compile", "plan", []string{"compile", "--format=json", "--bogus"}},
+		{"verify entry", "verify", []string{"--entry", "r/x.json", "--json", "--bogus"}},
+		{"receipts tail", "receipts", []string{"tail", "--agent", "a1", "--format=json", "--bogus"}},
+		{"trust eu-list status", "trust", []string{"eu-list", "status", "--json", "--bogus"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, stdout, stderr := runCLI(t, tc.cmd, tc.args...)
+			if code != 2 {
+				t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
+			}
+			assertCleanStdout(t, stdout)
+			assertSingleJSONDocument(t, stderr)
+		})
+	}
+}
+
+func TestCLITextModeFlagParseErrorClean(t *testing.T) {
+	code, _, stderr := runCLI(t, "risk-summary", "--bogus")
+	if code != 2 {
+		t.Fatalf("code=%d want 2", code)
+	}
+	if stderr != "Error: risk-summary: flag provided but not defined: -bogus\n" {
+		t.Fatalf("text parse error drifted: %q", stderr)
+	}
+}

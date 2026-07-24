@@ -32,7 +32,6 @@ func runReceiptsCmd(args []string, stdout, stderr io.Writer) int {
 
 func runReceiptsTailCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("receipts tail", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		agentID string
@@ -49,8 +48,8 @@ func runReceiptsTailCmd(args []string, stdout, stderr io.Writer) int {
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 	cmd.IntVar(&limit, "limit", 100, "Maximum receipts per poll")
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "receipts tail"); !ok {
+		return code
 	}
 	jsonOut = jsonOut || formatFlag.IsJSON()
 	// Errors follow the effective output mode (legacy --json included).

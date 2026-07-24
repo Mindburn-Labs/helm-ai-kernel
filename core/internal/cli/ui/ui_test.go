@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -231,5 +232,86 @@ func TestFormatErrorJSONEmptyMsgWrap(t *testing.T) {
 	want := `{"error":{"op":"verify decision-receipt","message":"bundle digest mismatch","code":2}}`
 	if got != want {
 		t.Fatalf("empty-Msg envelope drifted:\n got: %s\nwant: %s", got, want)
+	}
+}
+
+// --- Golden: RequestedFormat + ParseFlags (permit round-5 P2) --------------
+
+func TestRequestedFormatGolden(t *testing.T) {
+	cases := []struct {
+		args []string
+		want Format
+	}{
+		{[]string{"--format=json"}, FormatJSON},
+		{[]string{"--format", "json"}, FormatJSON},
+		{[]string{"-format", "text"}, FormatText},
+		{[]string{"--json"}, FormatJSON},
+		{[]string{"--json=false"}, FormatText},
+		{[]string{"--json=true"}, FormatJSON},
+		{[]string{"--bogus", "--json"}, FormatJSON}, // mode survives unknown flags
+		{[]string{"--format", "yaml"}, FormatText},  // invalid value fails closed to default
+		{[]string{"--effect", "X"}, FormatText},
+		{[]string{"--format=json", "--format=text"}, FormatText}, // last wins, like flag
+	}
+	for i, tc := range cases {
+		if got := RequestedFormat(tc.args, FormatText); got != tc.want {
+			t.Fatalf("case %d %v: got %q want %q", i, tc.args, got, tc.want)
+		}
+	}
+}
+
+func TestParseFlagsJSONModeParseError(t *testing.T) {
+	fs := flag.NewFlagSet("risk-summary", flag.ContinueOnError)
+	RegisterFormat(fs, FormatText)
+	var chrome bytes.Buffer
+	code, ok := ParseFlags(fs, []string{"--format=json", "--bogus"}, &chrome, "risk-summary")
+	if ok || code != ExitUsage {
+		t.Fatalf("code=%d ok=%v", code, ok)
+	}
+	got := strings.TrimSpace(chrome.String())
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(got), &doc); err != nil {
+		t.Fatalf("parse error not a JSON document: %v\n%s", err, got)
+	}
+	errBody, _ := doc["error"].(map[string]any)
+	if !strings.Contains(errBody["message"].(string), "flag provided but not defined: -bogus") {
+		t.Fatalf("envelope message drifted: %s", got)
+	}
+}
+
+func TestParseFlagsTextModeAndHelp(t *testing.T) {
+	// Text mode: clean human error, flag-package noise suppressed.
+	fs := flag.NewFlagSet("risk-summary", flag.ContinueOnError)
+	RegisterFormat(fs, FormatText)
+	var chrome bytes.Buffer
+	code, ok := ParseFlags(fs, []string{"--bogus"}, &chrome, "risk-summary")
+	if ok || code != ExitUsage {
+		t.Fatalf("code=%d ok=%v", code, ok)
+	}
+	if chrome.String() != "Error: risk-summary: flag provided but not defined: -bogus\n" {
+		t.Fatalf("text parse error drifted: %q", chrome.String())
+	}
+
+	// -h keeps the historical usage dump on chrome with exit code 2.
+	fs = flag.NewFlagSet("risk-summary", flag.ContinueOnError)
+	RegisterFormat(fs, FormatText)
+	chrome.Reset()
+	code, ok = ParseFlags(fs, []string{"-h"}, &chrome, "risk-summary")
+	if ok || code != ExitUsage {
+		t.Fatalf("-h code=%d ok=%v", code, ok)
+	}
+	if !strings.Contains(chrome.String(), "Usage of risk-summary:") || !strings.Contains(chrome.String(), "-format value") {
+		t.Fatalf("help output drifted: %q", chrome.String())
+	}
+
+	// Success path.
+	fs = flag.NewFlagSet("risk-summary", flag.ContinueOnError)
+	ff := RegisterFormat(fs, FormatText)
+	chrome.Reset()
+	if code, ok = ParseFlags(fs, []string{"--format=json"}, &chrome, "risk-summary"); !ok || code != ExitOK {
+		t.Fatalf("success code=%d ok=%v", code, ok)
+	}
+	if !ff.IsJSON() || chrome.Len() != 0 {
+		t.Fatalf("success side effects wrong: ff=%v chrome=%q", ff.Value, chrome.String())
 	}
 }

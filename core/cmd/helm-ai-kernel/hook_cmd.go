@@ -116,37 +116,55 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	if !classification.ShouldDecide {
 		return 0
 	}
-	if tripped, runLength := recordHookDoomLoop(opts, payload, classification, stderr); tripped {
-		return emitHookDenyOrFail(stdout, stderr, doomLoopSteeringText(classification, runLength))
-	}
 	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-		return emitHookDenyOrFail(stdout, stderr, failClosedSteeringText(
+		tripped, run := recordHookDoomLoopOutcome(opts, payload, classification, true, stderr)
+		return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, classification, run, failClosedSteeringText(
 			"HELM denied operation: local receipt signer is unavailable",
 			actioninbox.ReasonSignerUnavailable,
 			"HELM cannot sign a local decision receipt, so the operation fails closed.",
 			"Do not retry until the signer is fixed. Run `helm-ai-kernel doctor` or `helm-ai-kernel setup`, or pass --signing-seed-file.",
 			"Escalate to the human operator; signer repair is an operator action, not an agent action.",
-		))
+		)))
 	}
 	if receipt.Verdict != contracts.WorkstationVerdictDeny {
+		// Settled ALLOW: the breaker never counts allowed calls, and a
+		// successful call breaks any consecutive-denial run.
+		recordHookDoomLoopOutcome(opts, payload, classification, false, stderr)
 		return 0
 	}
 	receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
-		return emitHookDenyOrFail(stdout, stderr, failClosedSteeringText(
+		tripped, run := recordHookDoomLoopOutcome(opts, payload, classification, true, stderr)
+		return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, classification, run, failClosedSteeringText(
 			"HELM denied operation: receipt persistence is unavailable",
 			actioninbox.ReasonReceiptPersistence,
 			"HELM cannot persist the signed decision receipt, so the operation fails closed.",
 			"Do not retry until receipt storage is fixed; check the data directory is writable.",
 			"Escalate to the human operator; storage repair is an operator action, not an agent action.",
-		))
+		)))
 	}
+	// Settled DENY: count it against the doom-loop breaker. The policy
+	// denial stands on its own; the breaker only upgrades the steering
+	// text once identical denials repeat.
+	tripped, run := recordHookDoomLoopOutcome(opts, payload, classification, true, stderr)
 	feedback := actioninbox.DenyFeedbackFor(receipt.ReasonCode, receipt.CreatedAt)
-	return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s) %s",
-		classification.Reason, receipt.ReasonCode, receiptPath, actioninbox.RenderSteeringText(feedback)))
+	return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, classification, run,
+		fmt.Sprintf("HELM denied %s: %s (receipt: %s) %s",
+			classification.Reason, receipt.ReasonCode, receiptPath, actioninbox.RenderSteeringText(feedback))))
+}
+
+// withDoomLoopSteering appends circuit-breaker escalation guidance to an
+// already-denied outcome when the breaker has latched for this call
+// signature. The base denial (policy or fail-closed) is always preserved;
+// the breaker only adds steering, never authority.
+func withDoomLoopSteering(tripped bool, classification hookClassification, runLength int, base string) string {
+	if !tripped {
+		return base
+	}
+	return base + " " + doomLoopSteeringText(classification, runLength)
 }
 
 // failClosedSteeringText keeps the operator-facing prefix intact (tests and
@@ -162,19 +180,20 @@ func failClosedSteeringText(prefix, code, explanation, remediation, escalation s
 	})
 }
 
-// doomLoopSteeringText renders the circuit-breaker denial. The breaker only
-// ever adds denials on top of the policy decision path; it never authorizes.
+// doomLoopSteeringText renders the circuit-breaker escalation guidance that
+// is appended to an already-denied outcome. The breaker only ever enriches
+// denial steering; it never authorizes and never denies on its own.
 func doomLoopSteeringText(classification hookClassification, runLength int) string {
 	d := actioninbox.DenialRecord{
 		SchemaVersion: actioninbox.DenyFeedbackSchemaVersion,
 		ReasonCode:    actioninbox.ReasonDoomLoopDetected,
-		Explanation: fmt.Sprintf("The identical call (%s via %s) has been attempted %d consecutive times in this session without progress; the doom-loop circuit breaker forced an escalation.",
+		Explanation: fmt.Sprintf("The identical call (%s via %s) has now been denied %d consecutive times in this session; the doom-loop circuit breaker is forcing escalation.",
 			classification.Action, classification.ToolID, runLength),
 		Remediation: "Stop retrying the identical call. Change the approach, gather the missing information, or abandon the attempt.",
-		Escalation:  "Ask the human operator to review the repeated attempts and either take over or reset the circuit breaker by changing the approach.",
+		Escalation:  "Ask the human operator to review the repeated denials and either take over or adjust policy.",
 		DecidedAt:   hookNow(),
 	}
-	return "HELM denied " + classification.Reason + ": " + actioninbox.RenderSteeringText(d)
+	return actioninbox.RenderSteeringText(d)
 }
 
 func emitHookDenyOrFail(stdout, stderr io.Writer, reason string) int {
@@ -200,27 +219,80 @@ func printHookUsage(w io.Writer) {
 
 // hookDoomLoopFile is the on-disk circuit-breaker state for the pre-tool
 // hook. The hook process is stateless between invocations, so the identical-
-// call run is persisted per session under the HELM data dir. The state is
+// denial run is persisted per session under the HELM data dir. The state is
 // advisory evidence for the breaker only; losing it never weakens the base
 // policy decision path, which remains fail-closed on its own.
 type hookDoomLoopFile struct {
 	Sessions map[string]*hookDoomLoopSession `json:"sessions"`
 }
 
+// hookDoomLoopSession tracks one session's consecutive-denial run. The trip
+// latch is keyed per call signature (TrippedSignatures), never per session:
+// a changed approach (different signature) is always evaluated fresh, while
+// retrying an already-tripped identical call keeps the escalation steering.
 type hookDoomLoopSession struct {
-	LastSignature string     `json:"last_signature"`
-	RunLength     int        `json:"run_length"`
-	Tripped       bool       `json:"tripped"`
-	TripCount     int        `json:"trip_count,omitempty"`
-	LastTrippedAt *time.Time `json:"last_tripped_at,omitempty"`
+	LastSignature     string          `json:"last_signature"`
+	RunLength         int             `json:"run_length"`
+	TrippedSignatures map[string]bool `json:"tripped_signatures,omitempty"`
+	TripCount         int             `json:"trip_count,omitempty"`
+	LastTrippedAt     *time.Time      `json:"last_tripped_at,omitempty"`
+	LastSeenAt        time.Time       `json:"last_seen_at"`
 }
 
-// recordHookDoomLoop counts consecutive identical classified calls for the
-// session and reports whether the circuit breaker has tripped. Identical
-// means the same normalized tool/action/target signature. The hook observes
-// attempts, not settled results, which is strictly more conservative than
-// the settled-call semantics of the control-plane breaker.
-func recordHookDoomLoop(opts hookOptions, payload preToolPayload, classification hookClassification, stderr io.Writer) (bool, int) {
+const (
+	// hookDoomLoopStateTTL prunes idle sessions from the state file.
+	hookDoomLoopStateTTL = 24 * time.Hour
+	// hookDoomLoopMaxSessions bounds the state file (oldest LastSeenAt is
+	// evicted first).
+	hookDoomLoopMaxSessions = 128
+	// hookDoomLoopLockStaleAfter is the age at which a leftover lock file
+	// from a crashed hook process is reclaimed.
+	hookDoomLoopLockStaleAfter = 60 * time.Second
+	// hookDoomLoopLockWait bounds how long a hook waits for the state lock
+	// before giving up (the breaker is advisory; the policy path proceeds).
+	hookDoomLoopLockWait = 2 * time.Second
+)
+
+// recordDenied counts one settled denial for the signature and reports
+// whether the breaker has latched for THIS signature, plus the current run
+// length. Only settled denials count; allowed calls never trip the breaker.
+func (s *hookDoomLoopSession) recordDenied(signature string, now time.Time) (bool, int) {
+	if s.LastSignature == signature {
+		s.RunLength++
+	} else {
+		s.LastSignature = signature
+		s.RunLength = 1
+	}
+	if s.RunLength >= actioninbox.DefaultDoomLoopThreshold {
+		if s.TrippedSignatures == nil {
+			s.TrippedSignatures = map[string]bool{}
+		}
+		if !s.TrippedSignatures[signature] {
+			s.TrippedSignatures[signature] = true
+			s.TripCount++
+			s.LastTrippedAt = &now
+		}
+	}
+	return s.TrippedSignatures[signature], s.RunLength
+}
+
+// recordAllowed breaks the consecutive-denial run: a successful call means
+// the agent is making progress, not looping. It never sets a latch.
+func (s *hookDoomLoopSession) recordAllowed() {
+	s.LastSignature = ""
+	s.RunLength = 0
+}
+
+// recordHookDoomLoopOutcome records one settled classified outcome (denied
+// or allowed) for the session and reports whether the breaker has latched
+// for this call signature. The read-modify-write is serialized with a lock
+// file so concurrent hook processes cannot lose updates.
+//
+// Advisory note: the session ID is supplied by the agent client payload and
+// is not authenticated — a client rotating session IDs could evade the
+// breaker. The breaker is defense-in-depth UX steering on top of the
+// authoritative fail-closed policy path, not a security boundary.
+func recordHookDoomLoopOutcome(opts hookOptions, payload preToolPayload, classification hookClassification, denied bool, stderr io.Writer) (bool, int) {
 	if strings.TrimSpace(opts.DataDir) == "" {
 		// No local state dir (e.g. HOME-less environment): the breaker is
 		// disabled rather than writing state into the caller's CWD.
@@ -231,31 +303,88 @@ func recordHookDoomLoop(opts hookOptions, payload preToolPayload, classification
 	if sessionID == "" {
 		sessionID = "_default"
 	}
-	path := filepath.Join(opts.DataDir, "state", "hook-doomloop.json")
-	state := loadHookDoomLoopState(path, stderr)
+	statePath := filepath.Join(opts.DataDir, "state", "hook-doomloop.json")
+	unlock, ok := acquireHookDoomLoopLock(statePath+".lock", stderr)
+	if !ok {
+		return false, 0
+	}
+	defer unlock()
+
+	now := hookNow()
+	state := loadHookDoomLoopState(statePath, stderr)
+	pruneHookDoomLoopSessions(state, now)
 	sess, ok := state.Sessions[sessionID]
 	if !ok {
 		sess = &hookDoomLoopSession{}
 		state.Sessions[sessionID] = sess
 	}
-	if sess.LastSignature == signature {
-		sess.RunLength++
+	sess.LastSeenAt = now
+	var trippedB bool
+	var runN int
+	if denied {
+		trippedB, runN = sess.recordDenied(signature, now)
 	} else {
-		sess.LastSignature = signature
-		sess.RunLength = 1
+		sess.recordAllowed()
 	}
-	if sess.RunLength >= actioninbox.DefaultDoomLoopThreshold && !sess.Tripped {
-		sess.Tripped = true
-		sess.TripCount++
-		now := hookNow()
-		sess.LastTrippedAt = &now
-	}
-	if err := saveHookDoomLoopState(path, state); err != nil {
+	if err := saveHookDoomLoopState(statePath, state); err != nil {
 		// Best-effort persistence: the base policy decision path is
 		// unaffected and remains fail-closed; log and continue.
 		fmt.Fprintf(stderr, "hook pre-tool: persist doom-loop state: %v\n", err)
 	}
-	return sess.Tripped, sess.RunLength
+	return trippedB, runN
+}
+
+// pruneHookDoomLoopSessions drops sessions idle beyond the TTL and evicts
+// the oldest sessions beyond the cap, keeping the state file bounded.
+func pruneHookDoomLoopSessions(state *hookDoomLoopFile, now time.Time) {
+	for id, sess := range state.Sessions {
+		if sess.LastSeenAt.IsZero() || now.Sub(sess.LastSeenAt) > hookDoomLoopStateTTL {
+			delete(state.Sessions, id)
+		}
+	}
+	for len(state.Sessions) > hookDoomLoopMaxSessions {
+		var oldestID string
+		var oldest time.Time
+		for id, sess := range state.Sessions {
+			if oldestID == "" || sess.LastSeenAt.Before(oldest) {
+				oldestID, oldest = id, sess.LastSeenAt
+			}
+		}
+		delete(state.Sessions, oldestID)
+	}
+}
+
+// acquireHookDoomLoopLock takes the state lock as an O_CREATE|O_EXCL marker
+// file, reclaiming stale locks from crashed processes. On acquisition
+// failure it reports ok=false; callers must treat the breaker update as
+// skipped (advisory) and continue on the authoritative policy path.
+func acquireHookDoomLoopLock(lockPath string, stderr io.Writer) (unlock func(), ok bool) {
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
+		fmt.Fprintf(stderr, "hook pre-tool: doom-loop lock dir: %v\n", err)
+		return nil, false
+	}
+	deadline := time.Now().Add(hookDoomLoopLockWait)
+	for {
+		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			fmt.Fprintf(f, "%d\n", os.Getpid())
+			_ = f.Close()
+			return func() { _ = os.Remove(lockPath) }, true
+		}
+		if !os.IsExist(err) {
+			fmt.Fprintf(stderr, "hook pre-tool: doom-loop lock: %v\n", err)
+			return nil, false
+		}
+		if info, serr := os.Stat(lockPath); serr == nil && time.Since(info.ModTime()) > hookDoomLoopLockStaleAfter {
+			_ = os.Remove(lockPath)
+			continue
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintf(stderr, "hook pre-tool: doom-loop state lock busy; skipping breaker update\n")
+			return nil, false
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func loadHookDoomLoopState(path string, stderr io.Writer) *hookDoomLoopFile {

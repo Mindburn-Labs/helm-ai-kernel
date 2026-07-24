@@ -144,9 +144,10 @@ func (s *InMemoryInboxStore) DenyWithFeedback(ctx context.Context, itemID string
 
 // DenyCascade marks an item as denied with feedback, then cascade-rejects
 // every other still-pending item that is an identical same-session ask:
-// same non-empty ContentHash and same session ID. Cascaded items are denied,
-// never approved — the cascade only ever narrows, preserving fail-closed
-// semantics. It returns the IDs of the cascaded items (excluding itemID).
+// same non-empty ContentHash and same non-empty session ID. Cascaded items
+// are denied, never approved — the cascade only ever narrows, preserving
+// fail-closed semantics. It returns the IDs of the cascaded items
+// (excluding itemID).
 func (s *InMemoryInboxStore) DenyCascade(ctx context.Context, itemID string, feedback string, principalID string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -179,10 +180,18 @@ func (s *InMemoryInboxStore) DenyCascade(ctx context.Context, itemID string, fee
 		return cascaded, nil
 	}
 	session := item.SessionID()
+	if session == "" {
+		// Without a session ID there is no safe identity for "same
+		// session": two unknown-session asks could be unrelated. Fail
+		// closed by refusing to cascade.
+		return cascaded, nil
+	}
 	for _, other := range s.items {
 		if other.ItemID == itemID || other.Status != StatusPending {
 			continue
 		}
+		// Cascade only when session IDs are equal AND non-empty: empty
+		// session IDs must never compare equal here.
 		if other.ContentHash != item.ContentHash || other.SessionID() != session {
 			continue
 		}

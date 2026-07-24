@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/actioninbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
@@ -352,7 +355,7 @@ func TestHookPreToolDoomLoopBreakerTripsOnIdenticalAttempts(t *testing.T) {
 	restoreHookClock(t)
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-loop","cwd":"/repo"}`
 
-	// First two identical attempts: ordinary policy deny with kernel code.
+	// First two identical settled denials: ordinary policy deny, no trip.
 	for i := 1; i <= 2; i++ {
 		var stdout, stderr bytes.Buffer
 		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
@@ -367,34 +370,36 @@ func TestHookPreToolDoomLoopBreakerTripsOnIdenticalAttempts(t *testing.T) {
 		}
 	}
 
-	// Third identical attempt: circuit breaker forces escalation.
-	preTripReceipts := len(globReceipts(t, tmp))
+	// Third identical settled denial: policy deny stands, breaker upgrades
+	// the steering text. The denial is still evaluated and receipted — the
+	// breaker never short-circuits the authoritative policy path.
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("tripped exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "INBOX_DOOM_LOOP_DETECTED") {
-		t.Fatalf("third identical attempt must trip the breaker: %s", stdout.String())
+		t.Fatalf("third identical denial must trip the breaker: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "OPERATE_PERMISSIONS_EMPTY") {
+		t.Fatalf("tripped denial must still carry the kernel reason code: %s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "Stop retrying the identical call") {
 		t.Fatalf("doom-loop deny missing steering remediation: %s", stdout.String())
 	}
-
-	// The breaker short-circuits before policy evaluation, so the tripped
-	// attempt must not produce a new decision receipt.
-	if receipts := globReceipts(t, tmp); len(receipts) != preTripReceipts {
-		t.Fatalf("tripped attempt wrote receipts: before=%d after=%v", preTripReceipts, receipts)
+	if receipts := globReceipts(t, tmp); len(receipts) == 0 {
+		t.Fatal("tripped denial must still produce a decision receipt")
 	}
 
-	// Breaker state is persisted per session under the data dir.
+	// Breaker state is persisted per session under the data dir, latched
+	// per call signature.
 	statePath := filepath.Join(tmp, "state", "hook-doomloop.json")
 	raw, err := os.ReadFile(statePath)
 	if err != nil {
 		t.Fatalf("read doom-loop state: %v", err)
 	}
-	if !strings.Contains(string(raw), `"tripped":true`) || !strings.Contains(string(raw), "s-loop") {
-		t.Fatalf("doom-loop state missing trip record: %s", raw)
+	if !strings.Contains(string(raw), `"tripped_signatures"`) || !strings.Contains(string(raw), "s-loop") {
+		t.Fatalf("doom-loop state missing per-signature trip record: %s", raw)
 	}
 
 	// A different session is unaffected by the tripped session.
@@ -408,6 +413,166 @@ func TestHookPreToolDoomLoopBreakerTripsOnIdenticalAttempts(t *testing.T) {
 	if strings.Contains(stdout.String(), "INBOX_DOOM_LOOP_DETECTED") {
 		t.Fatalf("breaker leaked across sessions: %s", stdout.String())
 	}
+}
+
+// TestHookPreToolDoomLoopLatchIsPerSignature is the regression test for the
+// session-permalock blocker: after a trip, a CHANGED approach (different
+// signature) in the same session must go through the normal policy path
+// without doom-loop steering, while retrying the tripped identical call
+// keeps the escalation steering.
+func TestHookPreToolDoomLoopLatchIsPerSignature(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	sigA := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-latch","cwd":"/repo"}`
+	sigB := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /var/other-target"},"session_id":"s-latch","cwd":"/repo"}`
+
+	run := func(payload string) string {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+		}
+		return stdout.String()
+	}
+
+	// Trip the breaker on sigA (3 identical settled denials).
+	for i := 1; i <= 3; i++ {
+		run(sigA)
+	}
+
+	// Post-trip, a different signature in the same session is a fresh
+	// evaluation: policy deny without doom-loop steering.
+	out := run(sigB)
+	if !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, "OPERATE_PERMISSIONS_EMPTY") {
+		t.Fatalf("changed approach must follow the normal policy path: %s", out)
+	}
+	if strings.Contains(out, "INBOX_DOOM_LOOP_DETECTED") {
+		t.Fatalf("changed approach must not inherit the tripped session's latch: %s", out)
+	}
+
+	// Retrying the tripped identical call keeps the escalation steering
+	// (latch is per signature and survives interleaved calls).
+	out = run(sigA)
+	if !strings.Contains(out, "INBOX_DOOM_LOOP_DETECTED") {
+		t.Fatalf("retry of tripped signature must keep escalation steering: %s", out)
+	}
+}
+
+// TestHookDoomLoopOutcomeLogic unit-tests the pure settled-outcome logic:
+// only settled denials count, allowed calls reset the run and can never
+// trip, and the latch is per signature.
+func TestHookDoomLoopOutcomeLogic(t *testing.T) {
+	now := time.Unix(1000, 0).UTC()
+	sigA := actioninbox.SignatureFor("shell", "shell_operate", "rm -rf /a")
+	sigB := actioninbox.SignatureFor("shell", "shell_operate", "rm -rf /b")
+
+	sess := &hookDoomLoopSession{}
+	// Allowed calls never trip and reset the run.
+	sess.recordAllowed()
+	if tripped, run := sess.recordDenied(sigA, now); tripped || run != 1 {
+		t.Fatalf("first denial: tripped=%v run=%d, want false/1", tripped, run)
+	}
+	sess.recordAllowed()
+	if tripped, run := sess.recordDenied(sigA, now); tripped || run != 1 {
+		t.Fatalf("allowed call must reset the run: tripped=%v run=%d, want false/1", tripped, run)
+	}
+	// Consecutive denials trip at the threshold.
+	sess.recordDenied(sigA, now)
+	if tripped, _ := sess.recordDenied(sigA, now); !tripped {
+		t.Fatal("third consecutive identical denial must trip")
+	}
+	// Latch is per signature: sigB fresh, sigA latched even interleaved.
+	if tripped, run := sess.recordDenied(sigB, now); tripped || run != 1 {
+		t.Fatalf("different signature must start fresh: tripped=%v run=%d", tripped, run)
+	}
+	if tripped, _ := sess.recordDenied(sigA, now); !tripped {
+		t.Fatal("latched signature must stay tripped after interleave")
+	}
+}
+
+// TestHookDoomLoopPrune covers TTL expiry and the session cap.
+func TestHookDoomLoopPrune(t *testing.T) {
+	now := time.Unix(100000, 0).UTC()
+	state := &hookDoomLoopFile{Sessions: map[string]*hookDoomLoopSession{}}
+	state.Sessions["fresh"] = &hookDoomLoopSession{LastSeenAt: now.Add(-time.Hour)}
+	state.Sessions["stale"] = &hookDoomLoopSession{LastSeenAt: now.Add(-48 * time.Hour)}
+	state.Sessions["legacy-zero"] = &hookDoomLoopSession{}
+	pruneHookDoomLoopSessions(state, now)
+	if _, ok := state.Sessions["stale"]; ok {
+		t.Fatal("TTL-expired session must be pruned")
+	}
+	if _, ok := state.Sessions["legacy-zero"]; ok {
+		t.Fatal("zero LastSeenAt (legacy state) must be pruned")
+	}
+	if _, ok := state.Sessions["fresh"]; !ok {
+		t.Fatal("fresh session must survive pruning")
+	}
+
+	for i := 0; i < hookDoomLoopMaxSessions+10; i++ {
+		id := fmt.Sprintf("s-%d", i)
+		state.Sessions[id] = &hookDoomLoopSession{LastSeenAt: now.Add(time.Duration(i) * time.Second)}
+	}
+	pruneHookDoomLoopSessions(state, now)
+	if len(state.Sessions) != hookDoomLoopMaxSessions {
+		t.Fatalf("session cap: got %d, want %d", len(state.Sessions), hookDoomLoopMaxSessions)
+	}
+}
+
+// TestHookDoomLoopConcurrentRecordsNoLostUpdates is the regression test for
+// the state race: parallel hook invocations must serialize through the lock
+// so no settled-denial record is lost.
+func TestHookDoomLoopConcurrentRecordsNoLostUpdates(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	opts := hookOptions{DataDir: tmp}
+	payload := preToolPayload{ToolName: "Bash", SessionID: "s-race"}
+	classification := hookClassification{ToolID: "shell", Action: "shell_operate", Target: "rm -rf /race"}
+
+	const workers = 12
+	var wg sync.WaitGroup
+	var stderr bytes.Buffer
+	var mu sync.Mutex
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var buf bytes.Buffer
+			recordHookDoomLoopOutcome(opts, payload, classification, true, &buf)
+			mu.Lock()
+			stderr.Write(buf.Bytes())
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+
+	raw, err := os.ReadFile(filepath.Join(tmp, "state", "hook-doomloop.json"))
+	if err != nil {
+		t.Fatalf("read state: %v (stderr: %s)", err, stderr.String())
+	}
+	var state hookDoomLoopFile
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatalf("parse state: %v", err)
+	}
+	sess := state.Sessions["s-race"]
+	if sess == nil {
+		t.Fatalf("session missing after concurrent records: %s", raw)
+	}
+	if sess.RunLength != workers {
+		t.Fatalf("lost updates under concurrency: run=%d, want %d", sess.RunLength, workers)
+	}
+	sig := actioninbox.SignatureFor("shell", "shell_operate", "rm -rf /race")
+	if !sess.TrippedSignatures[sig] {
+		t.Fatalf("breaker must be latched after %d identical denials", workers)
+	}
+	if left := filepath.Join(tmp, "state", "hook-doomloop.json.lock"); fileExists(left) {
+		t.Fatalf("lock file left behind: %s", left)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func restoreHookClock(t *testing.T) {

@@ -171,6 +171,45 @@ func TestDenyCascade_WithoutContentHashDoesNotGuess(t *testing.T) {
 	assert.Equal(t, actioninbox.StatusPending, got.Status)
 }
 
+func TestDenyCascade_EmptySessionNeverCollides(t *testing.T) {
+	store := actioninbox.NewInMemoryInboxStore()
+	ctx := context.Background()
+
+	withHash := func(item *actioninbox.InboxItem, hash, session string) *actioninbox.InboxItem {
+		item.ContentHash = hash
+		if session != "" {
+			item.Context = map[string]any{actioninbox.SessionContextKey: session}
+		}
+		return item
+	}
+
+	// Same content hash, but NEITHER item has a session ID: empty session
+	// IDs must not compare equal, so unrelated unknown-session asks are
+	// never cascade-denied together.
+	require.NoError(t, store.Enqueue(ctx, withHash(newTestItem("target-nosess", "mgr-1"), "hash-A", "")))
+	require.NoError(t, store.Enqueue(ctx, withHash(newTestItem("other-nosess", "mgr-1"), "hash-A", "")))
+
+	cascaded, err := store.DenyCascade(ctx, "target-nosess", "no", "principal-1")
+	require.NoError(t, err)
+	assert.Empty(t, cascaded, "empty session must disable cascading")
+
+	got, err := store.Get(ctx, "other-nosess")
+	require.NoError(t, err)
+	assert.Equal(t, actioninbox.StatusPending, got.Status)
+
+	// Mixed: target HAS a session, lookalike has none — still no cascade.
+	require.NoError(t, store.Enqueue(ctx, withHash(newTestItem("target-sess", "mgr-1"), "hash-B", "sess-1")))
+	require.NoError(t, store.Enqueue(ctx, withHash(newTestItem("other-nosess-2", "mgr-1"), "hash-B", "")))
+
+	cascaded, err = store.DenyCascade(ctx, "target-sess", "no", "principal-1")
+	require.NoError(t, err)
+	assert.Empty(t, cascaded, "non-empty session must not cascade into empty-session items")
+
+	got, err = store.Get(ctx, "other-nosess-2")
+	require.NoError(t, err)
+	assert.Equal(t, actioninbox.StatusPending, got.Status)
+}
+
 func TestDenyCascade_NonPendingTargetFails(t *testing.T) {
 	store := actioninbox.NewInMemoryInboxStore()
 	ctx := context.Background()

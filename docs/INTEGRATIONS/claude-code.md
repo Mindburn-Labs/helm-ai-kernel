@@ -71,10 +71,15 @@ HELM denied <class>: <KERNEL_REASON_CODE> (receipt: <path>) [INBOX_KERNEL_POLICY
   be confused with canonical Kernel verdict reason codes).
 - `Remediation` tells the agent how to self-correct; `Escalation` names the
   human route. Agents should not retry an identical denied call.
-- After 3 consecutive identical classified calls in one session, the
-  doom-loop circuit breaker denies with `[INBOX_DOOM_LOOP_DETECTED]` and
-  forces escalation. Breaker state lives under `~/.helm-ai-kernel/state/`;
-  it only ever adds denials and never authorizes anything.
+- After 3 consecutive identical settled denials in one session, the
+  doom-loop circuit breaker appends `[INBOX_DOOM_LOOP_DETECTED]` escalation
+  guidance to the denial. The latch is per call signature: a changed
+  approach is evaluated fresh. Only settled denials count — allowed calls
+  never trip the breaker and reset the run. Breaker state lives under
+  `~/.helm-ai-kernel/state/` (bounded, lock-serialized); it is advisory
+  steering on top of the authoritative policy path — the session ID is
+  client-supplied and unauthenticated, so the breaker is not a security
+  boundary.
 - Fail-closed infrastructure denials carry their own codes:
   `[INBOX_SIGNER_UNAVAILABLE]`, `[INBOX_RECEIPT_PERSISTENCE_UNAVAILABLE]`.
 

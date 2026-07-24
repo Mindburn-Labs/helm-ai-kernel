@@ -49,8 +49,11 @@ return cliui.WriteError(stderr, cliui.UsageErrorf("trust", "unknown subcommand: 
   cause (and returns nil for nil err).
 - `cliui.ExitCode` fails closed: unknown error types and out-of-range codes
   map to 1, never 0.
-- `cliui.FormatErrorJSON` produces the stable machine envelope
-  `{"error":{"op","message","hint","code"}}` for `--format=json` consumers.
+- `cliui.WriteErrorFormat(w, err, format)` renders the stable machine envelope
+  `{"error":{"op","message","hint","code"}}` on stderr when the command runs
+  with `--format=json`, and the clean text form otherwise. Commands that
+  register `--format` route their post-parse error paths through it.
+  `cliui.WriteError` remains the text-mode shorthand.
 
 ## Output format: `--format text|json`
 
@@ -79,7 +82,10 @@ Rules:
 `scan`, `trust`, `export aat`, `log`, `plan` — 9 commands. Golden tests in
 `core/cmd/helm-ai-kernel/cli_ui_convention_test.go` pin their flag surface,
 error text, and stream discipline; `core/internal/cli/ui/ui_test.go` pins the
-helper contracts.
+helper contracts. `--format` is registered on `receipts tail`, `risk-summary`,
+`verify --entry`, `trust eu-list status`, and `plan compile` (whose output is
+PlanSpec-JSON-only; `--format=text` is a no-op there, matching the historical
+`--json=false` quirk).
 
 ## Fan-out checklist (follow-up PRs, leaf-first)
 

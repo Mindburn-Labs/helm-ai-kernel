@@ -230,6 +230,43 @@ func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "ok")
 }
 
+// HELM-364: when the gateway advertises auth_mode: none (or any non-OAuth
+// mode) there is no channel for a client to present scopes, so scoped tools
+// must stay reachable; governance policy remains the enforcement boundary.
+func TestGateway_ToolsCallWithoutOAuthChannelReachesScopedTool(t *testing.T) {
+	for _, authMode := range []string{"", "static-header"} {
+		t.Run("auth_mode="+authMode, func(t *testing.T) {
+			exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+				assert.Equal(t, "scoped_tool", req.ToolName)
+				return ToolExecutionResponse{Content: "ok"}, nil
+			}
+			catalog := NewInMemoryCatalog()
+			require.NoError(t, catalog.Register(context.Background(), ToolRef{
+				Name:           "scoped_tool",
+				Description:    "requires an OAuth scope when OAuth is the auth channel",
+				Schema:         map[string]any{"type": "object"},
+				RequiredScopes: []string{"mcp:tool:scoped"},
+			}))
+			gw := NewGateway(catalog, GatewayConfig{AuthMode: authMode}, WithExecutor(exec))
+			mux := http.NewServeMux()
+			gw.RegisterRoutes(mux)
+
+			rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+				"jsonrpc": "2.0",
+				"id":      22,
+				"method":  "tools/call",
+				"params": map[string]any{
+					"name": "scoped_tool",
+				},
+			}, nil)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			assert.NotContains(t, rec.Body.String(), "requires OAuth scopes")
+			assert.Contains(t, rec.Body.String(), "ok")
+		})
+	}
+}
+
 func TestGateway_UnsupportedProtocolVersionRejected(t *testing.T) {
 	mux := newProtocolTestMux(t, GatewayConfig{}, nil)
 
@@ -293,7 +330,7 @@ func newScopedProtocolTestMux(t *testing.T, exec ToolExecutor) *http.ServeMux {
 		RequiredScopes: []string{"mcp:tool:scoped"},
 	}))
 
-	gw := NewGateway(catalog, GatewayConfig{})
+	gw := NewGateway(catalog, GatewayConfig{AuthMode: "oauth"})
 	if exec != nil {
 		WithExecutor(exec)(gw)
 	}

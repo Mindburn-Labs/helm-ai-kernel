@@ -247,7 +247,7 @@ func newGeneratedSpecCeremonyReferencePackFixture(t *testing.T) *generatedSpecCe
 		},
 	}}
 	service, err := newService(
-		newMemoryStore(), bindingStub{binding: fixture.binding}, authority,
+		newMemoryStore(8*time.Minute), bindingStub{binding: fixture.binding}, authority,
 		&controlStub{identity: ControlIdentity{Subject: "spiffe://helm/control-api", TenantID: fixture.binding.TenantID, WorkspaceID: fixture.binding.WorkspaceID}},
 		&consumerStub{identity: ConsumerIdentity{Subject: "spiffe://helm/control-plane-a", TenantID: fixture.binding.TenantID, WorkspaceID: fixture.binding.WorkspaceID, Audience: fixture.binding.Audience}},
 		fixture.signer, verifier, func() time.Time { return fixture.now }, bytes.NewReader(bytes.Repeat([]byte{0x42}, 256)), fixture.config,

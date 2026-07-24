@@ -163,10 +163,11 @@ func (s *InMemoryInboxStore) DenyWithFeedback(ctx context.Context, itemID string
 
 // DenyCascade marks an item as denied with feedback, then cascade-rejects
 // every other still-pending item that is an identical same-session ask:
-// same non-empty ContentHash and same non-empty session ID. Cascaded items
-// are denied, never approved — the cascade only ever narrows, preserving
-// fail-closed semantics. It returns the IDs of the cascaded items
-// (excluding itemID).
+// same non-empty ContentHash and same non-empty session ID. A logically
+// expired target is rejected (error) and never cascades; logically expired
+// duplicates are skipped, not denied. Cascaded items are denied, never
+// approved — the cascade only ever narrows, preserving fail-closed
+// semantics. It returns the IDs of the cascaded items (excluding itemID).
 func (s *InMemoryInboxStore) DenyCascade(ctx context.Context, itemID string, feedback string, principalID string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,6 +178,13 @@ func (s *InMemoryInboxStore) DenyCascade(ctx context.Context, itemID string, fee
 	}
 	if item.Status != StatusPending {
 		return nil, fmt.Errorf("actioninbox: item %q is not pending (status=%s)", itemID, item.Status)
+	}
+	if !item.ExpiresAt.IsZero() && time.Now().After(item.ExpiresAt) {
+		// A logically expired target is an expired audit record (lazy
+		// expiry marks it EXPIRED on read), not a deniable ask: it must
+		// not be denied and must not cascade rejection into live matching
+		// requests.
+		return nil, fmt.Errorf("actioninbox: item %q is expired and cannot be cascade-denied", itemID)
 	}
 
 	now := time.Now().UTC()

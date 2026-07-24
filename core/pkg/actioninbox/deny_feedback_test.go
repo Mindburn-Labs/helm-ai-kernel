@@ -306,6 +306,39 @@ func TestDenyCascade_SkipsExpiredDuplicates(t *testing.T) {
 	assert.Nil(t, got.Denial, "expired item must not carry a denial record")
 }
 
+func TestDenyCascade_ExpiredTargetDoesNotCascade(t *testing.T) {
+	store := actioninbox.NewInMemoryInboxStore()
+	ctx := context.Background()
+
+	withHash := func(item *actioninbox.InboxItem, hash, session string) *actioninbox.InboxItem {
+		item.ContentHash = hash
+		item.Context = map[string]any{actioninbox.SessionContextKey: session}
+		return item
+	}
+
+	// Logically expired TARGET plus a live matching request: the expired
+	// target must not be denied and must not cascade into the live item.
+	expiredTarget := withHash(newTestItem("expired-target", "mgr-1"), "hash-A", "sess-1")
+	expiredTarget.CreatedAt = time.Now().UTC().Add(-2 * time.Hour)
+	expiredTarget.ExpiresAt = time.Now().UTC().Add(-1 * time.Hour)
+	require.NoError(t, store.Enqueue(ctx, expiredTarget))
+	require.NoError(t, store.Enqueue(ctx, withHash(newTestItem("live-dup", "mgr-1"), "hash-A", "sess-1")))
+
+	_, err := store.DenyCascade(ctx, "expired-target", "no", "principal-1")
+	require.Error(t, err, "expired target must reject the cascade")
+	assert.Contains(t, err.Error(), "expired")
+
+	target, err := store.Get(ctx, "expired-target")
+	require.NoError(t, err)
+	assert.Equal(t, actioninbox.StatusExpired, target.Status, "expired target must read as EXPIRED, not DENIED")
+	assert.Nil(t, target.Denial, "expired target must not carry a denial record")
+
+	live, err := store.Get(ctx, "live-dup")
+	require.NoError(t, err)
+	assert.Equal(t, actioninbox.StatusPending, live.Status, "live matching request must be unaffected")
+	assert.Nil(t, live.Denial)
+}
+
 func TestDenyCascade_NonPendingTargetFails(t *testing.T) {
 	store := actioninbox.NewInMemoryInboxStore()
 	ctx := context.Background()

@@ -32,9 +32,28 @@ type InboxItem struct {
 	Status      InboxItemStatus   `json:"status"`
 	Route       ApprovalRoute     `json:"route"`
 	Escalation  *EscalationReason `json:"escalation,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
-	ExpiresAt   time.Time         `json:"expires_at"`
-	ContentHash string            `json:"content_hash"`
+	// Denial is the structured, model-actionable denial record, present
+	// once the item has been denied. Additive (omitempty): older items and
+	// non-denied items are unaffected.
+	Denial      *DenialRecord `json:"denial,omitempty"`
+	CreatedAt   time.Time     `json:"created_at"`
+	ExpiresAt   time.Time     `json:"expires_at"`
+	ContentHash string        `json:"content_hash"`
+}
+
+// SessionContextKey is the InboxItem.Context key carrying the agent session
+// identifier. Cascade-reject only propagates within one session.
+const SessionContextKey = "session_id"
+
+// SessionID returns the session identifier recorded on the item, or "".
+func (i *InboxItem) SessionID() string {
+	if i == nil || i.Context == nil {
+		return ""
+	}
+	if s, ok := i.Context[SessionContextKey].(string); ok {
+		return s
+	}
+	return ""
 }
 
 // ApprovalRoute defines how an item must be approved.

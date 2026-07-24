@@ -58,6 +58,32 @@ copied receipts — see
 [local signer and trusted verification](../reference/workstation-governance.md#local-signer-and-trusted-verification).
 Receipts signed with pre-v0.7.3 derivable seeds remain untrusted.
 
+## Deny Feedback Format
+
+Every PreToolUse denial returns model-actionable steering text in
+`hookSpecificOutput.permissionDecisionReason`, not just "denied":
+
+```text
+HELM denied <class>: <KERNEL_REASON_CODE> (receipt: <path>) [INBOX_KERNEL_POLICY_DENY] kernel=<CODE> <explanation> Remediation: <what to do instead> Escalation: <who can unblock>
+```
+
+- `[INBOX_*]` is the machine-readable steering code (namespaced so it cannot
+  be confused with canonical Kernel verdict reason codes).
+- `Remediation` tells the agent how to self-correct; `Escalation` names the
+  human route. Agents should not retry an identical denied call.
+- After 3 consecutive identical settled denials in one session, the
+  doom-loop circuit breaker appends `[INBOX_DOOM_LOOP_DETECTED]` escalation
+  guidance to the denial. The latch is per call signature: a changed
+  approach is evaluated fresh. Only settled denials count — allowed calls
+  never trip the breaker and reset the run. Breaker state lives under
+  `~/.helm-ai-kernel/state/` (bounded, lock-serialized); it is advisory
+  steering on top of the authoritative policy path — the session ID is
+  client-supplied and unauthenticated, so the breaker is not a security
+  boundary. Payloads without a session ID are not tracked, so unrelated
+  sessionless invocations can never false-trip each other.
+- Fail-closed infrastructure denials carry their own codes:
+  `[INBOX_SIGNER_UNAVAILABLE]`, `[INBOX_RECEIPT_PERSISTENCE_UNAVAILABLE]`.
+
 ## MCP Configuration
 
 For lower-level MCP configuration, install the Claude Code MCP server:

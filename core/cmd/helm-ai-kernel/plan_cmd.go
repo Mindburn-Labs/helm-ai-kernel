@@ -78,7 +78,7 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&jsonOutput, "json", true, "Output as JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if code, ok := cliui.ParseFlags(cmd, args, stderr, "plan compile"); !ok {
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "plan compile", cliui.FormatJSON); !ok {
 		return code
 	}
 	// plan compile renders PlanSpec JSON only (there is no text renderer; the

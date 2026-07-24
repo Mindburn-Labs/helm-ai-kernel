@@ -44,7 +44,7 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if code, ok := cliui.ParseFlags(cmd, args, stderr, "verify entry"); !ok {
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "verify entry", cliui.FormatText); !ok {
 		return code
 	}
 	jsonOutput = jsonOutput || formatFlag.IsJSON()

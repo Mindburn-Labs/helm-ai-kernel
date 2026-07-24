@@ -48,7 +48,7 @@ func runReceiptsTailCmd(args []string, stdout, stderr io.Writer) int {
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 	cmd.IntVar(&limit, "limit", 100, "Maximum receipts per poll")
 
-	if code, ok := cliui.ParseFlags(cmd, args, stderr, "receipts tail"); !ok {
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "receipts tail", cliui.FormatText); !ok {
 		return code
 	}
 	jsonOut = jsonOut || formatFlag.IsJSON()

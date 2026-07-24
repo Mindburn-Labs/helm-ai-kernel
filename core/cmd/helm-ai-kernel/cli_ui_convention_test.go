@@ -345,3 +345,23 @@ func TestCLITextModeFlagParseErrorClean(t *testing.T) {
 		t.Fatalf("text parse error drifted: %q", stderr)
 	}
 }
+
+// --- Regression: plan compile parse error uses its JSON default (round-6 P2)
+
+func TestCLIPlanCompileParseErrorIsEnvelope(t *testing.T) {
+	// P2 PLAN_COMPILE_PARSE_ERROR_FORMAT: plan compile's default output mode
+	// is JSON, so even a bare malformed flag (no explicit --format/--json)
+	// must render the JSON error envelope.
+	code, stdout, stderr := runCLI(t, "plan", "compile", "--bogus")
+	if code != 2 {
+		t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, stderr)
+
+	// Other commands keep text as their default parse-error mode.
+	code, _, stderr = runCLI(t, "risk-summary", "--bogus")
+	if code != 2 || stderr != "Error: risk-summary: flag provided but not defined: -bogus\n" {
+		t.Fatalf("text default drifted: code=%d stderr=%q", code, stderr)
+	}
+}

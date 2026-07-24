@@ -209,6 +209,12 @@ func (s *InMemoryInboxStore) DenyCascade(ctx context.Context, itemID string, fee
 		if other.ItemID == itemID || other.Status != StatusPending {
 			continue
 		}
+		// Skip logically expired items: they are expired audit records
+		// (lazy expiry marks them EXPIRED on read), not deniable asks —
+		// a cascade must never rewrite them as DENIED.
+		if !other.ExpiresAt.IsZero() && time.Now().After(other.ExpiresAt) {
+			continue
+		}
 		// Cascade only when session IDs are equal AND non-empty: empty
 		// session IDs must never compare equal here.
 		if other.ContentHash != item.ContentHash || other.SessionID() != session {

@@ -277,6 +277,35 @@ func TestDenyCascade_EmptySessionNeverCollides(t *testing.T) {
 	assert.Equal(t, actioninbox.StatusPending, got.Status)
 }
 
+func TestDenyCascade_SkipsExpiredDuplicates(t *testing.T) {
+	store := actioninbox.NewInMemoryInboxStore()
+	ctx := context.Background()
+
+	withHash := func(item *actioninbox.InboxItem, hash, session string) *actioninbox.InboxItem {
+		item.ContentHash = hash
+		item.Context = map[string]any{actioninbox.SessionContextKey: session}
+		return item
+	}
+
+	require.NoError(t, store.Enqueue(ctx, withHash(newTestItem("target", "mgr-1"), "hash-A", "sess-1")))
+	require.NoError(t, store.Enqueue(ctx, withHash(newTestItem("live-dup", "mgr-1"), "hash-A", "sess-1")))
+	// Same hash + session but already logically expired: it must remain an
+	// expired audit record, never a cascade-denied one.
+	expired := withHash(newTestItem("expired-dup", "mgr-1"), "hash-A", "sess-1")
+	expired.CreatedAt = time.Now().UTC().Add(-2 * time.Hour)
+	expired.ExpiresAt = time.Now().UTC().Add(-1 * time.Hour)
+	require.NoError(t, store.Enqueue(ctx, expired))
+
+	cascaded, err := store.DenyCascade(ctx, "target", "no", "principal-1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"live-dup"}, cascaded, "expired duplicates must not be cascaded")
+
+	got, err := store.Get(ctx, "expired-dup")
+	require.NoError(t, err)
+	assert.Equal(t, actioninbox.StatusExpired, got.Status, "expired item must read as EXPIRED, not DENIED")
+	assert.Nil(t, got.Denial, "expired item must not carry a denial record")
+}
+
 func TestDenyCascade_NonPendingTargetFails(t *testing.T) {
 	store := actioninbox.NewInMemoryInboxStore()
 	ctx := context.Background()

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/a2a"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
@@ -125,6 +126,33 @@ func newLocalMCPGatewayWithEvaluator(cfg mcppkg.GatewayConfig, evaluator mcppkg.
 	}
 
 	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+}
+
+// receiptPersistingEvaluator persists a signed, queryable receipt for every
+// governed MCP gateway decision — ALLOW and DENY — into the kernel receipt
+// store that /api/v1/receipts reads. Persistence is fail-closed: a decision
+// that cannot be receipted surfaces as a governance error and blocks the
+// call, matching the /api/v1/evaluate route and the transparency-anchor
+// posture.
+type receiptPersistingEvaluator struct {
+	svc   *Services
+	inner mcppkg.PolicyEvaluator
+}
+
+func (e *receiptPersistingEvaluator) EvaluateDecision(ctx context.Context, req guardian.DecisionRequest) (*contracts.DecisionRecord, error) {
+	decision, err := e.inner.EvaluateDecision(ctx, req)
+	if err != nil || decision == nil {
+		return decision, err
+	}
+	if err := persistDecisionReceipt(ctx, e.svc, decision, req.Principal, []byte(req.Action+":"+req.Resource), map[string]any{
+		"source":   "mcp.gateway",
+		"action":   req.Action,
+		"resource": req.Resource,
+		"reason":   decision.Reason,
+	}); err != nil {
+		return nil, fmt.Errorf("persist gateway decision receipt: %w", err)
+	}
+	return decision, nil
 }
 
 func runLocalMCPTool(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {

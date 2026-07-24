@@ -520,6 +520,44 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 		t.Fatal("terminal receipt exceeded the source-owned maximum chain depth")
 	}
 
+	// Evidence must not derive from any receipt in the chain, including
+	// ancestors older than the immediate predecessor: sha256:<older-receipt-id>
+	// is formally identical to an artifact content hash.
+	ancestorDerived := conflict
+	ancestorDerived.ReceiptID = ""
+	ancestorDerived.Signature = ""
+	ancestorDerived.ReceiptRevision = 3
+	ancestorDerived.ReconciliationRevision = 2
+	ancestorDerived.PreviousReceiptID = conflictSigned.ReceiptID
+	ancestorDerived.Outcome = "FAILED"
+	ancestorDerived.ReconciliationStatus = "PROVEN_NOT_APPLIED"
+	ancestorDerived.ResultHash = launchHash("d")
+	ancestorDerived.EvidencePackRef = "evidencepack:ancestor-derived"
+	ancestorDerived.EvidencePackHash = launchHash("e")
+	ancestorDerived.ProofGraphNode = launchHash("c")
+	ancestorDerived.Timestamp = "2026-07-18T12:05:00Z"
+	ancestorDerived.Lamport = 4
+	ancestorDerivedSigned, err := contracts.SignLaunchEffectReceiptRevision(ancestorDerived, conflictSigned, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ancestorRefContext := fullChainContext
+	ancestorRefContext.ResolveEvidenceDAG = func(nodeHash string) (contracts.LaunchEffectEvidenceDAG, error) {
+		if nodeHash == ancestorDerivedSigned.ProofGraphNode {
+			return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{{
+				NodeHash: nodeHash, ArtifactRefs: []string{"sha256:" + signed.ReceiptID}, ProofSessionRef: signed.ProofSessionRef,
+				EvidenceReservationRef: signed.EvidenceReservationRef, Lamport: 2,
+			}}}, nil
+		}
+		return launchReceiptVerificationContext(publicKey).ResolveEvidenceDAG(nodeHash)
+	}
+	if err := contracts.VerifyLaunchEffectReceipt(ancestorDerivedSigned, ancestorRefContext); err == nil {
+		t.Fatal("receipt accepted evidence derived from an older chain receipt")
+	}
+	if err := contracts.VerifyLaunchEffectReceiptRevision(ancestorDerivedSigned, conflictSigned, ancestorRefContext); err == nil {
+		t.Fatal("revision verification accepted evidence derived from an older chain receipt")
+	}
+
 	tampered := reconciledSigned
 	tampered.ResultHash = launchHash("8")
 	if err := contracts.VerifyLaunchEffectReceipt(tampered, verifyContext); err == nil {

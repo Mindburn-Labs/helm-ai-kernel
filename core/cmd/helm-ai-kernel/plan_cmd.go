@@ -83,16 +83,12 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	}
 	// plan compile renders PlanSpec JSON only (there is no text renderer; the
 	// historical --json default is true for the same reason), so --format=json
-	// is accepted as the unified alias and --format=text is a no-op, matching
-	// the pre-existing --json=false behavior.
+	// is accepted as the unified alias and --format=text / --json=false are
+	// documented no-ops on the output mode.
 	jsonOutput = jsonOutput || formatFlag.IsJSON()
-	// plan compile emits PlanSpec JSON on every success path (the --json
-	// default is true and there is no text renderer), so its errors are
-	// ALWAYS the JSON envelope to keep stderr parseable as one document.
-	errFormat := cliui.FormatText
-	if jsonOutput {
-		errFormat = cliui.FormatJSON
-	}
+	// Because success output is ALWAYS PlanSpec JSON, errors are ALWAYS the
+	// JSON envelope — flag values cannot deselect it (JSON-only contract).
+	const errFormat = cliui.FormatJSON
 
 	var steps []string
 
@@ -113,11 +109,7 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 		// Inline steps from remaining args.
 		steps = cmd.Args()
 	} else {
-		_ = cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("plan compile", "provide --input <file> or inline step descriptions"), errFormat)
-		if errFormat != cliui.FormatJSON {
-			_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan compile [--input file.json | step1 step2 ...]")
-		}
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("plan compile", "provide --input <file> or inline step descriptions").WithHint("helm-ai-kernel plan compile [--input file.json | step1 step2 ...]"), errFormat)
 	}
 
 	compiler := intentcompiler.NewCompiler()

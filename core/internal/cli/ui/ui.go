@@ -324,7 +324,13 @@ func ValueFlagNames(fs *flag.FlagSet) map[string]bool {
 // here) does not consume anything, matching the flag package's
 // stop-at-first-undefined-flag behavior. The last selector in a valid flag
 // position wins. Invalid or missing values fail closed to def.
-func RequestedFormat(args []string, def Format, valueFlags map[string]bool) Format {
+//
+// formatSelector must be true only when --format is the command's OUTPUT
+// format flag (registered via RegisterFormat). Collision-exception commands
+// whose --format carries a domain meaning (e.g. verify decision-receipt's
+// receipt format id) pass false; --format then still consumes its value via
+// valueFlags but never selects the error mode.
+func RequestedFormat(args []string, def Format, valueFlags map[string]bool, formatSelector bool) Format {
 	f := def
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--" {
@@ -346,11 +352,13 @@ func RequestedFormat(args []string, def Format, valueFlags map[string]bool) Form
 				}
 			}
 		case name == "format" && i+1 < len(args):
-			if v, err := ParseFormat(args[i+1]); err == nil {
-				f = v
+			if formatSelector {
+				if v, err := ParseFormat(args[i+1]); err == nil {
+					f = v
+				}
 			}
-			i++
-		case strings.HasPrefix(name, "format="):
+			i++ // --format always consumes its value, selector or not
+		case strings.HasPrefix(name, "format=") && formatSelector:
 			if v, err := ParseFormat(strings.TrimPrefix(name, "format=")); err == nil {
 				f = v
 			}
@@ -386,7 +394,20 @@ func ParseFlags(fs *flag.FlagSet, args []string, chrome io.Writer, op string, de
 			fs.PrintDefaults()
 			return ExitUsage, false
 		}
-		return WriteErrorFormat(chrome, UsageErrorf(op, "%s", err), RequestedFormat(args, def, ValueFlagNames(fs))), false
+		return WriteErrorFormat(chrome, UsageErrorf(op, "%s", err),
+			RequestedFormat(args, def, ValueFlagNames(fs), formatIsOutputSelector(fs))), false
 	}
 	return ExitOK, true
+}
+
+// formatIsOutputSelector reports whether the command's --format flag is the
+// unified output-format selector (registered via RegisterFormat) rather than
+// a domain flag that merely shares the name (collision exception).
+func formatIsOutputSelector(fs *flag.FlagSet) bool {
+	fl := fs.Lookup("format")
+	if fl == nil {
+		return false
+	}
+	_, ok := fl.Value.(*FormatFlag)
+	return ok
 }

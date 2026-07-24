@@ -382,6 +382,20 @@
       "replacement": "<version>{version}</version>"
     },
     {
+      "id": "implementation-partner-guide-version-tag",
+      "path": "docs/guides/implementation-partner.md",
+      "kind": "regex",
+      "pattern": "v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "v{version}"
+    },
+    {
+      "id": "implementation-partner-guide-expected-release",
+      "path": "docs/guides/implementation-partner.md",
+      "kind": "regex",
+      "pattern": "The expected release for this packet is `(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
+      "replacement": "The expected release for this packet is `{version}`"
+    },
+    {
       "id": "examples-java-coordinate",
       "path": "docs/EXAMPLES.md",
       "kind": "regex",

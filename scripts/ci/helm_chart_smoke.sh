@@ -131,6 +131,13 @@ helm_runner template "$RELEASE" "$CHART" \
     --set-string launchpadApps.hermes.query="chart smoke" >"$hermes_job_rendered"
 assert_contains "$hermes_job_rendered" "kind: Job"
 assert_contains "$hermes_job_rendered" "helm-ai-kernel-hermes"
+assert_contains "$hermes_job_rendered" "helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded"
+# Match any argument order or added redirection, not one exact spelling. Uses a
+# literal space class rather than \b, which is not portable in POSIX ERE.
+if grep -Eq 'kube_helm[[:space:]]+test[[:space:]][^#]*--logs' "$ROOT/scripts/ci/launchpad_k8s_smoke.sh"; then
+    echo "::error::launchpad smoke requests Helm test logs after successful hooks are deleted"
+    exit 1
+fi
 assert_contains "$hermes_job_rendered" "anthropic/claude-3-5-haiku"
 assert_contains "$hermes_job_rendered" "chart smoke"
 assert_contains "$hermes_job_rendered" "--provider"

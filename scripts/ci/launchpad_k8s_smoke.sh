@@ -202,6 +202,10 @@ cleanup() {
         kubectl get pods -n "$NAMESPACE" -o wide 2>/dev/null || true
         kubectl describe pods -n "$NAMESPACE" 2>/dev/null | tail -200 || true
         kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=launchpad-app --all-containers --tail=200 2>/dev/null || true
+        # A failed Helm test hook is retained (hook-delete-policy deletes only on
+        # success), so its Pod is still readable here. This is the diagnostic the
+        # dropped `helm test` log flag used to provide on the failure path.
+        kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=test --all-containers --tail=200 2>/dev/null || true
         echo "::endgroup::"
         # Best-effort namespace-scoped teardown so the next run starts clean.
         # The cluster itself stays around when KEEP_CLUSTER=1.
@@ -462,8 +466,11 @@ case "$MODE" in
         kubectl -n "$NAMESPACE" rollout status "deployment/${RELEASE}-helm-ai-kernel" --timeout=300s
         assert_pod_ready openclaw 6m
         assert_job_succeeded hermes 3m
+        # Successful test hooks self-delete so teardown leaves no Pod behind.
+        # Helm cannot retrieve logs after that deletion, so failures rely on the
+        # trap's namespace diagnostics rather than `helm test --logs`.
         echo "helm test"
-        kube_helm test "$RELEASE" -n "$NAMESPACE" --logs
+        kube_helm test "$RELEASE" -n "$NAMESPACE"
         echo "openclaw kubectl exec healthcheck"
         kubectl -n "$NAMESPACE" exec \
             "deployment/${RELEASE}-helm-ai-kernel-openclaw" \

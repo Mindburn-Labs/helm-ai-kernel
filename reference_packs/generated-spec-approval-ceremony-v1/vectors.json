@@ -67,6 +67,11 @@
       "id": "quorum_not_verified",
       "mutation": "set_challenge_quorum_above_approvers_and_reseal",
       "expected_error": "quorum_not_verified"
+    },
+    {
+      "id": "duplicate_approver",
+      "mutation": "duplicate_grant_approver_and_reseal",
+      "expected_error": "contract_mismatch"
     }
   ]
 }

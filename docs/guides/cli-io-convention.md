@@ -51,9 +51,12 @@ return cliui.WriteError(stderr, cliui.UsageErrorf("trust", "unknown subcommand: 
   map to 1, never 0.
 - `cliui.WriteErrorFormat(w, err, format)` renders the stable machine envelope
   `{"error":{"op","message","hint","code"}}` on stderr when the command runs
-  with `--format=json`, and the clean text form otherwise. Commands that
-  register `--format` route their post-parse error paths through it.
-  `cliui.WriteError` remains the text-mode shorthand.
+  in JSON mode, and the clean text form otherwise. Commands that register
+  `--format` route their post-parse error paths through it, keyed off the
+  **effective** output mode (i.e. `jsonOut || formatFlag.IsJSON()`, so the
+  legacy `--json` alias selects the envelope too). In JSON mode stderr must
+  remain exactly one JSON document — gate any supplementary usage lines on
+  text mode. `cliui.WriteError` remains the text-mode shorthand.
 
 ## Output format: `--format text|json`
 

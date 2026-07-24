@@ -45,6 +45,12 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	jsonOutput = jsonOutput || formatFlag.IsJSON()
+	// Errors follow the EFFECTIVE output mode: the legacy --json alias selects
+	// JSON success output, so it must also select the JSON error envelope.
+	errFormat := cliui.FormatText
+	if jsonOutput {
+		errFormat = cliui.FormatJSON
+	}
 
 	// List mode
 	if listAll {
@@ -66,9 +72,11 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if effect == "" {
-		_ = cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("risk-summary", "--effect or --list is required"), formatFlag.Value)
-		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel risk-summary --effect INFRA_DESTROY [--frozen] [--json]")
-		_, _ = fmt.Fprintln(stderr, "       helm-ai-kernel risk-summary --list [--json]")
+		_ = cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("risk-summary", "--effect or --list is required"), errFormat)
+		if errFormat != cliui.FormatJSON {
+			_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel risk-summary --effect INFRA_DESTROY [--frozen] [--json]")
+			_, _ = fmt.Fprintln(stderr, "       helm-ai-kernel risk-summary --list [--json]")
+		}
 		return 2
 	}
 

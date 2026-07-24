@@ -212,3 +212,71 @@ func TestCLIJSONErrorEnvelopeWired(t *testing.T) {
 		t.Fatalf("verify entry envelope drifted: %q", stderr)
 	}
 }
+
+// --- Regression: permit round-3 P2s ----------------------------------------
+
+// assertSingleJSONDocument fails unless s is exactly one JSON value.
+func assertSingleJSONDocument(t *testing.T, s string) {
+	t.Helper()
+	dec := json.NewDecoder(strings.NewReader(s))
+	var doc map[string]any
+	if err := dec.Decode(&doc); err != nil {
+		t.Fatalf("stderr not JSON: %v\n%s", err, s)
+	}
+	if dec.More() {
+		t.Fatalf("trailing content after JSON document: %q", s)
+	}
+	if _, ok := doc["error"]; !ok {
+		t.Fatalf("expected error envelope, got: %s", s)
+	}
+}
+
+func TestCLILegacyJSONAliasSelectsErrorEnvelope(t *testing.T) {
+	// P2 LEGACY_JSON_ERROR_FORMAT_DIVERGENCE: --json must select the JSON
+	// error envelope, not just JSON success output.
+	code, stdout, stderr := runCLI(t, "risk-summary", "--json")
+	if code != 2 {
+		t.Fatalf("code=%d want 2", code)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, strings.TrimSpace(stderr)+"\n")
+}
+
+func TestCLIJSONModeStderrIsOneDocument(t *testing.T) {
+	// P2 JSON_ERROR_STREAM_NOT_PARSEABLE: no plain usage text may follow the
+	// envelope in JSON mode.
+	cases := []struct {
+		name string
+		cmd  string
+		args []string
+	}{
+		{"risk-summary format=json", "risk-summary", []string{"--format=json"}},
+		{"risk-summary legacy --json", "risk-summary", []string{"--json"}},
+		{"plan compile missing input", "plan", []string{"compile", "--format=json"}},
+		{"plan compile default json", "plan", []string{"compile"}},
+		{"verify entry missing proof", "verify", []string{"--entry", "r/x.json", "--format=json"}},
+		{"verify entry legacy --json", "verify", []string{"--entry", "r/x.json", "--json"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, stdout, stderr := runCLI(t, tc.cmd, tc.args...)
+			if code != 2 {
+				t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
+			}
+			assertCleanStdout(t, stdout)
+			assertSingleJSONDocument(t, stderr)
+		})
+	}
+}
+
+func TestCLITextModeKeepsHumanErrorForm(t *testing.T) {
+	// plan compile is JSON-only, but risk-summary text mode keeps the human
+	// error + usage lines.
+	_, _, stderr := runCLI(t, "risk-summary")
+	if !strings.HasPrefix(stderr, "Error: risk-summary: --effect or --list is required\n") {
+		t.Fatalf("text error drifted: %q", stderr)
+	}
+	if !strings.Contains(stderr, "Usage: helm-ai-kernel risk-summary --effect INFRA_DESTROY") {
+		t.Fatalf("usage lines missing in text mode: %q", stderr)
+	}
+}

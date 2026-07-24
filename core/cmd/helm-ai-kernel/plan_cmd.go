@@ -87,6 +87,13 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	// is accepted as the unified alias and --format=text is a no-op, matching
 	// the pre-existing --json=false behavior.
 	jsonOutput = jsonOutput || formatFlag.IsJSON()
+	// plan compile emits PlanSpec JSON on every success path (the --json
+	// default is true and there is no text renderer), so its errors are
+	// ALWAYS the JSON envelope to keep stderr parseable as one document.
+	errFormat := cliui.FormatText
+	if jsonOutput {
+		errFormat = cliui.FormatJSON
+	}
 
 	var steps []string
 
@@ -94,21 +101,23 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 		// Read from file.
 		data, err := os.ReadFile(inputFile)
 		if err != nil {
-			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "plan compile", "reading input file"), formatFlag.Value)
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "plan compile", "reading input file"), errFormat)
 		}
 		var input struct {
 			Steps []string `json:"steps"`
 		}
 		if err := json.Unmarshal(data, &input); err != nil {
-			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "plan compile", "parsing input JSON"), formatFlag.Value)
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "plan compile", "parsing input JSON"), errFormat)
 		}
 		steps = input.Steps
 	} else if cmd.NArg() > 0 {
 		// Inline steps from remaining args.
 		steps = cmd.Args()
 	} else {
-		_ = cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("plan compile", "provide --input <file> or inline step descriptions"), formatFlag.Value)
-		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan compile [--input file.json | step1 step2 ...]")
+		_ = cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("plan compile", "provide --input <file> or inline step descriptions"), errFormat)
+		if errFormat != cliui.FormatJSON {
+			_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel plan compile [--input file.json | step1 step2 ...]")
+		}
 		return 2
 	}
 
@@ -118,7 +127,7 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 		PlanName: planName,
 	})
 	if err != nil {
-		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "compilation failed"), formatFlag.Value)
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "compilation failed"), errFormat)
 	}
 
 	// Print warnings.
@@ -129,12 +138,12 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	// Output plan.
 	data, err := json.MarshalIndent(result.Plan, "", "  ")
 	if err != nil {
-		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "marshaling plan"), formatFlag.Value)
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "marshaling plan"), errFormat)
 	}
 
 	if outputFile != "" {
 		if err := os.WriteFile(outputFile, data, 0644); err != nil {
-			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "writing output"), formatFlag.Value)
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitFailure, "plan compile", "writing output"), errFormat)
 		}
 		_, _ = fmt.Fprintf(stderr, "Plan written to %s (%d steps, %d edges)\n",
 			outputFile, len(result.Plan.DAG.Nodes), len(result.Plan.DAG.Edges))

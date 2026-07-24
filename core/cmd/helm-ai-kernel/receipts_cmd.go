@@ -54,10 +54,10 @@ func runReceiptsTailCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	jsonOut = jsonOut || formatFlag.IsJSON()
 	if cmd.NArg() > 0 {
-		return cliui.WriteError(stderr, cliui.UsageErrorf("receipts tail", "unexpected argument: %s", cmd.Arg(0)))
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("receipts tail", "unexpected argument: %s", cmd.Arg(0)), formatFlag.Value)
 	}
 	if strings.TrimSpace(agentID) == "" {
-		return cliui.WriteError(stderr, cliui.UsageErrorf("receipts tail", "--agent is required"))
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("receipts tail", "--agent is required"), formatFlag.Value)
 	}
 	if server == "" {
 		server = os.Getenv("HELM_URL")
@@ -68,26 +68,26 @@ func runReceiptsTailCmd(args []string, stdout, stderr io.Writer) int {
 
 	tailURL, err := buildReceiptsTailURL(server, agentID, since, limit)
 	if err != nil {
-		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "receipts tail", "invalid server URL"))
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "receipts tail", "invalid server URL"), formatFlag.Value)
 	}
 
 	client := &http.Client{Timeout: 0}
 	req, err := http.NewRequest(http.MethodGet, tailURL, nil)
 	if err != nil {
-		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "receipts tail", "cannot create request"))
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "receipts tail", "cannot create request"), formatFlag.Value)
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	resp, err := client.Do(req)
 	if err != nil {
-		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "receipts tail", "receipt stream unavailable"))
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitFailure, "receipts tail", "receipt stream unavailable"), formatFlag.Value)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return cliui.WriteError(stderr, cliui.Failf("receipts tail", "receipt stream returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+		return cliui.WriteErrorFormat(stderr, cliui.Failf("receipts tail", "receipt stream returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body))), formatFlag.Value)
 	}
 
-	return streamReceipts(resp.Body, stdout, stderr, jsonOut)
+	return streamReceipts(resp.Body, stdout, stderr, jsonOut, formatFlag.Value)
 }
 
 func buildReceiptsTailURL(server, agentID, since string, limit int) (string, error) {
@@ -108,7 +108,7 @@ func buildReceiptsTailURL(server, agentID, since string, limit int) (string, err
 	return base.String(), nil
 }
 
-func streamReceipts(body io.Reader, stdout, stderr io.Writer, jsonOut bool) int {
+func streamReceipts(body io.Reader, stdout, stderr io.Writer, jsonOut bool, format cliui.Format) int {
 	scanner := bufio.NewScanner(body)
 	var data strings.Builder
 	for scanner.Scan() {
@@ -128,7 +128,7 @@ func streamReceipts(body io.Reader, stdout, stderr io.Writer, jsonOut bool) int 
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "receipts tail", "receipt stream interrupted"))
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitFailure, "receipts tail", "receipt stream interrupted"), format)
 	}
 	return 0
 }

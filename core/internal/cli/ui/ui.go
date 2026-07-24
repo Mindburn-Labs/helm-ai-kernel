@@ -163,7 +163,12 @@ func Wrapf(err error, code int, op, format string, args ...any) *CliError {
 }
 
 // WithHint attaches a remediation hint and returns the error for chaining.
+// It is nil-safe: chaining onto Wrapf (nil for a nil cause) returns nil
+// instead of panicking.
 func (e *CliError) WithHint(hint string) *CliError {
+	if e == nil {
+		return nil
+	}
 	e.Hint = hint
 	return e
 }
@@ -257,10 +262,23 @@ func FormatErrorJSON(err error) string {
 // returns the exit code for err, so handlers can `return ui.WriteError(...)`.
 // A nil err writes nothing and returns ExitOK.
 func WriteError(chrome io.Writer, err error) int {
+	return WriteErrorFormat(chrome, err, FormatText)
+}
+
+// WriteErrorFormat is WriteError with format-aware rendering: under
+// FormatJSON it emits the stable {"error":{...}} envelope (FormatErrorJSON)
+// so --format=json consumers get structured errors on stderr; otherwise it
+// renders the clean text form. Data/chrome separation is unchanged — errors
+// always go to chrome (stderr), never to the data stream.
+func WriteErrorFormat(chrome io.Writer, err error, f Format) int {
 	if err == nil {
 		return ExitOK
 	}
-	_, _ = fmt.Fprintln(chrome, FormatError(err))
+	if f.IsJSON() {
+		_, _ = fmt.Fprintln(chrome, FormatErrorJSON(err))
+	} else {
+		_, _ = fmt.Fprintln(chrome, FormatError(err))
+	}
 	return ExitCode(err)
 }
 

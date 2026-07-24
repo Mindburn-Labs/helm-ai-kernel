@@ -171,3 +171,55 @@ func TestWriteJSONGolden(t *testing.T) {
 		t.Fatalf("JSON output drifted:\n got: %q\nwant: %q", data.String(), want)
 	}
 }
+
+// --- Regression: nil-safe WithHint (permit advisory P3) --------------------
+
+func TestWithHintNilReceiverIsSafe(t *testing.T) {
+	// Wrapf returns nil for a nil cause; chaining WithHint must not panic.
+	err := Wrapf(nil, ExitFailure, "op", "ctx").WithHint("try again")
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	var nilErr *CliError
+	if got := nilErr.WithHint("x"); got != nil {
+		t.Fatalf("nil receiver WithHint = %v, want nil", got)
+	}
+}
+
+// --- Golden: format-aware WriteError (permit advisory P3) ------------------
+
+func TestWriteErrorFormatGolden(t *testing.T) {
+	var chrome bytes.Buffer
+	err := Failf("verify", "pack signature invalid").WithHint("check key")
+
+	code := WriteErrorFormat(&chrome, err, FormatJSON)
+	if code != ExitFailure {
+		t.Fatalf("exit code = %d, want %d", code, ExitFailure)
+	}
+	want := `{"error":{"op":"verify","message":"pack signature invalid","hint":"check key","code":1}}` + "\n"
+	if chrome.String() != want {
+		t.Fatalf("JSON envelope drifted:\n got: %q\nwant: %q", chrome.String(), want)
+	}
+
+	chrome.Reset()
+	code = WriteErrorFormat(&chrome, err, FormatText)
+	if code != ExitFailure {
+		t.Fatalf("exit code = %d, want %d", code, ExitFailure)
+	}
+	want = "Error: verify: pack signature invalid\n  hint: check key\n"
+	if chrome.String() != want {
+		t.Fatalf("text form drifted:\n got: %q\nwant: %q", chrome.String(), want)
+	}
+
+	// WriteError stays the text-mode shorthand.
+	chrome.Reset()
+	if WriteError(&chrome, err) != ExitFailure || chrome.String() != want {
+		t.Fatalf("WriteError shorthand drifted: %q", chrome.String())
+	}
+
+	// Nil error stays silent under both formats.
+	chrome.Reset()
+	if WriteErrorFormat(&chrome, nil, FormatJSON) != ExitOK || chrome.Len() != 0 {
+		t.Fatalf("nil error wrote %q", chrome.String())
+	}
+}

@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-24T17:39:32Z
+# Generated: 2026-07-24T18:03:39Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -230,8 +230,8 @@ bcfd4bc7c3f9463be26db2922ad02336c8f987812e7efe442b879359cd652bf6  core/pkg/contr
 63be4c54fb0ab500f0a6b3f0c00d0e5ae708136936edc94e78219e6e80f6d061  core/pkg/contracts/launch_contract_helpers.go
 ca23afe2337234f709e9dbd945d339acbe301409f50b1df8b7474d0eb612b54f  core/pkg/contracts/launch_effect_types.go
 009d5383146cd79e8ca4f8da896160feb8948a316fd5997f08739d6f04527fe9  core/pkg/contracts/launch_effect_authority.go
-b7107b7bd6a062a51481607b59ba06960257254d7041a13981899c24de431a6c  core/pkg/contracts/launch_effect_authority_test.go
-6f75e2bb68a7bd3d1cbb3321bfd8aaf0a20d87db48248e87e33843fb3225627a  core/pkg/contracts/launch_effect_receipt.go
+38714eaec424a8b07db03bb4927dd893a15f97381d14786b6a735042ae204662  core/pkg/contracts/launch_effect_authority_test.go
+cc2598c60a0c6d6c0b0eb16da302806327e3d14c8f3cd102fc64e5d18341a01b  core/pkg/contracts/launch_effect_receipt.go
 6130dbb6677a6f49195a53c1b2e01583b586bcb4527c00e0d322f3339e5be470  core/pkg/contracts/launch_effect_types_test.go
 890aafba8af988c93a47bf6a9a4c1402f3d57ea6cc1a0088797c51c911cdf66d  core/pkg/contracts/launch_offer_snapshot.go
 c8b1ed40ba2990d4448d729b4b29c2be46e5dc5f802d619d109669dde3d3c9cf  core/pkg/contracts/launch_portable_vocabulary_test.go

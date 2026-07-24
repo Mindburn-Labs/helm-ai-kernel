@@ -403,40 +403,9 @@ func validateSealedLaunchEffectReceipt(receipt LaunchEffectReceipt) error {
 // resolution, the Ed25519 signature, the source-owned dispatch reservation,
 // pre-receipt evidence DAG, and non-circular EvidencePack closure.
 func VerifyLaunchEffectReceipt(receipt LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
-	var chain []LaunchEffectReceipt
-	seen := make(map[string]struct{})
-	current := receipt
-	for {
-		if err := verifyLaunchEffectReceiptBase(current, ctx); err != nil {
-			if len(chain) == 0 {
-				return err
-			}
-			return fmt.Errorf("verify launch effect receipt predecessor revision %d: %w", current.ReceiptRevision, err)
-		}
-		if _, duplicate := seen[current.ReceiptID]; duplicate {
-			return errors.New("launch effect receipt predecessor chain contains a cycle")
-		}
-		seen[current.ReceiptID] = struct{}{}
-		chain = append(chain, current)
-		if current.ReceiptRevision == 1 {
-			break
-		}
-		if ctx.ResolvePreviousReceipt == nil {
-			return errors.New("revised launch effect receipt requires source-owned predecessor resolution")
-		}
-		previous, err := ctx.ResolvePreviousReceipt(current.PreviousReceiptID)
-		if err != nil {
-			return fmt.Errorf("resolve launch effect receipt predecessor revision %d: %w", current.ReceiptRevision-1, err)
-		}
-		if err := validateLaunchEffectReceiptPredecessorLink(current, previous); err != nil {
-			return err
-		}
-		current = previous
-	}
-	for index := 0; index+1 < len(chain); index++ {
-		if err := validateLaunchEffectReceiptRevision(chain[index], chain[index+1]); err != nil {
-			return err
-		}
+	chain, _, err := verifyLaunchEffectReceiptChain(receipt, ctx)
+	if err != nil {
+		return err
 	}
 	if receipt.Outcome == "UNKNOWN" {
 		return nil
@@ -445,6 +414,60 @@ func VerifyLaunchEffectReceipt(receipt LaunchEffectReceipt, ctx LaunchEffectRece
 		return errors.New("terminal launch effect receipt has no verified predecessor")
 	}
 	return verifyLaunchEffectReceiptEvidencePack(receipt, chain[1], ctx)
+}
+
+// verifyLaunchEffectReceiptChain walks the append-only predecessor chain from
+// the given head, verifying every revision, and returns the verified chain
+// alongside each receipt's resolved evidence DAG.
+func verifyLaunchEffectReceiptChain(receipt LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) ([]LaunchEffectReceipt, []LaunchEffectEvidenceDAG, error) {
+	var chain []LaunchEffectReceipt
+	var dags []LaunchEffectEvidenceDAG
+	seen := make(map[string]struct{})
+	current := receipt
+	for {
+		if err := verifyLaunchEffectReceiptBase(current, ctx); err != nil {
+			if len(chain) == 0 {
+				return nil, nil, err
+			}
+			return nil, nil, fmt.Errorf("verify launch effect receipt predecessor revision %d: %w", current.ReceiptRevision, err)
+		}
+		dag, err := resolveLaunchReceiptEvidenceDAG(current, ctx)
+		if err != nil {
+			if len(chain) == 0 {
+				return nil, nil, err
+			}
+			return nil, nil, fmt.Errorf("verify launch effect receipt predecessor revision %d: %w", current.ReceiptRevision, err)
+		}
+		dags = append(dags, dag)
+		if _, duplicate := seen[current.ReceiptID]; duplicate {
+			return nil, nil, errors.New("launch effect receipt predecessor chain contains a cycle")
+		}
+		seen[current.ReceiptID] = struct{}{}
+		chain = append(chain, current)
+		if current.ReceiptRevision == 1 {
+			break
+		}
+		if ctx.ResolvePreviousReceipt == nil {
+			return nil, nil, errors.New("revised launch effect receipt requires source-owned predecessor resolution")
+		}
+		previous, err := ctx.ResolvePreviousReceipt(current.PreviousReceiptID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve launch effect receipt predecessor revision %d: %w", current.ReceiptRevision-1, err)
+		}
+		if err := validateLaunchEffectReceiptPredecessorLink(current, previous); err != nil {
+			return nil, nil, err
+		}
+		current = previous
+	}
+	for index := 0; index+1 < len(chain); index++ {
+		if err := validateLaunchEffectReceiptRevision(chain[index], chain[index+1]); err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := verifyLaunchReceiptChainEvidence(chain, dags); err != nil {
+		return nil, nil, err
+	}
+	return chain, dags, nil
 }
 
 func verifyLaunchEffectReceiptBase(receipt LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
@@ -496,17 +519,25 @@ func verifyLaunchEffectReceiptBase(receipt LaunchEffectReceipt, ctx LaunchEffect
 	if err := verifyLaunchReceiptAuthority(receipt, authority); err != nil {
 		return err
 	}
+	return nil
+}
+
+// resolveLaunchReceiptEvidenceDAG resolves and structurally verifies one
+// receipt's evidence DAG, rejecting references to the receipt itself or its
+// immediate predecessor. Chain-wide ancestor filtering happens after the full
+// predecessor chain is verified, in verifyLaunchReceiptChainEvidence.
+func resolveLaunchReceiptEvidenceDAG(receipt LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) (LaunchEffectEvidenceDAG, error) {
 	if ctx.ResolveEvidenceDAG == nil {
-		return errors.New("launch effect receipt requires source-owned evidence DAG resolution")
+		return LaunchEffectEvidenceDAG{}, errors.New("launch effect receipt requires source-owned evidence DAG resolution")
 	}
 	dag, err := ctx.ResolveEvidenceDAG(receipt.ProofGraphNode)
 	if err != nil {
-		return fmt.Errorf("resolve launch effect receipt evidence DAG: %w", err)
+		return LaunchEffectEvidenceDAG{}, fmt.Errorf("resolve launch effect receipt evidence DAG: %w", err)
 	}
 	if err := verifyLaunchReceiptEvidenceDAG(receipt, dag); err != nil {
-		return err
+		return LaunchEffectEvidenceDAG{}, err
 	}
-	return nil
+	return dag, nil
 }
 
 func verifyLaunchEffectReceiptEvidencePack(receipt, previous LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
@@ -690,14 +721,53 @@ func launchEvidenceRefDependsOnReceipt(receipt LaunchEffectReceipt, ref string) 
 	return false
 }
 
+// verifyLaunchReceiptChainEvidence rejects evidence references to any receipt
+// in the verified chain, not just each receipt's immediate neighbors. Receipt
+// IDs are bare SHA-256 digests, so sha256:<older-receipt-id> is
+// indistinguishable from an artifact content hash unless the whole chain is
+// checked; without this, reconciliation evidence could secretly derive from
+// an ancestor receipt, breaking the no-receipt-dependency invariant.
+func verifyLaunchReceiptChainEvidence(chain []LaunchEffectReceipt, dags []LaunchEffectEvidenceDAG) error {
+	if len(chain) != len(dags) {
+		return errors.New("launch effect receipt evidence chain is incomplete")
+	}
+	forbidden := make(map[string]struct{}, len(chain)*2)
+	for _, link := range chain {
+		forbidden[link.ReceiptID] = struct{}{}
+		forbidden["sha256:"+link.ReceiptID] = struct{}{}
+	}
+	for index, dag := range dags {
+		for _, node := range dag.Nodes {
+			for _, artifactRef := range node.ArtifactRefs {
+				if _, found := forbidden[artifactRef]; found {
+					return fmt.Errorf("launch effect receipt revision %d evidence DAG depends on a receipt in its own chain", chain[index].ReceiptRevision)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // VerifyLaunchEffectReceiptRevision verifies one append-only reconciliation
 // transition against the exact signed predecessor.
 func VerifyLaunchEffectReceiptRevision(current, previous LaunchEffectReceipt, ctx LaunchEffectReceiptVerificationContext) error {
-	if err := VerifyLaunchEffectReceipt(previous, ctx); err != nil {
+	previousChain, previousDAGs, err := verifyLaunchEffectReceiptChain(previous, ctx)
+	if err != nil {
 		return fmt.Errorf("verify previous launch effect receipt: %w", err)
 	}
 	if err := verifyLaunchEffectReceiptBase(current, ctx); err != nil {
 		return fmt.Errorf("verify current launch effect receipt: %w", err)
+	}
+	dag, err := resolveLaunchReceiptEvidenceDAG(current, ctx)
+	if err != nil {
+		return fmt.Errorf("verify current launch effect receipt: %w", err)
+	}
+	// The new head's evidence must not derive from any receipt in the chain it
+	// extends; per-receipt filtering only covers its immediate predecessor.
+	chain := append([]LaunchEffectReceipt{current}, previousChain...)
+	dags := append([]LaunchEffectEvidenceDAG{dag}, previousDAGs...)
+	if err := verifyLaunchReceiptChainEvidence(chain, dags); err != nil {
+		return err
 	}
 	if err := validateLaunchEffectReceiptRevision(current, previous); err != nil {
 		return err

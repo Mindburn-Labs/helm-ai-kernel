@@ -49,6 +49,14 @@
 | `posture_attestation.v1.schema.json` | L2 | preview | Live OS posture attestation (MATCH/DRIFT, fail-closed on drift) |
 | `update_bundle_manifest.v1.schema.json` | L2 | preview | Signed offline update-bundle manifest (format + verifier only) |
 
+### Capability (`capability/`)
+
+| Schema | Conformance | Status | Description |
+| --- | --- | --- | --- |
+| `capability_manifest.v1.json` | L2 | preview | Governed atomic capability manifest for the capability registry (effect class, reversibility, data boundary, permit level, rollback, receipts, memory access, routing) |
+| `rollback_plan.v1.json` | L2 | preview | Machine-checkable rollback plan bound to a capability or effect receipt |
+| `capability_token.v1.json` | L2 | preview | Task-bound, TTL-limited, hash-pinned runtime capability grant with revocation receipts |
+
 ### Policy (`policy/`)
 
 | Schema                               | Conformance | Status    | Description                 |

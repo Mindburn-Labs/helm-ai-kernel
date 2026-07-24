@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/capability/capability_manifest.v1.json",
+  "title": "HELM Governed Capability Manifest v1",
+  "description": "Normative manifest for an atomically callable capability (tool, MCP server method, A2A skill, CLI verb, GUI action, or API endpoint) registered in the HELM capability registry. The guardian resolves every dispatched effect to a manifest before decision. Status: preview — schema only; guardian enforcement wiring is follow-up work.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capability_id",
+    "name",
+    "version",
+    "protocol",
+    "binding",
+    "effect_class",
+    "reversibility",
+    "data_boundary",
+    "risk_score",
+    "required_permit_level",
+    "rollback",
+    "receipts",
+    "memory_access"
+  ],
+  "properties": {
+    "schema_version": { "const": "capability-manifest/v1" },
+    "capability_id": {
+      "type": "string",
+      "pattern": "^helm\\.cap\\.[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+      "description": "Dotted namespaced identifier, e.g. helm.cap.fs.write, helm.cap.mcp.gelab.tap"
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$"
+    },
+    "description": { "type": "string" },
+    "protocol": {
+      "enum": ["mcp", "a2a", "cli", "http-api", "gui-action", "syscall"],
+      "description": "Dispatch surface. Mirrors the protocol families agentic OSes (e.g. Step AOS) expose: MCP, A2A, CLI, unified API; gui-action covers vision/accessibility actuation connectors."
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": {
+          "enum": ["mcp_tool", "mcp_server", "a2a_skill", "cli_command", "http_endpoint", "gui_action_primitive"]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Protocol-specific reference: tool name, command path, URL template, or action primitive id."
+        },
+        "parameters_schema": {
+          "type": "object",
+          "description": "JSON Schema for the capability's parameters, used for pre-dispatch argument validation."
+        }
+      }
+    },
+    "effect_class": {
+      "enum": [
+        "read_only",
+        "write_local",
+        "write_external",
+        "network_egress",
+        "credential_access",
+        "code_execution",
+        "financial",
+        "irreversible"
+      ],
+      "description": "Highest-consequence effect this capability can produce. Guardian policy keys on the worst case, not the common case."
+    },
+    "reversibility": {
+      "enum": ["none", "compensating_action", "exact_undo"],
+      "description": "Aligned with effect_type_definition/v2. none = irreversible; compensating_action = an inverse effect exists; exact_undo = state can be restored exactly."
+    },
+    "data_boundary": {
+      "enum": ["local_only", "device_boundary", "org_boundary", "external"],
+      "description": "Tightest boundary the capability's data flow is confined to. local_only/device_boundary map to edge/TEE execution; external means data may leave operator-controlled infrastructure."
+    },
+    "risk_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "required_permit_level": {
+      "enum": ["none", "single_approval", "multi_party_permit"],
+      "description": "Minimum authorization for dispatch. multi_party_permit requires a distinct-provider 2-of-2 permit per HELM merge/authority policy."
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "plan_ref": {
+          "type": "string",
+          "description": "Reference to a rollback_plan.v1 document. REQUIRED when reversibility is compensating_action or exact_undo and effect_class is not read_only."
+        }
+      }
+    },
+    "receipts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required"],
+      "properties": {
+        "required": { "const": true },
+        "schema_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Receipt schema ids every dispatch must produce (decision receipt at minimum)."
+        }
+      }
+    },
+    "memory_access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["user_domain", "agent_domain"],
+      "properties": {
+        "user_domain": { "enum": ["none", "read", "write", "read_write"] },
+        "agent_domain": { "enum": ["none", "read", "write", "read_write"] },
+        "cross_domain_read": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the capability may read across the user/agent domain boundary. Defaults false (deny) per memory-governance spec."
+        }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_model_tier": {
+          "enum": ["fast_edge", "standard", "deep_reasoning"],
+          "description": "Minimum model tier permitted to plan/invoke this capability, per model-routing-policy."
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "homepage": { "type": "string" },
+        "license": { "type": "string" },
+        "source_pack_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "certified_by": { "type": "string" },
+        "certified_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

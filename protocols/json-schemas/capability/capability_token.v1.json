@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "helm://schemas/capability/capability_token.v1.json",
+  "title": "HELM Task Capability Token v1",
+  "description": "Short-lived, task-bound authorization token implementing grant-on-demand / auto-revoke least privilege (docs/governance/task-capability-tokens.md). The guardian refuses dispatch for expired, exhausted, out-of-scope, or revoked tokens. Status: preview — schema only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "token_id",
+    "task_id",
+    "subject",
+    "capability_ref",
+    "grant",
+    "status"
+  ],
+  "properties": {
+    "schema_version": { "const": "capability-token/v1" },
+    "token_id": { "type": "string", "minLength": 1 },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier of the task/intent this token is bound to. Dispatch under any other task_id must fail closed."
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id"],
+      "properties": {
+        "agent_id": { "type": "string" },
+        "session_id": { "type": "string" },
+        "device_id": { "type": "string" }
+      }
+    },
+    "capability_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability_id", "version", "manifest_hash"],
+      "properties": {
+        "capability_id": { "type": "string" },
+        "version": { "type": "string" },
+        "manifest_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Hash of the exact manifest revision granted. Manifest drift invalidates the token (fail closed)."
+        }
+      }
+    },
+    "grant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issued_at", "expires_at"],
+      "properties": {
+        "issued_at": { "type": "string", "format": "date-time" },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "TTL boundary. Recommended default: task end or 15 minutes, whichever is earlier."
+        },
+        "max_uses": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Use-count ceiling for single-shot or bounded grants. Absent means bounded only by expiry."
+        },
+        "constraints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "args_digest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$",
+              "description": "When present, dispatch arguments must canonical-hash to this digest (exact-argument grant)."
+            },
+            "data_boundary_ceiling": {
+              "enum": ["local_only", "device_boundary", "org_boundary", "external"],
+              "description": "Grant is void if the dispatch would exceed this data boundary, even if the manifest allows more."
+            }
+          }
+        }
+      }
+    },
+    "status": {
+      "enum": ["active", "used_up", "expired", "revoked"],
+      "description": "Terminal states are fail-closed: no dispatch, receipt written for the refusal."
+    },
+    "revocation_receipt_ref": {
+      "type": "string",
+      "description": "Receipt recording when and why the token was revoked (task end, emergency stop, scope violation)."
+    },
+    "signature": {
+      "type": "string",
+      "description": "Detached signature over the canonical token payload, verifiable offline like other HELM receipts."
+    }
+  }
+}

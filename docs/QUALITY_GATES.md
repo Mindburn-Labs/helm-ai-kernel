@@ -33,6 +33,43 @@ make quality-flake
 make quality-impact
 ```
 
+## Invariant Constitution
+
+`HELM_INVARIANTS.md` is the numbered constitution: each `INV-NNN` states a
+property this kernel does not trade away and names the artifact that proves it.
+Two gates keep it from decaying into prose.
+
+```bash
+make inv-check                                  # hints resolve, ids unique
+make concept-gate                               # amendments carry a marker
+make concept-gate CONCEPT_RANGE=main..HEAD      # over a chosen range
+```
+
+`inv-check` checks that every invariant carries a `verify:` hint, that ids are
+unique, and that each backticked reference in a hint — repo path, Go test name,
+`make` target — resolves in this tree. Before it reads the constitution at all it
+runs synthetic negative and positive controls through itself: a block with no
+hint, a duplicate id, a dangling path, an unknown test, an unknown target, a
+retired entry with no successor, and one well-formed block that must come back
+clean. If any control answers the wrong way the gate exits non-zero **without
+scanning**, because a checker that has stopped discriminating reports a green
+constitution it never inspected.
+
+Hints that are free prose are human-owned. The gate does not check them and
+prints them under a heading saying so rather than folding them into the resolved
+count.
+
+`concept-gate` fails a commit that adds, edits, or retires an invariant without a
+`CONCEPT-CHANGE(INV-NNN)` marker in its message naming every id it touched.
+Attribution comes from comparing parsed blocks either side of the commit, not
+from diff hunks, so a change lands on the invariant that owns it however the diff
+was framed. Editing the surrounding prose is not a concept change and needs no
+marker; pass `-strict-any-edit` to require one on any modification of the file.
+
+Both are registered as **advisory** gates in the `nightly` profile. They do not
+block PR or merge today. Promote them with `QUALITY_STRICT=1` locally, or move
+them into the `pr` profile once the constitution has settled.
+
 ## Profiles
 
 | Profile | Command | Purpose |

@@ -35,6 +35,14 @@ const (
 
 	WorkstationVerdictAllow = "ALLOW"
 	WorkstationVerdictDeny  = "DENY"
+
+	// ClientObservationBasis records HOW HELM knows the client ran, which bounds
+	// what the receipt is allowed to claim. The distinction is load-bearing: a
+	// hook reports what the agent discloses; a parented process constrains what
+	// the agent can do. Only the latter earns ClientLoadObserved.
+	ClientObservationBasisParentedProcess = "parented_process"
+	ClientObservationBasisHookReported    = "hook_reported"
+	ClientObservationBasisUnobserved      = "unobserved"
 )
 
 // AgentRunReceipt is the public, manifest-first receipt for local workstation
@@ -49,6 +57,7 @@ type AgentRunReceipt struct {
 	Actor                AgentRunActor              `json:"actor"`
 	Workspace            AgentRunWorkspace          `json:"workspace"`
 	AgentSurface         string                     `json:"agent_surface"`
+	ClientObservation    *ClientObservation         `json:"client_observation,omitempty"`
 	PolicyProfile        string                     `json:"policy_profile"`
 	ArtifactHashes       map[string]string          `json:"artifact_hashes"`
 	ToolActions          []AgentToolAction          `json:"tool_actions"`
@@ -75,6 +84,78 @@ type AgentRunWorkspace struct {
 	WorkspaceID string `json:"workspace_id"`
 	Path        string `json:"path,omitempty"`
 	Repository  string `json:"repository,omitempty"`
+}
+
+// ClientObservation records whether HELM actually observed the client process
+// load, and on what basis. It is a signed fact: because the whole receipt is
+// canonicalized into ReceiptHash and Signature, a mutated ClientObservation
+// invalidates the signature.
+//
+// Before this field existed, "ClientLoadObserved" lived only in prose across
+// the docs. A prose assertion about evidence is not evidence. This makes the
+// claim a typed value on the receipt that earned it, and Validate refuses the
+// combinations that would let a weaker basis assert a stronger fact.
+//
+// The field is a pointer with omitempty so a receipt that predates it — or a
+// run that never observed the client — omits the key entirely and verifies
+// byte-identically, exactly as CompletedAt already does.
+type ClientObservation struct {
+	// ClientLoadObserved is true only when HELM has direct evidence the client
+	// process ran under its control. Never true on a hook_reported or
+	// unobserved basis; Validate enforces this.
+	ClientLoadObserved bool `json:"client_load_observed"`
+	// ObservationBasis is one of the ClientObservationBasis* constants and names
+	// how HELM knows what it knows.
+	ObservationBasis string `json:"observation_basis"`
+	// HarnessID is the adapter that ran the client (e.g. "claude", "codex").
+	HarnessID string `json:"harness_id,omitempty"`
+	// ProcessOwned is true when HELM was the parent process of the client —
+	// spawned it, scoped its HOME, scrubbed its env, and supervised it. This is
+	// the only basis on which ClientLoadObserved may be true.
+	ProcessOwned bool `json:"process_owned"`
+}
+
+// Validate rejects a ClientObservation whose claim outruns its basis. A nil
+// receiver is valid: absence of observation is a legitimate state, distinct
+// from a false claim of one.
+func (c *ClientObservation) Validate() error {
+	if c == nil {
+		return nil
+	}
+	switch c.ObservationBasis {
+	case ClientObservationBasisParentedProcess,
+		ClientObservationBasisHookReported,
+		ClientObservationBasisUnobserved:
+	default:
+		return &InvalidClientObservationError{Reason: "unknown observation_basis: " + c.ObservationBasis}
+	}
+	// ClientLoadObserved is a claim of direct evidence. Only a parented process
+	// supplies it; a hook merely relays what the agent chose to disclose.
+	if c.ClientLoadObserved && c.ObservationBasis != ClientObservationBasisParentedProcess {
+		return &InvalidClientObservationError{
+			Reason: "client_load_observed is true but basis is " + c.ObservationBasis + "; only parented_process observes the load",
+		}
+	}
+	// ProcessOwned IS the parented_process basis; the two cannot disagree.
+	if c.ProcessOwned && c.ObservationBasis != ClientObservationBasisParentedProcess {
+		return &InvalidClientObservationError{
+			Reason: "process_owned is true but basis is " + c.ObservationBasis,
+		}
+	}
+	// An observed load must name the harness that produced it — an anonymous
+	// observation cannot be corroborated against the run.
+	if c.ClientLoadObserved && c.HarnessID == "" {
+		return &InvalidClientObservationError{Reason: "client_load_observed is true but harness_id is empty"}
+	}
+	return nil
+}
+
+// InvalidClientObservationError is returned by ClientObservation.Validate when a
+// claim outruns its basis.
+type InvalidClientObservationError struct{ Reason string }
+
+func (e *InvalidClientObservationError) Error() string {
+	return "invalid client observation: " + e.Reason
 }
 
 // AgentToolAction is a normalized workstation tool event. Actions may be

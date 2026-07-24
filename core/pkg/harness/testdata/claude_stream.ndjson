@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","session_id":"sess-claude-1","model":"claude-opus-4-8","tools":["Read","Bash"]}
+{"type":"assistant","session_id":"sess-claude-1","message":{"id":"msg_1","model":"claude-opus-4-8","content":[{"type":"text","text":"Reading the failing test."}],"usage":{"input_tokens":120,"output_tokens":18}}}
+{"type":"assistant","session_id":"sess-claude-1","message":{"id":"msg_2","model":"claude-opus-4-8","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/tree/main_test.go"}}]}}
+{"type":"user","session_id":"sess-claude-1","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"package main"}]}}
+{"type":"stream_event","session_id":"sess-claude-1","event":{"type":"content_block_delta"}}
+{"type":"result","subtype":"success","is_error":false,"session_id":"sess-claude-1","result":"Fixed the assertion.","usage":{"input_tokens":900,"output_tokens":140}}

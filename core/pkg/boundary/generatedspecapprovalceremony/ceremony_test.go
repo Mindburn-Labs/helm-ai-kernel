@@ -211,7 +211,7 @@ func TestDenyFencesAnIssuedGrant(t *testing.T) {
 	}
 }
 
-func TestExpiryFailsClosedForConsumptionAndRecovery(t *testing.T) {
+func TestExpiryFailsClosedForConsumption(t *testing.T) {
 	t.Run("unconsumed grant", func(t *testing.T) {
 		fixture := newCeremonyFixture(t)
 		ctx := context.Background()
@@ -229,20 +229,53 @@ func TestExpiryFailsClosedForConsumptionAndRecovery(t *testing.T) {
 			t.Fatalf("Expire() state = %s, want %s", expired.State, StateExpired)
 		}
 	})
+}
 
-	t.Run("consumption recovery", func(t *testing.T) {
-		fixture := newCeremonyFixture(t)
-		ctx := context.Background()
-		granted := fixture.toGrant(t, ctx)
-		grant := granted.SignedGrant.Grant
-		if _, err := fixture.service.ConsumeGrant(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); err != nil {
-			t.Fatalf("ConsumeGrant() error = %v", err)
-		}
-		fixture.now = grant.ExpiresAt
-		if _, err := fixture.service.RecoverGrantConsumption(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrExpired) {
-			t.Fatalf("RecoverGrantConsumption(expired) error = %v, want expiry", err)
-		}
-	})
+func TestRecoverGrantConsumptionServesPersistedReceiptAfterGrantExpiry(t *testing.T) {
+	fixture := newCeremonyFixture(t)
+	ctx := context.Background()
+	granted := fixture.toGrant(t, ctx)
+	grant := granted.SignedGrant.Grant
+	consumed, err := fixture.service.ConsumeGrant(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce)
+	if err != nil {
+		t.Fatalf("ConsumeGrant() error = %v", err)
+	}
+	// The grant lapses after consumption was recorded; the same workload must
+	// still be able to recover its persisted receipt.
+	fixture.now = grant.ExpiresAt
+	recovered, err := fixture.service.RecoverGrantConsumption(ctx, granted.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce)
+	if err != nil {
+		t.Fatalf("RecoverGrantConsumption(after grant expiry) error = %v, want persisted receipt", err)
+	}
+	if recovered.State != StateConsumed || recovered.SignedConsumption.Consumption.ConsumptionHash != consumed.SignedConsumption.Consumption.ConsumptionHash {
+		t.Fatalf("RecoverGrantConsumption() = %+v, want exact persisted consumption", recovered)
+	}
+}
+
+func TestExpireReleasesHoldAfterMaxChallengeLifetime(t *testing.T) {
+	fixture := newCeremonyFixture(t)
+	ctx := context.Background()
+	hold, err := fixture.service.BeginHold(ctx, fixture.binding.BindingRef)
+	if err != nil {
+		t.Fatalf("BeginHold() error = %v", err)
+	}
+	if _, err := fixture.service.Expire(ctx, hold.ApprovalID); !errors.Is(err, ErrTransitionConflict) {
+		t.Fatalf("Expire(before challenge lifetime) error = %v, want transition conflict", err)
+	}
+	fixture.advance(fixture.config.MaxChallengeLifetime)
+	if _, err := fixture.service.IssueChallenge(ctx, hold.ApprovalID); !errors.Is(err, ErrExpired) {
+		t.Fatalf("IssueChallenge(after challenge lifetime) error = %v, want expiry", err)
+	}
+	expired, err := fixture.service.Expire(ctx, hold.ApprovalID)
+	if err != nil {
+		t.Fatalf("Expire() error = %v", err)
+	}
+	if expired.State != StateExpired {
+		t.Fatalf("Expire() state = %s, want %s", expired.State, StateExpired)
+	}
+	if expired.ExpiresAt == nil || !expired.ExpiresAt.Equal(hold.HoldStartedAt.Add(fixture.config.MaxChallengeLifetime)) {
+		t.Fatalf("Expire() expires_at = %v, want committed challenge lifetime deadline", expired.ExpiresAt)
+	}
 }
 
 func TestStoredEnvelopesRequirePinnedSignatureVerification(t *testing.T) {
@@ -307,7 +340,7 @@ func newCeremonyFixture(t *testing.T) *ceremonyFixture {
 			RequestingPrincipalID: "user:requester-a", AuthoritySource: "authority-a", AuthorityVersion: "version-a",
 			AuthoritySnapshotHash: testHash("0"), RequiredRole: "generated-spec-approver", Quorum: 1, ServerIdentity: "spiffe://helm/kernel-a",
 		},
-		store:    newMemoryStore(),
+		store:    newMemoryStore(8 * time.Minute),
 		control:  &controlStub{identity: ControlIdentity{Subject: "spiffe://helm/control-api", TenantID: "tenant-a", WorkspaceID: "workspace-a"}},
 		consumer: &consumerStub{identity: ConsumerIdentity{Subject: "spiffe://helm/control-plane-a", TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: contracts.GeneratedSpecApprovalAudienceV1}},
 		keyID:    "approver-key-a",

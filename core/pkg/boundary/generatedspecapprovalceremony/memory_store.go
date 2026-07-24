@@ -13,8 +13,9 @@ import (
 // memoryStore is intentionally unexported and process-local. It exists solely
 // for unit tests; it is not a durable-store substitute.
 type memoryStore struct {
-	mu      sync.Mutex
-	records map[recordKey]Record
+	mu                   sync.Mutex
+	records              map[recordKey]Record
+	maxChallengeLifetime time.Duration
 }
 
 type recordKey struct {
@@ -23,7 +24,9 @@ type recordKey struct {
 	approvalID  string
 }
 
-func newMemoryStore() *memoryStore { return &memoryStore{records: make(map[recordKey]Record)} }
+func newMemoryStore(maxChallengeLifetime time.Duration) *memoryStore {
+	return &memoryStore{records: make(map[recordKey]Record), maxChallengeLifetime: maxChallengeLifetime}
+}
 
 func (s *memoryStore) CreateHold(ctx context.Context, record Record) (Record, error) {
 	if err := ctx.Err(); err != nil {
@@ -169,11 +172,24 @@ func (s *memoryStore) Deny(ctx context.Context, tenantID, workspaceID, approvalI
 func (s *memoryStore) Expire(ctx context.Context, tenantID, workspaceID, approvalID string, expiredAt time.Time) (Record, error) {
 	return s.update(ctx, tenantID, workspaceID, approvalID, func(record *Record) error {
 		switch record.State {
+		case StateHoldPending:
+			// A never-challenged hold commits to HoldStartedAt + MaxChallengeLifetime:
+			// IssueChallenge refuses challenges past that point, so without an expiry
+			// path the record would stay pending forever. Committing the deadline as
+			// the record expiry keeps the terminal-state invariant intact.
+			if s.maxChallengeLifetime <= 0 {
+				return ErrTransitionConflict
+			}
+			deadline := record.HoldStartedAt.Add(s.maxChallengeLifetime)
+			if expiredAt.Before(deadline) {
+				return ErrTransitionConflict
+			}
+			record.ExpiresAt = &deadline
 		case StateChallengeIssued, StateQuorumVerified, StateGrantIssued:
+			if record.ExpiresAt == nil || expiredAt.Before(*record.ExpiresAt) {
+				return ErrTransitionConflict
+			}
 		default:
-			return ErrTransitionConflict
-		}
-		if record.ExpiresAt == nil || expiredAt.Before(*record.ExpiresAt) {
 			return ErrTransitionConflict
 		}
 		record.State = StateExpired

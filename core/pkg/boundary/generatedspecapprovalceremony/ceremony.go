@@ -147,6 +147,10 @@ type ConsumerIdentityProvider interface {
 // proof that a stored grant or consumption record is authentic.
 type GrantSignatureVerifier interface {
 	VerifyGrant(generatedspecapproval.SignedGrant, time.Time) error
+	// VerifyGrantSignature checks envelope integrity, trust-root metadata, and
+	// the signature without any liveness bound; recovery paths use it for
+	// grants whose committed lifetime has already passed.
+	VerifyGrantSignature(generatedspecapproval.SignedGrant) error
 	VerifyConsumption(generatedspecapproval.SignedConsumption, generatedspecapproval.SignedGrant) error
 }
 
@@ -182,7 +186,10 @@ type ConsumptionSealer func(generatedspecapproval.SignedGrant, string, time.Time
 // Store is the future production persistence seam. Each transition must be
 // atomic and scope by tenant/workspace/approval ID. IssueGrant and ConsumeGrant
 // must validate through the pinned GrantSignatureVerifier inside the transition.
-// The package's unexported memory implementation exists only for unit tests.
+// Expire must also release never-challenged holds once HoldStartedAt plus the
+// configured MaxChallengeLifetime has passed, committing that deadline as the
+// record expiry. The package's unexported memory implementation exists only
+// for unit tests.
 type Store interface {
 	CreateHold(context.Context, Record) (Record, error)
 	Get(context.Context, string, string, string) (Record, error)
@@ -415,11 +422,11 @@ func (s *Service) RecoverGrantConsumption(ctx context.Context, approvalID, grant
 	if record.ConsumedBy != identity.Subject || record.SignedConsumption.Consumption.ConsumedBy != identity.Subject || record.SignedGrant.Grant.Audience != identity.Audience {
 		return Record{}, fmt.Errorf("%w: persisted consumption identity mismatch", ErrConsumerUnavailable)
 	}
-	now := s.now()
-	if err := ensureGrantActive(record.SignedGrant.Grant, now); err != nil {
-		return Record{}, err
-	}
-	if err := s.verifier.VerifyGrant(*record.SignedGrant, now); err != nil {
+	// Recovery re-serves a consumption that was atomically recorded before the
+	// grant expired; it never performs a second consume transition. Grant
+	// expiry bounds new consumption, not retrieval of the persisted receipt,
+	// so verify envelope integrity and signatures without a liveness check.
+	if err := s.verifier.VerifyGrantSignature(*record.SignedGrant); err != nil {
 		return Record{}, err
 	}
 	if err := s.verifier.VerifyConsumption(*record.SignedConsumption, *record.SignedGrant); err != nil {

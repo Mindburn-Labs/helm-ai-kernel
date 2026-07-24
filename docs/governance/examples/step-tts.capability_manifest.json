@@ -1,0 +1,43 @@
+{
+  "schema_version": "capability-manifest/v1",
+  "capability_id": "helm.cap.http.stepfun.tts",
+  "name": "step-tts",
+  "version": "1.0.0",
+  "description": "Text-to-speech synthesis via the StepFun TTS API (streaming and file output), certified example for the skills-certification-profile-v1. Derived from stepfun-ai/StepAudio-Skills (Apache-2.0).",
+  "protocol": "http-api",
+  "binding": {
+    "kind": "http_endpoint",
+    "ref": "https://api.stepfun.com/v1/audio/speech",
+    "parameters_schema": {
+      "type": "object",
+      "required": ["input"],
+      "properties": {
+        "input": { "type": "string" },
+        "voice": { "type": "string" },
+        "speed": { "type": "number", "minimum": 0.5, "maximum": 2.0 },
+        "response_format": { "enum": ["mp3", "wav", "pcm", "ogg"] }
+      }
+    }
+  },
+  "effect_class": "network_egress",
+  "reversibility": "none",
+  "data_boundary": "external",
+  "risk_score": 25,
+  "required_permit_level": "none",
+  "rollback": { "required": false },
+  "receipts": {
+    "required": true,
+    "schema_refs": ["helm://schemas/receipt/decision_receipt.v1.json"]
+  },
+  "memory_access": {
+    "user_domain": "none",
+    "agent_domain": "write",
+    "cross_domain_read": false
+  },
+  "routing": { "min_model_tier": "fast_edge" },
+  "metadata": {
+    "homepage": "https://platform.stepfun.com/docs/zh/guide/tts",
+    "license": "Apache-2.0",
+    "certified_by": "skills-certification-profile-v1 example (illustrative, not a real certification)"
+  }
+}

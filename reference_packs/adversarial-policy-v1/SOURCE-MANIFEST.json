@@ -1,0 +1,10 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/adversarial-policy-v1",
+  "pinning_authority": "reference_packs/adversarial-policy-v1/vectors.json",
+  "verifier": "reference_packs/adversarial-policy-v1/verify_vectors.py",
+  "immutable_payloads": [],
+  "quantum_posture": "n/a — unsigned policy expectation vectors; no signature or post-quantum claims",
+  "purpose": "Adversarial multi-turn policy-adherence vectors (ClawEval-class) for the governed capability registry specs in docs/governance/. Origin: Step AOS alignment workstream 2026-07-24 (research/step-aos-2026-07/STEP-AOS-DEEP-RESEARCH.md).",
+  "status": "preview"
+}

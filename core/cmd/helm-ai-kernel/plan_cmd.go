@@ -64,7 +64,6 @@ func runPlanCmd(args []string, stdout, stderr io.Writer) int {
 // Outputs a PlanSpec JSON to stdout or --output file.
 func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("plan compile", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		inputFile  string
@@ -79,8 +78,8 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&jsonOutput, "json", true, "Output as JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "plan compile"); !ok {
+		return code
 	}
 	// plan compile renders PlanSpec JSON only (there is no text renderer; the
 	// historical --json default is true for the same reason), so --format=json

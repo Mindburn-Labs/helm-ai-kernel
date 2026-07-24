@@ -18,7 +18,6 @@ import (
 //	helm-ai-kernel risk-summary --list                     [--json]
 func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("risk-summary", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		effect          string
@@ -41,8 +40,8 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&jsonOutput, "json", false, "Output as JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "risk-summary"); !ok {
+		return code
 	}
 	jsonOutput = jsonOutput || formatFlag.IsJSON()
 	// Errors follow the EFFECTIVE output mode: the legacy --json alias selects

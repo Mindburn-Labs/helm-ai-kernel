@@ -33,7 +33,6 @@ import (
 // Exit codes: 0 = entry verified · 1 = verification failed · 2 = runtime error.
 func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("verify-entry", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		entryPath  string
@@ -45,8 +44,8 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "verify entry"); !ok {
+		return code
 	}
 	jsonOutput = jsonOutput || formatFlag.IsJSON()
 	// Errors follow the effective output mode (legacy --json included).

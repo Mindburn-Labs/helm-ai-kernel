@@ -62,7 +62,6 @@ func runTrustEUList(args []string, stdout, stderr io.Writer) int {
 
 func runTrustEUListStatus(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("trust eu-list status", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		jsonOut    bool
@@ -78,8 +77,8 @@ func runTrustEUListStatus(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&endpoint, "endpoint", "", "Override the LOTL endpoint URL")
 	cmd.IntVar(&timeoutSec, "timeout", 30, "Seconds to wait for the LOTL fetch")
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "trust eu-list status"); !ok {
+		return code
 	}
 	jsonOut = jsonOut || formatFlag.IsJSON()
 	// Errors follow the effective output mode (legacy --json included).

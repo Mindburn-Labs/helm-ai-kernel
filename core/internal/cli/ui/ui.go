@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -296,4 +297,65 @@ func WriteJSON(data io.Writer, v any) error {
 	enc := json.NewEncoder(data)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+// RequestedFormat best-effort scans raw CLI args for an explicit output-mode
+// selection (--format=<v> | --format <v> | --json[=bool]) so a flag-parse
+// error can still be rendered in the mode the user asked for. Invalid or
+// missing values fail closed to def.
+func RequestedFormat(args []string, def Format) Format {
+	f := def
+	for i := 0; i < len(args); i++ {
+		name := strings.TrimLeft(args[i], "-")
+		switch {
+		case name == "json":
+			f = FormatJSON
+		case strings.HasPrefix(name, "json="):
+			if v, err := strconv.ParseBool(strings.TrimPrefix(name, "json=")); err == nil {
+				if v {
+					f = FormatJSON
+				} else {
+					f = FormatText
+				}
+			}
+		case name == "format" && i+1 < len(args):
+			if v, err := ParseFormat(args[i+1]); err == nil {
+				f = v
+			}
+			i++
+		case strings.HasPrefix(name, "format="):
+			if v, err := ParseFormat(strings.TrimPrefix(name, "format=")); err == nil {
+				f = v
+			}
+		}
+	}
+	return f
+}
+
+// ParseFlags parses args with the flag package's own diagnostics suppressed
+// and renders failures through the single formatter in the user's requested
+// output mode (RequestedFormat) — keeping JSON-mode stderr exactly one
+// document even when the failure is a malformed flag. It returns (0, true)
+// on success. On failure it has already written the error to chrome and
+// returns (ExitUsage, false), so commands use:
+//
+//	if code, ok := cliui.ParseFlags(cmd, args, stderr, "risk-summary"); !ok {
+//		return code
+//	}
+//
+// -h/--help reproduces the flag package's historical usage dump on chrome
+// (always text) and returns the same exit code (2) as the previous direct
+// `cmd.Parse` + `return 2` pattern.
+func ParseFlags(fs *flag.FlagSet, args []string, chrome io.Writer, op string) (int, bool) {
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, _ = fmt.Fprintf(chrome, "Usage of %s:\n", fs.Name())
+			fs.SetOutput(chrome)
+			fs.PrintDefaults()
+			return ExitUsage, false
+		}
+		return WriteErrorFormat(chrome, UsageErrorf(op, "%s", err), RequestedFormat(args, FormatText)), false
+	}
+	return ExitOK, true
 }

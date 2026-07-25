@@ -176,6 +176,26 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 	switch {
 	case strings.EqualFold(tool, "Bash"):
 		command := inputString(payload.ToolInput, "command", "cmd")
+		if target, ok := shellEgressTarget(command); ok {
+			return hookClassification{
+				ShouldDecide: true,
+				Class:        "network",
+				Target:       target,
+				Action:       "network_egress",
+				ToolID:       "shell",
+				Reason:       "shell network egress",
+			}
+		}
+		if target, ok := shellSecretReadTarget(command); ok {
+			return hookClassification{
+				ShouldDecide: true,
+				Class:        "secret",
+				Target:       target,
+				Action:       "secret_read",
+				ToolID:       "shell",
+				Reason:       "shell secret read",
+			}
+		}
 		if isDestructiveShellCommand(command) {
 			return hookClassification{
 				ShouldDecide: true,
@@ -262,8 +282,185 @@ func inputString(input map[string]any, keys ...string) string {
 	return ""
 }
 
+// normalizeShellCommand lowercases a command and collapses runs of whitespace,
+// so that substring matching is not defeated by extra spaces, tabs, or newlines.
+// Without this, "rm  -rf /" reaches the agent because it never matches "rm -rf ".
+func normalizeShellCommand(command string) string {
+	return strings.ToLower(strings.Join(strings.Fields(command), " "))
+}
+
+// shellNetworkTools are commands whose primary effect is moving bytes off the
+// machine. A shell command that runs one of these is a network egress effect and
+// belongs under the egress allowlist, not under the destructive-command list.
+var shellNetworkTools = map[string]bool{
+	"curl":   true,
+	"wget":   true,
+	"nc":     true,
+	"ncat":   true,
+	"netcat": true,
+	"telnet": true,
+	"socat":  true,
+	"scp":    true,
+	"sftp":   true,
+	"rsync":  true,
+	"ftp":    true,
+	"aria2c": true,
+	"httpie": true,
+	"http":   true,
+}
+
+// shellEgressTarget reports whether a shell command sends data off the machine and
+// returns the destination it targets. The destination is handed to the egress
+// allowlist that already exists in the workstation policy, which already fails
+// closed when the allowlist is empty.
+func shellEgressTarget(command string) (string, bool) {
+	if strings.TrimSpace(command) == "" {
+		return "", false
+	}
+	if target, ok := devSocketTarget(command); ok {
+		return target, true
+	}
+	for _, segment := range splitShellSegments(command) {
+		fields := trimEnvAssignments(strings.Fields(segment))
+		if len(fields) == 0 {
+			continue
+		}
+		tool := strings.ToLower(filepath.Base(strings.Trim(fields[0], `"'`)))
+		if !shellNetworkTools[tool] {
+			continue
+		}
+		if dest, ok := firstDestinationArg(fields[1:]); ok {
+			return dest, true
+		}
+		return tool, true
+	}
+	return "", false
+}
+
+// splitShellSegments breaks a command line on the operators that begin a new
+// command, so a network tool inside a pipeline or substitution is still seen.
+func splitShellSegments(command string) []string {
+	replacer := strings.NewReplacer(
+		"&&", "\n",
+		"||", "\n",
+		";", "\n",
+		"|", "\n",
+		"$(", "\n",
+		")", "\n",
+		"`", "\n",
+		"\r", "\n",
+	)
+	return strings.Split(replacer.Replace(command), "\n")
+}
+
+// trimEnvAssignments drops leading VAR=value prefixes so that
+// "HTTPS_PROXY=http://p curl host" still resolves to curl.
+func trimEnvAssignments(fields []string) []string {
+	for len(fields) > 0 {
+		name, _, ok := strings.Cut(fields[0], "=")
+		if !ok || name == "" || strings.ContainsAny(name, `/\.`) {
+			break
+		}
+		fields = fields[1:]
+	}
+	return fields
+}
+
+// firstDestinationArg returns the first argument that looks like a host or URL,
+// skipping flags and their values.
+func firstDestinationArg(args []string) (string, bool) {
+	for _, arg := range args {
+		arg = strings.Trim(arg, `"'`)
+		if arg == "" || strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "@") {
+			continue
+		}
+		if strings.Contains(arg, "://") {
+			return arg, true
+		}
+		if strings.HasPrefix(arg, "/") || strings.HasPrefix(arg, ".") {
+			continue
+		}
+		if strings.Contains(arg, ".") || strings.Contains(arg, ":") {
+			return arg, true
+		}
+	}
+	return "", false
+}
+
+// devSocketTarget extracts the destination from a bash /dev/tcp or /dev/udp
+// redirect, the shape used by most reverse shells.
+func devSocketTarget(command string) (string, bool) {
+	lower := strings.ToLower(command)
+	for _, prefix := range []string{"/dev/tcp/", "/dev/udp/"} {
+		idx := strings.Index(lower, prefix)
+		if idx < 0 {
+			continue
+		}
+		rest := lower[idx+len(prefix):]
+		parts := strings.FieldsFunc(rest, func(r rune) bool {
+			return strings.ContainsRune(" \t\"';&|<>", r)
+		})
+		if len(parts) == 0 {
+			continue
+		}
+		proto := "tcp"
+		if strings.HasPrefix(prefix, "/dev/udp") {
+			proto = "udp"
+		}
+		host, port, _ := strings.Cut(parts[0], "/")
+		if host == "" {
+			continue
+		}
+		if port != "" {
+			return proto + "://" + host + ":" + port, true
+		}
+		return proto + "://" + host, true
+	}
+	return "", false
+}
+
+// shellSecretReadTarget reports whether a shell command touches well-known secret
+// material and returns the path it references.
+func shellSecretReadTarget(command string) (string, bool) {
+	for _, field := range strings.Fields(command) {
+		cleaned := strings.Trim(field, `"'@<>`)
+		if isSensitiveSecretPath(cleaned) {
+			return cleaned, true
+		}
+	}
+	return "", false
+}
+
+func isSensitiveSecretPath(path string) bool {
+	p := strings.ToLower(strings.TrimSpace(path))
+	if p == "" {
+		return false
+	}
+	sensitive := []string{
+		"id_rsa",
+		"id_ed25519",
+		"id_ecdsa",
+		".ssh/",
+		".pem",
+		".p12",
+		".aws/credentials",
+		".config/gcloud",
+		".kube/config",
+		".netrc",
+		".npmrc",
+		".pypirc",
+		".docker/config.json",
+	}
+	for _, needle := range sensitive {
+		if strings.Contains(p, needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func isDestructiveShellCommand(command string) bool {
-	c := strings.ToLower(strings.TrimSpace(command))
+	c := normalizeShellCommand(command)
 	if c == "" {
 		return false
 	}
@@ -279,6 +476,8 @@ func isDestructiveShellCommand(command string) bool {
 		"kubectl delete",
 		"docker rm -f",
 		"drop table",
+		"drop database",
+		"drop schema",
 		"truncate table",
 	}
 	for _, needle := range needles {

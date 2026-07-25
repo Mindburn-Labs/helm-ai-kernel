@@ -20,9 +20,11 @@ go test ./...
 This is a local convenience, not the gate. CI already runs this module on every
 PR: `scripts/ci/go_module_tests.sh` discovers every tracked `go.mod` and runs
 `GOWORK=off go test ./...` in each. It is wired into `.github/workflows/ci.yml`
-as the `Independent Go module tests` step of the `kernel` job. A new package
-added under this directory is covered the moment it lands — no workflow edit
-required.
+as the `Independent Go module tests` step of the `kernel` job, which is a
+required status check for merging to `main` — see
+[`.github/TEST_MATRIX.md`](../../.github/TEST_MATRIX.md) for the canonical CI
+baseline. A new package added under this directory is covered the moment it
+lands — no workflow edit required.
 
 Then run:
 

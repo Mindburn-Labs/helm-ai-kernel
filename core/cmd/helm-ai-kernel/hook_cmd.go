@@ -334,6 +334,10 @@ func shellEgressTarget(command string) (string, bool) {
 	if target, ok := devSocketTarget(command); ok {
 		return target, true
 	}
+	// A concrete destination anywhere in the command wins. A recognized tool with
+	// no parsable destination is only a fallback, so that "curl --help; curl
+	// https://host" reports the host rather than stopping on the first segment.
+	fallback := ""
 	for _, segment := range splitShellSegments(command) {
 		fields := stripCommandWrappers(trimEnvAssignments(strings.Fields(segment)))
 		if len(fields) == 0 {
@@ -343,12 +347,36 @@ func shellEgressTarget(command string) (string, bool) {
 		if !shellNetworkTools[tool] {
 			continue
 		}
-		if dest, ok := firstDestinationArg(fields[1:]); ok {
+		args := fields[1:]
+		if dest, ok := firstDestinationArg(args); ok {
 			return dest, true
 		}
-		return tool, true
+		// An invocation that only asks for help or a version moves no bytes. Any
+		// other unparsable destination still fails closed under the tool name,
+		// since a destination we cannot read is not a destination that is absent.
+		if fallback == "" && !isInformationalInvocation(args) {
+			fallback = tool
+		}
+	}
+	if fallback != "" {
+		return fallback, true
 	}
 	return "", false
+}
+
+// isInformationalInvocation reports whether a network tool was invoked only to
+// print usage or a version, which performs no egress.
+func isInformationalInvocation(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	for _, arg := range args {
+		switch strings.ToLower(strings.Trim(arg, `"'`)) {
+		case "-h", "--help", "--version", "--usage", "--manual":
+			return true
+		}
+	}
+	return false
 }
 
 // shellCommandWrappers run another command as an argument. Without stripping
@@ -498,6 +526,14 @@ func devSocketTarget(command string) (string, bool) {
 func shellSecretReadTarget(command string) (string, bool) {
 	for _, field := range strings.Fields(command) {
 		cleaned := strings.Trim(field, `"'@<>`)
+		// A URL that merely mentions secret-looking material, such as
+		// https://example.com/cert.pem, is a download rather than a local secret
+		// read. Treating it as one would route pure egress to the secret policy,
+		// where a granted secret.read permission would carry it past the egress
+		// allowlist entirely.
+		if strings.Contains(cleaned, "://") {
+			continue
+		}
 		if isSensitiveSecretPath(cleaned) {
 			return cleaned, true
 		}

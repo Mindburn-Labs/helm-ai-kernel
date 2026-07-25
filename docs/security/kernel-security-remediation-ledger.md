@@ -109,3 +109,50 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0024 | already-fixed-with-regression | WASI pack trust verifier |
 | HELM_AI_KERNEL-SUBAGENT-0031 | already-fixed-with-regression | Doctor diagnostic seed redaction |
 | HELM_AI_KERNEL-SUBAGENT-0004 | already-fixed-with-regression | Sandbox filesystem path containment |
+
+## 2026-07-25 red-team pass — trust-root and enforcement findings
+
+Source: internal red-team engagement against `main` @ `258afa85`. Distinct from
+the earlier portfolio scan above: every finding below was reproduced as an
+executable proof-of-concept against the unmodified tree before any fix, and each
+carries a regression test that fails on the pre-fix code.
+
+Severity key: **T0** breaks the trust root on its own · **T1** weakens signature
+scope, caching, or dual control · **T2** perimeter · **T3** CI and test integrity.
+
+| ID | Sev | Finding | Anchor | Status |
+|---|---|---|---|---|
+| F-01 | T0 | `NewEd25519Signer` takes a key *identifier* and generates a fresh random keypair, discarding all configured key material. `--sign`, `SYSTEM_BOOT_KEY` and `EVIDENCE_SIGNING_KEY` established no trust root; keys rotated on every restart; the supposed secret was written into every receipt's `KeyID` in cleartext. | `core/pkg/crypto/signer.go:43` | fixed |
+| F-02 | T0 | Default `dev-local` trust profile resolved the verification key from `seal.signer.public_key` — a field inside the pack being verified. Any keypair could sign its own EvidencePack and obtain `PASS: n/n checks passed`. | `core/pkg/evidence/seal.go:1157` | fixed |
+| F-03 | T0 | Offline verifier's chain-of-custody checks do not check chain of custody. `checkChainIntegrity` passes on "proofgraph.json parses as JSON"; `checkLamportMonotonicity` passes on "N receipt files present"; `checkPolicyDecisionHashes` passes on non-empty strings. Truncated, reordered and forked chains all verify. | `core/pkg/verifier/verifier.go:802,830,854` | remaining |
+| F-04 | T0 | `ZeroIDInterceptor` overwrote the authenticated principal with a caller-supplied `spiffe_uri` after checking only the URI prefix, and labelled the result `zeroid_verified`. `trustedKeys` was stored and never read. First interceptor in every Guardian's default chain. **PoC: a tenant-A low-privilege agent became `spiffe://tenant-b.example/admin` before the PDP.** | `core/pkg/guardian/zeroid.go:51` | fixed |
+| F-05 | T1 | Receipt signature covers 8 of ~80 fields. `Verdict`, `Timestamp`, `PolicyHash`, `MerkleRoot`, `KeyID`, `PublicKeySet`, `WitnessSignatures` and transparency-log anchoring are all unsigned and rewritable without breaking the signature. | `core/pkg/crypto/canonical.go:153` | remaining |
+| F-06 | T1 | Signing preimages are `:`-joined with no escaping (`SigSeparator = ":"`), so field-boundary shifts produce identical preimages and one signature verifies two distinct records. IDs in this codebase routinely contain `:`. | `core/pkg/crypto/canonical.go:43,153` | remaining |
+| F-07 | T1 | `Verify` keyed a process-global result cache on unframed `sha256(pubKeyHex ‖ sigHex ‖ data)` and consulted it *before* decoding or length-checking inputs. **PoC: after one genuine verification, a 65-byte signature over a different message returned `true`; `ed25519.Verify` never ran.** Same class in `Ed25519Verifier.Verify` (`H(message ‖ signature)`), where a 63-byte signature over a tampered message verified. | `core/pkg/crypto/signer.go:80`, `core/pkg/crypto/verifier.go:38` | fixed |
+| F-08 | T1 | Approver identity for the 2-of-2 quorum is a plain `actor` string in the request body, deduped by string equality. One admin token satisfies a 2-of-2 quorum by posting `/approve` twice with different names. No requester-vs-approver distinctness. WebAuthn variant only checks the assertion is non-empty. | `core/cmd/helm-ai-kernel/contract_routes.go:1232`, `core/pkg/boundary/surface_registry.go:517` | remaining |
+| F-09 | T1 | Executor idempotency short-circuit returns a signed receipt before `validateGating` runs, so an unsigned `DecisionRecord` carrying only a known `decision.ID` yields a success return. | `core/pkg/executor/executor.go:112` | remaining |
+| F-10 | T1 | Single-entry inclusion proofs are self-attesting: the proof is checked against a root carried inside the same document, with no signature and no external root parameter. An empty `merkle_path` makes any leaf its own root. | `core/pkg/evidencepack/inclusionproof.go:149` | remaining |
+| F-11 | T2 | 14 of 21 handlers in `subsystems.go` are neither auth-wrapped nor present in the route contract registry, including `POST /api/v1/memory/promote` (unauthenticated governed-memory promotion, no body limit), `GET /api/v1/memory/list` (raw `namespace` from query, no tenant scoping), the economic ledger endpoints, and `GET /api/v1/boundary/check?url=` (egress-policy oracle). | `core/cmd/helm-ai-kernel/subsystems.go` | remaining |
+| F-12 | T2 | Rate-limit bucket key is built from raw `X-Helm-Tenant-ID`/`X-Helm-Principal-ID`/`X-Helm-Actor-ID` headers — rotate to evade, or pin a victim's key to exhaust their bucket. | `core/pkg/api/middleware.go:266` | remaining |
+| F-13 | T2 | Public `/__helm/config.json` returns the `tenant_id` and `principal_id` that the tenant-scoped routes expect. | `core/cmd/helm-ai-kernel/local_first_run_routes.go:105` | remaining |
+| F-14 | T3 | `.golangci.yml` is never executed (`make lint` runs only `go vet` + `gofmt -l`, no workflow invokes it) and sets `tests: false`. gosec, semgrep and trivy are absent; `govulncheck` and secret scanning are advisory-only and nightly. | `Makefile:124`, `.golangci.yml` | remaining |
+| F-15 | T3 | Dependabot version PRs disabled across all 8 ecosystems while Renovate auto-merges all minor+patch with no review — unreviewed supply-chain ingress. | `.github/dependabot.yml`, `renovate.json` | remaining |
+| F-16 | T3 | `tests/parity_test.go` compares four identical hard-coded literals and cannot fail; it validates nothing about cross-language canonicalization. | `tests/parity_test.go:15` | remaining |
+| F-17 | T3 | `TestEvidencePackSingleSource` walked the filesystem without skipping dot-directories, so any developer with a `.claude/worktrees/` checkout got a spuriously red suite (16 "duplicate" definitions). A test that fails for environmental reasons trains people to ignore red. | `core/pkg/contracts/evidence_pack_single_source_test.go` | fixed |
+| F-18 | T3 | Two tests asserted vulnerable behaviour as correct: `zeroid_test.go` asserted the F-04 principal rebinding, and the verifier fixtures asserted that a self-attested pack verifies. Both now assert the inverse or opt in explicitly. | `core/pkg/guardian/zeroid_test.go:38`, `core/pkg/verifier/verifier_test.go` | fixed |
+
+### Notes
+
+- **F-04 removed capability deliberately.** `ZeroIDInterceptor` never verified
+  anything, so it is now fail-closed: a presented ZeroID envelope is denied with
+  a signed decision rather than trusted. Making ZeroID real requires a specified
+  token format, signature verification against a trust root obtained outside the
+  request, and issuer/audience/expiry/revocation checks — none of which existed.
+- **F-02 escape hatch.** `HELM_ALLOW_SELF_ATTESTED_EVIDENCE=1` preserves the
+  local dev and demo loop. It must never be set where provenance matters.
+- **F-01 blast radius.** `NewEd25519Signer` is retained for ephemeral dev use and
+  now fails closed under `HELM_PRODUCTION`. Persistent signers use
+  `NewEd25519SignerFromSeed` / `NewEd25519SignerFromEncodedSeed`.
+- All five T0/T1 core defects reproduce identically in `helm-ai-enterprise`
+  (`crypto/signer.go:43`, `guardian/zeroid.go:51`, `evidence/seal.go:1116`,
+  `verifier/verifier.go:757`, `crypto/signer.go:91`) and must be propagated.

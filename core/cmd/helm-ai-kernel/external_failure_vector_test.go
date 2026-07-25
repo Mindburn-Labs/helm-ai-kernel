@@ -98,7 +98,7 @@ func TestTestConformanceVectorWritesSignedKernelValidationManifest(t *testing.T)
 func TestVerifyProofReplayEvidencePackTar(t *testing.T) {
 	evidencePackPath := filepath.Join("..", "..", "..", "reference_packs", "proof_replays", "HPR-2026-00001", "evidencepack.tar")
 	var stdout, stderr bytes.Buffer
-	code := runVerifyCmd([]string{evidencePackPath, "--json"}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", evidencePackPath, "--json"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("runVerifyCmd exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
@@ -109,7 +109,7 @@ func TestVerifyProofReplayEvidencePackTar(t *testing.T) {
 
 func TestVerifyMissingProofReplayEvidencePackFails(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := runVerifyCmd([]string{filepath.Join(t.TempDir(), "missing.evidencepack.tar"), "--json"}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", filepath.Join(t.TempDir(), "missing.evidencepack.tar"), "--json"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("missing EvidencePack unexpectedly passed stdout=%s", stdout.String())
 	}

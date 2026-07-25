@@ -10,16 +10,16 @@ check_json_schemas.py's optional `import jsonschema` — which silently degrades
 to a parse-only pass when absent — is how this drift survived review. A checker
 that can no-op is not a gate.
 
-Only the keywords the schema actually uses are enforced. Any other keyword is a
-hard failure rather than a silent skip, so tightening the schema forces this
-checker to keep up.
+The whole document is walked from the schema root, so a constraint added
+anywhere — root, `codes`, an entry, a `$defs` target — is either enforced or
+reported. Any keyword outside ENFORCED/ANNOTATIONS is a hard failure rather
+than a silent skip, so tightening the schema forces this checker to keep up.
 """
 
 from __future__ import annotations
 
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -28,23 +28,37 @@ SCHEMA_PATH = ROOT / "protocols/json-schemas/reason-codes/reason-codes-v1.schema
 REGISTRY_PATH = ROOT / "protocols/json-schemas/reason-codes/reason-codes-v1.json"
 
 # Annotations carry no constraint; ignoring them is not a coverage gap.
-ANNOTATIONS = {"description", "title", "$ref", "$comment"}
-ENFORCED = {"type", "const", "enum", "pattern", "items", "minItems"}
+# `$defs` holds targets reached through `$ref`, never a constraint in itself.
+ANNOTATIONS = {"$schema", "$id", "$defs", "title", "description", "$comment"}
+ENFORCED = {"$ref", "type", "const", "enum", "pattern", "properties", "required", "items", "minItems"}
+TYPES = {"object": dict, "array": list, "string": str}
 
 
-def validate(where: str, value: Any, spec: dict[str, Any], out: list[str]) -> None:
+def validate(where: str, value: Any, spec: dict[str, Any], root: dict[str, Any], out: list[str]) -> None:
     unenforced = set(spec) - ENFORCED - ANNOTATIONS
     if unenforced:
         out.append(f"{where}: schema keyword(s) {sorted(unenforced)} are not enforced by {Path(__file__).name}")
         return
 
+    # 2020-12 allows `$ref` siblings, so apply the target and then the rest.
+    ref = spec.get("$ref")
+    if ref is not None:
+        name = ref.removeprefix("#/$defs/")
+        target = root.get("$defs", {}).get(name)
+        if name == ref or not isinstance(target, dict):
+            out.append(f"{where}: cannot resolve {ref!r}; only '#/$defs/<name>' is supported")
+            return
+        validate(where, value, target, root, out)
+
     declared = spec.get("type")
-    if declared == "string" and not isinstance(value, str):
-        out.append(f"{where}: expected string, got {type(value).__name__}")
-        return
-    if declared == "array" and not isinstance(value, list):
-        out.append(f"{where}: expected array, got {type(value).__name__}")
-        return
+    if declared is not None:
+        expected = TYPES.get(declared)
+        if expected is None:
+            out.append(f"{where}: schema type {declared!r} is not enforced by {Path(__file__).name}")
+            return
+        if not isinstance(value, expected):
+            out.append(f"{where}: expected {declared}, got {type(value).__name__}")
+            return
 
     if "const" in spec and value != spec["const"]:
         out.append(f"{where}: expected {spec['const']!r}, got {value!r}")
@@ -52,39 +66,31 @@ def validate(where: str, value: Any, spec: dict[str, Any], out: list[str]) -> No
         out.append(f"{where}: {value!r} is not one of {spec['enum']}")
     if "pattern" in spec and not (isinstance(value, str) and re.search(spec["pattern"], value)):
         out.append(f"{where}: {value!r} does not match {spec['pattern']}")
-    if "minItems" in spec and len(value) < spec["minItems"]:
-        out.append(f"{where}: needs at least {spec['minItems']} item(s), got {len(value)}")
-    if "items" in spec:
-        for i, item in enumerate(value):
-            validate(f"{where}[{i}]", item, spec["items"], out)
+
+    if isinstance(value, list):
+        if len(value) < spec.get("minItems", 0):
+            out.append(f"{where}: needs at least {spec['minItems']} item(s), got {len(value)}")
+        if "items" in spec:
+            for index, item in enumerate(value):
+                label = item.get("code") if isinstance(item, dict) else None
+                child = f"{where}[{index}]" + (f" ({label})" if isinstance(label, str) else "")
+                validate(child, item, spec["items"], root, out)
+
+    if isinstance(value, dict):
+        for field in spec.get("required", []):
+            if field not in value:
+                out.append(f"{where}: missing required field {field!r}")
+        for field, subspec in spec.get("properties", {}).items():
+            if field in value:
+                validate(f"{where}.{field}", value[field], subspec, root, out)
 
 
 def main() -> int:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
-    entry_schema = schema["$defs"]["ReasonCodeEntry"]
-    properties = entry_schema["properties"]
 
     failures: list[str] = []
-    validate("version", registry.get("version"), schema["properties"]["version"], failures)
-
-    codes = registry.get("codes")
-    if not isinstance(codes, list):
-        failures.append("codes: expected array")
-        codes = []
-
-    for index, entry in enumerate(codes):
-        label = entry.get("code") if isinstance(entry, dict) else None
-        where = f"codes[{index}]" + (f" ({label})" if label else "")
-        if not isinstance(entry, dict):
-            failures.append(f"{where}: expected object")
-            continue
-        for field in entry_schema["required"]:
-            if field not in entry:
-                failures.append(f"{where}: missing required field {field!r}")
-        for field, value in entry.items():
-            if field in properties:
-                validate(f"{where}.{field}", value, properties[field], failures)
+    validate("registry", registry, schema, schema, failures)
 
     if failures:
         print(f"reason-code registry does not validate against {SCHEMA_PATH.relative_to(ROOT)}:")
@@ -92,6 +98,7 @@ def main() -> int:
             print(f"- {failure}")
         return 1
 
+    codes = registry.get("codes", [])
     print(f"reason-code registry check passed: {len(codes)} entries valid against the v1 schema.")
     return 0
 

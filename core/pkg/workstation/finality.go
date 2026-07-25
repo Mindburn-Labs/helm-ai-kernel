@@ -69,11 +69,14 @@ func DenialFinality(reasonCode string) contracts.DenialFinality {
 	return denialCatalog[reasonCode].finality
 }
 
-// counterfactualFor returns the nearest allowed envelope for a denial, or nil
-// when the denial's disclosure class forbids one. Every path that does not
+// DenialCounterfactualFor returns the nearest allowed envelope for a denial, or
+// nil when the denial's disclosure class forbids one. Every path that does not
 // explicitly build a counterfactual returns nil, so an unclassified code
 // discloses nothing.
-func counterfactualFor(profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode string) *contracts.DenialCounterfactual {
+//
+// Exported because a conformance consumer has to be able to observe what a
+// denial discloses without reconstructing the import pipeline.
+func DenialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode string) *contracts.DenialCounterfactual {
 	switch denialCatalog[reasonCode].disclosure {
 	case discloseScalarBound:
 		if reasonCode == "MEMORY_TTL_EXCEEDS_POLICY" && event.MemoryEffect != nil {
@@ -111,6 +114,6 @@ func annotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.Works
 		denied.Finality = DenialFinality(reasonCode)
 	}
 	if learning.EmitCounterfactual {
-		denied.Counterfactual = counterfactualFor(profile, event, reasonCode)
+		denied.Counterfactual = DenialCounterfactualFor(profile, event, reasonCode)
 	}
 }

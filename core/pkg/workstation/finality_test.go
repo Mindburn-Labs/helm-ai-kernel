@@ -74,7 +74,7 @@ func TestSetMembershipDenialsDiscloseNothing(t *testing.T) {
 			if verdict != contracts.WorkstationVerdictDeny || code != tc.code {
 				t.Fatalf("EvaluateEvent() = %s/%s, want DENY/%s", verdict, code, tc.code)
 			}
-			if got := counterfactualFor(profile, tc.event, code); got != nil {
+			if got := DenialCounterfactualFor(profile, tc.event, code); got != nil {
 				t.Fatalf("%s disclosed a counterfactual %+v: membership denials must disclose nothing", code, got)
 			}
 			if got := DenialFinality(code); got != contracts.DenialClassForbidden {
@@ -101,10 +101,10 @@ func TestScalarBoundDisclosesTheCeiling(t *testing.T) {
 	if got := DenialFinality(code); got != contracts.DenialInstanceParameter {
 		t.Fatalf("DenialFinality() = %q, want instance_parameter", got)
 	}
-	got := counterfactualFor(profile, event, code)
+	got := DenialCounterfactualFor(profile, event, code)
 	want := &contracts.DenialCounterfactual{Field: "ttl_days", Requested: 90, Max: 30}
 	if got == nil || *got != *want {
-		t.Fatalf("counterfactualFor() = %+v, want %+v", got, want)
+		t.Fatalf("DenialCounterfactualFor() = %+v, want %+v", got, want)
 	}
 }
 
@@ -126,9 +126,9 @@ func TestUngrantedNamesTheCapability(t *testing.T) {
 	if got := DenialFinality(code); got != contracts.DenialUngranted {
 		t.Fatalf("DenialFinality() = %q, want ungranted", got)
 	}
-	got := counterfactualFor(profile, event, code)
+	got := DenialCounterfactualFor(profile, event, code)
 	if got == nil || got.Capability == "" {
-		t.Fatalf("counterfactualFor() = %+v, want a named capability", got)
+		t.Fatalf("DenialCounterfactualFor() = %+v, want a named capability", got)
 	}
 }
 
@@ -165,8 +165,8 @@ func TestUnknownCodeDisclosesNothing(t *testing.T) {
 	if got := DenialFinality("SOME_FUTURE_CODE"); got != "" {
 		t.Fatalf("DenialFinality(unknown) = %q, want empty", got)
 	}
-	if got := counterfactualFor(profile, ToolEvent{}, "SOME_FUTURE_CODE"); got != nil {
-		t.Fatalf("counterfactualFor(unknown) = %+v, want nil", got)
+	if got := DenialCounterfactualFor(profile, ToolEvent{}, "SOME_FUTURE_CODE"); got != nil {
+		t.Fatalf("DenialCounterfactualFor(unknown) = %+v, want nil", got)
 	}
 }
 

@@ -1,0 +1,51 @@
+{
+  "policy_snapshot": "policy-snapshot.json",
+  "digest": "ec68ffc9d349264cf816c6d1d54df152b125b239a5d843887b9875f87f0e729b",
+  "observations": [
+    {
+      "case": "class_forbidden/egress_destination",
+      "verdict": "DENY",
+      "reason_code": "EGRESS_DESTINATION_NOT_ALLOWED",
+      "finality": "class_forbidden"
+    },
+    {
+      "case": "class_forbidden/memory_class",
+      "verdict": "DENY",
+      "reason_code": "MEMORY_CLASS_DISALLOWED",
+      "finality": "class_forbidden"
+    },
+    {
+      "case": "class_forbidden/draft_outside_workspace",
+      "verdict": "DENY",
+      "reason_code": "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE",
+      "finality": "class_forbidden"
+    },
+    {
+      "case": "ungranted/operate_permission",
+      "verdict": "DENY",
+      "reason_code": "OPERATE_PERMISSION_NOT_GRANTED",
+      "finality": "ungranted",
+      "counterfactual": {
+        "field": "operate.permissions",
+        "capability": "shell.operate"
+      }
+    },
+    {
+      "case": "instance_parameter/memory_ttl",
+      "verdict": "DENY",
+      "reason_code": "MEMORY_TTL_EXCEEDS_POLICY",
+      "finality": "instance_parameter",
+      "counterfactual": {
+        "field": "ttl_days",
+        "requested": 90,
+        "max": 30
+      }
+    },
+    {
+      "case": "instance_context/tainted",
+      "verdict": "DENY",
+      "reason_code": "TAINTED_CONTEXT_REQUIRES_DENY",
+      "finality": "instance_context"
+    }
+  ]
+}

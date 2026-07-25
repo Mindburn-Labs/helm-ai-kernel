@@ -43,6 +43,12 @@ surface for the `helm-ai-kernel` project.
   signed evidence pack, verifies it offline, and uploads the redacted artifacts.
   It requires the `claude-managed-agents-live` environment with
   `CLAUDE_MANAGED_AGENTS_LIVE_CONFIG_JSON` and `HELM_SIGNING_KEY_HEX` secrets.
+- `copilot-code-review.yml` declares the runner GitHub Copilot code review
+  starts on, so the `copilot_code_review` ruleset rule does not depend on
+  default behavior under runner contention. Its job name is fixed by Copilot
+  (`copilot-setup-steps`); Copilot performs its own checkout, so the workflow
+  carries no build steps and its triggers are scoped to its own path. It is not
+  itself a quality gate and produces no evidence.
 - `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
   egress-proxy artifacts, then runs gated live local-container conformance when
   manually dispatched with the scoped CI key.

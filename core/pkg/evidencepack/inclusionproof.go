@@ -25,6 +25,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 )
@@ -143,9 +144,15 @@ func BuildInclusionProof(manifest *Manifest, entryPath string, disclosure *Selec
 //  2. The leaf hash matches the disclosed entry record.
 //  3. The Merkle audit path reconstructs entries_merkle_root from the leaf.
 //
-// It does NOT require the full pack. The returned error names the first failing
-// check. A nil error means the entry provably belongs to the pack identified by
-// binding.manifest_hash / binding.entries_merkle_root.
+// It does NOT require the full pack — and that is exactly its limit. Every input
+// it checks comes from the same attacker-supplied document: the path is
+// reconstructed against proof.Binding.EntriesMerkleRoot, which is a field inside
+// the proof, and computeBindingHash covers that root too. Nothing here is
+// anchored to anything external, so a nil error means the proof is internally
+// consistent — NOT that the entry belongs to any particular pack (F-10).
+//
+// Use VerifyInclusionProofAgainstRoot whenever the caller knows the pack's real
+// entries_merkle_root. That is the only form that proves membership.
 func VerifyInclusionProof(proof *InclusionProof) error {
 	if proof == nil {
 		return fmt.Errorf("inclusion proof: nil proof")
@@ -181,6 +188,65 @@ func VerifyInclusionProof(proof *InclusionProof) error {
 		return fmt.Errorf("inclusion proof: merkle path does not reach entries_merkle_root (wrong entry or tampered path)")
 	}
 
+	// Reject the degenerate self-attestation: with an empty audit path the
+	// derived root is just the leaf, so setting binding.entries_merkle_root to
+	// that leaf makes any entry its own root. A genuine single-entry pack is
+	// indistinguishable from a forged one here, so it must be checked against an
+	// external root instead.
+	if len(proof.Path) == 0 {
+		return fmt.Errorf("inclusion proof: empty merkle path — the leaf is its own root, " +
+			"which proves nothing without an external entries_merkle_root; " +
+			"use VerifyInclusionProofAgainstRoot")
+	}
+
+	return nil
+}
+
+// VerifyInclusionProofAgainstRoot verifies a proof against an entries_merkle_root
+// the caller obtained independently — from the pack's own 00_INDEX.json, a
+// signed seal, or a transparency log.
+//
+// This is the form that actually proves membership. VerifyInclusionProof alone
+// only shows the document agrees with itself (F-10).
+func VerifyInclusionProofAgainstRoot(proof *InclusionProof, expectedRoot string) error {
+	if strings.TrimSpace(expectedRoot) == "" {
+		return fmt.Errorf("inclusion proof: expected entries_merkle_root is required; " +
+			"verifying against the root carried inside the proof proves nothing")
+	}
+	if proof == nil {
+		return fmt.Errorf("inclusion proof: nil proof")
+	}
+	if proof.Binding.EntriesMerkleRoot != expectedRoot {
+		return fmt.Errorf("inclusion proof: binding root %q does not match the expected pack root %q",
+			proof.Binding.EntriesMerkleRoot, expectedRoot)
+	}
+
+	// Internal consistency, minus the empty-path rejection: a single-entry pack
+	// is legitimate once the root is externally anchored.
+	if proof.Version != InclusionProofVersion {
+		return fmt.Errorf("inclusion proof: unsupported version %q", proof.Version)
+	}
+	expectedBinding, err := computeBindingHash(proof)
+	if err != nil {
+		return err
+	}
+	if proof.BindingHash != expectedBinding {
+		return fmt.Errorf("inclusion proof: binding hash mismatch (tampered binding or entry)")
+	}
+	wantLeaf, err := LeafHash(proof.Entry)
+	if err != nil {
+		return err
+	}
+	if proof.LeafHash != wantLeaf {
+		return fmt.Errorf("inclusion proof: leaf hash does not match entry record")
+	}
+	derivedRoot, err := VerifyInclusionPath(proof.LeafHash, proof.Path)
+	if err != nil {
+		return err
+	}
+	if derivedRoot != expectedRoot {
+		return fmt.Errorf("inclusion proof: merkle path does not reach the expected pack root")
+	}
 	return nil
 }
 

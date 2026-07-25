@@ -11,7 +11,10 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
 )
 
-func writeTestManifest(t *testing.T, dir string) string {
+// writeTestManifest returns the manifest path and its entries_merkle_root.
+// The root is the external anchor a verifier must obtain independently of the
+// proof; reading it from the proof would prove nothing (F-10).
+func writeTestManifest(t *testing.T, dir string) (string, string) {
 	t.Helper()
 	b := evidencepack.NewBuilder("pack-cli-min512", "did:helm:agent", "intent-1", "sha256:"+rep("a", 64)).
 		WithCreatedAt(time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC))
@@ -29,7 +32,7 @@ func writeTestManifest(t *testing.T, dir string) string {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return path
+	return path, m.EntriesMerkleRoot
 }
 
 func rep(s string, n int) string {
@@ -42,7 +45,7 @@ func rep(s string, n int) string {
 
 func TestCLI_ProveAndVerifyEntry_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	manifestPath := writeTestManifest(t, dir)
+	manifestPath, packRoot := writeTestManifest(t, dir)
 	proofPath := filepath.Join(dir, "entry.proof.json")
 
 	// Generate.
@@ -55,7 +58,8 @@ func TestCLI_ProveAndVerifyEntry_RoundTrip(t *testing.T) {
 	// Verify (routed through the top-level verify command to exercise dispatch).
 	stdout.Reset()
 	stderr.Reset()
-	rc = runVerifyCmd([]string{"--entry", "receipts/decision-001.json", "--proof", proofPath, "--json"}, &stdout, &stderr)
+	rc = runVerifyCmd([]string{"--entry", "receipts/decision-001.json", "--proof", proofPath,
+		"--entries-merkle-root", packRoot, "--json"}, &stdout, &stderr)
 	if rc != 0 {
 		t.Fatalf("verify rc=%d stderr=%s out=%s", rc, stderr.String(), stdout.String())
 	}
@@ -71,7 +75,7 @@ func TestCLI_ProveAndVerifyEntry_RoundTrip(t *testing.T) {
 // NEGATIVE: asking for a different entry than the proof binds to FAILS.
 func TestCLI_VerifyEntry_WrongEntryName(t *testing.T) {
 	dir := t.TempDir()
-	manifestPath := writeTestManifest(t, dir)
+	manifestPath, _ := writeTestManifest(t, dir)
 	proofPath := filepath.Join(dir, "entry.proof.json")
 
 	var sink bytes.Buffer
@@ -89,7 +93,7 @@ func TestCLI_VerifyEntry_WrongEntryName(t *testing.T) {
 // NEGATIVE: a tampered proof file FAILS through the CLI.
 func TestCLI_VerifyEntry_TamperedProofFails(t *testing.T) {
 	dir := t.TempDir()
-	manifestPath := writeTestManifest(t, dir)
+	manifestPath, _ := writeTestManifest(t, dir)
 	proofPath := filepath.Join(dir, "entry.proof.json")
 
 	var sink bytes.Buffer

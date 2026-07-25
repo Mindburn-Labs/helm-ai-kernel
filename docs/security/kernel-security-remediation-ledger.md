@@ -156,3 +156,31 @@ scope, caching, or dual control · **T2** perimeter · **T3** CI and test integr
 - All five T0/T1 core defects reproduce identically in `helm-ai-enterprise`
   (`crypto/signer.go:43`, `guardian/zeroid.go:51`, `evidence/seal.go:1116`,
   `verifier/verifier.go:757`, `crypto/signer.go:91`) and must be propagated.
+
+### 2026-07-25 addendum — schema defects surfaced by implementing F-03
+
+Implementing a real chain-of-custody walk exposed three defects that the
+placeholder checks had been hiding. They are the reason the check was a stub:
+you cannot verify a chain whose hash function is unspecified.
+
+| ID | Sev | Finding | Status |
+|---|---|---|---|
+| F-19 | T1 | **No canonical chain-hash derivation.** Three producers link receipts three different ways: `store.buildNextCausalReceipt` uses `contracts.ReceiptChainHash` (JCS over the receipt); `mcp-proof` uses `"sha256:" + sha256` of the pretty-printed receipt file as written (`cmd/helm-ai-kernel/mcp_proof_cmd.go:396-402`); `demo`/`financedemo` chain on a `hash` field the receipt declares about itself (`cmd/helm-ai-kernel/demo_cmd.go:285-288`). A third-party verifier cannot check a chain without knowing which convention a pack used. | mitigated |
+| F-20 | T1 | **Self-declared receipt hashes have no specified preimage.** For the demo/financedemo shape, `hash` is asserted by the producer and cannot be recomputed by any verifier. For those receipts the walk proves the chain is well-formed, not that each node's contents are bound to its identity. | remaining |
+| F-21 | T1 | **Launchpad and conform packs emit no chain at all.** Receipts carry `lamport_clock` values implying an order but no `prev_hash` linking them (`core/pkg/launchpad/receipts`). These packs assert no chain of custody, which is materially weaker than the product's claim. | remaining |
+
+**Mitigation shipped for F-19:** each receipt is given a candidate identity set —
+`ReceiptChainHash`, `"sha256:"+sha256(file bytes)`, and any declared `hash` — and
+a link is accepted if the successor's `prev_hash` matches any of them, with the
+`sha256:` prefix normalised. The first two are recomputed by the verifier, so
+tampering still breaks linkage. F-20 is the residual gap.
+
+**Behaviour for F-21:** a pack where no receipt carries a `prev_hash` is reported
+as `"N receipts carry no prev_hash — this pack asserts no chain of custody, so
+none was verified"` rather than PASS-with-chain. This cannot be used to bypass
+the walk: stripping every `prev_hash` changes what the pack claims and the report
+says so. A missing or empty receipts directory still fails outright.
+
+**Correct fix for F-19/F-20/F-21** (not attempted here — it is a format change):
+specify one canonical receipt envelope and one chain-hash preimage, emit it from
+every producer, and make the declared hash recomputable.

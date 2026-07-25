@@ -20,7 +20,7 @@ func TestTrustedPublicKeyForSeal_RejectsSelfAttestedByDefault(t *testing.T) {
 	t.Setenv("HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX", "")
 	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
 
-	key, err := trustedPublicKeyForSeal(seal, nil, EvidenceTrustProfileDevLocal)
+	key, err := trustedPublicKeyForSeal(seal, nil, EvidenceTrustProfileDevLocal, false)
 	if err == nil {
 		t.Fatal("self-attested seal was accepted under the default dev-local profile: " +
 			"any keypair could sign its own evidence pack and verify")
@@ -44,7 +44,7 @@ func TestTrustedPublicKeyForSeal_AllowsSelfAttestedWithExplicitOptIn(t *testing.
 	t.Setenv("HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX", "")
 	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "1")
 
-	key, err := trustedPublicKeyForSeal(seal, nil, EvidenceTrustProfileDevLocal)
+	key, err := trustedPublicKeyForSeal(seal, nil, EvidenceTrustProfileDevLocal, true)
 	if err != nil {
 		t.Fatalf("explicit opt-in should be honoured: %v", err)
 	}

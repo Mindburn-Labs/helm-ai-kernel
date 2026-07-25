@@ -50,7 +50,9 @@ func TestEvidenceAttachHostChainAndCorrelateCLI(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(outDir, "11_HOST_EVIDENCE", "test", filepath.Base(chainPath))); err != nil {
 		t.Fatalf("attached chain missing: %v", err)
 	}
-	verifyReport, err := verifier.VerifyBundleWithOptions(outDir, verifier.VerifyOptions{ExternalHostKeyHex: pubHex})
+	verifyReport, err := verifier.VerifyBundleWithOptions(outDir, verifier.VerifyOptions{ExternalHostKeyHex: pubHex,
+		// Pack sealed by this test; self-attested seal is expected (F-02).
+		AllowSelfAttested: true})
 	if err != nil {
 		t.Fatal(err)
 	}

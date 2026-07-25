@@ -850,6 +850,9 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 	// check — it never read prev_hash and never walked a parent, so a chain with
 	// its middle removed, its order changed, or a fork grafted on reported
 	// "chain integrity: PASS" (F-03). Actually link the receipts.
+	if !packClaimsAChain(receiptPath(bundlePath)) {
+		return unchainedPackResult("chain_integrity", receiptPath(bundlePath))
+	}
 	chains, res := loadReceiptChains(bundlePath, "chain_integrity")
 	if res != nil {
 		return *res
@@ -864,11 +867,11 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 		for i := 1; i < len(chain.ordered); i++ {
 			prev := chain.ordered[i-1]
 			cur := chain.ordered[i]
-			if cur.receipt.PrevHash != prev.chainHash {
+			if !prev.matches(cur.receipt.PrevHash) {
 				return CheckResult{
 					Name: "chain_integrity", Pass: false,
 					Reason: fmt.Sprintf("session %q: receipt %s prev_hash=%s does not match the chain hash of %s (%s)",
-						chain.sessionID, cur.receipt.ReceiptID, cur.receipt.PrevHash, prev.receipt.ReceiptID, prev.chainHash),
+						chain.sessionID, cur.receipt.ReceiptID, cur.receipt.PrevHash, prev.receipt.ReceiptID, prev.primary()),
 				}
 			}
 		}
@@ -887,6 +890,9 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 // This previously returned Pass with "%d receipt files present" straight from
 // os.ReadDir — no clock was ever parsed, so any ordering claim passed (F-03).
 func checkLamportMonotonicity(bundlePath string) CheckResult {
+	if !packClaimsAChain(receiptPath(bundlePath)) {
+		return unchainedPackResult("lamport_monotonicity", receiptPath(bundlePath))
+	}
 	chains, res := loadReceiptChains(bundlePath, "lamport_monotonicity")
 	if res != nil {
 		return *res
@@ -927,9 +933,45 @@ func checkLamportMonotonicity(bundlePath string) CheckResult {
 // receiptNode pairs a parsed receipt with the chain hash other receipts use to
 // reference it.
 type receiptNode struct {
-	receipt   *contracts.Receipt
-	chainHash string
-	file      string
+	receipt *contracts.Receipt
+	// hashes are the identities a successor's prev_hash may legitimately carry.
+	// EvidencePack producers do not agree on one derivation:
+	//   - store     chains on contracts.ReceiptChainHash (JCS over the receipt)
+	//   - mcp-proof chains on "sha256:"+sha256 of the receipt file as written
+	//   - demo      chains on a "hash" field the receipt declares about itself
+	// The first two are recomputed here, so tampering breaks linkage. The third
+	// has no specified preimage and cannot be recomputed — recorded in the
+	// security ledger as a schema gap.
+	hashes []string
+	file   string
+}
+
+// normalizeHash strips the optional "sha256:" prefix so identities produced by
+// different producers compare equal.
+func normalizeHash(h string) string {
+	return strings.TrimPrefix(strings.TrimSpace(h), "sha256:")
+}
+
+// matches reports whether prevHash refers to this node under any derivation.
+func (n receiptNode) matches(prevHash string) bool {
+	want := normalizeHash(prevHash)
+	if want == "" {
+		return false
+	}
+	for _, h := range n.hashes {
+		if normalizeHash(h) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// primary is the identity quoted in diagnostics.
+func (n receiptNode) primary() string {
+	if len(n.hashes) == 0 {
+		return ""
+	}
+	return normalizeHash(n.hashes[0])
 }
 
 // receiptChain is one session's receipts ordered from genesis to head.
@@ -996,12 +1038,14 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 			return fail("receipt %s is not a JSON object: %v", entry.Name(), err)
 		}
 
-		chainHash, _ := raw["hash"].(string)
-		if strings.TrimSpace(chainHash) == "" {
-			chainHash, err = contracts.ReceiptChainHash(&receipt)
-			if err != nil {
-				return fail("cannot compute chain hash for receipt %s: %v", entry.Name(), err)
-			}
+		var hashes []string
+		// Recomputed identities first, so diagnostics quote a verifiable value.
+		if h, hErr := contracts.ReceiptChainHash(&receipt); hErr == nil {
+			hashes = append(hashes, h)
+		}
+		hashes = append(hashes, "sha256:"+sha256Hex(data))
+		if declared, _ := raw["hash"].(string); strings.TrimSpace(declared) != "" {
+			hashes = append(hashes, declared)
 		}
 
 		// Lamport lives under different keys across the schemas.
@@ -1018,7 +1062,7 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 		// without one form a single implicit chain.
 		session := receipt.ExecutorID
 		bySession[session] = append(bySession[session], receiptNode{
-			receipt: &receipt, chainHash: chainHash, file: entry.Name(),
+			receipt: &receipt, hashes: hashes, file: entry.Name(),
 		})
 		total++
 	}
@@ -1042,17 +1086,15 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 // linkChain orders one session's receipts by following prev_hash from the
 // genesis receipt, and rejects forks, cycles, orphans and truncation.
 func linkChain(nodes []receiptNode) ([]receiptNode, error) {
-	byPrev := map[string][]receiptNode{}
-	known := map[string]bool{}
-	for _, n := range nodes {
-		byPrev[n.receipt.PrevHash] = append(byPrev[n.receipt.PrevHash], n)
-		known[n.chainHash] = true
-	}
-
 	// Genesis is the receipt with an empty prev_hash. Exactly one is required:
 	// zero means the head of the chain was removed, more than one means the
 	// chain was forked at the root.
-	roots := byPrev[""]
+	var roots []receiptNode
+	for _, n := range nodes {
+		if normalizeHash(n.receipt.PrevHash) == "" {
+			roots = append(roots, n)
+		}
+	}
 	switch {
 	case len(roots) == 0:
 		return nil, fmt.Errorf("no genesis receipt (none has an empty prev_hash) — the start of the chain is missing")
@@ -1061,10 +1103,21 @@ func linkChain(nodes []receiptNode) ([]receiptNode, error) {
 	}
 
 	ordered := make([]receiptNode, 0, len(nodes))
+	used := map[string]bool{}
 	current := roots[0]
 	for {
 		ordered = append(ordered, current)
-		children := byPrev[current.chainHash]
+		used[current.file] = true
+
+		var children []receiptNode
+		for _, n := range nodes {
+			if used[n.file] {
+				continue
+			}
+			if current.matches(n.receipt.PrevHash) {
+				children = append(children, n)
+			}
+		}
 		if len(children) == 0 {
 			break
 		}
@@ -1079,16 +1132,11 @@ func linkChain(nodes []receiptNode) ([]receiptNode, error) {
 	}
 
 	if len(ordered) != len(nodes) {
-		// Some receipts were never reached: their prev_hash points at a receipt
-		// that is not in the pack, which is exactly what deleting a middle
-		// receipt produces.
+		// Unreached receipts point at a predecessor that is not in the pack —
+		// exactly what deleting a middle receipt produces.
 		var orphans []string
-		reached := map[string]bool{}
-		for _, n := range ordered {
-			reached[n.chainHash] = true
-		}
 		for _, n := range nodes {
-			if !reached[n.chainHash] {
+			if !used[n.file] {
 				orphans = append(orphans, fmt.Sprintf("%s (prev_hash=%s)", n.receipt.ReceiptID, n.receipt.PrevHash))
 			}
 		}
@@ -1098,6 +1146,64 @@ func linkChain(nodes []receiptNode) ([]receiptNode, error) {
 	}
 
 	return ordered, nil
+}
+
+// packClaimsAChain reports whether any receipt in the pack carries a non-empty
+// prev_hash.
+//
+// Several producers (launchpad, conform) emit receipts with lamport clocks that
+// imply an order but no prev_hash linking them — those packs assert no chain of
+// custody at all. Verifying such a pack must neither invent a chain nor claim to
+// have checked one. Packs that DO carry prev_hash values get the full
+// genesis-to-head walk.
+//
+// This cannot be abused to bypass the check: stripping every prev_hash changes
+// what the pack claims, and the report says so in plain text instead of
+// reporting a verified chain. A missing or empty receipts directory is not "no
+// chain claimed" — it is a pack with no evidence, so it falls through and fails.
+func packClaimsAChain(receiptsDir string) bool {
+	if !dirExists(receiptsDir) {
+		return true
+	}
+	entries, err := os.ReadDir(receiptsDir)
+	if err != nil {
+		return true
+	}
+	receipts := 0
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		receipts++
+		data, err := os.ReadFile(filepath.Join(receiptsDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		var raw map[string]any
+		if json.Unmarshal(data, &raw) != nil {
+			continue
+		}
+		if s, _ := raw["prev_hash"].(string); strings.TrimSpace(s) != "" {
+			return true
+		}
+	}
+	return receipts == 0
+}
+
+// unchainedPackResult describes a pack that makes no chaining claim.
+func unchainedPackResult(checkName, receiptsDir string) CheckResult {
+	entries, _ := os.ReadDir(receiptsDir)
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".json" {
+			n++
+		}
+	}
+	return CheckResult{
+		Name: checkName, Pass: true,
+		Detail: fmt.Sprintf("%d receipts carry no prev_hash — this pack asserts no chain of custody, "+
+			"so none was verified", n),
+	}
 }
 
 func checkPolicyDecisionHashes(bundlePath string) CheckResult {

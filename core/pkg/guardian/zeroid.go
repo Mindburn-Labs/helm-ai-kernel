@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -35,7 +36,10 @@ import (
 // Until all of that exists, binding an unverified principal is worse than
 // refusing the request.
 type ZeroIDInterceptor struct {
-	g              *Guardian
+	g *Guardian
+	// mu guards revocationList: IngestCAEPRevocation writes from the CAEP/SSF
+	// stream while Evaluate reads on the request path.
+	mu             sync.RWMutex
 	revocationList map[string]bool // In-memory CAEP/SSF revocation index
 }
 
@@ -53,7 +57,16 @@ func NewZeroIDInterceptor(g *Guardian) *ZeroIDInterceptor {
 // IngestCAEPRevocation dynamically invalidates a token received via CAEP SSF stream.
 // Revoked tokens are reported with a distinct reason code for forensics.
 func (z *ZeroIDInterceptor) IngestCAEPRevocation(tokenHash string) {
+	z.mu.Lock()
+	defer z.mu.Unlock()
 	z.revocationList[tokenHash] = true
+}
+
+// isRevoked reports whether a token has been revoked via CAEP/SSF.
+func (z *ZeroIDInterceptor) isRevoked(token string) bool {
+	z.mu.RLock()
+	defer z.mu.RUnlock()
+	return z.revocationList[token]
 }
 
 // Evaluate denies any request presenting a ZeroID envelope and passes every
@@ -68,7 +81,7 @@ func (z *ZeroIDInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationCon
 
 	// Revocation is checked first so an explicitly revoked credential is
 	// distinguishable from one that merely cannot be verified.
-	if token != "" && z.revocationList[token] {
+	if token != "" && z.isRevoked(token) {
 		return z.denyWithReason(evalCtx, contracts.ReasonTaintedCredentialDeny,
 			"ZeroID token has been dynamically revoked via CAEP")
 	}

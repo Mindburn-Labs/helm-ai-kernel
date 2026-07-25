@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
 	"net/http"
 	"strconv"
@@ -281,10 +283,12 @@ func (rl *GlobalRateLimiter) actorResourceKey(r *http.Request, fallbackIP string
 	if actorID == "" && tenantID != "" && principalID != "" {
 		actorID = tenantID + "/" + principalID
 	}
-	if actorID == "" {
-		return fallbackIP + " " + r.Method + " " + r.URL.EscapedPath()
-	}
-	return fallbackIP + "|" + actorID + " " + r.Method + " " + r.URL.EscapedPath()
+	// Hash the attacker-influenced portion. Concatenating raw header values with
+	// delimiters lets a caller embed the delimiter to collide with, or escape
+	// from, another actor's bucket — the same unframed-concatenation mistake
+	// that made the signature-verification cache forgeable.
+	sum := sha256.Sum256([]byte(fallbackIP + "\x00" + actorID))
+	return hex.EncodeToString(sum[:16]) + " " + r.Method + " " + r.URL.EscapedPath()
 }
 
 func tryAcquire(ch chan struct{}) bool {

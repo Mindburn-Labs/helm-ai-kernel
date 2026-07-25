@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-25T13:42:20Z
+# Generated: 2026-07-25T14:24:02Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -454,7 +454,7 @@ f2229d08f1b6ad50f51e976305814161e9269884bf563c18fb57bb7416285d10  core/pkg/verif
 bfbe8e2d25ff38dc49eb34028cfede4e449bdc63e3b810f1b19913a11b72442b  core/pkg/verifier/externalreceipt/externalreceipt.go
 fdb3835dc6315a0730a961d458a0c1e4f9f5d79059f33b8908718f075718e12f  core/pkg/verifier/externalreceipt/externalreceipt_test.go
 e70d160b80a81e70a4d1019d9903135d25f813bbe5803b1da8582e727e8c819c  core/pkg/verifier/host_evidence_test.go
-8751a236b940bf95f539f29333c0ce548022303b89b7003a4b447e6ba594e1d7  core/pkg/verifier/verifier.go
+bab0f7644af4117c1492d070a50827b64efea9aeec84241c493d05dc64e004f7  core/pkg/verifier/verifier.go
 6826dbc4685bd55768db73e1d39e7195ac05571d2452337aa10c87704027f153  core/pkg/verifier/verifier_behavior_coverage_test.go
 d7c3d8497667c186edca54f0e56e4ff364f27a21a1f4ed3cf2c5915a6667c49c  core/pkg/verifier/verifier_test.go
 f5332ef5eaa72e342066a9d3dad0f822415efeece0312fd97c9cb23674b2c647  core/pkg/connectors/sandbox/README.md
@@ -585,7 +585,7 @@ f00f35910a6dffa0f57240e5f0323eff859141af36a59937c456ac4a399d2f53  core/pkg/api/i
 e8ca0eb72c99676ee96a04283879a271abfc61856b2cfd776e740201b3fd39ef  core/pkg/api/launchpad_handler.go
 8bff4c2f62b6dea796f51c0459258f7e4b89bda501155dcbc5a9bdd9571bfafb  core/pkg/api/launchpad_handler_test.go
 3a569d473db609d38d61e4baa82d9ef0e5f0d7aaec02c0fd14af39d6c1d07f05  core/pkg/api/memory.go
-9361426cc73968c16779aff1368f7101fa06a5826550eb9328e37316bca4e4ec  core/pkg/api/middleware.go
+7bf71e77c7ca976504b82d84031212b7b958f5e95e3df96e50d4f73d3553a9b6  core/pkg/api/middleware.go
 e9a5bca9890ef8dabef35ea13d2f8e247ce4db9b2f0013135e8d7b32303026ff  core/pkg/api/middleware_test.go
 1b0bd999c7fbe3a0f103f9d365d47560996884885ab545dd04394fcf8ced9caa  core/pkg/api/migrations/001_create_idempotency_keys.sql
 8417977ea4ed473985b07c615c8e74cd24e7979d4c1e6c61f43769fd5b5b5954  core/pkg/api/openai_proxy.go
@@ -643,7 +643,7 @@ d76de934fccf7f211698fb38b9de617951db426ea8925ab6932a9021cf1ce41f  core/pkg/guard
 f0a2502b70ed3a9b6bbb82898c64ba482dd25b55bfe17124f612c98d393c7343  core/pkg/guardian/session_risk_memory_test.go
 4a0761e54a75d13b9639a985000e70f9dfe3706d2ea4d01222ee1e92c519608d  core/pkg/guardian/temporal.go
 934d400fc7d01f6c32d761edfd51234a8e14d187878cd089719859a969cbfe6b  core/pkg/guardian/temporal_test.go
-fc279eb23d6d183545e8699c02c7eb097b7562b4c9dc0367713f18b9e16db71d  core/pkg/guardian/zeroid.go
+1cdecc9677925131dcbde9baadc8bf962954aa9c40c557d2df605c1a50feec7c  core/pkg/guardian/zeroid.go
 4f056581bc921ad759f4c497e5db051fb1288f24e0b05973da26ca80b75cc147  core/pkg/guardian/zeroid_test.go
 23fb22bb8c383c70c7676257c13cdc12a6aced6204f819b82ebbcc3028899174  core/pkg/packs/antispoof/pack.go
 9402c221f21eb9e33de4a469731d2c7270ab5165de388422ca2ad30fe7800fb8  core/pkg/packs/antispoof/pack_test.go

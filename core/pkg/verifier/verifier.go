@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -1050,7 +1051,13 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 
 		// Lamport lives under different keys across the schemas.
 		if receipt.LamportClock == 0 {
+			// Reject a non-integral or negative clock rather than truncating it:
+			// uint64(1.9) is 1, which would let a tampered receipt slot into an
+			// ordering it does not actually occupy.
 			if v, ok := raw["lamport"].(float64); ok {
+				if v != math.Trunc(v) || v < 0 {
+					return fail("receipt %s has a non-integral lamport clock %v", entry.Name(), v)
+				}
 				receipt.LamportClock = uint64(v)
 			}
 		}
@@ -1148,8 +1155,13 @@ func linkChain(nodes []receiptNode) ([]receiptNode, error) {
 	return ordered, nil
 }
 
-// packClaimsAChain reports whether any receipt in the pack carries a non-empty
-// prev_hash.
+// packClaimsAChain reports whether the pack should be held to the full
+// genesis-to-head walk.
+//
+// That is true when any receipt carries a non-empty prev_hash, and also — fail
+// closed — when the receipts directory is missing or empty, or when any receipt
+// cannot be read or parsed. Only a directory of well-formed receipts that all
+// lack prev_hash counts as "no chain claimed".
 //
 // Several producers (launchpad, conform) emit receipts with lamport clocks that
 // imply an order but no prev_hash linking them — those packs assert no chain of
@@ -1177,11 +1189,15 @@ func packClaimsAChain(receiptsDir string) bool {
 		receipts++
 		data, err := os.ReadFile(filepath.Join(receiptsDir, entry.Name()))
 		if err != nil {
-			continue
+			// An unreadable receipt must not be read as "no chain claimed" —
+			// that would let a corrupt or deliberately unreadable file skip the
+			// walk entirely. Claim a chain so the caller falls through to
+			// loadReceiptChains and fails there with the real reason.
+			return true
 		}
 		var raw map[string]any
 		if json.Unmarshal(data, &raw) != nil {
-			continue
+			return true
 		}
 		if s, _ := raw["prev_hash"].(string); strings.TrimSpace(s) != "" {
 			return true

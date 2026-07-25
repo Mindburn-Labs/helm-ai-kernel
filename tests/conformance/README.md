@@ -17,6 +17,12 @@ cd tests/conformance
 go test ./...
 ```
 
+This is a local convenience, not the gate. CI already runs this module on every
+PR through the `Independent Go module tests` step of the `kernel` job
+(`scripts/ci/go_module_tests.sh`), which discovers every tracked `go.mod` and
+runs `GOWORK=off go test ./...` in each. A new package added under this
+directory is covered the moment it lands — no workflow edit required.
+
 Then run:
 
 ```bash

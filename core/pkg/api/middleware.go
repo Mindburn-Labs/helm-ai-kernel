@@ -263,6 +263,17 @@ func (rl *GlobalRateLimiter) isLowPriority(r *http.Request, endpointClass string
 	return endpointClass == "public"
 }
 
+// actorResourceKey derives the per-actor rate-limit bucket.
+//
+// The identity headers are combined with the peer address rather than used on
+// their own. They are unauthenticated at this layer — the limiter runs before
+// any route guard — so keying on them alone let a caller rotate
+// X-Helm-Actor-ID to mint a fresh bucket per request and evade the limit
+// entirely, or set a victim's actor id to exhaust that victim's bucket (F-12).
+//
+// Binding the bucket to fallbackIP keeps both closed: a rotating attacker stays
+// pinned to their own address, and one caller can no longer consume another's
+// allowance. Distinct actors behind a shared address still get distinct buckets.
 func (rl *GlobalRateLimiter) actorResourceKey(r *http.Request, fallbackIP string) string {
 	tenantID := strings.TrimSpace(r.Header.Get("X-Helm-Tenant-ID"))
 	principalID := strings.TrimSpace(r.Header.Get("X-Helm-Principal-ID"))
@@ -271,9 +282,9 @@ func (rl *GlobalRateLimiter) actorResourceKey(r *http.Request, fallbackIP string
 		actorID = tenantID + "/" + principalID
 	}
 	if actorID == "" {
-		actorID = fallbackIP
+		return fallbackIP + " " + r.Method + " " + r.URL.EscapedPath()
 	}
-	return actorID + " " + r.Method + " " + r.URL.EscapedPath()
+	return fallbackIP + "|" + actorID + " " + r.Method + " " + r.URL.EscapedPath()
 }
 
 func tryAcquire(ch chan struct{}) bool {

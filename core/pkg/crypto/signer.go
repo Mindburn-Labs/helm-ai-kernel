@@ -11,20 +11,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
-
-// sha256Pool amortises hasher allocation for callers that hash large payloads.
-//
-// Note: signature verification deliberately does NOT hash into a result cache.
-// See Verify below for why.
-var sha256Pool = sync.Pool{
-	New: func() any {
-		return sha256.New()
-	},
-}
 
 // Signer defines the interface for cryptographic signing operations.
 // For verification, use the separate Verifier interface.

@@ -107,16 +107,27 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		payload := map[string]any{
 			"api_base_url":     fmt.Sprintf("http://%s:%d", firstNonEmpty(opts.BindAddr, "127.0.0.1"), opts.Port),
 			"local_mode":       true,
 			"start_onboarding": true,
-			"tenant_id":        opts.Quickstart.TenantID,
-			"principal_id":     opts.Quickstart.PrincipalID,
 			"profile":          opts.Quickstart.Profile,
 			"entitlements":     []string{"OSS_CORE"},
-		})
+		}
+
+		// tenant_id and principal_id are exactly the values the tenant-scoped
+		// routes expect in X-Helm-Tenant-ID / X-Helm-Principal-ID. Publishing
+		// them on an unauthenticated endpoint reduced that gate to "obtain the
+		// admin key" (F-13). They are only disclosed to a loopback caller — the
+		// local-first onboarding case this endpoint exists for — and the check
+		// uses the real peer address, not a spoofable forwarding header.
+		if requestFromLoopback(r) {
+			payload["tenant_id"] = opts.Quickstart.TenantID
+			payload["principal_id"] = opts.Quickstart.PrincipalID
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(payload)
 	})
 
 	mux.HandleFunc("/api/v1/local-session/exchange", func(w http.ResponseWriter, r *http.Request) {

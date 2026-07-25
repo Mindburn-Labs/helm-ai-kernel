@@ -259,3 +259,58 @@ already makes for the same reason.
 true` after mutating `Metadata` — i.e. it asserts that most of the receipt is
 outside the signature. It is left as-is because the signer still emits v4;
 it must be inverted in the same change that flips the signer.
+
+### 2026-07-25 — F-10 and F-15
+
+| ID | Finding | Status |
+|---|---|---|
+| F-10 | Inclusion proofs were verified against a root carried inside the same document | fixed |
+| F-15 | Renovate auto-merged all minor+patch while Dependabot was disabled | fixed |
+
+**F-10.** `VerifyInclusionProof` checked the audit path against
+`proof.Binding.EntriesMerkleRoot`, a field inside the proof, with
+`computeBindingHash` covering that root too — so every input came from the same
+attacker-supplied document. An empty `merkle_path` makes the derived root equal
+the leaf, so any entry could declare itself its own root and verify.
+
+Added `VerifyInclusionProofAgainstRoot(proof, expectedRoot)`, which is the only
+form that establishes membership: the caller supplies the root from the pack's
+`00_INDEX.json`, a signed seal, or a transparency log. `VerifyInclusionProof` is
+retained for internal-consistency checks, now rejects the degenerate empty-path
+case, and its doc comment states plainly that a nil error does not mean the
+entry belongs to any pack.
+
+`helm-ai-kernel verify --entry --proof` gained `--entries-merkle-root`. Without
+it the command no longer prints `VERIFIED`; it reports `self_attested` and
+explains that the root was read from the proof itself.
+`TestF10_ForgedProofIsInternallyConsistent` is the negative control — it proves
+the forged fixture really does self-check, so the rejections above are firing for
+the right reason.
+
+**F-15.** `renovate.json` auto-merged every minor and patch update while
+`.github/dependabot.yml` set `open-pull-requests-limit: 0` for all eight
+ecosystems, making Renovate the only dependency path into the repo with no human
+in the loop. Auto-merge is now limited to patch, TCB packages (x/crypto, x/net,
+circl, filippo.io, cel-go, open-policy-agent) never auto-merge at any update
+type, and vulnerability alerts are raised for review rather than merged.
+
+### Remaining after this session
+
+- **v5 activation** — blocked on the receipt-store schema. `ensureColumn` in
+  `core/pkg/store/receipt_store_sqlite.go` is the additive-migration pattern to
+  follow; five columns are needed (`key_id`, `public_key_set`,
+  `signature_profile`, `signature_algorithm`, `correlation_id`) across both the
+  SQLite and Postgres backends, in the schema, `receiptColumns`, the scan, and
+  the insert. Then flip `SignReceipt` to `ReceiptPreimageV5` and invert
+  `TestDemoVerifyRejectsUnsignedEnvelopeMutation`.
+- **F-14 promotion** — triage the 14 `make lint-security` findings (several are
+  gosec false positives) and make the target blocking in CI.
+- **F-20** — self-declared receipt `hash` values have no specified preimage.
+- **F-21** — launchpad and conform packs emit receipts with no `prev_hash`.
+- **Live black-box pentest** against a `0.0.0.0` instance.
+- **Enterprise** — bump `tools/helm-ai-kernel.lock` past the kernel security
+  branch once it merges, then `make sync-oss-kernel && make verify-boundary`.
+
+Flaky under full-suite load, unrelated to these changes: `TestLivenessAutoExpiry`
+(`pkg/governance`) and `TestDockerRunnerValidateAndRun` (`pkg/sandbox/docker`).
+Both pass in isolation.

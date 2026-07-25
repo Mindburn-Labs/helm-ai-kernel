@@ -1,6 +1,6 @@
 {
   "policy_snapshot": "policy-snapshot.json",
-  "digest": "ec68ffc9d349264cf816c6d1d54df152b125b239a5d843887b9875f87f0e729b",
+  "digest": "cde7bd1afc128d4676b2a09ec1057b6ed1d20ae2d597be45a141329016b2027d",
   "observations": [
     {
       "case": "class_forbidden/egress_destination",
@@ -21,7 +21,7 @@
       "finality": "class_forbidden"
     },
     {
-      "case": "ungranted/operate_permission",
+      "case": "ungranted/operate_permission_discloses_capability",
       "verdict": "DENY",
       "reason_code": "OPERATE_PERMISSION_NOT_GRANTED",
       "finality": "ungranted",
@@ -31,7 +31,7 @@
       }
     },
     {
-      "case": "instance_parameter/memory_ttl",
+      "case": "instance_parameter/memory_ttl_discloses_bound",
       "verdict": "DENY",
       "reason_code": "MEMORY_TTL_EXCEEDS_POLICY",
       "finality": "instance_parameter",
@@ -40,6 +40,12 @@
         "requested": 90,
         "max": 30
       }
+    },
+    {
+      "case": "instance_parameter/recurring_loop_discloses_nothing",
+      "verdict": "DENY",
+      "reason_code": "RECURRING_LOOP_MISSING_SCHEDULE",
+      "finality": "instance_parameter"
     },
     {
       "case": "instance_context/tainted",

@@ -18,28 +18,42 @@ down the two fields that make the difference, and the limits on both.
 
 1. **Every refusal is classified.** Each denial reports one of four finality
    values — `class_forbidden`, `ungranted`, `instance_parameter`,
-   `instance_context` — derived from the rule that fired.
+   `instance_context` — derived from the rule that fired. Never from a reason
+   code the agent's own event log declares: a producer that could relabel its
+   refusal as `instance_context` would be telling the consumer to keep going.
 2. **Classification replays identically.** The same snapshot evaluated again
-   produces a byte-identical result. A boundary that drifts between rounds
-   cannot be proven to an auditor.
+   produces a byte-identical result, and matches a digest frozen in an earlier
+   process. The golden comparison is the load-bearing half — an implementation
+   with per-process hash seeding will look stable within a single run.
 3. **Membership refusals disclose nothing.** A `class_forbidden` refusal never
    carries a counterfactual. An egress allowlist or a set of workspace roots is
    a map of internal infrastructure; answering "not that one, try these" turns
    every refusal into a free probe of the estate.
-4. **Bounded refusals disclose the bound.** `instance_parameter` carries the
-   scalar ceiling, and `ungranted` carries the capability name, so a compliant
-   retry does not require guessing.
+4. **Disclosure follows the rule, not the finality.** `instance_parameter` and
+   `ungranted` *may* carry an envelope — a scalar ceiling, or a capability name
+   from the fixed permission vocabulary — but neither always does. The pack
+   contains an `instance_parameter` refusal that discloses nothing, because
+   treating the finality value as a licence to disclose is the mistake an
+   implementation is most likely to make.
 5. **Opting out removes the fields.** With the profile switches off, the keys
    are absent rather than empty. Presence is itself a policy statement, and an
    empty field claims the policy said nothing when it did.
+6. **The artifacts satisfy their published schemas.** The snapshot validates
+   against `workstation_policy_profile.v1`, and a denial carrying these fields
+   validates against `agent_run_receipt.v1`. A feature whose output its own
+   contract rejects is not shippable.
+
+An ALLOW control runs against the same snapshot. Without it, a boundary that
+refuses everything — or one that hardcodes answers for the known event ids —
+would pass this pack in full.
 
 ## Scope
 
 This scenario covers the workstation boundary, which is where these fields are
-produced today. `DenyPayload` and `RequireApprovalPayload` in
-`protocols/policy-schema/v1/verdict.proto` carry the same two fields for CPI
-verdicts; the policy VM that populates them is not in this repository, so no
-check here claims to cover it.
+produced today. In `protocols/policy-schema/v1/verdict.proto`, `DenyPayload`
+carries both fields and `RequireApprovalPayload` carries `finality` only; the
+policy VM that populates either is not in this repository, so no check here
+claims to cover it.
 
 `ungranted` is terminal at this boundary because the workstation layer has no
 approver to escalate to. At the kernel PDP the same finality rides

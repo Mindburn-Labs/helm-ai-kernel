@@ -1,6 +1,6 @@
 {
-  "id": "conformance.denial-legibility.v1",
-  "mode": "operate",
+  "id": "workstation.observe_draft.v1",
+  "mode": "enforceable",
   "observe": {
     "allowed_actions": ["read", "list"]
   },
@@ -9,7 +9,7 @@
     "allow_generated_artifacts": true
   },
   "operate": {
-    "permissions": ["memory.write", "network.egress"]
+    "permissions": ["memory.write", "network.egress", "loop.register"]
   },
   "egress": {
     "allowlist": [

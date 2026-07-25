@@ -147,7 +147,7 @@ func TestDisabledByDefaultLeavesReceiptsByteIdentical(t *testing.T) {
 	_, code, _ := EvaluateEvent(profile, event)
 
 	denied := contracts.AgentDeniedEffect{EffectID: "e1", EffectType: event.EffectType, ReasonCode: code}
-	annotateDenial(&denied, profile, event, code)
+	AnnotateDenial(&denied, profile, event, code)
 
 	encoded, err := json.Marshal(denied)
 	if err != nil {
@@ -156,6 +156,94 @@ func TestDisabledByDefaultLeavesReceiptsByteIdentical(t *testing.T) {
 	const want = `{"effect_id":"e1","effect_type":"WORKSTATION_MEMORY_WRITE","reason_code":"MEMORY_TTL_EXCEEDS_POLICY","occurred_at":"0001-01-01T00:00:00Z"}`
 	if string(encoded) != want {
 		t.Fatalf("denied effect JSON changed with the feature off:\n got %s\nwant %s", encoded, want)
+	}
+}
+
+// The agent's own event log may declare a reason code, and normalizeEvents
+// honours that declaration for the recorded reason_code. Finality must not
+// follow it: a producer able to relabel its own refusal as instance_context
+// would be telling the consumer "this was not about the action, keep going"
+// about a boundary it had just been refused at.
+func TestDeclaredReasonCodeCannotSteerFinality(t *testing.T) {
+	profile := learningProfile()
+	honest := ToolEvent{
+		EventID:    "e-egress",
+		Type:       "network_egress",
+		EffectType: contracts.EffectTypeWorkstationNetworkEgress,
+		EffectMode: contracts.WorkstationEffectModeOperate,
+		Target:     "exfil.example.net",
+	}
+	relabelled := honest
+	relabelled.ReasonCode = "TAINTED_CONTEXT_REQUIRES_DENY"
+
+	_, _, _, honestDenials := normalizeEvents(profile, []ToolEvent{honest})
+	_, _, _, relabelledDenials := normalizeEvents(profile, []ToolEvent{relabelled})
+
+	if len(honestDenials) != 1 || len(relabelledDenials) != 1 {
+		t.Fatalf("expected one denial each, got %d and %d", len(honestDenials), len(relabelledDenials))
+	}
+	if got := honestDenials[0].Finality; got != contracts.DenialClassForbidden {
+		t.Fatalf("honest event finality = %q, want class_forbidden", got)
+	}
+	if got := relabelledDenials[0].Finality; got != contracts.DenialClassForbidden {
+		t.Fatalf("declared reason code steered finality to %q: a producer must not be able to relabel its own refusal", got)
+	}
+}
+
+// An arbitrary effect_type must not reach the capability field.
+// workstationPermissionForEffect echoes unrecognised effect types back, and
+// effect_type is producer supplied, so without the vocabulary check a crafted
+// event lands an attacker-chosen string in a signed receipt field the contract
+// describes as an enum.
+func TestCapabilityDisclosureRejectsUnknownVocabulary(t *testing.T) {
+	profile := learningProfile()
+	profile.Operate.Permissions = []string{contracts.WorkstationPermissionMemoryWrite}
+	event := ToolEvent{
+		EventID:    "e-crafted",
+		Type:       "not_a_known_type",
+		EffectType: "s3://prod-secrets/customer-pii?sig=AKIA",
+		EffectMode: contracts.WorkstationEffectModeOperate,
+		Action:     "operate",
+	}
+	verdict, code, _ := EvaluateEvent(profile, event)
+	if verdict != contracts.WorkstationVerdictDeny || code != "OPERATE_PERMISSION_NOT_GRANTED" {
+		t.Fatalf("EvaluateEvent() = %s/%s, want DENY/OPERATE_PERMISSION_NOT_GRANTED", verdict, code)
+	}
+	if got := DenialCounterfactualFor(profile, event, code); got != nil {
+		t.Fatalf("disclosed %+v for an unrecognised effect type: capability must come from the fixed vocabulary", got)
+	}
+}
+
+// A TTL the event never declared must not be reported as the request. The
+// effective value would be the profile default, and echoing that back both
+// misstates what the agent asked for and publishes a second policy scalar.
+func TestUndeclaredTTLDisclosesNothing(t *testing.T) {
+	profile := learningProfile()
+	profile.Memory.DefaultTTLDays = 400 // above Max, so the event still denies
+	event := ToolEvent{
+		EventID:      "e-nottl",
+		Type:         "memory_write",
+		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
+		EffectMode:   contracts.WorkstationEffectModeOperate,
+		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic"},
+	}
+	_, code, _ := EvaluateEvent(profile, event)
+	if code != "MEMORY_TTL_EXCEEDS_POLICY" {
+		t.Fatalf("EvaluateEvent() reason = %q, want MEMORY_TTL_EXCEEDS_POLICY", code)
+	}
+	if got := DenialCounterfactualFor(profile, event, code); got != nil {
+		t.Fatalf("disclosed %+v for an undeclared TTL: %d is the policy default, not a request", got, profile.Memory.DefaultTTLDays)
+	}
+}
+
+// The disclosure rule as a property of the catalog, not of the handful of
+// cases someone happened to write down. A future entry pairing class_forbidden
+// with a disclosing class would otherwise ship silently.
+func TestForbiddenClassNeverDiscloses(t *testing.T) {
+	for code, class := range denialCatalog {
+		if class.finality == contracts.DenialClassForbidden && class.disclosure != discloseNothing {
+			t.Errorf("%s is class_forbidden with a disclosing class: a forbidden-class refusal must not describe the set it failed against", code)
+		}
 	}
 }
 

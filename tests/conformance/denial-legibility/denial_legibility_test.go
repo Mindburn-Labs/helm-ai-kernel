@@ -10,6 +10,7 @@
 package deniallegibility
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,12 +19,26 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-// replayRounds is why this is a conformance scenario rather than a unit test:
-// a boundary that classifies a refusal differently on the second look cannot
-// be replayed, and a receipt over it proves nothing.
+// replayRounds re-evaluates the snapshot in-process. It is the weaker half of
+// the replay evidence: the strong half is TestDenialsMatchTheGoldenPack, which
+// compares against a digest frozen in a different process on a different day.
+// An implementation in a language with per-process hash seeding — Python, Java
+// — must compare against the golden to prove anything, because unordered
+// iteration is stable within one process and varies between them.
 const replayRounds = 8
+
+// requiredFinalities is what the pack must always exercise. Without this the
+// scenario set could be trimmed and the golden regenerated, and every check
+// below would pass vacuously over whatever remained.
+var requiredFinalities = []contracts.DenialFinality{
+	contracts.DenialClassForbidden,
+	contracts.DenialUngranted,
+	contracts.DenialInstanceParameter,
+	contracts.DenialInstanceContext,
+}
 
 type observation struct {
 	Case           string                          `json:"case"`
@@ -39,17 +54,17 @@ type goldenFile struct {
 	Observations []observation `json:"observations"`
 }
 
-// Each case names the finality it is here to pin down. Together they cover all
-// four: a refusal an agent must stop probing, one nobody granted, one with a
-// bound to respect, and one that was never about the action.
-func scenarios() []struct {
+type scenario struct {
 	name  string
 	event workstation.ToolEvent
-} {
-	return []struct {
-		name  string
-		event workstation.ToolEvent
-	}{
+}
+
+// Every finality value appears, and both disclosure outcomes appear within the
+// values that can disclose: an implementer keying on finality alone will emit a
+// counterfactual for every instance_parameter and every ungranted, which is the
+// mistake these cases exist to catch.
+func denialScenarios() []scenario {
+	return []scenario{
 		{"class_forbidden/egress_destination", workstation.ToolEvent{
 			EventID:    "cf-egress",
 			Type:       "network_egress",
@@ -71,19 +86,30 @@ func scenarios() []struct {
 			EffectMode: contracts.WorkstationEffectModeDraft,
 			Target:     "../outside.txt",
 		}},
-		{"ungranted/operate_permission", workstation.ToolEvent{
+		{"ungranted/operate_permission_discloses_capability", workstation.ToolEvent{
 			EventID:    "ug-shell",
 			Type:       "shell_operate",
 			EffectType: contracts.EffectTypeWorkstationShellCommand,
 			EffectMode: contracts.WorkstationEffectModeOperate,
 			Action:     "operate",
 		}},
-		{"instance_parameter/memory_ttl", workstation.ToolEvent{
+		{"instance_parameter/memory_ttl_discloses_bound", workstation.ToolEvent{
 			EventID:      "ip-ttl",
 			Type:         "memory_write",
 			EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
 			EffectMode:   contracts.WorkstationEffectModeOperate,
 			MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
+		}},
+		// The same finality with nothing to disclose. The missing field is
+		// already named by the reason code, so a counterfactual would add
+		// nothing — an implementation that emits one here has misread the
+		// rule as "instance_parameter always carries a bound".
+		{"instance_parameter/recurring_loop_discloses_nothing", workstation.ToolEvent{
+			EventID:             "ip-loop",
+			Type:                "recurring_loop",
+			EffectType:          contracts.EffectTypeWorkstationRecurringLoop,
+			EffectMode:          contracts.WorkstationEffectModeOperate,
+			RecurringLoopEffect: &contracts.AgentRecurringLoopEffect{},
 		}},
 		{"instance_context/tainted", workstation.ToolEvent{
 			EventID:     "ic-taint",
@@ -95,17 +121,40 @@ func scenarios() []struct {
 	}
 }
 
+// allowControl is the negative vector. Without it an implementation that denies
+// unconditionally — or that hardcodes answers for the six known event ids —
+// passes this pack in full.
+func allowControl() scenario {
+	return scenario{"allow/egress_to_allowlisted_host", workstation.ToolEvent{
+		EventID:    "ok-egress",
+		Type:       "network_egress",
+		EffectType: contracts.EffectTypeWorkstationNetworkEgress,
+		EffectMode: contracts.WorkstationEffectModeOperate,
+		Target:     "api.example.com",
+	}}
+}
+
+// observe drives the same entry point the import pipeline uses, so the
+// snapshot's learning switches are genuinely exercised: reading the derivation
+// functions directly would bypass the opt-in gate and prove nothing about it.
 func observe(t *testing.T, profile contracts.WorkstationPolicyProfile) []observation {
 	t.Helper()
-	out := make([]observation, 0, len(scenarios()))
-	for _, sc := range scenarios() {
+	scenarios := denialScenarios()
+	out := make([]observation, 0, len(scenarios))
+	for _, sc := range scenarios {
 		verdict, code, _ := workstation.EvaluateEvent(profile, sc.event)
+		denied := contracts.AgentDeniedEffect{
+			EffectID:   sc.event.EventID,
+			EffectType: sc.event.EffectType,
+			ReasonCode: code,
+		}
+		workstation.AnnotateDenial(&denied, profile, sc.event, code)
 		out = append(out, observation{
 			Case:           sc.name,
 			Verdict:        verdict,
 			ReasonCode:     code,
-			Finality:       workstation.DenialFinality(code),
-			Counterfactual: workstation.DenialCounterfactualFor(profile, sc.event, code),
+			Finality:       denied.Finality,
+			Counterfactual: denied.Counterfactual,
 		})
 	}
 	return out
@@ -128,7 +177,9 @@ func loadSnapshot(t *testing.T) contracts.WorkstationPolicyProfile {
 		t.Fatalf("read policy snapshot: %v", err)
 	}
 	var profile contracts.WorkstationPolicyProfile
-	if err := json.Unmarshal(raw, &profile); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&profile); err != nil {
 		t.Fatalf("decode policy snapshot: %v", err)
 	}
 	return profile
@@ -145,6 +196,99 @@ func loadGolden(t *testing.T) goldenFile {
 		t.Fatalf("decode golden: %v", err)
 	}
 	return golden
+}
+
+// The snapshot is a published-contract document, not just a test input. A
+// fixture that could not be loaded by a real deployment would make every check
+// below prove something about a configuration nobody can run.
+func TestSnapshotSatisfiesThePublishedProfileSchema(t *testing.T) {
+	compiler := jsonschema.NewCompiler()
+	schema, err := compiler.Compile("../../../protocols/json-schemas/policy/workstation_policy_profile.v1.schema.json")
+	if err != nil {
+		t.Fatalf("compile profile schema: %v", err)
+	}
+	raw, err := os.ReadFile("policy-snapshot.json")
+	if err != nil {
+		t.Fatalf("read policy snapshot: %v", err)
+	}
+	var doc any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode policy snapshot: %v", err)
+	}
+	if err := schema.Validate(doc); err != nil {
+		t.Fatalf("policy-snapshot.json violates workstation_policy_profile.v1: %v", err)
+	}
+}
+
+// A denied effect carrying these fields must satisfy the published receipt
+// schema, or opting the feature on produces receipts every conforming consumer
+// rejects as malformed.
+func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
+	compiler := jsonschema.NewCompiler()
+	schema, err := compiler.Compile("../../../protocols/json-schemas/workstation/agent_run_receipt.v1.schema.json#/$defs/denied_effect")
+	if err != nil {
+		t.Fatalf("compile denied_effect schema: %v", err)
+	}
+	profile := loadSnapshot(t)
+	for _, sc := range denialScenarios() {
+		_, code, reason := workstation.EvaluateEvent(profile, sc.event)
+		denied := contracts.AgentDeniedEffect{
+			EffectID:   sc.event.EventID,
+			EffectType: sc.event.EffectType,
+			ReasonCode: code,
+			Reason:     reason,
+		}
+		workstation.AnnotateDenial(&denied, profile, sc.event, code)
+		encoded, err := json.Marshal(denied)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", sc.name, err)
+		}
+		var doc any
+		if err := json.Unmarshal(encoded, &doc); err != nil {
+			t.Fatalf("decode %s: %v", sc.name, err)
+		}
+		if err := schema.Validate(doc); err != nil {
+			t.Errorf("case %s produced a denied effect the published schema rejects: %v", sc.name, err)
+		}
+	}
+}
+
+// The scenario set itself is pinned. Trimming a case and regenerating the
+// golden would otherwise silently drop a whole finality class from coverage
+// while every other check still passed.
+func TestPackExercisesEveryFinality(t *testing.T) {
+	seen := map[contracts.DenialFinality]int{}
+	for _, obs := range observe(t, loadSnapshot(t)) {
+		seen[obs.Finality]++
+	}
+	for _, want := range requiredFinalities {
+		if seen[want] == 0 {
+			t.Errorf("no scenario exercises finality %q", want)
+		}
+	}
+}
+
+// Both disclosure outcomes must appear within the finality values that are
+// allowed to disclose, so the pack cannot be read as "this finality always
+// carries an envelope".
+func TestDisclosingFinalitiesShowBothOutcomes(t *testing.T) {
+	withEnvelope, withoutEnvelope := 0, 0
+	for _, obs := range observe(t, loadSnapshot(t)) {
+		switch obs.Finality {
+		case contracts.DenialInstanceParameter, contracts.DenialUngranted:
+			if obs.Counterfactual != nil {
+				withEnvelope++
+			} else {
+				withoutEnvelope++
+			}
+		}
+	}
+	if withEnvelope == 0 {
+		t.Error("no disclosing case carries a counterfactual")
+	}
+	if withoutEnvelope == 0 {
+		t.Error("no disclosing finality appears without a counterfactual: the pack reads as though the envelope is unconditional")
+	}
 }
 
 // The scenario proper: the frozen snapshot must produce the recorded denials,
@@ -176,8 +320,7 @@ func TestDenialsMatchTheGoldenPack(t *testing.T) {
 	}
 }
 
-// Replay: the same snapshot, evaluated again, has to say the same thing. A
-// boundary that drifts between rounds cannot be proven to an auditor.
+// Replay: the same snapshot, evaluated again, has to say the same thing.
 func TestDenialClassificationReplaysIdentically(t *testing.T) {
 	profile := loadSnapshot(t)
 	first := digest(t, observe(t, profile))
@@ -188,17 +331,22 @@ func TestDenialClassificationReplaysIdentically(t *testing.T) {
 	}
 }
 
-// Every scenario must actually be denied. A snapshot that quietly starts
-// allowing one of these would still pass a golden comparison if the golden
-// were regenerated, so the property is asserted directly.
-func TestEveryScenarioIsDenied(t *testing.T) {
-	for _, obs := range observe(t, loadSnapshot(t)) {
+// Every denial scenario must actually be denied, and the control must not be.
+// A boundary that refuses everything would otherwise pass this pack.
+func TestVerdictsSplitAsExpected(t *testing.T) {
+	profile := loadSnapshot(t)
+	for _, obs := range observe(t, profile) {
 		if obs.Verdict != contracts.WorkstationVerdictDeny {
 			t.Errorf("case %s returned %s, want DENY", obs.Case, obs.Verdict)
 		}
 		if obs.Finality == "" {
 			t.Errorf("case %s produced no finality: a denial a consumer cannot classify teaches nothing", obs.Case)
 		}
+	}
+	control := allowControl()
+	verdict, code, _ := workstation.EvaluateEvent(profile, control.event)
+	if verdict != contracts.WorkstationVerdictAllow {
+		t.Errorf("control %s returned %s/%s, want ALLOW", control.name, verdict, code)
 	}
 }
 
@@ -223,9 +371,10 @@ func TestMembershipRefusalsDiscloseNothing(t *testing.T) {
 func TestOptOutEmitsNothing(t *testing.T) {
 	profile := loadSnapshot(t)
 	profile.Learning = nil
-	for _, sc := range scenarios() {
+	for _, sc := range denialScenarios() {
 		_, code, _ := workstation.EvaluateEvent(profile, sc.event)
 		denied := contracts.AgentDeniedEffect{EffectID: sc.event.EventID, ReasonCode: code}
+		workstation.AnnotateDenial(&denied, profile, sc.event, code)
 		encoded, err := json.Marshal(denied)
 		if err != nil {
 			t.Fatalf("marshal: %v", err)

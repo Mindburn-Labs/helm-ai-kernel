@@ -328,6 +328,11 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 	for i, event := range events {
 		normalizeEvent(&event, i)
 		verdict, reasonCode, reason := EvaluateEvent(profile, event)
+		// evaluatedCode is the code our own rules produced. The declared
+		// verdict and reason code below come from the agent's event log and
+		// may disagree with it; finality is derived from this one, never from
+		// the declaration, or a producer could relabel its own refusals.
+		evaluatedCode := reasonCode
 		if event.Verdict != "" {
 			verdict = strings.ToUpper(event.Verdict)
 		}
@@ -382,7 +387,7 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 				Reason:     firstNonEmpty(event.Reason, reason),
 				OccurredAt: event.OccurredAt,
 			}
-			annotateDenial(&denied, profile, event, reasonCode)
+			AnnotateDenial(&denied, profile, event, evaluatedCode)
 			deniedEffects = append(deniedEffects, denied)
 		}
 	}

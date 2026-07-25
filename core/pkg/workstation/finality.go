@@ -79,33 +79,69 @@ func DenialFinality(reasonCode string) contracts.DenialFinality {
 func DenialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode string) *contracts.DenialCounterfactual {
 	switch denialCatalog[reasonCode].disclosure {
 	case discloseScalarBound:
-		if reasonCode == "MEMORY_TTL_EXCEEDS_POLICY" && event.MemoryEffect != nil {
-			requested := event.MemoryEffect.TTLDays
-			if requested == 0 {
-				requested = profile.Memory.DefaultTTLDays
-			}
-			return &contracts.DenialCounterfactual{
-				Field:     "ttl_days",
-				Requested: requested,
-				Max:       profile.Memory.MaxTTLDays,
-			}
+		// Only MEMORY_TTL_EXCEEDS_POLICY carries a scalar today. A future
+		// scalar code gets nil until someone writes its bound here, which is
+		// the safe direction to be wrong in.
+		if reasonCode != "MEMORY_TTL_EXCEEDS_POLICY" || event.MemoryEffect == nil {
+			return nil
+		}
+		// Only report a request the event actually made. When the event
+		// declared no TTL the effective value came from the profile default,
+		// and reporting that as "requested" would both misstate what the
+		// agent asked for and disclose a second policy scalar nobody agreed
+		// to publish.
+		requested := event.MemoryEffect.TTLDays
+		if requested == 0 || profile.Memory.MaxTTLDays == 0 {
+			return nil
+		}
+		return &contracts.DenialCounterfactual{
+			Field:     "ttl_days",
+			Requested: requested,
+			Max:       profile.Memory.MaxTTLDays,
 		}
 	case discloseCapabilityName:
-		if required := workstationPermissionForEffect(event.EffectType, event.Type, event.Action); required != "" {
-			return &contracts.DenialCounterfactual{
-				Field:      "operate.permissions",
-				Capability: required,
-			}
+		// workstationPermissionForEffect falls back to the raw effect_type
+		// for anything it does not recognise, and effect_type is producer
+		// supplied. Disclose only names from the fixed vocabulary, or a
+		// crafted event would land an arbitrary attacker-chosen string in a
+		// signed receipt field the contract describes as an enum.
+		required := workstationPermissionForEffect(event.EffectType, event.Type, event.Action)
+		if !isKnownPermission(required) {
+			return nil
+		}
+		return &contracts.DenialCounterfactual{
+			Field:      "operate.permissions",
+			Capability: required,
 		}
 	}
 	return nil
 }
 
-// annotateDenial fills the learning fields on a denied effect, subject to the
+// knownPermissions is the closed vocabulary a counterfactual may name.
+var knownPermissions = map[string]struct{}{
+	contracts.WorkstationPermissionNetworkEgress:   {},
+	contracts.WorkstationPermissionMCPMutate:       {},
+	contracts.WorkstationPermissionMemoryWrite:     {},
+	contracts.WorkstationPermissionLoopRegister:    {},
+	contracts.WorkstationPermissionShellOperate:    {},
+	contracts.WorkstationPermissionDeployPublish:   {},
+	contracts.WorkstationPermissionSecretRead:      {},
+	contracts.WorkstationPermissionPaymentInitiate: {},
+}
+
+func isKnownPermission(name string) bool {
+	_, ok := knownPermissions[name]
+	return ok
+}
+
+// AnnotateDenial fills the learning fields on a denied effect, subject to the
 // profile opting in. Both switches default off, and a disabled field is absent
 // rather than empty, so receipts from profiles that never opted in stay
 // byte-identical.
-func annotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode string) {
+//
+// reasonCode must be the code the evaluator produced, never one declared by
+// the agent's own event log — see normalizeEvents.
+func AnnotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode string) {
 	learning := profile.Learning
 	if learning == nil {
 		return

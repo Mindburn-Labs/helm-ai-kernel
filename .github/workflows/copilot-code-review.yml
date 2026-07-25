@@ -1,0 +1,33 @@
+name: Copilot code review runner
+
+# Declares the runner GitHub Copilot code review executes on. Without this file
+# Copilot falls back to copilot-setup-steps.yml; with neither, its agentic review
+# never starts before the timeout and it posts a review that reviewed nothing —
+# a green-looking reviewer with no coverage behind it.
+#
+# The job name is fixed: Copilot only picks up a job called `copilot-setup-steps`.
+# Copilot checks out the repository itself, so no setup steps are needed here.
+#
+# Path-scoped triggers keep this out of normal PR runs; it executes only when
+# this file changes, so `runs-on` stays verifiable without adding CI noise.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-code-review.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-code-review.yml
+
+permissions:
+  contents: read
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Confirm runner availability
+        run: echo "Runner reachable; Copilot code review performs its own checkout."

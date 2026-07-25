@@ -44,7 +44,7 @@ func TestVerifyProfileDevLocalPassesSealedPack(t *testing.T) {
 	packDir := writeCLISealedPack(t, dataDir)
 
 	var stdout, stderr bytes.Buffer
-	code := runVerifyCmd([]string{"--profile", "dev-local", packDir}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", "--profile", "dev-local", packDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("verify exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
@@ -59,7 +59,7 @@ func TestVerifyProfileDevLocalPassesDeclaredIndexedExtension(t *testing.T) {
 	packDir := writeCLISealedPack(t, dataDir, "helm-formal-proof")
 
 	var stdout, stderr bytes.Buffer
-	code := runVerifyCmd([]string{"--profile", "dev-local", packDir}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", "--profile", "dev-local", packDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("verify exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
@@ -74,7 +74,7 @@ func TestVerifyProfileCustomerFailsWithoutExternalTrust(t *testing.T) {
 	packDir := writeCLISealedPack(t, dataDir)
 
 	var stdout, stderr bytes.Buffer
-	code := runVerifyCmd([]string{"--profile", "customer", packDir, "--json"}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", "--profile", "customer", packDir, "--json"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("customer verify exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
@@ -200,7 +200,7 @@ func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runVerifyCmd([]string{"--profile", "customer", "--storage-receipt", receiptPath, packDir, "--json"}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", "--profile", "customer", "--storage-receipt", receiptPath, packDir, "--json"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("customer verify exit=%d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}

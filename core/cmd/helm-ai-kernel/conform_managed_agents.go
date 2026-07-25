@@ -262,6 +262,8 @@ func runConformClaudeSelfHosted(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	verifyReport, err := verifier.VerifyBundleWithOptions(packDir, verifier.VerifyOptions{
+		// Pack produced by this process; self-attested seal is expected (F-02).
+		AllowSelfAttested:               true,
 		ManagedAgentReceiptPublicKeyHex: managedAgentSignerPublicKeyHex(signer),
 	})
 	if err != nil {
@@ -285,6 +287,8 @@ func runConformClaudeSelfHosted(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	verifyReport, err = verifier.VerifyBundleWithOptions(packDir, verifier.VerifyOptions{
+		// Pack produced by this process; self-attested seal is expected (F-02).
+		AllowSelfAttested:               true,
 		ManagedAgentReceiptPublicKeyHex: managedAgentSignerPublicKeyHex(signer),
 	})
 	if err != nil {

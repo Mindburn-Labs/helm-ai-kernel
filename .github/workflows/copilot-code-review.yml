@@ -1,9 +1,12 @@
 name: Copilot code review runner
 
 # Declares the runner GitHub Copilot code review executes on. Without this file
-# Copilot falls back to copilot-setup-steps.yml; with neither, its agentic review
-# never starts before the timeout and it posts a review that reviewed nothing —
-# a green-looking reviewer with no coverage behind it.
+# Copilot falls back to copilot-setup-steps.yml; with neither, the review starts
+# on default behavior and can lose the race for a runner under load. Seen once on
+# #689: it timed out and posted a review that had reviewed nothing, while the
+# `copilot_code_review` ruleset rule still read as satisfied. Later pushes to the
+# same PR reviewed fine without this file, so the failure is intermittent — this
+# makes the start deterministic, it does not repair a broken gate.
 #
 # The job name is fixed: Copilot only picks up a job called `copilot-setup-steps`.
 # Copilot checks out the repository itself, so no setup steps are needed here.

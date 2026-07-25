@@ -176,24 +176,38 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 	switch {
 	case strings.EqualFold(tool, "Bash"):
 		command := inputString(payload.ToolInput, "command", "cmd")
-		if target, ok := shellEgressTarget(command); ok {
-			return hookClassification{
-				ShouldDecide: true,
-				Class:        "network",
-				Target:       target,
-				Action:       "network_egress",
-				ToolID:       "shell",
-				Reason:       "shell network egress",
+		// Secret material is checked first, and deliberately so. A command that
+		// both reads a secret and sends bytes off the machine is exfiltration,
+		// and classifying it as egress would let an operator who allowlisted the
+		// destination ship credentials to it without the secret policy ever being
+		// consulted. Reading the secret is the precondition, so that is the effect
+		// the decision is bound to. This is still one effect per call. Evaluating
+		// egress and secret policy together needs a decision-request change and is
+		// noted in the PR discussion.
+		secretTarget, isSecret := shellSecretReadTarget(command)
+		egressTarget, isEgress := shellEgressTarget(command)
+		switch {
+		case isSecret:
+			reason := "shell secret read"
+			if isEgress {
+				reason = "shell secret read with network egress to " + egressTarget
 			}
-		}
-		if target, ok := shellSecretReadTarget(command); ok {
 			return hookClassification{
 				ShouldDecide: true,
 				Class:        "secret",
-				Target:       target,
+				Target:       secretTarget,
 				Action:       "secret_read",
 				ToolID:       "shell",
-				Reason:       "shell secret read",
+				Reason:       reason,
+			}
+		case isEgress:
+			return hookClassification{
+				ShouldDecide: true,
+				Class:        "network",
+				Target:       egressTarget,
+				Action:       "network_egress",
+				ToolID:       "shell",
+				Reason:       "shell network egress",
 			}
 		}
 		if isDestructiveShellCommand(command) {
@@ -321,11 +335,11 @@ func shellEgressTarget(command string) (string, bool) {
 		return target, true
 	}
 	for _, segment := range splitShellSegments(command) {
-		fields := trimEnvAssignments(strings.Fields(segment))
+		fields := stripCommandWrappers(trimEnvAssignments(strings.Fields(segment)))
 		if len(fields) == 0 {
 			continue
 		}
-		tool := strings.ToLower(filepath.Base(strings.Trim(fields[0], `"'`)))
+		tool := shellToolName(fields[0])
 		if !shellNetworkTools[tool] {
 			continue
 		}
@@ -335,6 +349,50 @@ func shellEgressTarget(command string) (string, bool) {
 		return tool, true
 	}
 	return "", false
+}
+
+// shellCommandWrappers run another command as an argument. Without stripping
+// them, "bash -c 'curl https://host'" hides the egress tool behind the wrapper
+// and no decision is emitted.
+var shellCommandWrappers = map[string]bool{
+	"bash":    true,
+	"sh":      true,
+	"zsh":     true,
+	"dash":    true,
+	"ksh":     true,
+	"fish":    true,
+	"env":     true,
+	"sudo":    true,
+	"doas":    true,
+	"nohup":   true,
+	"nice":    true,
+	"timeout": true,
+	"stdbuf":  true,
+	"xargs":   true,
+	"command": true,
+	"exec":    true,
+}
+
+// stripCommandWrappers removes leading wrapper commands and their flags so the
+// tool actually being run ends up first.
+func stripCommandWrappers(fields []string) []string {
+	for len(fields) > 0 {
+		if !shellCommandWrappers[shellToolName(fields[0])] {
+			break
+		}
+		fields = fields[1:]
+		for len(fields) > 0 && strings.HasPrefix(strings.Trim(fields[0], `"'`), "-") {
+			fields = fields[1:]
+		}
+		fields = trimEnvAssignments(fields)
+	}
+	return fields
+}
+
+// shellToolName reduces an argv[0] to a bare command name, dropping any path and
+// surrounding quotes.
+func shellToolName(field string) string {
+	return strings.ToLower(filepath.Base(strings.Trim(field, `"'`)))
 }
 
 // splitShellSegments breaks a command line on the operators that begin a new
@@ -366,21 +424,37 @@ func trimEnvAssignments(fields []string) []string {
 	return fields
 }
 
-// firstDestinationArg returns the first argument that looks like a host or URL,
-// skipping flags and their values.
+// firstDestinationArg returns the first argument that looks like a host or URL.
+// An explicit URL anywhere in the argument list wins, because it is unambiguous.
+// Otherwise a bare hostname is accepted only when it is not the value of a
+// preceding flag, so that "curl -o output.txt host" does not report output.txt
+// as the destination and write a receipt naming the wrong target.
 func firstDestinationArg(args []string) (string, bool) {
+	cleaned := make([]string, 0, len(args))
 	for _, arg := range args {
-		arg = strings.Trim(arg, `"'`)
-		if arg == "" || strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "@") {
-			continue
-		}
+		cleaned = append(cleaned, strings.Trim(arg, `"'`))
+	}
+	for _, arg := range cleaned {
 		if strings.Contains(arg, "://") {
 			return arg, true
 		}
-		if strings.HasPrefix(arg, "/") || strings.HasPrefix(arg, ".") {
+	}
+	precededByFlag := false
+	for _, arg := range cleaned {
+		isFlag := strings.HasPrefix(arg, "-") && arg != "-"
+		switch {
+		case arg == "":
 			continue
-		}
-		if strings.Contains(arg, ".") || strings.Contains(arg, ":") {
+		case isFlag:
+			// A flag written as --data=value carries its own value.
+			precededByFlag = !strings.Contains(arg, "=")
+			continue
+		case precededByFlag:
+			precededByFlag = false
+			continue
+		case strings.HasPrefix(arg, "@"), strings.HasPrefix(arg, "/"), strings.HasPrefix(arg, "."):
+			continue
+		case strings.Contains(arg, "."), strings.Contains(arg, ":"):
 			return arg, true
 		}
 	}

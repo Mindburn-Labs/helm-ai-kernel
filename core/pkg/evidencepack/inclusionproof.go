@@ -21,6 +21,9 @@
 // tampered binding, tampered disclosed claim) MUST fail.
 package evidencepack
 
+// quantum_posture: classical Ed25519/SHA-256 only; no post-quantum assurance
+// is claimed or provided by this file.
+
 import (
 	"crypto/sha256"
 	"encoding/hex"

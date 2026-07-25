@@ -1,5 +1,8 @@
 package crypto
 
+// quantum_posture: classical Ed25519/SHA-256 only; no post-quantum assurance
+// is claimed or provided by this file.
+
 // Security regression tests for the Wave 1 trust-root findings.
 //
 // Each test below is a proof-of-concept exploit that FAILS on the pre-fix tree

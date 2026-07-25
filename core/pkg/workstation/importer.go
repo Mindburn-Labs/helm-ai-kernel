@@ -373,7 +373,7 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 			recurringEffects = append(recurringEffects, loop)
 		}
 		if verdict == contracts.WorkstationVerdictDeny {
-			deniedEffects = append(deniedEffects, contracts.AgentDeniedEffect{
+			denied := contracts.AgentDeniedEffect{
 				EffectID:   event.EventID,
 				EffectType: event.EffectType,
 				ToolID:     event.ToolID,
@@ -381,7 +381,9 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 				ReasonCode: reasonCode,
 				Reason:     firstNonEmpty(event.Reason, reason),
 				OccurredAt: event.OccurredAt,
-			})
+			}
+			annotateDenial(&denied, profile, event, reasonCode)
+			deniedEffects = append(deniedEffects, denied)
 		}
 	}
 	return toolActions, memoryEffects, recurringEffects, deniedEffects

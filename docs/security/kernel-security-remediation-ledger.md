@@ -1,5 +1,7 @@
 # Kernel Security Remediation Ledger
 
+<!-- quantum_posture: this ledger records classical Ed25519/SHA-256 findings; no post-quantum assurance is claimed. -->
+
 Source scan: `/Users/ivan/Code/Mindburn-Labs/.codex-security-scan/security_scan_report.portfolio_plus_addendum.md`
 
 Scope rule: strict kernel findings whose IDs start with `HELM_AI_KERNEL-` or `helm-ai-kernel-FILE-`.

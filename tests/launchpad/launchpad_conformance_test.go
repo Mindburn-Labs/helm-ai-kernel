@@ -29,7 +29,13 @@ func TestReferencePacksVerifyOffline(t *testing.T) {
 		"codex-local-container",
 	} {
 		t.Run(pack, func(t *testing.T) {
-			report, err := verifier.VerifyBundle(filepath.Join(root, "reference_packs", "launchpad", pack))
+			// These reference packs are checked into this repository and sealed
+			// with a "file-dev" signer, so their seal carries its own
+			// verification key. Self-attestation is refused by default (F-02);
+			// the packs are ours, so the provenance question does not arise here.
+			// A reference pack shipped to a third party would need a real
+			// external trust root.
+			report, err := verifier.VerifyLocallyProducedBundle(filepath.Join(root, "reference_packs", "launchpad", pack))
 			if err != nil {
 				t.Fatalf("VerifyBundle: %v", err)
 			}

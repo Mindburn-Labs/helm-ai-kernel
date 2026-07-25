@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: classical Ed25519/SHA-256 only; no post-quantum assurance
+// is claimed or provided by this file.
+
 import (
 	"context"
 	"encoding/json"

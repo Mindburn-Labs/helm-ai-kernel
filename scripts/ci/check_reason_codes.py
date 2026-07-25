@@ -27,9 +27,14 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "protocols/json-schemas/reason-codes/reason-codes-v1.schema.json"
 REGISTRY_PATH = ROOT / "protocols/json-schemas/reason-codes/reason-codes-v1.json"
 
-# Annotations carry no constraint; ignoring them is not a coverage gap.
-# `$defs` holds targets reached through `$ref`, never a constraint in itself.
-ANNOTATIONS = {"$schema", "$id", "$defs", "title", "description", "$comment"}
+# The 2020-12 core and annotation vocabularies: none of these assert anything
+# about an instance, so ignoring them is not a coverage gap. `$defs` only holds
+# targets reached through `$ref`. Assertion and applicator keywords are
+# deliberately absent — an unlisted one must fail, not be assumed harmless.
+ANNOTATIONS = {
+    "$schema", "$id", "$defs", "$comment",
+    "title", "description", "default", "examples", "deprecated", "readOnly", "writeOnly",
+}
 ENFORCED = {"$ref", "type", "const", "enum", "pattern", "properties", "required", "items", "minItems"}
 TYPES = {"object": dict, "array": list, "string": str}
 

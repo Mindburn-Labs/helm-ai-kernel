@@ -510,6 +510,36 @@ func (r *SurfaceRegistry) TransitionApproval(id string, state contracts.Approval
 	if state == contracts.ApprovalCeremonyAllowed && approval.BreakGlass && (strings.TrimSpace(reason) == "" || strings.TrimSpace(receiptID) == "") {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("break-glass approval requires reason and receipt_id")
 	}
+	// An approver identity that is merely asserted by the caller cannot
+	// establish dual control. The actor arrives as a plain string — from a
+	// request body on the HTTP route, or a CLI flag — and the only credential
+	// behind it is the single shared admin key. One key holder could therefore
+	// satisfy a 2-of-2 quorum by approving twice under two different names,
+	// which is precisely the interlock that gates high-risk actions (F-08).
+	//
+	// There is no verified approver identity on this path: the WebAuthn variant
+	// checks only that an assertion string is non-empty and never verifies it
+	// against a credential. Until one exists, a multi-party quorum is refused
+	// rather than faked. The correct implementation is
+	// boundary/approvalverify.VerifyQuorum, which already enforces distinct
+	// principal / credential / device / key and a real ed25519.Verify against
+	// authority-registry-pinned keys.
+	if state == contracts.ApprovalCeremonyAllowed {
+		if actor != "" && actor == approval.RequestedBy {
+			return contracts.ApprovalCeremony{}, fmt.Errorf(
+				"approver %q is the requester of approval %q: dual control requires a distinct approver",
+				actor, id)
+		}
+		if quorumFor(approval) > 1 {
+			approval.UpdatedAt = now
+			approval.State = contracts.ApprovalCeremonyPending
+			approval.Reason = fmt.Sprintf(
+				"approval requires a %d-party quorum, which cannot be established from an asserted actor name; "+
+					"verified approver credentials are required", quorumFor(approval))
+			return r.PutApproval(approval)
+		}
+	}
+
 	approval.State = state
 	approval.UpdatedAt = now
 	approval.Reason = reason
@@ -520,16 +550,21 @@ func (r *SurfaceRegistry) TransitionApproval(id string, state contracts.Approval
 		approval.ReceiptID = receiptID
 	}
 	if state == contracts.ApprovalCeremonyAllowed {
-		quorum := approval.Quorum
-		if quorum <= 0 {
-			quorum = 1
-		}
+		quorum := quorumFor(approval)
 		if len(approval.Approvers) < quorum {
 			approval.State = contracts.ApprovalCeremonyPending
 			approval.Reason = fmt.Sprintf("approval quorum pending: %d/%d", len(approval.Approvers), quorum)
 		}
 	}
 	return r.PutApproval(approval)
+}
+
+// quorumFor normalises an unset quorum to single-approver.
+func quorumFor(approval contracts.ApprovalCeremony) int {
+	if approval.Quorum <= 0 {
+		return 1
+	}
+	return approval.Quorum
 }
 
 func (r *SurfaceRegistry) CreateApprovalChallenge(approvalID, method string, ttl time.Duration) (contracts.ApprovalWebAuthnChallenge, error) {

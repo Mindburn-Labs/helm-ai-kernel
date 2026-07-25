@@ -184,3 +184,28 @@ says so. A missing or empty receipts directory still fails outright.
 **Correct fix for F-19/F-20/F-21** (not attempted here — it is a format change):
 specify one canonical receipt envelope and one chain-hash preimage, emit it from
 every producer, and make the declared hash recomputable.
+
+### 2026-07-25 — waves 3 and 4
+
+| ID | Finding | Status | Note |
+|---|---|---|---|
+| F-08 | One credential satisfied a multi-party quorum via an asserted `actor` string | fixed | A quorum > 1 is now **refused** rather than faked: there is no verified approver identity on this path (the WebAuthn variant only checks the assertion is non-empty). Requester ≠ approver is enforced. Single-approver ceremonies, denial and revocation are unaffected. The real implementation is `boundary/approvalverify.VerifyQuorum`; routing the HTTP path through it is the remaining work. |
+| F-09 | Executor idempotency short-circuit ran before `validateGating` | fixed | Three-line reorder. An unsigned `DecisionRecord` carrying only a known decision ID no longer yields a signed receipt. |
+| F-11 | 12 handlers in `subsystems.go` neither auth-wrapped nor declared public | fixed | All wrapped in `protectRuntimeHandler(RouteAuthAdmin, …)`; body limits added to the two mutating POST paths. `TestSubsystemRoutesAreAuthenticatedOrExplicitlyPublic` now fails on any new unguarded route, with `TestScanRoutesDetectsAnUnguardedRoute` as its negative control. |
+| F-12 | Rate-limit bucket key derived from attacker-chosen headers | fixed | The bucket is now bound to the peer address as well as the asserted actor, so rotating `X-Helm-Actor-ID` cannot mint fresh buckets and one caller cannot exhaust another's allowance. |
+| F-13 | Public `/__helm/config.json` published the tenant gate's expected values | fixed | `tenant_id`/`principal_id` are disclosed only to loopback callers, checked against the real peer address rather than a forwarding header. |
+| F-14 | `.golangci.yml` never executed; gosec absent | partial | `make lint-security` now runs golangci-lint with gosec over the TCB packages. **Not wired into CI**: it reports 14 findings, several of them gosec false positives (e.g. G101 on the `ContextCredentialHash` map-key constant). Triage then promote to blocking. |
+
+**Third instance of a test asserting the vulnerability.** `TestApprovalTransitionEnforcesQuorumAndTimelock`
+asserted that two `TransitionApproval` calls naming "user:alice" and "user:bob"
+satisfied a 2-of-2 quorum — the F-08 bypass, encoded as expected behaviour. It
+now asserts the refusal. Counting `zeroid_test.go` and the verifier seal
+fixtures, three separate suites were protecting a defect from being fixed.
+
+### Still open after this pass
+
+F-05/F-06 (receipt signature covers 8 of ~80 fields; unescaped `:` preimages —
+needs the versioned v5 JCS envelope), F-10 (self-attesting inclusion proofs),
+F-15 (Dependabot disabled while Renovate auto-merges), F-16 (vacuous
+`tests/parity_test.go`), F-20/F-21, live black-box pentest, and propagation of
+all of the above into `helm-ai-enterprise`.

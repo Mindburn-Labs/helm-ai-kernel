@@ -401,20 +401,78 @@ var shellCommandWrappers = map[string]bool{
 	"exec":    true,
 }
 
-// stripCommandWrappers removes leading wrapper commands and their flags so the
-// tool actually being run ends up first.
+// wrapperValueFlags lists the flags of each wrapper that consume the token after
+// them. Without this, "sudo -u root curl host" resolves to root rather than curl
+// and the egress is never classified.
+var wrapperValueFlags = map[string]map[string]bool{
+	"sudo":    {"-u": true, "-g": true, "-p": true, "-r": true, "-t": true, "-c": true, "-h": true},
+	"doas":    {"-u": true, "-c": true},
+	"env":     {"-u": true, "-c": true, "-s": true},
+	"nice":    {"-n": true},
+	"timeout": {"-s": true, "-k": true, "--signal": true, "--kill-after": true},
+	"stdbuf":  {"-i": true, "-o": true, "-e": true},
+	"xargs":   {"-i": true, "-l": true, "-n": true, "-p": true, "-s": true, "-a": true, "-d": true, "-e": true},
+	"exec":    {"-a": true},
+}
+
+// wrapperLeadingPositional marks wrappers that take a positional argument of
+// their own before the command, such as the duration in "timeout 5 curl host".
+var wrapperLeadingPositional = map[string]bool{"timeout": true}
+
+// stripCommandWrappers removes leading wrapper commands, their flags, and any
+// values those flags consume, so the tool actually being run ends up first.
 func stripCommandWrappers(fields []string) []string {
 	for len(fields) > 0 {
-		if !shellCommandWrappers[shellToolName(fields[0])] {
+		name := shellToolName(fields[0])
+		if !shellCommandWrappers[name] {
 			break
 		}
+		valueFlags := wrapperValueFlags[name]
 		fields = fields[1:]
-		for len(fields) > 0 && strings.HasPrefix(strings.Trim(fields[0], `"'`), "-") {
+		for len(fields) > 0 {
+			arg := strings.Trim(fields[0], `"'`)
+			if !strings.HasPrefix(arg, "-") || arg == "-" {
+				break
+			}
+			fields = fields[1:]
+			// A flag written as --signal=TERM carries its own value.
+			if strings.Contains(arg, "=") {
+				continue
+			}
+			if valueFlags[strings.ToLower(arg)] && len(fields) > 0 {
+				fields = fields[1:]
+			}
+		}
+		if wrapperLeadingPositional[name] && len(fields) > 1 && isDurationLike(strings.Trim(fields[0], `"'`)) {
 			fields = fields[1:]
 		}
 		fields = trimEnvAssignments(fields)
 	}
 	return fields
+}
+
+// isDurationLike reports whether a token looks like a timeout duration such as
+// 5, 1.5, or 30s.
+func isDurationLike(arg string) bool {
+	trimmed := strings.TrimRight(strings.ToLower(arg), "smhd")
+	if trimmed == "" {
+		return false
+	}
+	for _, r := range trimmed {
+		if (r < '0' || r > '9') && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+// shellTokens splits a command on whitespace and on the shell operators that can
+// sit flush against a path, so that "id_rsa|nc" yields "id_rsa" rather than a
+// target with punctuation glued to it.
+func shellTokens(command string) []string {
+	return strings.FieldsFunc(command, func(r rune) bool {
+		return strings.ContainsRune(" \t\n\r\v\f|;&<>()", r)
+	})
 }
 
 // shellToolName reduces an argv[0] to a bare command name, dropping any path and
@@ -524,7 +582,7 @@ func devSocketTarget(command string) (string, bool) {
 // shellSecretReadTarget reports whether a shell command touches well-known secret
 // material and returns the path it references.
 func shellSecretReadTarget(command string) (string, bool) {
-	for _, field := range strings.Fields(command) {
+	for _, field := range shellTokens(command) {
 		cleaned := strings.Trim(field, `"'@<>`)
 		// A URL that merely mentions secret-looking material, such as
 		// https://example.com/cert.pem, is a download rather than a local secret

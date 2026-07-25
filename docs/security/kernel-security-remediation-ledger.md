@@ -227,3 +227,35 @@ proven nothing if it had. Deleted rather than repaired: a real parity test has
 to execute all five SDK canonicalizers over a shared vector set and compare the
 digests they actually produce, which is a separate piece of work. Removing the
 file makes the absence of that coverage visible instead of simulated.
+
+### 2026-07-25 — F-05/F-06 v5 envelope: implemented, not yet activated
+
+`core/pkg/crypto/canonical_v5.go` adds `ReceiptPreimageV5` (JCS over the whole
+receipt minus its signature), `ReceiptPreimageV4` (the legacy eight-field
+string, retained for verification only) and `VerifyReceiptSignature`, which
+tries v5 then v4 and reports which matched.
+
+Two properties are proven by test: a JCS object cannot suffer the v4
+field-boundary collision (`TestF06_FieldBoundaryShiftNoLongerCollides`, which
+first asserts the v4 collision still reproduces so it cannot pass vacuously),
+and the signature is excluded from its own preimage.
+
+**`SignReceipt` still emits v4.** Switching it over is blocked on the receipt
+store: `receiptColumns` (`core/pkg/store/receipt_store.go:98`) has **no column
+for `key_id`, `public_key_set`, `signature_profile`, `signature_algorithm` or
+`correlation_id`**. Those fields are empty after a load, so a signature covering
+them cannot match a persisted receipt. Attempting the switch turned five CLI
+tests red for exactly this reason.
+
+Signing only the subset that survives the store would silently reintroduce F-05
+for everything dropped, so the ordering is: **schema migration first, then flip
+the signer**. A second, smaller dependency: `anchorReceiptTransparency` mutates
+the receipt after signing, so `transparency`, `log_id` and `leaf_index` are
+excluded from the envelope — matching the carve-out `contracts.ReceiptChainHash`
+already makes for the same reason.
+
+**Fourth test found asserting a vulnerability as intended behaviour:**
+`TestDemoVerifyRejectsUnsignedEnvelopeMutation` requires `signature_valid ==
+true` after mutating `Metadata` — i.e. it asserts that most of the receipt is
+outside the signature. It is left as-is because the signer still emits v4;
+it must be inverted in the same change that flips the signer.

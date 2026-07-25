@@ -62,6 +62,12 @@ message DenyPayload {
   repeated ReasonCodeRef reason_codes = 1;
   // Deterministic witness trace.
   string witness_id = 2;
+  // What kind of "no" this was. UNSPECIFIED when the policy profile has not
+  // opted in, or when no rule classified the denial.
+  DenialFinality finality = 3;
+  // Nearest allowed envelope. Absent unless the profile opts in AND the
+  // denial's disclosure class permits one — see DenialCounterfactual.
+  DenialCounterfactual counterfactual = 4;
 
   reserved 100 to 199;
 }
@@ -73,6 +79,63 @@ message RequireApprovalPayload {
   repeated SignerSpec required_signatures = 3;
   // Optional fact requests.
   repeated FactRequest fact_requests = 4;
+  // Escalations carry a finality too, and it is not always UNGRANTED: an
+  // escalation raised because the context was tainted is INSTANCE_CONTEXT.
+  // A consumer reads the verdict kind to know what to do, and the finality
+  // to know what to learn.
+  DenialFinality finality = 5;
+
+  reserved 100 to 199;
+}
+
+// ── Denial Legibility ──────────────────────────────────────────
+
+// DenialFinality says what kind of refusal this was, so an agent can draw the
+// right lesson from it rather than retrying at random.
+//
+// It is derived from the rule that fired, never assigned by a caller. A
+// hand-set value drifts from the rule it claims to describe, and a denial that
+// teaches has to teach the same lesson every time it is replayed.
+enum DenialFinality {
+  // Not classified, or the policy profile has not opted in. A consumer must
+  // treat this as "no information" and change nothing it has learned.
+  DENIAL_FINALITY_UNSPECIFIED = 0;
+  // The action itself is forbidden. Erase any stored bounds for it and stop
+  // probing.
+  DENIAL_FINALITY_CLASS_FORBIDDEN = 1;
+  // Nothing granted this action. There is no bound to learn and nothing to
+  // retry; it needs an authority to say yes. Carried on REQUIRE_APPROVAL
+  // where a signer exists to address, and on DENY where none does.
+  DENIAL_FINALITY_UNGRANTED = 2;
+  // A bound was exceeded. Record the bound and retry within it.
+  DENIAL_FINALITY_INSTANCE_PARAMETER = 3;
+  // The surrounding context was refused — taint, for example. The refusal was
+  // not about the action, so a consumer should touch none of its stored
+  // bounds.
+  DENIAL_FINALITY_INSTANCE_CONTEXT = 4;
+}
+
+// DenialCounterfactual is the nearest allowed envelope for a refusal: enough
+// for an agent to retry correctly, and deliberately no more.
+//
+// Emitted for scalar bounds and required-capability names only. Refusals that
+// turn on set membership never carry one. An egress allowlist or a set of
+// workspace roots is a map of internal infrastructure, and answering "not that
+// one, try these" would turn every refusal into a free probe of the estate.
+//
+// The counterfactual is computed from the same policy snapshot that produced
+// the verdict — the bundle already committed in CpiVerdict.policy_bundle_hash.
+// A counterfactual derived from any other snapshot would describe a boundary
+// that never denied anything.
+message DenialCounterfactual {
+  // Policy field that bound the request, e.g. "ttl_days".
+  string field = 1;
+  // Scalar bound. Minor units for money, never float, per EffectDigest.
+  int64 requested = 2;
+  int64 max = 3;
+  // Capability the action would have needed, from the fixed permission
+  // vocabulary. Never an instance identifier.
+  string capability = 4;
 
   reserved 100 to 199;
 }

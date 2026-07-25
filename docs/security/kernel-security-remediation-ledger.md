@@ -314,3 +314,42 @@ type, and vulnerability alerts are raised for review rather than merged.
 Flaky under full-suite load, unrelated to these changes: `TestLivenessAutoExpiry`
 (`pkg/governance`) and `TestDockerRunnerValidateAndRun` (`pkg/sandbox/docker`).
 Both pass in isolation.
+
+### 2026-07-25 — receipt-store schema migration (unblocks v5)
+
+`key_id`, `public_key_set`, `signature_profile`, `signature_algorithm` and
+`correlation_id` are now persisted and reloaded by both receipt-store backends
+(SQLite via the existing additive `ensureColumn` path, Postgres via
+`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Schema, `receiptColumns`, both scan
+paths and both insert paths were widened; `encodePublicKeySet` stores an absent
+key set as SQL NULL so a reloaded receipt is byte-identical to the signed one.
+
+This removes the first blocker on activating the v5 envelope: a signature
+covering the signer's own identity can now survive persistence.
+
+**v5 is still not activated.** Enabling it surfaced a second, distinct problem —
+**the receipt is mutated after it is signed**, in at least three places:
+
+1. `anchorReceiptTransparency` (`cmd/helm-ai-kernel/receipt_routes.go:292`)
+   writes `LogID`, `LeafIndex` and `Transparency`. Handled: those three fields
+   are excluded from the envelope, matching `contracts.ReceiptChainHash`.
+2. `buildNextCausalReceipt` (`pkg/store/receipt_store.go:495`) assigns
+   `ExecutorID` when the builder left it empty — after the builder callback has
+   already signed. Not handled.
+3. The mcp-proof and demo paths, which sign and then serialise with additional
+   fields set (`TestDemoMCPAlias`, `TestRunMCPProof*`,
+   `TestQuickstartOnboardingRunStepSignsReceiptAndExportsEvidence` fail on this).
+
+Any signature over a whole receipt is only as stable as the guarantee that
+nothing touches the receipt afterwards. The remaining work is a **systematic
+sweep for post-sign mutation**, not a field-by-field carve-out: each carve-out
+silently returns that field to the F-05 unsigned set. The correct shape is to
+assemble the receipt completely, sign last, and treat any later write as a bug —
+enforceable with a test that signs, re-serialises, and re-verifies at every
+boundary the receipt crosses.
+
+Activation checklist once that lands: flip `SignReceipt` to `ReceiptPreimageV5`,
+point both `VerifyReceipt` methods at `VerifyReceiptSignature`, restore the
+`TestF05_PreviouslyUnsignedFieldsAreNowCovered` cases, and invert
+`TestDemoVerifyRejectsUnsignedEnvelopeMutation`, which still asserts that
+mutating `Metadata` leaves the signature valid.

@@ -17,9 +17,9 @@ cd tests/conformance
 GOWORK=off go test ./...
 ```
 
-`GOWORK=off` is not optional: the repo has a `go.work`, and without it the
-module resolves against the workspace build list rather than its own `go.mod`,
-so a local pass need not mean a CI pass.
+`GOWORK=off` is not optional: the repo has a `go.work`, and without that flag
+the module resolves against the workspace build list rather than its own
+`go.mod`, so a local pass need not mean a CI pass.
 
 This is the same command CI runs. `scripts/ci/go_module_tests.sh` discovers
 every tracked `go.mod` and runs `GOWORK=off go test ./...` in each. It is wired

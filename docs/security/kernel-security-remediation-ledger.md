@@ -209,3 +209,21 @@ needs the versioned v5 JCS envelope), F-10 (self-attesting inclusion proofs),
 F-15 (Dependabot disabled while Renovate auto-merges), F-16 (vacuous
 `tests/parity_test.go`), F-20/F-21, live black-box pentest, and propagation of
 all of the above into `helm-ai-enterprise`.
+
+### F-16 — `tests/parity_test.go` removed
+
+The file claimed to prove cross-language canonicalization parity across the Go,
+Python, TS, Rust and Java SDKs. It did not:
+
+- `goHash`, `pyHash`, `tsHash` and `rsHash` were four identical hard-coded
+  literals compared to each other, so the assertion could never fail.
+- `encoding/json` and `os/exec` were imported without being used, and
+  `malformedPayload` was declared without being used — all compile errors in Go.
+- It sat in `package tests` at `tests/` root, which has no `go.mod`, so it
+  belonged to no module and nothing ever built it.
+
+It was therefore a test that could not compile, was never run, and would have
+proven nothing if it had. Deleted rather than repaired: a real parity test has
+to execute all five SDK canonicalizers over a shared vector set and compare the
+digests they actually produce, which is a separate piece of work. Removing the
+file makes the absence of that coverage visible instead of simulated.

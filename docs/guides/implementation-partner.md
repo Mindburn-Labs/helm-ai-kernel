@@ -5,7 +5,7 @@ last_reviewed: 2026-07-15
 
 # Implementation Partner Handoff
 
-This guide packages the local, self-hosted HELM AI Kernel v0.7.2 surface for an
+This guide packages the local, self-hosted HELM AI Kernel v0.7.5 surface for an
 implementation partner. It does not describe a hosted HELM API.
 
 NavigoTech Innovation is an official HELM implementation partner.
@@ -22,9 +22,9 @@ brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel --version
 ```
 
-The expected release for this packet is `0.7.2`. If the registry or local cache
+The expected release for this packet is `0.7.5`. If the registry or local cache
 does not return that release, stop and use the signed asset from the
-[v0.7.2 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.2).
+[v0.7.5 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.5).
 
 ## 2. Run A Clean Local Proof
 
@@ -82,7 +82,7 @@ If the selected SDK cannot send a required identity header, stop and use direct
 HTTP or a client generated from `/openapi.yaml`. Never remove a required scope
 merely to make an example run.
 
-At v0.7.2, the handwritten TypeScript and Python clients cannot set the
+At v0.7.5, the handwritten TypeScript and Python clients cannot set the
 principal header, and the Go client cannot set the optional workspace header.
 Use those convenience clients only for routes covered by their helpers. For a
 protected evaluate call, direct HTTP or a generated OpenAPI client is the

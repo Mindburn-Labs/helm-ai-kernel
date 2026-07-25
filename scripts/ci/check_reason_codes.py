@@ -10,10 +10,12 @@ check_json_schemas.py's optional `import jsonschema` — which silently degrades
 to a parse-only pass when absent — is how this drift survived review. A checker
 that can no-op is not a gate.
 
-The whole document is walked from the schema root, so a constraint added
-anywhere — root, `codes`, an entry, a `$defs` target — is either enforced or
-reported. Any keyword outside ENFORCED/ANNOTATIONS is a hard failure rather
-than a silent skip, so tightening the schema forces this checker to keep up.
+Two passes, because they have different reach. `audit` walks the schema itself
+— every property, every `$defs` target, used or not — and fails on any keyword
+outside ENFORCED/ANNOTATIONS, so tightening the schema anywhere forces this
+checker to keep up. `validate` then walks the registry against that schema.
+Auditing along the instance instead would leave optional properties no entry
+happens to use silently unenforced.
 """
 
 from __future__ import annotations
@@ -39,12 +41,29 @@ ENFORCED = {"$ref", "type", "const", "enum", "pattern", "properties", "required"
 TYPES = {"object": dict, "array": list, "string": str}
 
 
-def validate(where: str, value: Any, spec: dict[str, Any], root: dict[str, Any], out: list[str]) -> None:
+def audit(where: str, spec: dict[str, Any], out: list[str]) -> None:
+    """Walk the schema itself, so coverage does not depend on what the data reaches.
+
+    An optional property no entry happens to use, or a `$defs` target nothing
+    refers to, is still a place a constraint can be declared. Auditing along the
+    instance would leave those branches unvisited and silently unenforced.
+    """
     unenforced = set(spec) - ENFORCED - ANNOTATIONS
     if unenforced:
         out.append(f"{where}: schema keyword(s) {sorted(unenforced)} are not enforced by {Path(__file__).name}")
-        return
+    declared = spec.get("type")
+    if declared is not None and declared not in TYPES:
+        out.append(f"{where}: schema type {declared!r} is not enforced by {Path(__file__).name}")
 
+    for name, subschema in spec.get("properties", {}).items():
+        audit(f"{where}.{name}", subschema, out)
+    for name, subschema in spec.get("$defs", {}).items():
+        audit(f"{where}#/$defs/{name}", subschema, out)
+    if "items" in spec:
+        audit(f"{where}[]", spec["items"], out)
+
+
+def validate(where: str, value: Any, spec: dict[str, Any], root: dict[str, Any], out: list[str]) -> None:
     # 2020-12 allows `$ref` siblings, so apply the target and then the rest.
     ref = spec.get("$ref")
     if ref is not None:
@@ -59,8 +78,7 @@ def validate(where: str, value: Any, spec: dict[str, Any], root: dict[str, Any],
     if declared is not None:
         expected = TYPES.get(declared)
         if expected is None:
-            out.append(f"{where}: schema type {declared!r} is not enforced by {Path(__file__).name}")
-            return
+            return  # audit() already reported it; nothing sound to check here
         if not isinstance(value, expected):
             out.append(f"{where}: expected {declared}, got {type(value).__name__}")
             return
@@ -95,6 +113,7 @@ def main() -> int:
     registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
 
     failures: list[str] = []
+    audit("schema", schema, failures)
     validate("registry", registry, schema, schema, failures)
 
     if failures:

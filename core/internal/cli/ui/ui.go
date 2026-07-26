@@ -331,6 +331,19 @@ func ValueFlagNames(fs *flag.FlagSet) map[string]bool {
 // receipt format id) pass false; --format then still consumes its value via
 // valueFlags but never selects the error mode.
 func RequestedFormat(args []string, def Format, valueFlags map[string]bool, formatSelector bool) Format {
+	if def == FormatJSON {
+		// A FormatJSON default marks a JSON-only command (plan compile): the
+		// mode is its contract, not a preference, and its post-parse error
+		// paths pin FormatJSON outright. Scanning flags here would let
+		// --format=text or --json=false deselect JSON on the parse-failure
+		// path alone, so `plan compile --format=text --bogus` answered in
+		// text while every other failure of the same command answered in
+		// JSON. Nothing can deselect it.
+		// ponytail: an early return works because Format is exactly
+		// text|json; a third output mode would need a per-command
+		// "modes offered" set instead.
+		return FormatJSON
+	}
 	f := def
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--" {

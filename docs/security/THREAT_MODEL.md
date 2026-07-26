@@ -1,8 +1,9 @@
 # HELM AI Kernel Threat Model
 
-Version: 2026-07-15-security-evidence-loop-v3
+Version: 2026-08-03-security-evidence-loop-v4
+Version Hash: no signed release artifact has been created for this source revision
 Owner: HELM Kernel Security
-Review Date: 2026-07-15
+Review Date: 2026-08-03
 
 ## Assets
 

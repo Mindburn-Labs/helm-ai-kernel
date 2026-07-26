@@ -403,3 +403,99 @@ protecting defects from being fixed.** Every one of them passed CI continuously.
 HELM-354; the commercial repo had not. Worth a periodic drift check between the
 two module graphs — a vulnerability patched on one side does not propagate,
 because `go.mod` is not in the synced protected paths.
+
+### 2026-07-26 — F-23: the receipt store persists a third of the receipt
+
+| ID | Sev | Finding | Status |
+|---|---|---|---|
+| F-23 | T1 | `receiptColumns` covers 25 of the `Receipt` struct's 75 JSON fields. The other 50 are silently dropped on write, so a receipt read back from the store is not the receipt that was issued. | open — needs a schema decision |
+
+Found empirically while attempting to activate the v5 envelope: dumping the JCS
+preimage at sign time and at verify time showed a single-field difference —
+`reason_code` was `DANGEROUS_REQUEST_DENIED` when signed and absent when
+reloaded. A systematic diff of the struct against the column list then showed it
+was not one field but fifty.
+
+Dropped fields include, among others: `verdict`, `decision_hash`, `policy_hash`,
+`reason_code`, `idempotency_key`, `session_id`, `tool_name`, `tool_fingerprint`,
+`risk_tier`, `effect_type`, `evidence`, `witness_signatures`, `provenance`,
+`scope_hash`, `content_hash`, `prev_receipt_id`, `safe_dep_state`,
+`emergency_activation_id`.
+
+Full list of the 50 dropped fields:
+
+- `witness_signatures`
+- `replay_script`
+- `provenance`
+- `bundled_artifacts`
+- `gateway_id`
+- `runtime_type`
+- `runtime_version`
+- `model_hash`
+- `network_log_ref`
+- `secret_events_ref`
+- `port_exposures`
+- `sandbox_lease_id`
+- `effect_graph_node_id`
+- `type`
+- `launch_id`
+- `decision_hash`
+- `verdict`
+- `subject`
+- `created_at`
+- `pack_id`
+- `pack_name`
+- `pack_version`
+- `pack_hash`
+- `action`
+- `installed_by`
+- `installed_at`
+- `prev_receipt_id`
+- `content_hash`
+- `risk_tier`
+- `effect_type`
+- `tool_fingerprint`
+- `evidence`
+- `retry_count`
+- `idempotency_key`
+- `tool_name`
+- `reason_code`
+- `skill_id`
+- `skill_content_hash`
+- `policy_hash`
+- `projection_paths`
+- `direction`
+- `counterparty`
+- `session_id`
+- `scope_hash`
+- `issued_at`
+- `emergency_activation_id`
+- `emergency_delegation_session_id`
+- `emergency_scope_hash`
+- `safe_dep_state`
+- `safe_dep_reason_code`
+
+**This is why the earlier five-column migration did not unblock v5.** That fix
+was correct but scoped to the signer-identity fields the first diagnosis
+surfaced; the real gap is an order of magnitude larger.
+
+**Do not fix this by adding fifty columns.** The right shape is the standard one
+for signed records: keep the indexed columns for querying, and add a single
+column holding the canonical signed bytes verbatim. Verification then reads the
+stored envelope rather than reconstructing it from columns, which removes this
+entire class — a field added to the struct later cannot silently fall out of the
+signature because nobody added a column for it.
+
+Until that lands, `SignReceipt` correctly stays on the v4 preimage: signing a
+whole envelope that the storage layer cannot return intact would produce
+receipts that fail their own verification after a round trip.
+
+**Separately worth a product decision, independent of signing:** `verdict`,
+`policy_hash` and `reason_code` are the fields that record what was decided and
+why. Whether they are expected to survive in this store — or are considered
+carried by the EvidencePack path instead — should be settled explicitly rather
+than left implicit.
+
+Post-sign mutation, the other v5 blocker, is now partly closed:
+`buildNextCausalReceipt` no longer assigns `ExecutorID` to an already-signed
+receipt; it requires the builder to bind the session before signing.

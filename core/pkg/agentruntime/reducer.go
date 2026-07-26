@@ -75,6 +75,19 @@ func (s *State) EffectiveTools(callIndex int) []ToolDescriptor {
 	return out
 }
 
+// durableToolCall returns the tool call the model actually asked for, as
+// recorded in the durable assistant message for callIndex. Nothing outside
+// model_call_completed can introduce a tool call, so this is the only
+// authority on a call's tool_id and args.
+func (s *State) durableToolCall(toolCallID string, callIndex int) (ToolCall, bool) {
+	for _, tc := range s.AssistantMessages[callIndex].ToolCalls {
+		if tc.ToolCallID == toolCallID {
+			return tc, true
+		}
+	}
+	return ToolCall{}, false
+}
+
 func (s *State) toolDescriptor(toolID string, callIndex int) *ToolDescriptor {
 	for i, t := range s.EffectiveTools(callIndex) {
 		if t.ToolID == toolID {
@@ -360,12 +373,36 @@ func (s *State) applyToolInvocationRequested(p *ToolInvocationRequested) error {
 	if dec, decided := s.PermissionDecisions[p.ToolCallID]; decided && dec.Decision == DecisionDeny {
 		return fmt.Errorf("tool call %q was denied; a denied call is never invoked", p.ToolCallID)
 	}
+	// Fail-closed: the invocation must dispatch the call the model actually
+	// made. Matching tool_call_id alone let an invocation name a different
+	// tool_id — one with no descriptor, so the permission gate below found
+	// nothing to enforce — or carry different args than the ones a permission
+	// was decided over.
+	call, recorded := s.durableToolCall(p.ToolCallID, callIdx)
+	if !recorded {
+		return fmt.Errorf("tool call %q is not in the durable assistant message for model call %d", p.ToolCallID, callIdx)
+	}
+	if p.ToolID != call.ToolID {
+		return fmt.Errorf("tool call %q was requested for tool %q, not %q", p.ToolCallID, call.ToolID, p.ToolID)
+	}
+	// Event validation already binds p.ArgsHash to p.Args, so comparing the
+	// hash of the model's args binds the args themselves.
+	wantArgs, err := ComputeArgsHash(call.Args)
+	if err != nil {
+		return fmt.Errorf("tool call %q: hashing the requested args: %w", p.ToolCallID, err)
+	}
+	if p.ArgsHash != wantArgs {
+		return fmt.Errorf("tool call %q args do not match the model's request", p.ToolCallID)
+	}
 	// Fail-closed: a tool whose descriptor requires permission may only be
-	// invoked after a durable allow decision.
-	if desc := s.toolDescriptor(p.ToolID, callIdx); desc != nil && desc.RequiresPermission {
+	// invoked after a durable allow decision carrying a kernel verdict.
+	if desc := s.toolDescriptor(call.ToolID, callIdx); desc != nil && desc.RequiresPermission {
 		dec, decided := s.PermissionDecisions[p.ToolCallID]
 		if !decided || dec.Decision != DecisionAllow {
-			return fmt.Errorf("tool %q requires permission; no durable allow decision for %q", p.ToolID, p.ToolCallID)
+			return fmt.Errorf("tool %q requires permission; no durable allow decision for %q", call.ToolID, p.ToolCallID)
+		}
+		if dec.VerdictRef == "" {
+			return fmt.Errorf("tool %q requires permission; the allow for %q carries no kernel verdict reference", call.ToolID, p.ToolCallID)
 		}
 	}
 	s.OpenInvocations[p.ToolCallID] = *p

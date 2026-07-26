@@ -125,6 +125,15 @@ func (s *Store) Append(turnID string, candidates ...Event) (*AppendResult, error
 	lock.Lock()
 	defer lock.Unlock()
 
+	// The mutex only covers this Store value. Take the cross-process lock too,
+	// so a second Store over the same directory cannot read the same head and
+	// assign a duplicate Seq.
+	unlock, err := lockTurnFile(path)
+	if err != nil {
+		return nil, &InfraError{Op: "lock", Err: err}
+	}
+	defer unlock()
+
 	existing, _, headHash, err := s.loadLocked(path, turnID)
 	if err != nil {
 		return nil, err

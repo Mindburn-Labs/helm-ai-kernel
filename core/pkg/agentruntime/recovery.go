@@ -29,6 +29,12 @@ const (
 	// pending async work or outstanding permissions exist but the log has
 	// no suspension snapshot.
 	ActionAppendSuspensionSnapshot RecoveryActionKind = "append_suspension_snapshot"
+	// ActionFailTurnBudgetExhausted appends
+	// turn_failed{class:"budget_exhausted"} when the interrupted model call
+	// consumed the final budget slot. Re-issuing is impossible — the reducer
+	// rejects a request past MaxModelCalls — so the turn terminates instead
+	// of being planned into an action that can never be applied.
+	ActionFailTurnBudgetExhausted RecoveryActionKind = "fail_turn_budget_exhausted"
 )
 
 // RecoveryAction is one deterministic recovery step. Actions are produced
@@ -73,10 +79,21 @@ func PlanRecovery(events []Event) ([]RecoveryAction, error) {
 			Kind:   ActionCloseInterruptedModelCall,
 			Reason: fmt.Sprintf("model call %d was open at crash; close as interrupted (budget already charged at request)", state.OpenModelCallIndex),
 		})
-		actions = append(actions, RecoveryAction{
-			Kind:   ActionReissueModelCall,
-			Reason: "re-issue the model call as the next call index; it counts against the budget",
-		})
+		// The interrupted call already charged budget at request time. If it
+		// took the last slot there is no slot to re-issue into — the reducer
+		// would reject the reissue and the turn could never be recovered, so
+		// plan the terminal failure the log actually implies.
+		if state.ModelCallsRequested >= state.Created.MaxModelCalls {
+			actions = append(actions, RecoveryAction{
+				Kind:   ActionFailTurnBudgetExhausted,
+				Reason: fmt.Sprintf("interrupted model call consumed the final budget slot (%d/%d); no re-issue is possible", state.ModelCallsRequested, state.Created.MaxModelCalls),
+			})
+		} else {
+			actions = append(actions, RecoveryAction{
+				Kind:   ActionReissueModelCall,
+				Reason: "re-issue the model call as the next call index; it counts against the budget",
+			})
+		}
 	}
 
 	// Interrupted sync tools: may have executed -> indeterminate, never

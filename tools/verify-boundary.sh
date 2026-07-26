@@ -90,17 +90,32 @@ if [ "$MODE" = "commercial" ]; then
   # shellcheck source=tools/boundary/protected-dirs.sh
   source "$SCRIPT_DIR/boundary/protected-dirs.sh"
 
+  # The manifest cannot list itself, so it is never "extra". Without this the
+  # scan of tools/boundary would report protected.manifest on every run — and
+  # since the counter above now actually survives the loop, that would fail the
+  # gate unconditionally.
+  SELF_EXCLUDE="tools/boundary/protected.manifest"
+
+  # Compare against the manifest's path column as whole lines. The old
+  # `grep -q "  $relpath$"` interpolated the path as a regular expression, so a
+  # path containing regex metacharacters matched the wrong entry or none at all.
+  MANIFEST_PATHS="$(mktemp)"
+  trap 'rm -f "$MANIFEST_PATHS"' EXIT
+  sed -n 's/^[0-9a-f]\{64\}  //p' "$MANIFEST" > "$MANIFEST_PATHS"
+
   for dir in "${PROTECTED_DIRS[@]}"; do
     if [ -d "$REPO_ROOT/$dir" ]; then
       # Redirect rather than pipe: a `find | while` loop runs in a subshell, so
       # every EXTRA increment was discarded and TOTAL_ERRORS never saw one.
+      # Match symlinks too: a symlinked .go file compiles like any other.
       while IFS= read -r f; do
         relpath="${f#$REPO_ROOT/}"
-        if ! grep -q "  $relpath$" "$MANIFEST"; then
+        [ "$relpath" = "$SELF_EXCLUDE" ] && continue
+        if ! grep -qxF "$relpath" "$MANIFEST_PATHS"; then
           echo "  ✗ EXTRA: $relpath (not in manifest)"
           EXTRA=$((EXTRA + 1))
         fi
-      done < <(find "$REPO_ROOT/$dir" -type f)
+      done < <(find "$REPO_ROOT/$dir" \( -type f -o -type l \))
     fi
   done
 

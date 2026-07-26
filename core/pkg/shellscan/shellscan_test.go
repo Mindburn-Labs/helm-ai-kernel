@@ -106,6 +106,26 @@ var decideCases = []struct {
 	{"regression-env-split-string", `env -S "rm -rf /tmp/x"`, "recursive rm"},
 	{"regression-env-unknown-flag", "env --frobnicate rm -rf /tmp/x", "unrecognized flag"},
 
+	// Regression: P1 ENV_SPLIT_SUFFIX_BYPASS — env -S splits only its own
+	// payload; trailing operands are appended to the split words and used to
+	// run a command. Classifying the payload alone let the suffix through.
+	{"regression-env-split-suffix", `env -S 'FOO=x' rm --recursive --force /tmp/x`, "fail-closed"},
+	{"regression-env-split-suffix-long", `env --split-string='FOO=x' rm -rf /tmp/x`, "fail-closed"},
+	{"regression-env-split-suffix-command", `env -S '-i' rm --recursive --force /tmp/x`, "recursive rm"},
+
+	// Regression: P1 UNKNOWN_WRAPPER_BYPASS — process-executor wrappers take
+	// their own operands (duration, lockfile, mask) before the real command;
+	// treating the wrapper as the command left the payload unclassified.
+	{"regression-wrapper-timeout", "timeout 1 rm --recursive --force /tmp/x", "recursive rm"},
+	{"regression-wrapper-timeout-flags", "timeout --preserve-status -s KILL 1 rm -rf /tmp/x", "recursive rm"},
+	{"regression-wrapper-flock-command", `flock -c 'rm -rf /tmp/x' /tmp/l`, "recursive rm"},
+	{"regression-wrapper-taskset", "taskset 0x1 rm --recursive --force /tmp/x", "recursive rm"},
+	{"regression-wrapper-chrt", "chrt -f 10 rm -rf /tmp/x", "recursive rm"},
+	{"regression-wrapper-ionice", "ionice -c 3 rm --recursive --force /tmp/x", "recursive rm"},
+	{"regression-wrapper-nested", "timeout 1 flock /tmp/l rm -rf /tmp/x", "recursive rm"},
+	{"regression-wrapper-unknown-flag", "timeout --frobnicate 1 rm -rf /tmp/x", "unrecognized flag"},
+	{"regression-wrapper-chroot-bare", "chroot /jail", "chroot"},
+
 	// Regression: P1 DYNAMIC_REDIRECT_BYPASS — write redirects with
 	// unresolvable targets fail closed ($TARGET could be .env).
 	{"regression-dynamic-redirect-out", `echo SECRET=x > "$TARGET"`, "unresolvable"},

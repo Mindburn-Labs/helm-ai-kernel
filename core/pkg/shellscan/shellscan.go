@@ -385,6 +385,98 @@ var shellNames = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "ash": true,
 }
 
+// splitEnvPayload splits an env -S/--split-string payload into words using
+// the shell parser (env's splitting is shell-like: quotes are honored).
+// The payload must reduce to a single simple command line.
+func splitEnvPayload(payload string) ([]wordTok, bool) {
+	if strings.TrimSpace(payload) == "" {
+		return nil, true
+	}
+	parser := syntax.NewParser()
+	file, err := parser.Parse(strings.NewReader(payload), "")
+	if err != nil || len(file.Stmts) != 1 || file.Stmts[0].Negated || file.Stmts[0].Background {
+		return nil, false
+	}
+	call, ok := file.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) > 0 {
+		return nil, false
+	}
+	out := make([]wordTok, 0, len(call.Args))
+	for _, w := range call.Args {
+		out = append(out, resolveWord(w))
+	}
+	return out, true
+}
+
+// executorSpec describes a process-executor wrapper whose leading positional
+// operands configure the execution instead of naming the command.
+type executorSpec struct {
+	valueShort   string   // letters of value-taking short flags
+	valueLong    []string // long flags taking a value
+	noValueShort string   // letters of no-value short flags
+	noValueLong  []string // long flags taking no value
+	commandFlag  byte     // short flag whose value is a command string (flock -c); 0 = none
+	pidFlag      byte     // short flag meaning "operate on a pid; no command executes" (0 = none)
+	skip         int      // leading positionals before the command (duration, mask, lockfile, jail dir)
+	decideBare   bool     // invocation with operands but no command is opaque (chroot runs a shell)
+}
+
+// executorWrappers are process-executor prefixes (UNKNOWN_WRAPPER_BYPASS).
+// Unknown flags on these wrappers route to the decision path.
+var executorWrappers = map[string]executorSpec{
+	"timeout": {
+		valueShort: "sk", valueLong: []string{"--signal", "--kill-after"},
+		noValueShort: "v", noValueLong: []string{"--preserve-status", "--foreground"},
+		skip: 1, // DURATION
+	},
+	"flock": {
+		valueShort: "wEc", valueLong: []string{"--timeout", "--conflict-exit-code", "--command"},
+		noValueShort: "sxunoFv", noValueLong: []string{"--shared", "--exclusive", "--unlock", "--nonblock", "--close", "--fork", "--verbose"},
+		commandFlag: 'c',
+		skip:        1, // LOCKFILE
+	},
+	"taskset": {
+		valueShort: "c", valueLong: []string{"--cpu-list"},
+		pidFlag: 'p',
+		skip:    1, // MASK (absent when -c/--cpu-list supplies it)
+	},
+	"chrt": {
+		valueShort:   "pTPD",
+		valueLong:    []string{"--sched-runtime", "--sched-period", "--sched-deadline"},
+		noValueShort: "frobiamd", noValueLong: []string{"--fifo", "--rr", "--other", "--batch", "--idle", "--deadline", "--all", "--max"},
+		pidFlag: 'p',
+		skip:    1, // PRIO
+	},
+	"ionice": {
+		valueShort:   "cnp",
+		valueLong:    []string{"--class", "--classdata", "--pid"},
+		noValueShort: "t", noValueLong: []string{"--ignore"},
+		pidFlag: 'p',
+	},
+	"chroot": {
+		valueLong:   []string{"--userspec", "--groups"},
+		noValueLong: []string{"--help", "--version"},
+		skip:        1, // NEWROOT
+		decideBare:  true,
+	},
+}
+
+// isExecutorWrapper reports whether name is a registered process-executor
+// wrapper.
+func isExecutorWrapper(name string) bool {
+	_, ok := executorWrappers[name]
+	return ok
+}
+
+func containsString(list []string, s string) bool {
+	for _, item := range list {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
 // shellLongValueFlags are shell long flags that consume the next token.
 var shellLongValueFlags = map[string]bool{
 	"--init-file": true, "--rcfile": true, "--emulate": true,
@@ -485,6 +577,8 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			via = joinVia(via, "env")
 			rest := args[1:]
 			commandIdx := -1
+			splits := 0
+		envScan:
 			for i := 0; i < len(rest); i++ {
 				tok := rest[i]
 				if tok.dynamic {
@@ -514,12 +608,29 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 								return
 							}
 							payload = rest[i+1].text
+							i++
 						} else {
 							payload = strings.TrimPrefix(tok.text, "--split-string=")
 						}
-						// env -S splits the payload into command + args.
-						c.classifyString(payload, joinVia(via, "env -S"), depth+1)
-						return
+						// env -S splits ONLY the payload into words; trailing
+						// arguments are appended to the split words. Combine
+						// both and restart the env scan (ENV_SPLIT_SUFFIX_BYPASS).
+						words, ok := splitEnvPayload(payload)
+						if !ok {
+							c.decide("env --split-string payload cannot be parsed statically (fail-closed)")
+							return
+						}
+						splits++
+						if splits > 4 {
+							c.decide("env --split-string nesting too deep (fail-closed)")
+							return
+						}
+						combined := make([]wordTok, 0, len(words)+len(rest))
+						combined = append(combined, words...)
+						combined = append(combined, rest[i+1:]...)
+						rest = combined
+						i = -1
+						continue envScan
 					default:
 						c.decide("env with unrecognized flag " + tok.text + " (fail-closed)")
 						return
@@ -544,12 +655,27 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 								payload = cluster[j+1:]
 							} else if i+1 < len(rest) && !rest[i+1].dynamic {
 								payload = rest[i+1].text
+								i++
 							} else {
 								c.decide("env -S with an unresolvable payload")
 								return
 							}
-							c.classifyString(payload, joinVia(via, "env -S"), depth+1)
-							return
+							words, ok := splitEnvPayload(payload)
+							if !ok {
+								c.decide("env -S payload cannot be parsed statically (fail-closed)")
+								return
+							}
+							splits++
+							if splits > 4 {
+								c.decide("env -S nesting too deep (fail-closed)")
+								return
+							}
+							combined := make([]wordTok, 0, len(words)+len(rest))
+							combined = append(combined, words...)
+							combined = append(combined, rest[i+1:]...)
+							rest = combined
+							i = -1
+							continue envScan
 						default:
 							c.decide(fmt.Sprintf("env with unrecognized flag -%c (fail-closed)", cluster[j]))
 							return
@@ -585,6 +711,110 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			c.signal(SignalEnvWrapper)
 			args = args[1:]
 			via = joinVia(via, "busybox")
+		case isExecutorWrapper(name):
+			spec := executorWrappers[name]
+			c.signal(SignalEnvWrapper)
+			via = joinVia(via, name)
+			rest := args[1:]
+			skip := spec.skip
+			i := 0
+		executorScan:
+			for i < len(rest) {
+				tok := rest[i]
+				if tok.dynamic {
+					c.decide(name + " wrapper arguments cannot be resolved statically")
+					return
+				}
+				if tok.text == "--" {
+					i++
+					break
+				}
+				if strings.HasPrefix(tok.text, "--") {
+					lname := tok.text
+					lval := ""
+					attached := false
+					if idx := strings.Index(lname, "="); idx >= 0 {
+						lname, lval, attached = lname[:idx], lname[idx+1:], true
+					}
+					if containsString(spec.valueLong, lname) {
+						if lname == "--command" { // flock --command STRING
+							if !attached {
+								if i+1 >= len(rest) || rest[i+1].dynamic {
+									c.decide(name + " --command with an unresolvable payload")
+									return
+								}
+								lval = rest[i+1].text
+							}
+							c.classifyString(lval, joinVia(via, name+" --command"), depth+1)
+							return
+						}
+						if name == "taskset" && lname == "--cpu-list" {
+							skip = 0 // mask supplied via --cpu-list value
+						}
+						if !attached {
+							i++
+						}
+						i++
+						continue
+					}
+					if containsString(spec.noValueLong, lname) {
+						i++
+						continue
+					}
+					c.decide(name + " with unrecognized flag " + tok.text + " (fail-closed)")
+					return
+				}
+				if !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
+					break // first positional
+				}
+				cluster := tok.text[1:]
+				for j := 0; j < len(cluster); j++ {
+					ch := cluster[j]
+					if spec.pidFlag != 0 && ch == spec.pidFlag {
+						// pid mode: operates on an existing process, no
+						// command executes.
+						c.record(Command{Name: name, Via: via, Prefix: name})
+						return
+					}
+					if strings.IndexByte(spec.valueShort, ch) >= 0 {
+						payload := ""
+						if j+1 < len(cluster) {
+							payload = cluster[j+1:]
+						} else if i+1 < len(rest) && !rest[i+1].dynamic {
+							payload = rest[i+1].text
+							i++ // skip the value token
+						} else {
+							c.decide(name + " flag -" + string(ch) + " with an unresolvable value (fail-closed)")
+							return
+						}
+						if spec.commandFlag != 0 && ch == spec.commandFlag {
+							c.classifyString(payload, joinVia(via, name+" -c"), depth+1)
+							return
+						}
+						if name == "taskset" && ch == 'c' {
+							skip = 0 // mask supplied via -c value
+						}
+						i++ // move past the flag token
+						continue executorScan
+					}
+					if strings.IndexByte(spec.noValueShort, ch) >= 0 {
+						continue
+					}
+					c.decide(name + " with unrecognized flag -" + string(ch) + " (fail-closed)")
+					return
+				}
+				i++
+			}
+			rest = rest[i:]
+			if len(rest) <= skip {
+				if spec.decideBare && len(rest) > 0 {
+					c.decide(name + " without a command runs an interactive shell (fail-closed)")
+					return
+				}
+				c.record(Command{Name: name, Via: via, Prefix: name})
+				return
+			}
+			args = rest[skip:]
 		case name == "eval":
 			c.signal(SignalEvalWrapper)
 			c.sawEval = true

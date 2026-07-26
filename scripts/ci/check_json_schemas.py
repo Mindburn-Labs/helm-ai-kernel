@@ -39,7 +39,7 @@ def main() -> int:
         # not the other, and that should read as this message rather than as a
         # traceback from the first schema that happens to be compiled.
         import jsonschema.validators  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError as exc:
+    except Exception as exc:  # not just ImportError: a broken dep can raise anything at import time
         print(
             f"JSON schema check failed: the jsonschema package is unusable ({exc}).\n"
             f"Install it with: {sys.executable} -m pip install --only-binary=:all: "

@@ -10,6 +10,7 @@ invisible in a green run, so it is asserted here instead.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import subprocess
 import sys
@@ -21,11 +22,13 @@ CHECKER = pathlib.Path(__file__).resolve().parent / "check_json_schemas.py"
 
 class JsonSchemaGateFailsClosedTest(unittest.TestCase):
     def run_with_broken_jsonschema(self, shadow: pathlib.Path) -> subprocess.CompletedProcess[str]:
+        # Inherit the environment and override only PYTHONPATH: a stripped env
+        # loses locale and cert vars and makes this flaky on some runners.
         return subprocess.run(
             [sys.executable, str(CHECKER)],
             capture_output=True,
             text=True,
-            env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(shadow)},
+            env={**os.environ, "PYTHONPATH": str(shadow)},
         )
 
     def assert_controlled_failure(self, result: subprocess.CompletedProcess[str]) -> None:

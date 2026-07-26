@@ -443,3 +443,25 @@ func TestParseFlagsCollisionFormatNotSelector(t *testing.T) {
 		t.Fatalf("selector --format not honored: %v\n%s", err, got)
 	}
 }
+
+// --- Regression: OR semantics between selectors (permit round-11 P2) -------
+
+func TestRequestedFormatMirrorsEffectiveORSemantics(t *testing.T) {
+	cases := []struct {
+		args []string
+		want Format
+	}{
+		{[]string{"--format=json", "--json=false"}, FormatJSON}, // reviewer example
+		{[]string{"--json", "--format=text"}, FormatJSON},       // --json=true wins under OR
+		{[]string{"--json=false", "--format=json"}, FormatJSON},
+		{[]string{"--format=text", "--json=false"}, FormatText},  // both deselect → text
+		{[]string{"--format=json", "--format=text"}, FormatText}, // same flag: last wins
+		{[]string{"--json", "--json=false"}, FormatText},         // same flag: last wins
+		{[]string{"--json=false", "--json"}, FormatJSON},
+	}
+	for _, tc := range cases {
+		if got := RequestedFormat(tc.args, FormatText, vf("effect", "format"), true); got != tc.want {
+			t.Fatalf("RequestedFormat(%v) = %q, want %q (OR semantics)", tc.args, got, tc.want)
+		}
+	}
+}

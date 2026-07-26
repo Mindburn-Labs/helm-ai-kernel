@@ -441,3 +441,24 @@ func TestCLIPlanCompileFalseAliasKeepsEnvelope(t *testing.T) {
 		assertSingleJSONDocument(t, stderr)
 	}
 }
+
+// --- Regression: conflicting aliases render the effective mode (round-11 P2)
+
+func TestCLIConflictingAliasesUseEffectiveMode(t *testing.T) {
+	// P2 CONFLICTING_FORMAT_FLAGS_DIVERGE: --format=json --json=false parses
+	// into JSON mode (OR semantics), so the parse failure is the envelope.
+	code, stdout, stderr := runCLI(t, "risk-summary", "--format=json", "--json=false", "--bogus")
+	if code != 2 {
+		t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, stderr)
+
+	// And the post-parse path agrees: same flags, valid parse → JSON error.
+	code, stdout, stderr = runCLI(t, "risk-summary", "--format=json", "--json=false")
+	if code != 2 {
+		t.Fatalf("code=%d want 2 (stderr=%s)", code, stderr)
+	}
+	assertCleanStdout(t, stdout)
+	assertSingleJSONDocument(t, stderr)
+}

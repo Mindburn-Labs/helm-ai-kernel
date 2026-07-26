@@ -322,8 +322,10 @@ func ValueFlagNames(fs *flag.FlagSet) map[string]bool {
 // as another flag's value (e.g. `--effect --format=text`) never flips the
 // mode — while a value-flag name belonging to a DIFFERENT command (unknown
 // here) does not consume anything, matching the flag package's
-// stop-at-first-undefined-flag behavior. The last selector in a valid flag
-// position wins. Invalid or missing values fail closed to def.
+// stop-at-first-undefined-flag behavior. The two selectors are combined with
+// the same OR semantics the commands apply after a successful parse
+// (jsonOut || --format=json), with each flag's last occurrence winning.
+// Invalid or missing values fail closed to def.
 //
 // formatSelector must be true only when --format is the command's OUTPUT
 // format flag (registered via RegisterFormat). Collision-exception commands
@@ -344,7 +346,19 @@ func RequestedFormat(args []string, def Format, valueFlags map[string]bool, form
 		// "modes offered" set instead.
 		return FormatJSON
 	}
-	f := def
+	// Track the two selector flags independently (last occurrence of each
+	// wins, as in the flag package), then combine with the SAME OR semantics
+	// the commands use after a successful parse:
+	//
+	//	effective = jsonOut || formatFlag.IsJSON()
+	//
+	// A pure last-token-wins scan would diverge from that contract:
+	// `--format=json --json=false` parses successfully into JSON mode, so the
+	// parse-failure path must answer JSON too.
+	var (
+		fmtSet, fmtJSON   bool
+		jsonSet, jsonFlag bool
+	)
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--" {
 			break // everything after the terminator is positional
@@ -355,31 +369,39 @@ func RequestedFormat(args []string, def Format, valueFlags map[string]bool, form
 		name := strings.TrimLeft(args[i], "-")
 		switch {
 		case name == "json":
-			f = FormatJSON
+			jsonSet, jsonFlag = true, true
 		case strings.HasPrefix(name, "json="):
 			if v, err := strconv.ParseBool(strings.TrimPrefix(name, "json=")); err == nil {
-				if v {
-					f = FormatJSON
-				} else {
-					f = FormatText
-				}
+				jsonSet, jsonFlag = true, v
 			}
 		case name == "format" && i+1 < len(args):
 			if formatSelector {
 				if v, err := ParseFormat(args[i+1]); err == nil {
-					f = v
+					fmtSet, fmtJSON = true, v.IsJSON()
 				}
 			}
 			i++ // --format always consumes its value, selector or not
 		case strings.HasPrefix(name, "format=") && formatSelector:
 			if v, err := ParseFormat(strings.TrimPrefix(name, "format=")); err == nil {
-				f = v
+				fmtSet, fmtJSON = true, v.IsJSON()
 			}
 		case valueFlags[name]:
 			i++ // the next token is this flag's value, never a selector
 		}
 	}
-	return f
+	if jsonSet && jsonFlag {
+		return FormatJSON // --json=true always selects JSON under the OR rule
+	}
+	if fmtSet {
+		if fmtJSON {
+			return FormatJSON
+		}
+		return FormatText // explicit --format=text with no --json=true
+	}
+	if jsonSet {
+		return FormatText // explicit --json=false only
+	}
+	return def
 }
 
 // ParseFlags parses args with the flag package's own diagnostics suppressed

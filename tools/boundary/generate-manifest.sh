@@ -117,5 +117,8 @@ mv "$TMP" "$MANIFEST"
 # mktemp creates 0600. Moving it over a 0644 file carries that mode across, and
 # git tracks only the exec bit, so the tightened mode never shows up in review.
 chmod 644 "$MANIFEST"
+# Clear FILELIST before dropping the trap, or it survives every run — and
+# verify-boundary.sh calls this on each CI job.
+rm -f "$FILELIST"
 trap - EXIT
 echo "Generated $MANIFEST ($TOTAL files)"

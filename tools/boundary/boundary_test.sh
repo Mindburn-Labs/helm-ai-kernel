@@ -65,6 +65,15 @@ cleanup() {
 restore() { git checkout -q -- "$MANIFEST" "$DIRS_FILE" "$VERIFY" "$GENERATE" 2>/dev/null || true; }
 trap cleanup EXIT
 
+# must <cmd...> — for the steps that SET UP a case, as opposed to the case itself.
+# The suite deliberately does not run under `set -e`: every assertion expects the
+# gate to exit non-zero, so -e would abort on the first intended failure. But a
+# failed setup step is different — it would leave the tree in a state the case
+# did not intend and report a result that means nothing. Those abort.
+must() {
+  "$@" || { echo "  ERROR: setup step failed: $*" >&2; exit 3; }
+}
+
 # assert <expected-exit: pass|fail> <description>
 assert() {
   local want="$1" desc="$2" got
@@ -81,17 +90,18 @@ assert pass "clean tree verifies"
 
 # A protected package is Go source; anything else appearing in one is a finding,
 # whether git is configured to ignore it or not — the compiler does not care.
-echo "package crypto" > "$FIX_UNTRACKED"
+must sh -c "echo 'package crypto' > \"$FIX_UNTRACKED\""
 assert fail "untracked file in a protected package"
 rm -f "$FIX_UNTRACKED"
 
-mkdir -p "$FIX_IGNOREDIR" && echo "package kernel" > "$FIX_IGNORED"
+must mkdir -p "$FIX_IGNOREDIR"
+must sh -c "echo 'package kernel' > \"$FIX_IGNORED\""
 assert fail "gitignored file in a protected package"
 rm -f "$FIX_IGNORED"
 [ "$CREATED_IGNOREDIR" = "1" ] && rmdir "$FIX_IGNOREDIR" 2>/dev/null
 
-echo "package crypto" > "$FIX_TRACKED"
-git add -f "$FIX_TRACKED" 2>/dev/null
+must sh -c "echo 'package crypto' > \"$FIX_TRACKED\""
+must git add -f "$FIX_TRACKED"
 assert fail "tracked file added without regenerating the manifest"
 git rm -q -f --cached "$FIX_TRACKED" 2>/dev/null
 rm -f "$FIX_TRACKED"
@@ -110,21 +120,22 @@ restore_victim() {
   return 0
 }
 
-echo "// drift" >> "$VICTIM"
+must sh -c "echo '// drift' >> \"$VICTIM\""
 assert fail "protected file modified"
 restore_victim
 
-rm -f "$VICTIM"
+must rm -f "$VICTIM"
 assert fail "protected file deleted"
 restore_victim
 
 # The boundary's own configuration is inside the boundary, so narrowing it is a
 # visible act rather than a silent one.
-sed -i.tmpbak '/^  core\/pkg\/guardian$/d' "$DIRS_FILE" && rm -f "$DIRS_FILE.tmpbak"
+must sed -i.tmpbak "/^  core\/pkg\/guardian$/d" "$DIRS_FILE"
+rm -f "$DIRS_FILE.tmpbak"
 assert fail "a directory removed from the protected list"
 restore
 
-echo "# tampered" >> "$VERIFY"
+must sh -c "echo '# tampered' >> \"$VERIFY\""
 assert fail "the verifier itself modified"
 restore
 

@@ -205,7 +205,10 @@ if [ "$MODE" = "oss" ]; then
   echo "  Drift against tools/boundary/protected.manifest:"
   echo "    $ADDED added, $REMOVED removed, $CHANGED modified"
   echo ""
-  diff -u "$MANIFEST" "$EXPECTED" | head -60
+  # `diff` exits 1 when files differ — which is always, on this path — and head
+  # can SIGPIPE it. Under `set -euo pipefail` that killed the script right here,
+  # swallowing the summary and the remediation line below.
+  diff -u "$MANIFEST" "$EXPECTED" | head -60 || true
   echo ""
   echo "═══════════════════════════════════════════════════════"
   echo "  Results: manifest does not match the tree"

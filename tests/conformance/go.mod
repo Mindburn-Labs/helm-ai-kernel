@@ -4,7 +4,7 @@ go 1.25.12
 
 require (
 	github.com/Mindburn-Labs/helm-ai-kernel/core v0.0.0
-	github.com/google/cel-go v0.28.0
+	github.com/google/cel-go v0.29.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1

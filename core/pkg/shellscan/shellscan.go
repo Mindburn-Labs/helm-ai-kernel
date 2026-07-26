@@ -461,6 +461,86 @@ var executorWrappers = map[string]executorSpec{
 	},
 }
 
+// hasSudoShellFlag reports whether sudo/doas arguments contain -s/-i (or
+// --shell/--login), honoring value-taking flags so their values are not
+// misread as flags (e.g. -ui is -u with value "i", not the -i shell flag).
+func hasSudoShellFlag(args []wordTok) bool {
+	vals := valueFlags["sudo"]
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		if tok.dynamic || tok.text == "--" || !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
+			return false
+		}
+		if strings.HasPrefix(tok.text, "--") {
+			name := tok.text
+			if idx := strings.Index(name, "="); idx >= 0 {
+				name = name[:idx]
+			}
+			if name == "--shell" || name == "--login" {
+				return true
+			}
+			if vals[name] && !strings.Contains(tok.text, "=") {
+				i++ // skip the value token
+			}
+			continue
+		}
+		cluster := tok.text[1:]
+		for j := 0; j < len(cluster); j++ {
+			key := "-" + string(cluster[j])
+			if vals[key] {
+				if j+1 == len(cluster) {
+					i++ // value is the next token
+				}
+				break // value consumes the rest of the cluster
+			}
+			if cluster[j] == 's' || cluster[j] == 'i' {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// xargsUsesReplace reports whether xargs arguments use -I/--replace
+// (including the deprecated -i alias), which makes the command template
+// data-driven and unclassifiable.
+func xargsUsesReplace(args []wordTok) bool {
+	vals := valueFlags["xargs"]
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		if tok.dynamic || tok.text == "--" || !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
+			return false
+		}
+		if strings.HasPrefix(tok.text, "--") {
+			name := tok.text
+			if idx := strings.Index(name, "="); idx >= 0 {
+				name = name[:idx]
+			}
+			if name == "--replace" {
+				return true
+			}
+			if vals[name] && !strings.Contains(tok.text, "=") {
+				i++ // skip the value token
+			}
+			continue
+		}
+		cluster := tok.text[1:]
+		for j := 0; j < len(cluster); j++ {
+			key := "-" + string(cluster[j])
+			if vals[key] {
+				if cluster[j] == 'I' || cluster[j] == 'i' {
+					return true
+				}
+				if j+1 == len(cluster) {
+					i++ // value is the next token
+				}
+				break // value consumes the rest of the cluster
+			}
+		}
+	}
+	return false
+}
+
 // isExecutorWrapper reports whether name is a registered process-executor
 // wrapper.
 func isExecutorWrapper(name string) bool {
@@ -570,8 +650,18 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 		switch {
 		case name == "sudo" || name == "doas":
 			c.signal(SignalPrivilegeWrapper)
+			if hasSudoShellFlag(args[1:]) {
+				// sudo -s/-i (and long forms) launch a privileged shell —
+				// opaque regardless of any trailing command (fail-closed).
+				c.decide(name + " launches a privileged shell (fail-closed)")
+				return
+			}
 			args = dropWrapperFlags("sudo", args[1:])
 			via = joinVia(via, name)
+			if args != nil && len(args) == 0 {
+				c.decide(name + " without a command (fail-closed)")
+				return
+			}
 		case name == "env":
 			c.signal(SignalEnvWrapper)
 			via = joinVia(via, "env")
@@ -701,6 +791,13 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			via = joinVia(via, name)
 		case name == "xargs":
 			c.signal(SignalEnvWrapper)
+			if xargsUsesReplace(args[1:]) {
+				// With -I/--replace the command template contains the
+				// replacement token, so the executed command is data-driven
+				// and cannot be classified statically (fail-closed).
+				c.decide("xargs replacement-token template cannot be classified statically (fail-closed)")
+				return
+			}
 			args = dropWrapperFlags("xargs", args[1:])
 			via = joinVia(via, "xargs")
 			if args != nil && len(args) == 0 {

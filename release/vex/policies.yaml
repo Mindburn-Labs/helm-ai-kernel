@@ -2,14 +2,19 @@
 #
 # Consumed by scripts/release/generate_vex.sh during the release workflow.
 # Each entry overrides the default "under_investigation" disposition for the
-# matching CVE id when emitting release/vex/v<version>.openvex.json.
+# matching id when emitting release/vex/v<version>.openvex.json.
 #
 # Schema:
 #   policies:
-#     - cve_id: <CVE-YYYY-NNNNN>
+#     - cve_id: <CVE-YYYY-NNNNN or GO-YYYY-NNNNN>
 #       status: not_affected | fixed | affected | under_investigation
 #       justification: <OpenVEX justification token; required when status=not_affected>
 #       statement: <free-form explanation that ships in the published VEX>
+#
+# cve_id accepts either a CVE (CVE-YYYY-NNNNN) or a Go vulnerability database
+# id (GO-YYYY-NNNNN) for advisories with no assigned CVE — e.g. entries from
+# golang.org/x/vulndb surfaced by govulncheck/OSV, such as the x/crypto
+# openpgp module flag this file dispositions below.
 #
 # Justification tokens (per OpenVEX 0.2.0):
 #   component_not_present
@@ -18,4 +23,8 @@
 #   vulnerable_code_cannot_be_controlled_by_adversary
 #   inline_mitigations_already_exist
 
-policies: []
+policies:
+  - cve_id: GO-2026-5932
+    status: not_affected
+    justification: vulnerable_code_not_present
+    statement: "golang.org/x/crypto/openpgp is never imported; only x/crypto/hkdf is compiled into the binary; module-granularity gobinary scan flags the whole module"

@@ -12,21 +12,14 @@ maintainer-addition or maintainer-removal rule documented there.
 
 ## Reviewers
 
-Reviewers may review PRs in their listed area but cannot merge.
+Reviewers provide advisory review in their listed area. Neither reviewer
+identity, CODEOWNERS, labels, nor commit trailers authorize a code merge; that
+authority is limited to the source-owned deterministic gates and
+distinct-provider exact-head machine interlock in `GOVERNANCE.md`.
 
 | Name | GitHub | Affiliation | Areas |
 | --- | --- | --- | --- |
 | Mindburn Labs core team | @Mindburn-Labs | Mindburn-Labs | docs, release |
-
-## Merge Authority
-
-This roster, a reviewer approval, and DCO or other commit trailers are
-stewardship, license, or provenance evidence; none is standalone merge
-authority. The current human GitHub approval rule remains the enforced
-transition state and must not be removed or bypassed before a source-owned
-machine permit bound to the exact PR head, an exact-head GitHub App interlock,
-and configuration plus runtime readbacks are live-proven. That machine
-authority is not live today.
 
 ## Known Gaps
 
@@ -44,7 +37,8 @@ The path to maintainer is documented in
 [`GOVERNANCE.md`](GOVERNANCE.md#becoming-a-maintainer). In short:
 sustained high-quality contributions, nomination by an existing
 maintainer, lazy-consensus approval, and addition to this file in the
-same PR that grants commit access.
+same PR that grants commit access. Maintainer status does not grant a
+code-merge override.
 
 ## Contact
 

@@ -165,7 +165,9 @@ func runCertifyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Run basic structural verification first.
-	report, verifyErr := verifier.VerifyBundle(packDir)
+	// Pack was sealed by this process, so its dev-local self-attested
+	// seal carries no provenance question (F-02).
+	report, verifyErr := verifier.VerifyLocallyProducedBundle(packDir)
 	if verifyErr != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: pack verification failed: %v\n", verifyErr)
 		return 2

@@ -88,7 +88,9 @@ fi
 rm -f /tmp/boundary_m1.$$ /tmp/boundary_m2.$$
 
 bash "$GENERATE" >/dev/null 2>&1
-MODE="$(stat -f '%Lp' "$MANIFEST" 2>/dev/null || stat -c '%a' "$MANIFEST")"
+# GNU stat first: on Linux `stat -f` does not fail, it reports filesystem status,
+# so a BSD-first probe never falls through and returns unparseable output.
+MODE="$(stat -c '%a' "$MANIFEST" 2>/dev/null || stat -f '%Lp' "$MANIFEST" 2>/dev/null)"
 if [ "$MODE" = "644" ]; then
   PASS=$((PASS + 1)); echo "  ok    regeneration leaves the manifest 0644"
 else

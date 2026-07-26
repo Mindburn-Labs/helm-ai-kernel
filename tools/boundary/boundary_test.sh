@@ -51,10 +51,16 @@ done
 CREATED_IGNOREDIR=0
 [ -d "$FIX_IGNOREDIR" ] || CREATED_IGNOREDIR=1
 
+# Assigned later, but declared here so the trap can restore it even if the run is
+# interrupted mid-case with the file modified or deleted.
+VICTIM=""
+
 cleanup() {
   rm -f "${FIXTURES[@]}"
   [ "$CREATED_IGNOREDIR" = "1" ] && rmdir "$FIX_IGNOREDIR" 2>/dev/null
   git checkout -q -- "$MANIFEST" "$DIRS_FILE" "$VERIFY" "$GENERATE" 2>/dev/null || true
+  [ -n "$VICTIM" ] && git checkout -q -- "$VICTIM" 2>/dev/null
+  return 0
 }
 restore() { git checkout -q -- "$MANIFEST" "$DIRS_FILE" "$VERIFY" "$GENERATE" 2>/dev/null || true; }
 trap cleanup EXIT
@@ -90,18 +96,27 @@ assert fail "tracked file added without regenerating the manifest"
 git rm -q -f --cached "$FIX_TRACKED" 2>/dev/null
 rm -f "$FIX_TRACKED"
 
-# Back up outside the tree: a sibling .bak would itself be an untracked file in
-# a protected package, which is a violation this suite asserts on.
+# git is the restore mechanism, not a copied backup. A sibling .bak would itself
+# be an untracked file in a protected package — a violation this suite asserts
+# on, so both cases below used to fail for the wrong reason. And restoring by
+# `cp` from a mktemp file gave the recreated file mktemp's 0600, silently
+# retightening a protected source file. `git checkout` restores content and mode
+# from the index, and works whether the file was modified or deleted.
 VICTIM="$(git ls-files core/pkg/crypto | head -1)"
-VICTIM_BAK="$(mktemp)"
-cp "$VICTIM" "$VICTIM_BAK"
+VICTIM_MODE="$(stat -c '%a' "$VICTIM" 2>/dev/null || stat -f '%Lp' "$VICTIM" 2>/dev/null)"
+restore_victim() {
+  git checkout -q -- "$VICTIM" 2>/dev/null || true
+  [ -n "$VICTIM_MODE" ] && chmod "$VICTIM_MODE" "$VICTIM" 2>/dev/null
+  return 0
+}
+
 echo "// drift" >> "$VICTIM"
 assert fail "protected file modified"
-cp "$VICTIM_BAK" "$VICTIM"
+restore_victim
 
 rm -f "$VICTIM"
 assert fail "protected file deleted"
-cp "$VICTIM_BAK" "$VICTIM" && rm -f "$VICTIM_BAK"
+restore_victim
 
 # The boundary's own configuration is inside the boundary, so narrowing it is a
 # visible act rather than a silent one.
@@ -114,6 +129,21 @@ assert fail "the verifier itself modified"
 restore
 
 echo "generator:"
+
+# The generator no longer sorts: it relies on the git index being stored sorted
+# by path, which drops a GNU-only `sort -z`. That is a documented property of the
+# index format rather than an accident, but it is load-bearing for determinism,
+# so it is asserted rather than assumed.
+bash "$GENERATE" /tmp/boundary_sorted.$$ >/dev/null 2>&1
+# Check the PATH column. Sorting whole lines would order by hash, which is random
+# — the assertion would fail on a correctly sorted manifest.
+if grep -v '^#' /tmp/boundary_sorted.$$ | sed 's/^[0-9a-f]\{64\}  //' | LC_ALL=C sort -c 2>/dev/null; then
+  PASS=$((PASS + 1)); echo "  ok    manifest entries come out byte-sorted"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL  manifest entries are not sorted"
+fi
+rm -f /tmp/boundary_sorted.$$
+
 bash "$GENERATE" /tmp/boundary_m1.$$ >/dev/null 2>&1
 bash "$GENERATE" /tmp/boundary_m2.$$ >/dev/null 2>&1
 if cmp -s /tmp/boundary_m1.$$ /tmp/boundary_m2.$$; then

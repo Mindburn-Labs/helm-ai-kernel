@@ -73,9 +73,13 @@ trap 'rm -f "$TMP" "$FILELIST"' EXIT
   # files, paid on every pull request and ten times over by the test suite;
   # batched it is under a second. shasum already prints "HASH  PATH", which is
   # the manifest's own format, so no reformatting is needed.
+  # No sort: the git index is stored sorted by path, and `git ls-files` walks it
+  # in that order, so its output is already byte-sorted. Dropping the explicit
+  # `sort -z` also drops a GNU-ism that older BSD/macOS sort does not have.
+  # tools/boundary/boundary_test.sh asserts the manifest comes out sorted, so if
+  # that property ever stops holding the suite says so.
   git ls-files -z -- "${PROTECTED_DIRS[@]}" "${PROTECTED_FILES[@]}" \
-      ':!tools/boundary/protected.manifest' \
-    | sort -z > "$FILELIST"
+      ':!tools/boundary/protected.manifest' > "$FILELIST"
 
   while IFS= read -r -d '' f; do
     [ -f "$f" ] && continue

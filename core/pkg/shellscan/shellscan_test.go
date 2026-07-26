@@ -178,6 +178,23 @@ var decideCases = []struct {
 	{"regression-nice-unknown-short", "nice -z rm -rf /tmp/x", "cannot be resolved statically"},
 	{"regression-xargs-unknown-short", "printf 'a\\n' | xargs -Z rm -rf", "cannot be resolved statically"},
 	{"regression-shell-nonposix-flag", `bash -9 -c 'rm -rf /tmp/x'`, "cannot be resolved statically"},
+
+	// Regression: P1 XARGS_REPLACEMENT_BYPASS — with -I/--replace the
+	// command template is data-driven and unclassifiable.
+	{"regression-xargs-replace-template", "printf 'rm\\n' | xargs -I{} {} --recursive --force /tmp/x", "replacement-token"},
+	{"regression-xargs-replace-long", "printf 'rm\\n' | xargs --replace={} {} -rf /tmp/x", "replacement-token"},
+	{"regression-xargs-replace-separate", "printf 'rm\\n' | xargs -I {} {} -rf /tmp/x", "replacement-token"},
+	{"regression-xargs-replace-deprecated", "printf 'rm\\n' | xargs -i{} {} -rf /tmp/x", "replacement-token"},
+
+	// Regression: P1 SUDO_INTERACTIVE_SHELL_BYPASS — sudo -s/-i launches a
+	// privileged shell; bare sudo is opaque.
+	{"regression-sudo-shell-s", "sudo -s", "privileged shell"},
+	{"regression-sudo-login-i", "sudo -i", "privileged shell"},
+	{"regression-sudo-shell-long", "sudo --shell", "privileged shell"},
+	{"regression-sudo-login-long", "sudo --login", "privileged shell"},
+	{"regression-sudo-shell-with-cmd", "sudo -s rm -rf /tmp/x", "privileged shell"},
+	{"regression-sudo-bare", "sudo", "without a command"},
+	{"regression-sudo-flags-only", "sudo -E", "without a command"},
 }
 
 // passCases are commands that must still pass through without a decision —

@@ -181,6 +181,43 @@ func TestCLIPlanCompileFormatFlag(t *testing.T) {
 	}
 }
 
+// Regression: P2 FORMAT_TEXT_EMITS_JSON — plan compile advertised --format
+// but emitted PlanSpec JSON whatever was asked for, so --format=text silently
+// produced the output it had just been told not to. An unsupported mode is
+// rejected, not ignored.
+func TestCLIPlanCompileRejectsDeselectingJSON(t *testing.T) {
+	for _, args := range [][]string{
+		{"plan", "compile", "--format=text", "step-one"},
+		{"plan", "compile", "--format", "text", "step-one"},
+		{"plan", "compile", "--json=false", "step-one"},
+	} {
+		code, stdout, stderr := runCLI(t, args[0], args[1:]...)
+		if code != 2 {
+			t.Fatalf("%v: code=%d, want 2 — the unsupported mode must be rejected\nstdout=%s", args, code, stdout)
+		}
+		assertCleanStdout(t, stdout)
+		if !strings.Contains(stderr, "not supported") || !strings.Contains(stderr, "PlanSpec JSON only") {
+			t.Fatalf("%v: stderr does not explain the JSON-only contract: %q", args, stderr)
+		}
+		// The refusal itself still honours the JSON-only error envelope.
+		var env map[string]any
+		firstLine, _, _ := strings.Cut(stderr, "\n")
+		if err := json.Unmarshal([]byte(firstLine), &env); err != nil {
+			t.Fatalf("%v: refusal is not a JSON envelope: %v\n%s", args, err, firstLine)
+		}
+	}
+
+	// The JSON defaults are untouched: no flag at all still compiles.
+	code, stdout, stderr := runCLI(t, "plan", "compile", "step-one")
+	if code != 0 {
+		t.Fatalf("default invocation broke: code=%d stderr=%s", code, stderr)
+	}
+	var plan map[string]any
+	if err := json.Unmarshal([]byte(stdout), &plan); err != nil {
+		t.Fatalf("default stdout not PlanSpec JSON: %v", err)
+	}
+}
+
 // --- Golden: JSON error envelope under --format=json (permit advisory P3) --
 
 func TestCLIJSONErrorEnvelopeWired(t *testing.T) {

@@ -76,19 +76,39 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&outputFile, "output", "", "Output file (default: stdout)")
 	cmd.StringVar(&planName, "name", "", "Plan name")
 	cmd.BoolVar(&jsonOutput, "json", true, "Output as JSON (alias for --format=json)")
-	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatJSON)
 
 	if code, ok := cliui.ParseFlags(cmd, args, stderr, "plan compile", cliui.FormatJSON); !ok {
 		return code
 	}
-	// plan compile renders PlanSpec JSON only (there is no text renderer; the
-	// historical --json default is true for the same reason), so --format=json
-	// is accepted as the unified alias and --format=text / --json=false are
-	// documented no-ops on the output mode.
-	jsonOutput = jsonOutput || formatFlag.IsJSON()
 	// Because success output is ALWAYS PlanSpec JSON, errors are ALWAYS the
 	// JSON envelope — flag values cannot deselect it (JSON-only contract).
 	const errFormat = cliui.FormatJSON
+
+	// plan compile renders PlanSpec JSON only; there is no text renderer. Ask
+	// for text and you get an error, not silently the JSON you did not ask
+	// for: accepting --format=text and ignoring it advertises an output
+	// contract the command does not honour. Visit reports only flags actually
+	// present on the command line, so the JSON defaults stay untouched.
+	var deselected string
+	cmd.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "format":
+			if !formatFlag.Value.IsJSON() {
+				deselected = "--format=" + string(formatFlag.Value)
+			}
+		case "json":
+			if !jsonOutput {
+				deselected = "--json=false"
+			}
+		}
+	})
+	if deselected != "" {
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("plan compile",
+			"%s is not supported: plan compile emits PlanSpec JSON only", deselected).
+			WithHint("drop the flag, or use --format=json"), errFormat)
+	}
+	jsonOutput = true
 
 	var steps []string
 

@@ -55,7 +55,8 @@ if [ "${#missing[@]}" -gt 0 ]; then
 fi
 
 TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
+FILELIST="$(mktemp)"
+trap 'rm -f "$TMP" "$FILELIST"' EXIT
 
 {
   echo "# HELM Protected Manifest"
@@ -67,15 +68,22 @@ trap 'rm -f "$TMP"' EXIT
   # git ls-files, not find: tracked files only, so untracked build artifacts and
   # editor droppings can never enter the manifest or perturb its contents.
   # The manifest is excluded from its own listing — it cannot contain its own hash.
+  #
+  # xargs batches the hashing. Spawning one shasum per file cost 14s for ~1000
+  # files, paid on every pull request and ten times over by the test suite;
+  # batched it is under a second. shasum already prints "HASH  PATH", which is
+  # the manifest's own format, so no reformatting is needed.
   git ls-files -z -- "${PROTECTED_DIRS[@]}" "${PROTECTED_FILES[@]}" \
       ':!tools/boundary/protected.manifest' \
-    | sort -z | while IFS= read -r -d '' f; do
-    if [ ! -f "$f" ]; then
-      echo "ERROR: tracked file absent from the working tree: $f" >&2
-      exit 1
-    fi
-    printf '%s  %s\n' "$(shasum -a 256 "$f" | cut -d' ' -f1)" "$f"
-  done
+    | sort -z > "$FILELIST"
+
+  while IFS= read -r -d '' f; do
+    [ -f "$f" ] && continue
+    echo "ERROR: tracked file absent from the working tree: $f" >&2
+    exit 1
+  done < "$FILELIST"
+
+  xargs -0 shasum -a 256 < "$FILELIST"
 } > "$TMP"
 
 TOTAL=$(grep -cv '^#' "$TMP" || true)
@@ -86,8 +94,14 @@ fi
 
 # Guard against a silent shrink: a regeneration that drops a large fraction of
 # the protected surface is a broken environment, not a legitimate deletion.
-if [ -f "$MANIFEST" ]; then
-  PREV=$(grep -cv '^#' "$MANIFEST" || true)
+#
+# The baseline is always the committed manifest, never the output path. Keying
+# it off the output meant the guard vanished whenever the target did not exist —
+# which is every scratch generation from verify-boundary.sh, and also anyone who
+# deleted the manifest before regenerating it.
+CANONICAL="tools/boundary/protected.manifest"
+if [ -f "$CANONICAL" ]; then
+  PREV=$(grep -cv '^#' "$CANONICAL" || true)
   if [ "$PREV" -gt 0 ] && [ "$((TOTAL * 10))" -lt "$((PREV * 9))" ]; then
     echo "ERROR: manifest would shrink from $PREV to $TOTAL entries (>10%)." >&2
     echo "Refusing to overwrite. Investigate the working tree first." >&2

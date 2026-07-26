@@ -155,9 +155,15 @@ if [ "$MODE" = "oss" ]; then
   # a protected package would never appear in the diff below — yet `go build`
   # compiles it. Catch that separately rather than widening the manifest, which
   # would make its contents depend on the state of the working directory.
+  #
+  # Deliberately WITHOUT --exclude-standard: the compiler does not consult
+  # .gitignore. A gitignored .go file inside a protected package builds like any
+  # other, so excluding ignored paths here would leave exactly the hole this
+  # check exists to close. Nothing ignored legitimately lives in the protected
+  # surface — it is Go source, protobufs and schemas.
   # shellcheck source=tools/boundary/protected-dirs.sh
   source "$SCRIPT_DIR/boundary/protected-dirs.sh"
-  UNTRACKED=$(cd "$REPO_ROOT" && git ls-files --others --exclude-standard -- "${PROTECTED_DIRS[@]}" "${PROTECTED_FILES[@]}")
+  UNTRACKED=$(cd "$REPO_ROOT" && git ls-files --others -- "${PROTECTED_DIRS[@]}" "${PROTECTED_FILES[@]}")
   if [ -n "$UNTRACKED" ]; then
     echo "  ✗ UNTRACKED files inside the protected surface:"
     while IFS= read -r u; do echo "      $u"; done <<< "$UNTRACKED"

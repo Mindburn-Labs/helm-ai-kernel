@@ -428,10 +428,15 @@ verify-boundary:
 # conflicts with every other one: adding two names there newly conflicted six
 # open pull requests, four of which were mergeable before. .PHONY is additive,
 # so a second declaration costs nothing.
-.PHONY: manifest install-merge-drivers
+.PHONY: manifest test-boundary install-merge-drivers
 
 manifest:
 	bash tools/boundary/generate-manifest.sh
+
+# Asserts the gate fails on every known way of breaking the boundary. Needs a
+# clean tree: it mutates the working tree per case and restores after each.
+test-boundary:
+	bash tools/boundary/boundary_test.sh
 
 # Registers the merge driver referenced by .gitattributes. Git stores merge
 # drivers in local config, never in the repository, so every clone runs this

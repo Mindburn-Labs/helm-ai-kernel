@@ -19,8 +19,58 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # Fast gate (~5s): decide which languages actually changed. The four
+  # CodeQL matrix jobs and Rust audit are required status checks, so the
+  # workflow must still trigger on every PR/push — when a language did not
+  # change, its job reports success without running analysis.
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      javascript-typescript: ${{ steps.filter.outputs.javascript-typescript }}
+      python: ${{ steps.filter.outputs.python }}
+      java-kotlin: ${{ steps.filter.outputs.java-kotlin }}
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          set -euo pipefail
+          BASE=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BASE="${{ github.event.before }}"
+          fi
+          # schedule / workflow_dispatch / unknown base → full sweep
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            for k in go javascript-typescript python java-kotlin rust; do
+              echo "$k=true" >> "$GITHUB_OUTPUT"
+            done
+            exit 0
+          fi
+          files="$(git diff --name-only "$BASE"...HEAD)"
+          out() {
+            if printf '%s\n' "$files" | grep -qE "$2"; then
+              echo "$1=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$1=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+          out go '\.go$|go\.(mod|sum)$|go\.work'
+          out javascript-typescript '\.(js|jsx|ts|tsx|mjs|cjs)$|package(-lock)?\.json$|pnpm-lock\.yaml$'
+          out python '\.py$|requirements.*\.txt$|pyproject\.toml$'
+          out java-kotlin '\.(java|kt|kts)$|pom\.xml$|build\.gradle'
+          out rust '\.rs$|Cargo\.(toml|lock)$'
+
   analyze:
     name: CodeQL (${{ matrix.language }})
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -35,18 +85,23 @@ jobs:
           - language: python
           - language: java-kotlin
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - if: matrix.language == 'go'
+      - name: Skip when no relevant changes
+        if: needs.changes.outputs[matrix.language] != 'true'
+        run: echo "no ${{ matrix.language }} changes in this range; analysis skipped"
+      - if: needs.changes.outputs[matrix.language] == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - if: matrix.language == 'go' && needs.changes.outputs[matrix.language] == 'true'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25.12"
           cache-dependency-path: "**/go.sum"
-          cache: false
-      - uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+          cache: true
+      - if: needs.changes.outputs[matrix.language] == 'true'
+        uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
-      - if: matrix.language == 'go'
+      - if: matrix.language == 'go' && needs.changes.outputs[matrix.language] == 'true'
         name: Build Go modules for CodeQL
         run: |
           go version
@@ -59,12 +114,15 @@ jobs:
             ./tests/conformance/... \
             ./tests/launchpad/... \
             -run '^$'
-      - uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+      - if: needs.changes.outputs[matrix.language] == 'true'
+        uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
         with:
           category: "/language:${{ matrix.language }}"
 
   rust-audit:
     name: Rust audit
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5

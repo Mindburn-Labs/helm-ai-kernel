@@ -211,6 +211,15 @@ var decideCases = []struct {
 	{"regression-flock-c-after-lockfile-flag", `flock /tmp/l -n -c 'rm -rf /tmp/x'`, "recursive rm"},
 	{"regression-flock-command-long-after", `flock /tmp/l --command 'rm -rf /tmp/x'`, "recursive rm"},
 	{"regression-timeout-late-flag", "timeout 5 -v rm -rf /tmp/x", "cannot be resolved statically"},
+
+	// Regression: P1 UNMODELED_EXECUTOR_BYPASS — tracers and
+	// instrumentation prefixes execute their command operand.
+	{"regression-strace-rm", "strace rm -f -r /tmp/x", "recursive rm"},
+	{"regression-strace-flags", "strace -f -o /tmp/out rm -rf /tmp/x", "recursive rm"},
+	{"regression-ltrace-rm", "ltrace rm -rf /tmp/x", "recursive rm"},
+	{"regression-catchsegv-rm", "catchsegv rm -rf /tmp/x", "recursive rm"},
+	{"regression-valgrind-rm", "valgrind --tool=memcheck rm -rf /tmp/x", "recursive rm"},
+	{"regression-strace-unknown-flag", "strace --frobnicate rm -rf /tmp/x", "unrecognized flag"},
 }
 
 // passCases are commands that must still pass through without a decision —
@@ -241,6 +250,8 @@ var passCases = []struct {
 	{"safe-sudo-preserve-env", "sudo --preserve-env ls /root"},
 	{"safe-sudo-E-ls", "sudo -E ls /root"},
 	{"safe-xargs-null", "printf 'a\\0' | xargs -0 echo"},
+	{"safe-strace-pid", "strace -p 1234"},
+	{"safe-strace-ls", "strace -f ls /tmp"},
 	{"safe-empty", "   "},
 	{"safe-base64-encode", "echo hello | base64"},
 	{"safe-xargs-echo", "echo a b | xargs echo"},

@@ -470,6 +470,34 @@ var executorWrappers = map[string]executorSpec{
 		skip:        1, // NEWROOT
 		decideBare:  true,
 	},
+	"strace": {
+		valueShort:   "eopusPES",
+		valueLong:    []string{"--trace", "--output", "--user", "--env", "--string-limit", "--summary-sort-by", "--filter", "--detach-on"},
+		noValueShort: "bfDxXykKcCwtTzZvVrAiqdF",
+		noValueLong:  []string{"--follow-forks", "--summary", "--summary-wall-clock", "--timestamps", "--syscall-times", "--instruction-pointer", "--stack-trace", "--decode-fds", "--help", "--version"},
+		pidFlag:      'p',
+	},
+	"ltrace": {
+		valueShort:   "eolxsnFp",
+		valueLong:    []string{"--output", "--filter", "--library", "--config", "--indent", "--strlen", "--pid"},
+		noValueShort: "tifrdSCV",
+		noValueLong:  []string{"--timestamp", "--follow-forks", "--demangle", "--help", "--version"},
+		pidFlag:      'p',
+	},
+	"catchsegv": {},
+	"valgrind": {
+		noValueShort: "qv",
+		valueLong: []string{
+			"--tool", "--log-file", "--xml-file", "--xml-fd", "--suppressions",
+			"--error-exitcode", "--leak-check", "--show-leak-kinds", "--track-origins",
+			"--gen-suppressions", "--num-callers", "--max-stackframe", "--main-stacksize",
+			"--max-threads", "--fair-sched", "--smc-check", "--read-var-info",
+			"--freelist-vol", "--malloc-fill", "--free-fill", "--demangle",
+			"--error-limit", "--show-below-main", "--partial-loads-ok",
+			"--expensive-definedness-checks", "--keep-stacktraces", "--xml-user-comment",
+		},
+		noValueLong: []string{"--help", "--version", "--verbose", "--quiet"},
+	},
 }
 
 // hasSudoShellFlag reports whether sudo/doas arguments contain -s/-i (or

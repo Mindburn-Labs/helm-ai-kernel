@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
@@ -324,7 +325,7 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 	// which on the enforcement path is a crash where a refusal belongs — and a
 	// panic recovered upstream reads as a transient fault rather than a denied
 	// execution. Fail closed instead.
-	if e.verifier == nil {
+	if isNilVerifier(e.verifier) {
 		return errors.New("execution blocked: no signature verifier configured")
 	}
 
@@ -479,5 +480,30 @@ type CompilerPolicy interface {
 func (e *SafeExecutor) ApplyCompilerPolicy(policy CompilerPolicy) {
 	if policy != nil {
 		e.policyEnforcer.SetProhibitedTools(policy.GetProhibitedTools())
+	}
+}
+
+// isNilVerifier reports whether the verifier is absent, including the
+// typed-nil case.
+//
+// A plain `e.verifier == nil` catches only a nil interface. An interface
+// holding a nil *Ed25519Verifier is non-nil, so it passes that check and then
+// panics when the method dereferences its receiver. That path is not
+// hypothetical: it is reached as soon as the signature is well-formed enough to
+// get past the earlier length checks, which is exactly what an attacker
+// supplies.
+//
+// The reflect call runs once per execution, against an ed25519 verification
+// that costs orders of magnitude more.
+func isNilVerifier(v crypto.Verifier) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func:
+		return rv.IsNil()
+	default:
+		return false
 	}
 }

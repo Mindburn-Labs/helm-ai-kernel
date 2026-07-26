@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: classical Ed25519/SHA-256 only; no post-quantum assurance
+// is claimed or provided by this file.
+
 import (
 	"context"
 	"encoding/json"
@@ -153,9 +156,11 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 	}
 	if verify {
 		report, err := verifier.VerifyBundleWithOptions(packDir, verifier.VerifyOptions{
-			Profile: evidencepkg.EvidenceTrustProfileDevLocal,
-			DataDir: evidenceDataDir,
-			Now:     generatedAt,
+			// Pack produced by this process; self-attested seal is expected (F-02).
+			AllowSelfAttested: true,
+			Profile:           evidencepkg.EvidenceTrustProfileDevLocal,
+			DataDir:           evidenceDataDir,
+			Now:               generatedAt,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "Error: verify EvidencePack: %v\n", err)

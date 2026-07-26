@@ -50,6 +50,14 @@ helm-ai-kernel workstation verify-decision \
   --receipt ~/.helm-ai-kernel/receipts/hooks/<decision>.json
 ```
 
+This proves signature **integrity** against the receipt's self-declared key.
+Signer **trust** (`signer_trusted`) is evaluated against an expected
+workstation public key — the local `--data-dir` key by default; pin the
+signer's key out of band with `--trusted-public-key-file` when verifying
+copied receipts — see
+[local signer and trusted verification](../reference/workstation-governance.md#local-signer-and-trusted-verification).
+Receipts signed with pre-v0.7.3 derivable seeds remain untrusted.
+
 ## MCP Configuration
 
 For lower-level MCP configuration, install the Claude Code MCP server:

@@ -134,6 +134,37 @@ func TestHookPreToolFailsClosedWhenLocalSigningKeyIsInsecure(t *testing.T) {
 	}
 }
 
+func TestHookPreToolProductionRequiresExplicitSigningSeedFile(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
+	tmp := t.TempDir()
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "local receipt signer is unavailable") {
+		t.Fatalf("production hook without signer = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(tmp, workstationSigningKeyDirectory)); !os.IsNotExist(err) {
+		t.Fatalf("production hook created local signing key state: %v", err)
+	}
+
+	seedFile := filepath.Join(t.TempDir(), "hook.seed")
+	if err := os.WriteFile(seedFile, []byte(strings.Repeat("2", 64)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--signing-seed-file", seedFile}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+		t.Fatalf("production hook with explicit signer = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 1 {
+		t.Fatalf("explicit production signer receipts = %v, want one", receipts)
+	}
+	if _, err := os.Stat(workstationSigningSeedPath(tmp)); !os.IsNotExist(err) {
+		t.Fatalf("production hook created fallback seed: %v", err)
+	}
+}
+
 func TestHookPreToolFailsClosedWhenReceiptCannotPersist(t *testing.T) {
 	tmp := t.TempDir()
 	if _, err := ensureLocalWorkstationSigningSeed(tmp); err != nil {

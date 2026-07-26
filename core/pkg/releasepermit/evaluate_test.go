@@ -138,12 +138,34 @@ func TestEvaluateAcceptsGitHubWorkflowRefIdentity(t *testing.T) {
 	}
 }
 
+func TestEvaluateAcceptsGitHubWorkflowSHAIdentity(t *testing.T) {
+	context := validContext()
+	context.WorkflowRef = context.WorkflowRepository + "/" + context.WorkflowPath + "@" + context.WorkflowSHA
+
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if permit.Decision != DecisionAllow {
+		t.Fatalf("Decision = %q, want %q; reasons = %#v", permit.Decision, DecisionAllow, permit.Reasons)
+	}
+}
+
 func TestEvaluateRejectsMismatchedGitHubWorkflowRefIdentity(t *testing.T) {
 	context := validContext()
 	context.WorkflowRef = "Mindburn-Labs/other/.github/workflows/ci.yml@refs/heads/main"
 
 	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
 		t.Fatal("Evaluate() error = nil, want mismatched workflow identity error")
+	}
+}
+
+func TestEvaluateRejectsMismatchedGitHubWorkflowSHAIdentity(t *testing.T) {
+	context := validContext()
+	context.WorkflowRef = context.WorkflowRepository + "/" + context.WorkflowPath + "@" + testMergeSHA
+
+	if _, err := Evaluate(context, testContextSHA, validReviews(context)); err == nil {
+		t.Fatal("Evaluate() error = nil, want mismatched workflow SHA identity error")
 	}
 }
 

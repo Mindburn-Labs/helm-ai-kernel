@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
@@ -14,6 +15,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receipts/policies"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 )
 
 // UsageMeter is an optional interface for recording execution usage events.
@@ -107,7 +109,20 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 		return nil, nil, errors.New("execution blocked: missing decision")
 	}
 
-	// 1. Idempotency Check
+	// 1. Gating & Verification.
+	//
+	// This MUST precede the idempotency lookup. The lookup keys on decision.ID
+	// alone, so running it first meant an unsigned DecisionRecord carrying
+	// nothing but a known ID returned (receipt, artifact, nil) — a success
+	// return plus a genuine signed receipt — without the decision signature,
+	// intent signature, effect digest, verdict or authority window ever being
+	// examined (F-09).
+	if err := e.validateGating(decision, intent, effect); err != nil {
+		return nil, nil, err
+	}
+
+	// 2. Idempotency Check — only after the caller has proven it was entitled
+	// to ask about this decision at all.
 	if receipt, ok := e.checkIdempotency(ctx, decision.ID); ok {
 		// Recover artifact if possible, or return a pointer to the receipt
 		// For now, return a synthetic artifact indicating execution already happened
@@ -118,11 +133,6 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 			Preview:     fmt.Sprintf("Already executed. Receipt: %s", receipt.ReceiptID),
 		}
 		return receipt, artifact, nil
-	}
-
-	// 1. Gating & Verification
-	if err := e.validateGating(decision, intent, effect); err != nil {
-		return nil, nil, err
 	}
 
 	// 2. Snapshot Verification
@@ -310,14 +320,33 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 		return fmt.Errorf("execution blocked: intent effect digest mismatch (intent=%s, runtime=%s)", intent.EffectDigestHash, effectDigest)
 	}
 
+	// An executor with no verifier cannot establish provenance for anything.
+	// Without this guard the calls below dereference a nil interface and panic,
+	// which on the enforcement path is a crash where a refusal belongs — and a
+	// panic recovered upstream reads as a transient fault rather than a denied
+	// execution. Fail closed instead.
+	if isNilVerifier(e.verifier) {
+		return errors.New("execution blocked: no signature verifier configured")
+	}
+
 	// 1. Verify Decision Signature (Provenance)
-	if valid, err := e.verifier.VerifyDecision(decision); err != nil || !valid {
-		return fmt.Errorf("execution blocked: invalid decision signature: %w", err)
+	//
+	// A verifier reports a bad signature as (false, nil); an error means it could
+	// not complete the check at all. Wrapping a nil err with %w rendered the
+	// common case as "invalid decision signature: %!w(<nil>)", losing the
+	// distinction between "the signature is wrong" and "verification failed to
+	// run" exactly where a forensic reader needs it. Both still deny.
+	if valid, err := e.verifier.VerifyDecision(decision); err != nil {
+		return fmt.Errorf("execution blocked: decision signature verification failed: %w", err)
+	} else if !valid {
+		return errors.New("execution blocked: invalid decision signature")
 	}
 
 	// 2. Verify Intent Signature (Authorization)
-	if valid, err := e.verifier.VerifyIntent(intent); err != nil || !valid {
-		return fmt.Errorf("execution blocked: invalid intent signature: %w", err)
+	if valid, err := e.verifier.VerifyIntent(intent); err != nil {
+		return fmt.Errorf("execution blocked: intent signature verification failed: %w", err)
+	} else if !valid {
+		return errors.New("execution blocked: invalid intent signature")
 	}
 
 	// 3. Verify Verdict (canonical: ALLOW per contracts/verdict.go)
@@ -379,16 +408,22 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 	}
 
 	receipt := &contracts.Receipt{
-		ReceiptID:    "rcpt-" + decision.ID,
-		DecisionID:   decision.ID,
-		EffectID:     effect.EffectID,
-		Status:       "SUCCESS",
-		BlobHash:     blobHash,
-		OutputHash:   outputHash,
-		ArgsHash:     effect.ArgsHash, // PEP boundary hash bound into signed receipt
-		Timestamp:    e.clock(),
-		PrevHash:     prevHash,
-		LamportClock: lamportClock,
+		ReceiptID:     "rcpt-" + decision.ID,
+		DecisionID:    decision.ID,
+		CorrelationID: decision.CorrelationID,
+		EffectID:      effect.EffectID,
+		Status:        "SUCCESS",
+		BlobHash:      blobHash,
+		OutputHash:    outputHash,
+		ArgsHash:      effect.ArgsHash, // PEP boundary hash bound into signed receipt
+		Timestamp:     e.clock(),
+		PrevHash:      prevHash,
+		LamportClock:  lamportClock,
+	}
+	if receipt.CorrelationID == "" {
+		if corr, ok := tracing.GetCorrelationID(ctx); ok {
+			receipt.CorrelationID = string(corr)
+		}
 	}
 	if intent != nil {
 		receipt.EmergencyActivationID = intent.EmergencyActivationID
@@ -445,5 +480,35 @@ type CompilerPolicy interface {
 func (e *SafeExecutor) ApplyCompilerPolicy(policy CompilerPolicy) {
 	if policy != nil {
 		e.policyEnforcer.SetProhibitedTools(policy.GetProhibitedTools())
+	}
+}
+
+// quantum_posture: this helper inspects only whether a verifier is present. It
+// performs no cryptographic operation and makes no algorithm choice, so it is
+// agnostic to the classical/post-quantum profile the injected verifier
+// implements.
+//
+// isNilVerifier reports whether the verifier is absent, including the
+// typed-nil case.
+//
+// A plain `e.verifier == nil` catches only a nil interface. An interface
+// holding a nil *Ed25519Verifier is non-nil, so it passes that check and then
+// panics when the method dereferences its receiver. That path is not
+// hypothetical: it is reached as soon as the signature is well-formed enough to
+// get past the earlier length checks, which is exactly what an attacker
+// supplies.
+//
+// The reflect call runs once per execution, against an ed25519 verification
+// that costs orders of magnitude more.
+func isNilVerifier(v crypto.Verifier) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func:
+		return rv.IsNil()
+	default:
+		return false
 	}
 }

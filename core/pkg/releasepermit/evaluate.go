@@ -196,8 +196,8 @@ func ValidateAllowPermit(permit Permit, trustedContext Context, contextSHA256 st
 		problems = append(problems, "workflow_path must name a GitHub Actions workflow")
 	}
 	workflowRef := normalizeWorkflowRef(permit.WorkflowRepository, permit.WorkflowPath, permit.WorkflowRef)
-	if !validGitRef(workflowRef, true) {
-		problems = append(problems, "workflow_ref must be a branch or tag ref")
+	if !validWorkflowRef(workflowRef, permit.WorkflowSHA) {
+		problems = append(problems, "workflow_ref must be a branch or tag ref or match workflow_sha")
 	}
 	if strings.EqualFold(permit.Repository, permit.WorkflowRepository) &&
 		(permit.WorkflowSHA == permit.HeadSHA || permit.WorkflowSHA == permit.MergeSHA) {
@@ -323,8 +323,8 @@ func validateContext(context Context) error {
 		problems = append(problems, "workflow_path must name a GitHub Actions workflow")
 	}
 	workflowRef := normalizeWorkflowRef(context.WorkflowRepository, context.WorkflowPath, context.WorkflowRef)
-	if !validGitRef(workflowRef, true) {
-		problems = append(problems, "workflow_ref must be a branch or tag ref")
+	if !validWorkflowRef(workflowRef, context.WorkflowSHA) {
+		problems = append(problems, "workflow_ref must be a branch or tag ref or match workflow_sha")
 	}
 	if !hexSHA40Pattern.MatchString(context.WorkflowSHA) {
 		problems = append(problems, "workflow_sha must be a lowercase 40-character Git SHA")
@@ -501,6 +501,10 @@ func validWorkflowPath(path string) bool {
 
 func normalizeWorkflowRef(repository, path, ref string) string {
 	return strings.TrimPrefix(ref, repository+"/"+path+"@")
+}
+
+func validWorkflowRef(ref, workflowSHA string) bool {
+	return validGitRef(ref, true) || ref == workflowSHA
 }
 
 func validGitRef(ref string, allowTag bool) bool {

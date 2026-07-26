@@ -1,3 +1,8 @@
+// quantum_posture: setup provisions and propagates the path to the classical
+// Ed25519 workstation signing seed (resolution and key handling live in
+// workstation_signing.go); crypto/rand is used only for install identifiers.
+// No post-quantum or hybrid primitives are used in this file.
+
 package main
 
 import (
@@ -9,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -32,16 +38,17 @@ var (
 )
 
 type setupOptions struct {
-	Target       string
-	Operation    string
-	Scope        string
-	Workspace    string
-	WorkspaceSet bool
-	Yes          bool
-	DryRun       bool
-	JSON         bool
-	NoQuickstart bool
-	DataDir      string
+	Target          string
+	Operation       string
+	Scope           string
+	Workspace       string
+	WorkspaceSet    bool
+	Yes             bool
+	DryRun          bool
+	JSON            bool
+	NoQuickstart    bool
+	DataDir         string
+	SigningSeedFile string
 }
 
 type setupSummary struct {
@@ -152,7 +159,7 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup: create data dir: %v\n", err)
 		return 1
 	}
-	if _, err := ensureLocalWorkstationSigningSeed(opts.DataDir); err != nil {
+	if _, err := resolveWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile); err != nil {
 		fmt.Fprintf(stderr, "setup: provision local receipt signing key: %v\n", err)
 		return 1
 	}
@@ -297,6 +304,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Install without starting the blocking Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
+	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
@@ -323,6 +331,7 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Report a headless setup without a Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
+	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	if includeYes {
 		fs.BoolVar(&opts.Yes, "yes", false, "Remove without prompting")
 	}
@@ -371,6 +380,14 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 	}
 	if abs, err := filepath.Abs(opts.DataDir); err == nil {
 		opts.DataDir = abs
+	}
+	// The seed-file path gets baked into the installed hook command, which
+	// later runs from an arbitrary working directory — a relative path would
+	// resolve against that directory and fail the signer.
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		if abs, err := filepath.Abs(opts.SigningSeedFile); err == nil {
+			opts.SigningSeedFile = abs
+		}
 	}
 	if opts.Workspace == "" {
 		workspace, err := os.Getwd()
@@ -487,12 +504,17 @@ func setupUninstallCommand(opts setupOptions) string {
 	if opts.Scope == "project" {
 		workspace = " --workspace " + shellQuote(opts.Workspace)
 	}
+	signingSeedFile := ""
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		signingSeedFile = " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
 	return fmt.Sprintf(
-		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s",
+		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s%s",
 		opts.Target,
 		opts.Scope,
 		workspace,
 		shellQuote(opts.DataDir),
+		signingSeedFile,
 	)
 }
 
@@ -688,7 +710,11 @@ func setupHookMatcher(target string) string {
 }
 
 func setupHookCommand(opts setupOptions, bin string) string {
-	return shellQuote(bin) + " hook pre-tool --client " + opts.Target + " --data-dir " + shellQuote(opts.DataDir)
+	command := shellQuote(bin) + " hook pre-tool --client " + opts.Target + " --data-dir " + shellQuote(opts.DataDir)
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		command += " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
+	return command
 }
 
 func upsertHookConfig(path, matcher, command, allowedRoot string) error {
@@ -702,6 +728,29 @@ func upsertHookConfig(path, matcher, command, allowedRoot string) error {
 	hooks := objectValue(root, "hooks")
 	pre := arrayValue(hooks, "PreToolUse")
 	if hookCommandPresent(pre, command) {
+		// Same hook identity: rewrite the stored command in place so a
+		// re-install with a new --signing-seed-file updates the config
+		// instead of silently keeping the old seed path.
+		key := hookCommandKey(command)
+		for _, item := range pre {
+			obj, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			hookItems, ok := obj["hooks"].([]any)
+			if !ok {
+				continue
+			}
+			for _, h := range hookItems {
+				hookObj, ok := h.(map[string]any)
+				if !ok {
+					continue
+				}
+				if hookCommandKey(hookCommandFromAny(h)) == key {
+					hookObj["command"] = command
+				}
+			}
+		}
 		return writeJSONObject(path, root, allowedRoot)
 	}
 	entry := map[string]any{
@@ -747,7 +796,7 @@ func removeHookConfig(path, command, allowedRoot string) error {
 		}
 		keptHooks := make([]any, 0, len(hookItems))
 		for _, h := range hookItems {
-			if hookCommandFromAny(h) != command {
+			if hookCommandKey(hookCommandFromAny(h)) != hookCommandKey(command) {
 				keptHooks = append(keptHooks, h)
 			}
 		}
@@ -806,7 +855,23 @@ func arrayValue(root map[string]any, key string) []any {
 	return []any{}
 }
 
+// signingSeedFileArgPattern matches the optional --signing-seed-file segment
+// of an installed hook command, with its shell-quoted or bare argument. The
+// argument alternation mirrors shellQuote output: a sequence of
+// single-quoted chunks, escaped quotes (the '\” idiom), and bare
+// non-space characters.
+var signingSeedFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
+
+// hookCommandKey reduces an installed hook command to its identity: the
+// signing-seed-file argument is a deployment detail, so `setup status` and
+// `setup remove` must match the hook whether or not (and with whichever path
+// form) the flag was passed on their own invocation.
+func hookCommandKey(command string) string {
+	return signingSeedFileArgPattern.ReplaceAllString(command, "")
+}
+
 func hookCommandPresent(pre []any, command string) bool {
+	key := hookCommandKey(command)
 	for _, item := range pre {
 		obj, ok := item.(map[string]any)
 		if !ok {
@@ -817,7 +882,7 @@ func hookCommandPresent(pre []any, command string) bool {
 			continue
 		}
 		for _, h := range hooks {
-			if hookCommandFromAny(h) == command {
+			if hookCommandKey(hookCommandFromAny(h)) == key {
 				return true
 			}
 		}

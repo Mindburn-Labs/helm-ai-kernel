@@ -1,9 +1,8 @@
 # Governance
 
-This document describes how the helm-ai-kernel project is governed. It is the
-canonical reference for maintainer responsibilities, decision-making, and
-project change control. The governance model is designed to satisfy CNCF
-Sandbox eligibility and to scale to a multi-organization maintainer set.
+This document describes the helm-ai-kernel stewardship model and code-merge
+authority. The governance model is designed to scale to a multi-organization
+maintainer set without making human identity an independent code-merge gate.
 
 ## Project Scope
 
@@ -16,17 +15,17 @@ not in scope for this project's governance.
 ## Maintainer Model
 
 The project is led by a small set of maintainers who hold commit access and
-the ability to approve releases. The initial roster is listed in
+release stewardship. The initial roster is listed in
 `MAINTAINERS.md`. Maintainers represent themselves first and their
 affiliation second; a single organization holds no more than half of the
 seats once the maintainer set reaches three or more members.
 
 There are three roles:
 
-- **Maintainer** — full commit access, may merge after a single review,
-  approves releases, votes on governance changes.
-- **Reviewer** — may approve PRs in a defined area; cannot merge; named
-  in `MAINTAINERS.md` under the relevant area.
+- **Maintainer** — full commit access, stewardship of releases, and a vote on
+  governance changes. Maintainer identity cannot authorize a code merge.
+- **Reviewer** — may provide advisory PR review in a defined area; cannot
+  authorize a merge; named in `MAINTAINERS.md` under the relevant area.
 - **Contributor** — anyone who opens a PR or issue. No formal status; the
   project welcomes contributions per `CONTRIBUTING.md`.
 
@@ -50,25 +49,37 @@ six months) are moved to "Emeritus" status by lazy consensus.
 
 ## Decision-Making
 
-The default decision rule is **lazy consensus**: any maintainer may propose
-a change, and absence of objection for the configured review window is
-treated as approval.
+The default decision rule for project stewardship is **lazy consensus**: any
+maintainer may propose a change, and absence of objection for the configured
+review window is treated as agreement. It never substitutes for code-merge
+authorization.
 
 | Decision Type | Rule | Window |
 | --- | --- | --- |
-| Routine code change | One maintainer review (Mandatory PR Approval) | Same day |
-| Architectural change | Lazy consensus | 72 hours |
-| Breaking API change | Super-majority (2/3) | 7 days |
+| Routine code change | Source-owned deterministic gates plus a distinct-provider exact-head machine interlock | Per gate |
+| Architectural change | Same machine merge rule; maintainer discussion is advisory | 72 hours advisory window |
+| Breaking API change | Same machine merge rule plus CHANGELOG and SDK requirements | 7 days advisory window |
 | Governance change | Super-majority (2/3) | 14 days |
 | Maintainer addition | Lazy consensus | 7 days |
 | Maintainer removal | Super-majority (2/3) | 14 days |
 
-### Branch Protection & Review Policies
+### Code-Merge Authority
 
-To satisfy OpenSSF and CNCF compliance, branch protection rules are strictly enforced on the default branch (`main`) in the GitHub repository:
-1. **Mandatory Peer Review**: All merges to the default branch must occur via Pull Requests. Each Pull Request requires at least one formal approval from an authorized, unaffiliated maintainer or codeowner prior to merge. Direct pushes are structurally blocked.
-2. **Mandatory Status Checks**: The continuous integration suite (`ci.yml`) and vulnerability scanner must pass successfully before a merge is permitted.
-3. **Cryptographic Signing**: All commit contributions must be cryptographically signed by the committer.
+All code merges to `main` must use a pull request and are authorized only by:
+
+1. source-owned deterministic gates for the candidate; and
+2. a distinct-provider machine interlock that approves the exact candidate
+   head (or exact merge tree) after those gates pass.
+
+Human identity, formal approvals, CODEOWNERS, labels, commit signing, and
+commit trailers are advisory metadata only; none has merge-authority weight or
+can replace either machine requirement. Missing, stale, or mismatched evidence
+fails closed. This rule is active for autonomous merges only after the
+source-owned gates and interlock are live-proven.
+
+This applies to repository code changes. Product-level approval ceremonies and
+effect control remain governed by their runtime policy, connector, receipt, and
+EvidencePack contracts.
 
 A breaking API change is any change to `protocols/`, `api/openapi/`, the
 public CLI flag set, or the `core/pkg/contracts/` types. Such changes
@@ -100,7 +111,9 @@ A release is approved when:
 
 1. CI passes on the tagged commit.
 2. The reproducibility job in `release.yml` confirms byte-identical builds.
-3. At least one maintainer has signed off on the release notes.
+3. The distinct-provider exact-head machine interlock approves the tagged
+   release candidate. A maintainer may prepare release notes, but human
+   sign-off and commit trailers have no release-authority weight.
 
 ## Security Policy
 

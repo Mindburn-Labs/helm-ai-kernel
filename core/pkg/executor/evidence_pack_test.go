@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 )
 
 func TestEvidencePackProducer_Produce(t *testing.T) {
@@ -352,5 +353,38 @@ func TestEvidencePackHashIncludesEUAIActProfile(t *testing.T) {
 	}
 	if withProfile == withoutProfile {
 		t.Fatal("EU AI Act profile changes must affect evidence pack hash")
+	}
+}
+
+func TestEvidencePackProducer_CorrelationIDFromContext(t *testing.T) {
+	producer := NewEvidencePackProducer("1.0.0-test")
+	const corr = "d2f1c3a4-5b6e-4f70-8a91-b2c3d4e5f601"
+	ctx := tracing.WithCorrelationID(context.Background(), tracing.CorrelationID(corr))
+
+	pack, err := producer.Produce(ctx, &EvidencePackInput{
+		ActorID:    "user-123",
+		ActorType:  "human",
+		DecisionID: "dec-789",
+		EffectID:   "eff-001",
+	})
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	if pack.CorrelationID != corr {
+		t.Errorf("pack.CorrelationID = %q, want %q", pack.CorrelationID, corr)
+	}
+
+	// Without a correlation ID in context the field stays empty (omitempty).
+	pack2, err := producer.Produce(context.Background(), &EvidencePackInput{
+		ActorID:    "user-123",
+		ActorType:  "human",
+		DecisionID: "dec-790",
+		EffectID:   "eff-002",
+	})
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	if pack2.CorrelationID != "" {
+		t.Errorf("pack2.CorrelationID = %q, want empty", pack2.CorrelationID)
 	}
 }

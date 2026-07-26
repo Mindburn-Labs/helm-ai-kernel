@@ -26,4 +26,8 @@ message DecisionRecord {
   double trajectory_risk_score = 11;
   string session_centroid_hash = 12;
   int32 risk_accumulation_window = 13;
+  // Product request identity (X-Helm-Correlation-ID) this decision was made
+  // for — the stable join key across lifecycle events, receipts, and
+  // evidence. Optional; outside the decision signature until HELM-303.
+  string correlation_id = 14;
 }

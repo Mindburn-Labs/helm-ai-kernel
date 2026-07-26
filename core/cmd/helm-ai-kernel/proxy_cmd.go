@@ -1,3 +1,7 @@
+// quantum_posture: the proxy signs governance receipts with the kernel's
+// classical Ed25519 signer when --sign is enabled and hashes payloads with
+// SHA-256; no post-quantum primitives are used in this file.
+
 package main
 
 import (
@@ -33,6 +37,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // proxyReceipt is the governance receipt attached to every proxied request.
@@ -446,15 +452,33 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	defer store.Close()
 
-	// Ed25519 signer (used for both receipts and KernelBridge governance)
-	kernelSignerID := signKey
-	if kernelSignerID == "" {
-		kernelSignerID = "helm-proxy"
-	}
-	kernelSigner, err := helmcrypto.NewEd25519Signer(kernelSignerID)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: failed to create kernel signer: %v\n", err)
-		return 2
+	// Ed25519 signer (used for both receipts and KernelBridge governance).
+	//
+	// --sign is documented as a signing seed. It previously became the signer's
+	// key *id* while the actual keypair was generated at random, so receipts
+	// were unverifiable after a restart and the seed was published in every
+	// receipt's KeyID field (F-01).
+	var kernelSigner *helmcrypto.Ed25519Signer
+	if signKey != "" {
+		var derivedFromPassphrase bool
+		kernelSigner, derivedFromPassphrase, err = helmcrypto.NewEd25519SignerFromSecret(signKey, "helm-proxy")
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: failed to create kernel signer: %v\n", err)
+			return 2
+		}
+		if derivedFromPassphrase {
+			_, _ = fmt.Fprintln(stderr,
+				"Warning: --sign is not a 32-byte hex/base64 seed; deriving one by hashing it. "+
+					"Supply a generated seed so receipts stay verifiable and the key is not guessable.")
+		}
+	} else {
+		// No seed supplied: ephemeral identity. Receipts signed by it cannot be
+		// verified once this process exits. Fails closed under HELM_PRODUCTION.
+		kernelSigner, err = helmcrypto.NewEd25519Signer("helm-proxy")
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: failed to create kernel signer: %v\n", err)
+			return 2
+		}
 	}
 
 	// Optional: separate receipt signer (same key for now)
@@ -527,19 +551,27 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 			// helm correlation_id — also used as gen_ai.tool.call.id so OTel traces
 			// and helm-ai-kernel receipts cross-reference 1:1.
-			corr := tracing.NewCorrelationID()
+			// Adopt-or-mint (telemetry contract §2.2): a valid inbound
+			// X-Helm-Correlation-ID is honoured so a caller can thread one
+			// product identity through the whole request path; anything
+			// else is replaced with a freshly minted ID.
+			corr, _ := tracing.AdoptOrMintFromHeaders(req.Header)
 			ctx := tracing.WithCorrelationID(req.Context(), corr)
 			ctx = context.WithValue(ctx, ctxKeyCorrelationID, string(corr))
 			ctx = context.WithValue(ctx, ctxKeyRequestModel, requestModel)
 
+			// Stamp the product identity onto the edge server span so OTel
+			// traces and receipts join 1:1 (HELM-333); same attribute the
+			// governance tracer uses.
+			oteltrace.SpanFromContext(ctx).SetAttributes(
+				attribute.String(observability.HelmCorrelationID, string(corr)))
+
 			// Inject W3C traceparent so the upstream provider's traces (if any)
-			// link back into our governance trace tree.
+			// link back into our governance trace tree. InjectHTTPHeaders also
+			// sets the advisory X-Helm-Correlation-ID for upstreams that echo it.
 			helmotel.InjectTraceparent(ctx, req.Header)
 			tracing.InjectHTTPHeaders(ctx, req.Header)
 			ctx = context.WithValue(ctx, ctxKeyTraceparent, req.Header.Get("traceparent"))
-
-			// Set advisory header so upstreams that look for it can echo the id.
-			req.Header.Set("X-Helm-Correlation-ID", string(corr))
 
 			*req = *req.WithContext(ctx)
 
@@ -559,6 +591,13 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			}
 		},
 		ModifyResponse: func(resp *http.Response) error {
+			// The correlation ID is a client-visible join key for both regular
+			// responses and SSE streams, which return before receipt creation.
+			correlationID, _ := resp.Request.Context().Value(ctxKeyCorrelationID).(string)
+			if correlationID != "" {
+				resp.Header.Set("X-Helm-Correlation-ID", correlationID)
+			}
+
 			// Detect SSE streaming response
 			contentType := resp.Header.Get("Content-Type")
 			isSSE := strings.Contains(contentType, "text/event-stream")
@@ -590,7 +629,6 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 			// Pull per-request governance state stashed by Director.
 			reqCtx := resp.Request.Context()
-			correlationID, _ := reqCtx.Value(ctxKeyCorrelationID).(string)
 			requestModel, _ := reqCtx.Value(ctxKeyRequestModel).(string)
 			traceparent, _ := reqCtx.Value(ctxKeyTraceparent).(string)
 
@@ -799,9 +837,6 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			resp.Header.Set("X-Helm-Output-Hash", rcpt.OutputHash)
 			resp.Header.Set("X-Helm-Lamport-Clock", fmt.Sprintf("%d", rcpt.LamportClock))
 			resp.Header.Set("X-Helm-Status", rcpt.Status)
-			if correlationID != "" {
-				resp.Header.Set("X-Helm-Correlation-ID", correlationID)
-			}
 			if traceparent != "" {
 				resp.Header.Set("traceparent", traceparent)
 			}
@@ -963,8 +998,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stdout, "  Every tool call is governed, hashed, and receipted. Ctrl+C to stop.\n")
 
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
+		Addr: addr,
+		// The proxy is an external ingress edge: run every request inside an
+		// otelhttp server span so an inbound W3C traceparent is continued
+		// (HELM-333) before governance and upstream forwarding run.
+		Handler:           tracing.WrapEdgeHandler(mux, "helm.proxy"),
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 

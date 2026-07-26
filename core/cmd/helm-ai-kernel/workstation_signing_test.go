@@ -54,6 +54,30 @@ func TestLocalWorkstationSigningKeyLifecycle(t *testing.T) {
 	}
 }
 
+func TestProductionWorkstationSigningRequiresExplicitSeedFile(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
+	dataDir := filepath.Join(t.TempDir(), "helm")
+
+	if _, err := resolveWorkstationSigningSeed(dataDir, "", ""); err == nil || !strings.Contains(err.Error(), "requires --signing-seed-file") {
+		t.Fatalf("production missing signer error = %v, want explicit seed requirement", err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, workstationSigningKeyDirectory)); !os.IsNotExist(err) {
+		t.Fatalf("production missing signer created local key state: %v", err)
+	}
+
+	seedFile := filepath.Join(t.TempDir(), "workstation.seed")
+	if err := os.WriteFile(seedFile, []byte(strings.Repeat("1", ed25519.SeedSize*2)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	seed, err := resolveWorkstationSigningSeed(dataDir, "", seedFile)
+	if err != nil {
+		t.Fatalf("load explicit production signing seed: %v", err)
+	}
+	if len(seed) != ed25519.SeedSize {
+		t.Fatalf("explicit production seed length = %d, want %d", len(seed), ed25519.SeedSize)
+	}
+}
+
 func TestLocalWorkstationSigningKeyRejectsSymlinkAndMismatchedPublicKey(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "helm")
 	keyDir := filepath.Join(dataDir, workstationSigningKeyDirectory)

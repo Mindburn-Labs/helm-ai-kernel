@@ -40,6 +40,9 @@ func resolveWorkstationSigningSeed(dataDir, seedHex, seedFile string) ([]byte, e
 }
 
 func ensureLocalWorkstationSigningSeed(dataDir string) ([]byte, error) {
+	if envBool("HELM_PRODUCTION") {
+		return nil, errors.New("production mode requires --signing-seed-file")
+	}
 	dataDir, err := normalizedWorkstationDataDir(dataDir)
 	if err != nil {
 		return nil, err

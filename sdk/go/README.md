@@ -4,14 +4,14 @@ Typed Go client for the HELM kernel HTTP API.
 
 ## Install
 
-After the `sdk/go/v0.7.4` subdirectory tag is published and verified:
+After the `sdk/go/v0.7.5` subdirectory tag is published and verified:
 
 ```bash
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.4
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.5
 ```
 
-Version truth is the repository `VERSION` file (`0.7.4` for this source target).
-Tagged Go module releases use the subdirectory tag form `sdk/go/v0.7.4`; this
+Version truth is the repository `VERSION` file (`0.7.5` for this source target).
+Tagged Go module releases use the subdirectory tag form `sdk/go/v0.7.5`; this
 source target does not claim that the tag already exists.
 
 ## Local Test
@@ -112,4 +112,4 @@ func main() {
 
 ## Release Notes
 
-`0.7.4` adds the Boundary Enforcement Profile to the kernel and retains the public HTTP client surface, conformance entrypoints, and evidence verification helpers.
+`0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.

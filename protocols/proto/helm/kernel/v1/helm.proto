@@ -64,6 +64,10 @@ message DecisionRecord {
   string policy_ref = 10;
   string policy_decision_hash = 11;
   bytes input_context = 12;
+  // Product request identity (X-Helm-Correlation-ID) this decision was made
+  // for — the stable join key across lifecycle events, receipts, and
+  // evidence. Optional; outside the decision signature until HELM-303.
+  string correlation_id = 13;
 }
 
 message AuthorizedExecutionIntent {
@@ -94,6 +98,9 @@ message Receipt {
   string payload_hash = 14;
   ReasonCode reason_code = 15;
   map<string, string> metadata = 16;
+  // Product request identity (X-Helm-Correlation-ID) this receipt belongs
+  // to. Optional; outside the receipt signature until HELM-303.
+  string correlation_id = 17;
 }
 
 // ── PDP Service ────────────────────────────────────────────────

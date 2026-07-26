@@ -20,8 +20,13 @@ type AccessRequest struct {
 //
 //nolint:govet // fieldalignment: struct layout matches proto schema
 type DecisionRecord struct {
-	ID            string `json:"id"`
-	ProposalID    string `json:"proposal_id"`
+	ID         string `json:"id"`
+	ProposalID string `json:"proposal_id"`
+	// CorrelationID is the product request identity (X-Helm-Correlation-ID)
+	// this decision was made for — the stable join key across lifecycle
+	// events, receipts, and evidence (pilot business-telemetry contract §2).
+	// NOTE: outside the decision signature until HELM-303 resolves.
+	CorrelationID string `json:"correlation_id,omitempty"`
 	StepID        string `json:"step_id"`
 	PhenotypeHash string `json:"phenotype_hash"`
 	PolicyVersion string `json:"policy_version"`

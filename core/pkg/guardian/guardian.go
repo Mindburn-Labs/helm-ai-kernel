@@ -14,6 +14,7 @@ import (
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capability"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
@@ -177,35 +178,36 @@ func WithSafeDepController(controller *safedep.Controller) GuardianOption {
 
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
-	signer            crypto.Signer
-	prg               *prg.Graph
-	pe                *prg.PolicyEngine
-	registry          *pkg_artifact.Registry
-	clock             Clock
-	tracker           BudgetGate
-	auditLog          *AuditLog
-	temporal          *TemporalGuardian
-	envFprint         string                  // Boot-sequence fingerprint for DecisionRecords
-	pdp               pdp.PolicyDecisionPoint // Optional pluggable policy backend
-	snapshotStore     policyreconcile.PolicySnapshotStore
-	snapshotScope     policyreconcile.PolicyScope
-	complianceChecker ComplianceChecker            // Optional compliance pre-check
-	freezeCtrl        *kernel.FreezeController     // Global kill-switch
-	scopedStopReader  kernel.ScopedStopReader      // Tenant/workspace dispatch fence
-	agentKillSwitch   *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
-	contextGuard      *kernel.ContextGuard         // Environment mismatch detection
-	isolationChecker  *identity.IsolationChecker   // Agent credential reuse detection
-	egressChecker     *firewall.EgressChecker      // Network egress enforcement
-	threatScanner     *threatscan.Scanner          // Canonical threat signal scanner
-	delegationStore   identity.DelegationStore     // Delegation session store (§Gate 5)
-	behavioralScorer  *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
-	privilegeResolver PrivilegeResolver            // Privilege tier resolver
-	sessionRiskMemory *SessionRiskMemory           // Deterministic trajectory authorization gate
-	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
-	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
-	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
-	safeDepController *safedep.Controller          // Safe Deprecation emergency release plane
-	boundaryChain     []BoundaryInterceptor        // Cached request interceptors
+	signer             crypto.Signer
+	prg                *prg.Graph
+	pe                 *prg.PolicyEngine
+	registry           *pkg_artifact.Registry
+	clock              Clock
+	tracker            BudgetGate
+	auditLog           *AuditLog
+	temporal           *TemporalGuardian
+	envFprint          string                  // Boot-sequence fingerprint for DecisionRecords
+	pdp                pdp.PolicyDecisionPoint // Optional pluggable policy backend
+	snapshotStore      policyreconcile.PolicySnapshotStore
+	snapshotScope      policyreconcile.PolicyScope
+	complianceChecker  ComplianceChecker            // Optional compliance pre-check
+	freezeCtrl         *kernel.FreezeController     // Global kill-switch
+	scopedStopReader   kernel.ScopedStopReader      // Tenant/workspace dispatch fence
+	agentKillSwitch    *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
+	contextGuard       *kernel.ContextGuard         // Environment mismatch detection
+	isolationChecker   *identity.IsolationChecker   // Agent credential reuse detection
+	egressChecker      *firewall.EgressChecker      // Network egress enforcement
+	threatScanner      *threatscan.Scanner          // Canonical threat signal scanner
+	delegationStore    identity.DelegationStore     // Delegation session store (§Gate 5)
+	behavioralScorer   *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
+	privilegeResolver  PrivilegeResolver            // Privilege tier resolver
+	sessionRiskMemory  *SessionRiskMemory           // Deterministic trajectory authorization gate
+	otel               *OTelInstrumentation         // Optional OTel tracing & metrics
+	warmLeaseMgr       *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
+	zeroidInterceptor  *ZeroIDInterceptor           // ZeroID identity validator
+	safeDepController  *safedep.Controller          // Safe Deprecation emergency release plane
+	capabilityRegistry *capability.Registry         // Governed capability registry (preview, chunk 1)
+	boundaryChain      []BoundaryInterceptor        // Cached request interceptors
 }
 
 // ZeroID returns the registered ZeroIDInterceptor.
@@ -757,6 +759,13 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		attribute.String("principal", req.Principal),
 		attribute.String("resource", req.Resource),
 	)
+
+	// Governed capability resolution (chunk 1): when a capability registry is
+	// configured and the request carries capability_id, resolve before any
+	// policy evaluation. Unknown = ESCALATE (quarantine); drift = DENY.
+	if decision, handled := g.resolveCapabilityGate(span, &req); handled {
+		return decision, nil
+	}
 
 	activeGraph := g.prg
 	activePDP := g.pdp

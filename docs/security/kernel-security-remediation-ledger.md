@@ -355,3 +355,51 @@ point both `VerifyReceipt` methods at `VerifyReceiptSignature`, restore the
 `TestF05_PreviouslyUnsignedFieldsAreNowCovered` cases, and invert
 `TestDemoVerifyRejectsUnsignedEnvelopeMutation`, which still asserts that
 mutating `Metadata` leaves the signature valid.
+
+### 2026-07-25 — F-22: panic instead of denial when no verifier is configured
+
+| ID | Sev | Finding | Status |
+|---|---|---|---|
+| F-22 | T0 | `validateGating` dereferenced `e.verifier` with no nil check, so a `SafeExecutor` built without a verifier **panicked instead of refusing the execution** | fixed in both repos |
+
+A panic is not a safe failure mode on the enforcement path. It writes no
+decision record, and recovered anywhere upstream it presents as a transient
+fault rather than a blocked execution — the distinction between "the kernel
+denied this" and "the kernel fell over" is the entire product claim. Both repos
+now return an explicit error.
+
+**Why it survived:** the earlier effect-digest checks mask it for the common
+input shape. Reaching the dereference requires a decision and intent whose
+effect digests already bind correctly, so the naive test stops at an earlier
+check and never exercises the guard. The regression test binds the digests
+deliberately and recovers from a panic explicitly, so a regression fails as an
+assertion rather than taking down the suite.
+
+**Found by propagation, not by review.** It surfaced only while porting the F-09
+gating-order fix into `helm-ai-enterprise`, where `core/pkg/executor` sits
+outside the `sync-oss-kernel` protected paths and needed a separate patch. The
+non-synced packages are exactly where kernel-side review does not reach.
+
+### Fifth test asserting a vulnerability as intended behaviour
+
+`core/tests/gate_idempotency_test.go` (enterprise) built an executor with every
+dependency nil, called `Execute` with an unsigned `DecisionRecord`, a nil intent
+and a nil effect — commenting *"we expect it to return BEFORE using them"* — and
+asserted that a real signed receipt came back. That is the F-09 exploit written
+down as the expected result. It now asserts that an ungated caller is refused
+and never reaches the receipt store, and that a caller whose intent does not
+verify is refused even when a receipt is already cached.
+
+Running total: `zeroid_test.go`, the verifier seal fixtures,
+`TestApprovalTransitionEnforcesQuorumAndTimelock`,
+`TestDemoVerifyRejectsUnsignedEnvelopeMutation`, and this one. **Five suites were
+protecting defects from being fixed.** Every one of them passed CI continuously.
+
+### Dependency posture
+
+`golang.org/x/text v0.38.0 -> v0.39.0` in `helm-ai-enterprise` clears
+`GO-2026-5970`, which was failing `govulncheck` and `osv-scanner` on that repo's
+`main`, not just on the branch. The kernel had already made this bump in
+HELM-354; the commercial repo had not. Worth a periodic drift check between the
+two module graphs — a vulnerability patched on one side does not propagate,
+because `go.mod` is not in the synced protected paths.

@@ -23,21 +23,29 @@ def load_json(path: Path) -> Any:
         raise ValueError(f"{path.relative_to(ROOT)}:{exc.lineno}:{exc.colno}: {exc.msg}") from exc
 
 
-def optional_jsonschema_check(path: Path, payload: Any) -> str | None:
-    try:
-        import jsonschema.validators  # type: ignore[import-not-found]
-    except Exception:
-        return None
+def jsonschema_check(path: Path, payload: Any) -> None:
+    import jsonschema.validators  # type: ignore[import-not-found]
 
     try:
         validator = jsonschema.validators.validator_for(payload)
         validator.check_schema(payload)
     except Exception as exc:
         raise ValueError(f"{path.relative_to(ROOT)} failed jsonschema compilation: {exc}") from exc
-    return "jsonschema"
 
 
 def main() -> int:
+    try:
+        import jsonschema  # type: ignore[import-not-found]  # noqa: F401
+    except ImportError:
+        print(
+            "JSON schema check failed: the jsonschema package is missing.\n"
+            "Install it with: python -m pip install --require-hashes -r .github/schema-requirements.txt\n"
+            "This used to degrade to a parse-only pass, which is how a schema that "
+            "no longer matched its own registry stayed green in CI (HELM-374).",
+            file=sys.stderr,
+        )
+        return 1
+
     failures: list[str] = []
     schema_count = 0
     compiled_count = 0
@@ -61,8 +69,8 @@ def main() -> int:
                         )
                     ids[schema_id] = path
                 if "$schema" in payload or "$defs" in payload or "properties" in payload:
-                    if optional_jsonschema_check(path, payload):
-                        compiled_count += 1
+                    jsonschema_check(path, payload)
+                    compiled_count += 1
             except ValueError as exc:
                 failures.append(str(exc))
 
@@ -72,8 +80,6 @@ def main() -> int:
             print(f"- {failure}")
         return 1
 
-    if compiled_count == 0:
-        print("jsonschema package unavailable; completed JSON parse and structural checks only.")
     print(f"JSON schema check passed: {schema_count} files parsed, {compiled_count} schemas compiled.")
     return 0
 

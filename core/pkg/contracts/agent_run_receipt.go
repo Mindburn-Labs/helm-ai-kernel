@@ -155,6 +155,53 @@ type AgentDeniedEffect struct {
 	ReasonCode string    `json:"reason_code"`
 	Reason     string    `json:"reason,omitempty"`
 	OccurredAt time.Time `json:"occurred_at"`
+
+	// Finality and Counterfactual are opt-in per policy profile and absent
+	// (not empty) when disabled: their presence is itself a policy statement.
+	Finality       DenialFinality        `json:"finality,omitempty"`
+	Counterfactual *DenialCounterfactual `json:"counterfactual,omitempty"`
+}
+
+// DenialFinality tells a consumer what kind of "no" it received, so an agent
+// can draw the right lesson from it: which bounds to record, which to erase,
+// and which refusals were never about the attempted action at all.
+//
+// It is derived from the reason code that fired, never assigned by a caller.
+type DenialFinality string
+
+const (
+	// DenialClassForbidden: the action itself is forbidden by policy. A
+	// consumer should erase any stored bounds for it and stop probing.
+	DenialClassForbidden DenialFinality = "class_forbidden"
+	// DenialUngranted: no grant is configured for this action. Nothing to
+	// retry and no bound to learn — the action needs an authority to say yes.
+	// The kernel PDP carries this on the escalation channel with the required
+	// signers; the workstation layer has no approver, so it is terminal here.
+	DenialUngranted DenialFinality = "ungranted"
+	// DenialInstanceParameter: a bound was exceeded. A consumer should record
+	// the bound and retry within it.
+	DenialInstanceParameter DenialFinality = "instance_parameter"
+	// DenialInstanceContext: the surrounding context was refused (taint, for
+	// example). The refusal was not about the action; a consumer should touch
+	// none of its stored bounds.
+	DenialInstanceContext DenialFinality = "instance_context"
+)
+
+// DenialCounterfactual is the nearest allowed envelope for a denial: enough for
+// an agent to retry correctly, and no more.
+//
+// It is emitted for scalar bounds and required-capability names only. Denials
+// that turn on set membership never carry one — an egress allowlist or a set of
+// workspace roots is a map of internal infrastructure, and disclosing it would
+// turn every denial into a free probe. See counterfactualFor.
+type DenialCounterfactual struct {
+	// Field is the policy field that bound the request, e.g. "ttl_days".
+	Field string `json:"field"`
+	// Requested and Max describe a scalar bound.
+	Requested uint32 `json:"requested,omitempty"`
+	Max       uint32 `json:"max,omitempty"`
+	// Capability names the permission the action would have needed.
+	Capability string `json:"capability,omitempty"`
 }
 
 // WorkstationPolicyDecisionReceipt is the selected-effect enforcement bridge
@@ -202,6 +249,18 @@ type WorkstationPolicyProfile struct {
 	Egress  WorkstationEgressPolicy    `json:"egress"`
 	Memory  WorkstationMemoryPolicy    `json:"memory"`
 	Loops   WorkstationRecurringPolicy `json:"recurring_loops"`
+	// Learning is nil unless a profile opts in, which keeps the receipts of
+	// every existing profile byte-identical.
+	Learning *WorkstationLearningPolicy `json:"learning,omitempty"`
+}
+
+// WorkstationLearningPolicy opts a profile into the denial fields an agent can
+// learn from. Both default off. They are separate switches because they
+// disclose different things: finality is a taxonomy, a counterfactual is a
+// policy value.
+type WorkstationLearningPolicy struct {
+	EmitFinality       bool `json:"emit_finality,omitempty"`
+	EmitCounterfactual bool `json:"emit_counterfactual,omitempty"`
 }
 
 type WorkstationObservePolicy struct {

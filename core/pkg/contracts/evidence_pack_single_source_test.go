@@ -32,6 +32,14 @@ func TestEvidencePackSingleSource(t *testing.T) {
 			if _, ok := skipDirs[d.Name()]; ok {
 				return filepath.SkipDir
 			}
+			// Skip dot-directories. They are tooling state, not module source —
+			// and .claude/worktrees/ in particular holds full checkouts of this
+			// same repo, whose copies of the struct would otherwise be counted
+			// as duplicate definitions and fail the suite for every developer
+			// with an active worktree.
+			if path != root && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if filepath.Ext(path) != ".go" {

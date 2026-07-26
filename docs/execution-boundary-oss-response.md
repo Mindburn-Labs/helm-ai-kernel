@@ -42,7 +42,7 @@ Targeted verification for this boundary slice:
 
 ```sh
 go test ./core/pkg/contracts ./core/pkg/boundary ./core/cmd/helm-ai-kernel
-cd tests/conformance && go test ./...
+cd tests/conformance && GOWORK=off go test ./...
 cd sdk/go && GOWORK=off CGO_ENABLED=0 go test ./client
 cd sdk/python && python -m pytest -q
 cd sdk/ts && npm test

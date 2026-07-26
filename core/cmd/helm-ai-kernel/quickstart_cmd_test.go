@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: classical Ed25519/SHA-256 only; no post-quantum assurance
+// is claimed or provided by this file.
+
 import (
 	"bytes"
 	"context"
@@ -191,7 +194,7 @@ func TestVerifyCmdAcceptsPositionalBundle(t *testing.T) {
 	bundle := createMinimalVerifiableBundle(t)
 	var stdout, stderr bytes.Buffer
 
-	code := runVerifyCmd([]string{bundle}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", bundle}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
@@ -212,7 +215,7 @@ func TestVerifyCmdOnlineUsesLedgerURL(t *testing.T) {
 	defer ledger.Close()
 
 	var stdout, stderr bytes.Buffer
-	code := runVerifyCmd([]string{bundle, "--online", "--ledger-url", ledger.URL}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", bundle, "--online", "--ledger-url", ledger.URL}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
 	}
@@ -237,7 +240,7 @@ func TestVerifyCmdRejectsBundledConformancePublicKey(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runVerifyCmd([]string{bundle, "--json"}, &stdout, &stderr)
+	code := runVerifyCmd([]string{"--allow-self-attested", bundle, "--json"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("verify accepted bundled public_key.hex as a trust root: stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
@@ -250,7 +253,7 @@ func TestVerifyCmdRejectsBundledConformancePublicKey(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	code = runVerifyCmd([]string{bundle, "--json", "--trusted-public-key", hex.EncodeToString(pub)}, &stdout, &stderr)
+	code = runVerifyCmd([]string{"--allow-self-attested", bundle, "--json", "--trusted-public-key", hex.EncodeToString(pub)}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("verify with explicit trusted key failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}

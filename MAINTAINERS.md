@@ -12,7 +12,10 @@ maintainer-addition or maintainer-removal rule documented there.
 
 ## Reviewers
 
-Reviewers may approve PRs in their listed area but cannot merge.
+Reviewers provide advisory review in their listed area. Neither reviewer
+identity, CODEOWNERS, labels, nor commit trailers authorize a code merge; that
+authority is limited to the source-owned deterministic gates and
+distinct-provider exact-head machine interlock in `GOVERNANCE.md`.
 
 | Name | GitHub | Affiliation | Areas |
 | --- | --- | --- | --- |
@@ -34,7 +37,8 @@ The path to maintainer is documented in
 [`GOVERNANCE.md`](GOVERNANCE.md#becoming-a-maintainer). In short:
 sustained high-quality contributions, nomination by an existing
 maintainer, lazy-consensus approval, and addition to this file in the
-same PR that grants commit access.
+same PR that grants commit access. Maintainer status does not grant a
+code-merge override.
 
 ## Contact
 

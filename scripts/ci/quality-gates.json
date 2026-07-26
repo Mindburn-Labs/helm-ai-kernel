@@ -20,6 +20,7 @@
         "ts-sdk",
         "rust-sdk",
         "java-sdk",
+        "json-schemas",
         "proto-breaking",
         "openapi-breaking"
       ]
@@ -417,15 +418,18 @@
     },
     {
       "id": "json-schemas",
-      "title": "JSON schema compilation",
-      "command": "python3 scripts/ci/check_json_schemas.py",
+      "title": "JSON schema compilation and registry conformance",
+      "command": "python3 scripts/ci/check_json_schemas_test.py && python3 scripts/ci/check_json_schemas.py && python3 scripts/ci/check_reason_codes.py",
       "timeout_seconds": 300,
       "paths": [
         "schemas/**",
         "protocols/json-schemas/**",
         "protocols/specs/**",
         "api/openapi/**",
-        "scripts/ci/check_json_schemas.py"
+        ".github/schema-requirements.txt",
+        "scripts/ci/check_json_schemas.py",
+        "scripts/ci/check_json_schemas_test.py",
+        "scripts/ci/check_reason_codes.py"
       ]
     },
     {

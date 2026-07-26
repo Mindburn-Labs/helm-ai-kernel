@@ -69,9 +69,17 @@ func seedPacks(reg registry.Registry, root string) error {
 	if bootKey == "" {
 		return fmt.Errorf("SYSTEM_BOOT_KEY environment variable is required for pack signing (must be a stable secret)")
 	}
-	signer, err := crypto.NewEd25519Signer(bootKey)
+	// SYSTEM_BOOT_KEY is key material, not a label. It previously reached
+	// NewEd25519Signer, which ignored it and generated a random keypair — so
+	// every bootstrap produced a different pack-signing identity and the secret
+	// was published in each pack's key id (F-01).
+	signer, derivedFromPassphrase, err := crypto.NewEd25519SignerFromSecret(bootKey, "system-boot")
 	if err != nil {
 		return fmt.Errorf("failed to create system signer: %w", err)
+	}
+	if derivedFromPassphrase {
+		log.Println("[bootstrap] WARNING: SYSTEM_BOOT_KEY is not a 32-byte hex/base64 seed; " +
+			"deriving one by hashing it. Supply a generated seed for production.")
 	}
 
 	entries, err := os.ReadDir(root + "/ops")

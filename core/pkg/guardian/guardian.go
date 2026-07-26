@@ -241,7 +241,7 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 	}
 
 	if g.zeroidInterceptor == nil {
-		g.zeroidInterceptor = NewZeroIDInterceptor(g, nil)
+		g.zeroidInterceptor = NewZeroIDInterceptor(g)
 	}
 
 	if g.clock == nil {

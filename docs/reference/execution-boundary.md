@@ -166,7 +166,7 @@ or unsupported roots are reported as not verified.
 cd core
 go test ./pkg/contracts ./pkg/boundary ./cmd/helm-ai-kernel -run 'Test.*Boundary|Test.*Route|Test.*Evidence|Test.*MCP|Test.*Sandbox' -count=1
 cd ../tests/conformance
-go test ./...
+GOWORK=off go test ./...
 ```
 
 ## Troubleshooting

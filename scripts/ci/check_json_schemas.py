@@ -24,7 +24,9 @@ def load_json(path: Path) -> Any:
 
 
 def jsonschema_check(path: Path, payload: Any) -> None:
-    import jsonschema.validators  # type: ignore[import-not-found]  # imported once up front by main()
+    # Re-imported per call and served from sys.modules; kept local so module
+    # load cannot fail before main() reports an unusable install.
+    import jsonschema.validators  # type: ignore[import-not-found]
 
     try:
         validator = jsonschema.validators.validator_for(payload)

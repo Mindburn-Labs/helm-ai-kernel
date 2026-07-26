@@ -319,6 +319,15 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 		return fmt.Errorf("execution blocked: intent effect digest mismatch (intent=%s, runtime=%s)", intent.EffectDigestHash, effectDigest)
 	}
 
+	// An executor with no verifier cannot establish provenance for anything.
+	// Without this guard the calls below dereference a nil interface and panic,
+	// which on the enforcement path is a crash where a refusal belongs — and a
+	// panic recovered upstream reads as a transient fault rather than a denied
+	// execution. Fail closed instead.
+	if e.verifier == nil {
+		return errors.New("execution blocked: no signature verifier configured")
+	}
+
 	// 1. Verify Decision Signature (Provenance)
 	if valid, err := e.verifier.VerifyDecision(decision); err != nil || !valid {
 		return fmt.Errorf("execution blocked: invalid decision signature: %w", err)

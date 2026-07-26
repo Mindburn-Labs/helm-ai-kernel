@@ -281,9 +281,17 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	if defaultedEvidenceKey {
 		logger.Warn("EVIDENCE_SIGNING_KEY not set — using default seed (not safe for production)")
 	}
-	evidenceSigner, err := helmcrypto.NewEd25519Signer(evidenceKey)
+	// evidenceKey is a signing seed, not a key id. It previously reached
+	// NewEd25519Signer, which discarded it and generated a random keypair, so
+	// the HELM_PRODUCTION guard on this value protected nothing and no exported
+	// evidence pack was verifiable after a restart (F-01).
+	evidenceSigner, evidenceKeyDerived, err := helmcrypto.NewEd25519SignerFromSecret(evidenceKey, "helm-evidence-bundle")
 	if err != nil {
 		return nil, fmt.Errorf("evidence signer init: %w", err)
+	}
+	if evidenceKeyDerived {
+		logger.Warn("EVIDENCE_SIGNING_KEY is not a 32-byte hex/base64 seed — deriving one by hashing it; " +
+			"supply a generated seed for production")
 	}
 	s.Evidence = evidence.NewExporter(evidenceSigner, evidenceSigner.KeyID)
 	logger.Info("subsystem ready", "component", " Evidence Exporter initialized")

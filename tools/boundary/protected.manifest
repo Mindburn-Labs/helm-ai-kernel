@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-26T18:12:47Z
+# Generated: 2026-07-26T18:50:49Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -274,7 +274,7 @@ b82e5b29d65604bb1bf50aee11432f7888bd85f9b165315ce5a9be998c890519  core/pkg/contr
 6b8e7126b9dc13f0b78244cb113aaed6e999fc713054f419c045a5e9a8e99103  core/pkg/contracts/threat_signal.go
 e224328618a59532e62d3d2d0c5c84ec551d4918747809d58af9665a0abbdfdf  core/pkg/contracts/truth_discipline.go
 b6e6982c30854f07cd59a91dc237c8529353bdb4c98a46d396c1da47fcea6294  core/pkg/contracts/truth_discipline_test.go
-6204ba583962f06c769a9f58c6c0980baac2bcbe86ca263edfdfcdbc8c990f62  core/pkg/contracts/verdict.go
+cc2500e6f8824ef3b20d50032fd21aa23c24fd444b65438b8737db334d8cf433  core/pkg/contracts/verdict.go
 d4716f592388c9e770ba647be8f071527a43e1a2db6d32f0c455ef2ed1039d1a  core/pkg/contracts/verdict_registry_test.go
 300c57c0291408966a38c790053e393a514eeb697585c731c811ad90ec6a5939  core/pkg/contracts/vpl.go
 cec8685ee1984a7d2354c6772225a93f0b2410933199464e7a982e90cf8c17de  core/pkg/contracts/worker.go
@@ -606,7 +606,8 @@ e9c7493e7d6285f570d997a7ea29bf06091f334240b4a1e501e9b365f15f18cb  core/pkg/trust
 800faf77e21246a48f93d872c8ba5b01375c52db86e7768fda4c6d0156258d52  core/pkg/trust/registry/types.go
 f3bae08d14fe098e6b6322c7eac60746ae5fd2277e348d82c3a9d3701becb05a  core/pkg/guardian/audit.go
 992891e2e7ae9f58c88e5de1c72647399a4d6b7450272aae8915759aeb752577  core/pkg/guardian/audit_test.go
-e3321f7ee2ea5f53735955262c86f79efb1f102c7a9a0f23cd4e7a47217de33a  core/pkg/guardian/capability.go
+a8a8143b8f9112cff05884221eb1b6452550bc4be6a0c40745452169552bd466  core/pkg/guardian/capability.go
+1f8b99cf584d4a7b2105329c474474c24afcd2e33e2a8fb0b440de21a0ef1189  core/pkg/guardian/capability_rollback_test.go
 454e88e8ced964535a7f40f61c79853e548abae83b3f96f3c94e69ebe329b485  core/pkg/guardian/capability_test.go
 f1cf580ec9e715214102693ba3508eaef747aa3aed42526ef01989de32d20b5c  core/pkg/guardian/capability_token_test.go
 50900fa685a8ea47bf2bec683c04759d50af35be074ed2635cd50bdb83fc15a6  core/pkg/guardian/chaos_test.go
@@ -615,7 +616,7 @@ f1cf580ec9e715214102693ba3508eaef747aa3aed42526ef01989de32d20b5c  core/pkg/guard
 33b80ff2f4dc9eba8c135cb61ac232deb9be30e84fe63585e31f6ddfeadd19b1  core/pkg/guardian/decision_fuzz_test.go
 d4fa373206ebec6a2226322a2aea776c5d66a8f8c5b4f533c0e61c2e116deb3b  core/pkg/guardian/execution_intent_test.go
 d23c84456f34f27e6cb7fd113211028dbd88c34980fe81e3b74a307d701a4bfd  core/pkg/guardian/extended2_test.go
-1a04ee8cf73aa2411763d9fa43c0b0f7186be655da5c5205d20fa6b561e1c745  core/pkg/guardian/guardian.go
+12ac5939315ef426c7180cd9cb876ae5029bf8014ac59fc000e0301d3a1ce9c4  core/pkg/guardian/guardian.go
 9fc820cc5de13baf08dc3a37d97142e2ad3f506f82a06b38b92579e180d93d15  core/pkg/guardian/guardian_additional_coverage_test.go
 05d2907a744570e725955e9967f578b098389dee199fa7af7d54c2381f770a54  core/pkg/guardian/guardian_behavior_coverage_test.go
 2a5ca32bc0c383992332eea7cd839575ee7dd4b6266c2ed64c7bd8a2bfec044f  core/pkg/guardian/guardian_bench_test.go
@@ -861,7 +862,7 @@ b4ba129ddfda5cc795fd9b40f733272504015959ecfdc9b05479188a0df5b8ad  protocols/json
 606dcbc28b588838590232a7c0dd32ff177299296c089d13d6a50b37acc13d7c  protocols/json-schemas/policy/workstation_policy_profile.v1.schema.json
 4eef2422313caaa37a8bfabdfb6e4fc98380af2629452eca262399e406706d98  protocols/json-schemas/profiles/industry_profile.v1.schema.json
 80074bb4048296085fa1f5ac0321aa811ee7161ab96580ab018d0c54536d9448  protocols/json-schemas/profiles/jurisdiction_profile.v1.schema.json
-87dab788f479665b48a035d7837bf65eceec0b9defe47527ec2392959674eb7e  protocols/json-schemas/reason-codes/reason-codes-v1.json
+4e9c4d564e4e58ee1083018dd154c898b7c2b0dbdfbf9a799be6ae701e1ae4b2  protocols/json-schemas/reason-codes/reason-codes-v1.json
 d8cbd048eec9ec78cecd884e5ea04d14dd4424095850c3de35c481f53a319531  protocols/json-schemas/reason-codes/reason-codes-v1.schema.json
 0db5049dcc300a51c382971f3ccca2f2d3194a0b8e18c6b6251893e540d9eb9b  protocols/json-schemas/receipt/v2.json
 0fec45f58f4c745ef29567307e9067fb392335a54c1bf741c5e531bebc76235c  protocols/json-schemas/receipts/canonical_semantic_receipt.schema.json

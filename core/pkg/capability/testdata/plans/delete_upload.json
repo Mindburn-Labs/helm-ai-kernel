@@ -1,0 +1,14 @@
+{
+  "schema_version": "rollback-plan/v1",
+  "plan_id": "plans/gui-delete-upload.v1",
+  "strategy": "compensating_action",
+  "applies_to": { "capability_id": "helm.cap.gui.gelab.upload-photo" },
+  "steps": [
+    {
+      "order": 1,
+      "action_ref": "helm.cap.gui.gelab.delete",
+      "description": "Delete the uploaded object via the service's delete affordance."
+    }
+  ],
+  "verification": { "method": "state_digest_match" }
+}

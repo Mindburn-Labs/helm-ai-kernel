@@ -208,6 +208,7 @@ type Guardian struct {
 	safeDepController  *safedep.Controller          // Safe Deprecation emergency release plane
 	capabilityRegistry *capability.Registry         // Governed capability registry (preview, chunk 1)
 	capabilityVerifier *capability.TokenVerifier    // Capability token verifier (preview, chunk 2)
+	rollbackPlans      capability.RollbackPlanStore // Rollback plan store (preview, chunk 3)
 	boundaryChain      []BoundaryInterceptor        // Cached request interceptors
 }
 

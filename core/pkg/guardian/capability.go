@@ -30,6 +30,10 @@ const (
 	// ContextKeyTaskID binds the dispatch to a task; required when a
 	// capability token is presented.
 	ContextKeyTaskID = "task_id"
+	// ContextKeyApprovalReceiptRef optionally presents an approval/permit
+	// receipt reference. Reversible-external and irreversible dispatches
+	// escalate to the permit flow unless this is present.
+	ContextKeyApprovalReceiptRef = "approval_receipt_ref"
 )
 
 // WithCapabilityRegistry attaches a governed capability registry. Dispatch
@@ -61,6 +65,19 @@ func WithCapabilityTokenVerifier(v *capability.TokenVerifier) GuardianOption {
 // SetCapabilityTokenVerifier attaches or replaces the token verifier.
 func (g *Guardian) SetCapabilityTokenVerifier(v *capability.TokenVerifier) {
 	g.capabilityVerifier = v
+}
+
+// WithRollbackPlanStore attaches a rollback plan store (chunk 3). When set,
+// reversible non-read-only capabilities must resolve their manifest's
+// rollback.plan_ref to a valid, unexpired plan — otherwise the dispatch
+// DENYs with CAPABILITY_ROLLBACK_PLAN_INVALID (no plan, no dispatch).
+func WithRollbackPlanStore(store capability.RollbackPlanStore) GuardianOption {
+	return func(g *Guardian) { g.rollbackPlans = store }
+}
+
+// SetRollbackPlanStore attaches or replaces the rollback plan store.
+func (g *Guardian) SetRollbackPlanStore(store capability.RollbackPlanStore) {
+	g.rollbackPlans = store
 }
 
 // resolveCapabilityGate implements chunk-1 registry resolution. It returns
@@ -136,6 +153,12 @@ func (g *Guardian) resolveCapabilityGate(span trace.Span, req *DecisionRequest) 
 		req.Context["capability_min_model_tier"] = entry.Manifest.Routing.MinModelTier
 	}
 
+	// Chunk 3: reversibility policy (reversibility-classes.md). Evaluated
+	// before token consumption so a refused dispatch never wastes a use.
+	if decision, handled := g.applyReversibilityPolicy(span, req, entry); handled {
+		return decision, true
+	}
+
 	// Chunk 2: when a capability token is presented and a verifier is
 	// configured, verify it (signature, lifecycle, task binding, manifest
 	// drift, constraints) and consume one use. Any failure denies fail closed.
@@ -209,4 +232,92 @@ func stringFromContext(ctx map[string]interface{}, key string) (string, bool) {
 	}
 	s, ok := v.(string)
 	return s, ok
+}
+
+// applyReversibilityPolicy implements the reversibility-classes.md decision
+// table for a resolved capability:
+//
+//   - read_only: no requirements.
+//   - effect_class irreversible: DENY without an approval artifact — no
+//     rollback promise may be made for irreversible effects.
+//   - reversibility none (irreversible in practice): org/external reach
+//     escalates to the permit flow unless an approval is presented.
+//   - reversible (exact_undo / compensating_action): when a rollback plan
+//     store is configured, the manifest's plan must load and be unexpired —
+//     otherwise DENY (no plan, no dispatch). The bound plan id/hash is
+//     recorded in the decision context. Org/external reach (reversible-
+//     external) escalates by default unless an approval is presented.
+func (g *Guardian) applyReversibilityPolicy(span trace.Span, req *DecisionRequest, entry *capability.Entry) (*contracts.DecisionRecord, bool) {
+	m := entry.Manifest
+	if m.EffectClass == capability.EffectReadOnly {
+		return nil, false
+	}
+	_, hasApproval := stringFromContext(req.Context, ContextKeyApprovalReceiptRef)
+	externalReach := m.DataBoundary == capability.BoundaryOrg || m.DataBoundary == capability.BoundaryExternal
+
+	if m.EffectClass == capability.EffectIrreversible && !hasApproval {
+		return g.capabilityShortCircuit(span, req, contracts.VerdictDeny,
+			contracts.ReasonCapabilityIrreversible,
+			fmt.Sprintf("%s: effect class irreversible dispatched without an approval artifact; no rollback promise may be made", contracts.ReasonCapabilityIrreversible),
+			"CAPABILITY_IRREVERSIBLE_DENY")
+	}
+
+	if m.Reversibility == capability.ReversibilityNone {
+		if externalReach && !hasApproval {
+			return g.capabilityShortCircuit(span, req, contracts.VerdictEscalate,
+				contracts.ReasonApprovalRequired,
+				fmt.Sprintf("%s: irreversible effect (%s) reaching %s requires the permit flow", contracts.ReasonApprovalRequired, m.EffectClass, m.DataBoundary),
+				"CAPABILITY_IRREVERSIBLE_EXTERNAL_ESCALATE")
+		}
+		return nil, false
+	}
+
+	// Reversible: bind the rollback plan when a plan store is configured.
+	if g.rollbackPlans != nil {
+		plan := g.rollbackPlans.ResolvePlan(m.Rollback.PlanRef)
+		if plan == nil {
+			return g.capabilityShortCircuit(span, req, contracts.VerdictDeny,
+				contracts.ReasonCapabilityRollbackPlanInvalid,
+				fmt.Sprintf("%s: rollback plan %q not found in plan store (no plan, no dispatch)", contracts.ReasonCapabilityRollbackPlanInvalid, m.Rollback.PlanRef),
+				"CAPABILITY_ROLLBACK_PLAN_INVALID_DENY")
+		}
+		if plan.Plan.Expired(g.clock.Now()) {
+			return g.capabilityShortCircuit(span, req, contracts.VerdictDeny,
+				contracts.ReasonCapabilityRollbackPlanInvalid,
+				fmt.Sprintf("%s: rollback plan %q guarantee expired; effect is treated as irreversible", contracts.ReasonCapabilityRollbackPlanInvalid, m.Rollback.PlanRef),
+				"CAPABILITY_ROLLBACK_PLAN_EXPIRED_DENY")
+		}
+		req.Context["capability_rollback_plan_id"] = plan.Plan.PlanID
+		req.Context["capability_rollback_plan_hash"] = plan.Hash
+		span.SetAttributes(attribute.String("capability.rollback_plan", plan.Plan.PlanID))
+	} else if m.Rollback.PlanRef != "" {
+		req.Context["capability_rollback_plan_ref"] = m.Rollback.PlanRef
+	}
+
+	// Reversible-external escalates by default.
+	if externalReach && !hasApproval {
+		return g.capabilityShortCircuit(span, req, contracts.VerdictEscalate,
+			contracts.ReasonApprovalRequired,
+			fmt.Sprintf("%s: reversible-external effect (%s) reaching %s requires approval", contracts.ReasonApprovalRequired, m.EffectClass, m.DataBoundary),
+			"CAPABILITY_REVERSIBLE_EXTERNAL_ESCALATE")
+	}
+	return nil, false
+}
+
+// capabilityShortCircuit builds, signs, and audits a fail-closed decision.
+func (g *Guardian) capabilityShortCircuit(span trace.Span, req *DecisionRequest, verdict contracts.Verdict, code contracts.ReasonCode, reason, auditAction string) (*contracts.DecisionRecord, bool) {
+	decision := &contracts.DecisionRecord{
+		ID:           newDecisionID(),
+		Timestamp:    g.clock.Now(),
+		Verdict:      string(verdict),
+		ReasonCode:   string(code),
+		Reason:       reason,
+		InputContext: req.Context,
+	}
+	span.SetAttributes(attribute.String("capability.short_circuit", string(code)))
+	if signErr := g.signer.SignDecision(decision); signErr != nil {
+		return nil, false
+	}
+	g.appendCapabilityAudit(auditAction, decision)
+	return decision, true
 }

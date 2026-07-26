@@ -162,9 +162,11 @@ const (
 	ReasonDevFallbackPresent        ReasonCode = "ERR_DEV_FALLBACK_PRESENT"
 
 	// ── Capability Registry Reasons (preview, capability-manifest/v1) ─────
-	ReasonCapabilityUnknown       ReasonCode = "CAPABILITY_UNKNOWN"
-	ReasonCapabilityManifestDrift ReasonCode = "CAPABILITY_MANIFEST_DRIFT"
-	ReasonCapabilityTokenInvalid  ReasonCode = "CAPABILITY_TOKEN_INVALID"
+	ReasonCapabilityUnknown             ReasonCode = "CAPABILITY_UNKNOWN"
+	ReasonCapabilityManifestDrift       ReasonCode = "CAPABILITY_MANIFEST_DRIFT"
+	ReasonCapabilityTokenInvalid        ReasonCode = "CAPABILITY_TOKEN_INVALID"
+	ReasonCapabilityRollbackPlanInvalid ReasonCode = "CAPABILITY_ROLLBACK_PLAN_INVALID"
+	ReasonCapabilityIrreversible        ReasonCode = "CAPABILITY_IRREVERSIBLE"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.
@@ -278,6 +280,8 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonCapabilityUnknown,
 		ReasonCapabilityManifestDrift,
 		ReasonCapabilityTokenInvalid,
+		ReasonCapabilityRollbackPlanInvalid,
+		ReasonCapabilityIrreversible,
 	}
 }
 

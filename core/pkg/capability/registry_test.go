@@ -11,8 +11,8 @@ func TestLoadDir_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadDir failed: %v", err)
 	}
-	if reg.Len() != 2 {
-		t.Fatalf("expected 2 entries, got %d", reg.Len())
+	if reg.Len() != 6 {
+		t.Fatalf("expected 6 entries, got %d", reg.Len())
 	}
 	entry := reg.Resolve("helm.cap.gui.gelab.tap")
 	if entry == nil {
@@ -28,8 +28,21 @@ func TestLoadDir_Valid(t *testing.T) {
 		t.Fatal("unknown capability must not resolve")
 	}
 	ids := reg.IDs()
-	if len(ids) != 2 || ids[0] != "helm.cap.fs.read" || ids[1] != "helm.cap.gui.gelab.tap" {
-		t.Fatalf("IDs not sorted as expected: %v", ids)
+	want := []string{
+		"helm.cap.fs.read",
+		"helm.cap.gui.gelab.delete",
+		"helm.cap.gui.gelab.tap",
+		"helm.cap.gui.gelab.upload-photo",
+		"helm.cap.msg.send-external",
+		"helm.cap.net.fetch",
+	}
+	if len(ids) != len(want) {
+		t.Fatalf("IDs length %d, want %d: %v", len(ids), len(want), ids)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("IDs[%d] = %s, want %s (all: %v)", i, ids[i], want[i], ids)
+		}
 	}
 }
 

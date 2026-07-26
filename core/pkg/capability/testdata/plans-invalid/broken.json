@@ -1,0 +1,14 @@
+{
+  "schema_version": "rollback-plan/v1",
+  "plan_id": "plans/broken.v1",
+  "strategy": "compensating_action",
+  "applies_to": { "capability_id": "helm.cap.gui.gelab.tap" },
+  "steps": [
+    {
+      "order": 1,
+      "action_ref": "helm.cap.does.not.exist",
+      "description": "References an unregistered capability and must fail validation."
+    }
+  ],
+  "verification": { "method": "receipt_pairing" }
+}

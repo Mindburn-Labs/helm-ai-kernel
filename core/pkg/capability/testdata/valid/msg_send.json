@@ -1,0 +1,17 @@
+{
+  "schema_version": "capability-manifest/v1",
+  "capability_id": "helm.cap.msg.send-external",
+  "name": "msg-send-external",
+  "version": "1.0.0",
+  "description": "Send a message to an external recipient; cannot be undone (irreversible-class fixture).",
+  "protocol": "mcp",
+  "binding": { "kind": "mcp_tool", "ref": "messages/send" },
+  "effect_class": "irreversible",
+  "reversibility": "none",
+  "data_boundary": "external",
+  "risk_score": 85,
+  "required_permit_level": "single_approval",
+  "rollback": { "required": false },
+  "receipts": { "required": true },
+  "memory_access": { "user_domain": "read", "agent_domain": "write", "cross_domain_read": false }
+}

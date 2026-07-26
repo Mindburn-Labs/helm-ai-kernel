@@ -1,6 +1,14 @@
 # Reversibility-Aware Policy Classes (R3)
 
-**Status:** preview specification. No guardian code changes in this pass.
+**Status:** preview. Schema merged (`capability/rollback_plan.v1.json`).
+Chunk 3 implemented in `core/pkg/capability` (plan loader with registry
+cross-validation of step actions, hash pinning, guarantee-expiry handling)
+and enforced in the guardian (`WithRollbackPlanStore`; reversible
+non-read-only dispatches bind a valid unexpired plan or DENY with
+`CAPABILITY_ROLLBACK_PLAN_INVALID`; reversible-external and irreversible
+external reach ESCALATE to the permit flow; irreversible effect class DENYs
+without an approval artifact). Rollback *execution* and outcome verification
+(receipt pairing / state-digest match) are follow-up work.
 **Origin:** Step AOS alignment (their 可逆 "one-click rollback"), adapted to
 fail-closed enforcement instead of a UX promise.
 

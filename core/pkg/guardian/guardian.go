@@ -207,6 +207,7 @@ type Guardian struct {
 	zeroidInterceptor  *ZeroIDInterceptor           // ZeroID identity validator
 	safeDepController  *safedep.Controller          // Safe Deprecation emergency release plane
 	capabilityRegistry *capability.Registry         // Governed capability registry (preview, chunk 1)
+	capabilityVerifier *capability.TokenVerifier    // Capability token verifier (preview, chunk 2)
 	boundaryChain      []BoundaryInterceptor        // Cached request interceptors
 }
 

@@ -1,7 +1,11 @@
 # Task Capability Tokens (R4)
 
-**Status:** preview specification. Schema merged
-(`capability/capability_token.v1.json`); mint/verify wiring is follow-up.
+**Status:** preview. Schema merged (`capability/capability_token.v1.json`).
+Chunk 2 implemented in `core/pkg/capability` (token mint/verify, TTL,
+use-count, revocation, constraints; in-memory store — durable storage and
+permit-ceremony minting are follow-up) and wired into the guardian
+(`WithCapabilityTokenVerifier`; presented tokens verified and consumed, any
+failure DENYs with `CAPABILITY_TOKEN_INVALID`).
 **Origin:** Step AOS 可控 ("权限按需授予、用完即收" — granted on demand,
 revoked when the task ends), formalized as a verifiable credential.
 

@@ -1,5 +1,5 @@
 # HELM Protected Manifest
-# Generated: 2026-07-26T17:24:36Z
+# Generated: 2026-07-26T18:12:47Z
 # Source: current protected working tree; per-entry hashes are authoritative
 # Format: SHA256  PATH
 # quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control.
@@ -606,15 +606,16 @@ e9c7493e7d6285f570d997a7ea29bf06091f334240b4a1e501e9b365f15f18cb  core/pkg/trust
 800faf77e21246a48f93d872c8ba5b01375c52db86e7768fda4c6d0156258d52  core/pkg/trust/registry/types.go
 f3bae08d14fe098e6b6322c7eac60746ae5fd2277e348d82c3a9d3701becb05a  core/pkg/guardian/audit.go
 992891e2e7ae9f58c88e5de1c72647399a4d6b7450272aae8915759aeb752577  core/pkg/guardian/audit_test.go
-2e053f33a8b540105ffb6b80de65f6e1a7611333ec8afeb82875a47b6f25a1ce  core/pkg/guardian/capability.go
+e3321f7ee2ea5f53735955262c86f79efb1f102c7a9a0f23cd4e7a47217de33a  core/pkg/guardian/capability.go
 454e88e8ced964535a7f40f61c79853e548abae83b3f96f3c94e69ebe329b485  core/pkg/guardian/capability_test.go
+f1cf580ec9e715214102693ba3508eaef747aa3aed42526ef01989de32d20b5c  core/pkg/guardian/capability_token_test.go
 50900fa685a8ea47bf2bec683c04759d50af35be074ed2635cd50bdb83fc15a6  core/pkg/guardian/chaos_test.go
 2c66096e622a633b6fa2f8e3d18bc519d1ef2444b1d5b1e8e9199d1acfc3403c  core/pkg/guardian/compliance_checker.go
 3bf046b9f5630ade87ed4fc4d31c5a0223e5ef3e24b9427ec7fa268282a2e555  core/pkg/guardian/compliance_checker_test.go
 33b80ff2f4dc9eba8c135cb61ac232deb9be30e84fe63585e31f6ddfeadd19b1  core/pkg/guardian/decision_fuzz_test.go
 d4fa373206ebec6a2226322a2aea776c5d66a8f8c5b4f533c0e61c2e116deb3b  core/pkg/guardian/execution_intent_test.go
 d23c84456f34f27e6cb7fd113211028dbd88c34980fe81e3b74a307d701a4bfd  core/pkg/guardian/extended2_test.go
-f8a04d9758894bbf224ecb60d36f9fae4e801c187798b94b5b8c21b5c238d794  core/pkg/guardian/guardian.go
+1a04ee8cf73aa2411763d9fa43c0b0f7186be655da5c5205d20fa6b561e1c745  core/pkg/guardian/guardian.go
 9fc820cc5de13baf08dc3a37d97142e2ad3f506f82a06b38b92579e180d93d15  core/pkg/guardian/guardian_additional_coverage_test.go
 05d2907a744570e725955e9967f578b098389dee199fa7af7d54c2381f770a54  core/pkg/guardian/guardian_behavior_coverage_test.go
 2a5ca32bc0c383992332eea7cd839575ee7dd4b6266c2ed64c7bd8a2bfec044f  core/pkg/guardian/guardian_bench_test.go

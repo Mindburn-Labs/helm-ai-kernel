@@ -23,6 +23,13 @@ const (
 	// the caller believes it is dispatching against. A mismatch with the
 	// registry's hash fails closed (manifest drift).
 	ContextKeyCapabilityManifestHash = "capability_manifest_hash"
+	// ContextKeyCapabilityToken optionally presents a capability-token/v1
+	// grant (JSON string or map). When a token verifier is configured, the
+	// token is verified and one use consumed; any failure denies fail closed.
+	ContextKeyCapabilityToken = "capability_token"
+	// ContextKeyTaskID binds the dispatch to a task; required when a
+	// capability token is presented.
+	ContextKeyTaskID = "task_id"
 )
 
 // WithCapabilityRegistry attaches a governed capability registry. Dispatch
@@ -42,6 +49,18 @@ func (g *Guardian) SetCapabilityRegistry(reg *capability.Registry) {
 // CapabilityRegistry returns the attached registry, or nil.
 func (g *Guardian) CapabilityRegistry() *capability.Registry {
 	return g.capabilityRegistry
+}
+
+// WithCapabilityTokenVerifier attaches a capability token verifier (chunk 2).
+// When set, a presented ContextKeyCapabilityToken is verified and consumed;
+// any verification failure DENYs with CAPABILITY_TOKEN_INVALID.
+func WithCapabilityTokenVerifier(v *capability.TokenVerifier) GuardianOption {
+	return func(g *Guardian) { g.capabilityVerifier = v }
+}
+
+// SetCapabilityTokenVerifier attaches or replaces the token verifier.
+func (g *Guardian) SetCapabilityTokenVerifier(v *capability.TokenVerifier) {
+	g.capabilityVerifier = v
 }
 
 // resolveCapabilityGate implements chunk-1 registry resolution. It returns
@@ -116,7 +135,57 @@ func (g *Guardian) resolveCapabilityGate(span trace.Span, req *DecisionRequest) 
 	if entry.Manifest.Routing.MinModelTier != "" {
 		req.Context["capability_min_model_tier"] = entry.Manifest.Routing.MinModelTier
 	}
+
+	// Chunk 2: when a capability token is presented and a verifier is
+	// configured, verify it (signature, lifecycle, task binding, manifest
+	// drift, constraints) and consume one use. Any failure denies fail closed.
+	if g.capabilityVerifier != nil {
+		if rawToken, present := req.Context[ContextKeyCapabilityToken]; present {
+			taskID, _ := stringFromContext(req.Context, ContextKeyTaskID)
+			token, tokenErr := g.verifyCapabilityToken(rawToken, taskID, req)
+			if tokenErr != nil {
+				decision := &contracts.DecisionRecord{
+					ID:           newDecisionID(),
+					Timestamp:    g.clock.Now(),
+					Verdict:      string(contracts.VerdictDeny),
+					ReasonCode:   string(contracts.ReasonCapabilityTokenInvalid),
+					Reason:       fmt.Sprintf("%s: %s", contracts.ReasonCapabilityTokenInvalid, tokenErr.Error()),
+					InputContext: req.Context,
+				}
+				span.SetAttributes(attribute.Bool("capability.token_valid", false))
+				if signErr := g.signer.SignDecision(decision); signErr != nil {
+					return nil, false
+				}
+				g.appendCapabilityAudit("CAPABILITY_TOKEN_INVALID_DENY", decision)
+				return decision, true
+			}
+			span.SetAttributes(
+				attribute.Bool("capability.token_valid", true),
+				attribute.String("capability.token_id", token.TokenID),
+			)
+			req.Context["capability_token_id"] = token.TokenID
+		}
+	}
 	return nil, false
+}
+
+// verifyCapabilityToken decodes and verifies a presented token. Dispatch
+// arguments are taken from req.Context["arguments"] when present (map form)
+// for args_digest constraint checking.
+func (g *Guardian) verifyCapabilityToken(rawToken interface{}, taskID string, req *DecisionRequest) (*capability.Token, error) {
+	token, err := capability.DecodeToken(rawToken)
+	if err != nil {
+		return nil, err
+	}
+	var args map[string]interface{}
+	if rawArgs, ok := req.Context["arguments"].(map[string]interface{}); ok {
+		args = rawArgs
+	}
+	return g.capabilityVerifier.Verify(capability.VerifyRequest{
+		Presented: token,
+		TaskID:    taskID,
+		Args:      args,
+	})
 }
 
 func (g *Guardian) appendCapabilityAudit(action string, decision *contracts.DecisionRecord) {

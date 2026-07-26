@@ -1,677 +1,902 @@
 {
-  "version": "1.0.0",
-  "codes": [
-    {
-      "code": "POLICY_VIOLATION",
-      "applies_to": ["DENY"],
-      "domain": "policy",
-      "description": "Effect violates an active policy rule",
-      "since": "1.0.0"
-    },
-    {
-      "code": "NO_POLICY_DEFINED",
-      "applies_to": ["DENY"],
-      "domain": "policy",
-      "description": "No policy covers this effect type",
-      "since": "1.0.0"
-    },
-    {
-      "code": "POLICY_NOT_READY",
-      "applies_to": ["DENY"],
-      "domain": "policy",
-      "description": "No verified EffectivePolicySnapshot is installed for the requested scope",
-      "since": "1.3.0"
-    },
-    {
-      "code": "POLICY_HASH_MISMATCH",
-      "applies_to": ["DENY"],
-      "domain": "policy",
-      "description": "Policy source bytes did not match the published canonical policy hash",
-      "since": "1.3.0"
-    },
-    {
-      "code": "POLICY_SIGNATURE_INVALID",
-      "applies_to": ["DENY"],
-      "domain": "policy",
-      "description": "Policy source signature or provenance verification failed",
-      "since": "1.3.0"
-    },
-    {
-      "code": "POLICY_EPOCH_CHANGED",
-      "applies_to": ["DENY"],
-      "domain": "policy",
-      "description": "The active policy epoch changed before the effect could be issued",
-      "since": "1.3.0"
-    },
-    {
-      "code": "PRG_EVALUATION_ERROR",
-      "applies_to": ["DENY"],
-      "domain": "policy",
-      "description": "Policy Requirement Graph evaluation failed",
-      "since": "1.0.0"
-    },
-    {
-      "code": "SCHEMA_VIOLATION",
-      "applies_to": ["DENY"],
-      "domain": "policy",
-      "description": "Request does not conform to schema",
-      "since": "1.0.0"
-    },
-    {
-      "code": "PDP_DENY",
-      "applies_to": ["DENY"],
-      "domain": "pdp",
-      "description": "External PDP returned deny",
-      "since": "1.0.0"
-    },
-    {
-      "code": "PDP_ERROR",
-      "applies_to": ["DENY"],
-      "domain": "pdp",
-      "description": "PDP unavailable or returned error (fail-closed)",
-      "since": "1.0.0"
-    },
-    {
-      "code": "MISSING_REQUIREMENT",
-      "applies_to": ["DENY"],
-      "domain": "requirement",
-      "description": "Required precondition not satisfied",
-      "since": "1.0.0"
-    },
-    {
-      "code": "BUDGET_EXCEEDED",
-      "applies_to": ["DENY"],
-      "domain": "budget",
-      "description": "Operation exceeds allocated budget",
-      "since": "1.0.0"
-    },
-    {
-      "code": "BUDGET_ERROR",
-      "applies_to": ["DENY"],
-      "domain": "budget",
-      "description": "Budget system unavailable (fail-closed)",
-      "since": "1.0.0"
-    },
-    {
-      "code": "TEMPORAL_INTERVENTION",
-      "applies_to": ["ESCALATE"],
-      "domain": "temporal",
-      "description": "Time-based intervention triggered",
-      "since": "1.0.0"
-    },
-    {
-      "code": "TEMPORAL_THROTTLE",
-      "applies_to": ["ESCALATE"],
-      "domain": "temporal",
-      "description": "Rate limit or cooldown active",
-      "since": "1.0.0"
-    },
-    {
-      "code": "SESSION_RISK_MEMORY_DENY",
-      "applies_to": ["DENY"],
-      "domain": "temporal",
-      "description": "Session trajectory risk exceeded the deterministic authorization threshold",
-      "since": "1.0.0"
-    },
-    {
-      "code": "ENVELOPE_INVALID",
-      "applies_to": ["DENY"],
-      "domain": "envelope",
-      "description": "Effect envelope failed validation",
-      "since": "1.0.0"
-    },
-    {
-      "code": "PROVENANCE_FAILURE",
-      "applies_to": ["DENY"],
-      "domain": "envelope",
-      "description": "Provenance chain broken or unverifiable",
-      "since": "1.0.0"
-    },
-    {
-      "code": "VERIFICATION_FAILURE",
-      "applies_to": ["DENY"],
-      "domain": "envelope",
-      "description": "Cryptographic verification failed",
-      "since": "1.0.0"
-    },
-    {
-      "code": "SANDBOX_VIOLATION",
-      "applies_to": ["DENY"],
-      "domain": "isolation",
-      "description": "Effect exceeds sandbox boundary",
-      "since": "1.0.0"
-    },
-    {
-      "code": "TENANT_ISOLATION",
-      "applies_to": ["DENY"],
-      "domain": "isolation",
-      "description": "Cross-tenant access violation",
-      "since": "1.0.0"
-    },
-    {
-      "code": "JURISDICTION_VIOLATION",
-      "applies_to": ["DENY"],
-      "domain": "jurisdiction",
-      "description": "Effect violates jurisdictional constraint",
-      "since": "1.0.0"
-    },
-    {
-      "code": "SYSTEM_FROZEN",
-      "applies_to": ["DENY"],
-      "domain": "operations",
-      "description": "System is in global freeze state — all actions denied",
-      "since": "1.1.0"
-    },
-    {
-      "code": "EMERGENCY_STOP_SCOPE_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "operations",
-      "description": "A governed dispatch omitted the authoritative tenant/workspace scope required while emergency-stop fencing is enabled",
-      "since": "1.7.0"
-    },
-    {
-      "code": "EMERGENCY_STOP_UNVERIFIED",
-      "applies_to": ["DENY"],
-      "domain": "operations",
-      "description": "Emergency-stop fence status could not be verified, so the governed dispatch was denied fail-closed",
-      "since": "1.7.0"
-    },
-    {
-      "code": "EMERGENCY_STOP_FENCED",
-      "applies_to": ["DENY"],
-      "domain": "operations",
-      "description": "A durable tenant/workspace emergency-stop fence is active for newly governed dispatches",
-      "since": "1.7.0"
-    },
-    {
-      "code": "CONTEXT_MISMATCH",
-      "applies_to": ["DENY"],
-      "domain": "environment",
-      "description": "Environment fingerprint does not match boot-time snapshot",
-      "since": "1.1.0"
-    },
-    {
-      "code": "DATA_EGRESS_BLOCKED",
-      "applies_to": ["DENY"],
-      "domain": "network",
-      "description": "Data transmission to unauthorized external endpoint blocked",
-      "since": "1.1.0"
-    },
-    {
-      "code": "ERR_HOST_EGRESS_WITHOUT_INTENT",
-      "applies_to": ["DENY"],
-      "domain": "host_evidence",
-      "description": "Host-observed egress has no corresponding HELM intent or authority receipt",
-      "since": "1.6.0"
-    },
-    {
-      "code": "ERR_HOST_EGRESS_AFTER_DENY",
-      "applies_to": ["DENY"],
-      "domain": "host_evidence",
-      "description": "Host-observed egress occurred after HELM denied the corresponding action",
-      "since": "1.6.0"
-    },
-    {
-      "code": "ERR_HOST_RECEIPT_MISSING",
-      "applies_to": ["DENY"],
-      "domain": "host_evidence",
-      "description": "A HELM network-authority receipt has no matching host evidence receipt",
-      "since": "1.6.0"
-    },
-    {
-      "code": "ERR_HOST_DESTINATION_MISMATCH",
-      "applies_to": ["DENY"],
-      "domain": "host_evidence",
-      "description": "Host-observed egress destination differs from HELM authority metadata",
-      "since": "1.6.0"
-    },
-    {
-      "code": "ERR_HOST_VOLUME_EXCEEDED",
-      "applies_to": ["DENY"],
-      "domain": "host_evidence",
-      "description": "Host-observed egress byte volume exceeds the HELM authority ceiling",
-      "since": "1.6.0"
-    },
-    {
-      "code": "ERR_HOST_PROCESS_UNBOUND",
-      "applies_to": ["DENY"],
-      "domain": "host_evidence",
-      "description": "Host receipt process identity cannot be bound to a HELM workload identity",
-      "since": "1.6.0"
-    },
-    {
-      "code": "ERR_POLICY_DENIED_BUT_HOST_OBSERVED_EGRESS",
-      "applies_to": ["DENY"],
-      "domain": "host_evidence",
-      "description": "Host evidence contradicts a HELM policy denial for network egress",
-      "since": "1.6.0"
-    },
-    {
-      "code": "IDENTITY_ISOLATION_VIOLATION",
-      "applies_to": ["DENY"],
-      "domain": "identity",
-      "description": "Agent credential reuse or impersonation detected",
-      "since": "1.1.0"
-    },
-    {
-      "code": "INSUFFICIENT_PRIVILEGE",
-      "applies_to": ["DENY"],
-      "domain": "privilege",
-      "description": "Agent privilege tier insufficient for requested effect type",
-      "since": "1.2.0"
-    },
-    {
-      "code": "APPROVAL_REQUIRED",
-      "applies_to": ["ESCALATE"],
-      "domain": "approval",
-      "description": "High-risk effect requires human approval before execution",
-      "since": "1.1.0"
-    },
-    {
-      "code": "APPROVAL_TIMEOUT",
-      "applies_to": ["DENY"],
-      "domain": "approval",
-      "description": "Human approval not received within timeout — action denied",
-      "since": "1.1.0"
-    },
-    {
-      "code": "DELEGATION_INVALID",
-      "applies_to": ["DENY"],
-      "domain": "delegation",
-      "description": "Delegation session is invalid, expired, revoked, or has a binding mismatch",
-      "since": "1.3.0"
-    },
-    {
-      "code": "DELEGATION_SCOPE_VIOLATION",
-      "applies_to": ["DENY"],
-      "domain": "delegation",
-      "description": "Delegate attempted an action outside the session's granted capabilities",
-      "since": "1.3.0"
-    },
-    {
-      "code": "DELEGATION_PRINCIPAL_MISMATCH",
-      "applies_to": ["DENY"],
-      "domain": "delegation",
-      "description": "Requesting principal does not match the delegation session's bound delegate principal",
-      "since": "1.3.0"
-    },
-    {
-      "code": "AGENT_KILLED",
-      "applies_to": ["DENY"],
-      "domain": "agent_lifecycle",
-      "description": "Agent has been terminated via per-agent kill switch",
-      "since": "1.3.0"
-    },
-    {
-      "code": "TAINTED_INPUT_HIGH_RISK_DENY",
-      "applies_to": ["DENY"],
-      "domain": "threat",
-      "description": "High-risk effect denied due to tainted/untrusted input source",
-      "since": "1.2.0"
-    },
-    {
-      "code": "PROMPT_INJECTION_DETECTED",
-      "applies_to": ["DENY"],
-      "domain": "threat",
-      "description": "Prompt injection pattern detected in untrusted input",
-      "since": "1.2.0"
-    },
-    {
-      "code": "UNICODE_OBFUSCATION_DETECTED",
-      "applies_to": ["DENY"],
-      "domain": "threat",
-      "description": "Unicode obfuscation (zero-width chars, homoglyphs) detected",
-      "since": "1.2.0"
-    },
-    {
-      "code": "TAINTED_CREDENTIAL_ACCESS_DENY",
-      "applies_to": ["DENY"],
-      "domain": "threat",
-      "description": "Credential or token access attempted from tainted source",
-      "since": "1.2.0"
-    },
-    {
-      "code": "TAINTED_SOFTWARE_PUBLISH_DENY",
-      "applies_to": ["DENY"],
-      "domain": "threat",
-      "description": "Software publish or release attempted from tainted source",
-      "since": "1.2.0"
-    },
-    {
-      "code": "TAINTED_PRIVILEGED_INVOKE_DENY",
-      "applies_to": ["DENY"],
-      "domain": "threat",
-      "description": "Privileged agent invocation attempted from tainted source",
-      "since": "1.2.0"
-    },
-    {
-      "code": "TAINTED_DATA_EGRESS_DENY",
-      "applies_to": ["DENY"],
-      "domain": "threat",
-      "description": "Data egress or exfiltration attempted from tainted source",
-      "since": "1.2.0"
-    },
-    {
-      "code": "TAINTED_HIGH_RISK_ESCALATE",
-      "applies_to": ["ESCALATE"],
-      "domain": "threat",
-      "description": "High-risk effect from tainted source requires human approval",
-      "since": "1.2.0"
-    },
-    {
-      "code": "ERR_TON_ACTON_UNKNOWN_COMMAND",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Requested Acton action is not one of the typed HELM TON Acton actions",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_ACTON_UNSUPPORTED_VERSION",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Observed Acton version is outside the connector contract",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_TOLK_COMPILER_UNPINNED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "A Tolk compiler version pin is required for bytecode-sensitive TON work",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_TOLK_COMPILER_MISMATCH",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Observed Tolk compiler version does not match policy or connector contract",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_ACTON_ARGV_REJECTED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Acton argv failed typed connector validation",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_ACTON_RAW_SHELL_FORBIDDEN",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Raw shell or raw command execution was requested for Acton",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Generic Acton mainnet script execution is denied by default",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_SCRIPT_MANIFEST_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Networked Acton script is missing the required HELM sidecar manifest",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_SCRIPT_MANIFEST_HASH_MISMATCH",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Acton script hash does not match the HELM sidecar manifest",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_EXPECTED_EFFECT_MISMATCH",
-      "applies_to": ["DENY", "ESCALATE"],
-      "domain": "connector.ton.acton",
-      "description": "Declared TON expected effects are missing or do not match the action envelope",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_SPEND_CEILING_EXCEEDED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "TON spend exceeds action or daily policy ceilings",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_MAINNET_REQUIRES_APPROVAL",
-      "applies_to": ["ESCALATE"],
-      "domain": "connector.ton.acton",
-      "description": "TON mainnet action requires policy approval before dispatch",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_APPROVAL_CEREMONY_REQUIRED",
-      "applies_to": ["ESCALATE"],
-      "domain": "connector.ton.acton",
-      "description": "TON T3 action requires approval ceremony evidence",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_WALLET_REF_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "TON action requires an opaque wallet reference",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_PLAINTEXT_MNEMONIC_FORBIDDEN",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Plaintext wallet mnemonic or private key material is forbidden",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_NETWORK_GRANT_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "TON networked action requires an explicit sandbox network grant",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_SANDBOX_GRANT_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "Acton execution requires a valid HELM sandbox grant",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_SOURCE_VERIFICATION_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "TON source verification evidence is required before the action can dispatch",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_VERIFY_DRY_RUN_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "TON verifier dry-run evidence is required before final verification or deployment",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_VERIFY_BYTECODE_MISMATCH",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "TON verifier bytecode comparison failed",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_COVERAGE_THRESHOLD_FAILED",
-      "applies_to": ["DENY", "ESCALATE"],
-      "domain": "connector.ton.acton",
-      "description": "Acton coverage result is below policy threshold",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_MUTATION_THRESHOLD_FAILED",
-      "applies_to": ["DENY", "ESCALATE"],
-      "domain": "connector.ton.acton",
-      "description": "Acton mutation score is below policy threshold",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL",
-      "applies_to": ["ESCALATE"],
-      "domain": "connector.ton.acton",
-      "description": "Mainnet TON library publish or top-up requires approval",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED",
-      "applies_to": ["DENY"],
-      "domain": "connector.ton.acton",
-      "description": "TON library publish or top-up exceeds spend ceilings",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_CONNECTOR_CONTRACT_DRIFT",
-      "applies_to": ["DENY"],
-      "domain": "connector",
-      "description": "Connector observed output shape drift and failed closed",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_COMPUTE_GAS_EXHAUSTED",
-      "applies_to": ["DENY"],
-      "domain": "compute",
-      "description": "Sandboxed execution exhausted configured compute or gas budget",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_COMPUTE_TIME_EXHAUSTED",
-      "applies_to": ["DENY"],
-      "domain": "compute",
-      "description": "Sandboxed execution exceeded the configured wall-clock time budget",
-      "since": "1.3.0"
-    },
-    {
-      "code": "ERR_VERIFICATION_SCOPE_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "harness",
-      "description": "Medium or high risk execution is missing a VerificationScope",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_HARNESS_TRACE_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "harness",
-      "description": "Side-effectful execution is missing a hash-linked HarnessTrace",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_PLAN_TRANSACTION_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "harness",
-      "description": "Multi-artifact or write-bearing execution is missing a PlanTransaction",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_PLAN_TRANSACTION_CONFLICT",
-      "applies_to": ["DENY", "ESCALATE"],
-      "domain": "harness",
-      "description": "PlanTransaction read/write sets conflict with another open transaction",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_ASSUMPTION_STALE",
-      "applies_to": ["DENY", "ESCALATE"],
-      "domain": "harness",
-      "description": "A declared plan assumption or dependency is stale before side-effect dispatch",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL",
-      "applies_to": ["ESCALATE"],
-      "domain": "harness",
-      "description": "Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing state requires explicit approval",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_HARNESS_CHANGE_CONTRACT_INVALID",
-      "applies_to": ["DENY"],
-      "domain": "harness",
-      "description": "Harness mutation lacks a valid HarnessChangeContract",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_GREEN_TEST_SCOPE_MISSING",
-      "applies_to": ["DENY"],
-      "domain": "harness",
-      "description": "Passing tests were submitted without a declared verification scope",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_GROUNDED_ACTION_REF_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "gui-action",
-      "description": "GUI or computer-use action is missing grounded screenshot and DOM/accessibility evidence",
-      "since": "1.4.0"
-    },
-    {
-      "code": "ERR_GUI_POSTCONDITION_UNVERIFIED",
-      "applies_to": ["DENY"],
-      "domain": "gui-action",
-      "description": "GUI or computer-use action postcondition was not verified",
-      "since": "1.4.0"
-    },
-    {
-      "code": "SAFEDEP_TERMINAL_FREEZE",
-      "applies_to": ["DENY"],
-      "domain": "safe-deprecation",
-      "description": "Safe Deprecation classified the hazard as terminal freeze",
-      "since": "1.7.0"
-    },
-    {
-      "code": "SAFEDEP_DEGRADED_NARROWING",
-      "applies_to": ["ESCALATE"],
-      "domain": "safe-deprecation",
-      "description": "Safe Deprecation classified the hazard as recoverable degraded narrowing",
-      "since": "1.7.0"
-    },
-    {
-      "code": "SAFEDEP_DEPRECATED_READONLY",
-      "applies_to": ["DENY"],
-      "domain": "safe-deprecation",
-      "description": "Safe Deprecation classified the hazard as read-only deprecation",
-      "since": "1.7.0"
-    },
-    {
-      "code": "ERR_CONTINUITY_STALE",
-      "applies_to": ["DENY"],
-      "domain": "safe-deprecation",
-      "description": "Safe Deprecation continuity checkpoint is stale, replayed, expired, or rollbacked",
-      "since": "1.7.0"
-    },
-    {
-      "code": "ERR_EMERGENCY_CAPSULE_INVALID",
-      "applies_to": ["DENY"],
-      "domain": "safe-deprecation",
-      "description": "Emergency capsule failed binding, expiry, subset-proof, or delegation validation",
-      "since": "1.7.0"
-    },
-    {
-      "code": "ERR_HARDWARE_QUORUM_UNBOUND",
-      "applies_to": ["DENY"],
-      "domain": "safe-deprecation",
-      "description": "Hardware-bound emergency quorum is missing, duplicated, unauthorized, or revoked",
-      "since": "1.7.0"
-    },
-    {
-      "code": "ERR_ATTESTATION_RESULT_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "safe-deprecation",
-      "description": "Signed verifier-issued attestation result is required for emergency authorization",
-      "since": "1.7.0"
-    },
-    {
-      "code": "ERR_DEV_FALLBACK_PRESENT",
-      "applies_to": ["DENY"],
-      "domain": "safe-deprecation",
-      "description": "Dev, audit, mock, software-key, env-fallback, or unsigned overlay path is enabled",
-      "since": "1.7.0"
-    }
-  ]
+ "version": "1.0.0",
+ "codes": [
+  {
+   "code": "POLICY_VIOLATION",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "policy",
+   "description": "Effect violates an active policy rule",
+   "since": "1.0.0"
+  },
+  {
+   "code": "NO_POLICY_DEFINED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "policy",
+   "description": "No policy covers this effect type",
+   "since": "1.0.0"
+  },
+  {
+   "code": "POLICY_NOT_READY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "policy",
+   "description": "No verified EffectivePolicySnapshot is installed for the requested scope",
+   "since": "1.3.0"
+  },
+  {
+   "code": "POLICY_HASH_MISMATCH",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "policy",
+   "description": "Policy source bytes did not match the published canonical policy hash",
+   "since": "1.3.0"
+  },
+  {
+   "code": "POLICY_SIGNATURE_INVALID",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "policy",
+   "description": "Policy source signature or provenance verification failed",
+   "since": "1.3.0"
+  },
+  {
+   "code": "POLICY_EPOCH_CHANGED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "policy",
+   "description": "The active policy epoch changed before the effect could be issued",
+   "since": "1.3.0"
+  },
+  {
+   "code": "PRG_EVALUATION_ERROR",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "policy",
+   "description": "Policy Requirement Graph evaluation failed",
+   "since": "1.0.0"
+  },
+  {
+   "code": "SCHEMA_VIOLATION",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "policy",
+   "description": "Request does not conform to schema",
+   "since": "1.0.0"
+  },
+  {
+   "code": "PDP_DENY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "pdp",
+   "description": "External PDP returned deny",
+   "since": "1.0.0"
+  },
+  {
+   "code": "PDP_ERROR",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "pdp",
+   "description": "PDP unavailable or returned error (fail-closed)",
+   "since": "1.0.0"
+  },
+  {
+   "code": "MISSING_REQUIREMENT",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "requirement",
+   "description": "Required precondition not satisfied",
+   "since": "1.0.0"
+  },
+  {
+   "code": "BUDGET_EXCEEDED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "budget",
+   "description": "Operation exceeds allocated budget",
+   "since": "1.0.0"
+  },
+  {
+   "code": "BUDGET_ERROR",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "budget",
+   "description": "Budget system unavailable (fail-closed)",
+   "since": "1.0.0"
+  },
+  {
+   "code": "TEMPORAL_INTERVENTION",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "temporal",
+   "description": "Time-based intervention triggered",
+   "since": "1.0.0"
+  },
+  {
+   "code": "TEMPORAL_THROTTLE",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "temporal",
+   "description": "Rate limit or cooldown active",
+   "since": "1.0.0"
+  },
+  {
+   "code": "SESSION_RISK_MEMORY_DENY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "temporal",
+   "description": "Session trajectory risk exceeded the deterministic authorization threshold",
+   "since": "1.0.0"
+  },
+  {
+   "code": "ENVELOPE_INVALID",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "envelope",
+   "description": "Effect envelope failed validation",
+   "since": "1.0.0"
+  },
+  {
+   "code": "PROVENANCE_FAILURE",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "envelope",
+   "description": "Provenance chain broken or unverifiable",
+   "since": "1.0.0"
+  },
+  {
+   "code": "VERIFICATION_FAILURE",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "envelope",
+   "description": "Cryptographic verification failed",
+   "since": "1.0.0"
+  },
+  {
+   "code": "SANDBOX_VIOLATION",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "isolation",
+   "description": "Effect exceeds sandbox boundary",
+   "since": "1.0.0"
+  },
+  {
+   "code": "TENANT_ISOLATION",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "isolation",
+   "description": "Cross-tenant access violation",
+   "since": "1.0.0"
+  },
+  {
+   "code": "JURISDICTION_VIOLATION",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "jurisdiction",
+   "description": "Effect violates jurisdictional constraint",
+   "since": "1.0.0"
+  },
+  {
+   "code": "SYSTEM_FROZEN",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "operations",
+   "description": "System is in global freeze state — all actions denied",
+   "since": "1.1.0"
+  },
+  {
+   "code": "EMERGENCY_STOP_SCOPE_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "operations",
+   "description": "A governed dispatch omitted the authoritative tenant/workspace scope required while emergency-stop fencing is enabled",
+   "since": "1.7.0"
+  },
+  {
+   "code": "EMERGENCY_STOP_UNVERIFIED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "operations",
+   "description": "Emergency-stop fence status could not be verified, so the governed dispatch was denied fail-closed",
+   "since": "1.7.0"
+  },
+  {
+   "code": "EMERGENCY_STOP_FENCED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "operations",
+   "description": "A durable tenant/workspace emergency-stop fence is active for newly governed dispatches",
+   "since": "1.7.0"
+  },
+  {
+   "code": "CONTEXT_MISMATCH",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "environment",
+   "description": "Environment fingerprint does not match boot-time snapshot",
+   "since": "1.1.0"
+  },
+  {
+   "code": "DATA_EGRESS_BLOCKED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "network",
+   "description": "Data transmission to unauthorized external endpoint blocked",
+   "since": "1.1.0"
+  },
+  {
+   "code": "ERR_HOST_EGRESS_WITHOUT_INTENT",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "host_evidence",
+   "description": "Host-observed egress has no corresponding HELM intent or authority receipt",
+   "since": "1.6.0"
+  },
+  {
+   "code": "ERR_HOST_EGRESS_AFTER_DENY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "host_evidence",
+   "description": "Host-observed egress occurred after HELM denied the corresponding action",
+   "since": "1.6.0"
+  },
+  {
+   "code": "ERR_HOST_RECEIPT_MISSING",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "host_evidence",
+   "description": "A HELM network-authority receipt has no matching host evidence receipt",
+   "since": "1.6.0"
+  },
+  {
+   "code": "ERR_HOST_DESTINATION_MISMATCH",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "host_evidence",
+   "description": "Host-observed egress destination differs from HELM authority metadata",
+   "since": "1.6.0"
+  },
+  {
+   "code": "ERR_HOST_VOLUME_EXCEEDED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "host_evidence",
+   "description": "Host-observed egress byte volume exceeds the HELM authority ceiling",
+   "since": "1.6.0"
+  },
+  {
+   "code": "ERR_HOST_PROCESS_UNBOUND",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "host_evidence",
+   "description": "Host receipt process identity cannot be bound to a HELM workload identity",
+   "since": "1.6.0"
+  },
+  {
+   "code": "ERR_POLICY_DENIED_BUT_HOST_OBSERVED_EGRESS",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "host_evidence",
+   "description": "Host evidence contradicts a HELM policy denial for network egress",
+   "since": "1.6.0"
+  },
+  {
+   "code": "IDENTITY_ISOLATION_VIOLATION",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "identity",
+   "description": "Agent credential reuse or impersonation detected",
+   "since": "1.1.0"
+  },
+  {
+   "code": "INSUFFICIENT_PRIVILEGE",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "privilege",
+   "description": "Agent privilege tier insufficient for requested effect type",
+   "since": "1.2.0"
+  },
+  {
+   "code": "APPROVAL_REQUIRED",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "approval",
+   "description": "High-risk effect requires human approval before execution",
+   "since": "1.1.0"
+  },
+  {
+   "code": "APPROVAL_TIMEOUT",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "approval",
+   "description": "Human approval not received within timeout — action denied",
+   "since": "1.1.0"
+  },
+  {
+   "code": "DELEGATION_INVALID",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "delegation",
+   "description": "Delegation session is invalid, expired, revoked, or has a binding mismatch",
+   "since": "1.3.0"
+  },
+  {
+   "code": "DELEGATION_SCOPE_VIOLATION",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "delegation",
+   "description": "Delegate attempted an action outside the session's granted capabilities",
+   "since": "1.3.0"
+  },
+  {
+   "code": "DELEGATION_PRINCIPAL_MISMATCH",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "delegation",
+   "description": "Requesting principal does not match the delegation session's bound delegate principal",
+   "since": "1.3.0"
+  },
+  {
+   "code": "AGENT_KILLED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "agent_lifecycle",
+   "description": "Agent has been terminated via per-agent kill switch",
+   "since": "1.3.0"
+  },
+  {
+   "code": "TAINTED_INPUT_HIGH_RISK_DENY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "threat",
+   "description": "High-risk effect denied due to tainted/untrusted input source",
+   "since": "1.2.0"
+  },
+  {
+   "code": "PROMPT_INJECTION_DETECTED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "threat",
+   "description": "Prompt injection pattern detected in untrusted input",
+   "since": "1.2.0"
+  },
+  {
+   "code": "UNICODE_OBFUSCATION_DETECTED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "threat",
+   "description": "Unicode obfuscation (zero-width chars, homoglyphs) detected",
+   "since": "1.2.0"
+  },
+  {
+   "code": "TAINTED_CREDENTIAL_ACCESS_DENY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "threat",
+   "description": "Credential or token access attempted from tainted source",
+   "since": "1.2.0"
+  },
+  {
+   "code": "TAINTED_SOFTWARE_PUBLISH_DENY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "threat",
+   "description": "Software publish or release attempted from tainted source",
+   "since": "1.2.0"
+  },
+  {
+   "code": "TAINTED_PRIVILEGED_INVOKE_DENY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "threat",
+   "description": "Privileged agent invocation attempted from tainted source",
+   "since": "1.2.0"
+  },
+  {
+   "code": "TAINTED_DATA_EGRESS_DENY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "threat",
+   "description": "Data egress or exfiltration attempted from tainted source",
+   "since": "1.2.0"
+  },
+  {
+   "code": "TAINTED_HIGH_RISK_ESCALATE",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "threat",
+   "description": "High-risk effect from tainted source requires human approval",
+   "since": "1.2.0"
+  },
+  {
+   "code": "ERR_TON_ACTON_UNKNOWN_COMMAND",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Requested Acton action is not one of the typed HELM TON Acton actions",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_ACTON_UNSUPPORTED_VERSION",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Observed Acton version is outside the connector contract",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_TOLK_COMPILER_UNPINNED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "A Tolk compiler version pin is required for bytecode-sensitive TON work",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_TOLK_COMPILER_MISMATCH",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Observed Tolk compiler version does not match policy or connector contract",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_ACTON_ARGV_REJECTED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Acton argv failed typed connector validation",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_ACTON_RAW_SHELL_FORBIDDEN",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Raw shell or raw command execution was requested for Acton",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_ACTON_GENERIC_MAINNET_SCRIPT_DENIED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Generic Acton mainnet script execution is denied by default",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_SCRIPT_MANIFEST_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Networked Acton script is missing the required HELM sidecar manifest",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_SCRIPT_MANIFEST_HASH_MISMATCH",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Acton script hash does not match the HELM sidecar manifest",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_EXPECTED_EFFECT_MISMATCH",
+   "applies_to": [
+    "DENY",
+    "ESCALATE"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Declared TON expected effects are missing or do not match the action envelope",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_SPEND_CEILING_EXCEEDED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON spend exceeds action or daily policy ceilings",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_MAINNET_REQUIRES_APPROVAL",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON mainnet action requires policy approval before dispatch",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_APPROVAL_CEREMONY_REQUIRED",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON T3 action requires approval ceremony evidence",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_WALLET_REF_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON action requires an opaque wallet reference",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_PLAINTEXT_MNEMONIC_FORBIDDEN",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Plaintext wallet mnemonic or private key material is forbidden",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_NETWORK_GRANT_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON networked action requires an explicit sandbox network grant",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_SANDBOX_GRANT_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Acton execution requires a valid HELM sandbox grant",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_SOURCE_VERIFICATION_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON source verification evidence is required before the action can dispatch",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_VERIFY_DRY_RUN_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON verifier dry-run evidence is required before final verification or deployment",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_VERIFY_BYTECODE_MISMATCH",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON verifier bytecode comparison failed",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_COVERAGE_THRESHOLD_FAILED",
+   "applies_to": [
+    "DENY",
+    "ESCALATE"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Acton coverage result is below policy threshold",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_MUTATION_THRESHOLD_FAILED",
+   "applies_to": [
+    "DENY",
+    "ESCALATE"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Acton mutation score is below policy threshold",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_LIBRARY_MAINNET_REQUIRES_APPROVAL",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "Mainnet TON library publish or top-up requires approval",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_TON_LIBRARY_SPEND_CEILING_EXCEEDED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector.ton.acton",
+   "description": "TON library publish or top-up exceeds spend ceilings",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_CONNECTOR_CONTRACT_DRIFT",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "connector",
+   "description": "Connector observed output shape drift and failed closed",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_COMPUTE_GAS_EXHAUSTED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "compute",
+   "description": "Sandboxed execution exhausted configured compute or gas budget",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_COMPUTE_TIME_EXHAUSTED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "compute",
+   "description": "Sandboxed execution exceeded the configured wall-clock time budget",
+   "since": "1.3.0"
+  },
+  {
+   "code": "ERR_VERIFICATION_SCOPE_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "harness",
+   "description": "Medium or high risk execution is missing a VerificationScope",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_HARNESS_TRACE_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "harness",
+   "description": "Side-effectful execution is missing a hash-linked HarnessTrace",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_PLAN_TRANSACTION_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "harness",
+   "description": "Multi-artifact or write-bearing execution is missing a PlanTransaction",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_PLAN_TRANSACTION_CONFLICT",
+   "applies_to": [
+    "DENY",
+    "ESCALATE"
+   ],
+   "domain": "harness",
+   "description": "PlanTransaction read/write sets conflict with another open transaction",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_ASSUMPTION_STALE",
+   "applies_to": [
+    "DENY",
+    "ESCALATE"
+   ],
+   "domain": "harness",
+   "description": "A declared plan assumption or dependency is stale before side-effect dispatch",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "harness",
+   "description": "Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing state requires explicit approval",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_HARNESS_CHANGE_CONTRACT_INVALID",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "harness",
+   "description": "Harness mutation lacks a valid HarnessChangeContract",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_GREEN_TEST_SCOPE_MISSING",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "harness",
+   "description": "Passing tests were submitted without a declared verification scope",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_GROUNDED_ACTION_REF_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "gui-action",
+   "description": "GUI or computer-use action is missing grounded screenshot and DOM/accessibility evidence",
+   "since": "1.4.0"
+  },
+  {
+   "code": "ERR_GUI_POSTCONDITION_UNVERIFIED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "gui-action",
+   "description": "GUI or computer-use action postcondition was not verified",
+   "since": "1.4.0"
+  },
+  {
+   "code": "SAFEDEP_TERMINAL_FREEZE",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "safe-deprecation",
+   "description": "Safe Deprecation classified the hazard as terminal freeze",
+   "since": "1.7.0"
+  },
+  {
+   "code": "SAFEDEP_DEGRADED_NARROWING",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "safe-deprecation",
+   "description": "Safe Deprecation classified the hazard as recoverable degraded narrowing",
+   "since": "1.7.0"
+  },
+  {
+   "code": "SAFEDEP_DEPRECATED_READONLY",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "safe-deprecation",
+   "description": "Safe Deprecation classified the hazard as read-only deprecation",
+   "since": "1.7.0"
+  },
+  {
+   "code": "ERR_CONTINUITY_STALE",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "safe-deprecation",
+   "description": "Safe Deprecation continuity checkpoint is stale, replayed, expired, or rollbacked",
+   "since": "1.7.0"
+  },
+  {
+   "code": "ERR_EMERGENCY_CAPSULE_INVALID",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "safe-deprecation",
+   "description": "Emergency capsule failed binding, expiry, subset-proof, or delegation validation",
+   "since": "1.7.0"
+  },
+  {
+   "code": "ERR_HARDWARE_QUORUM_UNBOUND",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "safe-deprecation",
+   "description": "Hardware-bound emergency quorum is missing, duplicated, unauthorized, or revoked",
+   "since": "1.7.0"
+  },
+  {
+   "code": "ERR_ATTESTATION_RESULT_REQUIRED",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "safe-deprecation",
+   "description": "Signed verifier-issued attestation result is required for emergency authorization",
+   "since": "1.7.0"
+  },
+  {
+   "code": "ERR_DEV_FALLBACK_PRESENT",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "safe-deprecation",
+   "description": "Dev, audit, mock, software-key, env-fallback, or unsigned overlay path is enabled",
+   "since": "1.7.0"
+  },
+  {
+   "code": "CAPABILITY_UNKNOWN",
+   "applies_to": [
+    "ESCALATE"
+   ],
+   "domain": "capability",
+   "description": "Dispatched capability_id is not registered; quarantined for review per governed capability registry (fail closed)",
+   "since": "1.7.0"
+  },
+  {
+   "code": "CAPABILITY_MANIFEST_DRIFT",
+   "applies_to": [
+    "DENY"
+   ],
+   "domain": "capability",
+   "description": "Caller-pinned capability manifest hash no longer matches the registry revision; dispatch refused fail closed",
+   "since": "1.7.0"
+  },
+  {
+   "code": "CAPABILITY_TOKEN_INVALID",
+   "applies_to": [
+    "DENY",
+    "ESCALATE"
+   ],
+   "domain": "capability",
+   "description": "Task capability token is expired, exhausted, revoked, out of scope, or fails signature/binding verification",
+   "since": "1.7.0"
+  }
+ ]
 }

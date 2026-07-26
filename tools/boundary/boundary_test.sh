@@ -19,13 +19,45 @@ MANIFEST="tools/boundary/protected.manifest"
 DIRS_FILE="tools/boundary/protected-dirs.sh"
 PASS=0; FAIL=0
 
+# Every path this test creates and then deletes. It must own all of them: a
+# developer with a file of the same name would otherwise have it silently
+# overwritten and removed. The $$ suffix makes a collision improbable; the
+# check below makes acting on one impossible.
+FIX_UNTRACKED="core/pkg/crypto/zz_boundary_test_untracked.$$.go"
+FIX_IGNOREDIR="core/pkg/kernel/.gen_tmp"
+FIX_IGNORED="$FIX_IGNOREDIR/zz_boundary_test.$$.go"
+FIX_TRACKED="core/pkg/crypto/zz_boundary_test_tracked.$$.go"
+FIXTURES=("$FIX_UNTRACKED" "$FIX_IGNORED" "$FIX_TRACKED")
+
 if ! git diff --quiet -- "$MANIFEST" "$DIRS_FILE" "$VERIFY" "$GENERATE"; then
   echo "ERROR: boundary files are dirty; run from a clean tree." >&2
   exit 2
 fi
 
+# The gate must be green before the first case, or every "fail" assertion below
+# proves nothing — it would fail for a reason the test did not create.
+if ! bash "$VERIFY" >/dev/null 2>&1; then
+  echo "ERROR: the boundary gate is already failing on this tree." >&2
+  echo "Run 'bash $VERIFY' to see why, and start from a clean tree." >&2
+  exit 2
+fi
+
+for p in "${FIXTURES[@]}"; do
+  if [ -e "$p" ]; then
+    echo "ERROR: $p already exists; this test would overwrite and delete it." >&2
+    exit 2
+  fi
+done
+CREATED_IGNOREDIR=0
+[ -d "$FIX_IGNOREDIR" ] || CREATED_IGNOREDIR=1
+
+cleanup() {
+  rm -f "${FIXTURES[@]}"
+  [ "$CREATED_IGNOREDIR" = "1" ] && rmdir "$FIX_IGNOREDIR" 2>/dev/null
+  git checkout -q -- "$MANIFEST" "$DIRS_FILE" "$VERIFY" "$GENERATE" 2>/dev/null || true
+}
 restore() { git checkout -q -- "$MANIFEST" "$DIRS_FILE" "$VERIFY" "$GENERATE" 2>/dev/null || true; }
-trap restore EXIT
+trap cleanup EXIT
 
 # assert <expected-exit: pass|fail> <description>
 assert() {
@@ -43,29 +75,33 @@ assert pass "clean tree verifies"
 
 # A protected package is Go source; anything else appearing in one is a finding,
 # whether git is configured to ignore it or not — the compiler does not care.
-echo "package crypto" > core/pkg/crypto/zz_untracked.go
+echo "package crypto" > "$FIX_UNTRACKED"
 assert fail "untracked file in a protected package"
-rm -f core/pkg/crypto/zz_untracked.go
+rm -f "$FIX_UNTRACKED"
 
-mkdir -p core/pkg/kernel/.gen_tmp && echo "package kernel" > core/pkg/kernel/.gen_tmp/zz.go
+mkdir -p "$FIX_IGNOREDIR" && echo "package kernel" > "$FIX_IGNORED"
 assert fail "gitignored file in a protected package"
-rm -f core/pkg/kernel/.gen_tmp/zz.go && rmdir core/pkg/kernel/.gen_tmp 2>/dev/null
+rm -f "$FIX_IGNORED"
+[ "$CREATED_IGNOREDIR" = "1" ] && rmdir "$FIX_IGNOREDIR" 2>/dev/null
 
-echo "package crypto" > core/pkg/crypto/zz_tracked.go
-git add -f core/pkg/crypto/zz_tracked.go 2>/dev/null
+echo "package crypto" > "$FIX_TRACKED"
+git add -f "$FIX_TRACKED" 2>/dev/null
 assert fail "tracked file added without regenerating the manifest"
-git rm -q -f --cached core/pkg/crypto/zz_tracked.go 2>/dev/null
-rm -f core/pkg/crypto/zz_tracked.go
+git rm -q -f --cached "$FIX_TRACKED" 2>/dev/null
+rm -f "$FIX_TRACKED"
 
+# Back up outside the tree: a sibling .bak would itself be an untracked file in
+# a protected package, which is a violation this suite asserts on.
 VICTIM="$(git ls-files core/pkg/crypto | head -1)"
-cp "$VICTIM" "$VICTIM.bak"
+VICTIM_BAK="$(mktemp)"
+cp "$VICTIM" "$VICTIM_BAK"
 echo "// drift" >> "$VICTIM"
 assert fail "protected file modified"
-mv "$VICTIM.bak" "$VICTIM"
+cp "$VICTIM_BAK" "$VICTIM"
 
-cp "$VICTIM" /tmp/boundary_victim.$$ && rm -f "$VICTIM"
+rm -f "$VICTIM"
 assert fail "protected file deleted"
-cp /tmp/boundary_victim.$$ "$VICTIM" && rm -f /tmp/boundary_victim.$$
+cp "$VICTIM_BAK" "$VICTIM" && rm -f "$VICTIM_BAK"
 
 # The boundary's own configuration is inside the boundary, so narrowing it is a
 # visible act rather than a silent one.

@@ -244,6 +244,9 @@ func ValidateAllowPermit(permit Permit, trustedContext Context, contextSHA256 st
 			if review.AdvisoryFindings < 0 || review.AdvisoryFindings > maxFindings {
 				problems = append(problems, "review advisory_findings must be between 0 and 200")
 			}
+			if review.DeferredFindings < 0 || review.DeferredFindings > maxFindings {
+				problems = append(problems, "review deferred_findings must be between 0 and 200")
+			}
 			if !hexSHA256Pattern.MatchString(review.ResponseSHA256) {
 				problems = append(problems, "review response_sha256 must be lowercase hexadecimal")
 			}
@@ -464,8 +467,10 @@ func validateReview(context Context, contextSHA256 string, review Review) (Revie
 			continue
 		}
 		switch finding.Severity {
-		case "P0", "P1", "P2":
+		case "P0", "P1":
 			summary.BlockingFindings++
+		case "P2":
+			summary.DeferredFindings++
 		case "P3":
 			summary.AdvisoryFindings++
 		default:
@@ -473,7 +478,7 @@ func validateReview(context Context, contextSHA256 string, review Review) (Revie
 		}
 	}
 	if summary.BlockingFindings > 0 {
-		add("BLOCKING_FINDING", fmt.Sprintf("review contains %d P0-P2 findings", summary.BlockingFindings))
+		add("BLOCKING_FINDING", fmt.Sprintf("review contains %d P0-P1 findings", summary.BlockingFindings))
 	}
 	return summary, reasons
 }

@@ -5,7 +5,7 @@ import "testing"
 // Pins the exact permit_id for a fixed ALLOW quorum so any change to the
 // permit schema, field set, or canonicalization fails loudly instead of
 // silently re-deriving every permit ID in the wild.
-const goldenAllowPermitID = "sha256:864f7fa3ed1d06ac3cbfae5b6a08da2ab8124f0125699c22782bafacaf6ecc6c"
+const goldenAllowPermitID = "sha256:21ce49020357a46e790654dd1324064a54563d2f34c93102c9955942e30dd21f"
 
 func TestEvaluatePermitIDGoldenVector(t *testing.T) {
 	context := validContext()

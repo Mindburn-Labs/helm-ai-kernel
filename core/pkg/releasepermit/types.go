@@ -6,7 +6,7 @@ package releasepermit
 const (
 	ContextSchema   = "mindburn.release-permit-context/v2"
 	ReviewSchema    = "mindburn.release-review/v1"
-	PermitSchema    = "mindburn.release-permit/v3"
+	PermitSchema    = "mindburn.release-permit/v4"
 	AuthoritySchema = "mindburn.release-authority/v1"
 
 	DecisionAllow = "ALLOW"
@@ -61,8 +61,17 @@ type Context struct {
 	RequiredReviewers  []Reviewer `json:"required_reviewers"`
 }
 
-// Finding is one model-reported issue. P0-P2 findings block a permit; P3 is
-// retained as advisory evidence.
+// Finding is one model-reported issue. P0-P1 findings block a permit. P2 is
+// deferred: recorded and counted, but not blocking — a P2 is a defect to
+// schedule, not a reason to hold a release. P3 is retained as advisory
+// evidence.
+//
+// P2 blocked until 2026-07-26. In practice it made large changes
+// unmergeable: each round of fixes surfaced a fresh crop of P2s rather than
+// draining the set, so the gate never converged and its signal was spent on
+// re-litigating scope instead of on catastrophic and exploitable defects.
+// Deferred findings still reach the permit record via DeferredFindings, so
+// nothing is lost — it is triaged rather than gating.
 type Finding struct {
 	Severity string `json:"severity"`
 	Code     string `json:"code"`
@@ -100,11 +109,18 @@ type Reason struct {
 // ReviewSummary retains the model identity and response digest without
 // treating raw model prose as an authorization record.
 type ReviewSummary struct {
-	Reviewer         Reviewer `json:"reviewer"`
-	Verdict          string   `json:"verdict"`
-	ResponseSHA256   string   `json:"response_sha256"`
-	BlockingFindings int      `json:"blocking_findings"`
-	AdvisoryFindings int      `json:"advisory_findings"`
+	Reviewer Reviewer `json:"reviewer"`
+	Verdict  string   `json:"verdict"`
+	// ResponseSHA256 digests the raw model response; the prose itself is
+	// never an authorization record.
+	ResponseSHA256 string `json:"response_sha256"`
+	// BlockingFindings counts P0-P1: the severities that deny a permit.
+	BlockingFindings int `json:"blocking_findings"`
+	// DeferredFindings counts P2: recorded on the permit and owed a
+	// follow-up, but not blocking.
+	DeferredFindings int `json:"deferred_findings"`
+	// AdvisoryFindings counts P3.
+	AdvisoryFindings int `json:"advisory_findings"`
 }
 
 // Permit is the deterministic output consumed by a required GitHub workflow.

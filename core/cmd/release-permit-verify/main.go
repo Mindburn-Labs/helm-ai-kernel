@@ -339,7 +339,8 @@ func validateExactShape(content []byte, destination any) error {
 				return err
 			}
 			if err := requireKeys(review, []string{
-				"reviewer", "verdict", "response_sha256", "blocking_findings", "advisory_findings",
+				"reviewer", "verdict", "response_sha256",
+				"blocking_findings", "deferred_findings", "advisory_findings",
 			}, nil, fmt.Sprintf("reviews[%d]", index)); err != nil {
 				return err
 			}

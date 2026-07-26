@@ -49,6 +49,59 @@ func TestEvaluateDeniesBlockingFinding(t *testing.T) {
 	assertDeniedFor(t, permit, "BLOCKING_FINDING")
 }
 
+// P2 is deferred, not blocking: it is counted onto the permit so the defect
+// is owed a follow-up, but a reviewer that still returns ALLOW yields a
+// permit. A P2 reported alongside a DENY verdict is a different matter —
+// REVIEW_DENIED denies on the verdict, independent of severity.
+func TestEvaluateDefersP2WithoutBlocking(t *testing.T) {
+	context := validContext()
+	reviews := validReviews(context)
+	reviews[1].Findings = []Finding{
+		{Severity: "P2", Code: "COMPAT_BREAK", Summary: "Material compatibility defect"},
+		{Severity: "P2", Code: "COVERAGE_GAP", Summary: "Uncovered failure path"},
+		{Severity: "P3", Code: "STYLE", Summary: "Polish"},
+	}
+
+	permit, err := Evaluate(context, testContextSHA, reviews)
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if permit.Decision != DecisionAllow {
+		t.Fatalf("Decision = %q, want %q; reasons = %#v", permit.Decision, DecisionAllow, permit.Reasons)
+	}
+	if got := permit.Reviews[1].DeferredFindings; got != 2 {
+		t.Fatalf("DeferredFindings = %d, want 2 — a deferred finding must still be recorded", got)
+	}
+	if got := permit.Reviews[1].BlockingFindings; got != 0 {
+		t.Fatalf("BlockingFindings = %d, want 0", got)
+	}
+	if got := permit.Reviews[1].AdvisoryFindings; got != 1 {
+		t.Fatalf("AdvisoryFindings = %d, want 1", got)
+	}
+}
+
+// A P0 still denies, and a P2 riding alongside it does not soften the reason.
+func TestEvaluateDeniesP0EvenWithDeferredFindings(t *testing.T) {
+	context := validContext()
+	reviews := validReviews(context)
+	reviews[0].Findings = []Finding{
+		{Severity: "P2", Code: "COMPAT_BREAK", Summary: "Material compatibility defect"},
+		{Severity: "P0", Code: "RCE", Summary: "Remote code execution"},
+	}
+
+	permit, err := Evaluate(context, testContextSHA, reviews)
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	assertDeniedFor(t, permit, "BLOCKING_FINDING")
+	if got := permit.Reviews[0].BlockingFindings; got != 1 {
+		t.Fatalf("BlockingFindings = %d, want 1", got)
+	}
+	if got := permit.Reviews[0].DeferredFindings; got != 1 {
+		t.Fatalf("DeferredFindings = %d, want 1", got)
+	}
+}
+
 func TestEvaluateDeniesStaleHead(t *testing.T) {
 	context := validContext()
 	reviews := validReviews(context)

@@ -61,7 +61,11 @@ bash "$SCRIPT_DIR/gen.sh"
 verify_manifests
 
 drift=0
+# Working tree vs index AND index vs HEAD: staged drift must not slip through.
 if ! git -C "$PROJECT_ROOT" diff --exit-code --stat -- "${GATED_PATHS[@]}"; then
+    drift=1
+fi
+if ! git -C "$PROJECT_ROOT" diff --cached --exit-code --stat -- "${GATED_PATHS[@]}"; then
     drift=1
 fi
 untracked="$(git -C "$PROJECT_ROOT" status --porcelain -- "${GATED_PATHS[@]}" | grep '^??' || true)"

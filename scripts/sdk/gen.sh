@@ -52,10 +52,14 @@ cat > "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'HEADER'
 // Regenerate: bash scripts/sdk/gen.sh
 
 HEADER
+TS_MODEL_COUNT=0
 for f in "$PROJECT_ROOT/.gen_tmp/ts/models/"*.ts; do
-    [ -f "$f" ] && cat "$f" >> "$PROJECT_ROOT/sdk/ts/src/types.gen.ts"
+    if [ -f "$f" ]; then
+        cat "$f" >> "$PROJECT_ROOT/sdk/ts/src/types.gen.ts"
+        TS_MODEL_COUNT=$((TS_MODEL_COUNT + 1))
+    fi
 done
-[ -s "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" ] || fail "[ts] generator produced an empty model set"
+[ "$TS_MODEL_COUNT" -gt 0 ] || fail "[ts] generator produced zero model files"
 python3 - "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'PY'
 from pathlib import Path
 import sys
@@ -195,9 +199,14 @@ from typing import Annotated, Any, ClassVar, Dict, List, Literal, Optional, Set,
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr, ValidationError, field_validator
 HEADER
+PY_MODEL_COUNT=0
 for f in "$PROJECT_ROOT/.gen_tmp/python/helm_sdk/models/"*.py; do
-    [ -f "$f" ] && grep -v "^from\|^import\|^#" "$f" >> "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" 2>/dev/null || true
+    if [ -f "$f" ]; then
+        grep -v "^from\|^import\|^#" "$f" >> "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" 2>/dev/null || true
+        PY_MODEL_COUNT=$((PY_MODEL_COUNT + 1))
+    fi
 done
+[ "$PY_MODEL_COUNT" -gt 0 ] || fail "[py] generator produced zero model files"
 python3 - "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'PY'
 from pathlib import Path
 import sys

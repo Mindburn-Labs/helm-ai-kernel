@@ -86,6 +86,49 @@ class ManifestTestCase(unittest.TestCase):
         problems = manifest.verify_manifest(self.sdk_dir)
         self.assertTrue(any("unparseable" in p for p in problems))
 
+    def test_verify_rejects_non_object_manifest(self) -> None:
+        (self.sdk_dir / manifest.MANIFEST_NAME).write_text('["not", "an", "object"]', encoding="utf-8")
+        problems = manifest.verify_manifest(self.sdk_dir)
+        self.assertTrue(any("not a JSON object" in p for p in problems))
+
+    def test_verify_detects_source_spec_tampering(self) -> None:
+        out = self._write()
+        data = json.loads(out.read_text(encoding="utf-8"))
+        data["source"]["sha256"] = "0" * 64
+        out.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        problems = manifest.verify_manifest(self.sdk_dir)
+        self.assertTrue(any("source spec hash mismatch" in p for p in problems))
+
+    def test_verify_detects_source_spec_drift(self) -> None:
+        self._write()
+        self.spec_path.write_text("openapi: 3.1.1\n", encoding="utf-8")
+        problems = manifest.verify_manifest(self.sdk_dir)
+        self.assertTrue(any("source spec hash mismatch" in p for p in problems))
+
+    def test_verify_rejects_path_traversal_entry(self) -> None:
+        out = self._write()
+        data = json.loads(out.read_text(encoding="utf-8"))
+        data["files"][0]["path"] = "../../outside.ts"
+        out.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        problems = manifest.verify_manifest(self.sdk_dir)
+        self.assertTrue(any("escapes the SDK directory" in p for p in problems))
+
+    def test_verify_rejects_absolute_path_entry(self) -> None:
+        out = self._write()
+        data = json.loads(out.read_text(encoding="utf-8"))
+        data["files"][0]["path"] = str(self.gen_file)
+        out.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        problems = manifest.verify_manifest(self.sdk_dir)
+        self.assertTrue(any("escapes the SDK directory" in p for p in problems))
+
+    def test_verify_rejects_source_spec_escaping_repo(self) -> None:
+        out = self._write()
+        data = json.loads(out.read_text(encoding="utf-8"))
+        data["source"]["spec"] = "../../../etc/passwd"
+        out.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        problems = manifest.verify_manifest(self.sdk_dir)
+        self.assertTrue(any("source spec escapes the repo" in p for p in problems))
+
     def test_write_refuses_missing_generated_file(self) -> None:
         with self.assertRaises(SystemExit):
             manifest.write_manifest(self.sdk_dir, self.image, self.spec_path, ["src/nope.ts"])

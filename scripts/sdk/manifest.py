@@ -78,9 +78,49 @@ def verify_manifest(sdk_dir: Path) -> list[str]:
     except json.JSONDecodeError as exc:
         return [f"unparseable manifest {manifest_path}: {exc}"]
 
+    if not isinstance(manifest, dict):
+        return [f"manifest {manifest_path} is not a JSON object"]
+
+    sdk_root = sdk_dir.resolve()
+    repo_root = sdk_root.parent.parent
+
+    def _contained(base: Path, rel: str) -> Path | None:
+        """Resolve rel under base; None when it escapes or is absolute."""
+        candidate = Path(rel)
+        if candidate.is_absolute() or not rel:
+            return None
+        resolved = (base / candidate).resolve()
+        if resolved != base and base not in resolved.parents:
+            return None
+        return resolved
+
+    # The recorded source spec must also match disk: a spec change or a
+    # tampered source.sha256/source.spec entry is drift like any other.
+    source = manifest.get("source")
+    if not isinstance(source, dict):
+        problems.append(f"manifest {manifest_path} has no source object")
+    else:
+        spec_rel = source.get("spec", "")
+        spec_expected = source.get("sha256", "")
+        if not isinstance(spec_rel, str) or not isinstance(spec_expected, str) or not spec_rel or not spec_expected:
+            problems.append(f"manifest {manifest_path} has an incomplete source entry: {source!r}")
+        else:
+            spec_target = _contained(repo_root, spec_rel)
+            if spec_target is None:
+                problems.append(f"manifest {manifest_path} source spec escapes the repo: {spec_rel!r}")
+            elif not spec_target.is_file():
+                problems.append(f"source spec missing on disk: {spec_target}")
+            else:
+                spec_actual = _sha256(spec_target)
+                if spec_actual != spec_expected:
+                    problems.append(
+                        f"source spec hash mismatch: {spec_target} "
+                        f"(manifest {spec_expected[:12]}..., disk {spec_actual[:12]}...)"
+                    )
+
     files = manifest.get("files")
     if not isinstance(files, list) or not files:
-        return [f"manifest {manifest_path} records no files"]
+        return problems + [f"manifest {manifest_path} records no files"]
 
     seen: set[str] = set()
     for entry in files:
@@ -89,14 +129,17 @@ def verify_manifest(sdk_dir: Path) -> list[str]:
             continue
         rel = entry.get("path", "")
         expected = entry.get("sha256", "")
-        if not rel or not expected:
+        if not isinstance(rel, str) or not isinstance(expected, str) or not rel or not expected:
             problems.append(f"manifest {manifest_path} has an incomplete entry: {entry!r}")
             continue
         if rel in seen:
             problems.append(f"manifest {manifest_path} lists {rel} twice")
             continue
         seen.add(rel)
-        target = sdk_dir / rel
+        target = _contained(sdk_root, rel)
+        if target is None:
+            problems.append(f"manifest {manifest_path} entry escapes the SDK directory: {rel!r}")
+            continue
         if not target.is_file():
             problems.append(f"generated file missing on disk: {target}")
             continue

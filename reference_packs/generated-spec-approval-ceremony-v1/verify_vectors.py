@@ -38,6 +38,13 @@ HASH_FIELDS = (
     "authority_snapshot_hash",
 )
 
+# NOTE on nonce: challenge and grant carry deliberately independent fresh
+# randomness — the challenge nonce is ceremony freshness, the grant nonce is
+# single-use entropy for consumption. They are NOT field-equal by design, so
+# nonce is absent from GRANT_BINDING_FIELDS. Nonce integrity is still bound
+# transitively: nonce -> grant_hash (sealed content) -> grant signature, and
+# the grant_nonce_tamper negative vector proves a resealed nonce swap fails
+# signature verification.
 GRANT_BINDING_FIELDS = (
     "approval_id",
     "tenant_id",
@@ -258,6 +265,9 @@ def verify_vector(index, root, mutation=None):
         reseal(challenge, "challenge_hash")
     elif mutation == "duplicate_grant_approver_and_reseal":
         grant["approver_principal_ids"] = grant["approver_principal_ids"] + grant["approver_principal_ids"][:1]
+        reseal(grant, "grant_hash")
+    elif mutation == "set_grant_nonce_and_reseal":
+        grant["nonce"] = "f" * 64
         reseal(grant, "grant_hash")
     elif mutation is not None:
         raise VectorError("unknown_mutation", mutation)

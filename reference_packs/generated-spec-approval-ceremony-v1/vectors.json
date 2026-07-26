@@ -72,6 +72,11 @@
       "id": "duplicate_approver",
       "mutation": "duplicate_grant_approver_and_reseal",
       "expected_error": "contract_mismatch"
+    },
+    {
+      "id": "grant_nonce_tamper",
+      "mutation": "set_grant_nonce_and_reseal",
+      "expected_error": "signature_rejected"
     }
   ]
 }

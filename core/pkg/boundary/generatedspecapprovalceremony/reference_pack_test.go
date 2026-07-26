@@ -171,6 +171,7 @@ func buildGeneratedSpecApprovalCeremonyReferencePack(t *testing.T) map[string][]
 			{ID: "single_use_replay", Mutation: "replay_second_consume", ExpectedError: "transition_conflict"},
 			{ID: "quorum_not_verified", Mutation: "set_challenge_quorum_above_approvers_and_reseal", ExpectedError: "quorum_not_verified"},
 			{ID: "duplicate_approver", Mutation: "duplicate_grant_approver_and_reseal", ExpectedError: "contract_mismatch"},
+			{ID: "grant_nonce_tamper", Mutation: "set_grant_nonce_and_reseal", ExpectedError: "signature_rejected"},
 		},
 	}
 	indexJSON, err := json.MarshalIndent(index, "", "  ")

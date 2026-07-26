@@ -5,8 +5,25 @@
   ],
   "packageRules": [
     {
-      "matchUpdateTypes": ["minor", "patch"],
+      "description": "Patch updates auto-merge; minor updates now require review. Combined with dependabot.yml setting open-pull-requests-limit to 0 for every ecosystem, blanket minor+patch auto-merge made Renovate the sole dependency path into this repository with no human in the loop (F-15). Patch is the narrowest band where unattended merging is defensible.",
+      "matchUpdateTypes": ["patch"],
       "automerge": true
+    },
+    {
+      "description": "Never auto-merge inside the trusted computing base, whatever the update type. A patch release of a crypto or transport dependency still changes code that signs receipts and terminates TLS.",
+      "matchPackagePatterns": [
+        "^golang\\.org/x/crypto",
+        "^golang\\.org/x/net",
+        "^github\\.com/cloudflare/circl",
+        "^filippo\\.io/",
+        "^github\\.com/google/cel-go",
+        "^github\\.com/open-policy-agent/"
+      ],
+      "automerge": false
     }
-  ]
+  ],
+  "vulnerabilityAlerts": {
+    "description": "Security advisories are raised for prompt review, never merged unattended.",
+    "automerge": false
+  }
 }

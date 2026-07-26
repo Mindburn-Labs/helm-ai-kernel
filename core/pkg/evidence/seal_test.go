@@ -56,6 +56,12 @@ func TestExternalSignerHelper(t *testing.T) {
 }
 
 func TestSealEvidencePackCreatesValidSeal(t *testing.T) {
+	// Exercises the seal/verify roundtrip with a "file-dev" signer, whose seal
+	// carries its own verification key. Self-attestation is refused by default
+	// (F-02); this test is about roundtrip mechanics, so it opts in explicitly.
+	// TestTrustedPublicKeyForSeal_RejectsSelfAttestedByDefault covers the refusal.
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "1")
+
 	packDir := writeSealTestPack(t, map[string][]byte{
 		"01_SCORE.json": []byte(`{"pass":true}`),
 	})

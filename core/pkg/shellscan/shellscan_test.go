@@ -195,6 +195,22 @@ var decideCases = []struct {
 	{"regression-sudo-shell-with-cmd", "sudo -s rm -rf /tmp/x", "privileged shell"},
 	{"regression-sudo-bare", "sudo", "without a command"},
 	{"regression-sudo-flags-only", "sudo -E", "without a command"},
+
+	// Regression: P1 UNMODELED_SHELL_BYPASS — shells outside the original
+	// POSIX set must also have their -c payloads classified.
+	{"regression-fish-c", `fish -c 'rm -R -f /tmp/x'`, "recursive rm"},
+	{"regression-nu-c", `nu -c 'rm -rf /tmp/x'`, "recursive rm"},
+	{"regression-pwsh-c", `pwsh -c 'rm -rf /tmp/x'`, "recursive rm"},
+	{"regression-elvish-c", `elvish -c 'rm -rf /tmp/x'`, "recursive rm"},
+	{"regression-fish-unknown-flag", `fish -d 3 -c 'rm -rf /tmp/x'`, "cannot be resolved statically"},
+	{"regression-pwsh-word-flag", `pwsh -NoProfile -c 'rm -rf /tmp/x'`, "cannot be resolved statically"},
+
+	// Regression: P1 FLOCK_COMMAND_ORDER_BYPASS — flock -c may appear
+	// after the lockfile positional (GNU permutation).
+	{"regression-flock-c-after-lockfile", `flock /tmp/l -c 'rm -R -f /tmp/x'`, "recursive rm"},
+	{"regression-flock-c-after-lockfile-flag", `flock /tmp/l -n -c 'rm -rf /tmp/x'`, "recursive rm"},
+	{"regression-flock-command-long-after", `flock /tmp/l --command 'rm -rf /tmp/x'`, "recursive rm"},
+	{"regression-timeout-late-flag", "timeout 5 -v rm -rf /tmp/x", "cannot be resolved statically"},
 }
 
 // passCases are commands that must still pass through without a decision —

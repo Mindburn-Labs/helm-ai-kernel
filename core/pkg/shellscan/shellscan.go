@@ -383,6 +383,17 @@ func dropWrapperFlags(cmd string, args []wordTok) []wordTok {
 
 var shellNames = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "ash": true,
+	"mksh": true, "yash": true, "tcsh": true, "csh": true, "rc": true,
+	"fish": true, "nu": true, "pwsh": true, "powershell": true,
+	"elvish": true, "xonsh": true,
+}
+
+// strictFlagShells are shells whose single-dash options are not guaranteed
+// POSIX-valueless (fish -d takes a value, pwsh uses -Word options). For
+// these, unrecognized short-flag characters are ambiguous → decision path.
+var strictFlagShells = map[string]bool{
+	"fish": true, "nu": true, "pwsh": true, "powershell": true,
+	"elvish": true, "xonsh": true,
 }
 
 // splitEnvPayload splits an env -S/--split-string payload into words using
@@ -571,7 +582,7 @@ var shellLongValueFlags = map[string]bool{
 // from stdin because no static script source exists (stdin), whether scanning
 // hit an unresolvable word (ambiguous), and whether a positional script file
 // was seen (positional).
-func scanShellScriptFlag(rest []wordTok) (script wordTok, found, stdin, ambiguous, positional bool) {
+func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, stdin, ambiguous, positional bool) {
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
 		if tok.dynamic {
@@ -620,9 +631,14 @@ func scanShellScriptFlag(rest []wordTok) (script wordTok, found, stdin, ambiguou
 				j = len(cluster) // value consumes the rest of the cluster
 			default:
 				// POSIX single-letter shell options are valueless, so
-				// letters are safe to skip. Anything that is not a letter
-				// (digits, punctuation) is not a standard shell option and
-				// may be a value-taking extension: ambiguous, fail closed.
+				// letters are safe to skip for POSIX shells. For strict
+				// shells (fish/pwsh/nu/...) letter options may take values,
+				// so any unrecognized option is ambiguous. Non-letter
+				// characters (digits, punctuation) are never standard
+				// options and are always ambiguous. Both fail closed.
+				if strict {
+					return wordTok{}, false, false, true, false
+				}
 				if !((cluster[j] >= 'a' && cluster[j] <= 'z') || (cluster[j] >= 'A' && cluster[j] <= 'Z')) {
 					return wordTok{}, false, false, true, false
 				}
@@ -903,12 +919,37 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				i++
 			}
 			rest = rest[i:]
+			if spec.commandFlag != 0 {
+				// GNU-style permutation: flock's -c/--command may appear
+				// after the lockfile positional (FLOCK_COMMAND_ORDER_BYPASS).
+				for k := 0; k < len(rest); k++ {
+					tok := rest[k]
+					if tok.dynamic {
+						continue
+					}
+					if tok.text == "-c" || tok.text == "--command" {
+						if k+1 >= len(rest) || rest[k+1].dynamic {
+							c.decide(name + " -c with an unresolvable payload (fail-closed)")
+							return
+						}
+						c.classifyString(rest[k+1].text, joinVia(via, name+" -c"), depth+1)
+						return
+					}
+				}
+			}
 			if len(rest) <= skip {
 				if spec.decideBare && len(rest) > 0 {
 					c.decide(name + " without a command runs an interactive shell (fail-closed)")
 					return
 				}
 				c.record(Command{Name: name, Via: via, Prefix: name})
+				return
+			}
+			if !rest[skip].dynamic && strings.HasPrefix(rest[skip].text, "-") {
+				// The "command" after the positional operands still looks
+				// like a flag: the wrapper's argument layout is ambiguous
+				// (e.g. GNU permutation moved a flag behind the operand).
+				c.decide(name + " argument layout cannot be resolved statically (fail-closed)")
 				return
 			}
 			args = rest[skip:]
@@ -937,7 +978,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			c.signal(SignalShellInvocation)
 			c.sawShell = true
 			rest := args[1:]
-			script, found, stdin, ambiguous, _ := scanShellScriptFlag(rest)
+			script, found, stdin, ambiguous, _ := scanShellScriptFlag(rest, strictFlagShells[name])
 			switch {
 			case ambiguous:
 				c.decide(name + " wrapper arguments cannot be resolved statically")

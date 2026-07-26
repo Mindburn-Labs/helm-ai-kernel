@@ -13,6 +13,12 @@ import (
 )
 
 func TestLaunchpadAPIPlanLaunchDeleteEvidence(t *testing.T) {
+	// Packs here are sealed with a "file-dev" signer, so the seal carries its
+	// own verification key. Self-attestation is refused by default (F-02);
+	// this test covers pack materialisation, not provenance, so it opts in
+	// explicitly rather than relying on the old permissive default.
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "1")
+
 	t.Setenv("HELM_LAUNCHPAD_HOME", t.TempDir())
 	t.Setenv("model_gateway", "")
 	srv := newTestServer(t)

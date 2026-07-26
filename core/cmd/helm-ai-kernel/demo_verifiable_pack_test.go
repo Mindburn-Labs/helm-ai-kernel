@@ -20,7 +20,7 @@ func TestDemoPackVerifiesOffline(t *testing.T) {
 	}
 
 	packDir := filepath.Join(dir, "data", "evidence")
-	report, err := verifier.VerifyBundle(packDir)
+	report, err := verifier.VerifyLocallyProducedBundle(packDir)
 	if err != nil {
 		t.Fatalf("VerifyBundle returned error: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestResearchLabPackVerifiesOffline(t *testing.T) {
 	}
 
 	packDir := filepath.Join(dir, "data", "evidence")
-	report, err := verifier.VerifyBundle(packDir)
+	report, err := verifier.VerifyLocallyProducedBundle(packDir)
 	if err != nil {
 		t.Fatalf("VerifyBundle returned error: %v", err)
 	}

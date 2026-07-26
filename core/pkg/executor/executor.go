@@ -108,7 +108,20 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 		return nil, nil, errors.New("execution blocked: missing decision")
 	}
 
-	// 1. Idempotency Check
+	// 1. Gating & Verification.
+	//
+	// This MUST precede the idempotency lookup. The lookup keys on decision.ID
+	// alone, so running it first meant an unsigned DecisionRecord carrying
+	// nothing but a known ID returned (receipt, artifact, nil) — a success
+	// return plus a genuine signed receipt — without the decision signature,
+	// intent signature, effect digest, verdict or authority window ever being
+	// examined (F-09).
+	if err := e.validateGating(decision, intent, effect); err != nil {
+		return nil, nil, err
+	}
+
+	// 2. Idempotency Check — only after the caller has proven it was entitled
+	// to ask about this decision at all.
 	if receipt, ok := e.checkIdempotency(ctx, decision.ID); ok {
 		// Recover artifact if possible, or return a pointer to the receipt
 		// For now, return a synthetic artifact indicating execution already happened
@@ -119,11 +132,6 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 			Preview:     fmt.Sprintf("Already executed. Receipt: %s", receipt.ReceiptID),
 		}
 		return receipt, artifact, nil
-	}
-
-	// 1. Gating & Verification
-	if err := e.validateGating(decision, intent, effect); err != nil {
-		return nil, nil, err
 	}
 
 	// 2. Snapshot Verification

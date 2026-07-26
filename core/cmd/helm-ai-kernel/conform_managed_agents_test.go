@@ -79,14 +79,14 @@ func TestConformManagedAgentsWritesVerifiableEvidencePack(t *testing.T) {
 	}
 
 	var verifyStdout, verifyStderr bytes.Buffer
-	verifyCode := runVerifyCmd([]string{"--bundle", filepath.Join(outDir, "evidence-pack.tar"), "--json"}, &verifyStdout, &verifyStderr)
+	verifyCode := runVerifyCmd([]string{"--allow-self-attested", "--bundle", filepath.Join(outDir, "evidence-pack.tar"), "--json"}, &verifyStdout, &verifyStderr)
 	if verifyCode == 0 {
 		t.Fatalf("verify without managed-agent trust root unexpectedly passed: stdout=%s stderr=%s", verifyStdout.String(), verifyStderr.String())
 	}
 
 	verifyStdout.Reset()
 	verifyStderr.Reset()
-	verifyCode = runVerifyCmd([]string{
+	verifyCode = runVerifyCmd([]string{"--allow-self-attested",
 		"--bundle", filepath.Join(outDir, "evidence-pack.tar"),
 		"--json",
 		"--managed-agent-receipt-public-key", readManagedAgentSignerPublicKey(t, outDir),

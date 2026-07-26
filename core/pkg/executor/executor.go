@@ -329,13 +329,23 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 	}
 
 	// 1. Verify Decision Signature (Provenance)
-	if valid, err := e.verifier.VerifyDecision(decision); err != nil || !valid {
-		return fmt.Errorf("execution blocked: invalid decision signature: %w", err)
+	//
+	// A verifier reports a bad signature as (false, nil); an error means it could
+	// not complete the check at all. Wrapping a nil err with %w rendered the
+	// common case as "invalid decision signature: %!w(<nil>)", losing the
+	// distinction between "the signature is wrong" and "verification failed to
+	// run" exactly where a forensic reader needs it. Both still deny.
+	if valid, err := e.verifier.VerifyDecision(decision); err != nil {
+		return fmt.Errorf("execution blocked: decision signature verification failed: %w", err)
+	} else if !valid {
+		return errors.New("execution blocked: invalid decision signature")
 	}
 
 	// 2. Verify Intent Signature (Authorization)
-	if valid, err := e.verifier.VerifyIntent(intent); err != nil || !valid {
-		return fmt.Errorf("execution blocked: invalid intent signature: %w", err)
+	if valid, err := e.verifier.VerifyIntent(intent); err != nil {
+		return fmt.Errorf("execution blocked: intent signature verification failed: %w", err)
+	} else if !valid {
+		return errors.New("execution blocked: invalid intent signature")
 	}
 
 	// 3. Verify Verdict (canonical: ALLOW per contracts/verdict.go)

@@ -21,7 +21,7 @@ func TestDemoFinance_EscalatesAndSealsVerifiablePack(t *testing.T) {
 		t.Fatalf("demo finance failed with code %d: stderr=%s", code, stderr.String())
 	}
 
-	report, err := verifier.VerifyBundle(out)
+	report, err := verifier.VerifyLocallyProducedBundle(out)
 	if err != nil {
 		t.Fatalf("VerifyBundle returned error: %v", err)
 	}

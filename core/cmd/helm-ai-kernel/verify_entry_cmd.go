@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: classical Ed25519/SHA-256 only; no post-quantum assurance
+// is claimed or provided by this file.
+
 import (
 	"encoding/json"
 	"flag"
@@ -32,10 +35,12 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 
 	var (
 		entryPath  string
+		packRoot   string
 		proofPath  string
 		jsonOutput bool
 	)
 	cmd.StringVar(&entryPath, "entry", "", "Manifest entry path to verify (e.g. receipts/decision-001.json)")
+	cmd.StringVar(&packRoot, "entries-merkle-root", "", "The pack's entries_merkle_root, obtained independently (00_INDEX.json, a signed seal, or a transparency log). Without it the proof can only be checked against the root it carries about itself, which proves nothing.")
 	cmd.StringVar(&proofPath, "proof", "", "Path to the inclusion-proof JSON artifact")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 
@@ -78,7 +83,22 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 		CreatedAt:    proof.Binding.CreatedAt,
 	}
 
-	if err := evidencepack.VerifyInclusionProof(&proof); err != nil {
+	// Without an externally supplied root every input is drawn from the same
+	// attacker-controlled document, so membership cannot be established (F-10).
+	if strings.TrimSpace(packRoot) == "" {
+		if err := evidencepack.VerifyInclusionProof(&proof); err != nil {
+			result.Verified = false
+			result.Reason = err.Error()
+			return emitEntryResult(stdout, result, jsonOutput)
+		}
+		result.Verified = false
+		result.SelfAttested = true
+		result.Reason = "proof is internally consistent, but no --entries-merkle-root was supplied: " +
+			"the root was read from the proof itself, so this does not show the entry belongs to any pack"
+		return emitEntryResult(stdout, result, jsonOutput)
+	}
+
+	if err := evidencepack.VerifyInclusionProofAgainstRoot(&proof, strings.TrimSpace(packRoot)); err != nil {
 		result.Verified = false
 		result.Reason = err.Error()
 		return emitEntryResult(stdout, result, jsonOutput)
@@ -93,6 +113,9 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 type entryVerifyResult struct {
+	// SelfAttested marks a result where the merkle root came from the proof
+	// itself rather than an external source, so membership was not established.
+	SelfAttested    bool     `json:"self_attested,omitempty"`
 	Verified        bool     `json:"verified"`
 	Entry           string   `json:"entry"`
 	PackID          string   `json:"pack_id,omitempty"`

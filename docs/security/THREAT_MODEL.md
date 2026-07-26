@@ -39,26 +39,37 @@ Review Date: 2026-07-15
 - Signing keys, KMS references, local development signing keys, secret refs, sandbox mounts, environment variables, and external anchor credentials.
 - Credential material must never be stored in receipts, EvidencePacks, fixtures, transcripts, or test golden files.
 
-### Desktop local sidecar transport (`transport-v1`, proposed — not implemented)
+### Desktop local sidecar transport (`transport-v1`, Desktop source implemented — Kernel support absent on current `main`)
 
-The current local Desktop composition starts the Kernel at fixed
-`127.0.0.1:8420` and supplies the Console sidecar with `HELM_KERNEL_ORIGIN`
-plus a Kernel bearer capability in `HELM_KERNEL_TOKEN`. Its availability
-preflight binds and releases a fixed port before the child starts. A distinct
-local process that has already claimed that known port can receive a
-credential-bearing Console request. Loopback addressing and the Console
-readiness HMAC do not bind that fixed endpoint to the spawned Kernel process.
+`transport-v1` defends the local Desktop composition against a distinct local
+process squatting a known port and receiving a credential-bearing Console
+request. A port, URL, readiness response, or bearer alone is not a
+process-identity boundary. It does not claim hostile same-UID or
+replaced-process protection.
 
-`transport-v1` is the proposed, not-implemented defense against that distinct
-local port-squatter threat. It does not claim hostile same-UID or
-replaced-process protection. A port, URL, readiness response, or bearer alone
-is not a process-identity boundary.
+Status, read back from source on 2026-08-03:
+
+- **`helm-desktop` — implemented.** It sets `HELM_DESKTOP_TRANSPORT_V1` on the
+  child, reads a bounded handoff record off the direct child, binds it with an
+  HMAC over the per-launch nonce, origin, and challenge, and proves it at
+  `/api/v1/desktop/transport/proof` before starting Console. On a handoff
+  timeout it fails closed (`transport_timeout`); there is no fixed Kernel-port
+  fallback in that handoff path.
+- **`helm-ai-kernel` current `main` — not implemented.** `serve` retains its
+  normal `127.0.0.1:7714` default (`core/cmd/helm-ai-kernel/server_cmd.go`),
+  and this repository has no `HELM_DESKTOP_TRANSPORT_V1` configuration,
+  transport record, or proof route.
+
+Until the Kernel half lands on `main`, the Desktop source reaches its handoff
+timeout and refuses rather than degrading to a fixed Kernel endpoint. That is
+the fail-closed source behavior, not package, runtime, or release proof of a
+working governed boundary.
 
 Before any Desktop use of this path can claim a governed local boundary,
 `transport-v1` must fail closed:
 
 - Kernel atomically binds `127.0.0.1:0`; there is no Desktop availability
-  preflight and no `:8420` fallback.
+  preflight and no fixed-port fallback.
 - Kernel emits one bounded, HMAC-authenticated transport record on its direct
   child stdout. The record binds the per-launch nonce to the dynamic loopback
   origin and port.
@@ -72,18 +83,18 @@ Before any Desktop use of this path can claim a governed local boundary,
   invalidates the launch and blocks Console; relaunch requires a fresh record.
 - Tests cover a pre-bound fixed port, malformed or replayed records, nonce or
   MAC mismatch, non-loopback origins, failed health checks, and absence of a
-  `:8420` fallback.
+  fixed-port fallback.
 
 Inherited listeners, Unix-domain sockets, mTLS, or socket activation are the
 stronger follow-on requirement for a hostile same-UID or replaced-process
 threat. `transport-v1` does not claim that stronger protection.
 
-Cross-repository ownership is explicit: `helm-desktop` owns the per-launch
+For a complete transport-v1 design, `helm-desktop` owns the per-launch
 nonce/HMAC, direct-child record validation, health check, and sidecar
 lifecycle; `helm-ai-kernel` owns the atomic dynamic bind and bounded transport
 record; `app-helm-console` owns origin rejection before bearer forwarding and
 browser non-exposure. No runtime code or public API in this repository
-implements `transport-v1` yet.
+implements the Kernel transport-v1 half yet.
 
 ## Effect Classes
 

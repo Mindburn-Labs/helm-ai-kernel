@@ -124,8 +124,9 @@ def verify_challenge(challenge):
         "HELM/GeneratedSpecApprovalChallenge/v1",
         "generated-spec-approval-challenge.v1",
     )
-    if not isinstance(challenge.get("quorum"), int) or challenge["quorum"] <= 0:
-        raise VectorError("contract_mismatch", "challenge quorum must be positive")
+    quorum = challenge.get("quorum")
+    if not isinstance(quorum, int) or isinstance(quorum, bool) or quorum <= 0:
+        raise VectorError("contract_mismatch", "challenge quorum must be a positive integer")
     for field in HASH_FIELDS:
         prefixed_bytes(challenge.get(field), "sha256:", 32)
     require_hash(challenge, "challenge_hash", "challenge_hash_mismatch")
@@ -146,7 +147,10 @@ def verify_grant(grant, challenge):
     for field in HASH_FIELDS + ("challenge_hash", "ceremony_hash", "signer_set_hash"):
         prefixed_bytes(grant.get(field), "sha256:", 32)
     require_hash(grant, "grant_hash", "grant_hash_mismatch")
-    if not grant.get("approver_principal_ids") or grant["requesting_principal_id"] in grant["approver_principal_ids"]:
+    approvers = grant.get("approver_principal_ids")
+    if not isinstance(approvers, list) or not approvers or not all(isinstance(a, str) for a in approvers):
+        raise VectorError("contract_mismatch", "grant approvers are invalid")
+    if grant["requesting_principal_id"] in approvers:
         raise VectorError("contract_mismatch", "grant approvers are invalid")
     if len(set(grant["approver_principal_ids"])) != len(grant["approver_principal_ids"]):
         raise VectorError("contract_mismatch", "grant approvers must be unique")
@@ -157,7 +161,9 @@ def verify_grant(grant, challenge):
     if not issued_at < expires_at or expires_at > parse_time(challenge["expires_at"]):
         raise VectorError("contract_mismatch", "grant lifetime is invalid")
     for field in GRANT_BINDING_FIELDS:
-        if grant.get(field) != challenge.get(field):
+        if field not in grant or field not in challenge:
+            raise VectorError("grant_binding_rejected", f"grant binding field {field} is missing")
+        if grant[field] != challenge[field]:
             raise VectorError("grant_binding_rejected", f"grant {field} does not match challenge")
     if grant["challenge_hash"] != challenge["challenge_hash"]:
         raise VectorError("grant_binding_rejected", "grant challenge hash does not match")
@@ -212,7 +218,9 @@ def verify_signature(root, descriptor, value, kind, signature):
         raise VectorError("signature_rejected", f"{kind.lower()} Ed25519 signature rejected")
 
 
-def verify_lifecycle(lifecycle, replay=False):
+def verify_lifecycle(lifecycle, replay=False, approval_id=None):
+    if approval_id is not None and lifecycle.get("approval_id") != approval_id:
+        raise VectorError("contract_mismatch", "lifecycle approval_id does not match the ceremony")
     if lifecycle.get("states") != [
         "HOLD_PENDING",
         "CHALLENGE_ISSUED",
@@ -278,7 +286,7 @@ def verify_vector(index, root, mutation=None):
     verify_signature(root, index["grant"], grant, "Grant", grant_signature)
     verify_consumption(consumption, grant)
     verify_signature(root, index["consumption"], consumption, "Consumption", index["consumption"]["signature"])
-    verify_lifecycle(lifecycle, replay)
+    verify_lifecycle(lifecycle, replay, challenge["approval_id"])
 
 
 def main():

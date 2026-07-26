@@ -24,7 +24,7 @@ def load_json(path: Path) -> Any:
 
 
 def jsonschema_check(path: Path, payload: Any) -> None:
-    import jsonschema.validators  # type: ignore[import-not-found]
+    import jsonschema.validators  # type: ignore[import-not-found]  # imported once up front by main()
 
     try:
         validator = jsonschema.validators.validator_for(payload)
@@ -35,11 +35,15 @@ def jsonschema_check(path: Path, payload: Any) -> None:
 
 def main() -> int:
     try:
-        import jsonschema  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError:
+        # The submodule, not just the package: a partial install imports one and
+        # not the other, and that should read as this message rather than as a
+        # traceback from the first schema that happens to be compiled.
+        import jsonschema.validators  # type: ignore[import-not-found]  # noqa: F401
+    except ImportError as exc:
         print(
-            "JSON schema check failed: the jsonschema package is missing.\n"
-            "Install it with: python -m pip install --require-hashes -r .github/schema-requirements.txt\n"
+            f"JSON schema check failed: the jsonschema package is unusable ({exc}).\n"
+            f"Install it with: {sys.executable} -m pip install --only-binary=:all: "
+            "--require-hashes -r .github/schema-requirements.txt\n"
             "This used to degrade to a parse-only pass, which is how a schema that "
             "no longer matched its own registry stayed green in CI (HELM-374).",
             file=sys.stderr,

@@ -483,6 +483,11 @@ func (e *SafeExecutor) ApplyCompilerPolicy(policy CompilerPolicy) {
 	}
 }
 
+// quantum_posture: this helper inspects only whether a verifier is present. It
+// performs no cryptographic operation and makes no algorithm choice, so it is
+// agnostic to the classical/post-quantum profile the injected verifier
+// implements.
+//
 // isNilVerifier reports whether the verifier is absent, including the
 // typed-nil case.
 //

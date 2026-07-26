@@ -142,7 +142,7 @@ if [ "$MODE" = "oss" ]; then
   # would make its contents depend on the state of the working directory.
   # shellcheck source=tools/boundary/protected-dirs.sh
   source "$SCRIPT_DIR/boundary/protected-dirs.sh"
-  UNTRACKED=$(cd "$REPO_ROOT" && git ls-files --others --exclude-standard -- "${PROTECTED_DIRS[@]}")
+  UNTRACKED=$(cd "$REPO_ROOT" && git ls-files --others --exclude-standard -- "${PROTECTED_DIRS[@]}" "${PROTECTED_FILES[@]}")
   if [ -n "$UNTRACKED" ]; then
     echo "  ✗ UNTRACKED files inside the protected surface:"
     while IFS= read -r u; do echo "      $u"; done <<< "$UNTRACKED"

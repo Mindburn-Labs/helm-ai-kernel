@@ -31,8 +31,11 @@ missing=()
 for dir in "${PROTECTED_DIRS[@]}"; do
   [ -d "$dir" ] || missing+=("$dir")
 done
+for f in "${PROTECTED_FILES[@]}"; do
+  [ -f "$f" ] || missing+=("$f")
+done
 if [ "${#missing[@]}" -gt 0 ]; then
-  echo "ERROR: protected directories missing from the working tree:" >&2
+  echo "ERROR: protected paths missing from the working tree:" >&2
   printf '  %s\n' "${missing[@]}" >&2
   echo "Refusing to generate a truncated manifest." >&2
   exit 1
@@ -50,7 +53,10 @@ trap 'rm -f "$TMP"' EXIT
   echo "#"
   # git ls-files, not find: tracked files only, so untracked build artifacts and
   # editor droppings can never enter the manifest or perturb its contents.
-  git ls-files -z -- "${PROTECTED_DIRS[@]}" | sort -z | while IFS= read -r -d '' f; do
+  # The manifest is excluded from its own listing — it cannot contain its own hash.
+  git ls-files -z -- "${PROTECTED_DIRS[@]}" "${PROTECTED_FILES[@]}" \
+      ':!tools/boundary/protected.manifest' \
+    | sort -z | while IFS= read -r -d '' f; do
     if [ ! -f "$f" ]; then
       echo "ERROR: tracked file absent from the working tree: $f" >&2
       exit 1

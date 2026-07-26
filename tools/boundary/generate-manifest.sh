@@ -15,14 +15,27 @@ set -euo pipefail
 # Deterministic ordering regardless of the caller's locale.
 export LC_ALL=C
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Resolve both paths before the cd. Resolving BASH_SOURCE afterwards would
+# re-interpret a relative invocation against the new directory, so
+# `cd tools/boundary && ./generate-manifest.sh` failed to find its own config.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
+
+# Enumerating tracked files needs a work tree. An exported tree — `git archive`,
+# a release tarball, a .git-less build context — would otherwise fail with a bare
+# "fatal: not a git repository" from deep inside the pipeline.
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "ERROR: this script enumerates git-tracked files and needs a work tree." >&2
+  echo "Run it from a clone, not from an exported or archived tree." >&2
+  exit 1
+fi
 
 MANIFEST="${1:-tools/boundary/protected.manifest}"
 mkdir -p "$(dirname "$MANIFEST")"
 
 # shellcheck source=tools/boundary/protected-dirs.sh
-source "$(dirname "${BASH_SOURCE[0]}")/protected-dirs.sh"
+source "$SCRIPT_DIR/protected-dirs.sh"
 
 # Fail closed on a missing protected directory. The previous `if [ -d ]` skipped
 # it silently, which is how a regeneration could drop hundreds of entries and
@@ -83,5 +96,8 @@ if [ -f "$MANIFEST" ]; then
 fi
 
 mv "$TMP" "$MANIFEST"
+# mktemp creates 0600. Moving it over a 0644 file carries that mode across, and
+# git tracks only the exec bit, so the tightened mode never shows up in review.
+chmod 644 "$MANIFEST"
 trap - EXIT
 echo "Generated $MANIFEST ($TOTAL files)"

@@ -169,8 +169,11 @@ if [ "$MODE" = "oss" ]; then
   have_paths="$(mktemp)"; want_paths="$(mktemp)"
   have_lines="$(mktemp)"; want_lines="$(mktemp)"
   trap 'rm -f "$EXPECTED" "$have_paths" "$want_paths" "$have_lines" "$want_lines"' EXIT
-  grep -v '^#' "$MANIFEST" | sort > "$have_lines"; awk '{print $2}' "$have_lines" | sort > "$have_paths"
-  grep -v '^#' "$EXPECTED" | sort > "$want_lines"; awk '{print $2}' "$want_lines" | sort > "$want_paths"
+  # `grep -v` exits 1 when nothing matches, and `set -euo pipefail` would kill the
+  # script there — on a comments-only manifest the drift report died mid-way and
+  # printed no counts, no diff and no remediation line.
+  { grep -v '^#' "$MANIFEST" || true; } | sort > "$have_lines"; awk '{print $2}' "$have_lines" | sort > "$have_paths"
+  { grep -v '^#' "$EXPECTED" || true; } | sort > "$want_lines"; awk '{print $2}' "$want_lines" | sort > "$want_paths"
 
   ADDED=$(comm -13 "$have_paths" "$want_paths" | wc -l | tr -d ' ')
   REMOVED=$(comm -23 "$have_paths" "$want_paths" | wc -l | tr -d ' ')

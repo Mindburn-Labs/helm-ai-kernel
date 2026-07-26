@@ -134,6 +134,23 @@ lint: docs-coverage docs-truth
 	cd core && go vet ./...
 	cd core && test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
 
+# lint-security runs golangci-lint with gosec over the trusted computing base.
+#
+# .golangci.yml has existed for some time but nothing ever executed it: `lint`
+# above runs only go vet and gofmt, and no workflow invokes golangci-lint. gosec
+# was absent entirely (F-14). This target makes both runnable.
+#
+# It is NOT yet wired into CI: as of 2026-07-25 it reports 14 findings across the
+# TCB packages, of which several are gosec false positives (e.g. G101 firing on
+# the map-key constant ContextCredentialHash). Promoting it to a blocking gate
+# requires triaging those first — tracked in
+# docs/security/kernel-security-remediation-ledger.md.
+.PHONY: lint-security
+lint-security:
+	cd core && golangci-lint run --enable gosec --timeout 10m \
+		./pkg/crypto/... ./pkg/guardian/... ./pkg/executor/... ./pkg/pdp/... \
+		./pkg/verifier/... ./pkg/evidence/... ./pkg/boundary/...
+
 proto-lint:
 	buf lint protocols/policy-schema
 

@@ -380,10 +380,10 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	if err := contracts.VerifyLaunchEffectReceipt(signed, verifyContext); err != nil {
 		t.Fatalf("signed receipt rejected: %v", err)
 	}
-	if signed.ReceiptID != "46974ecaca8c21c0c679f5550108ee48138b43b94f5aba71751dc30f70748cc8" {
+	if signed.ReceiptID != "853cff39c95e643f812292d753264ab284c6ab01baca203b9cd45c9d2a48f595" {
 		t.Fatalf("launch receipt ID = %s, want committed golden", signed.ReceiptID)
 	}
-	if signed.Signature != "xSG7ctJfhqZScyUErE/JHicrd2p3zlqbCvXl6zoLh7VIr00RGVJd88uH2cw//cQUJmDgzP33ZXzmbmJiHT2QBw==" {
+	if signed.Signature != "6bRpugp1pCQhGBdHQw8N2NENjwtSNpz3thSVLUO3ZhPVuyn9zzvfa2mL7mJPFNrbHRJaBxlvih5DfoOsoZQXBQ==" {
 		t.Fatalf("launch receipt signature = %s, want committed golden", signed.Signature)
 	}
 	verifyContext.ResolvePreviousReceipt = launchReceiptResolver(signed)
@@ -403,7 +403,7 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	reconciled.ProviderResourceRefs = []string{"do:app:1", "do:deployment:1"}
 	reconciled.EvidencePackRef = "evidencepack:launch:1"
 	reconciled.EvidencePackHash = launchHash("8")
-	reconciled.ProofGraphNode = launchHash("b")
+	reconciled.ProofGraphNode = launchEvidenceClosureFixtureNode().NodeHash
 	reconciled.Timestamp = "2026-07-18T12:04:00Z"
 	reconciled.Lamport = 3
 	if _, err := contracts.SignLaunchEffectReceipt(reconciled, privateKey); err == nil {
@@ -534,7 +534,16 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	ancestorDerived.ResultHash = launchHash("d")
 	ancestorDerived.EvidencePackRef = "evidencepack:ancestor-derived"
 	ancestorDerived.EvidencePackHash = launchHash("e")
-	ancestorDerived.ProofGraphNode = launchHash("c")
+	ancestorEvidence := contracts.LaunchEffectEvidenceNode{
+		ParentHashes: []string{}, ArtifactRefs: []string{"sha256:" + signed.ReceiptID},
+		ProofSessionRef: signed.ProofSessionRef, EvidenceReservationRef: signed.EvidenceReservationRef, Lamport: 2,
+	}
+	ancestorEvidenceHash, err := contracts.ComputeLaunchEvidenceNodeHash(ancestorEvidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ancestorEvidence.NodeHash = ancestorEvidenceHash
+	ancestorDerived.ProofGraphNode = ancestorEvidenceHash
 	ancestorDerived.Timestamp = "2026-07-18T12:05:00Z"
 	ancestorDerived.Lamport = 4
 	ancestorDerivedSigned, err := contracts.SignLaunchEffectReceiptRevision(ancestorDerived, conflictSigned, privateKey)
@@ -544,10 +553,7 @@ func TestLaunchEffectReceiptSigningRevisionAndStateMachine(t *testing.T) {
 	ancestorRefContext := fullChainContext
 	ancestorRefContext.ResolveEvidenceDAG = func(nodeHash string) (contracts.LaunchEffectEvidenceDAG, error) {
 		if nodeHash == ancestorDerivedSigned.ProofGraphNode {
-			return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{{
-				NodeHash: nodeHash, ArtifactRefs: []string{"sha256:" + signed.ReceiptID}, ProofSessionRef: signed.ProofSessionRef,
-				EvidenceReservationRef: signed.EvidenceReservationRef, Lamport: 2,
-			}}}, nil
+			return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{ancestorEvidence}}, nil
 		}
 		return launchReceiptVerificationContext(publicKey).ResolveEvidenceDAG(nodeHash)
 	}
@@ -746,27 +752,28 @@ func TestLaunchEffectReceiptRejectsNoncanonicalAndUntrustedProof(t *testing.T) {
 		})
 	}
 
+	receiptDependentNode := launchEvidenceFixtureNode([]string{}, []string{"receipt:" + signed.ReceiptID}, 1)
 	receiptDependentProof := launchReceiptVerificationContext(publicKey)
 	receiptDependentProof.ResolveEvidenceDAG = func(nodeHash string) (contracts.LaunchEffectEvidenceDAG, error) {
-		return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{{
-			NodeHash: nodeHash, ArtifactRefs: []string{"receipt:" + signed.ReceiptID}, ProofSessionRef: signed.ProofSessionRef,
-			EvidenceReservationRef: signed.EvidenceReservationRef, Lamport: 1,
-		}}}, nil
+		return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{launchEvidenceRootFixtureNode(), receiptDependentNode}}, nil
 	}
 	if err := contracts.VerifyLaunchEffectReceipt(signed, receiptDependentProof); err == nil {
 		t.Fatal("receipt accepted a circular ProofGraph receipt dependency")
 	}
+	rawReceiptDependentNode := launchEvidenceFixtureNode([]string{}, []string{strings.Repeat("0", 64)}, 1)
 	rawReceiptDependentProof := launchReceiptVerificationContext(publicKey)
 	rawReceiptDependentProof.ResolveEvidenceDAG = func(nodeHash string) (contracts.LaunchEffectEvidenceDAG, error) {
-		return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{{
-			NodeHash: nodeHash, ArtifactRefs: []string{strings.Repeat("0", 64)}, ProofSessionRef: signed.ProofSessionRef,
-			EvidenceReservationRef: signed.EvidenceReservationRef, Lamport: 1,
-		}}}, nil
+		return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{launchEvidenceRootFixtureNode(), rawReceiptDependentNode}}, nil
 	}
 	if err := contracts.VerifyLaunchEffectReceipt(signed, rawReceiptDependentProof); err == nil {
 		t.Fatal("receipt accepted a raw receipt ID as an evidence dependency")
 	}
 
+	// A content-addressed cycle is a hash fixed point and cannot be
+	// constructed: each node hash commits to its parent hashes, so a mutual
+	// reference has no well-founded derivation. Claimed-but-unbound hashes are
+	// rejected by the content-binding check before cycle detection runs; the
+	// cycle guard remains as defense-in-depth.
 	cyclicProof := launchReceiptVerificationContext(publicKey)
 	cyclicProof.ResolveEvidenceDAG = func(nodeHash string) (contracts.LaunchEffectEvidenceDAG, error) {
 		otherHash := launchHash("1")
@@ -1403,15 +1410,24 @@ func launchMissionReferencePackBytes(t *testing.T) []byte {
 	receiptInput.OfferSnapshotHash = routeFixture.quote.PlacementCosts[0].OfferSnapshotHash
 	receiptInput.PriceEvidenceHash = routeFixture.quote.PlacementCosts[0].PriceEvidenceHash
 	receiptInput.TermsEvidenceHash = routeFixture.quote.PlacementCosts[0].TermsEvidenceHash
+	// The receipt commits to its ProofGraph node via the signature, so the
+	// evidence node's content-derived hash must be fixed before signing.
+	receiptEvidenceNode := contracts.LaunchEffectEvidenceNode{
+		ParentHashes: []string{}, ArtifactRefs: []string{"artifact:provider-request"},
+		ProofSessionRef: receiptInput.ProofSessionRef, EvidenceReservationRef: receiptInput.EvidenceReservationRef, Lamport: 1,
+	}
+	receiptEvidenceNodeHash, err := contracts.ComputeLaunchEvidenceNodeHash(receiptEvidenceNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptEvidenceNode.NodeHash = receiptEvidenceNodeHash
+	receiptInput.ProofGraphNode = receiptEvidenceNodeHash
 	receipt, err := contracts.SignLaunchEffectReceipt(receiptInput, launchFixturePrivateKey())
 	if err != nil {
 		t.Fatal(err)
 	}
 	receiptAuthority := launchReceiptAuthorityBinding(receiptInput)
-	receiptEvidence := contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{{
-		NodeHash: receiptInput.ProofGraphNode, ParentHashes: []string{}, ArtifactRefs: []string{"artifact:provider-request"},
-		ProofSessionRef: receiptInput.ProofSessionRef, EvidenceReservationRef: receiptInput.EvidenceReservationRef, Lamport: 1,
-	}}}
+	receiptEvidence := contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{receiptEvidenceNode}}
 	effects := make([]map[string]any, 0, len(launchInputFixtures()))
 	for _, fixture := range launchInputFixtures() {
 		effects = append(effects, map[string]any{"effect_id": fixture.effectID, "input": fixture.input, "idempotency_key": fixture.goldenKey})
@@ -1474,7 +1490,8 @@ func launchMissionReferencePackBytes(t *testing.T) []byte {
 			{"id": "receipt_result_tamper", "expected_error": "receipt_id_mismatch"},
 			{"id": "receipt_authority_tamper", "expected_error": "binding_mismatch"},
 			{"id": "receipt_raw_id_evidence_cycle", "expected_error": "evidence_cycle"},
-			{"id": "receipt_evidence_cycle", "expected_error": "evidence_cycle"},
+			{"id": "receipt_case_ref_evidence_cycle", "expected_error": "evidence_cycle"},
+			{"id": "receipt_evidence_cycle", "expected_error": "binding_mismatch"},
 			{"id": "receipt_unsafe_integer", "expected_error": "unsafe_integer"},
 			{"id": "unsafe_integer", "expected_error": "unsafe_integer"},
 		},
@@ -1504,7 +1521,7 @@ func launchUnknownReceiptFixture() contracts.LaunchEffectReceipt {
 		Action:                 contracts.LaunchActionProviderProvision,
 		Timestamp:              "2026-07-18T12:03:00Z",
 		Lamport:                2,
-		ProofGraphNode:         launchHash("0"),
+		ProofGraphNode:         launchEvidenceRootFixtureNode().NodeHash,
 		SignerKeyID:            "kernel-key-1",
 		PayloadHash:            launchHash("3"),
 		Metadata: contracts.LaunchEffectReceiptMetadata{
@@ -1574,6 +1591,32 @@ func launchUnknownReceiptFixture() contracts.LaunchEffectReceipt {
 	}
 }
 
+// launchEvidenceFixtureNode derives a content-addressed evidence node for the
+// canonical launch receipt fixtures so every signed receipt commits to the
+// exact node content it resolves. Derivation over static content cannot fail;
+// a panic here means the derivation itself is broken.
+func launchEvidenceFixtureNode(parentHashes, artifactRefs []string, lamport uint64) contracts.LaunchEffectEvidenceNode {
+	node := contracts.LaunchEffectEvidenceNode{
+		ParentHashes: parentHashes, ArtifactRefs: artifactRefs,
+		ProofSessionRef: "proof-session-1", EvidenceReservationRef: "evidence-reservation-1", Lamport: lamport,
+	}
+	hash, err := contracts.ComputeLaunchEvidenceNodeHash(node)
+	if err != nil {
+		panic(err)
+	}
+	node.NodeHash = hash
+	return node
+}
+
+func launchEvidenceRootFixtureNode() contracts.LaunchEffectEvidenceNode {
+	return launchEvidenceFixtureNode([]string{}, []string{"artifact:provider-request"}, 1)
+}
+
+func launchEvidenceClosureFixtureNode() contracts.LaunchEffectEvidenceNode {
+	root := launchEvidenceRootFixtureNode()
+	return launchEvidenceFixtureNode([]string{root.NodeHash}, []string{"artifact:provider-reconciliation"}, 2)
+}
+
 func launchReceiptVerificationContext(publicKey ed25519.PublicKey) contracts.LaunchEffectReceiptVerificationContext {
 	authority := launchReceiptAuthorityFixture()
 	return contracts.LaunchEffectReceiptVerificationContext{
@@ -1592,18 +1635,12 @@ func launchReceiptVerificationContext(publicKey ed25519.PublicKey) contracts.Lau
 			return authority, nil
 		},
 		ResolveEvidenceDAG: func(nodeHash string) (contracts.LaunchEffectEvidenceDAG, error) {
-			root := contracts.LaunchEffectEvidenceNode{
-				NodeHash: launchHash("0"), ArtifactRefs: []string{"artifact:provider-request"},
-				ProofSessionRef: authority.ProofSessionRef, EvidenceReservationRef: authority.EvidenceReservationRef, Lamport: 1,
-			}
+			root := launchEvidenceRootFixtureNode()
+			closure := launchEvidenceClosureFixtureNode()
 			switch nodeHash {
 			case root.NodeHash:
 				return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{root}}, nil
-			case launchHash("b"):
-				closure := contracts.LaunchEffectEvidenceNode{
-					NodeHash: nodeHash, ParentHashes: []string{root.NodeHash}, ArtifactRefs: []string{"artifact:provider-reconciliation"},
-					ProofSessionRef: authority.ProofSessionRef, EvidenceReservationRef: authority.EvidenceReservationRef, Lamport: 2,
-				}
+			case closure.NodeHash:
 				return contracts.LaunchEffectEvidenceDAG{Nodes: []contracts.LaunchEffectEvidenceNode{root, closure}}, nil
 			default:
 				return contracts.LaunchEffectEvidenceDAG{}, fmt.Errorf("evidence DAG not found")

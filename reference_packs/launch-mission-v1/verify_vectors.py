@@ -398,6 +398,20 @@ def canonical_ref_list(refs, field):
         raise VectorError("invalid_encoding", f"{field} must be strictly sorted and unique")
 
 
+def evidence_node_hash(node):
+    return "sha256:" + hashlib.sha256(
+        canonical_bytes(
+            {
+                "parent_hashes": node.get("parent_hashes", []),
+                "artifact_refs": node.get("artifact_refs", []),
+                "proof_session_ref": node.get("proof_session_ref"),
+                "evidence_reservation_ref": node.get("evidence_reservation_ref"),
+                "lamport": node.get("lamport"),
+            }
+        )
+    ).hexdigest()
+
+
 def verify_receipt_evidence(receipt, dag):
     nodes = dag.get("nodes", [])
     if not nodes:
@@ -408,6 +422,8 @@ def verify_receipt_evidence(receipt, dag):
         raw_hex(node_hash.removeprefix("sha256:"), 32)
         if not node_hash.startswith("sha256:") or node_hash in by_hash:
             raise VectorError("invalid_encoding", "receipt evidence node hash is noncanonical or duplicated")
+        if node_hash != evidence_node_hash(node):
+            raise VectorError("binding_mismatch", "receipt evidence node hash does not commit to its content")
         if node.get("proof_session_ref") != receipt["proof_session_ref"] or node.get("evidence_reservation_ref") != receipt["evidence_reservation_ref"]:
             raise VectorError("binding_mismatch", "receipt evidence escaped its source-owned reservation")
         lamport = node.get("lamport")
@@ -422,18 +438,21 @@ def verify_receipt_evidence(receipt, dag):
                 raise VectorError("invalid_encoding", "evidence parent hash is not canonical")
             raw_hex(parent_hash.removeprefix("sha256:"), 32)
         forbidden = {
-            receipt.get("receipt_id", ""),
-            receipt.get("previous_receipt_id", ""),
-            receipt.get("receipt_chain_id", ""),
-            receipt.get("evidence_pack_ref", ""),
-            receipt.get("evidence_pack_hash", ""),
-            "sha256:" + receipt.get("receipt_id", ""),
-            "sha256:" + receipt.get("previous_receipt_id", ""),
+            value.lower()
+            for value in {
+                receipt.get("receipt_id", ""),
+                receipt.get("previous_receipt_id", ""),
+                receipt.get("receipt_chain_id", ""),
+                receipt.get("evidence_pack_ref", ""),
+                receipt.get("evidence_pack_hash", ""),
+                "sha256:" + receipt.get("receipt_id", ""),
+                "sha256:" + receipt.get("previous_receipt_id", ""),
+            }
         }
         for artifact in artifacts:
             lowered = artifact.lower()
             raw_receipt_id = len(artifact) == 64 and all(character in "0123456789abcdef" for character in artifact)
-            if artifact in forbidden or lowered.startswith("receipt:") or lowered.startswith("evidencepack:") or raw_receipt_id:
+            if lowered in forbidden or lowered.startswith("receipt:") or lowered.startswith("evidencepack:") or raw_receipt_id:
                 raise VectorError("evidence_cycle", "receipt evidence depends on a receipt or EvidencePack")
         by_hash[node_hash] = node
 
@@ -552,12 +571,30 @@ def verify_negative_vectors(index):
         observed["receipt_authority_tamper"] = error.code
 
     evidence = copy.deepcopy(index["receipt"]["evidence_dag"])
-    evidence["nodes"][0]["artifact_refs"] = ["0" * 64]
+    raw_id_node = copy.deepcopy(evidence["nodes"][0])
+    raw_id_node["artifact_refs"] = ["0" * 64]
+    raw_id_node["node_hash"] = evidence_node_hash(raw_id_node)
+    evidence["nodes"].append(raw_id_node)
     try:
         verify_receipt(index, evidence_override=evidence)
     except VectorError as error:
         observed["receipt_raw_id_evidence_cycle"] = error.code
 
+    evidence = copy.deepcopy(index["receipt"]["evidence_dag"])
+    case_ref_node = copy.deepcopy(evidence["nodes"][0])
+    case_ref_node["artifact_refs"] = ["SHA256:" + index["receipt"]["value"]["receipt_id"]]
+    case_ref_node["node_hash"] = evidence_node_hash(case_ref_node)
+    evidence["nodes"].append(case_ref_node)
+    try:
+        verify_receipt(index, evidence_override=evidence)
+    except VectorError as error:
+        observed["receipt_case_ref_evidence_cycle"] = error.code
+
+    # A content-addressed cycle is a hash fixed point and cannot be
+    # constructed: each node hash commits to its parent hashes, so a mutual
+    # reference has no well-founded derivation. Claimed-but-unbound cyclic
+    # hashes are rejected by the content-binding check (binding_mismatch)
+    # before cycle detection runs; the cycle guard remains defense-in-depth.
     evidence = copy.deepcopy(index["receipt"]["evidence_dag"])
     top = evidence["nodes"][0]
     other_hash = "sha256:" + "1" * 64
@@ -616,7 +653,7 @@ def main():
     print(
         "verified Launch Mission v1 reference pack: "
         "10 authority artifact hashes, a multi-provider/stateful universal route, 6 effect inputs, provider certification, canonical approval, "
-        "Kernel verdict, receipt, and 8 negative mutations; exact Go/Python parity"
+        "Kernel verdict, receipt, and 9 negative mutations; exact Go/Python parity"
     )
 
 

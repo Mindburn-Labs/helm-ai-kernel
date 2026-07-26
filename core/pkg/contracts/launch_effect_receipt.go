@@ -635,6 +635,11 @@ func verifyLaunchReceiptEvidenceDAG(receipt LaunchEffectReceipt, dag LaunchEffec
 		if !validLaunchSHA256(node.NodeHash) {
 			return errors.New("launch effect receipt evidence DAG contains a noncanonical node hash")
 		}
+		if expected, err := ComputeLaunchEvidenceNodeHash(node); err != nil {
+			return err
+		} else if !launchConstantEqual(node.NodeHash, expected) {
+			return errors.New("launch effect receipt evidence node hash does not commit to its content")
+		}
 		if _, exists := nodes[node.NodeHash]; exists {
 			return errors.New("launch effect receipt evidence DAG contains a duplicate node")
 		}
@@ -698,6 +703,34 @@ func verifyLaunchReceiptEvidenceDAG(receipt LaunchEffectReceipt, dag LaunchEffec
 		return err
 	}
 	return nil
+}
+
+// ComputeLaunchEvidenceNodeHash derives the content address of one evidence
+// node from its canonical projection content (node_hash excluded), mirroring
+// the ProofGraph JCS+SHA-256 derivation so a claimed hash cannot be detached
+// from the content it commits to. Source-owned evidence DAG resolvers MUST
+// address nodes with this exact derivation: verification recomputes it and
+// rejects any node whose claimed node_hash does not match.
+func ComputeLaunchEvidenceNodeHash(node LaunchEffectEvidenceNode) (string, error) {
+	type nodeContent struct {
+		ParentHashes           []string `json:"parent_hashes"`
+		ArtifactRefs           []string `json:"artifact_refs"`
+		ProofSessionRef        string   `json:"proof_session_ref"`
+		EvidenceReservationRef string   `json:"evidence_reservation_ref"`
+		Lamport                uint64   `json:"lamport"`
+	}
+	data, err := canonicalize.JCS(nodeContent{
+		ParentHashes:           node.ParentHashes,
+		ArtifactRefs:           node.ArtifactRefs,
+		ProofSessionRef:        node.ProofSessionRef,
+		EvidenceReservationRef: node.EvidenceReservationRef,
+		Lamport:                node.Lamport,
+	})
+	if err != nil {
+		return "", fmt.Errorf("canonicalize launch effect evidence node: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 func launchEvidenceRefDependsOnReceipt(receipt LaunchEffectReceipt, ref string) bool {

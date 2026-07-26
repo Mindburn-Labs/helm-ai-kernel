@@ -982,6 +982,10 @@
     },
     {
       "expected_error": "evidence_cycle",
+      "id": "receipt_case_ref_evidence_cycle"
+    },
+    {
+      "expected_error": "binding_mismatch",
       "id": "receipt_evidence_cycle"
     },
     {
@@ -1060,7 +1064,7 @@
     "evidence_dag": {
       "nodes": [
         {
-          "node_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "node_hash": "sha256:0b66746074e07926d2c4e82e1ef0b48eed7557c2634234269efb5886ecc08b5c",
           "parent_hashes": [],
           "artifact_refs": [
             "artifact:provider-request"
@@ -1076,7 +1080,7 @@
       "schema_version": "launch_effect_receipt.v1",
       "receipt_version": "1.0",
       "kind": "helm_native_receipt",
-      "receipt_id": "ddc0d203fc03dbb6cc71e7c974262829a51757d10271b6fa76372ec351bc9e4c",
+      "receipt_id": "aa9dbbd6a904cae0129bb616da561d87da28113f326ec4eb3cf64ca121313769",
       "receipt_chain_id": "sha256:6ffcdbe1f85602dfb03681eb1b07bad1f5b7b734add088fc541ef0ade667a0e0",
       "receipt_revision": 1,
       "reconciliation_revision": 0,
@@ -1090,7 +1094,7 @@
       "action": "urn:helm:provider-route:provision",
       "timestamp": "2026-07-18T12:03:00Z",
       "lamport": 2,
-      "proofgraph_node": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "proofgraph_node": "sha256:0b66746074e07926d2c4e82e1ef0b48eed7557c2634234269efb5886ecc08b5c",
       "signer_key_id": "kernel-key-1",
       "payload_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
       "metadata": {
@@ -1157,7 +1161,7 @@
       "offer_snapshot_hash": "sha256:042ca6a9fc9ba1619bcab69e0b201d0d3cee2dc610e4ee8ed3c91458775c8ada",
       "price_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "signature": "FlHsjBjuzEEalo3HF9T7Q65cv/YRtaXtq+tqJGKqM/UjISGOygUJdHBUr1IbGvq4vt832l7JoqFi8cgmcTDiCQ=="
+      "signature": "3JnD2CwTF/lyTiXJ/CssDKI3TE11SILU4DIyYVvVX/0gp6qT5BcmLiXJzyBL+C5T1UPJUrTZr2M4C+kuqHPsAA=="
     }
   },
   "schema_version": "launch-mission-reference-v1",

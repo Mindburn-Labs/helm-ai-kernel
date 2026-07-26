@@ -58,3 +58,41 @@ func TestVerifyLaunchReceiptChainEvidenceRejectsCaseVariantReceiptRefs(t *testin
 		t.Fatalf("verifyLaunchReceiptChainEvidence() rejected unrelated evidence: %v", err)
 	}
 }
+
+func TestVerifyLaunchReceiptEvidenceDAGRejectsContentSubstitution(t *testing.T) {
+	node := LaunchEffectEvidenceNode{
+		ParentHashes: []string{}, ArtifactRefs: []string{"artifact:provider-request"},
+		ProofSessionRef: "proof-session-1", EvidenceReservationRef: "evidence-reservation-1", Lamport: 1,
+	}
+	hash, err := ComputeLaunchEvidenceNodeHash(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.NodeHash = hash
+	receipt := LaunchEffectReceipt{
+		ProofGraphNode:         hash,
+		ProofSessionRef:        "proof-session-1",
+		EvidenceReservationRef: "evidence-reservation-1",
+		Lamport:                2,
+	}
+	if err := verifyLaunchReceiptEvidenceDAG(receipt, LaunchEffectEvidenceDAG{Nodes: []LaunchEffectEvidenceNode{node}}); err != nil {
+		t.Fatalf("verifyLaunchReceiptEvidenceDAG() rejected a content-bound node: %v", err)
+	}
+	// Substitute content under the claimed hash without recomputing it: an
+	// attacker keeps the address the receipt commits to but swaps what the
+	// evidence actually says.
+	substituted := node
+	substituted.ArtifactRefs = []string{"artifact:provider-reconciliation"}
+	if err := verifyLaunchReceiptEvidenceDAG(receipt, LaunchEffectEvidenceDAG{Nodes: []LaunchEffectEvidenceNode{substituted}}); err == nil {
+		t.Fatal("verifyLaunchReceiptEvidenceDAG() accepted an artifact ref substituted under a claimed node hash")
+	} else if !strings.Contains(err.Error(), "does not commit to its content") {
+		t.Fatalf("verifyLaunchReceiptEvidenceDAG() rejected substituted content with the wrong error: %v", err)
+	}
+	bumped := node
+	bumped.Lamport = 2
+	if err := verifyLaunchReceiptEvidenceDAG(receipt, LaunchEffectEvidenceDAG{Nodes: []LaunchEffectEvidenceNode{bumped}}); err == nil {
+		t.Fatal("verifyLaunchReceiptEvidenceDAG() accepted a Lamport substitution under a claimed node hash")
+	} else if !strings.Contains(err.Error(), "does not commit to its content") {
+		t.Fatalf("verifyLaunchReceiptEvidenceDAG() rejected a Lamport substitution with the wrong error: %v", err)
+	}
+}

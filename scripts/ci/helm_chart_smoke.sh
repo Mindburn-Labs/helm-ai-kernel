@@ -53,10 +53,14 @@ helm_runner() {
     docker run --rm -v "$ROOT:/work" -w /work "$KUBE_HELM_IMAGE" "$@"
 }
 
+# Every assertion below is a literal string from the rendered chart, so both
+# helpers match fixed strings. Without -F, grep reads the pattern as a BRE and
+# `.` matches any character: `helm.sh/hook-delete-policy` would also accept
+# `helmXsh/...`, which is a test that can pass on the wrong output.
 assert_contains() {
     file="$1"
     pattern="$2"
-    if ! grep -q -- "$pattern" "$file"; then
+    if ! grep -qF -- "$pattern" "$file"; then
         echo "::error::rendered chart missing pattern: $pattern"
         exit 1
     fi
@@ -65,7 +69,7 @@ assert_contains() {
 assert_not_contains() {
     file="$1"
     pattern="$2"
-    if grep -q -- "$pattern" "$file"; then
+    if grep -qF -- "$pattern" "$file"; then
         echo "::error::rendered chart unexpectedly contained pattern: $pattern"
         exit 1
     fi

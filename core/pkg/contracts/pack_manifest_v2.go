@@ -4,10 +4,12 @@ import "time"
 
 // PackChannel controls where an installable add-on can be surfaced.
 //
-// OSS recognizes all four channels as data (so manifests round-trip
-// unchanged), but the OSS install runtime (core/pkg/packs/install) only
-// installs core and community packs. Teams and enterprise channels are
-// gated by commercial entitlement logic layered above.
+// OSS recognizes every channel below as data, so any signed manifest
+// round-trips unchanged whatever channel it names. Recognition is not
+// installation: the OSS install runtime (core/pkg/packs/install) installs
+// core and community packs only. Teams and enterprise are gated by
+// commercial entitlement logic layered above, and individual is a legacy
+// spelling retained for round-trip compatibility, not an install target.
 type PackChannel string
 
 const (

@@ -87,26 +87,20 @@ if [ "$MODE" = "commercial" ]; then
 
   # Check for extraneous files in protected paths
   EXTRA=0
-  PROTECTED_DIRS=(
-    core/pkg/kernel core/pkg/contracts core/pkg/crypto
-    core/pkg/evidencepack core/pkg/proofgraph core/pkg/receipts
-    core/pkg/verifier core/pkg/connectors/sandbox core/pkg/conformance
-    core/pkg/safedep
-    core/pkg/incubator/audit core/pkg/integrations/receipts
-    core/pkg/integrations/capgraph core/pkg/integrations/manifest
-    core/pkg/api core/pkg/trust/registry core/pkg/guardian
-    protocols schemas
-  )
+  # shellcheck source=tools/boundary/protected-dirs.sh
+  source "$SCRIPT_DIR/boundary/protected-dirs.sh"
 
   for dir in "${PROTECTED_DIRS[@]}"; do
     if [ -d "$REPO_ROOT/$dir" ]; then
-      find "$REPO_ROOT/$dir" -type f | while read -r f; do
+      # Redirect rather than pipe: a `find | while` loop runs in a subshell, so
+      # every EXTRA increment was discarded and TOTAL_ERRORS never saw one.
+      while IFS= read -r f; do
         relpath="${f#$REPO_ROOT/}"
         if ! grep -q "  $relpath$" "$MANIFEST"; then
           echo "  ✗ EXTRA: $relpath (not in manifest)"
           EXTRA=$((EXTRA + 1))
         fi
-      done
+      done < <(find "$REPO_ROOT/$dir" -type f)
     fi
   done
 
@@ -130,53 +124,70 @@ fi
 
 # ── OSS verification ────────────────────────────────────
 if [ "$MODE" = "oss" ]; then
-  echo "  Checking manifest against current tree..."
+  echo "  Regenerating the manifest from the tracked tree and diffing..."
   echo ""
 
-  PASS=0
-  FAIL=0
-  STALE=0
+  EXPECTED="$(mktemp)"
+  trap 'rm -f "$EXPECTED"' EXIT
 
-  while IFS= read -r line; do
-    [[ "$line" =~ ^#.* ]] && continue
-    [[ -z "$line" ]] && continue
-
-    expected_hash=$(echo "$line" | awk '{print $1}')
-    filepath=$(echo "$line" | awk '{print $2}')
-
-    if [ ! -f "$REPO_ROOT/$filepath" ]; then
-      echo "  ✗ DELETED: $filepath (in manifest but not on disk)"
-      FAIL=$((FAIL + 1))
-      continue
-    fi
-
-    actual_hash=$(shasum -a 256 "$REPO_ROOT/$filepath" | cut -d' ' -f1)
-    if [ "$expected_hash" != "$actual_hash" ]; then
-      STALE=$((STALE + 1))
-    else
-      PASS=$((PASS + 1))
-    fi
-  done < "$MANIFEST"
-
-  echo ""
-  echo "═══════════════════════════════════════════════════════"
-  echo "  Results: $PASS current, $STALE stale, $FAIL errors"
-  echo "═══════════════════════════════════════════════════════"
-
-  if [ "$FAIL" -gt 0 ]; then
-    echo ""
-    echo "ERROR: $FAIL files deleted or missing. Regenerate manifest."
+  # Generate to a scratch path — the committed manifest is never written here.
+  if ! bash "$SCRIPT_DIR/boundary/generate-manifest.sh" "$EXPECTED" >/dev/null; then
+    echo "  ✗ FAIL: manifest generation failed (errors above)."
     exit 1
   fi
 
-  if [ "$STALE" -gt 0 ]; then
+  # The manifest is built from tracked files, so an untracked file dropped into
+  # a protected package would never appear in the diff below — yet `go build`
+  # compiles it. Catch that separately rather than widening the manifest, which
+  # would make its contents depend on the state of the working directory.
+  # shellcheck source=tools/boundary/protected-dirs.sh
+  source "$SCRIPT_DIR/boundary/protected-dirs.sh"
+  UNTRACKED=$(cd "$REPO_ROOT" && git ls-files --others --exclude-standard -- "${PROTECTED_DIRS[@]}")
+  if [ -n "$UNTRACKED" ]; then
+    echo "  ✗ UNTRACKED files inside the protected surface:"
+    while IFS= read -r u; do echo "      $u"; done <<< "$UNTRACKED"
     echo ""
-    echo "ERROR: $STALE files changed since last manifest generation."
-    echo "  Run 'tools/boundary/generate-manifest.sh' to update."
+    echo "ERROR: untracked files in protected directories."
+    echo "  Commit them (and regenerate the manifest) or remove them."
     exit 1
   fi
 
+  # One diff subsumes three checks the old per-entry loop could not perform
+  # together: modified files, deleted files, and — the gap that let a file
+  # injected into a protected directory report "boundary check passed" — files
+  # present in the protected surface but absent from the manifest.
+  if diff -q "$MANIFEST" "$EXPECTED" >/dev/null 2>&1; then
+    ENTRIES=$(grep -cv '^#' "$MANIFEST" || true)
+    echo "═══════════════════════════════════════════════════════"
+    echo "  Results: $ENTRIES entries, manifest matches the tree"
+    echo "═══════════════════════════════════════════════════════"
+    echo ""
+    echo "OSS boundary check passed. ✓"
+    exit 0
+  fi
+
+  have_paths="$(mktemp)"; want_paths="$(mktemp)"
+  have_lines="$(mktemp)"; want_lines="$(mktemp)"
+  trap 'rm -f "$EXPECTED" "$have_paths" "$want_paths" "$have_lines" "$want_lines"' EXIT
+  grep -v '^#' "$MANIFEST" | sort > "$have_lines"; awk '{print $2}' "$have_lines" | sort > "$have_paths"
+  grep -v '^#' "$EXPECTED" | sort > "$want_lines"; awk '{print $2}' "$want_lines" | sort > "$want_paths"
+
+  ADDED=$(comm -13 "$have_paths" "$want_paths" | wc -l | tr -d ' ')
+  REMOVED=$(comm -23 "$have_paths" "$want_paths" | wc -l | tr -d ' ')
+  IN_BOTH=$(comm -12 "$have_paths" "$want_paths" | wc -l | tr -d ' ')
+  IDENTICAL=$(comm -12 "$have_lines" "$want_lines" | wc -l | tr -d ' ')
+  CHANGED=$((IN_BOTH - IDENTICAL))
+
+  echo "  Drift against tools/boundary/protected.manifest:"
+  echo "    $ADDED added, $REMOVED removed, $CHANGED modified"
   echo ""
-  echo "OSS boundary check passed. ✓"
-  exit 0
+  diff -u "$MANIFEST" "$EXPECTED" | head -60
+  echo ""
+  echo "═══════════════════════════════════════════════════════"
+  echo "  Results: manifest does not match the tree"
+  echo "═══════════════════════════════════════════════════════"
+  echo ""
+  echo "ERROR: the protected surface drifted from the manifest."
+  echo "  Run 'tools/boundary/generate-manifest.sh' and commit the result."
+  exit 1
 fi

@@ -1,4 +1,4 @@
-.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: manifest install-merge-drivers build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -422,6 +422,17 @@ codegen-check: codegen
 
 verify-boundary:
 	bash tools/verify-boundary.sh
+
+manifest:
+	bash tools/boundary/generate-manifest.sh
+
+# Registers the merge driver referenced by .gitattributes. Git stores merge
+# drivers in local config, never in the repository, so every clone runs this
+# once. Skipping it is safe: the manifest just conflicts the old way.
+install-merge-drivers:
+	git config merge.helm-derived.name "derived file: resolve to ours, regenerate, CI verifies"
+	git config merge.helm-derived.driver true
+	@echo "Merge driver 'helm-derived' registered. Run 'make manifest' after any merge that touched a protected file."
 
 clean:
 	rm -rf bin/ dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json

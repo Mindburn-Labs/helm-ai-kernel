@@ -65,6 +65,10 @@ account session and entitlement responses expose only canonical `plan_id`
 values from this list. Historical `individual`, `basic`, and `pro` values are
 not valid public Kernel SDK plan IDs.
 
+This does not rename `PackChannelIndividual` in `PackManifestV2`: that is a
+legacy add-on manifest channel retained for signed-manifest compatibility, not
+an account plan ID.
+
 The decision endpoint returns action-level access state and must be called
 before mutating Launchpad side effects when hosted gating is enabled.
 

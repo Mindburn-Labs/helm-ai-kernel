@@ -4,6 +4,11 @@
 // proof unless separately bound to HELM verdict receipts or EvidencePacks.
 package agentprovenance
 
+// quantum_posture: agent provenance verification uses classical Ed25519
+// signatures and SHA-256 digests in this release. The pack-extraction bound
+// added for F-24 is a resource limit and carries no cryptographic claim; no
+// post-quantum assurance is made by this package.
+
 import (
 	"archive/tar"
 	"crypto/ed25519"

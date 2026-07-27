@@ -432,6 +432,29 @@ codegen-check: codegen
 verify-boundary:
 	bash tools/verify-boundary.sh
 
+# Declared here rather than appended to the .PHONY line at the top of this file.
+# That line is a single ~1500-character string, so every branch that touches it
+# conflicts with every other one: adding two names there newly conflicted six
+# open pull requests, four of which were mergeable before. .PHONY is additive,
+# so a second declaration costs nothing.
+.PHONY: manifest test-boundary install-merge-drivers
+
+manifest:
+	bash tools/boundary/generate-manifest.sh
+
+# Asserts the gate fails on every known way of breaking the boundary. Needs a
+# clean tree: it mutates the working tree per case and restores after each.
+test-boundary:
+	bash tools/boundary/boundary_test.sh
+
+# Registers the merge driver referenced by .gitattributes. Git stores merge
+# drivers in local config, never in the repository, so every clone runs this
+# once. Skipping it is safe: the manifest just conflicts the old way.
+install-merge-drivers:
+	git config merge.helm-derived.name "derived file: resolve to ours, regenerate, CI verifies"
+	git config merge.helm-derived.driver true
+	@echo "Merge driver 'helm-derived' registered. Run 'make manifest' after any merge that touched a protected file."
+
 clean:
 	rm -rf bin/ dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json
 

@@ -355,3 +355,205 @@ point both `VerifyReceipt` methods at `VerifyReceiptSignature`, restore the
 `TestF05_PreviouslyUnsignedFieldsAreNowCovered` cases, and invert
 `TestDemoVerifyRejectsUnsignedEnvelopeMutation`, which still asserts that
 mutating `Metadata` leaves the signature valid.
+
+### 2026-07-25 — F-22: panic instead of denial when no verifier is configured
+
+| ID | Sev | Finding | Status |
+|---|---|---|---|
+| F-22 | T0 | `validateGating` dereferenced `e.verifier` with no nil check, so a `SafeExecutor` built without a verifier **panicked instead of refusing the execution** | fixed in both repos |
+
+A panic is not a safe failure mode on the enforcement path. It writes no
+decision record, and recovered anywhere upstream it presents as a transient
+fault rather than a blocked execution — the distinction between "the kernel
+denied this" and "the kernel fell over" is the entire product claim. Both repos
+now return an explicit error.
+
+**Why it survived:** the earlier effect-digest checks mask it for the common
+input shape. Reaching the dereference requires a decision and intent whose
+effect digests already bind correctly, so the naive test stops at an earlier
+check and never exercises the guard. The regression test binds the digests
+deliberately and recovers from a panic explicitly, so a regression fails as an
+assertion rather than taking down the suite.
+
+**Found by propagation, not by review.** It surfaced only while porting the F-09
+gating-order fix into `helm-ai-enterprise`, where `core/pkg/executor` sits
+outside the `sync-oss-kernel` protected paths and needed a separate patch. The
+non-synced packages are exactly where kernel-side review does not reach.
+
+### Fifth test asserting a vulnerability as intended behaviour
+
+`core/tests/gate_idempotency_test.go` (enterprise) built an executor with every
+dependency nil, called `Execute` with an unsigned `DecisionRecord`, a nil intent
+and a nil effect — commenting *"we expect it to return BEFORE using them"* — and
+asserted that a real signed receipt came back. That is the F-09 exploit written
+down as the expected result. It now asserts that an ungated caller is refused
+and never reaches the receipt store, and that a caller whose intent does not
+verify is refused even when a receipt is already cached.
+
+Running total: `zeroid_test.go`, the verifier seal fixtures,
+`TestApprovalTransitionEnforcesQuorumAndTimelock`,
+`TestDemoVerifyRejectsUnsignedEnvelopeMutation`, and this one. **Five suites were
+protecting defects from being fixed.** Every one of them passed CI continuously.
+
+### Dependency posture
+
+`golang.org/x/text v0.38.0 -> v0.39.0` in `helm-ai-enterprise` clears
+`GO-2026-5970`, which was failing `govulncheck` and `osv-scanner` on that repo's
+`main`, not just on the branch. The kernel had already made this bump in
+HELM-354; the commercial repo had not. Worth a periodic drift check between the
+two module graphs — a vulnerability patched on one side does not propagate,
+because `go.mod` is not in the synced protected paths.
+
+### 2026-07-26 — F-23: the receipt store persists a third of the receipt
+
+| ID | Sev | Finding | Status |
+|---|---|---|---|
+| F-23 | T1 | `receiptColumns` covers 25 of the `Receipt` struct's 75 JSON fields. The other 50 are silently dropped on write, so a receipt read back from the store is not the receipt that was issued. | open — needs a schema decision |
+
+Found empirically while attempting to activate the v5 envelope: dumping the JCS
+preimage at sign time and at verify time showed a single-field difference —
+`reason_code` was `DANGEROUS_REQUEST_DENIED` when signed and absent when
+reloaded. A systematic diff of the struct against the column list then showed it
+was not one field but fifty.
+
+Dropped fields include, among others: `verdict`, `decision_hash`, `policy_hash`,
+`reason_code`, `idempotency_key`, `session_id`, `tool_name`, `tool_fingerprint`,
+`risk_tier`, `effect_type`, `evidence`, `witness_signatures`, `provenance`,
+`scope_hash`, `content_hash`, `prev_receipt_id`, `safe_dep_state`,
+`emergency_activation_id`.
+
+Full list of the 50 dropped fields:
+
+- `witness_signatures`
+- `replay_script`
+- `provenance`
+- `bundled_artifacts`
+- `gateway_id`
+- `runtime_type`
+- `runtime_version`
+- `model_hash`
+- `network_log_ref`
+- `secret_events_ref`
+- `port_exposures`
+- `sandbox_lease_id`
+- `effect_graph_node_id`
+- `type`
+- `launch_id`
+- `decision_hash`
+- `verdict`
+- `subject`
+- `created_at`
+- `pack_id`
+- `pack_name`
+- `pack_version`
+- `pack_hash`
+- `action`
+- `installed_by`
+- `installed_at`
+- `prev_receipt_id`
+- `content_hash`
+- `risk_tier`
+- `effect_type`
+- `tool_fingerprint`
+- `evidence`
+- `retry_count`
+- `idempotency_key`
+- `tool_name`
+- `reason_code`
+- `skill_id`
+- `skill_content_hash`
+- `policy_hash`
+- `projection_paths`
+- `direction`
+- `counterparty`
+- `session_id`
+- `scope_hash`
+- `issued_at`
+- `emergency_activation_id`
+- `emergency_delegation_session_id`
+- `emergency_scope_hash`
+- `safe_dep_state`
+- `safe_dep_reason_code`
+
+**This is why the earlier five-column migration did not unblock v5.** That fix
+was correct but scoped to the signer-identity fields the first diagnosis
+surfaced; the real gap is an order of magnitude larger.
+
+**Do not fix this by adding fifty columns.** The right shape is the standard one
+for signed records: keep the indexed columns for querying, and add a single
+column holding the canonical signed bytes verbatim. Verification then reads the
+stored envelope rather than reconstructing it from columns, which removes this
+entire class — a field added to the struct later cannot silently fall out of the
+signature because nobody added a column for it.
+
+Until that lands, `SignReceipt` correctly stays on the v4 preimage: signing a
+whole envelope that the storage layer cannot return intact would produce
+receipts that fail their own verification after a round trip.
+
+**Separately worth a product decision, independent of signing:** `verdict`,
+`policy_hash` and `reason_code` are the fields that record what was decided and
+why. Whether they are expected to survive in this store — or are considered
+carried by the EvidencePack path instead — should be settled explicitly rather
+than left implicit.
+
+Post-sign mutation, the other v5 blocker, is now partly closed:
+`buildNextCausalReceipt` no longer assigns `ExecutorID` to an already-signed
+receipt; it requires the builder to bind the session before signing.
+
+### 2026-07-27 — F-24: unbounded provenance-pack extraction, and the lint-security triage
+
+| ID | Sev | Finding | Status |
+|---|---|---|---|
+| F-24 | T1 | `unpackTar` extracted agent provenance packs with an unbounded `io.Copy`, so a small crafted archive could exhaust the verifier's disk. | fixed |
+
+An agent provenance pack is a verification input from a party the verifier does
+not yet trust — checking provenance is the whole point. The function already
+rejected `..` and absolute paths, so tar safety had been considered; the size
+bound was simply missing. Extraction is now capped at 512 MiB with `io.CopyN`,
+and the staging directory dropped from `0755`/`0644` to `0700`/`0600` since it
+is private to the verification run.
+
+`TestExtractRefusesOversizedPack` streams a declared-oversize archive without
+materialising it, and `TestExtractAcceptsNormalPack` is the negative control so
+the first cannot pass merely because extraction broke.
+
+### Triage of the remaining `make lint-security` findings
+
+Recorded so the gate can be promoted to blocking with the accepted set stated
+rather than implied.
+
+**Fixed:** F-24 above (G110, G301, G302).
+
+**False positives — safe to exclude:**
+
+- `G101` at `guardian/interceptor.go:22` — `ContextCredentialHash = "credential_hash"`
+  is a context map key, not a credential.
+- `G117` at `evidence/seal.go:690` — the marshaled `PrivateKey` is a
+  `file-dev-ed25519/v1` keystore. Persisting the private key is the file's
+  purpose and it is written `0600`.
+
+**Real, already tracked, not fixed here:**
+
+- `G204` at `crypto/external_signer.go:55` — `exec.CommandContext(ctx, "sh", "-c", s.Command)`
+  runs a config-derived string through a shell. This was raised in the original
+  audit and is unchanged; it belongs with the external-signer work, not with a
+  lint sweep.
+
+**Needs review, not blindly silenced:**
+
+- `G115` integer-overflow conversions in `crypto/tee/nitro.go` and
+  `nitro_cose.go` (7 sites). These parse attestation documents from an enclave,
+  so a truncating conversion on a length or index field is exactly where a
+  malformed document would do damage. They should be read individually before
+  the gate goes blocking; suppressing them wholesale would defeat the point.
+- `G304` file-inclusion-via-variable at `agentprovenance.go:149,296` and
+  `tee/collateral/bundle.go:40` — caller-supplied paths. Likely legitimate CLI
+  inputs, but each needs a stated reason.
+
+**Non-security hygiene:** five `errcheck` findings on `rows.Close` /
+`Body.Close` and two `staticcheck` QF1008 suggestions. Worth fixing, unrelated
+to security posture.
+
+**Recommendation:** promote `lint-security` to blocking once the seven `G115`
+sites and three `G304` sites are individually reviewed. Until then it stays
+runnable-but-advisory, which is what `make lint-security` already provides.

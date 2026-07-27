@@ -170,6 +170,8 @@ jobs:
         run: bash scripts/ci/check_release_no_mock_tee.sh
       - name: Boundary registry drift
         run: make verify-boundary
+      - name: Boundary gate regression suite
+        run: make test-boundary
       - name: Crucible
         run: make crucible
       - name: Benchmark report

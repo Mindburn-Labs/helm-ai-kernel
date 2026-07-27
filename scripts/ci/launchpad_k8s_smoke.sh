@@ -202,6 +202,12 @@ cleanup() {
         kubectl get pods -n "$NAMESPACE" -o wide 2>/dev/null || true
         kubectl describe pods -n "$NAMESPACE" 2>/dev/null | tail -200 || true
         kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=launchpad-app --all-containers --tail=200 2>/dev/null || true
+        # The chart's hooks carry `before-hook-creation,hook-succeeded`, so a
+        # hook Pod is deleted when it succeeds and when the next run starts —
+        # never on failure. A failed test hook is therefore still readable
+        # here, which is the diagnostic the dropped `helm test` log flag used
+        # to provide on the failure path.
+        kubectl logs -n "$NAMESPACE" -l app.kubernetes.io/component=test --all-containers --tail=200 2>/dev/null || true
         echo "::endgroup::"
         # Best-effort namespace-scoped teardown so the next run starts clean.
         # The cluster itself stays around when KEEP_CLUSTER=1.
@@ -462,8 +468,13 @@ case "$MODE" in
         kubectl -n "$NAMESPACE" rollout status "deployment/${RELEASE}-helm-ai-kernel" --timeout=300s
         assert_pod_ready openclaw 6m
         assert_job_succeeded hermes 3m
+        # `hook-succeeded` deletes the test Pod as soon as it passes, so
+        # teardown leaves nothing behind — but it also means `helm test --logs`
+        # races the deletion and reports a log-fetch error on the path that
+        # actually worked. Dropping the flag costs nothing on failure: the hook
+        # Pod survives a failure, and the trap above dumps its logs.
         echo "helm test"
-        kube_helm test "$RELEASE" -n "$NAMESPACE" --logs
+        kube_helm test "$RELEASE" -n "$NAMESPACE"
         echo "openclaw kubectl exec healthcheck"
         kubectl -n "$NAMESPACE" exec \
             "deployment/${RELEASE}-helm-ai-kernel-openclaw" \

@@ -566,10 +566,21 @@ func TestCoverageBuildNextCausalReceiptBranches(t *testing.T) {
 	}); err == nil {
 		t.Fatal("expected nil receipt error")
 	}
+	// A builder that omits the executor id is now rejected rather than silently
+	// defaulted. The builder signs the receipt it returns, so assigning the
+	// session here would mutate an already-signed object and invalidate any
+	// signature covering it.
 	if got, err := buildNextCausalReceipt("agent", nil, func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return storeCoverageReceipt("receipt-empty-executor", "decision", "", 1, now), nil
+	}); err == nil {
+		t.Fatalf("a receipt with no executor id was accepted and defaulted after signing: %+v", got)
+	}
+
+	// The ordinary path — the builder binds the session before signing.
+	if got, err := buildNextCausalReceipt("agent", nil, func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
+		return storeCoverageReceipt("receipt-bound-executor", "decision", "agent", 1, now), nil
 	}); err != nil || got.ExecutorID != "agent" {
-		t.Fatalf("expected default executor, got %+v err=%v", got, err)
+		t.Fatalf("builder-bound executor should be accepted, got %+v err=%v", got, err)
 	}
 	for name, build := range map[string]CausalReceiptBuilder{
 		"wrong executor": func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {

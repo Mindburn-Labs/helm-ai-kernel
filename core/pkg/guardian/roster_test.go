@@ -42,6 +42,7 @@ var nonGateFields = map[string]bool{
 	"registry":          true,
 	"clock":             true,
 	"envFprint":         true,
+	"gateRosterHash":    true,
 	"snapshotScope":     true,
 	"otel":              true,
 	"zeroidInterceptor": true,

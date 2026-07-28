@@ -1,12 +1,12 @@
 {
   "policy_snapshot": "policy-snapshot.json",
-  "digest": "cde7bd1afc128d4676b2a09ec1057b6ed1d20ae2d597be45a141329016b2027d",
+  "digest": "db210c41a3da2f17abd6ccc471d9363ddb2853f975297e6edb7545cc95d42256",
   "observations": [
     {
-      "case": "class_forbidden/egress_destination",
+      "case": "instance_membership/egress_destination",
       "verdict": "DENY",
       "reason_code": "EGRESS_DESTINATION_NOT_ALLOWED",
-      "finality": "class_forbidden"
+      "finality": "instance_membership"
     },
     {
       "case": "class_forbidden/memory_class",
@@ -15,10 +15,10 @@
       "finality": "class_forbidden"
     },
     {
-      "case": "class_forbidden/draft_outside_workspace",
+      "case": "instance_membership/draft_outside_workspace",
       "verdict": "DENY",
       "reason_code": "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE",
-      "finality": "class_forbidden"
+      "finality": "instance_membership"
     },
     {
       "case": "ungranted/operate_permission_discloses_capability",

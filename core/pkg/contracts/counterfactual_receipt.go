@@ -41,6 +41,11 @@ func IsCanonicalEnforcement(e string) bool {
 // "observe → enforce" on-ramp into a business case: the weekly summary becomes
 // "HELM would have blocked these N actions".
 //
+// Despite the shared word, this is not a DenialCounterfactual. That value is
+// the nearest-allowed-envelope field on a denial the boundary actually
+// enforced; this receipt records a would-have verdict and confers no
+// execution authority at all.
+//
 // Invariants (enforced by Validate):
 //   - Enforcement is ALWAYS EnforcementCounterfactual. A counterfactual receipt
 //     that claims to be enforced is rejected — that is the P0 negative vector.

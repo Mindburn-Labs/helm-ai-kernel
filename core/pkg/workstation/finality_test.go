@@ -42,26 +42,29 @@ func TestEveryDenyReasonCodeIsClassified(t *testing.T) {
 
 // Membership denials are the disclosure boundary: an egress allowlist or a set
 // of workspace roots is a map of internal infrastructure. "Not that one, try
-// these" would make every denial a free probe.
+// these" would make every denial a free probe. A disallowed memory class is
+// not membership — the category comes from a fixed public vocabulary — so it
+// carries the class lesson instead. Neither discloses anything.
 func TestSetMembershipDenialsDiscloseNothing(t *testing.T) {
 	profile := learningProfile()
 	cases := []struct {
 		code  string
+		want  contracts.DenialFinality
 		event ToolEvent
 	}{
-		{"EGRESS_DESTINATION_NOT_ALLOWED", ToolEvent{
+		{"EGRESS_DESTINATION_NOT_ALLOWED", contracts.DenialInstanceMembership, ToolEvent{
 			Type:       "network_egress",
 			EffectType: contracts.EffectTypeWorkstationNetworkEgress,
 			EffectMode: contracts.WorkstationEffectModeOperate,
 			Target:     "exfil.example.com",
 		}},
-		{"DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE", ToolEvent{
+		{"DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE", contracts.DenialInstanceMembership, ToolEvent{
 			Type:       "file_write",
 			EffectType: contracts.EffectTypeWorkstationFileWrite,
 			EffectMode: contracts.WorkstationEffectModeDraft,
 			Target:     "../secrets.txt",
 		}},
-		{"MEMORY_CLASS_DISALLOWED", ToolEvent{
+		{"MEMORY_CLASS_DISALLOWED", contracts.DenialClassForbidden, ToolEvent{
 			Type:         "memory_write",
 			EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
 			EffectMode:   contracts.WorkstationEffectModeOperate,
@@ -75,10 +78,10 @@ func TestSetMembershipDenialsDiscloseNothing(t *testing.T) {
 				t.Fatalf("EvaluateEvent() = %s/%s, want DENY/%s", verdict, code, tc.code)
 			}
 			if got := DenialCounterfactualFor(profile, tc.event, code); got != nil {
-				t.Fatalf("%s disclosed a counterfactual %+v: membership denials must disclose nothing", code, got)
+				t.Fatalf("%s disclosed a counterfactual %+v: membership and class denials must disclose nothing", code, got)
 			}
-			if got := DenialFinality(code); got != contracts.DenialClassForbidden {
-				t.Fatalf("DenialFinality(%s) = %q, want class_forbidden", code, got)
+			if got := DenialFinality(code); got != tc.want {
+				t.Fatalf("DenialFinality(%s) = %q, want %q", code, got, tc.want)
 			}
 		})
 	}
@@ -182,10 +185,10 @@ func TestDeclaredReasonCodeCannotSteerFinality(t *testing.T) {
 	if len(honestDenials) != 1 || len(relabelledDenials) != 1 {
 		t.Fatalf("expected one denial each, got %d and %d", len(honestDenials), len(relabelledDenials))
 	}
-	if got := honestDenials[0].Finality; got != contracts.DenialClassForbidden {
-		t.Fatalf("honest event finality = %q, want class_forbidden", got)
+	if got := honestDenials[0].Finality; got != contracts.DenialInstanceMembership {
+		t.Fatalf("honest event finality = %q, want instance_membership", got)
 	}
-	if got := relabelledDenials[0].Finality; got != contracts.DenialClassForbidden {
+	if got := relabelledDenials[0].Finality; got != contracts.DenialInstanceMembership {
 		t.Fatalf("declared reason code steered finality to %q: a producer must not be able to relabel its own refusal", got)
 	}
 }
@@ -238,11 +241,13 @@ func TestUndeclaredTTLDisclosesNothing(t *testing.T) {
 
 // The disclosure rule as a property of the catalog, not of the handful of
 // cases someone happened to write down. A future entry pairing class_forbidden
-// with a disclosing class would otherwise ship silently.
+// or instance_membership with a disclosing class would otherwise ship silently.
 func TestForbiddenClassNeverDiscloses(t *testing.T) {
 	for code, class := range denialCatalog {
-		if class.finality == contracts.DenialClassForbidden && class.disclosure != discloseNothing {
-			t.Errorf("%s is class_forbidden with a disclosing class: a forbidden-class refusal must not describe the set it failed against", code)
+		forbidden := class.finality == contracts.DenialClassForbidden ||
+			class.finality == contracts.DenialInstanceMembership
+		if forbidden && class.disclosure != discloseNothing {
+			t.Errorf("%s is %s with a disclosing class: this refusal must not describe the set or category it failed against", code, class.finality)
 		}
 	}
 }

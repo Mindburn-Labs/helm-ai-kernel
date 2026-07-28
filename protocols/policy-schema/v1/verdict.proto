@@ -113,6 +113,14 @@ enum DenialFinality {
   // not about the action, so a consumer should touch none of its stored
   // bounds.
   DENIAL_FINALITY_INSTANCE_CONTEXT = 4;
+  // A caller-chosen target was refused against a confidential set — an egress
+  // host outside the allowlist, a path outside the workspace roots. That
+  // target is closed; other targets may work. The set is never disclosed:
+  // there is no bound to record and nothing to erase, so a consumer stops
+  // retrying this target without unlearning anything else. Distinct from
+  // CLASS_FORBIDDEN, where the refused thing is a policy-named category of
+  // action from a fixed public vocabulary, not a probe against a private set.
+  DENIAL_FINALITY_INSTANCE_MEMBERSHIP = 5;
 }
 
 // DenialCounterfactual is the nearest allowed envelope for a refusal: enough
@@ -127,6 +135,11 @@ enum DenialFinality {
 // the verdict — the bundle already committed in CpiVerdict.policy_bundle_hash.
 // A counterfactual derived from any other snapshot would describe a boundary
 // that never denied anything.
+//
+// Despite the shared word, this is not a counterfactual receipt. This message
+// rides a denial the boundary actually enforced; a counterfactual receipt
+// records the verdict a PDP would have issued under an observe grant, enforces
+// nothing, and must never be presentable as enforced.
 message DenialCounterfactual {
   // Policy field that bound the request, e.g. "ttl_days".
   string field = 1;

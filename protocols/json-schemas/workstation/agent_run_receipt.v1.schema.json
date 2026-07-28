@@ -233,7 +233,7 @@
         "finality": {
           "type": "string",
           "description": "What kind of refusal this was, derived from the rule that fired. Absent unless the policy profile opts in.",
-          "enum": ["class_forbidden", "ungranted", "instance_parameter", "instance_context"]
+          "enum": ["class_forbidden", "ungranted", "instance_parameter", "instance_context", "instance_membership"]
         },
         "counterfactual": {
           "type": "object",

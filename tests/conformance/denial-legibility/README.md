@@ -16,19 +16,24 @@ down the two fields that make the difference, and the limits on both.
 
 ## What an implementation has to satisfy
 
-1. **Every refusal is classified.** Each denial reports one of four finality
+1. **Every refusal is classified.** Each denial reports one of five finality
    values — `class_forbidden`, `ungranted`, `instance_parameter`,
-   `instance_context` — derived from the rule that fired. Never from a reason
-   code the agent's own event log declares: a producer that could relabel its
-   refusal as `instance_context` would be telling the consumer to keep going.
+   `instance_context`, `instance_membership` — derived from the rule that
+   fired. Never from a reason code the agent's own event log declares: a
+   producer that could relabel its refusal as `instance_context` would be
+   telling the consumer to keep going.
 2. **Classification replays identically.** The same snapshot evaluated again
    produces a byte-identical result, and matches a digest frozen in an earlier
    process. The golden comparison is the load-bearing half — an implementation
    with per-process hash seeding will look stable within a single run.
-3. **Membership refusals disclose nothing.** A `class_forbidden` refusal never
-   carries a counterfactual. An egress allowlist or a set of workspace roots is
-   a map of internal infrastructure; answering "not that one, try these" turns
-   every refusal into a free probe of the estate.
+3. **Membership refusals disclose nothing.** An `instance_membership` refusal
+   says a caller-chosen target was refused against a confidential set — an
+   egress allowlist, a set of workspace roots. That target is closed, other
+   targets may work, and the set itself is never described: answering "not
+   that one, try these" turns every refusal into a free probe of the estate.
+   `class_forbidden` — a policy-named category of action from a fixed public
+   vocabulary, like a disallowed memory class — carries no counterfactual
+   either.
 4. **Disclosure follows the rule, not the finality.** `instance_parameter` and
    `ungranted` *may* carry an envelope — a scalar ceiling, or a capability name
    from the fixed permission vocabulary — but neither always does. The pack
@@ -65,7 +70,7 @@ learn, so the two never have to be inferred from each other.
 
 Don't, as a way of making a failure go away. A diff here means the boundary
 changed what it discloses, which is either a deliberate policy change or the
-defect this pack exists to catch. `TestEveryScenarioIsDenied` and
+defect this pack exists to catch. `TestVerdictsSplitAsExpected` and
 `TestMembershipRefusalsDiscloseNothing` assert their properties directly for
 that reason: they still fail on a regenerated golden.
 

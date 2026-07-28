@@ -185,6 +185,16 @@ const (
 	// example). The refusal was not about the action; a consumer should touch
 	// none of its stored bounds.
 	DenialInstanceContext DenialFinality = "instance_context"
+	// DenialInstanceMembership: a caller-chosen target was refused against a
+	// confidential set — an egress host outside the allowlist, a path outside
+	// the workspace roots. That target is closed; other targets may work. The
+	// set is never disclosed, so there is no bound to record and nothing to
+	// erase: stop retrying this target without unlearning anything else.
+	//
+	// Distinct from DenialClassForbidden, where the refused thing is a
+	// policy-named category of action from a fixed public vocabulary rather
+	// than a probe against a set the policy keeps private.
+	DenialInstanceMembership DenialFinality = "instance_membership"
 )
 
 // DenialCounterfactual is the nearest allowed envelope for a denial: enough for
@@ -194,6 +204,12 @@ const (
 // that turn on set membership never carry one — an egress allowlist or a set of
 // workspace roots is a map of internal infrastructure, and disclosing it would
 // turn every denial into a free probe. See counterfactualFor.
+//
+// Despite the shared word, this is not a CounterfactualReceipt. This value
+// rides a denial the boundary actually enforced and describes the nearest
+// request that would have been allowed. A CounterfactualReceipt records the
+// verdict the PDP would have issued under an observe grant, enforces nothing,
+// and must never be presentable as enforced.
 type DenialCounterfactual struct {
 	// Field is the policy field that bound the request, e.g. "ttl_days".
 	Field string `json:"field"`

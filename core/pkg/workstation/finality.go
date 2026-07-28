@@ -31,18 +31,23 @@ type denialClass struct {
 // denialCatalog maps every workstation deny reason code to what a consumer may
 // learn from it.
 //
-// Set-membership denials (egress allowlist, workspace roots, memory classes)
-// deliberately disclose nothing. The allowlist is a map of internal
-// infrastructure; answering "not that one, try these" would turn each denial
-// into a free probe of the estate. The agent learns "forbidden" and stops.
+// Membership denials (egress allowlist, workspace roots) deliberately disclose
+// nothing beyond their finality. The set is a map of internal infrastructure;
+// answering "not that one, try these" would turn each denial into a free probe
+// of the estate. The agent learns "this target is closed" and stops probing.
 var denialCatalog = map[string]denialClass{
 	// The context was refused, not the action. Nothing about the action changed.
 	"TAINTED_CONTEXT_REQUIRES_DENY": {contracts.DenialInstanceContext, discloseNothing},
 
-	// Forbidden by set membership. No counterfactual, ever.
-	"EGRESS_DESTINATION_NOT_ALLOWED":       {contracts.DenialClassForbidden, discloseNothing},
-	"DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE": {contracts.DenialClassForbidden, discloseNothing},
-	"MEMORY_CLASS_DISALLOWED":              {contracts.DenialClassForbidden, discloseNothing},
+	// Refused by membership in a confidential set: the target is closed,
+	// other targets may work, the set is never described. No counterfactual, ever.
+	"EGRESS_DESTINATION_NOT_ALLOWED":       {contracts.DenialInstanceMembership, discloseNothing},
+	"DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE": {contracts.DenialInstanceMembership, discloseNothing},
+
+	// Not membership: the refused thing is a policy-named category of action
+	// (writing a given memory class) from a fixed public vocabulary, so the
+	// class lesson applies — stop attempting that category.
+	"MEMORY_CLASS_DISALLOWED": {contracts.DenialClassForbidden, discloseNothing},
 
 	// A bound was exceeded and the agent can retry under it.
 	"MEMORY_TTL_EXCEEDS_POLICY": {contracts.DenialInstanceParameter, discloseScalarBound},

@@ -38,6 +38,7 @@ var requiredFinalities = []contracts.DenialFinality{
 	contracts.DenialUngranted,
 	contracts.DenialInstanceParameter,
 	contracts.DenialInstanceContext,
+	contracts.DenialInstanceMembership,
 }
 
 type observation struct {
@@ -65,7 +66,7 @@ type scenario struct {
 // mistake these cases exist to catch.
 func denialScenarios() []scenario {
 	return []scenario{
-		{"class_forbidden/egress_destination", workstation.ToolEvent{
+		{"instance_membership/egress_destination", workstation.ToolEvent{
 			EventID:    "cf-egress",
 			Type:       "network_egress",
 			EffectType: contracts.EffectTypeWorkstationNetworkEgress,
@@ -79,7 +80,7 @@ func denialScenarios() []scenario {
 			EffectMode:   contracts.WorkstationEffectModeOperate,
 			MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "procedural", TTLDays: 1},
 		}},
-		{"class_forbidden/draft_outside_workspace", workstation.ToolEvent{
+		{"instance_membership/draft_outside_workspace", workstation.ToolEvent{
 			EventID:    "cf-draft",
 			Type:       "file_write",
 			EffectType: contracts.EffectTypeWorkstationFileWrite,
@@ -351,15 +352,16 @@ func TestVerdictsSplitAsExpected(t *testing.T) {
 }
 
 // The disclosure boundary, restated as a conformance property: a refusal that
-// turns on set membership discloses nothing about the set. This is the check an
-// external implementation is most likely to get wrong in the helpful direction.
+// turns on set membership discloses nothing about the set, and a forbidden
+// category discloses nothing either. This is the check an external
+// implementation is most likely to get wrong in the helpful direction.
 func TestMembershipRefusalsDiscloseNothing(t *testing.T) {
 	for _, obs := range observe(t, loadSnapshot(t)) {
-		if obs.Finality != contracts.DenialClassForbidden {
+		if obs.Finality != contracts.DenialInstanceMembership && obs.Finality != contracts.DenialClassForbidden {
 			continue
 		}
 		if obs.Counterfactual != nil {
-			t.Errorf("case %s disclosed %+v: a forbidden-class refusal must not describe the set it failed against",
+			t.Errorf("case %s disclosed %+v: this refusal must not describe the set or category it failed against",
 				obs.Case, obs.Counterfactual)
 		}
 	}

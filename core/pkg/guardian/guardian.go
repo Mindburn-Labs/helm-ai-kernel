@@ -186,6 +186,7 @@ type Guardian struct {
 	auditLog          *AuditLog
 	temporal          *TemporalGuardian
 	envFprint         string                  // Boot-sequence fingerprint for DecisionRecords
+	gateRosterHash    string                  // Digest of the injected gate set; constant after construction
 	pdp               pdp.PolicyDecisionPoint // Optional pluggable policy backend
 	snapshotStore     policyreconcile.PolicySnapshotStore
 	snapshotScope     policyreconcile.PolicyScope
@@ -239,6 +240,22 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 	for _, opt := range opts {
 		opt(g)
 	}
+
+	// The roster is fixed once every option has been applied, so digest it
+	// here rather than per decision. Reported at construction because a gate
+	// set is otherwise only discoverable by reading each call site.
+	roster := g.GateRoster()
+	if hash, err := roster.Hash(); err != nil {
+		slog.Warn("[guardian] gate roster hash failed; decisions will not state their gate set", "error", err)
+	} else {
+		g.gateRosterHash = hash
+	}
+	slog.Info("[guardian] gate roster",
+		"active", roster.Active,
+		"inactive", roster.Inactive,
+		"active_count", len(roster.Active),
+		"declared_count", len(AllGateIDs()),
+		"roster_hash", g.gateRosterHash)
 
 	if g.zeroidInterceptor == nil {
 		g.zeroidInterceptor = NewZeroIDInterceptor(g)
@@ -387,6 +404,14 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 			return fmt.Errorf("canonicalize effect digest: %w", err)
 		}
 		decision.EffectDigest = digest
+	}
+
+	// Bind the gate roster before any signing path. Every exit below reaches
+	// SignDecision, and this is the only funnel all six DecisionRecord
+	// construction sites pass through, so binding here cannot be missed by a
+	// seventh.
+	if decision.GateRosterHash == "" {
+		decision.GateRosterHash = g.gateRosterHash
 	}
 
 	artifacts := make([]*pkg_artifact.ArtifactEnvelope, 0, len(evidenceHashes))

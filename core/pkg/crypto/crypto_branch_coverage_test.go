@@ -12,27 +12,11 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-func TestShardedCacheEvictsBoundedShard(t *testing.T) {
-	cache := NewShardedCache()
-	for i := 0; i < maxEntriesPerShard; i++ {
-		var key [32]byte
-		key[0] = 0
-		key[1] = byte(i >> 8)
-		key[2] = byte(i)
-		cache.Store(key, true)
-	}
-	var extra [32]byte
-	extra[0] = 0
-	extra[1] = 0xff
-	extra[2] = 0xff
-	cache.Store(extra, false)
-	if len(cache.shards[0].items) > maxEntriesPerShard {
-		t.Fatalf("shard exceeded max entries: %d", len(cache.shards[0].items))
-	}
-	if got, ok := cache.Lookup(extra); !ok || got {
-		t.Fatalf("extra cache entry = %v/%v, want false/true", got, ok)
-	}
-}
+// TestShardedCacheEvictsBoundedShard was removed together with ShardedCache
+// itself: the cache existed only to memoise signature-verification results, and
+// its key construction (unframed concatenation, consulted before input
+// validation) made forged signatures inherit genuine cached verdicts. See the
+// F-07 cases in security_regression_test.go.
 
 func TestAuditLogErrorAndMalformedEntryBranches(t *testing.T) {
 	if _, err := NewFileAuditLog(filepath.Join(t.TempDir(), "missing", "audit.jsonl")); err == nil {

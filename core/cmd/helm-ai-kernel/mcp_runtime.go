@@ -89,9 +89,10 @@ func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
+	catalog.RegisterGovernanceTools()
 	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog)
 
-	return catalog, firewall.GovernedExecutor(runLocalMCPTool), nil
+	return catalog, firewall.GovernedExecutor(localMCPToolHandler(evaluator)), nil
 }
 
 func newLocalMCPGateway() (*mcppkg.Gateway, error) {
@@ -159,8 +160,59 @@ func (e *receiptPersistingEvaluator) EvaluateDecision(ctx context.Context, req g
 	return decision, nil
 }
 
-func runLocalMCPTool(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+func localMCPToolHandler(evaluator mcppkg.PolicyEvaluator) mcppkg.ToolHandler {
+	return func(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+		return runLocalMCPTool(ctx, evaluator, req)
+	}
+}
+
+func runLocalMCPTool(ctx context.Context, evaluator mcppkg.PolicyEvaluator, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
 	switch req.ToolName {
+	case "helm.verify":
+		decision, err := evaluator.EvaluateDecision(ctx, guardian.DecisionRequest{
+			Principal: stringArgument(req.Arguments, "principal"),
+			Action:    stringArgument(req.Arguments, "action"),
+			Resource:  stringArgument(req.Arguments, "resource"),
+			Context: map[string]any{
+				"args_hash": stringArgument(req.Arguments, "args_hash"),
+			},
+		})
+		if err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("evaluate governance action: %w", err)
+		}
+		if decision == nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("evaluate governance action: empty decision")
+		}
+		return structuredLocalMCPResponse(map[string]any{
+			"verdict":         decision.Verdict,
+			"receipt_id":      decision.ID,
+			"reason_code":     decision.ReasonCode,
+			"proofgraph_node": decision.RequirementSetHash,
+		})
+
+	case "helm.evaluate":
+		envelopeJSON, err := json.Marshal(req.Arguments["envelope"])
+		if err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("encode A2A envelope: %w", err)
+		}
+		var envelope a2a.Envelope
+		if err := json.Unmarshal(envelopeJSON, &envelope); err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("decode A2A envelope: %w", err)
+		}
+		featuresJSON, err := json.Marshal(req.Arguments["local_features"])
+		if err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("encode local A2A features: %w", err)
+		}
+		var localFeatures []a2a.Feature
+		if err := json.Unmarshal(featuresJSON, &localFeatures); err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("decode local A2A features: %w", err)
+		}
+		result, err := a2a.NewDefaultVerifier().Negotiate(ctx, &envelope, localFeatures)
+		if err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("evaluate A2A envelope: %w", err)
+		}
+		return structuredLocalMCPResponse(result)
+
 	case "file_read":
 		path, _ := req.Arguments["path"].(string)
 		resolvedPath, err := resolveLocalMCPPath(path)
@@ -251,6 +303,27 @@ func runLocalMCPTool(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcpp
 			IsError: true,
 		}, nil
 	}
+}
+
+func stringArgument(arguments map[string]any, name string) string {
+	value, _ := arguments[name].(string)
+	return value
+}
+
+func structuredLocalMCPResponse(value any) (mcppkg.ToolExecutionResponse, error) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		return mcppkg.ToolExecutionResponse{}, fmt.Errorf("encode MCP tool result: %w", err)
+	}
+	var structured map[string]any
+	if err := json.Unmarshal(body, &structured); err != nil {
+		return mcppkg.ToolExecutionResponse{}, fmt.Errorf("normalize MCP tool result: %w", err)
+	}
+	return mcppkg.ToolExecutionResponse{
+		Content:           string(body),
+		ContentItems:      mcppkg.StructuredTextContent(structured, string(body)),
+		StructuredContent: structured,
+	}, nil
 }
 
 func resolveLocalMCPPath(rawPath string) (string, error) {

@@ -162,6 +162,10 @@ var decideCases = []struct {
 	{"regression-git-reset-dynamic-flag", `git reset "$(printf %s --hard)"`, "unresolvable flags"},
 	{"regression-git-clean-dynamic-flag", `git clean "$(printf %s -fd)"`, "unresolvable flags"},
 	{"regression-find-exec-dynamic-payload", `find . -exec "$(printf 'rm -rf')" {} +`, "dynamic payload"},
+	{"regression-find-exec-shell-plus", `find /tmp/x -exec sh -c 'rm --recursive --force "$@"' sh {} +`, "recursive rm"},
+	{"regression-find-exec-shell-semicolon", `find /tmp/x -exec sh -c 'rm --recursive --force "$@"' sh {} \;`, "recursive rm"},
+	{"regression-find-execdir-shell-plus", `find /tmp/x -execdir sh -c 'rm --recursive --force "$@"' sh {} +`, "recursive rm"},
+	{"regression-find-execdir-dynamic-shell", `find /tmp/x -execdir sh -c "$PAYLOAD" sh {} \;`, "dynamic payload"},
 
 	// Regression: P1 WRAPPER_VALUE_FLAG_BYPASS — wrapper long flags that
 	// consume values must be modeled; unknown long flags fail closed.

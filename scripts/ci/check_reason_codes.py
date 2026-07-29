@@ -15,7 +15,8 @@ Two passes, because they have different reach. `audit` walks the schema itself
 outside ENFORCED/ANNOTATIONS, so tightening the schema anywhere forces this
 checker to keep up. `validate` then walks the registry against that schema.
 Auditing along the instance instead would leave optional properties no entry
-happens to use silently unenforced.
+happens to use silently unenforced. A third pass, `legibility`, enforces the
+cross-field denial-legibility pairing rules JSON Schema cannot express.
 """
 
 from __future__ import annotations
@@ -108,6 +109,32 @@ def validate(where: str, value: Any, spec: dict[str, Any], root: dict[str, Any],
                 validate(f"{where}.{field}", value[field], subspec, root, out)
 
 
+def legibility(codes: list[Any], out: list[str]) -> None:
+    """Denial-legibility invariants (HELM-373), beyond what JSON Schema can say.
+
+    A disclosure is a promise about what a classified refusal reveals, so it
+    cannot stand alone, and each disclosing class only makes sense on the
+    finality whose lesson it serves: a scalar ceiling on "retry within the
+    bound", a capability name on "ask an authority for it". Forbidden classes
+    and membership refusals never describe the set or category they failed
+    against.
+    """
+    for entry in codes:
+        if not isinstance(entry, dict):
+            continue  # validate() already reported it
+        code = entry.get("code", "<unnamed>")
+        finality = entry.get("finality")
+        disclosure = entry.get("disclosure")
+        if disclosure is not None and finality is None:
+            out.append(f"{code}: disclosure {disclosure!r} without a finality")
+        if disclosure == "scalar_bound" and finality != "instance_parameter":
+            out.append(f"{code}: scalar_bound disclosure requires finality instance_parameter, got {finality!r}")
+        if disclosure == "capability_name" and finality != "ungranted":
+            out.append(f"{code}: capability_name disclosure requires finality ungranted, got {finality!r}")
+        if finality in ("class_forbidden", "instance_membership") and disclosure not in (None, "none"):
+            out.append(f"{code}: finality {finality} must not disclose, got {disclosure!r}")
+
+
 def main() -> int:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -115,6 +142,8 @@ def main() -> int:
     failures: list[str] = []
     audit("schema", schema, failures)
     validate("registry", registry, schema, schema, failures)
+    if isinstance(registry, dict) and isinstance(registry.get("codes"), list):
+        legibility(registry["codes"], failures)
 
     if failures:
         print(f"reason-code registry does not validate against {SCHEMA_PATH.relative_to(ROOT)}:")

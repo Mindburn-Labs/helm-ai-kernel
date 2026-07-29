@@ -75,6 +75,7 @@ var sensitiveRedirectTargets = []string{
 	"id_rsa",
 	"id_ed25519",
 	".git/",
+	`.git\`,
 }
 
 // Classify parses and structurally classifies a raw shell command string.
@@ -342,10 +343,12 @@ var noValueShortFlags = map[string]map[string]bool{
 		"-k": true, "-K": true, "-l": true, "-n": true, "-P": true, "-S": true,
 		"-s": true, "-v": true, "-V": true,
 	},
-	"xargs":  {"-0": true, "-p": true, "-t": true, "-v": true, "-x": true, "-r": true, "-o": true},
-	"setsid": {"-f": true, "-w": true, "-c": true},
-	"time":   {"-p": true, "-a": true, "-v": true, "-q": true},
-	"exec":   {"-l": true, "-c": true},
+	"xargs":   {"-0": true, "-p": true, "-t": true, "-v": true, "-x": true, "-r": true, "-o": true},
+	"setsid":  {"-f": true, "-w": true, "-c": true},
+	"time":    {"-p": true, "-a": true, "-v": true, "-q": true},
+	"exec":    {"-l": true, "-c": true},
+	"command": {"-p": true},
+	"builtin": {"-a": true, "-p": true},
 }
 
 // noValueLongFlags lists wrapper long flags known to take no value. Unknown
@@ -682,7 +685,10 @@ func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, st
 			}
 			continue
 		}
-		if !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
+		if tok.text == "-" {
+			return wordTok{}, false, true, false, wordTok{}
+		}
+		if !strings.HasPrefix(tok.text, "-") {
 			return wordTok{}, false, false, false, tok // script file positional
 		}
 		cluster := tok.text[1:]
@@ -879,6 +885,10 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				return
 			}
 			args = rest[commandIdx:]
+		case name == "command" && len(args) > 1 && !args[1].dynamic && (args[1].text == "-v" || args[1].text == "-V"):
+			c.signal(SignalEnvWrapper)
+			c.record(Command{Name: name, Tokens: staticTokens(args), Prefix: name, Via: via})
+			return
 		case name == "nice" || name == "nohup" || name == "time" || name == "command" || name == "builtin" || name == "stdbuf" || name == "setsid" || name == "exec":
 			c.signal(SignalEnvWrapper)
 			args = dropWrapperFlags(name, args[1:])
@@ -1142,16 +1152,20 @@ func (c *collector) record(cmd Command) {
 func (c *collector) matchDestructive(cmd Command, args []wordTok) {
 	switch {
 	case cmd.Name == "rm":
-		recursive, force, dynamicFlag := false, false, false
+		recursive, force, dynamicArg, endOptions := false, false, false, false
 		for _, tok := range args[1:] {
 			if tok.dynamic {
 				// Any unresolved word may expand to "-rf" (word-splitting or
-				// a variable whose value is flags); fail closed.
-				dynamicFlag = true
+				// a destructive operand); fail closed even after `--`.
+				dynamicArg = true
 				continue
 			}
 			if tok.text == "--" {
-				break // everything after "--" is an operand
+				endOptions = true
+				continue
+			}
+			if endOptions {
+				continue
 			}
 			isFlag := strings.HasPrefix(tok.text, "-") && tok.text != "-"
 			if !isFlag {
@@ -1179,8 +1193,8 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok) {
 			c.decide("recursive rm delete" + forceSuffix(force))
 			return
 		}
-		if dynamicFlag {
-			c.decide("rm with flags that cannot be resolved statically")
+		if dynamicArg {
+			c.decide("rm with arguments that cannot be resolved statically")
 			return
 		}
 	case strings.HasPrefix(cmd.Name, "mkfs"):
@@ -1278,10 +1292,18 @@ func (c *collector) matchGit(args []wordTok) {
 	rest := args[1:]
 	switch sub {
 	case "reset":
+		endOptions := false
 		for _, tok := range rest {
 			if tok.dynamic {
 				c.decide("git reset with unresolvable flags (fail-closed)")
 				return
+			}
+			if tok.text == "--" {
+				endOptions = true
+				continue
+			}
+			if endOptions {
+				continue
 			}
 			if tok.text == "--hard" {
 				c.decide("git reset --hard")
@@ -1289,13 +1311,17 @@ func (c *collector) matchGit(args []wordTok) {
 			}
 		}
 	case "clean":
-		force, dirs := false, false
+		force, dirs, endOptions := false, false, false
 		for _, tok := range rest {
 			if tok.dynamic {
 				c.decide("git clean with unresolvable flags (fail-closed)")
 				return
 			}
-			if !strings.HasPrefix(tok.text, "-") || tok.text == "--" {
+			if tok.text == "--" {
+				endOptions = true
+				continue
+			}
+			if endOptions || !strings.HasPrefix(tok.text, "-") {
 				continue
 			}
 			if tok.text == "--force" {
@@ -1309,7 +1335,7 @@ func (c *collector) matchGit(args []wordTok) {
 				switch r {
 				case 'f':
 					force = true
-				case 'd', 'x':
+				case 'd':
 					dirs = true
 				}
 			}
@@ -1344,10 +1370,18 @@ func (c *collector) matchDocker(args []wordTok) {
 	if !isRm {
 		return
 	}
+	endOptions := false
 	for _, tok := range rest {
 		if tok.dynamic {
 			c.decide("docker rm with unresolvable flags (fail-closed)")
 			return
+		}
+		if tok.text == "--" {
+			endOptions = true
+			continue
+		}
+		if endOptions {
+			continue
 		}
 		if tok.text == "--force" {
 			c.decide("docker rm --force")
@@ -1376,7 +1410,8 @@ func indexOfToken(args []wordTok, text string) int {
 func (c *collector) matchFind(args []wordTok) {
 	for i, tok := range args[1:] {
 		if tok.dynamic {
-			continue
+			c.decide("find with a dynamic expression (fail-closed)")
+			return
 		}
 		if tok.text == "-delete" {
 			c.decide("find -delete")

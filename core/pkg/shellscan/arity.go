@@ -16,6 +16,8 @@
 // arity-aware prefix instead of matching needles against the raw string.
 package shellscan
 
+import "strings"
+
 // arity maps a command prefix to how many leading tokens constitute the
 // "human-meaningful command". Flags never count as tokens; only subcommands
 // do. Longest matching prefix wins. Ported from opencode
@@ -169,6 +171,27 @@ var arity = map[string]int{
 func Prefix(tokens []string) string {
 	if len(tokens) == 0 {
 		return ""
+	}
+	if tokens[0] == "git" {
+		filtered := []string{"git"}
+		for i := 1; i < len(tokens); i++ {
+			token := tokens[i]
+			if token == "--" {
+				continue
+			}
+			if strings.HasPrefix(token, "-") {
+				name := token
+				if idx := strings.IndexByte(name, '='); idx >= 0 {
+					name = name[:idx]
+				}
+				if gitValueFlags[name] && !strings.Contains(token, "=") {
+					i++
+				}
+				continue
+			}
+			filtered = append(filtered, token)
+		}
+		tokens = filtered
 	}
 	for length := len(tokens); length > 1; length-- {
 		key := joinTokens(tokens[:length])

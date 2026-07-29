@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
@@ -300,8 +301,8 @@ func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 func TestHookPreToolDeniesEvasiveBashViaASTClassifier(t *testing.T) {
 	tmp := t.TempDir()
 	restoreHookClock(t)
-	// None of these hit the legacy needle list; the AST classifier must
-	// route them through the signed decision path, which denies by default.
+	// This matrix covers both legacy-needle parity and AST-only evasions; all
+	// must route through the signed decision path and deny by default.
 	evasive := []string{
 		"rm -r -f /tmp/helm-evasion",               // split flags
 		"sudo rm -rf /var/lib/helm-evasion",        // privilege wrapper
@@ -336,6 +337,20 @@ func TestHookPreToolDeniesEvasiveBashViaASTClassifier(t *testing.T) {
 	}
 	if receipts := globReceipts(t, tmp); len(receipts) != len(evasive) {
 		t.Fatalf("receipts = %d, want %d (one signed receipt per denied evasion)", len(receipts), len(evasive))
+	}
+}
+
+func TestShellscanReceiptMetadataPreservesAuditSignals(t *testing.T) {
+	scan := shellscan.Classify("sudo rm -r -f /tmp/x")
+	metadata := shellscanReceiptMetadata(scan)
+	if metadata["shellscan.parse_ok"] != "true" {
+		t.Fatalf("parse metadata = %q", metadata["shellscan.parse_ok"])
+	}
+	if metadata["shellscan.signals"] == "" {
+		t.Fatal("signals metadata missing")
+	}
+	if !strings.Contains(metadata["shellscan.commands"], "rm via sudo") {
+		t.Fatalf("wrapper chain missing from %q", metadata["shellscan.commands"])
 	}
 }
 

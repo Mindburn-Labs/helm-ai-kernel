@@ -1,0 +1,24 @@
+name: Docs Truth
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  docs-truth:
+    name: docs-truth
+    # Scoped to this job, not the workflow: only the reusable's orphan-ledger
+    # step needs it, and a called workflow cannot elevate GITHUB_TOKEN beyond
+    # the caller's grant — without it the run fails at startup.
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: Mindburn-Labs/.github/.github/workflows/docs-truth-public.yml@b9040b9d9585bf035dd5178d7a4dcadbe9e2666e
+    secrets:
+      MINDBURN_ORG_READ_TOKEN: ${{ secrets.MINDBURN_ORG_READ_TOKEN }}

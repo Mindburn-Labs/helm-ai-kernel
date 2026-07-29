@@ -55,6 +55,14 @@ jobs:
             exit 0
           fi
           files="$(git diff --name-only "$BASE"...HEAD)"
+          # A change to this workflow changes the scanner itself; validate the
+          # whole matrix instead of treating it as a docs-only change.
+          if printf '%s\n' "$files" | grep -Fxq ".github/workflows/codeql.yml"; then
+            for k in go javascript-typescript python java-kotlin rust; do
+              echo "$k=true" >> "$GITHUB_OUTPUT"
+            done
+            exit 0
+          fi
           out() {
             if printf '%s\n' "$files" | grep -qE "$2"; then
               echo "$1=true" >> "$GITHUB_OUTPUT"

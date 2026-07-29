@@ -45,19 +45,8 @@ jobs:
           import json
           import os
 
-          if os.path.exists("version-status.json"):
-              with open("version-status.json", "r", encoding="utf-8") as f:
-                  status = json.load(f)
-          else:
-              # Drift script died before writing its status file: report that
-              # instead of crashing the issue step (kept the monitor red 30/31).
-              print("Published version drift was detected, but `check_version_drift.py` "
-                    "exited before writing `version-status.json`.")
-              print()
-              print(f"Workflow run: {os.environ.get('RUN_URL', '')}")
-              print()
-              print("Inspect the `Check published registry lockstep` step log for the underlying error.")
-              raise SystemExit(0)
+          with open("version-status.json", "r", encoding="utf-8") as f:
+              status = json.load(f)
 
           expected = status.get("expected_version", "unknown")
           generated_at = status.get("generated_at", "unknown")

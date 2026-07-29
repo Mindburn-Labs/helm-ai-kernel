@@ -112,6 +112,14 @@ func runWatchSnapshot(client approvalClient, jsonOut bool, stdout, stderr io.Wri
 // resolveWatchAPIKey reads the admin API key from --api-key-file (0600) or the
 // HELM_ADMIN_API_KEY environment variable. Missing key fails closed.
 func resolveWatchAPIKey(apiKeyFile string) (string, error) {
+	return resolveAPIKey(apiKeyFile, watchAdminAPIKeyEnv, "admin")
+}
+
+func resolveServiceAPIKey(apiKeyFile string) (string, error) {
+	return resolveAPIKey(apiKeyFile, serviceAPIKeyEnv, "service")
+}
+
+func resolveAPIKey(apiKeyFile, envName, label string) (string, error) {
 	if strings.TrimSpace(apiKeyFile) != "" {
 		info, err := os.Lstat(apiKeyFile)
 		if err != nil {
@@ -133,9 +141,9 @@ func resolveWatchAPIKey(apiKeyFile string) (string, error) {
 		}
 		return key, nil
 	}
-	key := strings.TrimSpace(os.Getenv(watchAdminAPIKeyEnv))
+	key := strings.TrimSpace(os.Getenv(envName))
 	if key == "" {
-		return "", fmt.Errorf("admin API key is required (set %s or --api-key-file)", watchAdminAPIKeyEnv)
+		return "", fmt.Errorf("%s API key is required (set %s or provide its key file)", label, envName)
 	}
 	return key, nil
 }

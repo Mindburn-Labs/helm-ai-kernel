@@ -1176,6 +1176,12 @@ export interface ApprovalCeremony {
      * @type {string}
      * @memberof ApprovalCeremony
      */
+    binding_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ApprovalCeremony
+     */
     reason?: string;
     /**
      *
@@ -1244,6 +1250,7 @@ export function ApprovalCeremonyFromJSONTyped(json: any, ignoreDiscriminator: bo
         'timelock_until': json['timelock_until'] == null ? undefined : (new Date(json['timelock_until'])),
         'expires_at': json['expires_at'] == null ? undefined : (new Date(json['expires_at'])),
         'break_glass': json['break_glass'] == null ? undefined : json['break_glass'],
+        'binding_hash': json['binding_hash'] == null ? undefined : json['binding_hash'],
         'reason': json['reason'] == null ? undefined : json['reason'],
         'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
         'ceremony_hash': json['ceremony_hash'] == null ? undefined : json['ceremony_hash'],
@@ -1268,6 +1275,7 @@ export function ApprovalCeremonyToJSON(value?: ApprovalCeremony | null): any {
         'timelock_until': value['timelock_until'] == null ? undefined : ((value['timelock_until']).toISOString()),
         'expires_at': value['expires_at'] == null ? undefined : ((value['expires_at']).toISOString()),
         'break_glass': value['break_glass'],
+        'binding_hash': value['binding_hash'],
         'reason': value['reason'],
         'receipt_id': value['receipt_id'],
         'ceremony_hash': value['ceremony_hash'],

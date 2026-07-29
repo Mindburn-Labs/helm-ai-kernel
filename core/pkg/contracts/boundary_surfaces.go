@@ -1,6 +1,8 @@
 package contracts
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -367,4 +369,12 @@ func SurfaceID(prefix, value string) string {
 		normalized = "default"
 	}
 	return prefix + "-" + normalized
+}
+
+func NewSurfaceID(prefix string) (string, error) {
+	var entropy [16]byte
+	if _, err := rand.Read(entropy[:]); err != nil {
+		return "", fmt.Errorf("generate %s id: %w", prefix, err)
+	}
+	return SurfaceID(prefix, hex.EncodeToString(entropy[:])), nil
 }

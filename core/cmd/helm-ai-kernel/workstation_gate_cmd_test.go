@@ -112,7 +112,7 @@ func TestWorkstationGateRequestApprovalCreatesCeremony(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	t.Setenv(watchAdminAPIKeyEnv, "test-key")
+	t.Setenv(serviceAPIKeyEnv, "test-key")
 
 	allowlist := gateTestAllowlist(t, []string{"ls"})
 	code, out, errOut := runGateForTest(t,
@@ -158,19 +158,23 @@ func TestWorkstationGateConsumesExactApprovalOnce(t *testing.T) {
 	}
 	revokeCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == approvalAPIBasePath:
-			_ = json.NewEncoder(w).Encode([]contracts.ApprovalCeremony{approval})
-		case r.Method == http.MethodPost && r.URL.Path == approvalAPIBasePath+"/"+approval.ApprovalID+"/revoke":
-			revokeCount++
-			approval.State = contracts.ApprovalCeremonyRevoked
-			_ = json.NewEncoder(w).Encode(approval)
-		default:
+		if r.Method != http.MethodPost || r.URL.Path != approvalAPIBasePath+"/"+approval.ApprovalID+"/consume" {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["binding_hash"] != approval.BindingHash || approval.State != contracts.ApprovalCeremonyAllowed {
+			http.Error(w, "not approved for binding", http.StatusBadRequest)
+			return
+		}
+		revokeCount++
+		approval.State = contracts.ApprovalCeremonyRevoked
+		_ = json.NewEncoder(w).Encode(approval)
 	}))
 	defer server.Close()
-	t.Setenv(watchAdminAPIKeyEnv, "test-key")
+	t.Setenv(serviceAPIKeyEnv, "test-key")
 
 	allowlist := gateTestAllowlist(t, []string{"ls"})
 	args := []string{
@@ -187,7 +191,7 @@ func TestWorkstationGateConsumesExactApprovalOnce(t *testing.T) {
 	}
 	args[5] = t.TempDir()
 	code, _, errOut = runGateForTest(t, args...)
-	if code != 1 || !strings.Contains(errOut, "not approved") || revokeCount != 1 {
+	if code != 1 || !strings.Contains(errOut, "400") || revokeCount != 1 {
 		t.Fatalf("cross-ledger reuse exit=%d revokes=%d err=%s, want server-side consumed rejection", code, revokeCount, errOut)
 	}
 }
@@ -202,11 +206,17 @@ func TestWorkstationGateRejectsApprovalForDifferentCommand(t *testing.T) {
 		BindingHash: workstation.ShellCommandBindingRef("rm /tmp/safe"),
 		Reason:      "approved; " + workstation.ShellCommandBinding("rm /tmp/safe"),
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode([]contracts.ApprovalCeremony{approval})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["binding_hash"] != approval.BindingHash {
+			http.Error(w, "wrong binding", http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(approval)
 	}))
 	defer server.Close()
-	t.Setenv(watchAdminAPIKeyEnv, "test-key")
+	t.Setenv(serviceAPIKeyEnv, "test-key")
 
 	code, _, errOut := runGateForTest(t,
 		"--profile", "dev",
@@ -216,13 +226,13 @@ func TestWorkstationGateRejectsApprovalForDifferentCommand(t *testing.T) {
 		"--url", server.URL,
 		"--command", "rm /etc/passwd",
 	)
-	if code != 1 || !strings.Contains(errOut, "different command") {
+	if code != 1 || !strings.Contains(errOut, "400") {
 		t.Fatalf("exit = %d err=%s, want command-binding rejection", code, errOut)
 	}
 }
 
 func TestWorkstationGateRequestApprovalServerDown(t *testing.T) {
-	t.Setenv(watchAdminAPIKeyEnv, "test-key")
+	t.Setenv(serviceAPIKeyEnv, "test-key")
 	allowlist := gateTestAllowlist(t, []string{"ls"})
 	code, _, errOut := runGateForTest(t,
 		"--profile", "dev",

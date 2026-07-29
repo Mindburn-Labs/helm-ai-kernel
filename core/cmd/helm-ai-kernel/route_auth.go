@@ -57,6 +57,30 @@ func protectRuntimeHandler(auth RouteAuth, handler http.HandlerFunc) http.Handle
 	}
 }
 
+func protectApprovalCollectionHandler(handler http.HandlerFunc) http.HandlerFunc {
+	admin := requireRuntimeAdmin(handler)
+	service := requireRuntimeService(handler)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			service(w, r)
+			return
+		}
+		admin(w, r)
+	}
+}
+
+func protectApprovalItemHandler(handler http.HandlerFunc) http.HandlerFunc {
+	admin := requireRuntimeAdmin(handler)
+	service := requireRuntimeService(handler)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/consume") {
+			service(w, r)
+			return
+		}
+		admin(w, r)
+	}
+}
+
 func requireRuntimeAdmin(handler http.HandlerFunc) http.HandlerFunc {
 	adminKey := os.Getenv(helmauth.AdminAPIKeyEnv)
 	return func(w http.ResponseWriter, r *http.Request) {

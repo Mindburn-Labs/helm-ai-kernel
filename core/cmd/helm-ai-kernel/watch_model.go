@@ -24,6 +24,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
 type approvalsFetchedMsg struct {
@@ -296,9 +297,18 @@ func formatApprovalRow(item contracts.ApprovalCeremony, now time.Time) string {
 	if strings.TrimSpace(item.Reason) != "" {
 		reason = fmt.Sprintf("  reason %q", terminalSafe(item.Reason))
 	}
-	return fmt.Sprintf("%s  %s:%s  by %s  age %s%s%s",
+	binding := ""
+	if item.BindingHash != "" {
+		binding = "  binding " + terminalSafe(item.BindingHash)
+		if item.Subject == workstation.ShellGateApprovalSubject &&
+			item.Action == workstation.ShellGateApprovalAction &&
+			!workstation.ApprovalReasonMatchesBinding(item.Reason, item.BindingHash) {
+			binding += " [reason/binding mismatch]"
+		}
+	}
+	return fmt.Sprintf("%s  %s:%s  by %s  age %s%s%s%s",
 		terminalSafe(item.ApprovalID), terminalSafe(item.Subject), terminalSafe(item.Action),
-		terminalSafe(item.RequestedBy), age, suffix, reason)
+		terminalSafe(item.RequestedBy), age, suffix, binding, reason)
 }
 
 // terminalSafe strips terminal control and Unicode format characters from

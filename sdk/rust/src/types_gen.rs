@@ -494,6 +494,8 @@ pub struct ApprovalCeremony {
     pub expires_at: Option<String>,
     #[serde(rename = "break_glass", skip_serializing_if = "Option::is_none")]
     pub break_glass: Option<bool>,
+    #[serde(rename = "binding_hash", skip_serializing_if = "Option::is_none")]
+    pub binding_hash: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     #[serde(rename = "receipt_id", skip_serializing_if = "Option::is_none")]
@@ -519,6 +521,7 @@ impl ApprovalCeremony {
             timelock_until: None,
             expires_at: None,
             break_glass: None,
+            binding_hash: None,
             reason: None,
             receipt_id: None,
             ceremony_hash: None,

@@ -3647,7 +3647,7 @@ paths:
       tags: [identity]
       summary: Create an approval ceremony
       security:
-        - AdminBearerAuth: []
+        - ServiceBearerAuth: []
       requestBody:
         content:
           application/json:
@@ -6147,6 +6147,7 @@ components:
         timelock_until: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
         break_glass: { type: boolean }
+        binding_hash: { type: string }
         reason: { type: string }
         receipt_id: { type: string }
         ceremony_hash: { type: string }

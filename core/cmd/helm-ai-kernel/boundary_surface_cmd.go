@@ -449,6 +449,11 @@ func runApprovalsCreate(args []string, registry *boundarypkg.SurfaceRegistry, st
 		fmt.Fprintln(stderr, "Error: --subject and --action are required")
 		return 2
 	}
+	approvalID, err := contracts.NewSurfaceID("approval")
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
 	now := time.Now().UTC()
 	var timelock time.Time
 	if *timelockMs > 0 {
@@ -459,7 +464,7 @@ func runApprovalsCreate(args []string, registry *boundarypkg.SurfaceRegistry, st
 		expiresAt = now.Add(time.Duration(*expiresInMs) * time.Millisecond)
 	}
 	approval, err := registry.PutApproval(contracts.ApprovalCeremony{
-		ApprovalID:    contracts.SurfaceID("approval", *subject+"-"+*action),
+		ApprovalID:    approvalID,
 		Subject:       *subject,
 		Action:        *action,
 		State:         contracts.ApprovalCeremonyPending,

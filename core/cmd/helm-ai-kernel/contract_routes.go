@@ -25,6 +25,7 @@ import (
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
 const (
@@ -1130,7 +1131,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, snapshot)
 	}))
 
-	mux.HandleFunc("/api/v1/approvals", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/approvals", protectApprovalCollectionHandler(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			writeContractJSON(w, http.StatusOK, surfaces.ListApprovals())
@@ -1154,7 +1155,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 			if req.ApprovalID == "" {
-				req.ApprovalID = contracts.SurfaceID("approval", req.Subject+"-"+req.Action)
+				var err error
+				req.ApprovalID, err = contracts.NewSurfaceID("approval")
+				if err != nil {
+					api.WriteInternal(w, err)
+					return
+				}
 			}
 			now := time.Now().UTC()
 			var timelock time.Time
@@ -1192,7 +1198,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 	}))
 
-	mux.HandleFunc("/api/v1/approvals/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/approvals/", protectApprovalItemHandler(func(w http.ResponseWriter, r *http.Request) {
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/approvals/")
 		approvalID, action, ok := strings.Cut(suffix, "/")
 		if !ok || approvalID == "" {
@@ -1201,6 +1207,51 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
+			return
+		}
+		if action == "consume" {
+			var req struct {
+				BindingHash string `json:"binding_hash"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.BindingHash) == "" {
+				api.WriteBadRequest(w, "binding_hash is required")
+				return
+			}
+			var matched *contracts.ApprovalCeremony
+			for _, approval := range surfaces.ListApprovals() {
+				if approval.ApprovalID == approvalID {
+					copy := approval
+					matched = &copy
+					break
+				}
+			}
+			if matched == nil {
+				api.WriteNotFound(w, "approval not found")
+				return
+			}
+			if matched.State != contracts.ApprovalCeremonyAllowed ||
+				matched.Subject != workstation.ShellGateApprovalSubject ||
+				matched.Action != workstation.ShellGateApprovalAction ||
+				matched.BindingHash != req.BindingHash {
+				api.WriteBadRequest(w, "approval is not an approved shell command with this binding")
+				return
+			}
+			if !matched.ExpiresAt.IsZero() && !time.Now().Before(matched.ExpiresAt) {
+				api.WriteBadRequest(w, "approval is expired")
+				return
+			}
+			approval, err := surfaces.TransitionApproval(
+				approvalID,
+				contracts.ApprovalCeremonyRevoked,
+				servicePrincipalID,
+				"",
+				"consumed by workstation shell gate",
+			)
+			if err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
+			writeContractJSON(w, http.StatusOK, approval)
 			return
 		}
 		if action == "webauthn/challenge" {

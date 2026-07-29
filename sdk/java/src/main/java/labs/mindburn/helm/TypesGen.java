@@ -3717,6 +3717,7 @@ public static class AgentIdentityProfile {
   ApprovalCeremony.JSON_PROPERTY_TIMELOCK_UNTIL,
   ApprovalCeremony.JSON_PROPERTY_EXPIRES_AT,
   ApprovalCeremony.JSON_PROPERTY_BREAK_GLASS,
+  ApprovalCeremony.JSON_PROPERTY_BINDING_HASH,
   ApprovalCeremony.JSON_PROPERTY_REASON,
   ApprovalCeremony.JSON_PROPERTY_RECEIPT_ID,
   ApprovalCeremony.JSON_PROPERTY_CEREMONY_HASH,
@@ -3795,6 +3796,9 @@ public static class ApprovalCeremony {
 
   public static final String JSON_PROPERTY_BREAK_GLASS = "break_glass";
   private Boolean breakGlass;
+
+  public static final String JSON_PROPERTY_BINDING_HASH = "binding_hash";
+  private String bindingHash;
 
   public static final String JSON_PROPERTY_REASON = "reason";
   private String reason;
@@ -4072,6 +4076,31 @@ public static class ApprovalCeremony {
   }
 
 
+  public ApprovalCeremony bindingHash(String bindingHash) {
+    this.bindingHash = bindingHash;
+    return this;
+  }
+
+   /**
+   * Get bindingHash
+   * @return bindingHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_BINDING_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getBindingHash() {
+    return bindingHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_BINDING_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setBindingHash(String bindingHash) {
+    this.bindingHash = bindingHash;
+  }
+
+
   public ApprovalCeremony reason(String reason) {
     this.reason = reason;
     return this;
@@ -4219,6 +4248,7 @@ public static class ApprovalCeremony {
         Objects.equals(this.timelockUntil, approvalCeremony.timelockUntil) &&
         Objects.equals(this.expiresAt, approvalCeremony.expiresAt) &&
         Objects.equals(this.breakGlass, approvalCeremony.breakGlass) &&
+        Objects.equals(this.bindingHash, approvalCeremony.bindingHash) &&
         Objects.equals(this.reason, approvalCeremony.reason) &&
         Objects.equals(this.receiptId, approvalCeremony.receiptId) &&
         Objects.equals(this.ceremonyHash, approvalCeremony.ceremonyHash) &&
@@ -4228,7 +4258,7 @@ public static class ApprovalCeremony {
 
   @Override
   public int hashCode() {
-    return Objects.hash(approvalId, subject, action, state, requestedBy, approvers, quorum, timelockUntil, expiresAt, breakGlass, reason, receiptId, ceremonyHash, createdAt, updatedAt);
+    return Objects.hash(approvalId, subject, action, state, requestedBy, approvers, quorum, timelockUntil, expiresAt, breakGlass, bindingHash, reason, receiptId, ceremonyHash, createdAt, updatedAt);
   }
 
   @Override
@@ -4245,6 +4275,7 @@ public static class ApprovalCeremony {
     sb.append("    timelockUntil: ").append(toIndentedString(timelockUntil)).append("\n");
     sb.append("    expiresAt: ").append(toIndentedString(expiresAt)).append("\n");
     sb.append("    breakGlass: ").append(toIndentedString(breakGlass)).append("\n");
+    sb.append("    bindingHash: ").append(toIndentedString(bindingHash)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
     sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
     sb.append("    ceremonyHash: ").append(toIndentedString(ceremonyHash)).append("\n");
@@ -4349,6 +4380,11 @@ public static class ApprovalCeremony {
     // add `break_glass` to the URL query string
     if (getBreakGlass() != null) {
       joiner.add(String.format("%sbreak_glass%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getBreakGlass()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `binding_hash` to the URL query string
+    if (getBindingHash() != null) {
+      joiner.add(String.format("%sbinding_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getBindingHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `reason` to the URL query string

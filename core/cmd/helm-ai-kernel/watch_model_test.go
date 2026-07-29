@@ -259,12 +259,13 @@ func TestWatchModelView(t *testing.T) {
 	client := &fakeApprovalClient{}
 	m := newWatchModel(client, "operator.cli", time.Second)
 	item := pendingCeremony("ap-1", time.Now().Add(-time.Minute))
+	item.BindingHash = "sha256:command-one"
 	item.Reason = `blocked command "rm /tmp/x"`
 	m, _ = updateModel(t, m, approvalsFetchedMsg{items: []contracts.ApprovalCeremony{
 		item,
 	}})
 	view := m.View()
-	for _, want := range []string{"ap-1", "a approve", "d deny", "q quit", "shell_command", "rm /tmp/x"} {
+	for _, want := range []string{"ap-1", "a approve", "d deny", "q quit", "shell_command", "rm /tmp/x", "sha256:command-one", "reason/binding mismatch"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}

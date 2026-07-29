@@ -356,7 +356,7 @@ func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
 	registerContractRoutes(mux, svc)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(`{"approval_id":"approval-webauthn","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1}`))
-	authorizeTestRequest(createReq)
+	authorizeServiceTestRequest(createReq)
 	createRec := httptest.NewRecorder()
 	mux.ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -392,6 +392,88 @@ func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
 	}
 	if approval["state"] != "approved" || approval["auth_method"] != "passkey" {
 		t.Fatalf("approval did not bind passkey assertion: %+v", approval)
+	}
+}
+
+func TestApprovalRoutesSplitRequestApprovalAndConsumptionAuthority(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	payload := `{"subject":"shell_command","action":"shell_operate","requested_by":"agent.local","quorum":1,"binding_hash":"sha256:exact-command","reason":"shellgate-binding=sha256:exact-command"}`
+	adminCreate := httptest.NewRequest(http.MethodPost, approvalAPIBasePath, strings.NewReader(payload))
+	authorizeTestRequest(adminCreate)
+	adminCreateRec := httptest.NewRecorder()
+	mux.ServeHTTP(adminCreateRec, adminCreate)
+	if adminCreateRec.Code != http.StatusUnauthorized {
+		t.Fatalf("admin credential created requester ceremony: status=%d body=%s", adminCreateRec.Code, adminCreateRec.Body.String())
+	}
+
+	ids := make([]string, 0, 2)
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, approvalAPIBasePath, strings.NewReader(payload))
+		authorizeServiceTestRequest(req)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("service create %d status=%d body=%s", i, rec.Code, rec.Body.String())
+		}
+		var approval contracts.ApprovalCeremony
+		if err := json.NewDecoder(rec.Body).Decode(&approval); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, approval.ApprovalID)
+	}
+	if ids[0] == ids[1] {
+		t.Fatalf("missing approval ids collided: %q", ids[0])
+	}
+	duplicatePayload := strings.Replace(payload, `"subject":"shell_command"`, `"approval_id":"`+ids[0]+`","subject":"shell_command"`, 1)
+	duplicate := httptest.NewRequest(http.MethodPost, approvalAPIBasePath, strings.NewReader(duplicatePayload))
+	authorizeServiceTestRequest(duplicate)
+	duplicateRec := httptest.NewRecorder()
+	mux.ServeHTTP(duplicateRec, duplicate)
+	if duplicateRec.Code != http.StatusBadRequest {
+		t.Fatalf("explicit duplicate overwrote ceremony: status=%d body=%s", duplicateRec.Code, duplicateRec.Body.String())
+	}
+
+	serviceApprove := httptest.NewRequest(http.MethodPost, approvalAPIBasePath+"/"+ids[0]+"/approve", strings.NewReader(`{"actor":"operator.cli"}`))
+	authorizeServiceTestRequest(serviceApprove)
+	serviceApproveRec := httptest.NewRecorder()
+	mux.ServeHTTP(serviceApproveRec, serviceApprove)
+	if serviceApproveRec.Code != http.StatusUnauthorized {
+		t.Fatalf("request credential approved ceremony: status=%d body=%s", serviceApproveRec.Code, serviceApproveRec.Body.String())
+	}
+
+	adminApprove := httptest.NewRequest(http.MethodPost, approvalAPIBasePath+"/"+ids[0]+"/approve", strings.NewReader(`{"actor":"operator.cli"}`))
+	authorizeTestRequest(adminApprove)
+	adminApproveRec := httptest.NewRecorder()
+	mux.ServeHTTP(adminApproveRec, adminApprove)
+	if adminApproveRec.Code != http.StatusOK {
+		t.Fatalf("admin approve status=%d body=%s", adminApproveRec.Code, adminApproveRec.Body.String())
+	}
+
+	wrongConsume := httptest.NewRequest(http.MethodPost, approvalAPIBasePath+"/"+ids[0]+"/consume", strings.NewReader(`{"binding_hash":"sha256:other-command"}`))
+	authorizeServiceTestRequest(wrongConsume)
+	wrongConsumeRec := httptest.NewRecorder()
+	mux.ServeHTTP(wrongConsumeRec, wrongConsume)
+	if wrongConsumeRec.Code != http.StatusBadRequest {
+		t.Fatalf("wrong binding consume status=%d body=%s", wrongConsumeRec.Code, wrongConsumeRec.Body.String())
+	}
+
+	consume := httptest.NewRequest(http.MethodPost, approvalAPIBasePath+"/"+ids[0]+"/consume", strings.NewReader(`{"binding_hash":"sha256:exact-command"}`))
+	authorizeServiceTestRequest(consume)
+	consumeRec := httptest.NewRecorder()
+	mux.ServeHTTP(consumeRec, consume)
+	if consumeRec.Code != http.StatusOK {
+		t.Fatalf("exact binding consume status=%d body=%s", consumeRec.Code, consumeRec.Body.String())
+	}
+	replayConsume := httptest.NewRequest(http.MethodPost, approvalAPIBasePath+"/"+ids[0]+"/consume", strings.NewReader(`{"binding_hash":"sha256:exact-command"}`))
+	authorizeServiceTestRequest(replayConsume)
+	replayConsumeRec := httptest.NewRecorder()
+	mux.ServeHTTP(replayConsumeRec, replayConsume)
+	if replayConsumeRec.Code != http.StatusBadRequest {
+		t.Fatalf("approval consumed twice: status=%d body=%s", replayConsumeRec.Code, replayConsumeRec.Body.String())
 	}
 }
 
@@ -524,6 +606,7 @@ func TestReceiptListReturnsCursorPagination(t *testing.T) {
 func newContractRouteTestServices(t *testing.T) (*Services, func()) {
 	t.Helper()
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(serviceAPIKeyEnv, "test-service-key")
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -591,6 +674,10 @@ func authorizeTestRequest(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, defaultRuntimeTenantID)
 	req.Header.Set(principalHeader, "system-admin")
+}
+
+func authorizeServiceTestRequest(req *http.Request) {
+	req.Header.Set("Authorization", "Bearer test-service-key")
 }
 
 type overflowReceiptStore struct {

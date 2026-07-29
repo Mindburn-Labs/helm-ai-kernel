@@ -137,7 +137,7 @@ func TestGateShellCommandProfiles(t *testing.T) {
 }
 
 func TestGateShellCommandDetectsQuotedRedirectAndYQInPlace(t *testing.T) {
-	for _, command := range []string{`cat input > "/tmp/out"`, `yq -i '.x = 1' config.yaml`, `yq --in-place '.x = 1' config.yaml`} {
+	for _, command := range []string{`cat input > "/tmp/out"`, `cat input >&/tmp/out`, `yq -i '.x = 1' config.yaml`, `yq --in-place '.x = 1' config.yaml`} {
 		decision := GateShellCommand(ShellGateProfileProduction, command, []string{"cat", "yq"})
 		if decision.Verdict != ShellGateVerdictDeny || len(decision.WriteTargets) == 0 {
 			t.Fatalf("GateShellCommand(%q) = %+v, want detected write denial", command, decision)
@@ -145,6 +145,11 @@ func TestGateShellCommandDetectsQuotedRedirectAndYQInPlace(t *testing.T) {
 	}
 	if got := ExtractWriteTargets(`echo "a > b"`); got != nil {
 		t.Fatalf("operator inside quoted text produced targets %v", got)
+	}
+	for _, command := range []string{`cat input 2>&1`, `cat input >&2`, `cat input 2>&-`} {
+		if got := ExtractWriteTargets(command); got != nil {
+			t.Fatalf("descriptor duplication %q produced write targets %v", command, got)
+		}
 	}
 }
 
@@ -192,6 +197,12 @@ func TestShellAllowlistStoreSeedsDefaults(t *testing.T) {
 func TestDefaultShellAllowlistExcludesYQ(t *testing.T) {
 	if containsString(DefaultShellAllowlist, "yq") {
 		t.Fatal("default allowlist must exclude yq because it can edit files in place")
+	}
+}
+
+func TestDefaultShellAllowlistExcludesMutatingDate(t *testing.T) {
+	if containsString(DefaultShellAllowlist, "date") {
+		t.Fatal("default allowlist must exclude date because --set mutates the system clock")
 	}
 }
 

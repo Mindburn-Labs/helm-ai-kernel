@@ -248,8 +248,8 @@ func ExtractWriteTargets(command string) []string {
 }
 
 // redirectionTargets scans for `>` / `>>` / `>|` output redirections. An
-// optional fd prefix (`2>`, `&>`) is part of the operator; `>&` (fd
-// duplication such as `2>&1`) is not a file write and is skipped.
+// optional fd prefix (`2>`, `&>`) is part of the operator. `>&1` duplicates a
+// descriptor and is skipped; `>&file` redirects both streams and is a write.
 func redirectionTargets(line string) []string {
 	var targets []string
 	var quote byte
@@ -279,9 +279,12 @@ func redirectionTargets(line string) []string {
 		if j < len(line) && line[j] == '|' { // noclobber override: >|
 			j++
 		}
-		if j < len(line) && line[j] == '&' { // fd duplication: 2>&1
-			i = j
-			continue
+		if j < len(line) && line[j] == '&' {
+			j++
+			if j < len(line) && ((line[j] >= '0' && line[j] <= '9') || line[j] == '-') {
+				i = j // fd duplication/closure: 2>&1 or 2>&-
+				continue
+			}
 		}
 		for j < len(line) && (line[j] == ' ' || line[j] == '\t') {
 			j++

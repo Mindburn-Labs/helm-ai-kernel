@@ -30,7 +30,6 @@ import (
 // defeats the gate. Operators who need them add them explicitly.
 var DefaultShellAllowlist = []string{
 	"cat",
-	"date",
 	"grep",
 	"jq",
 	"ls",

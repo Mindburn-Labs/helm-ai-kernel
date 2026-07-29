@@ -466,6 +466,18 @@ func (r *SurfaceRegistry) ListCheckpoints() []contracts.BoundaryCheckpoint {
 func (r *SurfaceRegistry) PutApproval(approval contracts.ApprovalCeremony) (contracts.ApprovalCeremony, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, exists := r.approvals[approval.ApprovalID]; exists {
+		return contracts.ApprovalCeremony{}, fmt.Errorf("approval %q already exists", approval.ApprovalID)
+	}
+	return r.putApprovalLocked(approval)
+}
+
+func (r *SurfaceRegistry) updateApproval(approval contracts.ApprovalCeremony) (contracts.ApprovalCeremony, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.approvals[approval.ApprovalID]; !exists {
+		return contracts.ApprovalCeremony{}, fmt.Errorf("approval %q not found", approval.ApprovalID)
+	}
 	return r.putApprovalLocked(approval)
 }
 
@@ -651,7 +663,7 @@ func (r *SurfaceRegistry) AssertApprovalChallenge(assertion contracts.ApprovalWe
 	approval.ChallengeID = challenge.ChallengeID
 	approval.ChallengeHash = challenge.ChallengeHash
 	approval.AssertionHash = "sha256:" + assertionHash
-	sealed, err := r.PutApproval(approval)
+	sealed, err := r.updateApproval(approval)
 	if err != nil {
 		return contracts.ApprovalCeremony{}, err
 	}

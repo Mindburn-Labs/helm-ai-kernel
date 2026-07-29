@@ -128,6 +128,18 @@ func (c *approvalHTTPClient) CreateApproval(ctx context.Context, req createAppro
 	return ceremony, nil
 }
 
+func (c *approvalHTTPClient) ConsumeApproval(ctx context.Context, approvalID, bindingHash string) (contracts.ApprovalCeremony, error) {
+	if strings.TrimSpace(bindingHash) == "" {
+		return contracts.ApprovalCeremony{}, errors.New("approval binding_hash is required")
+	}
+	var ceremony contracts.ApprovalCeremony
+	path := approvalAPIBasePath + "/" + url.PathEscape(approvalID) + "/consume"
+	if err := c.do(ctx, http.MethodPost, path, map[string]string{"binding_hash": bindingHash}, &ceremony); err != nil {
+		return contracts.ApprovalCeremony{}, err
+	}
+	return ceremony, nil
+}
+
 func (c *approvalHTTPClient) do(ctx context.Context, method, path string, body, out any) error {
 	if c.apiKey == "" {
 		return errApprovalAPIKeyMissing

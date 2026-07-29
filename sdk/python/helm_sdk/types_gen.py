@@ -1006,12 +1006,13 @@ class ApprovalCeremony(BaseModel):
     timelock_until: Optional[datetime] = None
     expires_at: Optional[datetime] = None
     break_glass: Optional[StrictBool] = None
+    binding_hash: Optional[StrictStr] = None
     reason: Optional[StrictStr] = None
     receipt_id: Optional[StrictStr] = None
     ceremony_hash: Optional[StrictStr] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    __properties: ClassVar[List[str]] = ["approval_id", "subject", "action", "state", "requested_by", "approvers", "quorum", "timelock_until", "expires_at", "break_glass", "reason", "receipt_id", "ceremony_hash", "created_at", "updated_at"]
+    __properties: ClassVar[List[str]] = ["approval_id", "subject", "action", "state", "requested_by", "approvers", "quorum", "timelock_until", "expires_at", "break_glass", "binding_hash", "reason", "receipt_id", "ceremony_hash", "created_at", "updated_at"]
 
     @field_validator('state')
     def state_validate_enum(cls, value):
@@ -1084,6 +1085,7 @@ class ApprovalCeremony(BaseModel):
             "timelock_until": obj.get("timelock_until"),
             "expires_at": obj.get("expires_at"),
             "break_glass": obj.get("break_glass"),
+            "binding_hash": obj.get("binding_hash"),
             "reason": obj.get("reason"),
             "receipt_id": obj.get("receipt_id"),
             "ceremony_hash": obj.get("ceremony_hash"),

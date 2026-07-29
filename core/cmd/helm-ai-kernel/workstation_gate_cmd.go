@@ -26,7 +26,7 @@ const (
 func runWorkstationGateCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("workstation gate", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var profileRaw, command, allowlistPath, dataDir, apiKeyFile, approvalID string
+	var profileRaw, command, allowlistPath, dataDir, serviceKeyFile, approvalID string
 	var jsonOut, requestApproval bool
 	var rawURL, actor string
 	cmd.StringVar(&profileRaw, "profile", string(workstation.ShellGateProfileProduction), "Gate profile: dev escalates blocked commands to pending approvals; anything else is production (deny, fail-closed)")
@@ -37,7 +37,7 @@ func runWorkstationGateCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&requestApproval, "request-approval", false, "On a pending_approval verdict, create the approval ceremony on the kernel server")
 	cmd.StringVar(&rawURL, "url", "", "Kernel server URL for --request-approval (default $HELM_KERNEL_URL or "+defaultWatchURL+")")
 	cmd.StringVar(&actor, "actor", "agent.local", "Requesting actor recorded on the approval (must differ from the approving watch actor)")
-	cmd.StringVar(&apiKeyFile, "api-key-file", "", "Path to a 0600 admin API key file (default $HELM_ADMIN_API_KEY)")
+	cmd.StringVar(&serviceKeyFile, "service-key-file", "", "Path to a 0600 service API key file (default $HELM_SERVICE_API_KEY; never use an admin key)")
 	cmd.StringVar(&approvalID, "approval-id", "", "Consume this approved, command-bound ceremony to allow a pending dev command")
 	if err := cmd.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -64,7 +64,7 @@ func runWorkstationGateCmd(args []string, stdout, stderr io.Writer) int {
 			_, _ = fmt.Fprintln(stderr, "Error: --approval-id is valid only for a pending dev-profile command")
 			return 2
 		}
-		if err := consumeShellGateApproval(decision, approvalID, rawURL, apiKeyFile); err != nil {
+		if err := consumeShellGateApproval(decision, approvalID, rawURL, serviceKeyFile); err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: approval cannot authorize command: %v\n", err)
 			return 1
 		}
@@ -86,7 +86,7 @@ func runWorkstationGateCmd(args []string, stdout, stderr io.Writer) int {
 		if !requestApproval {
 			return exitGatePendingApproval
 		}
-		if err := requestShellGateApproval(decision, rawURL, apiKeyFile, actor, stdout); err != nil {
+		if err := requestShellGateApproval(decision, rawURL, serviceKeyFile, actor, stdout); err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: approval request failed: %v\n", err)
 			return 1
 		}
@@ -113,22 +113,22 @@ func printGateDecision(stdout io.Writer, decision workstation.ShellGateDecision,
 
 // requestShellGateApproval turns a pending_approval verdict into an approval
 // ceremony on the kernel server, so `watch` can drain it.
-func shellGateApprovalClient(rawURL, apiKeyFile string) (*approvalHTTPClient, error) {
+func shellGateApprovalClient(rawURL, serviceKeyFile string) (*approvalHTTPClient, error) {
 	if strings.TrimSpace(rawURL) == "" {
 		rawURL = strings.TrimSpace(os.Getenv(watchURLEnv))
 	}
 	if rawURL == "" {
 		rawURL = defaultWatchURL
 	}
-	apiKey, err := resolveWatchAPIKey(apiKeyFile)
+	apiKey, err := resolveServiceAPIKey(serviceKeyFile)
 	if err != nil {
 		return nil, err
 	}
 	return newApprovalHTTPClient(rawURL, apiKey)
 }
 
-func requestShellGateApproval(decision workstation.ShellGateDecision, rawURL, apiKeyFile, actor string, stdout io.Writer) error {
-	client, err := shellGateApprovalClient(rawURL, apiKeyFile)
+func requestShellGateApproval(decision workstation.ShellGateDecision, rawURL, serviceKeyFile, actor string, stdout io.Writer) error {
+	client, err := shellGateApprovalClient(rawURL, serviceKeyFile)
 	if err != nil {
 		return err
 	}
@@ -150,38 +150,19 @@ func requestShellGateApproval(decision workstation.ShellGateDecision, rawURL, ap
 	return nil
 }
 
-func consumeShellGateApproval(decision workstation.ShellGateDecision, approvalID, rawURL, apiKeyFile string) error {
-	client, err := shellGateApprovalClient(rawURL, apiKeyFile)
+func consumeShellGateApproval(decision workstation.ShellGateDecision, approvalID, rawURL, serviceKeyFile string) error {
+	client, err := shellGateApprovalClient(rawURL, serviceKeyFile)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	approvals, err := client.ListApprovals(ctx)
+	approval, err := client.ConsumeApproval(ctx, approvalID, workstation.ShellCommandBindingRef(decision.Command))
 	if err != nil {
-		return err
+		return fmt.Errorf("consume approval %s: %w", approvalID, err)
 	}
-	for _, approval := range approvals {
-		if approval.ApprovalID != approvalID {
-			continue
-		}
-		if approval.State != contracts.ApprovalCeremonyAllowed {
-			return fmt.Errorf("approval %s is %s, not approved", approvalID, approval.State)
-		}
-		if approval.Subject != workstation.ShellGateApprovalSubject || approval.Action != workstation.ShellGateApprovalAction {
-			return fmt.Errorf("approval %s has wrong subject/action", approvalID)
-		}
-		if !approval.ExpiresAt.IsZero() && time.Now().After(approval.ExpiresAt) {
-			return fmt.Errorf("approval %s is expired", approvalID)
-		}
-		if !workstation.ApprovalBindsToCommand(approval.BindingHash, decision.Command) {
-			return fmt.Errorf("approval %s is bound to a different command", approvalID)
-		}
-		_, err := client.TransitionApproval(ctx, approvalID, "revoke", "workstation.shellgate", "consumed by workstation shell gate")
-		if err != nil {
-			return fmt.Errorf("consume approval %s: %w", approvalID, err)
-		}
-		return nil
+	if approval.State != contracts.ApprovalCeremonyRevoked {
+		return fmt.Errorf("consume approval %s returned state %s", approvalID, approval.State)
 	}
-	return fmt.Errorf("approval %s not found", approvalID)
+	return nil
 }

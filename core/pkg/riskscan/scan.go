@@ -266,9 +266,20 @@ func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enab
 			continue
 		}
 		install := installs[0]
-		for _, candidate := range installs[1:] {
-			if candidate.LastUpdated > install.LastUpdated {
-				install = candidate
+		if len(installs) > 1 {
+			latestUpdated, err := time.Parse(time.RFC3339Nano, install.LastUpdated)
+			if err != nil {
+				return scanCoverageError("enabled plugin inventory is invalid")
+			}
+			for _, candidate := range installs[1:] {
+				candidateUpdated, err := time.Parse(time.RFC3339Nano, candidate.LastUpdated)
+				if err != nil {
+					return scanCoverageError("enabled plugin inventory is invalid")
+				}
+				if candidateUpdated.After(latestUpdated) {
+					install = candidate
+					latestUpdated = candidateUpdated
+				}
 			}
 		}
 		if strings.TrimSpace(install.InstallPath) == "" {

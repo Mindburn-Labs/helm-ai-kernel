@@ -575,8 +575,8 @@ func TestCollectConfigObservationUsesLatestEnabledPluginInstall(t *testing.T) {
 	writeJSON(t, filepath.Join(claudeDir, "plugins", "installed_plugins.json"), map[string]any{
 		"plugins": map[string]any{
 			"context7@official": []map[string]any{
-				{"installPath": oldPluginDir, "lastUpdated": "2026-01-01T00:00:00Z"},
-				{"installPath": currentPluginDir, "lastUpdated": "2026-07-29T00:00:00Z"},
+				{"installPath": oldPluginDir, "lastUpdated": "2026-07-29T00:30:00+01:00"},
+				{"installPath": currentPluginDir, "lastUpdated": "2026-07-28T23:45:00Z"},
 			},
 		},
 	})

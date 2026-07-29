@@ -239,7 +239,7 @@ func isDecoderCall(name string, args []wordTok) bool {
 func (c *collector) classifyRedirect(r *syntax.Redirect) {
 	c.signal(SignalRedirect)
 	switch r.Op {
-	case syntax.RdrOut, syntax.AppOut, syntax.RdrInOut, syntax.ClbOut:
+	case syntax.RdrOut, syntax.AppOut, syntax.RdrInOut, syntax.ClbOut, syntax.RdrAll, syntax.AppAll:
 		// write-capable redirect
 	default:
 		return
@@ -276,8 +276,12 @@ func (c *collector) classifyRedirect(r *syntax.Redirect) {
 // unwrapping sudo/env/eval/sh -c/xargs wrappers recursively.
 func (c *collector) classifyCall(call *syntax.CallExpr, via string, depth int) {
 	args := make([]wordTok, 0, len(call.Args))
-	for _, w := range call.Args {
-		args = append(args, resolveWord(w))
+	for i, w := range call.Args {
+		tok := resolveWord(w)
+		if i == 0 && !tok.dynamic {
+			tok = resolveCommandWord(w)
+		}
+		args = append(args, tok)
 	}
 	c.classifyTokens(args, via, depth)
 }
@@ -285,6 +289,40 @@ func (c *collector) classifyCall(call *syntax.CallExpr, via string, depth int) {
 type wordTok struct {
 	text    string
 	dynamic bool
+}
+
+func unescapeCommandLit(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			i++
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+func resolveCommandWord(w *syntax.Word) wordTok {
+	var b strings.Builder
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			b.WriteString(unescapeCommandLit(p.Value))
+		case *syntax.SglQuoted:
+			b.WriteString(p.Value)
+		case *syntax.DblQuoted:
+			for _, inner := range p.Parts {
+				lit, ok := inner.(*syntax.Lit)
+				if !ok {
+					return wordTok{dynamic: true}
+				}
+				b.WriteString(lit.Value)
+			}
+		default:
+			return wordTok{dynamic: true}
+		}
+	}
+	return wordTok{text: b.String()}
 }
 
 func resolveWord(w *syntax.Word) wordTok {
@@ -1060,6 +1098,22 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				return
 			}
 			c.classifyString(b.String(), joinVia(via, "eval"), depth+1)
+			return
+		case name == "." || name == "source":
+			if len(args) < 2 {
+				c.decide(name + " without a script path (fail-closed)")
+				return
+			}
+			script := args[1]
+			if script.dynamic {
+				c.decide(name + " with a dynamic script path (fail-closed)")
+				return
+			}
+			if c.writtenPaths[path.Clean(script.text)] {
+				c.decide(name + " executes a script generated earlier in the command")
+				return
+			}
+			c.record(Command{Name: name, Tokens: staticTokens(args), Via: via, Prefix: name})
 			return
 		case shellNames[name]:
 			c.signal(SignalShellInvocation)

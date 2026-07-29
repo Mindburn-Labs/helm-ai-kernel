@@ -1142,6 +1142,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				RequestedBy string   `json:"requested_by"`
 				Approvers   []string `json:"approvers"`
 				Quorum      int      `json:"quorum"`
+				BindingHash string   `json:"binding_hash"`
 				TimelockMs  int64    `json:"timelock_ms"`
 				ExpiresInMs int64    `json:"expires_in_ms"`
 				Reason      string   `json:"reason"`
@@ -1172,6 +1173,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				RequestedBy:   req.RequestedBy,
 				Approvers:     req.Approvers,
 				Quorum:        req.Quorum,
+				BindingHash:   req.BindingHash,
 				TimelockUntil: timelock,
 				ExpiresAt:     expires,
 				BreakGlass:    req.BreakGlass,

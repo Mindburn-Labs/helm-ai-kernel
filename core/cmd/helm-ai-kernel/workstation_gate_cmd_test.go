@@ -134,6 +134,12 @@ func TestWorkstationGateRequestApprovalCreatesCeremony(t *testing.T) {
 	if !strings.Contains(gotBody.Reason, workstation.ShellCommandBinding("sudo rm /x")) {
 		t.Fatalf("approval reason must bind the exact command: %q", gotBody.Reason)
 	}
+	if gotBody.BindingHash != workstation.ShellCommandBindingRef("sudo rm /x") {
+		t.Fatalf("approval binding = %q, want immutable command hash", gotBody.BindingHash)
+	}
+	if gotBody.RequestedBy != "agent.local" {
+		t.Fatalf("default requester = %q, want agent.local distinct from watch approver", gotBody.RequestedBy)
+	}
 	if !strings.Contains(out, "ap-gate-1") {
 		t.Fatalf("output must surface the created approval id:\n%s", out)
 	}
@@ -147,6 +153,7 @@ func TestWorkstationGateConsumesExactApprovalOnce(t *testing.T) {
 		Action:      workstation.ShellGateApprovalAction,
 		State:       contracts.ApprovalCeremonyAllowed,
 		RequestedBy: "operator.cli",
+		BindingHash: workstation.ShellCommandBindingRef(command),
 		Reason:      "approved; " + workstation.ShellCommandBinding(command),
 	}
 	revokeCount := 0
@@ -192,6 +199,7 @@ func TestWorkstationGateRejectsApprovalForDifferentCommand(t *testing.T) {
 		Action:      workstation.ShellGateApprovalAction,
 		State:       contracts.ApprovalCeremonyAllowed,
 		RequestedBy: "operator.cli",
+		BindingHash: workstation.ShellCommandBindingRef("rm /tmp/safe"),
 		Reason:      "approved; " + workstation.ShellCommandBinding("rm /tmp/safe"),
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

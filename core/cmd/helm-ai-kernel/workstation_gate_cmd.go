@@ -36,7 +36,7 @@ func runWorkstationGateCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&jsonOut, "json", false, "Print the gate decision as JSON")
 	cmd.BoolVar(&requestApproval, "request-approval", false, "On a pending_approval verdict, create the approval ceremony on the kernel server")
 	cmd.StringVar(&rawURL, "url", "", "Kernel server URL for --request-approval (default $HELM_KERNEL_URL or "+defaultWatchURL+")")
-	cmd.StringVar(&actor, "actor", "operator.cli", "Actor recorded on the approval request")
+	cmd.StringVar(&actor, "actor", "agent.local", "Requesting actor recorded on the approval (must differ from the approving watch actor)")
 	cmd.StringVar(&apiKeyFile, "api-key-file", "", "Path to a 0600 admin API key file (default $HELM_ADMIN_API_KEY)")
 	cmd.StringVar(&approvalID, "approval-id", "", "Consume this approved, command-bound ceremony to allow a pending dev command")
 	if err := cmd.Parse(args); err != nil {
@@ -139,6 +139,7 @@ func requestShellGateApproval(decision workstation.ShellGateDecision, rawURL, ap
 		Action:      workstation.ShellGateApprovalAction,
 		RequestedBy: actor,
 		Quorum:      1,
+		BindingHash: workstation.ShellCommandBindingRef(decision.Command),
 		Reason: fmt.Sprintf("shell gate escalation (dev profile): blocked commands [%s] in %q; %s",
 			strings.Join(decision.Blocked, ", "), decision.Command, workstation.ShellCommandBinding(decision.Command)),
 	})
@@ -173,7 +174,7 @@ func consumeShellGateApproval(decision workstation.ShellGateDecision, approvalID
 		if !approval.ExpiresAt.IsZero() && time.Now().After(approval.ExpiresAt) {
 			return fmt.Errorf("approval %s is expired", approvalID)
 		}
-		if !workstation.ApprovalBindsToCommand(approval.Reason, decision.Command) {
+		if !workstation.ApprovalBindsToCommand(approval.BindingHash, decision.Command) {
 			return fmt.Errorf("approval %s is bound to a different command", approvalID)
 		}
 		_, err := client.TransitionApproval(ctx, approvalID, "revoke", "workstation.shellgate", "consumed by workstation shell gate")

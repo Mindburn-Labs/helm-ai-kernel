@@ -68,6 +68,41 @@ func TestApprovalTransitionSealsCeremony(t *testing.T) {
 	}
 }
 
+func TestApprovalTransitionPreservesImmutableBinding(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry := NewSurfaceRegistry(func() time.Time { return now })
+	pending, err := registry.PutApproval(contracts.ApprovalCeremony{
+		ApprovalID:  "approval-command-bound",
+		Subject:     "shell_command",
+		Action:      "shell_operate",
+		State:       contracts.ApprovalCeremonyPending,
+		RequestedBy: "agent.local",
+		BindingHash: "sha256:command-binding",
+		Reason:      "request details",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, err := registry.TransitionApproval(
+		pending.ApprovalID,
+		contracts.ApprovalCeremonyAllowed,
+		"operator.cli",
+		"",
+		"approver-controlled reason",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approved.BindingHash != pending.BindingHash {
+		t.Fatalf("binding changed across transition: got %q want %q", approved.BindingHash, pending.BindingHash)
+	}
+	if approved.Reason != "approver-controlled reason" {
+		t.Fatalf("reason = %q, want mutable audit note", approved.Reason)
+	}
+}
+
 func TestApprovedApprovalCanOnlyBeRevokedOnce(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })

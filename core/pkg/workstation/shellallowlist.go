@@ -1,26 +1,27 @@
-// shellallowlist.go — user-editable shell allowlist file with an mtime cache.
+// shellallowlist.go — user-editable shell allowlist file with stable reads.
 //
 // Attribution: the file format tolerance (bare array / {"allowedCommands"} /
-// truthy map) and the mtime-cached read are adapted from Rowboat (Apache-2.0),
+// truthy map) are adapted from Rowboat (Apache-2.0),
 // apps/cli/src/config/security.ts. This is an original Go implementation; no
 // Rowboat code is copied verbatim.
 //
 // Fail-closed deviations from Rowboat:
 //   - A corrupt or unreadable allowlist file is an error, not a silent fallback
 //     to the defaults. Callers must treat the error as "everything blocked".
-//   - The cache also compares file size alongside mtime, so a rewrite that
-//     preserves mtime but changes length still reloads.
+//   - Each read verifies the opened file against the path and reads identical
+//     bytes twice, so replacement or in-place mutation fails closed.
 package workstation
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 // DefaultShellAllowlist is the minimal read-only set seeded on first use.
@@ -47,16 +48,11 @@ func DefaultShellAllowlistPath(dataDir string) string {
 	return filepath.Join(dataDir, "workstation", ShellAllowlistFilename)
 }
 
-// ShellAllowlistStore reads a user-editable JSON allowlist file and caches it
-// by modification time (and size). It is safe for concurrent use.
+// ShellAllowlistStore reads a user-editable JSON allowlist file. It is safe
+// for concurrent use.
 type ShellAllowlistStore struct {
 	path string
-
-	mu           sync.Mutex
-	cached       []string
-	cachedMtime  time.Time
-	cachedSize   int64
-	cachePresent bool
+	mu   sync.Mutex
 }
 
 // NewShellAllowlistStore creates a store rooted at path.
@@ -69,18 +65,15 @@ func (s *ShellAllowlistStore) Path() string {
 	return s.path
 }
 
-// Allowlist returns the current allowlist, reloading the file when its mtime
-// or size changed since the last successful read. A missing file is seeded
-// with DefaultShellAllowlist. Parse and I/O failures return an error — callers
-// must fail closed. The allowlist file must be a regular file (never a
-// symlink or special file) and must not be writable by group or others: this
-// file controls what passes the workstation boundary, so a redirected or
-// world-writable allowlist fails closed.
+// Allowlist returns the current allowlist. A missing file is seeded with
+// DefaultShellAllowlist. Parse and I/O failures return an error — callers must
+// fail closed. The allowlist file must be a regular file (never a symlink or
+// special file) and must not be writable by group or others.
 func (s *ShellAllowlistStore) Allowlist() ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	info, err := os.Lstat(s.path)
+	_, err := os.Lstat(s.path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("stat shell allowlist %s: %w", s.path, err)
@@ -88,38 +81,12 @@ func (s *ShellAllowlistStore) Allowlist() ([]string, error) {
 		if err := s.seedLocked(); err != nil {
 			return nil, err
 		}
-		info, err = os.Lstat(s.path)
-		if err != nil {
-			return nil, fmt.Errorf("stat seeded shell allowlist %s: %w", s.path, err)
-		}
 	}
-	if err := validateShellAllowlistInfo(s.path, info); err != nil {
-		return nil, err
-	}
-
-	if s.cachePresent && info.ModTime().Equal(s.cachedMtime) && info.Size() == s.cachedSize {
-		return append([]string(nil), s.cached...), nil
-	}
-
-	allowlist, err := readShellAllowlistFile(s.path)
+	allowlist, err := readStableShellAllowlistFile(s.path)
 	if err != nil {
 		return nil, err
 	}
-	// Re-stat after the read: the file may have changed between the initial
-	// Lstat and ReadFile. Cache the metadata observed after the read so a
-	// concurrent rewrite can never pin stale mtime/size to new contents.
-	info, err = os.Lstat(s.path)
-	if err != nil {
-		return nil, fmt.Errorf("re-stat shell allowlist %s: %w", s.path, err)
-	}
-	if err := validateShellAllowlistInfo(s.path, info); err != nil {
-		return nil, err
-	}
-	s.cached = allowlist
-	s.cachedMtime = info.ModTime()
-	s.cachedSize = info.Size()
-	s.cachePresent = true
-	return append([]string(nil), s.cached...), nil
+	return allowlist, nil
 }
 
 // validateShellAllowlistInfo enforces the file-safety invariants of the
@@ -134,15 +101,11 @@ func validateShellAllowlistInfo(path string, info os.FileInfo) error {
 	return nil
 }
 
-// Reset drops the cached allowlist so the next Allowlist call re-reads the
-// file. Primarily for tests.
+// Reset remains for API compatibility. Allowlist always performs a stable
+// read, so there is no cache to clear.
 func (s *ShellAllowlistStore) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cached = nil
-	s.cachedMtime = time.Time{}
-	s.cachedSize = 0
-	s.cachePresent = false
 }
 
 // seedLocked writes the default allowlist to a missing file with restrictive
@@ -167,11 +130,7 @@ func (s *ShellAllowlistStore) seedLocked() error {
 //   - a bare JSON array: ["ls", "cat"]
 //   - an object with an allowedCommands array: {"allowedCommands": ["ls"]}
 //   - a truthy map: {"ls": true, "rm": false} → ["ls"]
-func readShellAllowlistFile(path string) ([]string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read shell allowlist %s: %w", path, err)
-	}
+func parseShellAllowlist(path string, data []byte) ([]string, error) {
 	var payload any
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return nil, fmt.Errorf("parse shell allowlist %s: %w", path, err)
@@ -197,6 +156,58 @@ func readShellAllowlistFile(path string) ([]string, error) {
 	default:
 		return nil, fmt.Errorf("parse shell allowlist %s: expected array or object", path)
 	}
+}
+
+func readStableShellAllowlistFile(path string) ([]string, error) {
+	const attempts = 3
+	for attempt := 0; attempt < attempts; attempt++ {
+		first, err := readShellAllowlistBytes(path)
+		if err != nil {
+			return nil, err
+		}
+		second, err := readShellAllowlistBytes(path)
+		if err != nil {
+			return nil, err
+		}
+		if bytes.Equal(first, second) {
+			return parseShellAllowlist(path, first)
+		}
+	}
+	return nil, fmt.Errorf("read shell allowlist %s: file changed during stable read", path)
+}
+
+func readShellAllowlistBytes(path string) ([]byte, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat shell allowlist %s: %w", path, err)
+	}
+	if err := validateShellAllowlistInfo(path, pathInfo); err != nil {
+		return nil, err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open shell allowlist %s: %w", path, err)
+	}
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat opened shell allowlist %s: %w", path, err)
+	}
+	if !os.SameFile(pathInfo, openedInfo) {
+		return nil, fmt.Errorf("read shell allowlist %s: path changed before open", path)
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("read shell allowlist %s: %w", path, err)
+	}
+	currentInfo, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("re-stat shell allowlist %s: %w", path, err)
+	}
+	if !os.SameFile(openedInfo, currentInfo) {
+		return nil, fmt.Errorf("read shell allowlist %s: path changed during read", path)
+	}
+	return data, nil
 }
 
 // jsonTruthy mirrors JavaScript truthiness for decoded JSON values.

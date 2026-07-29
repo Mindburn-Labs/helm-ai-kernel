@@ -11,7 +11,6 @@ package workstation
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"strings"
 )
 
 // ShellGateApprovalSubject and ShellGateApprovalAction identify approval
@@ -39,8 +38,14 @@ func ShellCommandBinding(command string) string {
 	return shellGateBindingPrefix + ShellCommandBindingHash(command)
 }
 
-// ApprovalBindsToCommand reports whether an approval ceremony reason carries
-// the binding token for exactly this command line.
-func ApprovalBindsToCommand(approvalReason, command string) bool {
-	return strings.Contains(approvalReason, ShellCommandBinding(command))
+// ShellCommandBindingRef returns the structured immutable binding stored on
+// the approval ceremony. Human-readable reasons are deliberately excluded.
+func ShellCommandBindingRef(command string) string {
+	return "sha256:" + ShellCommandBindingHash(command)
+}
+
+// ApprovalBindsToCommand reports whether a structured ceremony binding covers
+// exactly this command line.
+func ApprovalBindsToCommand(bindingHash, command string) bool {
+	return bindingHash == ShellCommandBindingRef(command)
 }

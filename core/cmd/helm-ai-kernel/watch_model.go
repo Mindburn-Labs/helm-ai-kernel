@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -182,9 +183,9 @@ func (m *watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case approvalTransitionedMsg:
 		m.busy = false
 		if typed.err != nil {
-			m.status = fmt.Sprintf("%s %s failed: %v", typed.action, typed.approvalID, typed.err)
+			m.status = terminalSafe(fmt.Sprintf("%s %s failed: %v", typed.action, typed.approvalID, typed.err))
 		} else {
-			m.status = fmt.Sprintf("%s %s recorded", typed.action, typed.approvalID)
+			m.status = terminalSafe(fmt.Sprintf("%s %s recorded", typed.action, typed.approvalID))
 		}
 		// A transition invalidates the queue; refresh immediately. Bump the
 		// generation first so any result from a fetch started before the
@@ -238,7 +239,7 @@ func (m *watchModel) View() string {
 		fmt.Fprintf(&b, "refreshed %s · every %s · server-derived state\n", m.refreshedAt.Format("15:04:05"), m.interval)
 	}
 	if m.lastErr != nil {
-		fmt.Fprintf(&b, "ERROR: %v (actions disabled, fail-closed)\n", m.lastErr)
+		fmt.Fprintf(&b, "ERROR: %s (actions disabled, fail-closed)\n", terminalSafe(m.lastErr.Error()))
 	}
 	b.WriteString("\n")
 	if len(m.pending) == 0 && m.lastErr == nil {
@@ -253,7 +254,7 @@ func (m *watchModel) View() string {
 	}
 	b.WriteString("\n")
 	if m.status != "" {
-		fmt.Fprintf(&b, "%s\n", m.status)
+		fmt.Fprintf(&b, "%s\n", terminalSafe(m.status))
 	}
 	b.WriteString("↑/↓ select · a approve · d deny · r refresh · q quit\n")
 	return b.String()
@@ -293,10 +294,22 @@ func formatApprovalRow(item contracts.ApprovalCeremony, now time.Time) string {
 	}
 	reason := ""
 	if strings.TrimSpace(item.Reason) != "" {
-		reason = fmt.Sprintf("  reason %q", item.Reason)
+		reason = fmt.Sprintf("  reason %q", terminalSafe(item.Reason))
 	}
 	return fmt.Sprintf("%s  %s:%s  by %s  age %s%s%s",
-		item.ApprovalID, item.Subject, item.Action, item.RequestedBy, age, suffix, reason)
+		terminalSafe(item.ApprovalID), terminalSafe(item.Subject), terminalSafe(item.Action),
+		terminalSafe(item.RequestedBy), age, suffix, reason)
+}
+
+// terminalSafe strips terminal control and Unicode format characters from
+// server-controlled text before it reaches an interactive or snapshot view.
+func terminalSafe(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf) {
+			return '\uFFFD'
+		}
+		return r
+	}, value)
 }
 
 // renderApprovalSnapshot prints a non-interactive snapshot of the pending

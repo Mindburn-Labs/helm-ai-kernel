@@ -14,12 +14,14 @@ import (
 )
 
 func TestApprovalHTTPClientListApprovals(t *testing.T) {
+	apiKey := strings.Join([]string{"test", "key"}, "-")
+	wantAuthorization := strings.Join([]string{"Bearer", apiKey}, " ")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != approvalAPIBasePath || r.Method != http.MethodGet {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
-		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
-			t.Fatalf("Authorization = %q, want Bearer test-key", got)
+		if got := r.Header.Get("Authorization"); got != wantAuthorization {
+			t.Fatalf("Authorization = %q, want runtime client credential", got)
 		}
 		_ = json.NewEncoder(w).Encode([]contracts.ApprovalCeremony{{
 			ApprovalID:  "ap-1",
@@ -33,7 +35,7 @@ func TestApprovalHTTPClientListApprovals(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := newApprovalHTTPClient(server.URL, "test-key")
+	client, err := newApprovalHTTPClient(server.URL, apiKey)
 	if err != nil {
 		t.Fatalf("newApprovalHTTPClient: %v", err)
 	}

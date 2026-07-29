@@ -278,6 +278,27 @@ func TestWatchModelView(t *testing.T) {
 	}
 }
 
+func TestWatchModelSanitizesServerControlledTerminalText(t *testing.T) {
+	m := newWatchModel(&fakeApprovalClient{}, "operator.cli", time.Second)
+	item := pendingCeremony("ap-\x1b[2J", time.Now())
+	item.Subject = "shell\x00command"
+	item.Action = "operate\u202Etxt"
+	item.RequestedBy = "agent\rspoof"
+	item.Reason = "blocked\x1b]52;c;payload\a"
+	m, _ = updateModel(t, m, approvalsFetchedMsg{items: []contracts.ApprovalCeremony{item}})
+	view := m.View()
+	for _, forbidden := range []string{"\x1b", "\x00", "\r", "\u202E", "\a"} {
+		if strings.Contains(view, forbidden) {
+			t.Fatalf("view contains terminal control %q: %q", forbidden, view)
+		}
+	}
+	for _, want := range []string{"ap-", "shell", "operate", "agent", "blocked"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("sanitized view lost safe text %q: %q", want, view)
+		}
+	}
+}
+
 func TestRenderApprovalSnapshot(t *testing.T) {
 	var buf bytes.Buffer
 	items := []contracts.ApprovalCeremony{

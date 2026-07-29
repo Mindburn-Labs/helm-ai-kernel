@@ -34,6 +34,7 @@ type createApprovalRequest struct {
 	RequestedBy string   `json:"requested_by"`
 	Approvers   []string `json:"approvers,omitempty"`
 	Quorum      int      `json:"quorum,omitempty"`
+	BindingHash string   `json:"binding_hash,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
 	ReceiptID   string   `json:"receipt_id,omitempty"`
 }

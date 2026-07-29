@@ -220,7 +220,7 @@ func TestShellAllowlistStoreFormats(t *testing.T) {
 	}
 }
 
-func TestShellAllowlistStoreMtimeReload(t *testing.T) {
+func TestShellAllowlistStoreReloadsDespiteUnchangedMetadata(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ShellAllowlistFilename)
 	store := NewShellAllowlistStore(path)
 
@@ -233,7 +233,7 @@ func TestShellAllowlistStoreMtimeReload(t *testing.T) {
 		t.Fatalf("Allowlist = %v, want [ls]", got)
 	}
 
-	// Rewrite with the same mtime and size: cache must be served.
+	// Rewrite with the same mtime and size: content, not metadata, is authority.
 	if err := os.WriteFile(path, []byte(`["dd"]`), 0o600); err != nil {
 		t.Fatalf("rewrite allowlist: %v", err)
 	}
@@ -244,8 +244,8 @@ func TestShellAllowlistStoreMtimeReload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Allowlist after same-mtime rewrite: %v", err)
 	}
-	if !reflect.DeepEqual(got, []string{"ls"}) {
-		t.Fatalf("cached Allowlist = %v, want [ls]", got)
+	if !reflect.DeepEqual(got, []string{"dd"}) {
+		t.Fatalf("Allowlist after same-metadata rewrite = %v, want [dd]", got)
 	}
 
 	// Rewrite with a newer mtime: cache must reload.

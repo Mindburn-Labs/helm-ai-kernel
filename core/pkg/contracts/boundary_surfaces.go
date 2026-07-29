@@ -136,6 +136,7 @@ type ApprovalCeremony struct {
 	ChallengeID      string                `json:"challenge_id,omitempty"`
 	ChallengeHash    string                `json:"challenge_hash,omitempty"`
 	AssertionHash    string                `json:"assertion_hash,omitempty"`
+	BindingHash      string                `json:"binding_hash,omitempty"`
 	Reason           string                `json:"reason,omitempty"`
 	ReceiptID        string                `json:"receipt_id,omitempty"`
 	BoundaryRecordID string                `json:"boundary_record_id,omitempty"`

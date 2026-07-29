@@ -32,6 +32,7 @@ func TestExtractCommandNames(t *testing.T) {
 		{"multiple env prefixes", "FOO=bar BAZ=qux sudo rm /x", []string{"rm", "sudo"}},
 		{"env prefix only", "FOO=bar", nil},
 		{"sudo wrapper", "sudo rm /x", []string{"rm", "sudo"}},
+		{"sudo value flag", "sudo -u root rm /x", []string{"rm", "sudo"}},
 		{"env wrapper", "env rm /x", []string{"env", "rm"}},
 		{"time wrapper", "time ls", []string{"ls", "time"}},
 		{"command wrapper", "command ls", []string{"command", "ls"}},

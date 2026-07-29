@@ -16,8 +16,8 @@
 //     skipped before resolving the wrapped command, so `env FOO=1 rm x`
 //     extracts {env, rm} (Rowboat extracts {env, "foo=1"}, which blocks by
 //     accident rather than by policy). Flags that take separate values
-//     (e.g. `sudo -u root rm x`) may surface the value as a command name;
-//     that false positive fails closed and is accepted.
+//     (e.g. `sudo -u root rm x`) are modeled per wrapper so their values
+//     cannot shadow the wrapped command.
 //   - Unknown gate profiles normalize to production (deny), never to dev.
 //   - The gate is redirection-aware: output redirections (`>`, `>>`, `>|`)
 //     and downloader output flags (`-o`, `--output`, `-O`, `--remote-name`,
@@ -109,7 +109,7 @@ func ExtractCommandNames(command string) []string {
 		}
 		discovered[primary] = struct{}{}
 		if _, isWrapper := wrapperCommands[primary]; isWrapper {
-			for _, wrapped := range unwrapWrappedCommands(tokens[index+1:]) {
+			for _, wrapped := range unwrapWrappedCommands(primary, tokens[index+1:]) {
 				discovered[wrapped] = struct{}{}
 			}
 		}
@@ -130,9 +130,8 @@ func ExtractCommandNames(command string) []string {
 // ENV=value assignments and bare `-` flags after a wrapper are skipped; flags
 // known to take a separate value (sudo -u, env -u, time -o, …) are skipped
 // together with their value so the value cannot shadow the wrapped command.
-func unwrapWrappedCommands(tokens []string) []string {
+func unwrapWrappedCommands(activeWrapper string, tokens []string) []string {
 	var out []string
-	activeWrapper := ""
 	for i := 0; i < len(tokens); i++ {
 		token := tokens[i]
 		if envAssignmentPattern.MatchString(token) {

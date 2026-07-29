@@ -147,7 +147,10 @@ func observe(t *testing.T, profile contracts.WorkstationPolicyProfile) []observa
 		denied := contracts.AgentDeniedEffect{
 			EffectID:   sc.event.EventID,
 			EffectType: sc.event.EffectType,
+			ToolID:     sc.event.ToolID,
+			Action:     sc.event.Action,
 			ReasonCode: code,
+			OccurredAt: sc.event.OccurredAt,
 		}
 		workstation.AnnotateDenial(&denied, profile, sc.event)
 		out = append(out, observation{
@@ -236,8 +239,11 @@ func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
 		denied := contracts.AgentDeniedEffect{
 			EffectID:   sc.event.EventID,
 			EffectType: sc.event.EffectType,
+			ToolID:     sc.event.ToolID,
+			Action:     sc.event.Action,
 			ReasonCode: code,
 			Reason:     reason,
+			OccurredAt: sc.event.OccurredAt,
 		}
 		workstation.AnnotateDenial(&denied, profile, sc.event)
 		encoded, err := json.Marshal(denied)

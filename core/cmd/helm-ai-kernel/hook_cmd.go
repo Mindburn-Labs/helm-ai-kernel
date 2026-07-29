@@ -389,8 +389,12 @@ func removesOnlyBuildArtifacts(c string) bool {
 		found = true
 		operands := 0
 		for _, arg := range fields[start:] {
-			if strings.HasPrefix(arg, "-") {
+			switch arg {
+			case "-r", "-f", "-rf", "-fr", "--recursive", "--force", "--":
 				continue
+			}
+			if strings.HasPrefix(arg, "-") {
+				return false
 			}
 			operands++
 			if !buildArtifactDirs[strings.TrimSuffix(strings.TrimPrefix(arg, "./"), "/")] {

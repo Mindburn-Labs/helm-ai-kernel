@@ -730,9 +730,11 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
-// shellLongValueFlags are shell long flags that consume the next token.
-var shellLongValueFlags = map[string]bool{
-	"--init-file": true, "--rcfile": true, "--emulate": true,
+// shellLongValueFlags are shell-specific long flags that consume a value.
+var shellLongValueFlags = map[string]map[string]bool{
+	"bash": {"--init-file": true, "--rcfile": true},
+	"zsh":  {"--emulate": true},
+	"nu":   {"--config": true, "--env-config": true},
 }
 
 // scanShellScriptFlag analyzes a shell invocation's arguments. It locates
@@ -744,7 +746,7 @@ var shellLongValueFlags = map[string]bool{
 // from stdin because no static script source exists (stdin), whether scanning
 // hit an unresolvable word (ambiguous), and whether a positional script file
 // was seen (positional).
-func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, stdin, ambiguous bool, positional wordTok) {
+func scanShellScriptFlag(shell string, rest []wordTok) (script wordTok, found, stdin, ambiguous bool, positional wordTok) {
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
 		if tok.dynamic {
@@ -761,10 +763,25 @@ func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, st
 			return wordTok{}, false, false, false, tok
 		}
 		if strings.HasPrefix(tok.text, "--") {
-			if shellLongValueFlags[tok.text] {
-				i++
+			flag := tok.text
+			attached := false
+			if idx := strings.IndexByte(flag, '='); idx >= 0 {
+				flag, attached = flag[:idx], true
 			}
-			continue
+			if shellLongValueFlags[shell][flag] {
+				if attached {
+					if len(tok.text) == len(flag)+1 {
+						return wordTok{}, false, false, true, wordTok{}
+					}
+				} else {
+					if i+1 >= len(rest) || rest[i+1].dynamic {
+						return wordTok{}, false, false, true, wordTok{}
+					}
+					i++
+				}
+				continue
+			}
+			return wordTok{}, false, false, true, wordTok{}
 		}
 		if tok.text == "-" {
 			return wordTok{}, false, true, false, wordTok{}
@@ -801,7 +818,7 @@ func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, st
 				// so any unrecognized option is ambiguous. Non-letter
 				// characters (digits, punctuation) are never standard
 				// options and are always ambiguous. Both fail closed.
-				if strict {
+				if strictFlagShells[shell] {
 					return wordTok{}, false, false, true, wordTok{}
 				}
 				if !((cluster[j] >= 'a' && cluster[j] <= 'z') || (cluster[j] >= 'A' && cluster[j] <= 'Z')) {
@@ -1178,7 +1195,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 		case shellNames[name]:
 			c.signal(SignalShellInvocation)
 			rest := args[1:]
-			script, found, stdin, ambiguous, positional := scanShellScriptFlag(rest, strictFlagShells[name])
+			script, found, stdin, ambiguous, positional := scanShellScriptFlag(name, rest)
 			switch {
 			case ambiguous:
 				c.decide(name + " wrapper arguments cannot be resolved statically")

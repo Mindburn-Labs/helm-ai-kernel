@@ -44,7 +44,7 @@ func TestExtractCommandNames(t *testing.T) {
 		{"double quoted command", `"curl" https://example.com`, []string{"curl"}},
 		{"uppercase lowered", "SUDO RM /x", []string{"rm", "sudo"}},
 		{"mixed chaining", "cat a | grep b && jq . || echo done", []string{"cat", "echo", "grep", "jq"}},
-		{"substitution inside args", "ls $(pwd)/x", []string{"/x", "ls", "pwd"}},
+		{"substitution inside args", "ls $(pwd)/x", []string{"ls", "pwd"}},
 		{"empty", "", nil},
 		{"whitespace", "   ", nil},
 		{"separator only", "|", nil},
@@ -56,6 +56,22 @@ func TestExtractCommandNames(t *testing.T) {
 				t.Fatalf("ExtractCommandNames(%q) = %v, want %v", tc.command, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestConsumedApprovalStoreIsSingleUse(t *testing.T) {
+	store := NewConsumedApprovalStore(filepath.Join(t.TempDir(), "consumed"))
+	if consumed, err := store.IsConsumed("ap-1"); err != nil || consumed {
+		t.Fatalf("fresh approval consumed=%t err=%v", consumed, err)
+	}
+	if err := store.MarkConsumed("ap-1"); err != nil {
+		t.Fatalf("first consume: %v", err)
+	}
+	if err := store.MarkConsumed("ap-1"); err == nil {
+		t.Fatal("second consume must fail")
+	}
+	if consumed, err := store.IsConsumed("ap-1"); err != nil || !consumed {
+		t.Fatalf("consumed approval consumed=%t err=%v", consumed, err)
 	}
 }
 

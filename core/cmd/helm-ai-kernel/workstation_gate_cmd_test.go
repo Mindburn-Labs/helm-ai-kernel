@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
 func gateTestAllowlist(t *testing.T, entries []string) string {
@@ -130,8 +131,75 @@ func TestWorkstationGateRequestApprovalCreatesCeremony(t *testing.T) {
 	if !strings.Contains(gotBody.Reason, "rm") || !strings.Contains(gotBody.Reason, "sudo") {
 		t.Fatalf("approval reason must name blocked commands: %q", gotBody.Reason)
 	}
+	if !strings.Contains(gotBody.Reason, workstation.ShellCommandBinding("sudo rm /x")) {
+		t.Fatalf("approval reason must bind the exact command: %q", gotBody.Reason)
+	}
 	if !strings.Contains(out, "ap-gate-1") {
 		t.Fatalf("output must surface the created approval id:\n%s", out)
+	}
+}
+
+func TestWorkstationGateConsumesExactApprovalOnce(t *testing.T) {
+	command := "rm /x"
+	approval := contracts.ApprovalCeremony{
+		ApprovalID:  "ap-bound",
+		Subject:     workstation.ShellGateApprovalSubject,
+		Action:      workstation.ShellGateApprovalAction,
+		State:       contracts.ApprovalCeremonyAllowed,
+		RequestedBy: "operator.cli",
+		Reason:      "approved; " + workstation.ShellCommandBinding(command),
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]contracts.ApprovalCeremony{approval})
+	}))
+	defer server.Close()
+	t.Setenv(watchAdminAPIKeyEnv, "test-key")
+
+	dataDir := t.TempDir()
+	allowlist := gateTestAllowlist(t, []string{"ls"})
+	args := []string{
+		"--profile", "dev",
+		"--allowlist", allowlist,
+		"--data-dir", dataDir,
+		"--approval-id", approval.ApprovalID,
+		"--url", server.URL,
+		"--command", command,
+	}
+	code, out, errOut := runGateForTest(t, args...)
+	if code != exitGateAllow {
+		t.Fatalf("first consume exit = %d, want allow; out=%s err=%s", code, out, errOut)
+	}
+	code, _, errOut = runGateForTest(t, args...)
+	if code != 1 || !strings.Contains(errOut, "already consumed") {
+		t.Fatalf("second consume exit = %d err=%s, want fail-closed consumed error", code, errOut)
+	}
+}
+
+func TestWorkstationGateRejectsApprovalForDifferentCommand(t *testing.T) {
+	approval := contracts.ApprovalCeremony{
+		ApprovalID:  "ap-wrong",
+		Subject:     workstation.ShellGateApprovalSubject,
+		Action:      workstation.ShellGateApprovalAction,
+		State:       contracts.ApprovalCeremonyAllowed,
+		RequestedBy: "operator.cli",
+		Reason:      "approved; " + workstation.ShellCommandBinding("rm /tmp/safe"),
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]contracts.ApprovalCeremony{approval})
+	}))
+	defer server.Close()
+	t.Setenv(watchAdminAPIKeyEnv, "test-key")
+
+	code, _, errOut := runGateForTest(t,
+		"--profile", "dev",
+		"--allowlist", gateTestAllowlist(t, []string{"ls"}),
+		"--data-dir", t.TempDir(),
+		"--approval-id", approval.ApprovalID,
+		"--url", server.URL,
+		"--command", "rm /etc/passwd",
+	)
+	if code != 1 || !strings.Contains(errOut, "different command") {
+		t.Fatalf("exit = %d err=%s, want command-binding rejection", code, errOut)
 	}
 }
 

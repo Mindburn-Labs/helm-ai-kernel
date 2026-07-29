@@ -26,8 +26,11 @@ import (
 )
 
 type approvalsFetchedMsg struct {
-	items []contracts.ApprovalCeremony
-	err   error
+	// generation tags the fetch so a stale (out-of-order) result can never
+	// overwrite newer state: only the latest generation may mutate the model.
+	generation int
+	items      []contracts.ApprovalCeremony
+	err        error
 }
 
 type approvalTransitionedMsg struct {
@@ -40,6 +43,16 @@ type watchTickMsg time.Time
 
 // watchModel renders the live approval queue and wires approve/deny hotkeys
 // to the kernel approval API.
+//
+// Refresh invariants (fail closed under races):
+//   - At most one fetch is ever in flight (inFlight guard): manual refreshes
+//     and ticks cannot stack up parallel polling loops.
+//   - Every fetch is tagged with a monotonically increasing generation; a
+//     result whose generation is not the latest is discarded untouched, so an
+//     out-of-order success can never overwrite a newer failure (or vice
+//     versa).
+//   - The next tick is scheduled only when a fetch completes, keeping a
+//     single polling loop for the lifetime of the program.
 type watchModel struct {
 	client   approvalClient
 	actor    string
@@ -52,6 +65,9 @@ type watchModel struct {
 	refreshedAt time.Time
 	status      string
 	width       int
+
+	generation int
+	inFlight   bool
 }
 
 func newWatchModel(client approvalClient, actor string, interval time.Duration) *watchModel {
@@ -62,15 +78,23 @@ func newWatchModel(client approvalClient, actor string, interval time.Duration) 
 }
 
 func (m *watchModel) Init() tea.Cmd {
-	return m.fetchCmd()
+	return m.startFetch()
 }
 
-func (m *watchModel) fetchCmd() tea.Cmd {
+// startFetch begins a new fetch generation. Callers must hold the inFlight
+// invariant: never start a fetch while one is already running.
+func (m *watchModel) startFetch() tea.Cmd {
+	m.generation++
+	m.inFlight = true
+	return m.fetchCmd(m.generation)
+}
+
+func (m *watchModel) fetchCmd(generation int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		items, err := m.client.ListApprovals(ctx)
-		return approvalsFetchedMsg{items: items, err: err}
+		return approvalsFetchedMsg{generation: generation, items: items, err: err}
 	}
 }
 
@@ -112,8 +136,19 @@ func (m *watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = typed.Width
 		return m, nil
 	case watchTickMsg:
-		return m, m.fetchCmd()
+		// A tick never starts a second polling loop: if a fetch is already in
+		// flight, its completion schedules the next tick.
+		if m.inFlight {
+			return m, nil
+		}
+		return m, m.startFetch()
 	case approvalsFetchedMsg:
+		if typed.generation != m.generation {
+			// Stale generation: an out-of-order result must never mutate
+			// state. The latest fetch will apply and schedule the next tick.
+			return m, nil
+		}
+		m.inFlight = false
 		m.refreshedAt = time.Now()
 		if typed.err != nil {
 			// Fail closed: never present stale items as actionable.
@@ -139,7 +174,14 @@ func (m *watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.status = fmt.Sprintf("%s %s recorded", typed.action, typed.approvalID)
 		}
-		return m, m.fetchCmd()
+		// A transition invalidates the queue; refresh immediately. Bump the
+		// generation first so any result from a fetch started before the
+		// transition is discarded as stale.
+		if m.inFlight {
+			m.generation++
+			m.inFlight = false
+		}
+		return m, m.startFetch()
 	case tea.KeyMsg:
 		switch typed.String() {
 		case "ctrl+c", "q":
@@ -155,7 +197,11 @@ func (m *watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "r":
-			return m, m.fetchCmd()
+			if m.inFlight {
+				m.status = "refresh already in flight"
+				return m, nil
+			}
+			return m, m.startFetch()
 		case "a", "d":
 			action := "approve"
 			if typed.String() == "d" {

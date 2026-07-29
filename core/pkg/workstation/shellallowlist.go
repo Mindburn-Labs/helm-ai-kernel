@@ -23,13 +23,13 @@ import (
 	"time"
 )
 
-// DefaultShellAllowlist mirrors the Rowboat default: a minimal read-only set
-// seeded on first use.
+// DefaultShellAllowlist is the minimal read-only set seeded on first use.
+// curl and echo are deliberately NOT in the shipped defaults: `curl -o file
+// URL` and `echo x > file` are arbitrary writes, and an allowlisted writer
+// defeats the gate. Operators who need them add them explicitly.
 var DefaultShellAllowlist = []string{
 	"cat",
-	"curl",
 	"date",
-	"echo",
 	"grep",
 	"jq",
 	"ls",
@@ -73,12 +73,15 @@ func (s *ShellAllowlistStore) Path() string {
 // Allowlist returns the current allowlist, reloading the file when its mtime
 // or size changed since the last successful read. A missing file is seeded
 // with DefaultShellAllowlist. Parse and I/O failures return an error — callers
-// must fail closed.
+// must fail closed. The allowlist file must be a regular file (never a
+// symlink or special file) and must not be writable by group or others: this
+// file controls what passes the workstation boundary, so a redirected or
+// world-writable allowlist fails closed.
 func (s *ShellAllowlistStore) Allowlist() ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	info, err := os.Stat(s.path)
+	info, err := os.Lstat(s.path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("stat shell allowlist %s: %w", s.path, err)
@@ -86,10 +89,13 @@ func (s *ShellAllowlistStore) Allowlist() ([]string, error) {
 		if err := s.seedLocked(); err != nil {
 			return nil, err
 		}
-		info, err = os.Stat(s.path)
+		info, err = os.Lstat(s.path)
 		if err != nil {
 			return nil, fmt.Errorf("stat seeded shell allowlist %s: %w", s.path, err)
 		}
+	}
+	if err := validateShellAllowlistInfo(s.path, info); err != nil {
+		return nil, err
 	}
 
 	if s.cachePresent && info.ModTime().Equal(s.cachedMtime) && info.Size() == s.cachedSize {
@@ -100,11 +106,33 @@ func (s *ShellAllowlistStore) Allowlist() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Re-stat after the read: the file may have changed between the initial
+	// Lstat and ReadFile. Cache the metadata observed after the read so a
+	// concurrent rewrite can never pin stale mtime/size to new contents.
+	info, err = os.Lstat(s.path)
+	if err != nil {
+		return nil, fmt.Errorf("re-stat shell allowlist %s: %w", s.path, err)
+	}
+	if err := validateShellAllowlistInfo(s.path, info); err != nil {
+		return nil, err
+	}
 	s.cached = allowlist
 	s.cachedMtime = info.ModTime()
 	s.cachedSize = info.Size()
 	s.cachePresent = true
 	return append([]string(nil), s.cached...), nil
+}
+
+// validateShellAllowlistInfo enforces the file-safety invariants of the
+// allowlist: regular file, no symlink, not writable by group/others.
+func validateShellAllowlistInfo(path string, info os.FileInfo) error {
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return fmt.Errorf("shell allowlist %s must be a regular file, not a symlink or special file", path)
+	}
+	if info.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf("shell allowlist %s must not be writable by group or others (chmod 0600)", path)
+	}
+	return nil
 }
 
 // Reset drops the cached allowlist so the next Allowlist call re-reads the

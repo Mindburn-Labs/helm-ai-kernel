@@ -65,11 +65,29 @@ func newApprovalHTTPClient(rawURL, apiKey string) (*approvalHTTPClient, error) {
 	if parsed.Host == "" {
 		return nil, fmt.Errorf("server URL must include a host: %q", base)
 	}
+	// The client sends the admin bearer key on every request, so plain HTTP
+	// is only acceptable on loopback where the key cannot leave the machine.
+	// Anything else must use HTTPS — fail closed.
+	if parsed.Scheme == "http" && !isLoopbackHost(parsed.Hostname()) {
+		return nil, fmt.Errorf("server URL must use https: plain http is only allowed for loopback hosts (127.0.0.1, ::1, localhost): %q", base)
+	}
 	return &approvalHTTPClient{
 		baseURL:    parsed,
 		apiKey:     strings.TrimSpace(apiKey),
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}, nil
+}
+
+// isLoopbackHost reports whether host is a loopback identifier: 127.0.0.1,
+// ::1, or localhost. Anything else — including other 127/8 addresses,
+// 0.0.0.0, and hostnames that merely resolve to loopback — is not loopback
+// here (fail closed).
+func isLoopbackHost(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "127.0.0.1", "::1", "localhost":
+		return true
+	}
+	return false
 }
 
 func (c *approvalHTTPClient) ListApprovals(ctx context.Context) ([]contracts.ApprovalCeremony, error) {

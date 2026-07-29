@@ -113,9 +113,12 @@ func runWatchSnapshot(client approvalClient, jsonOut bool, stdout, stderr io.Wri
 // HELM_ADMIN_API_KEY environment variable. Missing key fails closed.
 func resolveWatchAPIKey(apiKeyFile string) (string, error) {
 	if strings.TrimSpace(apiKeyFile) != "" {
-		info, err := os.Stat(apiKeyFile)
+		info, err := os.Lstat(apiKeyFile)
 		if err != nil {
 			return "", fmt.Errorf("read API key file: %w", err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return "", fmt.Errorf("API key file %s must be a regular file, not a symlink or special file", apiKeyFile)
 		}
 		if info.Mode().Perm()&0o077 != 0 {
 			return "", fmt.Errorf("API key file %s must not be readable by group/others (chmod 0600)", apiKeyFile)

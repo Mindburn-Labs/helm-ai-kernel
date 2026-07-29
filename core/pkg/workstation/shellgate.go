@@ -19,6 +19,19 @@
 //     (e.g. `sudo -u root rm x`) may surface the value as a command name;
 //     that false positive fails closed and is accepted.
 //   - Unknown gate profiles normalize to production (deny), never to dev.
+//   - The gate is redirection-aware: output redirections (`>`, `>>`, `>|`)
+//     and downloader output flags (`-o`, `--output`, `-O`, `--remote-name`,
+//     `--output-document`) are treated as writes that always require an
+//     approval (dev) or a denial (production), even when every command name
+//     is allowlisted. An allowlisted `cat` must not become `cat x > /etc/y`.
+//
+// Threat-model limit (documented, accepted): gating is command-name and
+// write-target based, not a full shell parser. Quoted operators, glob
+// expansions, and arguments that a program itself interprets as write
+// destinations (e.g. `tee file`, `dd of=file`, `sed -i`) are out of scope for
+// name extraction; programs with intrinsic write behavior must stay off the
+// allowlist. Redirection scanning strips quoted spans first and may still
+// false-positive on unusual unquoted `>` usage — that fails closed.
 package workstation
 
 import (
@@ -30,12 +43,15 @@ import (
 // commandSplitPattern splits a shell command line into segments at every
 // construct that can start a new command: pipes, logical operators, command
 // separators, background execution, command substitution (backticks and
-// $(...)), and subshells. Order matters: `||` and `&&` must precede their
-// single-character prefixes so the leftmost-longest alternation consumes the
-// right token. Without `&`, backtick, `$(`, and the subshell parens,
-// `echo hi & rm /x`, `echo `+"`rm /x`"+`, and `echo $(rm /x)` would slip past
-// the gate with only `echo` allowlisted.
-var commandSplitPattern = regexp.MustCompile(`\|\||&&|&|;|\||\n|` + "`" + `|\$\(|\(|\)`)
+// $(...)), and subshell open parens. Order matters: `||` and `&&` must
+// precede their single-character prefixes so the leftmost-longest
+// alternation consumes the right token. Without `&`, backtick, `$(`, and
+// `(`, `echo hi & rm /x`, `echo `+"`rm /x`"+`, and `echo $(rm /x)` would
+// slip past the gate with only `echo` allowlisted. `)` is deliberately not a
+// split point: `ls $(pwd)/x` would otherwise yield a bogus `/x` "command"
+// from the suffix after the substitution. sanitizeCommandToken truncates at
+// `)` instead, so the segment yields `pwd`.
+var commandSplitPattern = regexp.MustCompile(`\|\||&&|&|;|\||\n|` + "`" + `|\$\(|\(`)
 
 // envAssignmentPattern matches leading ENV=value prefixes that are not command
 // names (e.g. `FOO=bar ls`).
@@ -48,6 +64,25 @@ var wrapperCommands = map[string]struct{}{
 	"env":     {},
 	"time":    {},
 	"command": {},
+}
+
+// wrapperValueFlags are wrapper flags that consume the next token as a value
+// (e.g. `sudo -u root`, `env -u NAME`, `time -o FILE`). The value token must
+// be skipped with the flag so it neither shadows nor replaces the wrapped
+// command: `sudo -u root rm /x` must extract {sudo, rm}, never stop at
+// `root`. Long `--flag=value` forms carry no separate token and are skipped
+// as bare flags.
+var wrapperValueFlags = map[string]map[string]struct{}{
+	"sudo": {
+		"-u": {}, "--user": {}, "-g": {}, "--group": {}, "-h": {}, "--host": {},
+		"-p": {}, "--prompt": {}, "-C": {}, "--chdir": {},
+	},
+	"env": {
+		"-u": {}, "--unset": {}, "-C": {}, "--chdir": {}, "-S": {}, "--split-string": {},
+	},
+	"time": {
+		"-o": {}, "--output": {}, "-f": {}, "--format": {},
+	},
 }
 
 // ExtractCommandNames returns the sorted, de-duplicated, lowercased set of
@@ -92,18 +127,26 @@ func ExtractCommandNames(command string) []string {
 
 // unwrapWrappedCommands resolves the command names hidden behind one or more
 // nested wrappers, including the intermediate wrappers themselves. Leading
-// ENV=value assignments and bare `-` flags after a wrapper are skipped.
+// ENV=value assignments and bare `-` flags after a wrapper are skipped; flags
+// known to take a separate value (sudo -u, env -u, time -o, …) are skipped
+// together with their value so the value cannot shadow the wrapped command.
 func unwrapWrappedCommands(tokens []string) []string {
 	var out []string
+	activeWrapper := ""
 	for i := 0; i < len(tokens); i++ {
 		token := tokens[i]
 		if envAssignmentPattern.MatchString(token) {
 			continue
 		}
 		if strings.HasPrefix(token, "-") {
-			// Bare wrapper flag (e.g. `sudo -E`, `time -p`). Flags that take a
-			// separate value are not unwrapped; the value may surface as a
-			// command name, which fails closed.
+			// Bare wrapper flag (e.g. `sudo -E`, `time -p`). Value-taking
+			// flags consume the next token as well, so `sudo -u root rm /x`
+			// still resolves `rm` instead of stopping at `root`. Unknown
+			// value-taking flags may surface their value as a command name;
+			// that false positive fails closed and is accepted.
+			if _, takesValue := wrapperValueFlags[activeWrapper][token]; takesValue {
+				i++
+			}
 			continue
 		}
 		name := sanitizeCommandToken(token)
@@ -112,6 +155,7 @@ func unwrapWrappedCommands(tokens []string) []string {
 		}
 		out = append(out, name)
 		if _, isWrapper := wrapperCommands[name]; isWrapper {
+			activeWrapper = name
 			continue
 		}
 		break
@@ -119,8 +163,15 @@ func unwrapWrappedCommands(tokens []string) []string {
 	return out
 }
 
+// sanitizeCommandToken normalizes a raw token into a comparable command name:
+// trimmed, unquoted, lowercased, and truncated at the first `)` so a command
+// substitution suffix (`$(pwd)/x` → `pwd)/x`) cannot become a bogus command.
 func sanitizeCommandToken(token string) string {
-	return strings.ToLower(strings.Trim(strings.TrimSpace(token), `'"`))
+	cleaned := strings.ToLower(strings.Trim(strings.TrimSpace(token), `'"`))
+	if idx := strings.IndexByte(cleaned, ')'); idx >= 0 {
+		cleaned = cleaned[:idx]
+	}
+	return cleaned
 }
 
 // BlockedCommandNames returns the invoked command names that are not present
@@ -151,6 +202,123 @@ func BlockedCommandNames(command string, allowlist []string) []string {
 		}
 	}
 	return blocked
+}
+
+// quotedSpanPattern matches single- or double-quoted spans so redirection
+// scanning can ignore operators inside quotes (`echo "a > b"` is not a
+// write).
+var quotedSpanPattern = regexp.MustCompile(`'[^']*'|"[^"]*"`)
+
+// outputValueFlags are flags whose value is a file the command writes to
+// (curl/wget style). The value may be inline (`--output=file`), concatenated
+// (`-ofile`), or the next token (`-o file`).
+var outputValueFlags = map[string]struct{}{
+	"-o":                {},
+	"--output":          {},
+	"--output-document": {},
+}
+
+// outputBooleanFlags are flags that make the command write to a
+// command-chosen file name (curl -O / --remote-name).
+var outputBooleanFlags = map[string]struct{}{
+	"-O":                {},
+	"--remote-name":     {},
+	"--remote-name-all": {},
+}
+
+// ExtractWriteTargets returns the write destinations a shell command line
+// would create or overwrite: output redirections (`>`, `>>`, `>|`, with
+// optional fd prefixes like `2>`) and downloader-style output flags. File
+// descriptor duplication (`2>&1`) is not a write. Quoted spans are stripped
+// before scanning; unquoted corner cases may false-positive, which fails
+// closed. The result is sorted and de-duplicated.
+func ExtractWriteTargets(command string) []string {
+	stripped := quotedSpanPattern.ReplaceAllString(command, " ")
+	seen := make(map[string]struct{})
+	for _, target := range redirectionTargets(stripped) {
+		seen[target] = struct{}{}
+	}
+	for _, target := range outputFlagTargets(stripped) {
+		seen[target] = struct{}{}
+	}
+	targets := make([]string, 0, len(seen))
+	for target := range seen {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	if len(targets) == 0 {
+		return nil
+	}
+	return targets
+}
+
+// redirectionTargets scans for `>` / `>>` / `>|` output redirections. An
+// optional fd prefix (`2>`, `&>`) is part of the operator; `>&` (fd
+// duplication such as `2>&1`) is not a file write and is skipped.
+func redirectionTargets(line string) []string {
+	var targets []string
+	for i := 0; i < len(line); i++ {
+		if line[i] != '>' {
+			continue
+		}
+		j := i + 1
+		if j < len(line) && line[j] == '>' { // append: >>
+			j++
+		}
+		if j < len(line) && line[j] == '|' { // noclobber override: >|
+			j++
+		}
+		if j < len(line) && line[j] == '&' { // fd duplication: 2>&1
+			i = j
+			continue
+		}
+		for j < len(line) && (line[j] == ' ' || line[j] == '\t') {
+			j++
+		}
+		start := j
+		for j < len(line) && !strings.ContainsRune(" \t\r\n|;&<>()$`", rune(line[j])) {
+			j++
+		}
+		if j > start {
+			targets = append(targets, line[start:j])
+		}
+		i = j
+	}
+	return targets
+}
+
+// outputFlagTargets scans for downloader-style output flags: `-o file`,
+// `--output file`, `--output=file`, `-ofile`, `-O`, `--remote-name`,
+// `--output-document`. A trailing `-o` with no value, or `-o -` (stdout), is
+// not a write. Unknown programs that reuse `-o` for non-write purposes may
+// false-positive; that fails closed.
+func outputFlagTargets(line string) []string {
+	fields := strings.Fields(line)
+	var targets []string
+	for i, field := range fields {
+		name, inline := field, ""
+		if strings.HasPrefix(field, "--") {
+			if idx := strings.IndexByte(field, '='); idx >= 0 {
+				name, inline = field[:idx], field[idx+1:]
+			}
+		} else if strings.HasPrefix(field, "-o") && len(field) > 2 && !strings.HasPrefix(field, "--") {
+			name, inline = "-o", field[2:]
+		}
+		if _, ok := outputBooleanFlags[name]; ok {
+			targets = append(targets, "<remote-file>")
+			continue
+		}
+		if _, ok := outputValueFlags[name]; !ok {
+			continue
+		}
+		switch {
+		case inline != "" && inline != "-":
+			targets = append(targets, inline)
+		case i+1 < len(fields) && fields[i+1] != "-":
+			targets = append(targets, fields[i+1])
+		}
+	}
+	return targets
 }
 
 // ShellGateProfile selects the failure mode of the shell gate.
@@ -188,35 +356,57 @@ const (
 
 // ShellGateDecision is the result of gating one shell command line.
 type ShellGateDecision struct {
-	Verdict ShellGateVerdict `json:"verdict"`
-	Profile ShellGateProfile `json:"profile"`
-	Command string           `json:"command"`
-	Invoked []string         `json:"invoked_commands"`
-	Blocked []string         `json:"blocked_commands,omitempty"`
-	Reason  string           `json:"reason,omitempty"`
+	Verdict      ShellGateVerdict `json:"verdict"`
+	Profile      ShellGateProfile `json:"profile"`
+	Command      string           `json:"command"`
+	Invoked      []string         `json:"invoked_commands"`
+	Blocked      []string         `json:"blocked_commands,omitempty"`
+	WriteTargets []string         `json:"write_targets,omitempty"`
+	Reason       string           `json:"reason,omitempty"`
+}
+
+// gateReason explains why a command did not pass the gate, covering both
+// blocked command names and detected write targets.
+func gateReason(decision ShellGateDecision, dev bool) string {
+	mode := "are denied in the production profile"
+	if dev {
+		mode = "escalate to a pending approval in the dev profile"
+	}
+	var parts []string
+	if len(decision.Blocked) > 0 {
+		parts = append(parts, "blocked shell commands "+mode+": "+strings.Join(decision.Blocked, ", "))
+	}
+	if len(decision.WriteTargets) > 0 {
+		parts = append(parts, "shell writes "+mode+": "+strings.Join(decision.WriteTargets, ", "))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // GateShellCommand evaluates a shell command line against an allowlist under
-// the given profile. Blocked commands are denied in the production profile
-// (fail closed) and escalated to a pending approval in the dev profile.
+// the given profile. Blocked command names and any detected write target
+// (output redirection or output flag) are denied in the production profile
+// (fail closed) and escalated to a pending approval in the dev profile — even
+// when every command name is allowlisted, an allowlisted reader must not
+// become a writer (`cat x > y`, `curl -o y url`).
 func GateShellCommand(profile ShellGateProfile, command string, allowlist []string) ShellGateDecision {
 	decision := ShellGateDecision{
-		Profile: profile,
-		Command: command,
-		Invoked: ExtractCommandNames(command),
-		Blocked: BlockedCommandNames(command, allowlist),
+		Profile:      profile,
+		Command:      command,
+		Invoked:      ExtractCommandNames(command),
+		Blocked:      BlockedCommandNames(command, allowlist),
+		WriteTargets: ExtractWriteTargets(command),
 	}
-	if len(decision.Blocked) == 0 {
+	if len(decision.Blocked) == 0 && len(decision.WriteTargets) == 0 {
 		decision.Verdict = ShellGateVerdictAllow
 		return decision
 	}
 	if profile == ShellGateProfileDev {
 		decision.Verdict = ShellGateVerdictPendingApproval
-		decision.Reason = "blocked shell commands escalate to a pending approval in the dev profile: " + strings.Join(decision.Blocked, ", ")
+		decision.Reason = gateReason(decision, true)
 		return decision
 	}
 	decision.Verdict = ShellGateVerdictDeny
-	decision.Reason = "blocked shell commands are denied in the production profile: " + strings.Join(decision.Blocked, ", ")
+	decision.Reason = gateReason(decision, false)
 	return decision
 }
 
@@ -229,11 +419,12 @@ func GateShellCommandWithStore(profile ShellGateProfile, command string, store *
 		return GateShellCommand(profile, command, allowlist)
 	}
 	decision := ShellGateDecision{
-		Profile: profile,
-		Command: command,
-		Invoked: ExtractCommandNames(command),
-		Blocked: ExtractCommandNames(command),
-		Reason:  "shell allowlist unavailable, failing closed: " + err.Error(),
+		Profile:      profile,
+		Command:      command,
+		Invoked:      ExtractCommandNames(command),
+		Blocked:      ExtractCommandNames(command),
+		WriteTargets: ExtractWriteTargets(command),
+		Reason:       "shell allowlist unavailable, failing closed: " + err.Error(),
 	}
 	if profile == ShellGateProfileDev {
 		decision.Verdict = ShellGateVerdictPendingApproval

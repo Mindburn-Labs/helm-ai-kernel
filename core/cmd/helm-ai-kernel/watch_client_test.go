@@ -123,4 +123,7 @@ func TestNewApprovalHTTPClientRejectsBadURL(t *testing.T) {
 	if _, err := newApprovalHTTPClient("http://", "k"); err == nil {
 		t.Fatal("missing host must be rejected")
 	}
+	if _, err := newApprovalHTTPClient("http://example.com", "k"); err == nil {
+		t.Fatal("non-loopback plain HTTP must be rejected before sending the admin key")
+	}
 }

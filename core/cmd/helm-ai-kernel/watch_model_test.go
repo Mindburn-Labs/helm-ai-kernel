@@ -117,6 +117,29 @@ func TestWatchModelFetchErrorFailsClosed(t *testing.T) {
 	}
 }
 
+func TestWatchModelDiscardsStaleFetchGeneration(t *testing.T) {
+	m := newWatchModel(&fakeApprovalClient{}, "operator.cli", time.Second)
+	m.generation = 2
+	m.inFlight = true
+	m.pending = []contracts.ApprovalCeremony{pendingCeremony("current", time.Now())}
+
+	m, cmd := updateModel(t, m, approvalsFetchedMsg{
+		generation: 1,
+		err:        errors.New("stale failure"),
+	})
+	if cmd != nil || len(m.pending) != 1 || m.pending[0].ApprovalID != "current" || !m.inFlight {
+		t.Fatalf("stale generation mutated model: pending=%+v inFlight=%t cmd=%v", m.pending, m.inFlight, cmd)
+	}
+
+	m, _ = updateModel(t, m, approvalsFetchedMsg{
+		generation: 2,
+		err:        errors.New("current failure"),
+	})
+	if m.lastErr == nil || len(m.pending) != 0 || m.inFlight {
+		t.Fatalf("current failure did not fail closed: pending=%+v inFlight=%t err=%v", m.pending, m.inFlight, m.lastErr)
+	}
+}
+
 func TestWatchModelApproveDenyFlow(t *testing.T) {
 	client := &fakeApprovalClient{}
 	m := newWatchModel(client, "operator.cli", time.Second)

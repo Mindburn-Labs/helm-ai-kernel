@@ -235,29 +235,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	mux.Handle("/api/v1/trust/keys/revoke", auth.RequireAdminAuth(trustKeys.HandleRevokeKey))
 
 	// --- MCP Gateway ---
-	var (
-		mcpGateway *mcppkg.Gateway
-		err        error
-	)
-	switch {
-	case svc.Guardian != nil:
-		// The deployed gateway enforces the reconciled policy authority
-		// (snapshot-bound Guardian). A standalone boot-time guardian would
-		// keep an empty fail-closed graph forever, so reference-pack
-		// runtime_actions compiled by the reconciler would never reach the
-		// MCP enforcement path.
-		var evaluator mcppkg.PolicyEvaluator = svc.Guardian
-		if svc.ReceiptStore != nil && svc.ReceiptSigner != nil {
-			// Every governed gateway decision (ALLOW and DENY) persists a
-			// signed receipt into the same store /api/v1/receipts reads.
-			evaluator = &receiptPersistingEvaluator{svc: svc, inner: evaluator}
-		}
-		mcpGateway, err = newLocalMCPGatewayWithEvaluator(mcppkg.GatewayConfig{}, evaluator)
-	case svc.ReceiptSigner != nil:
-		mcpGateway, err = newConfiguredLocalMCPGatewayWithSigner(mcppkg.GatewayConfig{}, svc.ReceiptSigner)
-	default:
-		mcpGateway, err = newLocalMCPGateway()
-	}
+	mcpGateway, err := newDeployedMCPGateway(svc)
 	if err != nil {
 		log.Printf("[helm] routes: MCP gateway unavailable: %v", err)
 	} else {
@@ -352,6 +330,23 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	_ = ctx
 
 	log.Println("[helm] routes: All subsystem routes registered")
+}
+
+func newDeployedMCPGateway(svc *Services) (*mcppkg.Gateway, error) {
+	switch {
+	case svc.Guardian != nil && svc.ReceiptStore == nil:
+		return nil, errors.New("governed MCP gateway requires a receipt store")
+	case svc.Guardian != nil && svc.ReceiptSigner == nil:
+		return nil, errors.New("governed MCP gateway requires a receipt signer")
+	case svc.Guardian != nil:
+		// Bind the reconciled policy authority and receipt every decision.
+		evaluator := &receiptPersistingEvaluator{svc: svc, inner: svc.Guardian}
+		return newLocalMCPGatewayWithEvaluator(mcppkg.GatewayConfig{}, evaluator)
+	case svc.ReceiptSigner != nil:
+		return newConfiguredLocalMCPGatewayWithSigner(mcppkg.GatewayConfig{}, svc.ReceiptSigner)
+	default:
+		return newLocalMCPGateway()
+	}
 }
 
 func registerDeployedMCPRoutes(mux *http.ServeMux, gateway *mcppkg.Gateway) {

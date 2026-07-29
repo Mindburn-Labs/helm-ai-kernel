@@ -553,19 +553,18 @@ func (g *Gateway) authMode() string {
 	return g.config.AuthMode
 }
 
-// hasRequiredScopes enforces a tool's OAuth scopes only when the gateway runs
-// an OAuth channel that can actually convey them. In every other auth mode
-// (none, static-header) no client can present scopes, so demanding them made
-// scoped tools permanently unreachable while the gateway advertised
-// auth_mode: none. Skipping the scope gate does not bypass governance: the
-// executor still evaluates every call against the fail-closed policy
-// authority, which remains the enforcement boundary.
+// hasRequiredScopes enforces a tool's OAuth scopes whenever the configured
+// authentication channel claims a client identity. Anonymous local mode has
+// no scope-bearing identity, while static-header authentication must not
+// promote possession of an API key into every delegated OAuth scope.
 func (g *Gateway) hasRequiredScopes(ctx context.Context, tool ToolRef) bool {
 	switch g.authMode() {
 	case "oauth":
 		return hasAllOAuthScopes(ctx, tool.RequiredScopes)
-	case "none", "static-header":
+	case "none":
 		return true
+	case "static-header":
+		return len(tool.RequiredScopes) == 0
 	default:
 		return false
 	}

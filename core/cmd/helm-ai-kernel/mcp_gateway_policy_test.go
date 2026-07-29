@@ -365,3 +365,32 @@ func TestDeployedMCPRoutesRequireAdminAuthentication(t *testing.T) {
 		t.Fatalf("unauthenticated MCP route status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestGovernedDeployedMCPGatewayRequiresReceiptComponents(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard := &guardian.Guardian{}
+
+	for name, svc := range map[string]*Services{
+		"missing store":  {Guardian: guard, ReceiptSigner: signer},
+		"missing signer": {Guardian: guard, ReceiptStore: &captureReceiptStore{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			gateway, err := newDeployedMCPGateway(svc)
+			if err == nil || gateway != nil {
+				t.Fatalf("governed gateway must fail closed: gateway=%v err=%v", gateway, err)
+			}
+		})
+	}
+
+	gateway, err := newDeployedMCPGateway(&Services{
+		Guardian:      guard,
+		ReceiptStore:  &captureReceiptStore{},
+		ReceiptSigner: signer,
+	})
+	if err != nil || gateway == nil {
+		t.Fatalf("fully receipted governed gateway unavailable: gateway=%v err=%v", gateway, err)
+	}
+}

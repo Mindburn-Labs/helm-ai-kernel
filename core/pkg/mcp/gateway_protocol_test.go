@@ -230,41 +230,64 @@ func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "ok")
 }
 
-// HELM-364: the two known scope-less modes have no channel for a client to
-// present scopes, so scoped tools stay reachable; governance policy remains
-// the enforcement boundary.
-func TestGateway_ToolsCallWithoutOAuthChannelReachesScopedTool(t *testing.T) {
-	for _, authMode := range []string{"", "static-header"} {
-		t.Run("auth_mode="+authMode, func(t *testing.T) {
-			exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
-				assert.Equal(t, "scoped_tool", req.ToolName)
-				return ToolExecutionResponse{Content: "ok"}, nil
-			}
-			catalog := NewInMemoryCatalog()
-			require.NoError(t, catalog.Register(context.Background(), ToolRef{
-				Name:           "scoped_tool",
-				Description:    "requires an OAuth scope when OAuth is the auth channel",
-				Schema:         map[string]any{"type": "object"},
-				RequiredScopes: []string{"mcp:tool:scoped"},
-			}))
-			gw := NewGateway(catalog, GatewayConfig{AuthMode: authMode}, WithExecutor(exec))
-			mux := http.NewServeMux()
-			gw.RegisterRoutes(mux)
-
-			rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
-				"jsonrpc": "2.0",
-				"id":      22,
-				"method":  "tools/call",
-				"params": map[string]any{
-					"name": "scoped_tool",
-				},
-			}, nil)
-
-			require.Equal(t, http.StatusOK, rec.Code)
-			assert.NotContains(t, rec.Body.String(), "requires OAuth scopes")
-			assert.Contains(t, rec.Body.String(), "ok")
-		})
+// HELM-364: anonymous local mode has no scope-bearing identity, so policy
+// governance remains its enforcement boundary.
+func TestGateway_ToolsCallWithoutAuthenticationReachesScopedTool(t *testing.T) {
+	exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		assert.Equal(t, "scoped_tool", req.ToolName)
+		return ToolExecutionResponse{Content: "ok"}, nil
 	}
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Description:    "requires an OAuth scope when OAuth is the auth channel",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	gw := NewGateway(catalog, GatewayConfig{}, WithExecutor(exec))
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      22,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "scoped_tool"},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "requires OAuth scopes")
+	assert.Contains(t, rec.Body.String(), "ok")
+}
+
+func TestGateway_StaticHeaderDoesNotGrantRequiredOAuthScopes(t *testing.T) {
+	called := false
+	exec := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		called = true
+		return ToolExecutionResponse{Content: "unsafe"}, nil
+	}
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	gw := NewGateway(catalog, GatewayConfig{AuthMode: "static-header"}, WithExecutor(exec))
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      23,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "scoped_tool"},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "requires OAuth scopes")
+	assert.False(t, called)
+
+	require.True(t, gw.hasRequiredScopes(context.Background(), ToolRef{}))
 }
 
 func TestGateway_UnknownAuthModeFailsClosedForScopedTool(t *testing.T) {

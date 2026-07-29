@@ -653,3 +653,17 @@ func TestCollectConfigObservationRejectsInvalidUserAgentConfig(t *testing.T) {
 		t.Fatalf("error = %v, want coverage error", err)
 	}
 }
+
+func TestCollectConfigObservationRejectsMalformedNestedClaudeMCPServers(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"projects":{"/srv":{"mcpServers":[]}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := collectConfigObservation(t.TempDir(), true, true)
+	if !errors.Is(err, ErrScanCoverageIncomplete) {
+		t.Fatalf("error = %v, want coverage error", err)
+	}
+}

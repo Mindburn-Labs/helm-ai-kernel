@@ -111,10 +111,10 @@ func TestHookPreToolAllowsSafeBashWithoutApprovalOutput(t *testing.T) {
 	}
 }
 
-func TestClassifyPreToolPayloadDeniesBuildRemovalInProductionCWD(t *testing.T) {
+func TestClassifyPreToolPayloadDeniesArtifactRemovalOutsideSourceWorkspace(t *testing.T) {
 	classification := classifyPreToolPayload(preToolPayload{
 		ToolName:  "Bash",
-		ToolInput: map[string]any{"command": "rm -rf build"},
+		ToolInput: map[string]any{"command": "rm -rf target"},
 		CWD:       "/srv/production",
 	})
 	if !classification.ShouldDecide || classification.Class != "shell-operate" {
@@ -330,6 +330,17 @@ func globReceipts(t *testing.T, dataDir string) []string {
 }
 
 func TestIsDestructiveShellCommand(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	repo := filepath.Join(home, "repo")
+	workspace := filepath.Join(repo, "packages", "app")
+	for _, dir := range []string{filepath.Join(repo, ".git"), workspace} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	destructive := []string{
 		"rm -rf /srv/production",
 		"rm -rf /tmp/helm-demo",
@@ -361,7 +372,7 @@ func TestIsDestructiveShellCommand(t *testing.T) {
 		"drop table users",
 	}
 	for _, command := range destructive {
-		if !isDestructiveShellCommand(command) {
+		if !isDestructiveShellCommand(command, workspace) {
 			t.Errorf("expected destructive: %q", command)
 		}
 	}
@@ -380,8 +391,15 @@ func TestIsDestructiveShellCommand(t *testing.T) {
 		"",
 	}
 	for _, command := range safe {
-		if isDestructiveShellCommand(command) {
+		if isDestructiveShellCommand(command, workspace) {
 			t.Errorf("expected not destructive: %q", command)
 		}
+	}
+
+	if err := os.Symlink(t.TempDir(), filepath.Join(workspace, "coverage")); err != nil {
+		t.Fatal(err)
+	}
+	if !isDestructiveShellCommand("rm -rf coverage/", workspace) {
+		t.Error("expected build-artifact symlink removal to be destructive")
 	}
 }

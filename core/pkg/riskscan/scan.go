@@ -678,11 +678,18 @@ func applyConfigObservation(obs *ConfigObservation, kind string, data []byte) er
 }
 
 func applyJSONConfig(obs *ConfigObservation, data []byte) error {
-	var raw any
+	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	obs.MCPServerCount += countMap(raw, "mcpServers")
+	if raw == nil {
+		return fmt.Errorf("Claude configuration must be an object")
+	}
+	count, err := countMap(raw, "mcpServers")
+	if err != nil {
+		return err
+	}
+	obs.MCPServerCount += count
 	if mode := findString(raw, "permissionMode", "defaultMode", "approval_policy", "approvalPolicy"); mode != "" {
 		obs.PermissionMode = normalizePermissionMode(mode)
 	}
@@ -738,34 +745,48 @@ func applyTOMLConfig(obs *ConfigObservation, data []byte) error {
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	obs.MCPServerCount += countMap(raw, "mcp_servers")
+	count, err := countMap(raw, "mcp_servers")
+	if err != nil {
+		return err
+	}
+	obs.MCPServerCount += count
 	if mode := findString(raw, "approval_policy", "approvalPolicy", "permission_mode", "permissionMode"); mode != "" {
 		obs.PermissionMode = normalizePermissionMode(mode)
 	}
 	return nil
 }
 
-func countMap(v any, key string) int {
+func countMap(v any, key string) (int, error) {
 	switch typed := v.(type) {
 	case map[string]any:
 		total := 0
 		for k, child := range typed {
 			if k == key {
-				if m, ok := child.(map[string]any); ok {
-					total += len(m)
+				m, ok := child.(map[string]any)
+				if !ok {
+					return 0, fmt.Errorf("%s must be an object", key)
 				}
+				total += len(m)
 			}
-			total += countMap(child, key)
+			count, err := countMap(child, key)
+			if err != nil {
+				return 0, err
+			}
+			total += count
 		}
-		return total
+		return total, nil
 	case []any:
 		total := 0
 		for _, child := range typed {
-			total += countMap(child, key)
+			count, err := countMap(child, key)
+			if err != nil {
+				return 0, err
+			}
+			total += count
 		}
-		return total
+		return total, nil
 	default:
-		return 0
+		return 0, nil
 	}
 }
 

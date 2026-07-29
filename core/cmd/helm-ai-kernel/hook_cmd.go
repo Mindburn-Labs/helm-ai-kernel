@@ -176,7 +176,7 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 	switch {
 	case strings.EqualFold(tool, "Bash"):
 		command := inputString(payload.ToolInput, "command", "cmd")
-		if isDestructiveShellCommand(command) {
+		if isDestructiveShellCommand(command, payload.CWD) {
 			return hookClassification{
 				ShouldDecide: true,
 				Class:        "shell-operate",
@@ -281,7 +281,43 @@ var buildArtifactDirs = map[string]bool{
 	"venv":          true,
 }
 
-func isDestructiveShellCommand(command string) bool {
+func isLocalSourceWorkspace(cwd string) bool {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" || !filepath.IsAbs(cwd) {
+		return false
+	}
+	resolvedCWD, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(resolvedCWD)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	resolvedHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(resolvedHome, resolvedCWD)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	for dir := resolvedCWD; ; dir = filepath.Dir(dir) {
+		marker, err := os.Lstat(filepath.Join(dir, ".git"))
+		if err == nil {
+			return marker.IsDir() || marker.Mode().IsRegular()
+		}
+		if !os.IsNotExist(err) || dir == resolvedHome || filepath.Dir(dir) == dir {
+			return false
+		}
+	}
+}
+
+func isDestructiveShellCommand(command, cwd string) bool {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return false
@@ -297,7 +333,7 @@ func isDestructiveShellCommand(command string) bool {
 	}
 	for _, needle := range rmNeedles {
 		if strings.Contains(c, needle) || strings.HasPrefix(c, strings.TrimSpace(needle)) {
-			if !removesOnlyBuildArtifacts(command) {
+			if !isLocalSourceWorkspace(cwd) || !removesOnlyBuildArtifacts(command, cwd) {
 				return true
 			}
 			break
@@ -368,7 +404,7 @@ func isForcePush(c string) bool {
 // removesOnlyBuildArtifacts reports whether every command segment is an rm whose
 // operands are regenerable build directories. It fails closed when another
 // segment could change what a relative operand resolves to.
-func removesOnlyBuildArtifacts(c string) bool {
+func removesOnlyBuildArtifacts(c, cwd string) bool {
 	found := false
 	for _, segment := range splitShellSegments(c) {
 		fields := strings.Fields(segment)
@@ -396,7 +432,15 @@ func removesOnlyBuildArtifacts(c string) bool {
 				return false
 			}
 			operands++
-			if !buildArtifactDirs[strings.TrimSuffix(strings.TrimPrefix(arg, "./"), "/")] {
+			artifact := strings.TrimSuffix(strings.TrimPrefix(arg, "./"), "/")
+			if !buildArtifactDirs[artifact] {
+				return false
+			}
+			info, err := os.Lstat(filepath.Join(cwd, artifact))
+			if err == nil && info.Mode()&os.ModeSymlink != 0 {
+				return false
+			}
+			if err != nil && !os.IsNotExist(err) {
 				return false
 			}
 		}

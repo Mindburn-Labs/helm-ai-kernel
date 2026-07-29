@@ -54,27 +54,56 @@ jobs:
             done
             exit 0
           fi
-          files="$(git diff --name-only "$BASE"...HEAD)"
-          # A change to this workflow changes the scanner itself; validate the
-          # whole matrix instead of treating it as a docs-only change.
-          if printf '%s\n' "$files" | grep -Fxq ".github/workflows/codeql.yml"; then
-            for k in go javascript-typescript python java-kotlin rust; do
-              echo "$k=true" >> "$GITHUB_OUTPUT"
-            done
-            exit 0
+          # NUL-delimited paths preserve names containing spaces, newlines, or
+          # non-ASCII bytes. Unknown files deliberately trigger a full sweep:
+          # only Markdown and legal-text-only changes can skip CodeQL entirely.
+          go=false
+          javascript_typescript=false
+          python=false
+          java_kotlin=false
+          rust=false
+          full=false
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              .github/workflows/codeql.yml|.github/codeql/*|.github/codeql*.yml|.github/codeql*.yaml)
+                full=true
+                ;;
+              *.md|LICENSE|LICENSE.*|NOTICE|NOTICE.*)
+                ;;
+              *.go|go.mod|*/go.mod|go.sum|*/go.sum|go.work|*/go.work|go.work.sum|*/go.work.sum|vendor/*|*/vendor/*)
+                go=true
+                ;;
+              *.js|*.jsx|*.ts|*.tsx|*.mjs|*.cjs|*.mts|*.cts|*.vue|*.svelte|*.astro|package.json|*/package.json|package-lock.json|*/package-lock.json|npm-shrinkwrap.json|*/npm-shrinkwrap.json|pnpm-lock.yaml|*/pnpm-lock.yaml|yarn.lock|*/yarn.lock|bun.lock|*/bun.lock|bun.lockb|*/bun.lockb|tsconfig*.json|*/tsconfig*.json|jsconfig.json|*/jsconfig.json)
+                javascript_typescript=true
+                ;;
+              *.py|pyproject.toml|*/pyproject.toml|setup.cfg|*/setup.cfg|requirements*.txt|*/requirements*.txt|requirements*.in|*/requirements*.in|Pipfile|*/Pipfile|Pipfile.lock|*/Pipfile.lock|poetry.lock|*/poetry.lock|uv.lock|*/uv.lock|.python-version|*/.python-version)
+                python=true
+                ;;
+              *.java|*.kt|*.kts|pom.xml|*/pom.xml|build.gradle|*/build.gradle|settings.gradle|*/settings.gradle|gradle.properties|*/gradle.properties|gradle/*|*/gradle/*|gradlew|*/gradlew|gradlew.bat|*/gradlew.bat)
+                java_kotlin=true
+                ;;
+              *.rs|Cargo.toml|*/Cargo.toml|Cargo.lock|*/Cargo.lock|.cargo/*|*/.cargo/*)
+                rust=true
+                ;;
+              *)
+                full=true
+                ;;
+            esac
+          done < <(git diff --name-only -z "$BASE"...HEAD)
+          if [ "$full" = true ]; then
+            go=true
+            javascript_typescript=true
+            python=true
+            java_kotlin=true
+            rust=true
           fi
-          out() {
-            if printf '%s\n' "$files" | grep -qE "$2"; then
-              echo "$1=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "$1=false" >> "$GITHUB_OUTPUT"
-            fi
-          }
-          out go '\.go$|go\.(mod|sum)$|go\.work'
-          out javascript-typescript '\.(js|jsx|ts|tsx|mjs|cjs)$|package(-lock)?\.json$|pnpm-lock\.yaml$'
-          out python '\.py$|requirements.*\.txt$|pyproject\.toml$'
-          out java-kotlin '\.(java|kt|kts)$|pom\.xml$|build\.gradle'
-          out rust '\.rs$|Cargo\.(toml|lock)$'
+          {
+            echo "go=$go"
+            echo "javascript-typescript=$javascript_typescript"
+            echo "python=$python"
+            echo "java-kotlin=$java_kotlin"
+            echo "rust=$rust"
+          } >> "$GITHUB_OUTPUT"
 
   analyze:
     name: CodeQL (${{ matrix.language }})
@@ -130,13 +159,19 @@ jobs:
   rust-audit:
     name: Rust audit
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - name: Install cargo-audit
+      - name: Skip when no relevant changes
+        if: needs.changes.outputs.rust != 'true'
+        run: echo "no Rust changes in this range; audit skipped"
+      - if: needs.changes.outputs.rust == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - if: needs.changes.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - if: needs.changes.outputs.rust == 'true'
+        name: Install cargo-audit
         run: cargo install cargo-audit --locked
-      - name: Audit Rust SDK dependencies
+      - if: needs.changes.outputs.rust == 'true'
+        name: Audit Rust SDK dependencies
         working-directory: sdk/rust
         run: cargo audit

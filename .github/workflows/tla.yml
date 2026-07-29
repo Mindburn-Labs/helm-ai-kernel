@@ -4,18 +4,8 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
-    paths:
-      - "proofs/**"
-      - "protocols/**"
-      - "scripts/tla/**"
-      - ".github/workflows/tla.yml"
   push:
     branches: [main]
-    paths:
-      - "proofs/**"
-      - "protocols/**"
-      - "scripts/tla/**"
-      - ".github/workflows/tla.yml"
 
 permissions:
   contents: read

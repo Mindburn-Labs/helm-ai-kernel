@@ -4,20 +4,8 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
-    paths:
-      - "core/**"
-      - "**/go.mod"
-      - "**/go.sum"
-      - "go.work"
-      - ".github/workflows/coverage.yml"
   push:
     branches: [main]
-    paths:
-      - "core/**"
-      - "**/go.mod"
-      - "**/go.sum"
-      - "go.work"
-      - ".github/workflows/coverage.yml"
 
 permissions:
   contents: read

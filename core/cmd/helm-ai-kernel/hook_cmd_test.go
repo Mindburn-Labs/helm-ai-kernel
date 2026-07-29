@@ -324,6 +324,8 @@ func TestIsDestructiveShellCommand(t *testing.T) {
 		"rm -rf /tmp/helm-demo",
 		"rm -rf ~/Documents",
 		"cd /repo && rm -rf node_modules && rm -rf /etc",
+		"rm -rf node_modules && /bin/rm -rf /etc",
+		"/usr/bin/rm -rf /srv/production",
 		"rm -rf node_modules && terraform destroy",
 		"rm -rf $BUILD_DIR",
 		"rm -rf BUILD",
@@ -349,6 +351,7 @@ func TestIsDestructiveShellCommand(t *testing.T) {
 
 	safe := []string{
 		"rm -rf node_modules",
+		"/bin/rm -rf node_modules",
 		"rm -rf .next",
 		"cd /repo && rm -rf dist",
 		"rm -rf ./coverage/",

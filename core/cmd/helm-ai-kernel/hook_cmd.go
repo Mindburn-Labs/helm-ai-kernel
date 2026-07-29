@@ -375,7 +375,7 @@ func removesOnlyBuildArtifacts(c string) bool {
 		fields := strings.Fields(segment)
 		start := -1
 		for i, field := range fields {
-			if field == "rm" {
+			if filepath.Base(strings.Trim(field, `"'`)) == "rm" {
 				start = i + 1
 				break
 			}

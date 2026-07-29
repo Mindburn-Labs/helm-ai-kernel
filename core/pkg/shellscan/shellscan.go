@@ -247,11 +247,12 @@ func (c *collector) classifyRedirect(r *syntax.Redirect) {
 	if r.Word == nil {
 		return
 	}
-	tok := resolveWord(r.Word)
+	c.recordWriteTarget(resolveWord(r.Word), "write redirect")
+}
+
+func (c *collector) recordWriteTarget(tok wordTok, source string) {
 	if tok.dynamic {
-		// A write redirect whose target cannot be resolved statically may
-		// point at a protected file ($TARGET=.env); fail closed.
-		c.decide("write redirect with an unresolvable target (fail-closed)")
+		c.decide(source + " with an unresolvable target (fail-closed)")
 		return
 	}
 	target := strings.ToLower(tok.text)
@@ -269,6 +270,40 @@ func (c *collector) classifyRedirect(r *syntax.Redirect) {
 			c.decide(fmt.Sprintf("write redirect to sensitive target %q", tok.text))
 			return
 		}
+	}
+}
+
+func (c *collector) recordTeeWrites(args []wordTok) {
+	endOptions := false
+	targets := make([]wordTok, 0, len(args)-1)
+	for _, tok := range args[1:] {
+		if tok.dynamic {
+			targets = append(targets, tok)
+			continue
+		}
+		if !endOptions && tok.text == "--" {
+			endOptions = true
+			continue
+		}
+		if !endOptions && strings.HasPrefix(tok.text, "-") && tok.text != "-" {
+			switch {
+			case !strings.HasPrefix(tok.text, "--") && strings.Trim(tok.text[1:], "aip") == "",
+				tok.text == "--append", tok.text == "--ignore-interrupts",
+				tok.text == "--output-error", strings.HasPrefix(tok.text, "--output-error="):
+				continue
+			case tok.text == "--help", tok.text == "--version":
+				return
+			default:
+				c.decide("tee with unrecognized flag " + tok.text + " (fail-closed)")
+				continue
+			}
+		}
+		if tok.text != "-" {
+			targets = append(targets, tok)
+		}
+	}
+	for _, target := range targets {
+		c.recordWriteTarget(target, "tee write")
 	}
 }
 
@@ -513,14 +548,16 @@ func splitEnvPayload(payload string) ([]wordTok, bool) {
 // executorSpec describes a process-executor wrapper whose leading positional
 // operands configure the execution instead of naming the command.
 type executorSpec struct {
-	valueShort   string   // letters of value-taking short flags
-	valueLong    []string // long flags taking a value
-	noValueShort string   // letters of no-value short flags
-	noValueLong  []string // long flags taking no value
-	commandFlag  byte     // short flag whose value is a command string (flock -c); 0 = none
-	pidFlag      byte     // short flag meaning "operate on a pid; no command executes" (0 = none)
-	skip         int      // leading positionals before the command (duration, mask, lockfile, jail dir)
-	decideBare   bool     // invocation with operands but no command is opaque (chroot runs a shell)
+	valueShort     string   // letters of value-taking short flags
+	valueLong      []string // long flags taking a value
+	noValueShort   string   // letters of no-value short flags
+	noValueLong    []string // long flags taking no value
+	commandShort   string   // short flags whose values are command strings
+	commandLong    []string // long flags whose values are command strings
+	pidFlag        byte     // short flag meaning "operate on a pid; no command executes" (0 = none)
+	skip           int      // leading positionals before the command (duration, mask, lockfile, jail dir)
+	decideBare     bool     // invocation with operands but no command is opaque (chroot runs a shell)
+	requireCommand bool     // no command-string flag means an opaque shell (su)
 }
 
 // executorWrappers are process-executor prefixes (UNKNOWN_WRAPPER_BYPASS).
@@ -534,8 +571,14 @@ var executorWrappers = map[string]executorSpec{
 	"flock": {
 		valueShort: "wEc", valueLong: []string{"--timeout", "--conflict-exit-code", "--command"},
 		noValueShort: "sxunoFv", noValueLong: []string{"--shared", "--exclusive", "--unlock", "--nonblock", "--close", "--fork", "--verbose"},
-		commandFlag: 'c',
-		skip:        1, // LOCKFILE
+		commandShort: "c", commandLong: []string{"--command"},
+		skip: 1, // LOCKFILE
+	},
+	"su": {
+		valueShort: "cCgsGw", valueLong: []string{"--command", "--session-command", "--group", "--supp-group", "--shell", "--whitelist-environment"},
+		noValueShort: "flmPp", noValueLong: []string{"--fast", "--login", "--preserve-environment", "--pty", "--help", "--version"},
+		commandShort: "cC", commandLong: []string{"--command", "--session-command"},
+		requireCommand: true,
 	},
 	"taskset": {
 		valueShort: "c", valueLong: []string{"--cpu-list"},
@@ -976,15 +1019,19 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 						lname, lval, attached = lname[:idx], lname[idx+1:], true
 					}
 					if containsString(spec.valueLong, lname) {
-						if lname == "--command" { // flock --command STRING
+						if containsString(spec.commandLong, lname) {
 							if !attached {
 								if i+1 >= len(rest) || rest[i+1].dynamic {
-									c.decide(name + " --command with an unresolvable payload")
+									c.decide(name + " " + lname + " with an unresolvable payload")
 									return
 								}
 								lval = rest[i+1].text
 							}
-							c.classifyString(lval, joinVia(via, name+" --command"), depth+1)
+							if strings.TrimSpace(lval) == "" {
+								c.decide(name + " " + lname + " with an empty payload (fail-closed)")
+								return
+							}
+							c.classifyString(lval, joinVia(via, name+" "+lname), depth+1)
 							return
 						}
 						if name == "taskset" && lname == "--cpu-list" {
@@ -1023,10 +1070,18 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 							payload = rest[i+1].text
 							i++ // skip the value token
 						} else {
+							if strings.IndexByte(spec.commandShort, ch) >= 0 {
+								c.decide(name + " -" + string(ch) + " with an unresolvable payload (fail-closed)")
+								return
+							}
 							c.decide(name + " flag -" + string(ch) + " with an unresolvable value (fail-closed)")
 							return
 						}
-						if spec.commandFlag != 0 && ch == spec.commandFlag {
+						if strings.IndexByte(spec.commandShort, ch) >= 0 {
+							if strings.TrimSpace(payload) == "" {
+								c.decide(name + " -" + string(ch) + " with an empty payload (fail-closed)")
+								return
+							}
 							c.classifyString(payload, joinVia(via, name+" -c"), depth+1)
 							return
 						}
@@ -1045,7 +1100,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				i++
 			}
 			rest = rest[i:]
-			if spec.commandFlag != 0 {
+			if len(spec.commandShort) > 0 || len(spec.commandLong) > 0 {
 				// GNU-style permutation: flock's -c/--command may appear
 				// after the lockfile positional (FLOCK_COMMAND_ORDER_BYPASS).
 				for k := 0; k < len(rest); k++ {
@@ -1053,7 +1108,8 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 					if tok.dynamic {
 						continue
 					}
-					if tok.text == "-c" || tok.text == "--command" {
+					if (len(tok.text) == 2 && strings.IndexByte(spec.commandShort, tok.text[1]) >= 0) ||
+						containsString(spec.commandLong, tok.text) {
 						if k+1 >= len(rest) || rest[k+1].dynamic {
 							c.decide(name + " -c with an unresolvable payload (fail-closed)")
 							return
@@ -1062,6 +1118,10 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 						return
 					}
 				}
+			}
+			if spec.requireCommand {
+				c.decide(name + " without a static command payload launches a shell (fail-closed)")
+				return
 			}
 			if len(rest) <= skip {
 				if spec.decideBare && len(rest) > 0 {
@@ -1154,6 +1214,9 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				return
 			}
 		default:
+			if name == "tee" {
+				c.recordTeeWrites(args)
+			}
 			tokens := make([]string, 0, len(args))
 			dynamic := false
 			for _, tok := range args {

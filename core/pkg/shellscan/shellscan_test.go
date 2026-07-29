@@ -78,6 +78,10 @@ var decideCases = []struct {
 	{"regression-generated-script", "printf 'rm %s /tmp/x\\n' -rf >/tmp/run.sh; bash /tmp/run.sh", "generated earlier"},
 	{"regression-generated-script-dot", `printf '\x72\x6d \x2d\x72\x66 /tmp/x\n' >/tmp/a; . /tmp/a`, "generated earlier"},
 	{"regression-generated-script-source", `printf 'rm -rf /tmp/x\n' >/tmp/a; source /tmp/a`, "generated earlier"},
+	{"regression-generated-script-tee", `printf 'rm -rf /tmp/x\n' | tee /tmp/run.sh; bash /tmp/run.sh`, "generated earlier"},
+	{"regression-generated-script-tee-options", `printf 'rm -rf /tmp/x\n' | tee -ai /tmp/log /tmp/run.sh; bash /tmp/run.sh`, "generated earlier"},
+	{"regression-generated-script-tee-long-option", `printf 'rm -rf /tmp/x\n' | tee --output-error=warn /tmp/run.sh; bash /tmp/run.sh`, "generated earlier"},
+	{"regression-tee-dynamic-target", `printf x | tee "$TARGET"`, "unresolvable target"},
 
 	// Evasion: path obfuscation.
 	{"evasion-path-dots", "/bin/./rm -rf /tmp/x", "recursive rm"},
@@ -135,6 +139,11 @@ var decideCases = []struct {
 	{"regression-wrapper-nested", "timeout 1 flock /tmp/l rm -rf /tmp/x", "recursive rm"},
 	{"regression-wrapper-unknown-flag", "timeout --frobnicate 1 rm -rf /tmp/x", "unrecognized flag"},
 	{"regression-wrapper-chroot-bare", "chroot /jail", "chroot"},
+	{"regression-wrapper-su-command", `su -c 'rm --recursive --force /tmp/x'`, "recursive rm"},
+	{"regression-wrapper-su-command-long", `su --command='rm --recursive --force /tmp/x' root`, "recursive rm"},
+	{"regression-wrapper-su-session-command", `su -C 'rm --recursive --force /tmp/x' root`, "recursive rm"},
+	{"regression-wrapper-su-dynamic-command", `su -c "$PAYLOAD"`, "unresolvable payload"},
+	{"regression-wrapper-su-empty-command", `su --command= root`, "empty payload"},
 
 	// Regression: P1 DYNAMIC_REDIRECT_BYPASS — write redirects with
 	// unresolvable targets fail closed ($TARGET could be .env).
@@ -249,6 +258,7 @@ var passCases = []struct {
 	{"safe-chain", "go build ./... && go vet ./..."},
 	{"safe-pipe", "git log --oneline | head -5"},
 	{"safe-redirect", "go test ./... > /tmp/out.log"},
+	{"safe-tee-static-target", "printf ok | tee -a /tmp/out.log"},
 	{"safe-stderr-redirect", "make build 2>&1 | tail -3"},
 	{"safe-subst-benign", `echo "today is $(date +%F)"`},
 	{"safe-subst-arg", "git checkout $(git branch --show-current)"},

@@ -1233,7 +1233,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				Dynamic: dynamic,
 			}
 			c.record(cmd)
-			c.matchDestructive(cmd, args)
+			c.matchDestructive(cmd, args, via, depth)
 			return
 		}
 		if args == nil {
@@ -1266,7 +1266,7 @@ func (c *collector) record(cmd Command) {
 // matchDestructive structurally matches the destructive-command class that
 // the legacy needle list approximated, closing flag-order, wrapper and
 // chaining evasions.
-func (c *collector) matchDestructive(cmd Command, args []wordTok) {
+func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, depth int) {
 	switch {
 	case cmd.Name == "rm":
 		recursive, force, dynamicArg, endOptions := false, false, false, false
@@ -1341,7 +1341,7 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok) {
 	case cmd.Name == "docker":
 		c.matchDocker(args)
 	case cmd.Name == "find":
-		c.matchFind(args)
+		c.matchFind(args, via, depth)
 	}
 }
 
@@ -1527,7 +1527,7 @@ func indexOfToken(args []wordTok, text string) int {
 	return -1
 }
 
-func (c *collector) matchFind(args []wordTok) {
+func (c *collector) matchFind(args []wordTok, via string, depth int) {
 	for i, tok := range args[1:] {
 		if tok.dynamic {
 			c.decide("find with a dynamic expression (fail-closed)")
@@ -1538,12 +1538,13 @@ func (c *collector) matchFind(args []wordTok) {
 			return
 		}
 		if tok.text == "-exec" || tok.text == "-execdir" {
-			// Scan the exec payload (terminated by ";" or "+") for rm -r.
+			// Recursively classify the exec payload (terminated by ";" or
+			// "+") so wrappers such as sh -c cannot hide destructive work.
 			payload := args[i+2:]
-			isRm := false
-			recursive := false
-			for _, p := range payload {
+			end := len(payload)
+			for j, p := range payload {
 				if !p.dynamic && (p.text == ";" || p.text == "+") {
+					end = j
 					break
 				}
 				if p.dynamic {
@@ -1552,23 +1553,14 @@ func (c *collector) matchFind(args []wordTok) {
 					c.decide("find " + tok.text + " with a dynamic payload (fail-closed)")
 					return
 				}
-				if !isRm && path.Base(p.text) == "rm" {
-					isRm = true
-					continue
-				}
-				if isRm && strings.HasPrefix(p.text, "-") && !strings.HasPrefix(p.text, "--") {
-					for _, r := range p.text[1:] {
-						if r == 'r' || r == 'R' {
-							recursive = true
-						}
-					}
-				}
-				if isRm && (p.text == "--recursive") {
-					recursive = true
-				}
 			}
-			if isRm && recursive {
-				c.decide("find -exec recursive rm")
+			if end == 0 {
+				c.decide("find " + tok.text + " without a command (fail-closed)")
+				return
+			}
+			c.classifyTokens(payload[:end], joinVia(via, "find "+tok.text), depth+1)
+			if c.decideFlag {
+				c.decide("find " + tok.text + " payload requires a decision")
 				return
 			}
 		}

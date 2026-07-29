@@ -162,6 +162,9 @@ func (pe *PolicyEngine) EvaluateRequirementSetDetail(rs RequirementSet, input ma
 	if valid {
 		return true, nil, nil
 	}
+	if rs.Logic == NOT {
+		return false, []RequirementFailure{{ID: rs.ID}}, nil
+	}
 	return false, append(leafFailures, childFailures...), nil
 }
 

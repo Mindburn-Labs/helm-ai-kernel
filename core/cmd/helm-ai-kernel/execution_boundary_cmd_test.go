@@ -195,7 +195,7 @@ func TestRunMCPAuthorizeCallEscalateJSON(t *testing.T) {
 	}
 }
 
-func TestRunMCPAuthorizeCallPreservesReceiptPathWhenWriteFails(t *testing.T) {
+func TestRunMCPAuthorizeCallClearsReceiptPathWhenWriteFails(t *testing.T) {
 	dataFile := filepath.Join(t.TempDir(), "not-a-directory")
 	if err := os.WriteFile(dataFile, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -217,8 +217,8 @@ func TestRunMCPAuthorizeCallPreservesReceiptPathWhenWriteFails(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
 		t.Fatalf("parse json: %v\n%s", err, stdout.String())
 	}
-	if record.DecisionReceiptPath == "" {
-		t.Fatal("deterministic receipt path was erased after write failure")
+	if record.DecisionReceiptPath != "" {
+		t.Fatalf("decision_receipt_path = %q after write failure, want empty", record.DecisionReceiptPath)
 	}
 }
 

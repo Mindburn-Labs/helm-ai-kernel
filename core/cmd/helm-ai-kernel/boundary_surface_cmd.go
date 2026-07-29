@@ -1069,10 +1069,6 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
-	// Every verdict gets a receipt path and, where a remediation exists, the
-	// exact next-step command, so the human output shape is identical for
-	// ALLOW, DENY, and ESCALATE.
-	record.DecisionReceiptPath = localMCPReceiptPath(record.RecordID)
 	if record.ReasonCode == contracts.ReasonApprovalRequired || record.ReasonCode == contracts.ReasonApprovalTimeout {
 		record.ApprovalCommand = mcpApprovalCommand(*serverID, *toolName, *effect)
 	}
@@ -1082,10 +1078,16 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	record = sealed
-	if writtenPath := writeLocalMCPReceipt(record.RecordID, "decision", record); writtenPath != "" {
+	receiptRecord := record
+	receiptRecord.DecisionReceiptPath = localMCPReceiptPath(record.RecordID)
+	if writtenPath := writeLocalMCPReceipt(record.RecordID, "decision", receiptRecord); writtenPath != "" {
 		record.DecisionReceiptPath = writtenPath
+		record, err = surfaces.PutRecord(record)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return 1
+		}
 	}
-	_, _ = surfaces.PutRecord(record)
 	exitCode := 0
 	if record.Verdict != contracts.VerdictAllow {
 		exitCode = 1

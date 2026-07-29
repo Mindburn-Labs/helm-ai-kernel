@@ -514,7 +514,7 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 	if err != nil {
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonPRGEvalError)
-		decision.Reason = fmt.Sprintf("PRG Evaluation Error: %v", err)
+		decision.Reason = "PRG Evaluation Error: policy requirement evaluation failed"
 		return g.signer.SignDecision(decision)
 	}
 
@@ -1233,9 +1233,8 @@ func toMap(v any) (map[string]interface{}, error) {
 }
 
 // missingRequirementReason builds the actionable deny reason for a PRG rule
-// that evaluated to false. It names each unmet requirement (and its CEL
-// expression when one exists) and lists the input.* fields the policy author
-// can reference, so a deny is a fix instruction rather than a dead end.
+// that evaluated to false. It names each blocking requirement without exposing
+// policy source and lists the input.* fields the policy author can reference.
 func missingRequirementReason(failures []prg.RequirementFailure, input map[string]interface{}) string {
 	var b strings.Builder
 	b.WriteString(string(contracts.ReasonMissingRequirement))
@@ -1243,13 +1242,9 @@ func missingRequirementReason(failures []prg.RequirementFailure, input map[strin
 	if len(failures) > 0 {
 		parts := make([]string, 0, len(failures))
 		for _, f := range failures {
-			if f.Expression != "" {
-				parts = append(parts, fmt.Sprintf("%s (expression %q evaluated to false)", f.ID, f.Expression))
-			} else {
-				parts = append(parts, f.ID)
-			}
+			parts = append(parts, f.ID)
 		}
-		b.WriteString("; unmet requirement(s): ")
+		b.WriteString("; blocking requirement(s): ")
 		b.WriteString(strings.Join(parts, ", "))
 	}
 	if len(input) > 0 {

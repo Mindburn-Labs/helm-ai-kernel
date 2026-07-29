@@ -345,6 +345,7 @@ func TestEvaluateRequirementSet_NOT_InvertsFalse(t *testing.T) {
 func TestEvaluateRequirementSet_NOT_AllTrue_ReturnsFalse(t *testing.T) {
 	pe, _ := NewPolicyEngine()
 	rs := RequirementSet{
+		ID:    "forbidden-combination",
 		Logic: NOT,
 		Requirements: []Requirement{
 			{ID: "r1", Expression: "true"},
@@ -357,6 +358,13 @@ func TestEvaluateRequirementSet_NOT_AllTrue_ReturnsFalse(t *testing.T) {
 	}
 	if result {
 		t.Fatal("NOT of all-true should be false")
+	}
+	valid, failures, err := pe.EvaluateRequirementSetDetail(rs, map[string]interface{}{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid || len(failures) != 1 || failures[0].ID != rs.ID {
+		t.Fatalf("NOT denial failures = %#v, want group id %q", failures, rs.ID)
 	}
 }
 

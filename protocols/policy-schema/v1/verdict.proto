@@ -141,14 +141,34 @@ enum DenialFinality {
 // records the verdict a PDP would have issued under an observe grant, enforces
 // nothing, and must never be presentable as enforced.
 message DenialCounterfactual {
+  // Exactly one envelope is valid. Grouping the scalar fields keeps a
+  // field-only value from becoming a counterfactual, while the oneof prevents
+  // a producer from claiming both a scalar bound and a capability.
+  oneof envelope {
+    DenialScalarBound scalar_bound = 1;
+    DenialRequiredCapability required_capability = 2;
+  }
+
+  reserved 3 to 99;
+  reserved 100 to 199;
+}
+
+message DenialScalarBound {
   // Policy field that bound the request, e.g. "ttl_days".
   string field = 1;
   // Scalar bound. Minor units for money, never float, per EffectDigest.
   int64 requested = 2;
   int64 max = 3;
+
+  reserved 100 to 199;
+}
+
+message DenialRequiredCapability {
+  // Policy field that named the missing capability.
+  string field = 1;
   // Capability the action would have needed, from the fixed permission
   // vocabulary. Never an instance identifier.
-  string capability = 4;
+  string capability = 2;
 
   reserved 100 to 199;
 }

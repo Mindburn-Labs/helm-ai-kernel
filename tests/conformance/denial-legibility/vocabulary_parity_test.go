@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -70,6 +71,55 @@ func TestRequiredFinalitiesCoverEveryDeclaredConstant(t *testing.T) {
 			t.Errorf("requiredFinalities is missing %q", f)
 		}
 	}
+}
+
+func TestProtoCounterfactualCannotExpressAmbiguousShapes(t *testing.T) {
+	raw, err := os.ReadFile("../../../protocols/policy-schema/v1/verdict.proto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := protoMessageBlock(t, string(raw), "DenialCounterfactual")
+	for _, want := range []string{
+		"oneof envelope",
+		"DenialScalarBound scalar_bound = 1;",
+		"DenialRequiredCapability required_capability = 2;",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("DenialCounterfactual is missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"string field =",
+		"int64 requested =",
+		"int64 max =",
+		"string capability =",
+	} {
+		if strings.Contains(block, forbidden) {
+			t.Errorf("DenialCounterfactual still exposes ambiguous flat field %q", forbidden)
+		}
+	}
+}
+
+func protoMessageBlock(t *testing.T, source, name string) string {
+	t.Helper()
+	start := strings.Index(source, "message "+name+" {")
+	if start < 0 {
+		t.Fatalf("proto message %s not found", name)
+	}
+	depth := 0
+	for i := start; i < len(source); i++ {
+		switch source[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return source[start : i+1]
+			}
+		}
+	}
+	t.Fatalf("proto message %s is not closed", name)
+	return ""
 }
 
 // enumAt reads a JSON document and returns the string array at the given key

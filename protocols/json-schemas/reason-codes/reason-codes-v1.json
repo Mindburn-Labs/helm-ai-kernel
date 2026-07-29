@@ -77,8 +77,7 @@
       "applies_to": ["DENY"],
       "domain": "requirement",
       "description": "Required precondition not satisfied",
-      "since": "1.0.0",
-      "finality": "instance_parameter"
+      "since": "1.0.0"
     },
     {
       "code": "BUDGET_EXCEEDED",

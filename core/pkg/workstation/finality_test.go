@@ -102,6 +102,7 @@ func TestPublicDenialFinalityCompatibilityLookup(t *testing.T) {
 func TestScalarBoundDisclosesTheCeiling(t *testing.T) {
 	profile := learningProfile()
 	event := ToolEvent{
+		EventID:      "e1",
 		Type:         "memory_write",
 		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
 		EffectMode:   contracts.WorkstationEffectModeOperate,
@@ -123,6 +124,7 @@ func TestScalarBoundDisclosesTheCeiling(t *testing.T) {
 func TestScalarBoundNeverDisclosesAnUnexceededRequest(t *testing.T) {
 	profile := learningProfile()
 	event := ToolEvent{
+		EventID:      "e1",
 		Type:         "memory_write",
 		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
 		EffectMode:   contracts.WorkstationEffectModeOperate,
@@ -164,27 +166,28 @@ func TestDisabledByDefaultLeavesReceiptsByteIdentical(t *testing.T) {
 	profile.Learning = nil // the default: no opt-in
 
 	event := ToolEvent{
+		EventID:      "e1",
 		Type:         "memory_write",
 		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
 		EffectMode:   contracts.WorkstationEffectModeOperate,
 		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
 	}
-	_, code, _ := EvaluateEvent(profile, event)
-
-	denied := contracts.AgentDeniedEffect{EffectID: "e1", EffectType: event.EffectType, ReasonCode: code}
-	AnnotateDenial(&denied, profile, event)
+	denied, ok := EvaluateDeniedEffect(profile, event)
+	if !ok {
+		t.Fatal("EvaluateDeniedEffect() did not return the denied event")
+	}
 
 	encoded, err := json.Marshal(denied)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	const want = `{"effect_id":"e1","effect_type":"WORKSTATION_MEMORY_WRITE","reason_code":"MEMORY_TTL_EXCEEDS_POLICY","occurred_at":"0001-01-01T00:00:00Z"}`
+	const want = `{"effect_id":"e1","effect_type":"WORKSTATION_MEMORY_WRITE","reason_code":"MEMORY_TTL_EXCEEDS_POLICY","reason":"memory TTL exceeds workstation policy","occurred_at":"0001-01-01T00:00:00Z"}`
 	if string(encoded) != want {
 		t.Fatalf("denied effect JSON changed with the feature off:\n got %s\nwant %s", encoded, want)
 	}
 }
 
-func TestAnnotateDenialClearsStaleLearning(t *testing.T) {
+func TestEvaluateDeniedEffectRejectsCounterfactualEventSubstitution(t *testing.T) {
 	event := ToolEvent{
 		EventID:      "e-memory",
 		Type:         "memory_write",
@@ -195,60 +198,22 @@ func TestAnnotateDenialClearsStaleLearning(t *testing.T) {
 		OccurredAt:   time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
 	}
-	_, code, _ := EvaluateEvent(learningProfile(), event)
+	denied, ok := EvaluateDeniedEffect(learningProfile(), event)
+	if !ok {
+		t.Fatal("EvaluateDeniedEffect() did not return the denied event")
+	}
+	if denied.Counterfactual == nil || denied.Counterfactual.Requested != 90 || denied.Counterfactual.Max != 30 {
+		t.Fatalf("counterfactual = %+v, want requested=90 max=30", denied.Counterfactual)
+	}
 
-	disabled := learningProfile()
-	disabled.Learning = nil
-	finalityOff := learningProfile()
-	finalityOff.Learning.EmitFinality = false
-	counterfactualOff := learningProfile()
-	counterfactualOff.Learning.EmitCounterfactual = false
-
-	for _, tc := range []struct {
-		name               string
-		profile            contracts.WorkstationPolicyProfile
-		reasonCode         string
-		wantFinality       contracts.DenialFinality
-		wantCounterfactual bool
-		mutate             func(*contracts.AgentDeniedEffect)
-	}{
-		{"policy_disabled", disabled, code, "", false, nil},
-		{"finality_disabled", finalityOff, code, "", true, nil},
-		{"counterfactual_disabled", counterfactualOff, code, contracts.DenialInstanceParameter, false, nil},
-		{"evaluator_mismatch", learningProfile(), "TAINTED_CONTEXT_REQUIRES_DENY", "", false, nil},
-		{"effect_id_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.EffectID = "other" }},
-		{"effect_type_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.EffectType = "other" }},
-		{"tool_id_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.ToolID = "other" }},
-		{"action_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.Action = "other" }},
-		{"occurred_at_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.OccurredAt = denied.OccurredAt.Add(time.Second) }},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			denied := contracts.AgentDeniedEffect{
-				EffectID:   "e-memory",
-				EffectType: event.EffectType,
-				ToolID:     event.ToolID,
-				Action:     event.Action,
-				ReasonCode: tc.reasonCode,
-				OccurredAt: event.OccurredAt,
-				Finality:   contracts.DenialClassForbidden,
-				Counterfactual: &contracts.DenialCounterfactual{
-					Field: "stale", Requested: 2, Max: 1,
-				},
-			}
-			if tc.mutate != nil {
-				tc.mutate(&denied)
-			}
-			AnnotateDenial(&denied, tc.profile, event)
-			if got := denied.Finality; got != tc.wantFinality {
-				t.Fatalf("finality = %q, want %q", got, tc.wantFinality)
-			}
-			if got := denied.Counterfactual != nil; got != tc.wantCounterfactual {
-				t.Fatalf("counterfactual present = %t, want %t", got, tc.wantCounterfactual)
-			}
-			if tc.wantCounterfactual && denied.Counterfactual.Field != "ttl_days" {
-				t.Fatalf("counterfactual = %+v, want a freshly derived ttl_days bound", denied.Counterfactual)
-			}
-		})
+	substituted := event
+	substituted.MemoryEffect = &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 60}
+	other, ok := EvaluateDeniedEffect(learningProfile(), substituted)
+	if !ok {
+		t.Fatal("EvaluateDeniedEffect() did not return the substituted denial")
+	}
+	if other.Counterfactual == nil || other.Counterfactual.Requested != 60 || other.Counterfactual.Max != 30 {
+		t.Fatalf("substituted counterfactual = %+v, want requested=60 max=30", other.Counterfactual)
 	}
 }
 

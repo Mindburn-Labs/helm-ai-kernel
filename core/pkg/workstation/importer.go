@@ -327,10 +327,11 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 
 	for i, event := range events {
 		normalizeEvent(&event, i)
-		verdict, reasonCode, reason := EvaluateEvent(profile, event)
+		evaluatedVerdict, evaluatedReasonCode, evaluatedReason := EvaluateEvent(profile, event)
+		verdict, reasonCode, reason := evaluatedVerdict, evaluatedReasonCode, evaluatedReason
 		// The declared verdict and reason code below record the observed event,
-		// but are untrusted. AnnotateDenial independently re-evaluates the event
-		// and emits no learning fields when the recorded code disagrees.
+		// but are untrusted. A complete learning receipt is emitted only when the
+		// recorded code agrees with the evaluation that produced it.
 		if event.Verdict != "" {
 			verdict = strings.ToUpper(event.Verdict)
 		}
@@ -385,7 +386,9 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 				Reason:     firstNonEmpty(event.Reason, reason),
 				OccurredAt: event.OccurredAt,
 			}
-			AnnotateDenial(&denied, profile, event)
+			if evaluatedVerdict == contracts.WorkstationVerdictDeny && reasonCode == evaluatedReasonCode {
+				denied = evaluatedDeniedEffect(profile, event, evaluatedReasonCode, evaluatedReason)
+			}
 			deniedEffects = append(deniedEffects, denied)
 		}
 	}

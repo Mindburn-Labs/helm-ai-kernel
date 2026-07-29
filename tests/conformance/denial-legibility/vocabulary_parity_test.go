@@ -73,6 +73,35 @@ func TestRequiredFinalitiesCoverEveryDeclaredConstant(t *testing.T) {
 	}
 }
 
+// MISSING_REQUIREMENT does not identify which input, grant, or context would
+// resolve the denial. Classifying it as retryable would make consumers learn a
+// false parameter lesson, so the generic registry entry must stay unclassified.
+func TestGenericMissingRequirementIsUnclassified(t *testing.T) {
+	raw, err := os.ReadFile("../../../protocols/json-schemas/reason-codes/reason-codes-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var registry struct {
+		Codes []struct {
+			Code     string `json:"code"`
+			Finality string `json:"finality"`
+		} `json:"codes"`
+	}
+	if err := json.Unmarshal(raw, &registry); err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range registry.Codes {
+		if entry.Code != "MISSING_REQUIREMENT" {
+			continue
+		}
+		if entry.Finality != "" {
+			t.Fatalf("MISSING_REQUIREMENT finality = %q, want no classification", entry.Finality)
+		}
+		return
+	}
+	t.Fatal("MISSING_REQUIREMENT is missing from the reason-code registry")
+}
+
 func TestProtoCounterfactualCannotExpressAmbiguousShapes(t *testing.T) {
 	raw, err := os.ReadFile("../../../protocols/policy-schema/v1/verdict.proto")
 	if err != nil {

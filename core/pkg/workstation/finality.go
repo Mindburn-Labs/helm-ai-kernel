@@ -3,11 +3,9 @@ package workstation
 import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 
 // Denial finality and counterfactuals are derived here, from the reason code
-// that fired. The public annotation entry point re-evaluates the event before
-// it writes either field, and the tables below decide what may be said about
-// that result. That is the whole point — a denial that teaches has to teach
-// the same lesson every time, and a hand-assigned field drifts from the rule
-// it claims to describe.
+// that fired. A complete denied effect is built from that same evaluation, so
+// its counterfactual cannot be attached to another event that happens to share
+// its identifiers. The tables below decide what may be said about that result.
 
 // disclosure says what a denial is allowed to reveal about the policy that
 // produced it. The zero value discloses nothing, so a code that is added to
@@ -76,7 +74,8 @@ func denialFinality(reasonCode string) contracts.DenialFinality {
 
 // DenialFinality classifies a workstation denial code for compatibility with
 // downstream consumers. It is read-only: receipt learning fields must still
-// be produced through AnnotateDenial, which independently evaluates the event.
+// be produced through EvaluateDeniedEffect, which evaluates and constructs a
+// complete denied effect together.
 func DenialFinality(reasonCode string) contracts.DenialFinality {
 	return denialFinality(reasonCode)
 }
@@ -130,40 +129,35 @@ func denialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 	return nil
 }
 
-// AnnotateDenial fills the learning fields on a denied effect, subject to the
-// profile opting in. Both switches default off, and a disabled field is absent
-// rather than empty, so receipts from profiles that never opted in stay
-// byte-identical.
-//
-// AnnotateDenial independently evaluates event and requires the receipt identity
-// and recorded code to agree with that evaluation. A caller-declared reason code
-// therefore cannot steer the learning fields on another receipt — see normalizeEvents.
-func AnnotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.WorkstationPolicyProfile, event ToolEvent) {
-	if denied == nil {
-		return
+// EvaluateDeniedEffect evaluates event and, when it is denied, returns the
+// complete receipt effect derived from that one evaluation. The construction is
+// deliberately atomic: counterfactual fields must not be added to a separate,
+// caller-supplied receipt effect.
+func EvaluateDeniedEffect(profile contracts.WorkstationPolicyProfile, event ToolEvent) (contracts.AgentDeniedEffect, bool) {
+	verdict, reasonCode, reason := EvaluateEvent(profile, event)
+	if verdict != contracts.WorkstationVerdictDeny {
+		return contracts.AgentDeniedEffect{}, false
 	}
-	// A receipt can be reused across policy evaluations. Clear prior disclosure
-	// before any opt-out or mismatch return so stale learning cannot survive.
-	denied.Finality = ""
-	denied.Counterfactual = nil
-	learning := profile.Learning
-	if learning == nil {
-		return
+	return evaluatedDeniedEffect(profile, event, reasonCode, reason), true
+}
+
+func evaluatedDeniedEffect(profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode, reason string) contracts.AgentDeniedEffect {
+	denied := contracts.AgentDeniedEffect{
+		EffectID:   event.EventID,
+		EffectType: event.EffectType,
+		ToolID:     event.ToolID,
+		Action:     event.Action,
+		ReasonCode: reasonCode,
+		Reason:     firstNonEmpty(event.Reason, reason),
+		OccurredAt: event.OccurredAt,
 	}
-	verdict, reasonCode, _ := EvaluateEvent(profile, event)
-	if verdict != contracts.WorkstationVerdictDeny ||
-		denied.EffectID != event.EventID ||
-		denied.EffectType != event.EffectType ||
-		denied.ToolID != event.ToolID ||
-		denied.Action != event.Action ||
-		!denied.OccurredAt.Equal(event.OccurredAt) ||
-		denied.ReasonCode != reasonCode {
-		return
+	if learning := profile.Learning; learning != nil {
+		if learning.EmitFinality {
+			denied.Finality = denialFinality(reasonCode)
+		}
+		if learning.EmitCounterfactual {
+			denied.Counterfactual = denialCounterfactualFor(profile, event, reasonCode)
+		}
 	}
-	if learning.EmitFinality {
-		denied.Finality = denialFinality(reasonCode)
-	}
-	if learning.EmitCounterfactual {
-		denied.Counterfactual = denialCounterfactualFor(profile, event, reasonCode)
-	}
+	return denied
 }

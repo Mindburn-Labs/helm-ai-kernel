@@ -143,20 +143,15 @@ func observe(t *testing.T, profile contracts.WorkstationPolicyProfile) []observa
 	scenarios := denialScenarios()
 	out := make([]observation, 0, len(scenarios))
 	for _, sc := range scenarios {
-		verdict, code, _ := workstation.EvaluateEvent(profile, sc.event)
-		denied := contracts.AgentDeniedEffect{
-			EffectID:   sc.event.EventID,
-			EffectType: sc.event.EffectType,
-			ToolID:     sc.event.ToolID,
-			Action:     sc.event.Action,
-			ReasonCode: code,
-			OccurredAt: sc.event.OccurredAt,
+		verdict, _, _ := workstation.EvaluateEvent(profile, sc.event)
+		denied, ok := workstation.EvaluateDeniedEffect(profile, sc.event)
+		if !ok {
+			t.Fatalf("case %s did not return a denied effect", sc.name)
 		}
-		workstation.AnnotateDenial(&denied, profile, sc.event)
 		out = append(out, observation{
 			Case:           sc.name,
 			Verdict:        verdict,
-			ReasonCode:     code,
+			ReasonCode:     denied.ReasonCode,
 			Finality:       denied.Finality,
 			Counterfactual: denied.Counterfactual,
 		})
@@ -235,17 +230,10 @@ func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
 	}
 	profile := loadSnapshot(t)
 	for _, sc := range denialScenarios() {
-		_, code, reason := workstation.EvaluateEvent(profile, sc.event)
-		denied := contracts.AgentDeniedEffect{
-			EffectID:   sc.event.EventID,
-			EffectType: sc.event.EffectType,
-			ToolID:     sc.event.ToolID,
-			Action:     sc.event.Action,
-			ReasonCode: code,
-			Reason:     reason,
-			OccurredAt: sc.event.OccurredAt,
+		denied, ok := workstation.EvaluateDeniedEffect(profile, sc.event)
+		if !ok {
+			t.Fatalf("case %s did not return a denied effect", sc.name)
 		}
-		workstation.AnnotateDenial(&denied, profile, sc.event)
 		encoded, err := json.Marshal(denied)
 		if err != nil {
 			t.Fatalf("marshal %s: %v", sc.name, err)
@@ -260,11 +248,10 @@ func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
 	}
 }
 
-// A caller can preserve a claimed reason code as observed evidence, but it
-// cannot use a different code to make an evaluated denial teach a different
-// lesson. This exercises the exported annotation boundary directly rather
-// than relying on the importer's internal caller.
-func TestAnnotationRejectsCallerControlledReasonCode(t *testing.T) {
+// A counterfactual belongs to the evaluation that produced it. The public API
+// returns the complete effect rather than accepting a mutable receipt field,
+// so two same-ID events cannot exchange their requested TTLs.
+func TestCounterfactualBindsToTheEvaluatedEvent(t *testing.T) {
 	profile := loadSnapshot(t)
 	event := workstation.ToolEvent{
 		EventID:      "spoofed-denial",
@@ -273,19 +260,22 @@ func TestAnnotationRejectsCallerControlledReasonCode(t *testing.T) {
 		EffectMode:   contracts.WorkstationEffectModeOperate,
 		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
 	}
-	verdict, evaluatedCode, _ := workstation.EvaluateEvent(profile, event)
-	if verdict != contracts.WorkstationVerdictDeny || evaluatedCode != "MEMORY_TTL_EXCEEDS_POLICY" {
-		t.Fatalf("EvaluateEvent() = %s/%s, want DENY/MEMORY_TTL_EXCEEDS_POLICY", verdict, evaluatedCode)
+	denied, ok := workstation.EvaluateDeniedEffect(profile, event)
+	if !ok || denied.Counterfactual == nil {
+		t.Fatalf("EvaluateDeniedEffect() = %+v, %t; want a scalar counterfactual", denied, ok)
+	}
+	if got := denied.Counterfactual.Requested; got != 90 {
+		t.Fatalf("counterfactual requested = %d, want 90", got)
 	}
 
-	denied := contracts.AgentDeniedEffect{
-		EffectID:   event.EventID,
-		EffectType: event.EffectType,
-		ReasonCode: "OPERATE_PERMISSION_NOT_GRANTED",
+	substituted := event
+	substituted.MemoryEffect = &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 60}
+	other, ok := workstation.EvaluateDeniedEffect(profile, substituted)
+	if !ok || other.Counterfactual == nil {
+		t.Fatalf("EvaluateDeniedEffect() = %+v, %t; want substituted scalar counterfactual", other, ok)
 	}
-	workstation.AnnotateDenial(&denied, profile, event)
-	if denied.Finality != "" || denied.Counterfactual != nil {
-		t.Fatalf("caller-controlled reason code emitted finality=%q counterfactual=%+v", denied.Finality, denied.Counterfactual)
+	if got := other.Counterfactual.Requested; got != 60 {
+		t.Fatalf("substituted counterfactual requested = %d, want 60", got)
 	}
 }
 
@@ -452,9 +442,10 @@ func TestOptOutEmitsNothing(t *testing.T) {
 	profile := loadSnapshot(t)
 	profile.Learning = nil
 	for _, sc := range denialScenarios() {
-		_, code, _ := workstation.EvaluateEvent(profile, sc.event)
-		denied := contracts.AgentDeniedEffect{EffectID: sc.event.EventID, ReasonCode: code}
-		workstation.AnnotateDenial(&denied, profile, sc.event)
+		denied, ok := workstation.EvaluateDeniedEffect(profile, sc.event)
+		if !ok {
+			t.Fatalf("case %s did not return a denied effect", sc.name)
+		}
 		encoded, err := json.Marshal(denied)
 		if err != nil {
 			t.Fatalf("marshal: %v", err)

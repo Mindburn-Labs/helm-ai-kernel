@@ -74,8 +74,8 @@ All code merges to `main` must use a pull request and are authorized only by:
 Human identity, formal approvals, CODEOWNERS, labels, commit signing, and
 commit trailers are advisory metadata only; none has merge-authority weight or
 can replace either machine requirement. Missing, stale, or mismatched evidence
-fails closed. This rule is active for autonomous merges only after the
-source-owned gates and interlock are live-proven.
+fails closed. Until the source-owned gates and interlock are live-proven, all
+code merges remain on hold.
 
 This applies to repository code changes. Product-level approval ceremonies and
 effect control remain governed by their runtime policy, connector, receipt, and
@@ -106,14 +106,15 @@ Two consequences worth stating plainly, because both have been misread:
 - **No human approval is required by GitHub to merge.** The enforced ruleset
   requires the 18 status checks, resolved review threads, linear history, and
   an up-to-date branch. A reviewer's approval carries no enforcement weight.
-- **The required machine interlock is not live-proven.** Autonomous code merges
-  remain on hold under the operating contract above. GitHub does not enforce
-  that hold by itself.
+- **The required machine interlock is not live-proven.** All code merges remain
+  on hold under the operating contract above. GitHub does not enforce that hold
+  by itself.
 
 Verify with:
 
 ```bash
-gh api repos/Mindburn-Labs/helm-ai-kernel/rulesets/16024605 --jq '.rules'
+gh api repos/Mindburn-Labs/helm-ai-kernel/rulesets/16024605 \
+  --jq '{rules, bypass_actors}'
 ```
 
 A breaking API change is any change to `protocols/`, `api/openapi/`, the

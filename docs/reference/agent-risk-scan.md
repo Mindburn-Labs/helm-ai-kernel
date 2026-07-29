@@ -80,6 +80,10 @@ are normal. If a discovered user config, enabled-plugin inventory, or enabled
 plugin MCP manifest exists but cannot be read or parsed, the scan fails
 coverage and writes no export artifacts.
 
+Direct server-map `.mcp.json` is accepted only in a Claude plugin directory
+marked by `.claude-plugin/plugin.json`; generic MCP configs must use the
+`mcpServers` wrapper.
+
 It also uses the local shadow scanner findings to project risk codes such as
 `MCP_WRITE_SCOPE_WITHOUT_APPROVAL`, `SECRET_CLASS_AGENT_READABLE`,
 `NO_MANAGED_SETTINGS`, and `NO_AUDIT_EXPORT`.

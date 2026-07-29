@@ -771,6 +771,8 @@ func configKind(path string) (string, bool) {
 	base := strings.ToLower(filepath.Base(path))
 	parent := strings.ToLower(filepath.Base(filepath.Dir(path)))
 	switch {
+	case base == ".mcp.json" && isClaudePluginMCPConfig(path):
+		return "plugin_mcp_json", true
 	case base == ".mcp.json" || base == "mcp.json" || base == "claude_desktop_config.json":
 		return "mcp_json", true
 	case base == ".claude.json":
@@ -782,6 +784,11 @@ func configKind(path string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func isClaudePluginMCPConfig(path string) bool {
+	info, err := os.Stat(filepath.Join(filepath.Dir(path), ".claude-plugin", "plugin.json"))
+	return err == nil && info.Mode().IsRegular()
 }
 
 func shouldSkipDir(name string) bool {

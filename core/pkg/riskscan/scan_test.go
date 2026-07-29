@@ -291,6 +291,29 @@ func TestScanFailsClosedOnInvalidRecognizedConfig(t *testing.T) {
 	}
 }
 
+func TestCollectConfigObservationReadsDirectClaudePluginManifest(t *testing.T) {
+	root := t.TempDir()
+	pluginDir := filepath.Join(root, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]any{"name": "context7"})
+	writeJSON(t, filepath.Join(root, ".mcp.json"), map[string]any{
+		"context7": map[string]any{"command": "context7"},
+	})
+
+	obs, err := collectConfigObservation(root, true, false)
+	if err != nil {
+		t.Fatalf("collect plugin config: %v", err)
+	}
+	if obs.MCPServerCount != 1 {
+		t.Fatalf("mcp server count = %d, want 1", obs.MCPServerCount)
+	}
+	if obs.StaticConfigFilesRead != 1 {
+		t.Fatalf("static config files read = %d, want 1", obs.StaticConfigFilesRead)
+	}
+}
+
 func fixtureRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

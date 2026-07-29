@@ -76,9 +76,10 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	opts := riskscan.BuildOptions{
-		Salt:   salt,
-		Cohort: riskenvelope.CohortBucket(cohort),
-		Now:    time.Now().UTC(),
+		Salt:              salt,
+		Cohort:            riskenvelope.CohortBucket(cohort),
+		Now:               time.Now().UTC(),
+		IncludeUserConfig: true,
 	}
 	var envelope riskenvelope.RiskEnvelope
 	if strings.TrimSpace(receiptsPath) != "" {

@@ -95,6 +95,17 @@ of literal destructive command forms and does not interpret shell expansion,
 aliases, `eval`, wrappers, or every destructive tool. Treat it as a
 selected-effect guardrail, not a claim of comprehensive shell enforcement.
 
+Two forms are deliberately **not** denied, because denying them would block
+routine work without removing an irreversible effect:
+
+- `git push --force-with-lease`, which refuses to clobber unseen remote work.
+  Bare `--force` and `-f` are denied.
+- Recursive delete whose every operand is a relative, regenerable build
+  directory (`node_modules`, `dist`, `.next`, `target`, `coverage`, `.venv`
+  and similar). Any absolute path, parent-relative path, variable, or
+  unrecognized operand fails closed and is denied — including
+  `rm -rf /tmp/...`.
+
 ## Operator workflow
 
 The local operator read model answers the M4 questions from receipts:

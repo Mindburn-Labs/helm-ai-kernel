@@ -27,6 +27,11 @@ type BuildOptions struct {
 	Salt   []byte
 	Cohort riskenvelope.CohortBucket
 	Now    time.Time
+	// IncludeUserConfig also reads the agent configuration outside the scanned
+	// tree (~/.claude.json, ~/.codex/config.toml, ...). Without it a scan of a
+	// repository reports zero MCP servers even when the agent on that machine
+	// has many. Off by default so fixture scans stay deterministic.
+	IncludeUserConfig bool
 }
 
 type ConfigObservation struct {
@@ -69,7 +74,7 @@ func Scan(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, error) {
 		}
 		return riskenvelope.RiskEnvelope{}, err
 	}
-	obs, err := collectConfigObservation(root, true)
+	obs, err := collectConfigObservation(root, true, opts.IncludeUserConfig)
 	if err != nil {
 		return riskenvelope.RiskEnvelope{}, err
 	}
@@ -78,10 +83,10 @@ func Scan(root string, opts BuildOptions) (riskenvelope.RiskEnvelope, error) {
 }
 
 func CollectConfigObservation(root string) (ConfigObservation, error) {
-	return collectConfigObservation(root, false)
+	return collectConfigObservation(root, false, false)
 }
 
-func collectConfigObservation(root string, requireComplete bool) (ConfigObservation, error) {
+func collectConfigObservation(root string, requireComplete, includeUserConfig bool) (ConfigObservation, error) {
 	obs := ConfigObservation{
 		AgentSurface:   riskenvelope.AgentSurfaceUnknown,
 		PermissionMode: riskenvelope.PermissionModeUnknown,
@@ -132,7 +137,44 @@ func collectConfigObservation(root string, requireComplete bool) (ConfigObservat
 		}
 		return obs, err
 	}
+	if includeUserConfig {
+		applyUserAgentConfigs(&obs, absRoot)
+	}
 	return obs, nil
+}
+
+// applyUserAgentConfigs reads the agent configuration that lives outside any
+// project tree. Without it a scan of a repository reports zero MCP servers even
+// when the agent on that machine has many, because the walk above only covers
+// the scanned root. Missing files are normal and never a coverage failure.
+func applyUserAgentConfigs(obs *ConfigObservation, absRoot string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	paths := []string{
+		filepath.Join(home, ".claude.json"),
+		filepath.Join(home, ".claude", "settings.json"),
+		filepath.Join(home, ".claude", "settings.local.json"),
+		filepath.Join(home, ".codex", "config.toml"),
+		filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+		filepath.Join(home, ".config", "Claude", "claude_desktop_config.json"),
+	}
+	for _, path := range paths {
+		if strings.HasPrefix(path, absRoot+string(filepath.Separator)) || path == absRoot {
+			continue // already covered by the walk
+		}
+		kind, ok := configKind(path)
+		if !ok {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		obs.StaticConfigFilesRead++
+		_ = applyConfigObservation(obs, kind, data)
+	}
 }
 
 func scanCoverageError(reason string) error {
@@ -587,6 +629,8 @@ func configKind(path string) (string, bool) {
 	switch {
 	case base == ".mcp.json" || base == "mcp.json" || base == "claude_desktop_config.json":
 		return "mcp_json", true
+	case base == ".claude.json":
+		return "claude_json", true
 	case parent == ".claude" && strings.HasPrefix(base, "settings") && strings.HasSuffix(base, ".json"):
 		return "claude_json", true
 	case parent == ".codex" && base == "config.toml":

@@ -262,15 +262,45 @@ func inputString(input map[string]any, keys ...string) string {
 	return ""
 }
 
+// buildArtifactDirs are regenerable directories where recursive delete is
+// routine developer cleanup, not a destructive effect. Only bare relative names
+// qualify; anything absolute, parent-relative, or unrecognized fails closed.
+var buildArtifactDirs = map[string]bool{
+	".cache":        true,
+	".next":         true,
+	".nuxt":         true,
+	".pytest_cache": true,
+	".turbo":        true,
+	".venv":         true,
+	"__pycache__":   true,
+	"build":         true,
+	"coverage":      true,
+	"dist":          true,
+	"node_modules":  true,
+	"out":           true,
+	"target":        true,
+	"venv":          true,
+}
+
 func isDestructiveShellCommand(command string) bool {
 	c := strings.ToLower(strings.TrimSpace(command))
 	if c == "" {
 		return false
 	}
-	needles := []string{
+	if isForcePush(c) {
+		return true
+	}
+	rmNeedles := []string{
 		"rm -rf ",
 		"rm -fr ",
 		"rm -r ",
+	}
+	for _, needle := range rmNeedles {
+		if strings.Contains(c, needle) || strings.HasPrefix(c, strings.TrimSpace(needle)) {
+			return !removesOnlyBuildArtifacts(c)
+		}
+	}
+	needles := []string{
 		"git reset --hard",
 		"git clean -fd",
 		"git clean -xdf",
@@ -279,7 +309,12 @@ func isDestructiveShellCommand(command string) bool {
 		"kubectl delete",
 		"docker rm -f",
 		"drop table",
+		"drop database",
 		"truncate table",
+		"dropdb",
+		"terraform destroy",
+		"terraform apply -destroy",
+		"aws s3 rm",
 	}
 	for _, needle := range needles {
 		if strings.Contains(c, needle) || strings.HasPrefix(c, strings.TrimSpace(needle)) {
@@ -287,6 +322,67 @@ func isDestructiveShellCommand(command string) bool {
 		}
 	}
 	return false
+}
+
+// isForcePush reports a force push that can overwrite remote history.
+// --force-with-lease refuses to clobber unseen remote work, so it is excluded.
+func isForcePush(c string) bool {
+	if !strings.Contains(c, "git push") {
+		return false
+	}
+	bare := strings.ReplaceAll(c, "--force-with-lease", "")
+	if strings.Contains(bare, "--force") {
+		return true
+	}
+	for _, field := range strings.Fields(bare) {
+		if field == "-f" {
+			return true
+		}
+	}
+	return false
+}
+
+// removesOnlyBuildArtifacts reports whether every operand of every rm invocation
+// in the command is a regenerable build directory. It fails closed: an rm whose
+// operands cannot be resolved to that set is treated as destructive.
+func removesOnlyBuildArtifacts(c string) bool {
+	found := false
+	for _, segment := range splitShellSegments(c) {
+		fields := strings.Fields(segment)
+		start := -1
+		for i, field := range fields {
+			if field == "rm" {
+				start = i + 1
+				break
+			}
+		}
+		if start < 0 {
+			continue
+		}
+		found = true
+		operands := 0
+		for _, arg := range fields[start:] {
+			if strings.HasPrefix(arg, "-") {
+				continue
+			}
+			operands++
+			if !buildArtifactDirs[strings.TrimSuffix(strings.TrimPrefix(arg, "./"), "/")] {
+				return false
+			}
+		}
+		if operands == 0 {
+			return false
+		}
+	}
+	return found
+}
+
+// splitShellSegments splits on the operators that separate independent commands
+// so an rm can be inspected apart from the rest of a compound line.
+func splitShellSegments(c string) []string {
+	return strings.FieldsFunc(c, func(r rune) bool {
+		return r == ';' || r == '&' || r == '|' || r == '\n'
+	})
 }
 
 func sensitiveApplyPatchTarget(command string) string {

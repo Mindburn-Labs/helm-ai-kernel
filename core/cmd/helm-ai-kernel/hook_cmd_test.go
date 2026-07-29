@@ -317,3 +317,44 @@ func globReceipts(t *testing.T, dataDir string) []string {
 	}
 	return receipts
 }
+
+func TestIsDestructiveShellCommand(t *testing.T) {
+	destructive := []string{
+		"rm -rf /srv/production",
+		"rm -rf /tmp/helm-demo",
+		"rm -rf ~/Documents",
+		"cd /repo && rm -rf node_modules && rm -rf /etc",
+		"rm -rf $BUILD_DIR",
+		"git push --force origin main",
+		"git push -f origin main",
+		"psql -c 'DROP DATABASE production'",
+		"dropdb production",
+		"terraform destroy -auto-approve",
+		"terraform apply -destroy",
+		"aws s3 rm s3://prod-backups --recursive",
+		"kubectl delete ns production",
+		"drop table users",
+	}
+	for _, command := range destructive {
+		if !isDestructiveShellCommand(command) {
+			t.Errorf("expected destructive: %q", command)
+		}
+	}
+
+	safe := []string{
+		"rm -rf node_modules",
+		"rm -rf .next",
+		"cd /repo && rm -rf dist",
+		"rm -rf ./coverage/",
+		"rm -rf dist build .turbo",
+		"git push --force-with-lease origin main",
+		"git push origin main",
+		"ls -la",
+		"",
+	}
+	for _, command := range safe {
+		if isDestructiveShellCommand(command) {
+			t.Errorf("expected not destructive: %q", command)
+		}
+	}
+}

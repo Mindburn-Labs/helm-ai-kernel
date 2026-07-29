@@ -71,7 +71,8 @@ scanned tree:
 - `~/.claude/settings.json` and `~/.claude/settings.local.json`;
 - `~/.codex/config.toml`, including top-level and plugin-nested `mcp_servers`;
 - Claude Desktop config on the macOS and Linux user paths;
-- `.mcp.json` from enabled Claude plugins resolved through
+- `.mcp.json` from Claude plugins enabled by user or project
+  `.claude/settings*.json`, resolved through
   `~/.claude/plugins/installed_plugins.json`.
 
 Installed but disabled Claude plugins are not counted. Missing optional files

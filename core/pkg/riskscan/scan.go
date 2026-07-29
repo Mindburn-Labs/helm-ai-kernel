@@ -95,6 +95,7 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 	if err != nil {
 		return obs, err
 	}
+	projectEnabledPlugins := map[string]bool{}
 	err = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if requireComplete && !shouldSkipPath(path) {
@@ -126,8 +127,16 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 			return nil
 		}
 		obs.StaticConfigFilesRead++
-		if err := applyConfigObservation(&obs, kind, data); err != nil && requireComplete {
-			return scanCoverageError("recognized configuration is invalid")
+		if err := applyConfigObservation(&obs, kind, data); err != nil {
+			if requireComplete {
+				return scanCoverageError("recognized configuration is invalid")
+			}
+			return nil
+		}
+		if kind == "claude_json" && strings.EqualFold(filepath.Base(filepath.Dir(path)), ".claude") {
+			if err := mergeClaudeEnabledPlugins(projectEnabledPlugins, data); err != nil && requireComplete {
+				return scanCoverageError("recognized configuration is invalid")
+			}
 		}
 		return nil
 	})
@@ -138,7 +147,7 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 		return obs, err
 	}
 	if includeUserConfig {
-		if err := applyUserAgentConfigs(&obs, absRoot); err != nil {
+		if err := applyUserAgentConfigs(&obs, absRoot, projectEnabledPlugins); err != nil {
 			return obs, err
 		}
 	}
@@ -149,7 +158,7 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 // project tree. Without it a scan of a repository reports zero MCP servers even
 // when the agent on that machine has many, because the walk above only covers
 // the scanned root. Missing files are normal and never a coverage failure.
-func applyUserAgentConfigs(obs *ConfigObservation, absRoot string) error {
+func applyUserAgentConfigs(obs *ConfigObservation, absRoot string, projectEnabledPlugins map[string]bool) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return scanCoverageError("user home directory could not be resolved")
@@ -185,18 +194,28 @@ func applyUserAgentConfigs(obs *ConfigObservation, absRoot string) error {
 			return scanCoverageError("user agent configuration is invalid")
 		}
 		if path == claudeSettings || path == claudeLocalSettings {
-			var settings struct {
-				EnabledPlugins map[string]bool `json:"enabledPlugins"`
-			}
-			if err := json.Unmarshal(data, &settings); err != nil {
+			if err := mergeClaudeEnabledPlugins(enabledPlugins, data); err != nil {
 				return scanCoverageError("user agent configuration is invalid")
-			}
-			for pluginID, enabled := range settings.EnabledPlugins {
-				enabledPlugins[pluginID] = enabled
 			}
 		}
 	}
+	for pluginID, enabled := range projectEnabledPlugins {
+		enabledPlugins[pluginID] = enabled
+	}
 	return applyClaudePluginConfigs(obs, home, absRoot, enabledPlugins)
+}
+
+func mergeClaudeEnabledPlugins(dst map[string]bool, data []byte) error {
+	var settings struct {
+		EnabledPlugins map[string]bool `json:"enabledPlugins"`
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return err
+	}
+	for pluginID, enabled := range settings.EnabledPlugins {
+		dst[pluginID] = enabled
+	}
+	return nil
 }
 
 func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enabledPlugins map[string]bool) error {

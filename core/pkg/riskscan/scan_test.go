@@ -425,8 +425,9 @@ func TestCollectConfigObservationReadsUserAgentConfig(t *testing.T) {
 	claudeDir := filepath.Join(home, ".claude")
 	codexDir := filepath.Join(home, ".codex")
 	pluginDir := filepath.Join(claudeDir, "plugins", "cache", "official", "context7", "1.0.0")
+	projectPluginDir := filepath.Join(claudeDir, "plugins", "cache", "official", "project", "1.0.0")
 	disabledPluginDir := filepath.Join(claudeDir, "plugins", "cache", "official", "disabled", "1.0.0")
-	for _, dir := range []string{claudeDir, codexDir, pluginDir, disabledPluginDir} {
+	for _, dir := range []string{claudeDir, codexDir, pluginDir, projectPluginDir, disabledPluginDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -434,16 +435,19 @@ func TestCollectConfigObservationReadsUserAgentConfig(t *testing.T) {
 	writeJSON(t, filepath.Join(claudeDir, "settings.json"), map[string]any{
 		"enabledPlugins": map[string]bool{
 			"context7@official": true,
+			"project@official":  false,
 			"disabled@official": false,
 		},
 	})
 	writeJSON(t, filepath.Join(claudeDir, "plugins", "installed_plugins.json"), map[string]any{
 		"plugins": map[string]any{
 			"context7@official": []map[string]any{{"installPath": pluginDir}},
+			"project@official":  []map[string]any{{"installPath": projectPluginDir}},
 			"disabled@official": []map[string]any{{"installPath": disabledPluginDir}},
 		},
 	})
 	writeJSON(t, filepath.Join(pluginDir, ".mcp.json"), map[string]any{"context7": map[string]any{}})
+	writeJSON(t, filepath.Join(projectPluginDir, ".mcp.json"), map[string]any{"project-plugin": map[string]any{}})
 	writeJSON(t, filepath.Join(disabledPluginDir, ".mcp.json"), map[string]any{"must-not-count": map[string]any{}})
 	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(`
 [mcp_servers.codex]
@@ -459,6 +463,13 @@ command = "browser"
 	}
 
 	project := t.TempDir()
+	projectClaudeDir := filepath.Join(project, ".claude")
+	if err := os.MkdirAll(projectClaudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(projectClaudeDir, "settings.json"), map[string]any{
+		"enabledPlugins": map[string]bool{"project@official": true},
+	})
 	obs, err := collectConfigObservation(project, false, false)
 	if err != nil {
 		t.Fatalf("without user config: %v", err)
@@ -471,11 +482,11 @@ command = "browser"
 	if err != nil {
 		t.Fatalf("with user config: %v", err)
 	}
-	if obs.MCPServerCount != 6 {
-		t.Errorf("mcp server count = %d, want 6 (Claude, Codex, and enabled plugin servers)", obs.MCPServerCount)
+	if obs.MCPServerCount != 7 {
+		t.Errorf("mcp server count = %d, want 7 (Claude, Codex, and user/project-enabled plugin servers)", obs.MCPServerCount)
 	}
-	if obs.StaticConfigFilesRead != 5 {
-		t.Errorf("static config files read = %d, want 5", obs.StaticConfigFilesRead)
+	if obs.StaticConfigFilesRead != 7 {
+		t.Errorf("static config files read = %d, want 7", obs.StaticConfigFilesRead)
 	}
 	if obs.ManagedSettingsPresent {
 		t.Error("ordinary Claude user config must not report managed settings")

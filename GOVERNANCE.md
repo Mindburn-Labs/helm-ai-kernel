@@ -97,7 +97,7 @@ the enforced state; it is not a statement of intent.
 | Required status checks | 18, strict (branch must be up to date with `main`) |
 | Linear history | Required |
 | Branch deletion / non-fast-forward | Blocked |
-| `HELM Autonomous Release Permit` | No active workflow or required ruleset status check |
+| `HELM Autonomous Release Permit` | Live exact-head workflow; not one of the 18 ruleset-required status checks |
 | Ruleset bypass actors | None |
 | `Code Quality Copilot review` | Disabled |
 
@@ -106,9 +106,10 @@ Two consequences worth stating plainly, because both have been misread:
 - **No human approval is required by GitHub to merge.** The enforced ruleset
   requires the 18 status checks, resolved review threads, linear history, and
   an up-to-date branch. A reviewer's approval carries no enforcement weight.
-- **The required machine interlock is not live-proven.** All code merges remain
-  on hold under the operating contract above. GitHub does not enforce that hold
-  by itself.
+- **The required machine interlock is live, but it is not ruleset-required.**
+  Each candidate still remains on hold until its exact-head
+  `HELM Autonomous Release Permit` succeeds. A missing, stale, or denied permit
+  is not overridden by the 18 green ruleset checks.
 
 Verify each control plane independently:
 
@@ -125,6 +126,18 @@ gh api repos/Mindburn-Labs/helm-ai-kernel/actions/workflows --paginate \
     .name == "HELM Autonomous Release Permit" or
     .name == "Code Quality Copilot review"
   ) | {id, name, path, state}]'
+
+# Read the candidate's exact-head permit from the PR check rollup. The live
+# permit is supplied through the source-owned workflow even when the standalone
+# workflow registry above has no entry with that display name.
+gh pr view <PR_NUMBER> --repo Mindburn-Labs/helm-ai-kernel \
+  --json headRefOid,statusCheckRollup \
+  --jq '{
+    head: .headRefOid,
+    permit: [.statusCheckRollup[] | select(
+      .name == "HELM Autonomous Release Permit"
+    ) | {status, conclusion, detailsUrl}]
+  }'
 ```
 
 A breaking API change is any change to `protocols/`, `api/openapi/`, the

@@ -42,12 +42,13 @@ make release-assets
 
 ## Publish
 
-Do not start this section while the universal merge hold in
-`GOVERNANCE.md` is active. Before merging or tagging, re-run the live
-ruleset, classic branch-protection, and workflow readbacks documented there
-and require source-owned deterministic gates plus a distinct-provider machine
-interlock approving the exact release-prep head (or exact merge tree).
-Missing, stale, or mismatched interlock evidence stops the release.
+Do not start this section until the release-prep candidate's merge hold in
+`GOVERNANCE.md` is cleared. Before merging or tagging, re-run the live
+ruleset, classic branch-protection, workflow-registry, and exact-head PR check
+readbacks documented there. Require source-owned deterministic gates plus a
+successful distinct-provider `HELM Autonomous Release Permit` for the exact
+release-prep head (or exact merge tree). Missing, stale, denied, or mismatched
+interlock evidence stops the release.
 
 1. Merge the release-prep PR to `main`.
 2. Create the annotated `v0.6.0` tag only after the release commit is on

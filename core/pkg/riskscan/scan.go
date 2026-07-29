@@ -96,6 +96,7 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 		return obs, err
 	}
 	projectEnabledPlugins := map[string]bool{}
+	projectLocalEnabledPlugins := map[string]bool{}
 	err = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if requireComplete && !shouldSkipPath(path) {
@@ -134,7 +135,11 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 			return nil
 		}
 		if kind == "claude_json" && strings.EqualFold(filepath.Base(filepath.Dir(path)), ".claude") {
-			if err := mergeClaudeEnabledPlugins(projectEnabledPlugins, data); err != nil && requireComplete {
+			enabledPlugins := projectEnabledPlugins
+			if strings.EqualFold(filepath.Base(path), "settings.local.json") {
+				enabledPlugins = projectLocalEnabledPlugins
+			}
+			if err := mergeClaudeEnabledPlugins(enabledPlugins, data); err != nil && requireComplete {
 				return scanCoverageError("recognized configuration is invalid")
 			}
 		}
@@ -145,6 +150,9 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 			return obs, scanCoverageError("static configuration coverage could not be completed")
 		}
 		return obs, err
+	}
+	for pluginID, enabled := range projectLocalEnabledPlugins {
+		projectEnabledPlugins[pluginID] = enabled
 	}
 	if includeUserConfig {
 		if err := applyUserAgentConfigs(&obs, absRoot, projectEnabledPlugins); err != nil {

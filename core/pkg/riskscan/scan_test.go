@@ -516,6 +516,32 @@ command = "browser"
 	}
 }
 
+func TestCollectConfigObservationAppliesProjectLocalPluginOverrideLast(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	project := t.TempDir()
+	claudeDir := filepath.Join(project, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(claudeDir, "Settings.local.json"), map[string]any{
+		"enabledPlugins": map[string]bool{"project@official": false},
+	})
+	writeJSON(t, filepath.Join(claudeDir, "settings.json"), map[string]any{
+		"enabledPlugins": map[string]bool{"project@official": true},
+	})
+
+	obs, err := collectConfigObservation(project, true, true)
+	if err != nil {
+		t.Fatalf("project-local plugin override: %v", err)
+	}
+	if obs.MCPServerCount != 0 {
+		t.Fatalf("mcp server count = %d, want 0", obs.MCPServerCount)
+	}
+}
+
 func TestCollectConfigObservationAllowsOnlyDisabledPluginsWithoutRegistry(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

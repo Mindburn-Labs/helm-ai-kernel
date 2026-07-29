@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +20,14 @@ import (
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
+
+type fixedMCPDecisionEvaluator struct {
+	decision *contracts.DecisionRecord
+}
+
+func (e fixedMCPDecisionEvaluator) EvaluateDecision(context.Context, guardian.DecisionRequest) (*contracts.DecisionRecord, error) {
+	return e.decision, nil
+}
 
 // writeMountedServePolicyFixture writes a serve policy plus reference pack in
 // the exact form `quickstart` emits and returns both paths.
@@ -285,5 +294,44 @@ func TestMCPGatewayDecisionsPersistQueryableReceipts(t *testing.T) {
 	}
 	if verdicts["file_write"] != string(contracts.VerdictDeny) {
 		t.Fatalf("missing DENY receipt for file_write: %+v", verdicts)
+	}
+}
+
+func TestReceiptPersistingEvaluatorFailsClosedWhenStoreFails(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeErr := errors.New("store unavailable")
+	evaluator := &receiptPersistingEvaluator{
+		svc: &Services{
+			ReceiptStore:  &captureReceiptStore{storeErr: storeErr},
+			ReceiptSigner: signer,
+		},
+		inner: fixedMCPDecisionEvaluator{decision: &contracts.DecisionRecord{
+			ID:      "mcp-decision",
+			Verdict: string(contracts.VerdictAllow),
+		}},
+	}
+	decision, err := evaluator.EvaluateDecision(context.Background(), guardian.DecisionRequest{
+		Principal: "agent.test",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "file_read",
+	})
+	if decision != nil || !errors.Is(err, storeErr) {
+		t.Fatalf("persistence failure must block decision: decision=%+v err=%v", decision, err)
+	}
+}
+
+func TestDeployedMCPRoutesRequireAdminAuthentication(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", "test-admin-key")
+	mux := http.NewServeMux()
+	registerDeployedMCPRoutes(mux, mcppkg.NewGateway(mcppkg.NewToolCatalog(), mcppkg.GatewayConfig{}))
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated MCP route status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }

@@ -261,7 +261,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	if err != nil {
 		log.Printf("[helm] routes: MCP gateway unavailable: %v", err)
 	} else {
-		mcpGateway.RegisterRoutes(mux)
+		registerDeployedMCPRoutes(mux, mcpGateway)
 		log.Println("[helm] routes: MCP gateway routes registered")
 	}
 
@@ -352,6 +352,18 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	_ = ctx
 
 	log.Println("[helm] routes: All subsystem routes registered")
+}
+
+func registerDeployedMCPRoutes(mux *http.ServeMux, gateway *mcppkg.Gateway) {
+	gatewayMux := http.NewServeMux()
+	gateway.RegisterRoutes(gatewayMux)
+	protected := protectRuntimeHandler(RouteAuthAdmin, gatewayMux.ServeHTTP)
+	for _, route := range []string{"/mcp", "/mcp/v1/capabilities", "/mcp/v1/execute"} {
+		mux.HandleFunc(route, protected)
+	}
+	for _, route := range []string{"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
+		mux.Handle(route, gatewayMux)
+	}
 }
 
 func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Services) {

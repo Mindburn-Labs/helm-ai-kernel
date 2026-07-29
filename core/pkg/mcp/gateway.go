@@ -561,10 +561,14 @@ func (g *Gateway) authMode() string {
 // executor still evaluates every call against the fail-closed policy
 // authority, which remains the enforcement boundary.
 func (g *Gateway) hasRequiredScopes(ctx context.Context, tool ToolRef) bool {
-	if g.authMode() != "oauth" {
+	switch g.authMode() {
+	case "oauth":
+		return hasAllOAuthScopes(ctx, tool.RequiredScopes)
+	case "none", "static-header":
 		return true
+	default:
+		return false
 	}
-	return hasAllOAuthScopes(ctx, tool.RequiredScopes)
 }
 
 func findToolRef(c Catalog, name string) (ToolRef, bool) {

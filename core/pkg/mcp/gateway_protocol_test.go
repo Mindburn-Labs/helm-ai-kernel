@@ -230,9 +230,9 @@ func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "ok")
 }
 
-// HELM-364: when the gateway advertises auth_mode: none (or any non-OAuth
-// mode) there is no channel for a client to present scopes, so scoped tools
-// must stay reachable; governance policy remains the enforcement boundary.
+// HELM-364: the two known scope-less modes have no channel for a client to
+// present scopes, so scoped tools stay reachable; governance policy remains
+// the enforcement boundary.
 func TestGateway_ToolsCallWithoutOAuthChannelReachesScopedTool(t *testing.T) {
 	for _, authMode := range []string{"", "static-header"} {
 		t.Run("auth_mode="+authMode, func(t *testing.T) {
@@ -265,6 +265,12 @@ func TestGateway_ToolsCallWithoutOAuthChannelReachesScopedTool(t *testing.T) {
 			assert.Contains(t, rec.Body.String(), "ok")
 		})
 	}
+}
+
+func TestGateway_UnknownAuthModeFailsClosedForScopedTool(t *testing.T) {
+	gw := NewGateway(NewInMemoryCatalog(), GatewayConfig{AuthMode: "oath"})
+	tool := ToolRef{RequiredScopes: []string{"mcp:tool:scoped"}}
+	require.False(t, gw.hasRequiredScopes(context.Background(), tool))
 }
 
 func TestGateway_UnsupportedProtocolVersionRejected(t *testing.T) {

@@ -1,0 +1,48 @@
+Upstream-Repository: Mindburn-Labs/.github
+Upstream-Commit: b9040b9d9585bf035dd5178d7a4dcadbe9e2666e
+Upstream-Parent: 7a071ddeed9ad0313cfb3444ffc0499bdcedd978
+Workflow-Path: .github/workflows/docs-truth-public.yml
+Workflow-Git-Blob: bc10c452cf6c97ea54299e481e1003e29adbfa95
+Workflow-SHA256: ea175a0c3c3a95627f13d1338c58361215eebe982da9ff7e8ffc6c7056684c23
+Patch-SHA256: 6ebcef04b159cad95abeee3e31bed197e3b719d156c688b59e226bba516341da
+
+diff --git a/.github/workflows/docs-truth-public.yml b/.github/workflows/docs-truth-public.yml
+index 1f56fc0..bc10c45 100644
+--- a/.github/workflows/docs-truth-public.yml
++++ b/.github/workflows/docs-truth-public.yml
+@@ -58,6 +58,35 @@ jobs:
+           echo "repo=$repo" >> "$GITHUB_OUTPUT"
+           echo "local_name=$local_name" >> "$GITHUB_OUTPUT"
+ 
++      # A reusable workflow's `secrets: required: true` only checks that the
++      # caller declared the key, not that the value is non-empty or usable. So
++      # a deleted secret surfaces as actions/checkout's "Input required and not
++      # supplied: token", and an under-scoped one as a bare 403 — both read as
++      # checkout bugs. The 2026-07-16 sweep cost days to that ambiguity
++      # (HELM-311). Fail here instead, naming the actual cause. Probe the entire
++      # private read-set: a public subject can be readable while the private
++      # ledger or runner checkout still fails.
++      - name: Verify org read token
++        shell: bash
++        env:
++          TOKEN: ${{ secrets.MINDBURN_ORG_READ_TOKEN }}
++          SUBJECT_REPO: ${{ steps.subject.outputs.repo }}
++        run: |
++          if [ -z "$TOKEN" ]; then
++            echo "::error::MINDBURN_ORG_READ_TOKEN resolved empty. The caller declared the secret but no value reached this run — it was deleted, or an org secret's visibility does not cover this repo."
++            exit 1
++          fi
++          for repo in "$SUBJECT_REPO" .github docs dev-orchestration; do
++            code=$(curl -sS -o /dev/null -w '%{http_code}' \
++              -H "Authorization: Bearer $TOKEN" \
++              -H "Accept: application/vnd.github+json" \
++              "https://api.github.com/repos/Mindburn-Labs/$repo")
++            if [ "$code" != "200" ]; then
++              echo "::error::MINDBURN_ORG_READ_TOKEN cannot read Mindburn-Labs/$repo (HTTP $code). 401=invalid or expired; 403=valid but insufficient scope; 404=token has no access to this repo. Checkout would fail next with a misleading git error."
++              exit 1
++            fi
++          done
++
+       - name: Checkout subject repo
+         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+         with:

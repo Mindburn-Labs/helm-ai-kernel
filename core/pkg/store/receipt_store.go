@@ -492,8 +492,13 @@ func buildNextCausalReceipt(sessionID string, previous *contracts.Receipt, build
 	if receipt == nil {
 		return nil, fmt.Errorf("causal receipt builder returned nil")
 	}
+	// The builder signs the receipt it returns, so assigning a field here would
+	// mutate an already-signed object and invalidate any signature that covers
+	// it. Require the builder to set ExecutorID before signing instead of
+	// silently defaulting it afterwards.
 	if receipt.ExecutorID == "" {
-		receipt.ExecutorID = sessionID
+		return nil, fmt.Errorf("causal receipt builder returned a receipt with no executor id for session %q: "+
+			"the session must be bound before the receipt is signed", sessionID)
 	}
 	if receipt.ExecutorID != sessionID {
 		return nil, fmt.Errorf("receipt executor %q does not match locked session %q", receipt.ExecutorID, sessionID)

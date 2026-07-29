@@ -83,10 +83,15 @@ func TestProtoCounterfactualCannotExpressAmbiguousShapes(t *testing.T) {
 		"oneof envelope",
 		"DenialScalarBound scalar_bound = 1;",
 		"DenialRequiredCapability required_capability = 2;",
+		"denial_counterfactual.envelope_required",
 	} {
 		if !strings.Contains(block, want) {
 			t.Errorf("DenialCounterfactual is missing %q", want)
 		}
+	}
+	scalar := protoMessageBlock(t, string(raw), "DenialScalarBound")
+	if !strings.Contains(scalar, "denial_scalar_bound.complete") {
+		t.Error("DenialScalarBound is missing non-empty semantic validation")
 	}
 	for _, forbidden := range []string{
 		"string field =",
@@ -107,8 +112,13 @@ func TestProtoCounterfactualUsesFixedCapabilityVocabulary(t *testing.T) {
 	}
 	source := string(raw)
 	block := protoMessageBlock(t, source, "DenialRequiredCapability")
-	if !strings.Contains(block, "WorkstationPermission capability = 2;") {
+	if !strings.Contains(block, "WorkstationPermission capability = 2") {
 		t.Fatal("DenialRequiredCapability does not use the fixed workstation permission enum")
+	}
+	for _, rule := range []string{"defined_only: true", "not_in: [0]"} {
+		if !strings.Contains(block, rule) {
+			t.Errorf("DenialRequiredCapability is missing validation rule %q", rule)
+		}
 	}
 	for _, value := range []string{
 		"NETWORK_EGRESS",

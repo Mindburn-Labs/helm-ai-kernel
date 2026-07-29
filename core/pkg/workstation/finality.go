@@ -74,6 +74,13 @@ func denialFinality(reasonCode string) contracts.DenialFinality {
 	return denialCatalog[reasonCode].finality
 }
 
+// DenialFinality classifies a workstation denial code for compatibility with
+// downstream consumers. It is read-only: receipt learning fields must still
+// be produced through AnnotateDenial, which independently evaluates the event.
+func DenialFinality(reasonCode string) contracts.DenialFinality {
+	return denialFinality(reasonCode)
+}
+
 // denialCounterfactualFor returns the nearest allowed envelope for an
 // evaluated denial, or nil when the denial's disclosure class forbids one.
 // Every path that does not explicitly build a counterfactual returns nil, so

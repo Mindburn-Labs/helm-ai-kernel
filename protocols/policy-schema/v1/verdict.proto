@@ -10,6 +10,7 @@ package helm.policy.v1;
 option go_package = "helm.mindburn.run/policy/v1;policyv1";
 
 import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
 import "foundations.proto";
 
 // ── CPI Verdict ────────────────────────────────────────────────
@@ -141,6 +142,12 @@ enum DenialFinality {
 // records the verdict a PDP would have issued under an observe grant, enforces
 // nothing, and must never be presentable as enforced.
 message DenialCounterfactual {
+  option (buf.validate.message).cel = {
+    id: "denial_counterfactual.envelope_required"
+    message: "exactly one denial counterfactual envelope is required"
+    expression: "has(this.scalar_bound) || has(this.required_capability)"
+  };
+
   // Exactly one envelope is valid. Grouping the scalar fields keeps a
   // field-only value from becoming a counterfactual, while the oneof prevents
   // a producer from claiming both a scalar bound and a capability.
@@ -154,6 +161,12 @@ message DenialCounterfactual {
 }
 
 message DenialScalarBound {
+  option (buf.validate.message).cel = {
+    id: "denial_scalar_bound.complete"
+    message: "field, requested, and max must be non-zero"
+    expression: "this.field != '' && this.requested > 0 && this.max > 0"
+  };
+
   // Policy field that bound the request, e.g. "ttl_days".
   string field = 1;
   // Scalar bound. Unsigned to match the public Go and JSON contracts.
@@ -164,11 +177,20 @@ message DenialScalarBound {
 }
 
 message DenialRequiredCapability {
+  option (buf.validate.message).cel = {
+    id: "denial_required_capability.field_required"
+    message: "field is required"
+    expression: "this.field != ''"
+  };
+
   // Policy field that named the missing capability.
   string field = 1;
   // Capability the action would have needed, from the fixed permission
   // vocabulary. Never an instance identifier.
-  WorkstationPermission capability = 2;
+  WorkstationPermission capability = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
 
   reserved 100 to 199;
 }

@@ -21,6 +21,44 @@
     "receipts",
     "memory_access"
   ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "effect_class": {
+            "not": {
+              "const": "read_only"
+            }
+          },
+          "reversibility": {
+            "enum": [
+              "compensating_action",
+              "exact_undo"
+            ]
+          }
+        },
+        "required": [
+          "effect_class",
+          "reversibility"
+        ]
+      },
+      "then": {
+        "properties": {
+          "rollback": {
+            "required": [
+              "required",
+              "plan_ref"
+            ],
+            "properties": {
+              "required": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "properties": {
     "schema_version": { "const": "capability-manifest/v1" },
     "capability_id": {

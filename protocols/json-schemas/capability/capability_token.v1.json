@@ -12,7 +12,8 @@
     "subject",
     "capability_ref",
     "grant",
-    "status"
+    "status",
+    "signature"
   ],
   "properties": {
     "schema_version": { "const": "capability-token/v1" },

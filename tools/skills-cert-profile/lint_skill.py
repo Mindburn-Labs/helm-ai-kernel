@@ -33,38 +33,50 @@ def parse_frontmatter(text: str) -> dict:
     end = text.find("\n---", 3)
     if end == -1:
         return {}
-    root: dict = {}
-    stack: list[tuple[int, dict]] = [(-1, root)]
-    last_key_at_indent: dict[int, str] = {}
+    lines = []
     for raw in text[3:end].splitlines():
-        if not raw.strip() or raw.strip().startswith("#"):
-            continue
-        indent = len(raw) - len(raw.lstrip())
-        line = raw.strip()
-        while stack and indent <= stack[-1][0]:
-            stack.pop()
-        parent = stack[-1][1]
-        if line.startswith("- "):
-            key = last_key_at_indent.get(stack[-1][0])
-            if key is not None:
-                if not isinstance(parent.get(key), list):
-                    parent[key] = []
-                parent[key].append(line[2:].strip().strip('"\''))
-            continue
-        if ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        key = key.strip()
-        value = value.strip()
-        if value == "":
-            node: dict = {}
-            parent[key] = node
-            stack.append((indent, node))
-            last_key_at_indent[indent - 1] = key
-        else:
-            parent[key] = value.strip('"\'')
-            last_key_at_indent[stack[-1][0]] = key
-    return root
+        if raw.strip() and not raw.strip().startswith("#"):
+            lines.append((len(raw) - len(raw.lstrip()), raw.strip()))
+
+    def scalar(value: str) -> str:
+        return value.strip().strip('"\'')
+
+    def parse_list(index: int, indent: int) -> tuple[list[str], int]:
+        values: list[str] = []
+        while index < len(lines):
+            current_indent, line = lines[index]
+            if current_indent != indent or not line.startswith("- "):
+                break
+            values.append(scalar(line[2:]))
+            index += 1
+        return values, index
+
+    def parse_map(index: int, indent: int) -> tuple[dict, int]:
+        result: dict = {}
+        while index < len(lines):
+            current_indent, line = lines[index]
+            if current_indent < indent:
+                break
+            if current_indent != indent or line.startswith("- ") or ":" not in line:
+                index += 1
+                continue
+            key, _, value = line.partition(":")
+            key, value = key.strip(), value.strip()
+            index += 1
+            if value:
+                result[key] = scalar(value)
+                continue
+            if index >= len(lines) or lines[index][0] <= current_indent:
+                result[key] = {}
+                continue
+            child_indent, child_line = lines[index]
+            if child_line.startswith("- "):
+                result[key], index = parse_list(index, child_indent)
+            else:
+                result[key], index = parse_map(index, child_indent)
+        return result, index
+
+    return parse_map(0, lines[0][0])[0] if lines else {}
 
 
 def dig(node: dict, path: list[str]):

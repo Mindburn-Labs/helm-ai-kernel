@@ -19,20 +19,15 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # Fast gate (~5s): decide which CodeQL languages actually changed. The four
-  # CodeQL matrix jobs are required status checks, so the
-  # workflow must still trigger on every PR/push — when a language did not
-  # change, its job reports success without running analysis.
+  # Fast gate (~5s): only a docs/legal/Rust-only diff can skip all four required
+  # CodeQL analyses. Every other path triggers the complete matrix.
   changes:
     name: Detect relevant changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
-      go: ${{ steps.filter.outputs.go }}
-      javascript-typescript: ${{ steps.filter.outputs.javascript-typescript }}
-      python: ${{ steps.filter.outputs.python }}
-      java-kotlin: ${{ steps.filter.outputs.java-kotlin }}
+      codeql: ${{ steps.filter.outputs.codeql }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -48,57 +43,26 @@ jobs:
           fi
           # schedule / workflow_dispatch / unknown base → full sweep
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            for k in go javascript-typescript python java-kotlin; do
-              echo "$k=true" >> "$GITHUB_OUTPUT"
-            done
+            echo "codeql=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # NUL-delimited paths preserve names containing spaces, newlines, or
-          # non-ASCII bytes. Unknown files deliberately trigger a full sweep:
-          # Markdown, legal text, and Rust-only inputs can skip CodeQL entirely.
-          go=false
-          javascript_typescript=false
-          python=false
-          java_kotlin=false
-          full=false
+          # non-ASCII bytes. Renames are represented as delete+add so a source
+          # file cannot disappear behind a documentation or Rust destination.
+          codeql=false
           while IFS= read -r -d '' file; do
             case "$file" in
-              .github/workflows/codeql.yml|.github/codeql/*|.github/codeql*.yml|.github/codeql*.yaml)
-                full=true
+              *.rs|Cargo.toml|*/Cargo.toml|Cargo.lock|*/Cargo.lock|.cargo/*|*/.cargo/*)
                 ;;
               *.md|LICENSE|LICENSE.*|NOTICE|NOTICE.*)
                 ;;
-              *.go|go.mod|*/go.mod|go.sum|*/go.sum|go.work|*/go.work|go.work.sum|*/go.work.sum|vendor/*|*/vendor/*)
-                go=true
-                ;;
-              *.js|*.jsx|*.ts|*.tsx|*.mjs|*.cjs|*.mts|*.cts|*.vue|*.svelte|*.astro|package.json|*/package.json|package-lock.json|*/package-lock.json|npm-shrinkwrap.json|*/npm-shrinkwrap.json|pnpm-lock.yaml|*/pnpm-lock.yaml|yarn.lock|*/yarn.lock|bun.lock|*/bun.lock|bun.lockb|*/bun.lockb|tsconfig*.json|*/tsconfig*.json|jsconfig.json|*/jsconfig.json)
-                javascript_typescript=true
-                ;;
-              *.py|pyproject.toml|*/pyproject.toml|setup.cfg|*/setup.cfg|requirements*.txt|*/requirements*.txt|requirements*.in|*/requirements*.in|Pipfile|*/Pipfile|Pipfile.lock|*/Pipfile.lock|poetry.lock|*/poetry.lock|uv.lock|*/uv.lock|.python-version|*/.python-version)
-                python=true
-                ;;
-              *.java|*.kt|*.kts|pom.xml|*/pom.xml|build.gradle|*/build.gradle|settings.gradle|*/settings.gradle|gradle.properties|*/gradle.properties|gradle/*|*/gradle/*|gradlew|*/gradlew|gradlew.bat|*/gradlew.bat)
-                java_kotlin=true
-                ;;
-              *.rs|Cargo.toml|*/Cargo.toml|Cargo.lock|*/Cargo.lock|.cargo/*|*/.cargo/*)
-                ;;
               *)
-                full=true
+                codeql=true
+                break
                 ;;
             esac
-          done < <(git diff --name-only -z "$BASE"...HEAD)
-          if [ "$full" = true ]; then
-            go=true
-            javascript_typescript=true
-            python=true
-            java_kotlin=true
-          fi
-          {
-            echo "go=$go"
-            echo "javascript-typescript=$javascript_typescript"
-            echo "python=$python"
-            echo "java-kotlin=$java_kotlin"
-          } >> "$GITHUB_OUTPUT"
+          done < <(git diff --no-renames --name-only -z "$BASE"...HEAD)
+          echo "codeql=$codeql" >> "$GITHUB_OUTPUT"
 
   analyze:
     name: CodeQL (${{ matrix.language }})
@@ -117,23 +81,23 @@ jobs:
           - language: python
           - language: java-kotlin
     steps:
-      - name: Skip when no relevant changes
-        if: needs.changes.outputs[matrix.language] != 'true'
-        run: echo "no ${{ matrix.language }} changes in this range; analysis skipped"
-      - if: needs.changes.outputs[matrix.language] == 'true'
+      - name: Skip docs/legal/Rust-only changes
+        if: needs.changes.outputs.codeql != 'true'
+        run: echo "only documentation, legal text, or Rust inputs changed; CodeQL skipped"
+      - if: needs.changes.outputs.codeql == 'true'
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - if: matrix.language == 'go' && needs.changes.outputs[matrix.language] == 'true'
+      - if: matrix.language == 'go' && needs.changes.outputs.codeql == 'true'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25.12"
           cache-dependency-path: "**/go.sum"
-          cache: true
-      - if: needs.changes.outputs[matrix.language] == 'true'
+          cache: false
+      - if: needs.changes.outputs.codeql == 'true'
         uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
-      - if: matrix.language == 'go' && needs.changes.outputs[matrix.language] == 'true'
+      - if: matrix.language == 'go' && needs.changes.outputs.codeql == 'true'
         name: Build Go modules for CodeQL
         run: |
           go version
@@ -146,7 +110,7 @@ jobs:
             ./tests/conformance/... \
             ./tests/launchpad/... \
             -run '^$'
-      - if: needs.changes.outputs[matrix.language] == 'true'
+      - if: needs.changes.outputs.codeql == 'true'
         uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
         with:
           category: "/language:${{ matrix.language }}"

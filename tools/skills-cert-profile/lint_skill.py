@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 
 BASELINE_REQUIRED = ["name", "description", "version"]
+KEBAB_CASE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$")
 HELM_REQUIRED = {
     "effect_class": {
         "read_only", "write_local", "write_external", "network_egress",
@@ -24,6 +26,7 @@ HELM_REQUIRED = {
     "data_boundary": {"local_only", "device_boundary", "org_boundary", "external"},
 }
 NETWORK_BINS = {"curl", "wget", "nc", "http", "https"}
+MEMORY_DOMAINS = {"none", "read", "write", "read_write"}
 
 
 def parse_frontmatter(text: str) -> dict:
@@ -102,6 +105,10 @@ def lint(path: Path) -> list[str]:
         problems.append(
             f"baseline: name `{fm['name']}` != directory `{path.parent.name}`"
         )
+    if fm.get("name") and not KEBAB_CASE.fullmatch(fm["name"]):
+        problems.append("baseline: `name` must be kebab-case")
+    if fm.get("version") and not SEMVER.fullmatch(fm["version"]):
+        problems.append("baseline: `version` must be SemVer")
 
     helm = fm.get("metadata", {}).get("helm")
     if not isinstance(helm, dict):
@@ -119,6 +126,21 @@ def lint(path: Path) -> list[str]:
         problems.append("helm-cert: missing `metadata.helm.receipts.required: true`")
     if not helm.get("permissions"):
         problems.append("helm-cert: missing `metadata.helm.permissions` list")
+    memory_access = helm.get("memory_access")
+    if not isinstance(memory_access, dict):
+        problems.append("helm-cert: missing `metadata.helm.memory_access` block")
+    else:
+        for domain in ("user_domain", "agent_domain"):
+            if memory_access.get(domain) not in MEMORY_DOMAINS:
+                problems.append(
+                    f"helm-cert: `metadata.helm.memory_access.{domain}` must be one of "
+                    f"{sorted(MEMORY_DOMAINS)}"
+                )
+        if memory_access.get("cross_domain_read") not in (False, "false"):
+            problems.append(
+                "helm-cert: `metadata.helm.memory_access.cross_domain_read` "
+                "must be false"
+            )
 
     # consistency: network tooling or credentials imply non-read-only effects
     metadata = fm.get("metadata", {})
@@ -145,13 +167,19 @@ def lint(path: Path) -> list[str]:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--help"]:
+        print(__doc__)
+        return 0
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
     failures = 0
     for arg in sys.argv[1:]:
         path = Path(arg)
-        problems = lint(path)
+        try:
+            problems = lint(path)
+        except OSError as exc:
+            problems = [f"cannot read file: {exc}"]
         if problems:
             failures += 1
             print(f"FAIL {path}")

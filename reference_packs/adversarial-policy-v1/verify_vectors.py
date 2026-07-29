@@ -123,11 +123,15 @@ def main() -> int:
 
     failures = 0
     for vector in pack["vectors"]:
-        for key in ("id", "category", "narrative", "inputs", "expected"):
-            if key not in vector:
-                print(f"FAIL: {vector.get('id', '?')} missing key {key}")
-                failures += 1
-                continue
+        missing = [
+            key
+            for key in ("id", "category", "narrative", "inputs", "expected")
+            if key not in vector
+        ]
+        if missing:
+            print(f"FAIL: {vector.get('id', '?')} missing keys {missing}")
+            failures += 1
+            continue
         decision, reason = decide(vector["inputs"])
         expected = vector["expected"]
         ok = decision == expected["decision"] and reason == expected["reason_code"]

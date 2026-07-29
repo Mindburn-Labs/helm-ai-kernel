@@ -27,14 +27,14 @@
   "rollback": { "required": false },
   "receipts": {
     "required": true,
-    "schema_refs": ["helm://schemas/receipt/decision_receipt.v1.json"]
+    "schema_refs": ["helm://schemas/receipt/v2.json"]
   },
   "memory_access": {
     "user_domain": "none",
     "agent_domain": "write",
     "cross_domain_read": false
   },
-  "routing": { "min_model_tier": "fast_edge" },
+  "routing": { "min_model_tier": "standard" },
   "metadata": {
     "homepage": "https://platform.stepfun.com/docs/zh/guide/tts",
     "license": "Apache-2.0",

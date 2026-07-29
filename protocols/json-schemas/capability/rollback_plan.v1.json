@@ -23,10 +23,15 @@
     "applies_to": {
       "type": "object",
       "additionalProperties": false,
+      "anyOf": [
+        { "required": ["capability_id"] },
+        { "required": ["effect_receipt_ref"] }
+      ],
       "properties": {
-        "capability_id": { "type": "string" },
+        "capability_id": { "type": "string", "minLength": 1 },
         "effect_receipt_ref": {
           "type": "string",
+          "minLength": 1,
           "description": "When the plan is bound to one specific executed effect rather than a capability class."
         }
       }

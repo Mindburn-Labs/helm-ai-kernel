@@ -290,7 +290,8 @@ func TestPublishedReceiptSchemaRejectsAmbiguousCounterfactuals(t *testing.T) {
 		t.Fatalf("compile denied_effect schema: %v", err)
 	}
 	for name, counterfactual := range map[string]any{
-		"field_only": map[string]any{"field": "ttl_days"},
+		"field_only":  map[string]any{"field": "ttl_days"},
+		"zero_scalar": map[string]any{"field": "ttl_days", "requested": 0, "max": 0},
 		"mixed_shapes": map[string]any{
 			"field": "ttl_days", "requested": 90, "max": 30, "capability": "network.egress",
 		},

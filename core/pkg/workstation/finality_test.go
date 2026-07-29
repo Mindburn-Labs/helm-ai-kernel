@@ -87,6 +87,15 @@ func TestSetMembershipDenialsDiscloseNothing(t *testing.T) {
 	}
 }
 
+func TestPublicDenialFinalityCompatibilityLookup(t *testing.T) {
+	if got := DenialFinality("MEMORY_TTL_EXCEEDS_POLICY"); got != contracts.DenialInstanceParameter {
+		t.Fatalf("DenialFinality() = %q, want instance_parameter", got)
+	}
+	if got := DenialFinality("UNKNOWN"); got != "" {
+		t.Fatalf("DenialFinality() = %q, want empty finality for unknown code", got)
+	}
+}
+
 // A scalar bound is the case the whole design exists for: the agent is told the
 // ceiling and can retry under it without probing.
 func TestScalarBoundDisclosesTheCeiling(t *testing.T) {

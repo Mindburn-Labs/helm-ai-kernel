@@ -231,6 +231,9 @@ func (c DenialCounterfactual) Validate() error {
 	if c.Field == "" {
 		return errors.New("denial counterfactual field is required")
 	}
+	if c.Capability == "" && (c.Requested == 0 || c.Max == 0) {
+		return errors.New("denial counterfactual scalar bound requires positive requested and max")
+	}
 	if c.Capability != "" && (c.Requested != 0 || c.Max != 0) {
 		return errors.New("denial counterfactual cannot mix a scalar bound and capability")
 	}

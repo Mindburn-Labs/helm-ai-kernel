@@ -5,15 +5,16 @@ import (
 	"testing"
 )
 
-func TestDenialCounterfactualMarshalRejectsAmbiguousShapes(t *testing.T) {
+func TestDenialCounterfactualMarshalRejectsIncompleteShapes(t *testing.T) {
 	tests := []struct {
 		name     string
 		value    DenialCounterfactual
 		wantJSON string
 	}{
-		{"scalar with zero max", DenialCounterfactual{Field: "limit", Requested: 1}, `{"field":"limit","requested":1,"max":0}`},
-		{"scalar with zero request", DenialCounterfactual{Field: "limit", Max: 1}, `{"field":"limit","requested":0,"max":1}`},
-		{"zero scalar", DenialCounterfactual{Field: "limit"}, `{"field":"limit","requested":0,"max":0}`},
+		{"scalar", DenialCounterfactual{Field: "limit", Requested: 2, Max: 1}, `{"field":"limit","requested":2,"max":1}`},
+		{"scalar with zero max", DenialCounterfactual{Field: "limit", Requested: 1}, ""},
+		{"scalar with zero request", DenialCounterfactual{Field: "limit", Max: 1}, ""},
+		{"zero scalar", DenialCounterfactual{Field: "limit"}, ""},
 		{"capability", DenialCounterfactual{Field: "permission", Capability: "shell.operate"}, `{"field":"permission","capability":"shell.operate"}`},
 		{"missing field", DenialCounterfactual{Capability: "shell.operate"}, ""},
 		{"mixed", DenialCounterfactual{Field: "limit", Requested: 1, Capability: "shell.operate"}, ""},
@@ -44,7 +45,8 @@ func TestDenialCounterfactualUnmarshalRejectsAmbiguousShapes(t *testing.T) {
 		raw     string
 		wantErr bool
 	}{
-		{"zero scalar", `{"field":"limit","requested":0,"max":0}`, false},
+		{"scalar", `{"field":"limit","requested":2,"max":1}`, false},
+		{"zero scalar", `{"field":"limit","requested":0,"max":0}`, true},
 		{"capability", `{"field":"permission","capability":"shell.operate"}`, false},
 		{"field only", `{"field":"limit"}`, true},
 		{"zero valued mixed", `{"field":"permission","capability":"shell.operate","requested":0}`, true},

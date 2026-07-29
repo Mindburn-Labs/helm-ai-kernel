@@ -109,10 +109,7 @@ type collector struct {
 	signals    map[string]bool
 	parseOK    bool
 
-	sawPipe   bool
-	sawShell  bool
-	sawEval   bool
-	sawDecode bool
+	writtenPaths map[string]bool
 }
 
 func (c *collector) decide(reason string) {
@@ -169,8 +166,11 @@ func (c *collector) classifyString(src, via string, depth int) {
 		case *syntax.BinaryCmd:
 			switch n.Op {
 			case syntax.Pipe:
-				c.sawPipe = true
 				c.signal(SignalChaining)
+				if encodedPipeline(n) {
+					c.signal(SignalEncodedWrapper)
+					c.decide("encoded payload decoded into a shell or eval")
+				}
 			case syntax.AndStmt, syntax.OrStmt:
 				c.signal(SignalChaining)
 			}
@@ -183,10 +183,56 @@ func (c *collector) classifyString(src, via string, depth int) {
 		}
 		return true
 	})
-	if c.sawDecode && (c.sawPipe && (c.sawShell || c.sawEval)) {
-		c.signal(SignalEncodedWrapper)
-		c.decide("encoded payload decoded into a shell or eval")
+}
+
+func encodedPipeline(node syntax.Node) bool {
+	decoded, executed := false, false
+	syntax.Walk(node, func(child syntax.Node) bool {
+		call, ok := child.(*syntax.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		args := make([]wordTok, 0, len(call.Args))
+		for _, word := range call.Args {
+			args = append(args, resolveWord(word))
+		}
+		if args[0].dynamic {
+			return true
+		}
+		name := path.Base(path.Clean(args[0].text))
+		executed = executed || name == "eval" || shellNames[name]
+		decoded = decoded || isDecoderCall(name, args[1:])
+		return true
+	})
+	return decoded && executed
+}
+
+func isDecoderCall(name string, args []wordTok) bool {
+	switch name {
+	case "base64":
+		for _, arg := range args {
+			if !arg.dynamic && (arg.text == "-d" || arg.text == "--decode" || arg.text == "-D") {
+				return true
+			}
+		}
+	case "xxd":
+		for _, arg := range args {
+			if !arg.dynamic && strings.HasPrefix(arg.text, "-r") {
+				return true
+			}
+		}
+	case "openssl":
+		hasDecode, hasBase64 := false, false
+		for _, arg := range args {
+			if arg.dynamic {
+				continue
+			}
+			hasDecode = hasDecode || arg.text == "-d"
+			hasBase64 = hasBase64 || arg.text == "-base64" || arg.text == "-a" || arg.text == "-A"
+		}
+		return hasDecode && hasBase64
 	}
+	return false
 }
 
 func (c *collector) classifyRedirect(r *syntax.Redirect) {
@@ -212,6 +258,10 @@ func (c *collector) classifyRedirect(r *syntax.Redirect) {
 	if strings.HasPrefix(target, "&") {
 		return
 	}
+	if c.writtenPaths == nil {
+		c.writtenPaths = map[string]bool{}
+	}
+	c.writtenPaths[path.Clean(tok.text)] = true
 	for _, needle := range sensitiveRedirectTargets {
 		if strings.Contains(target, needle) {
 			c.signal(SignalSensitiveRedirect)
@@ -610,21 +660,21 @@ var shellLongValueFlags = map[string]bool{
 // from stdin because no static script source exists (stdin), whether scanning
 // hit an unresolvable word (ambiguous), and whether a positional script file
 // was seen (positional).
-func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, stdin, ambiguous, positional bool) {
+func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, stdin, ambiguous bool, positional wordTok) {
 	for i := 0; i < len(rest); i++ {
 		tok := rest[i]
 		if tok.dynamic {
-			return wordTok{}, false, false, true, false
+			return wordTok{}, false, false, true, wordTok{}
 		}
 		if tok.text == "--" {
 			if i+1 < len(rest) {
-				return wordTok{}, false, false, false, true // positional after --
+				return wordTok{}, false, false, false, rest[i+1] // positional after --
 			}
-			return wordTok{}, false, true, false, false
+			return wordTok{}, false, true, false, wordTok{}
 		}
 		if tok.text == "--help" || tok.text == "--version" {
 			// Prints and exits; treat like a benign positional.
-			return wordTok{}, false, false, false, true
+			return wordTok{}, false, false, false, tok
 		}
 		if strings.HasPrefix(tok.text, "--") {
 			if shellLongValueFlags[tok.text] {
@@ -633,7 +683,7 @@ func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, st
 			continue
 		}
 		if !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
-			return wordTok{}, false, false, false, true // script file positional
+			return wordTok{}, false, false, false, tok // script file positional
 		}
 		cluster := tok.text[1:]
 		for j := 0; j < len(cluster); j++ {
@@ -641,15 +691,15 @@ func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, st
 			case 'c':
 				if j+1 < len(cluster) {
 					// Attached payload: bash -cCMD (e.g. -c'rm -rf /').
-					return wordTok{text: cluster[j+1:]}, true, false, false, false
+					return wordTok{text: cluster[j+1:]}, true, false, false, wordTok{}
 				}
 				if i+1 < len(rest) {
-					return rest[i+1], true, false, false, false
+					return rest[i+1], true, false, false, wordTok{}
 				}
-				return wordTok{}, false, true, false, false // -c with no operand: stdin
+				return wordTok{}, false, true, false, wordTok{} // -c with no operand: stdin
 			case 's':
 				// -s reads commands from standard input: opaque.
-				return wordTok{}, false, true, false, false
+				return wordTok{}, false, true, false, wordTok{}
 			case 'o', 'O':
 				// -o option-name / bash -O shopt_option: value is attached
 				// or the next token.
@@ -665,15 +715,15 @@ func scanShellScriptFlag(rest []wordTok, strict bool) (script wordTok, found, st
 				// characters (digits, punctuation) are never standard
 				// options and are always ambiguous. Both fail closed.
 				if strict {
-					return wordTok{}, false, false, true, false
+					return wordTok{}, false, false, true, wordTok{}
 				}
 				if !((cluster[j] >= 'a' && cluster[j] <= 'z') || (cluster[j] >= 'A' && cluster[j] <= 'Z')) {
-					return wordTok{}, false, false, true, false
+					return wordTok{}, false, false, true, wordTok{}
 				}
 			}
 		}
 	}
-	return wordTok{}, false, true, false, false // no script source: stdin
+	return wordTok{}, false, true, false, wordTok{} // no script source: stdin
 }
 
 func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
@@ -983,7 +1033,6 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			args = rest[skip:]
 		case name == "eval":
 			c.signal(SignalEvalWrapper)
-			c.sawEval = true
 			var b strings.Builder
 			dynamic := false
 			for i, tok := range args[1:] {
@@ -1004,9 +1053,8 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			return
 		case shellNames[name]:
 			c.signal(SignalShellInvocation)
-			c.sawShell = true
 			rest := args[1:]
-			script, found, stdin, ambiguous, _ := scanShellScriptFlag(rest, strictFlagShells[name])
+			script, found, stdin, ambiguous, positional := scanShellScriptFlag(rest, strictFlagShells[name])
 			switch {
 			case ambiguous:
 				c.decide(name + " wrapper arguments cannot be resolved statically")
@@ -1033,6 +1081,10 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 						c.decide(name + " invocation with a dynamic argument")
 						return
 					}
+				}
+				if positional.text != "" && c.writtenPaths[path.Clean(positional.text)] {
+					c.decide(name + " executes a script generated earlier in the command")
+					return
 				}
 				c.record(Command{Name: name, Tokens: staticTokens(rest), Via: via, Prefix: name})
 				return
@@ -1159,34 +1211,6 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok) {
 		c.matchDocker(args)
 	case cmd.Name == "find":
 		c.matchFind(args)
-	case cmd.Name == "base64":
-		for _, tok := range args[1:] {
-			if !tok.dynamic && (tok.text == "-d" || tok.text == "--decode" || tok.text == "-D") {
-				c.sawDecode = true
-			}
-		}
-	case cmd.Name == "xxd":
-		for _, tok := range args[1:] {
-			if !tok.dynamic && (tok.text == "-r" || strings.HasPrefix(tok.text, "-r")) {
-				c.sawDecode = true
-			}
-		}
-	case cmd.Name == "openssl":
-		hasD, hasB64 := false, false
-		for _, tok := range args[1:] {
-			if tok.dynamic {
-				continue
-			}
-			if tok.text == "-d" {
-				hasD = true
-			}
-			if tok.text == "-base64" || tok.text == "-a" || tok.text == "-A" {
-				hasB64 = true
-			}
-		}
-		if hasD && hasB64 {
-			c.sawDecode = true
-		}
 	}
 }
 
@@ -1233,8 +1257,9 @@ func firstSubcommand(args []wordTok, vals map[string]bool) (sub string, dynamic,
 		if strings.HasPrefix(tok.text, "-") && tok.text != "-" {
 			if vals[tok.text] {
 				i++
+				continue
 			}
-			continue
+			return "", true, false
 		}
 		return tok.text, false, true
 	}

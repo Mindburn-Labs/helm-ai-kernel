@@ -50,6 +50,7 @@ func WithBridge(kb *bridge.KernelBridge) GatewayOption {
 func WithExecutor(exec ToolExecutor) GatewayOption {
 	return func(g *Gateway) {
 		g.exec = exec
+		g.governed = false
 	}
 }
 

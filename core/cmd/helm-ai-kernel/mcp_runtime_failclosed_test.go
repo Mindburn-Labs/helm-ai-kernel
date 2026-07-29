@@ -77,3 +77,15 @@ func TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph(t *testing.T) {
 		t.Fatalf("blocked MCP response leaked file content: %q", resp.Content)
 	}
 }
+
+func TestLocalMCPRuntimeDoesNotAdvertiseUnimplementedGovernanceTools(t *testing.T) {
+	catalog, _, err := newLocalMCPRuntimeWithDataDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"helm.verify", "helm.evaluate"} {
+		if _, ok := catalog.Lookup(name); ok {
+			t.Fatalf("unimplemented tool %q was advertised", name)
+		}
+	}
+}

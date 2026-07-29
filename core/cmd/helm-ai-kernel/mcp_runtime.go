@@ -89,7 +89,6 @@ func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
-	catalog.RegisterGovernanceTools()
 	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog)
 
 	return catalog, firewall.GovernedExecutor(runLocalMCPTool), nil

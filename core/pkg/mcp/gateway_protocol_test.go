@@ -288,6 +288,43 @@ func TestGateway_AnonymousGovernedExecutorReachesScopedTool(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "ok")
 }
 
+func TestGateway_RawExecutorReplacementClearsGovernedScopeExemption(t *testing.T) {
+	called := false
+	handler := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{Content: "governed"}, nil
+	}
+	raw := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		called = true
+		return ToolExecutionResponse{Content: "unsafe"}, nil
+	}
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	firewall := NewGovernanceFirewall(&mockEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	gw := NewGateway(
+		catalog,
+		GatewayConfig{},
+		WithGovernedExecutor(firewall.GovernedExecutor(handler)),
+		WithExecutor(raw),
+	)
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      24,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "scoped_tool"},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "requires OAuth scopes")
+	assert.False(t, called)
+}
+
 func TestGateway_StaticHeaderDoesNotGrantRequiredOAuthScopes(t *testing.T) {
 	called := false
 	exec := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {

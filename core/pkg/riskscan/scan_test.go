@@ -314,6 +314,21 @@ func TestCollectConfigObservationReadsDirectClaudePluginManifest(t *testing.T) {
 	}
 }
 
+func TestCollectConfigObservationAllowsDesktopConfigWithoutMCPServers(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "claude_desktop_config.json"), map[string]any{
+		"globalShortcut": "CommandOrControl+Shift+Space",
+	})
+
+	obs, err := collectConfigObservation(root, true, false)
+	if err != nil {
+		t.Fatalf("collect desktop config: %v", err)
+	}
+	if obs.MCPServerCount != 0 {
+		t.Fatalf("mcp server count = %d, want 0", obs.MCPServerCount)
+	}
+}
+
 func fixtureRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -536,6 +551,68 @@ func TestCollectConfigObservationAppliesProjectLocalPluginOverrideLast(t *testin
 	obs, err := collectConfigObservation(project, true, true)
 	if err != nil {
 		t.Fatalf("project-local plugin override: %v", err)
+	}
+	if obs.MCPServerCount != 0 {
+		t.Fatalf("mcp server count = %d, want 0", obs.MCPServerCount)
+	}
+}
+
+func TestCollectConfigObservationUsesLatestEnabledPluginInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	claudeDir := filepath.Join(home, ".claude")
+	oldPluginDir := filepath.Join(claudeDir, "plugins", "cache", "official", "context7", "1.0.0")
+	currentPluginDir := filepath.Join(claudeDir, "plugins", "cache", "official", "context7", "2.0.0")
+	for _, dir := range []string{claudeDir, oldPluginDir, currentPluginDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeJSON(t, filepath.Join(claudeDir, "settings.json"), map[string]any{
+		"enabledPlugins": map[string]bool{"context7@official": true},
+	})
+	writeJSON(t, filepath.Join(claudeDir, "plugins", "installed_plugins.json"), map[string]any{
+		"plugins": map[string]any{
+			"context7@official": []map[string]any{
+				{"installPath": oldPluginDir, "lastUpdated": "2026-01-01T00:00:00Z"},
+				{"installPath": currentPluginDir, "lastUpdated": "2026-07-29T00:00:00Z"},
+			},
+		},
+	})
+	writeJSON(t, filepath.Join(oldPluginDir, ".mcp.json"), map[string]any{
+		"stale-a": map[string]any{},
+		"stale-b": map[string]any{},
+	})
+	writeJSON(t, filepath.Join(currentPluginDir, ".mcp.json"), map[string]any{
+		"current": map[string]any{},
+	})
+
+	obs, err := collectConfigObservation(t.TempDir(), true, true)
+	if err != nil {
+		t.Fatalf("latest enabled plugin install: %v", err)
+	}
+	if obs.MCPServerCount != 1 {
+		t.Fatalf("mcp server count = %d, want 1", obs.MCPServerCount)
+	}
+}
+
+func TestCollectConfigObservationSkipsUninstalledProjectPlugin(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	project := t.TempDir()
+	claudeDir := filepath.Join(project, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(claudeDir, "settings.json"), map[string]any{
+		"enabledPlugins": map[string]bool{"project@official": true},
+	})
+
+	obs, err := collectConfigObservation(project, true, true)
+	if err != nil {
+		t.Fatalf("uninstalled project plugin: %v", err)
 	}
 	if obs.MCPServerCount != 0 {
 		t.Fatalf("mcp server count = %d, want 0", obs.MCPServerCount)

@@ -44,6 +44,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		upload       bool
 		uploadURL    string
 		yes          bool
+		noUserConfig bool
 		previews     scanPreviewFlags
 	)
 	cmd.StringVar(&rootPath, "path", ".", "Directory to scan")
@@ -56,6 +57,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&upload, "upload", false, "Upload anonymized RiskEnvelope JSON")
 	cmd.StringVar(&uploadURL, "upload-url", "", "Explicit upload endpoint for --upload")
 	cmd.BoolVar(&yes, "yes", false, "Confirm upload after local preview is printed")
+	cmd.BoolVar(&noUserConfig, "no-user-config", false, "Scan only configuration under --path")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
@@ -77,7 +79,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		Salt:              salt,
 		Cohort:            riskenvelope.CohortBucket(cohort),
 		Now:               time.Now().UTC(),
-		IncludeUserConfig: true,
+		IncludeUserConfig: !noUserConfig,
 	}
 	var envelope riskenvelope.RiskEnvelope
 	if strings.TrimSpace(receiptsPath) != "" {

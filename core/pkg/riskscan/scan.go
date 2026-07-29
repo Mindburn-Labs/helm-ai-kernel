@@ -241,7 +241,7 @@ func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enab
 	data, err := os.ReadFile(registryPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return scanCoverageError("enabled plugin inventory could not be found")
+			return nil
 		}
 		return scanCoverageError("enabled plugin inventory could not be read")
 	}
@@ -249,6 +249,7 @@ func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enab
 	var registry struct {
 		Plugins map[string][]struct {
 			InstallPath string `json:"installPath"`
+			LastUpdated string `json:"lastUpdated"`
 		} `json:"plugins"`
 	}
 	if err := json.Unmarshal(data, &registry); err != nil {
@@ -261,32 +262,36 @@ func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enab
 			continue
 		}
 		installs, ok := registry.Plugins[pluginID]
-		if !ok {
-			return scanCoverageError("enabled plugin is missing from inventory")
+		if !ok || len(installs) == 0 {
+			continue
 		}
-		for _, install := range installs {
-			if strings.TrimSpace(install.InstallPath) == "" {
-				return scanCoverageError("enabled plugin inventory is invalid")
+		install := installs[0]
+		for _, candidate := range installs[1:] {
+			if candidate.LastUpdated > install.LastUpdated {
+				install = candidate
 			}
-			manifestPath := filepath.Join(install.InstallPath, ".mcp.json")
-			if seen[manifestPath] {
-				continue
+		}
+		if strings.TrimSpace(install.InstallPath) == "" {
+			return scanCoverageError("enabled plugin inventory is invalid")
+		}
+		manifestPath := filepath.Join(install.InstallPath, ".mcp.json")
+		if seen[manifestPath] {
+			continue
+		}
+		seen[manifestPath] = true
+		if strings.HasPrefix(manifestPath, absRoot+string(filepath.Separator)) || manifestPath == absRoot {
+			continue // already covered by the walk
+		}
+		manifest, err := os.ReadFile(manifestPath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue // enabled plugin has no MCP server
 			}
-			seen[manifestPath] = true
-			if strings.HasPrefix(manifestPath, absRoot+string(filepath.Separator)) || manifestPath == absRoot {
-				continue // already covered by the walk
-			}
-			manifest, err := os.ReadFile(manifestPath)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					continue // enabled plugin has no MCP server
-				}
-				return scanCoverageError("enabled plugin configuration could not be read")
-			}
-			obs.StaticConfigFilesRead++
-			if err := applyConfigObservation(obs, "plugin_mcp_json", manifest); err != nil {
-				return scanCoverageError("enabled plugin configuration is invalid")
-			}
+			return scanCoverageError("enabled plugin configuration could not be read")
+		}
+		obs.StaticConfigFilesRead++
+		if err := applyConfigObservation(obs, "plugin_mcp_json", manifest); err != nil {
+			return scanCoverageError("enabled plugin configuration is invalid")
 		}
 	}
 	return nil
@@ -640,6 +645,13 @@ func applyConfigObservation(obs *ConfigObservation, kind string, data []byte) er
 		if obs.AgentSurface == riskenvelope.AgentSurfaceUnknown {
 			obs.AgentSurface = riskenvelope.AgentSurfaceMCP
 		}
+	case "claude_desktop_json":
+		if err := applyClaudeDesktopJSONConfig(obs, data); err != nil {
+			return err
+		}
+		if obs.AgentSurface == riskenvelope.AgentSurfaceUnknown {
+			obs.AgentSurface = riskenvelope.AgentSurfaceMCP
+		}
 	case "plugin_mcp_json":
 		if err := applyMCPJSONConfig(obs, data, true); err != nil {
 			return err
@@ -664,6 +676,20 @@ func applyJSONConfig(obs *ConfigObservation, data []byte) error {
 		obs.PermissionMode = normalizePermissionMode(mode)
 	}
 	return nil
+}
+
+func applyClaudeDesktopJSONConfig(obs *ConfigObservation, data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw == nil {
+		return fmt.Errorf("Claude Desktop configuration must be an object")
+	}
+	if _, found := raw["mcpServers"]; !found {
+		return nil
+	}
+	return applyMCPJSONConfig(obs, data, false)
 }
 
 func applyMCPJSONConfig(obs *ConfigObservation, data []byte, allowDirect bool) error {
@@ -781,7 +807,9 @@ func configKind(path string) (string, bool) {
 	switch {
 	case base == ".mcp.json" && isClaudePluginMCPConfig(path):
 		return "plugin_mcp_json", true
-	case base == ".mcp.json" || base == "mcp.json" || base == "claude_desktop_config.json":
+	case base == "claude_desktop_config.json":
+		return "claude_desktop_json", true
+	case base == ".mcp.json" || base == "mcp.json":
 		return "mcp_json", true
 	case base == ".claude.json":
 		return "claude_json", true

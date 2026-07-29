@@ -75,10 +75,18 @@ scanned tree:
   `.claude/settings*.json`, resolved through
   `~/.claude/plugins/installed_plugins.json`.
 
-Installed but disabled Claude plugins are not counted. Missing optional files
-are normal. If a discovered user config, enabled-plugin inventory, or enabled
-plugin MCP manifest exists but cannot be read or parsed, the scan fails
-coverage and writes no export artifacts.
+Use `--no-user-config` for a deterministic project-only scan, such as in CI or
+when the user configuration is unavailable.
+
+Installed but disabled Claude plugins are not counted. For each enabled plugin,
+only its most recently updated inventory entry is inspected; declarations with
+no matching local installation are not counted. Missing optional files are
+normal. If a discovered user config, plugin inventory, or selected plugin MCP
+manifest exists but cannot be read or parsed, the scan fails coverage and
+writes no export artifacts.
+
+`claude_desktop_config.json` may contain non-MCP preferences and does not need
+an `mcpServers` field. When `mcpServers` is present, it must be an object.
 
 Direct server-map `.mcp.json` is accepted only in a Claude plugin directory
 marked by `.claude-plugin/plugin.json`; generic MCP configs must use the

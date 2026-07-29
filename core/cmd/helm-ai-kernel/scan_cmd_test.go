@@ -164,6 +164,31 @@ func TestScanCommandDoesNotExportOnIncompleteCoverage(t *testing.T) {
 	}
 }
 
+func TestScanCommandCanExcludeInvalidUserConfig(t *testing.T) {
+	root := scanFixtureRoot(t)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{not-json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "scan",
+		"--path", root,
+		"--no-user-config",
+		"--salt-file", filepath.Join(out, "salt.hex"),
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("project-only scan code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "MCP servers detected: 1") {
+		t.Fatalf("stdout missing project MCP server count: %s", stdout.String())
+	}
+}
+
 func scanFixtureRoot(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()

@@ -359,6 +359,30 @@ func TestRunMCPAuthorizeCallMissingSchemaPinEscalateJSON(t *testing.T) {
 	}
 }
 
+func TestRunMCPAuthorizeCallCustomSchemaNextStepPreservesSchemas(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "srv-cli-custom-schema",
+		"--tool-name", "local.echo",
+		"--approved",
+		"--tool-schema-json", `{"type":"object"}`,
+		"--output-schema-json", `{"type":"string"}`,
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"--pinned-schema-hash sha256:",
+		`--tool-schema-json '{"type":"object"}'`,
+		`--output-schema-json '{"type":"string"}'`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestRunMCPAuthorizeCallApprovedPinnedLocalToolAllowJSON(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",

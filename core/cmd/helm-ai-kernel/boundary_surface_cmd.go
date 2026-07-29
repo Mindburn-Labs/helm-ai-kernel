@@ -1124,9 +1124,25 @@ func mcpAuthorizeCallNextStep(record contracts.ExecutionBoundaryRecord, catalog 
 	if err != nil {
 		return ""
 	}
-	return "helm-ai-kernel mcp authorize-call --server-id " + shellToken(serverID) +
+	next := "helm-ai-kernel mcp authorize-call --server-id " + shellToken(serverID) +
 		" --tool-name " + shellToken(toolName) +
 		" --pinned-schema-hash " + shellToken(hash)
+	if tool.ServerID == "" {
+		return next
+	}
+	toolSchema, err := json.Marshal(tool.Schema)
+	if err != nil {
+		return ""
+	}
+	next += " --tool-schema-json " + shellToken(string(toolSchema))
+	if tool.OutputSchema != nil {
+		outputSchema, err := json.Marshal(tool.OutputSchema)
+		if err != nil {
+			return ""
+		}
+		next += " --output-schema-json " + shellToken(string(outputSchema))
+	}
+	return next
 }
 
 func mcpApprovalCommand(serverID, toolName, effect string) string {

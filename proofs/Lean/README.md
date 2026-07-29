@@ -92,14 +92,15 @@ It does **not** verify the following:
 7. **GitHub merge authority.** This theorem does not establish GitHub merge
    or deployment authority. Lean proofs, CI results, reviewer or maintainer
    identity, DCO sign-offs, and other commit trailers are technical or
-   provenance evidence only; none authorizes a merge. What does authorize one
-   is recorded in `GOVERNANCE.md` under "What `main` enforces today" — the
-   required status checks, resolved review threads, linear history, and an
-   up-to-date branch. There is no human approval requirement to preserve:
-   `main` requires zero approving reviews. The release permit remains required
-   by the governance operating contract for all code merges, but the current
-   GitHub ruleset does not enforce it; the approval-only App interlock is not
-   live.
+   provenance evidence only; none authorizes a merge. GitHub enforces the
+   prerequisites recorded in `GOVERNANCE.md` under "What `main` enforces
+   today" — required status checks, resolved review threads, linear history,
+   and an up-to-date branch — but those controls are not sufficient merge
+   authority by themselves. The governance operating contract additionally
+   requires a distinct-provider exact-head release permit for every code
+   merge. There is no human approval requirement to preserve: `main` requires
+   zero approving reviews. The current GitHub ruleset does not enforce the
+   permit, and the approval-only App interlock is not live.
 
 These omissions are deliberate. Each one corresponds to an existing test
 surface (1, 3, 4), a future workstream (5, 6), or the separate GitHub authority

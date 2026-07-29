@@ -254,6 +254,31 @@ func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
 	}
 }
 
+func TestPublishedReceiptSchemaRejectsAmbiguousCounterfactuals(t *testing.T) {
+	compiler := jsonschema.NewCompiler()
+	schema, err := compiler.Compile("../../../protocols/json-schemas/workstation/agent_run_receipt.v1.schema.json#/$defs/denied_effect")
+	if err != nil {
+		t.Fatalf("compile denied_effect schema: %v", err)
+	}
+	for name, counterfactual := range map[string]any{
+		"field_only": map[string]any{"field": "ttl_days"},
+		"mixed_shapes": map[string]any{
+			"field": "ttl_days", "requested": 90, "max": 30, "capability": "network.egress",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := map[string]any{
+				"effect_id": "e1", "effect_type": "WORKSTATION_MEMORY_WRITE",
+				"reason_code": "MEMORY_TTL_EXCEEDS_POLICY", "occurred_at": "2026-07-29T00:00:00Z",
+				"counterfactual": counterfactual,
+			}
+			if err := schema.Validate(doc); err == nil {
+				t.Fatal("published schema accepted an ambiguous counterfactual")
+			}
+		})
+	}
+}
+
 // The scenario set itself is pinned. Trimming a case and regenerating the
 // golden would otherwise silently drop a whole finality class from coverage
 // while every other check still passed.

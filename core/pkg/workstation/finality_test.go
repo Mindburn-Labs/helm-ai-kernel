@@ -163,18 +163,18 @@ func TestDisabledByDefaultLeavesReceiptsByteIdentical(t *testing.T) {
 }
 
 // The agent's own event log may declare a reason code, and normalizeEvents
-// honours that declaration for the recorded reason_code. Finality must not
-// follow it: a producer able to relabel its own refusal as instance_context
-// would be telling the consumer "this was not about the action, keep going"
-// about a boundary it had just been refused at.
+// preserves that declaration as observed evidence. When it disagrees with the
+// local policy evaluation, however, the denial must teach nothing: combining
+// the declared code with learning derived from another code would make the
+// signed receipt internally contradictory.
 func TestDeclaredReasonCodeCannotSteerFinality(t *testing.T) {
 	profile := learningProfile()
 	honest := ToolEvent{
-		EventID:    "e-egress",
-		Type:       "network_egress",
-		EffectType: contracts.EffectTypeWorkstationNetworkEgress,
-		EffectMode: contracts.WorkstationEffectModeOperate,
-		Target:     "exfil.example.net",
+		EventID:      "e-memory",
+		Type:         "memory_write",
+		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
+		EffectMode:   contracts.WorkstationEffectModeOperate,
+		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
 	}
 	relabelled := honest
 	relabelled.ReasonCode = "TAINTED_CONTEXT_REQUIRES_DENY"
@@ -185,11 +185,20 @@ func TestDeclaredReasonCodeCannotSteerFinality(t *testing.T) {
 	if len(honestDenials) != 1 || len(relabelledDenials) != 1 {
 		t.Fatalf("expected one denial each, got %d and %d", len(honestDenials), len(relabelledDenials))
 	}
-	if got := honestDenials[0].Finality; got != contracts.DenialInstanceMembership {
-		t.Fatalf("honest event finality = %q, want instance_membership", got)
+	if got := honestDenials[0].Finality; got != contracts.DenialInstanceParameter {
+		t.Fatalf("honest event finality = %q, want instance_parameter", got)
 	}
-	if got := relabelledDenials[0].Finality; got != contracts.DenialInstanceMembership {
-		t.Fatalf("declared reason code steered finality to %q: a producer must not be able to relabel its own refusal", got)
+	if honestDenials[0].Counterfactual == nil {
+		t.Fatal("honest event omitted its scalar counterfactual")
+	}
+	if got := relabelledDenials[0].ReasonCode; got != relabelled.ReasonCode {
+		t.Fatalf("recorded reason code = %q, want observed %q", got, relabelled.ReasonCode)
+	}
+	if got := relabelledDenials[0].Finality; got != "" {
+		t.Fatalf("mismatched reason code emitted finality %q: contradictory denials must teach nothing", got)
+	}
+	if got := relabelledDenials[0].Counterfactual; got != nil {
+		t.Fatalf("mismatched reason code emitted counterfactual %+v: contradictory denials must teach nothing", got)
 	}
 }
 

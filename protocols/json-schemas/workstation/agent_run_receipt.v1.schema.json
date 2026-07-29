@@ -240,6 +240,21 @@
           "description": "Nearest allowed envelope. Absent unless the profile opts in and the refusal's disclosure class permits one; refusals that turn on set membership never carry it.",
           "additionalProperties": false,
           "required": ["field"],
+          "oneOf": [
+            {
+              "required": ["requested", "max"],
+              "not": { "required": ["capability"] }
+            },
+            {
+              "required": ["capability"],
+              "not": {
+                "anyOf": [
+                  { "required": ["requested"] },
+                  { "required": ["max"] }
+                ]
+              }
+            }
+          ],
           "properties": {
             "field": { "type": "string", "minLength": 1 },
             "requested": { "type": "integer", "minimum": 0 },

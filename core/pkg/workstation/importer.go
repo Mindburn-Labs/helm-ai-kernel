@@ -329,9 +329,9 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 		normalizeEvent(&event, i)
 		verdict, reasonCode, reason := EvaluateEvent(profile, event)
 		// evaluatedCode is the code our own rules produced. The declared
-		// verdict and reason code below come from the agent's event log and
-		// may disagree with it; finality is derived from this one, never from
-		// the declaration, or a producer could relabel its own refusals.
+		// verdict and reason code below record the observed event, but are
+		// untrusted. A disagreement therefore carries no learning fields:
+		// otherwise one denial would claim two incompatible meanings.
 		evaluatedCode := reasonCode
 		if event.Verdict != "" {
 			verdict = strings.ToUpper(event.Verdict)
@@ -387,7 +387,9 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 				Reason:     firstNonEmpty(event.Reason, reason),
 				OccurredAt: event.OccurredAt,
 			}
-			AnnotateDenial(&denied, profile, event, evaluatedCode)
+			if reasonCode == evaluatedCode {
+				AnnotateDenial(&denied, profile, event, evaluatedCode)
+			}
 			deniedEffects = append(deniedEffects, denied)
 		}
 	}

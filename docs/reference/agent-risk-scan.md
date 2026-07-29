@@ -1,6 +1,6 @@
 ---
 title: Agent Risk Scan
-last_reviewed: 2026-06-30
+last_reviewed: 2026-07-29
 ---
 
 # Agent Risk Scan
@@ -56,13 +56,28 @@ helm-ai-kernel scan \
   --evidence-pack out/risk-scan-pack.tar
 ```
 
-The scanner reads these local config shapes when present:
+The scanner walks these config shapes under `--path` when present:
 
 - `.mcp.json`
 - `mcp.json`
 - `claude_desktop_config.json`
 - `.claude/settings*.json`
 - `.codex/config.toml`
+
+For a static CLI scan, it also reads the active user configuration outside the
+scanned tree:
+
+- `~/.claude.json`, including project-scoped `mcpServers`;
+- `~/.claude/settings.json` and `~/.claude/settings.local.json`;
+- `~/.codex/config.toml`, including top-level and plugin-nested `mcp_servers`;
+- Claude Desktop config on the macOS and Linux user paths;
+- `.mcp.json` from enabled Claude plugins resolved through
+  `~/.claude/plugins/installed_plugins.json`.
+
+Installed but disabled Claude plugins are not counted. Missing optional files
+are normal. If a discovered user config, enabled-plugin inventory, or enabled
+plugin MCP manifest exists but cannot be read or parsed, the scan fails
+coverage and writes no export artifacts.
 
 It also uses the local shadow scanner findings to project risk codes such as
 `MCP_WRITE_SCOPE_WITHOUT_APPROVAL`, `SECRET_CLASS_AGENT_READABLE`,

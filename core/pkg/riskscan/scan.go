@@ -138,7 +138,9 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 		return obs, err
 	}
 	if includeUserConfig {
-		applyUserAgentConfigs(&obs, absRoot)
+		if err := applyUserAgentConfigs(&obs, absRoot); err != nil {
+			return obs, err
+		}
 	}
 	return obs, nil
 }
@@ -147,19 +149,22 @@ func collectConfigObservation(root string, requireComplete, includeUserConfig bo
 // project tree. Without it a scan of a repository reports zero MCP servers even
 // when the agent on that machine has many, because the walk above only covers
 // the scanned root. Missing files are normal and never a coverage failure.
-func applyUserAgentConfigs(obs *ConfigObservation, absRoot string) {
+func applyUserAgentConfigs(obs *ConfigObservation, absRoot string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return
+		return scanCoverageError("user home directory could not be resolved")
 	}
+	claudeSettings := filepath.Join(home, ".claude", "settings.json")
+	claudeLocalSettings := filepath.Join(home, ".claude", "settings.local.json")
 	paths := []string{
 		filepath.Join(home, ".claude.json"),
-		filepath.Join(home, ".claude", "settings.json"),
-		filepath.Join(home, ".claude", "settings.local.json"),
+		claudeSettings,
+		claudeLocalSettings,
 		filepath.Join(home, ".codex", "config.toml"),
 		filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
 		filepath.Join(home, ".config", "Claude", "claude_desktop_config.json"),
 	}
+	enabledPlugins := map[string]bool{}
 	for _, path := range paths {
 		if strings.HasPrefix(path, absRoot+string(filepath.Separator)) || path == absRoot {
 			continue // already covered by the walk
@@ -170,11 +175,87 @@ func applyUserAgentConfigs(obs *ConfigObservation, absRoot string) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return scanCoverageError("user agent configuration could not be read")
+			}
 			continue
 		}
 		obs.StaticConfigFilesRead++
-		_ = applyConfigObservation(obs, kind, data)
+		if err := applyConfigObservation(obs, kind, data); err != nil {
+			return scanCoverageError("user agent configuration is invalid")
+		}
+		if path == claudeSettings || path == claudeLocalSettings {
+			var settings struct {
+				EnabledPlugins map[string]bool `json:"enabledPlugins"`
+			}
+			if err := json.Unmarshal(data, &settings); err != nil {
+				return scanCoverageError("user agent configuration is invalid")
+			}
+			for pluginID, enabled := range settings.EnabledPlugins {
+				enabledPlugins[pluginID] = enabled
+			}
+		}
 	}
+	return applyClaudePluginConfigs(obs, home, absRoot, enabledPlugins)
+}
+
+func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enabledPlugins map[string]bool) error {
+	if len(enabledPlugins) == 0 {
+		return nil
+	}
+	registryPath := filepath.Join(home, ".claude", "plugins", "installed_plugins.json")
+	data, err := os.ReadFile(registryPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return scanCoverageError("enabled plugin inventory could not be found")
+		}
+		return scanCoverageError("enabled plugin inventory could not be read")
+	}
+	obs.StaticConfigFilesRead++
+	var registry struct {
+		Plugins map[string][]struct {
+			InstallPath string `json:"installPath"`
+		} `json:"plugins"`
+	}
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return scanCoverageError("enabled plugin inventory is invalid")
+	}
+
+	seen := map[string]bool{}
+	for pluginID, enabled := range enabledPlugins {
+		if !enabled {
+			continue
+		}
+		installs, ok := registry.Plugins[pluginID]
+		if !ok {
+			return scanCoverageError("enabled plugin is missing from inventory")
+		}
+		for _, install := range installs {
+			if strings.TrimSpace(install.InstallPath) == "" {
+				return scanCoverageError("enabled plugin inventory is invalid")
+			}
+			manifestPath := filepath.Join(install.InstallPath, ".mcp.json")
+			if seen[manifestPath] {
+				continue
+			}
+			seen[manifestPath] = true
+			if strings.HasPrefix(manifestPath, absRoot+string(filepath.Separator)) || manifestPath == absRoot {
+				continue // already covered by the walk
+			}
+			manifest, err := os.ReadFile(manifestPath)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue // enabled plugin has no MCP server
+				}
+				return scanCoverageError("enabled plugin configuration could not be read")
+			}
+			obs.StaticConfigFilesRead++
+			if err := applyConfigObservation(obs, "mcp_json", manifest); err != nil {
+				return scanCoverageError("enabled plugin configuration is invalid")
+			}
+		}
+	}
+	return nil
 }
 
 func scanCoverageError(reason string) error {
@@ -520,7 +601,7 @@ func applyConfigObservation(obs *ConfigObservation, kind string, data []byte) er
 		obs.ManagedSettingsPresent = true
 		return applyJSONConfig(obs, data)
 	case "mcp_json":
-		if err := applyJSONConfig(obs, data); err != nil {
+		if err := applyMCPJSONConfig(obs, data); err != nil {
 			return err
 		}
 		if obs.AgentSurface == riskenvelope.AgentSurfaceUnknown {
@@ -545,11 +626,32 @@ func applyJSONConfig(obs *ConfigObservation, data []byte) error {
 	return nil
 }
 
+func applyMCPJSONConfig(obs *ConfigObservation, data []byte) error {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if servers, ok := raw["mcpServers"].(map[string]any); ok {
+		obs.MCPServerCount += len(servers)
+	} else {
+		for _, server := range raw {
+			if _, ok := server.(map[string]any); ok {
+				obs.MCPServerCount++
+			}
+		}
+	}
+	if mode := findString(raw, "permissionMode", "defaultMode", "approval_policy", "approvalPolicy"); mode != "" {
+		obs.PermissionMode = normalizePermissionMode(mode)
+	}
+	return nil
+}
+
 func applyTOMLConfig(obs *ConfigObservation, data []byte) error {
 	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	obs.MCPServerCount += countMap(raw, "mcp_servers")
 	if mode := findString(raw, "approval_policy", "approvalPolicy", "permission_mode", "permissionMode"); mode != "" {
 		obs.PermissionMode = normalizePermissionMode(mode)
 	}

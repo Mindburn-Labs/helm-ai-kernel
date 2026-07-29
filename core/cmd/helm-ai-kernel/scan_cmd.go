@@ -130,6 +130,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "RiskEnvelope: %s\n", envelope.EnvelopeID)
 	fmt.Fprintf(stdout, "Content hash: %s\n", envelope.EnvelopeContentHash)
 	fmt.Fprintf(stdout, "Findings: %d\n", len(envelope.Findings))
+	fmt.Fprintf(stdout, "MCP servers detected: %d\n", envelope.Posture.MCPServerCount)
 	fmt.Fprintf(stdout, "Static config files read: %d\n", envelope.Posture.StaticConfigFilesRead)
 
 	if upload {

@@ -99,7 +99,7 @@ Two forms are deliberately **not** denied, because denying them would block
 routine work without removing an irreversible effect:
 
 - `git push --force-with-lease`, which refuses to clobber unseen remote work.
-  Bare `--force` and `-f` are denied.
+  Bare force forms (`--force`, clustered `-f`, and `+refspec`) are denied.
 - Recursive delete whose every operand is a relative, regenerable build
   directory (`node_modules`, `dist`, `.next`, `target`, `coverage`, `.venv`
   and similar). Any absolute path, parent-relative path, variable, or

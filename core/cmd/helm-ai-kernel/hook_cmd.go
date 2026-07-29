@@ -283,10 +283,11 @@ var buildArtifactDirs = map[string]bool{
 }
 
 func isDestructiveShellCommand(command string) bool {
-	c := strings.ToLower(strings.TrimSpace(command))
-	if c == "" {
+	command = strings.TrimSpace(command)
+	if command == "" {
 		return false
 	}
+	c := strings.ToLower(command)
 	if isForcePush(c) {
 		return true
 	}
@@ -297,7 +298,10 @@ func isDestructiveShellCommand(command string) bool {
 	}
 	for _, needle := range rmNeedles {
 		if strings.Contains(c, needle) || strings.HasPrefix(c, strings.TrimSpace(needle)) {
-			return !removesOnlyBuildArtifacts(c)
+			if !removesOnlyBuildArtifacts(command) {
+				return true
+			}
+			break
 		}
 	}
 	needles := []string{
@@ -327,16 +331,36 @@ func isDestructiveShellCommand(command string) bool {
 // isForcePush reports a force push that can overwrite remote history.
 // --force-with-lease refuses to clobber unseen remote work, so it is excluded.
 func isForcePush(c string) bool {
-	if !strings.Contains(c, "git push") {
-		return false
-	}
-	bare := strings.ReplaceAll(c, "--force-with-lease", "")
-	if strings.Contains(bare, "--force") {
-		return true
-	}
-	for _, field := range strings.Fields(bare) {
-		if field == "-f" {
-			return true
+	for _, segment := range splitShellSegments(c) {
+		fields := strings.Fields(segment)
+		push := -1
+		for i, field := range fields {
+			if strings.Trim(field, `"'`) != "git" {
+				continue
+			}
+			for j := i + 1; j < len(fields); j++ {
+				if strings.Trim(fields[j], `"'`) == "push" {
+					push = j
+					break
+				}
+			}
+			if push >= 0 {
+				break
+			}
+		}
+		if push < 0 {
+			continue
+		}
+		for _, field := range fields[push+1:] {
+			field = strings.Trim(field, `"'`)
+			switch {
+			case field == "--force", strings.HasPrefix(field, "--force="):
+				return true
+			case strings.HasPrefix(field, "-") && !strings.HasPrefix(field, "--") && strings.Contains(field[1:], "f"):
+				return true
+			case len(field) > 1 && strings.HasPrefix(field, "+"):
+				return true
+			}
 		}
 	}
 	return false

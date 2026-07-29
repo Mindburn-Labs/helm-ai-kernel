@@ -410,6 +410,41 @@ func TestCollectConfigObservationReadsUserAgentConfig(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"mcpServers":{"a":{},"b":{}},"projects":{"/p":{"mcpServers":{"c":{}}}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	claudeDir := filepath.Join(home, ".claude")
+	codexDir := filepath.Join(home, ".codex")
+	pluginDir := filepath.Join(claudeDir, "plugins", "cache", "official", "context7", "1.0.0")
+	disabledPluginDir := filepath.Join(claudeDir, "plugins", "cache", "official", "disabled", "1.0.0")
+	for _, dir := range []string{claudeDir, codexDir, pluginDir, disabledPluginDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeJSON(t, filepath.Join(claudeDir, "settings.json"), map[string]any{
+		"enabledPlugins": map[string]bool{
+			"context7@official": true,
+			"disabled@official": false,
+		},
+	})
+	writeJSON(t, filepath.Join(claudeDir, "plugins", "installed_plugins.json"), map[string]any{
+		"plugins": map[string]any{
+			"context7@official": []map[string]any{{"installPath": pluginDir}},
+			"disabled@official": []map[string]any{{"installPath": disabledPluginDir}},
+		},
+	})
+	writeJSON(t, filepath.Join(pluginDir, ".mcp.json"), map[string]any{"context7": map[string]any{}})
+	writeJSON(t, filepath.Join(disabledPluginDir, ".mcp.json"), map[string]any{"must-not-count": map[string]any{}})
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(`
+[mcp_servers.codex]
+command = "codex"
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."browser@openai-bundled".mcp_servers.browser]
+command = "browser"
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	project := t.TempDir()
 	obs, err := collectConfigObservation(project, false, false)
@@ -424,10 +459,24 @@ func TestCollectConfigObservationReadsUserAgentConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("with user config: %v", err)
 	}
-	if obs.MCPServerCount != 3 {
-		t.Errorf("mcp server count = %d, want 3 (global + project-scoped)", obs.MCPServerCount)
+	if obs.MCPServerCount != 6 {
+		t.Errorf("mcp server count = %d, want 6 (Claude, Codex, and enabled plugin servers)", obs.MCPServerCount)
 	}
-	if obs.StaticConfigFilesRead != 1 {
-		t.Errorf("static config files read = %d, want 1", obs.StaticConfigFilesRead)
+	if obs.StaticConfigFilesRead != 5 {
+		t.Errorf("static config files read = %d, want 5", obs.StaticConfigFilesRead)
+	}
+}
+
+func TestCollectConfigObservationRejectsInvalidUserAgentConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{not-json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := collectConfigObservation(t.TempDir(), true, true)
+	if !errors.Is(err, ErrScanCoverageIncomplete) {
+		t.Fatalf("error = %v, want coverage error", err)
 	}
 }

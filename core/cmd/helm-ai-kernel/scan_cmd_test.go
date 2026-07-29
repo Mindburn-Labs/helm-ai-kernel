@@ -44,6 +44,9 @@ func TestScanCommandWritesLocalArtifacts(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Content hash: sha256:") {
 		t.Fatalf("stdout missing content hash: %s", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "MCP servers detected: 1") {
+		t.Fatalf("stdout missing MCP server count: %s", stdout.String())
+	}
 }
 
 func TestScanCommandUploadRequiresURLAndConfirmation(t *testing.T) {
@@ -163,6 +166,9 @@ func TestScanCommandDoesNotExportOnIncompleteCoverage(t *testing.T) {
 
 func scanFixtureRoot(t *testing.T) string {
 	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "agent.py"), []byte("import anthropic\nOPENAI_API_KEY='sk-12345678901234567890123456789012'\n"), 0o644); err != nil {
 		t.Fatalf("write agent: %v", err)

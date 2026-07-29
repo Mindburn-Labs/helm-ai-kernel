@@ -76,10 +76,13 @@ var decideCases = []struct {
 	{"evasion-base64-pipe-bash", "echo cm0gLXJmIC8= | base64 --decode | bash", "encoded payload"},
 	{"evasion-xxd-pipe-sh", "cat payload.hex | xxd -r | sh", "encoded payload"},
 	{"regression-generated-script", "printf 'rm %s /tmp/x\\n' -rf >/tmp/run.sh; bash /tmp/run.sh", "generated earlier"},
+	{"regression-generated-script-dot", `printf '\x72\x6d \x2d\x72\x66 /tmp/x\n' >/tmp/a; . /tmp/a`, "generated earlier"},
+	{"regression-generated-script-source", `printf 'rm -rf /tmp/x\n' >/tmp/a; source /tmp/a`, "generated earlier"},
 
 	// Evasion: path obfuscation.
 	{"evasion-path-dots", "/bin/./rm -rf /tmp/x", "recursive rm"},
 	{"evasion-path-relative", "./../../bin/rm -rf /tmp/x", "recursive rm"},
+	{"evasion-escaped-command-name", `r\m -rf /tmp/x`, "recursive rm"},
 
 	// Evasion: find-based deletion.
 	{"evasion-find-delete", "find /tmp/x -name '*.log' -delete", "find -delete"},
@@ -90,6 +93,8 @@ var decideCases = []struct {
 	{"evasion-redirect-env", "echo SECRET=x >> .env", "sensitive target"},
 	{"evasion-redirect-key", "cat pub > /home/u/.ssh/id_ed25519", "sensitive target"},
 	{"evasion-redirect-windows-git", `echo x > 'repo/.git\config'`, "sensitive target"},
+	{"evasion-redirect-all-env", "echo SECRET=x &> .env", "sensitive target"},
+	{"evasion-append-all-key", "cat pub &>> /home/u/.ssh/id_ed25519", "sensitive target"},
 
 	// Fail-closed: unparseable input must not pass silently.
 	{"failclosed-unparseable", "rm -rf /tmp/x '", "unparseable"},
@@ -270,6 +275,7 @@ var passCases = []struct {
 	{"safe-docker-rm-force-name", "docker rm -- -f"},
 	{"safe-command-query", "command -v git"},
 	{"safe-builtin-print", "builtin -p"},
+	{"safe-quoted-command-backslash", `'r\m' --version`},
 }
 
 func TestClassifyDecides(t *testing.T) {

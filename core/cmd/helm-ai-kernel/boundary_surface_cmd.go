@@ -1184,7 +1184,7 @@ func mcpApprovalCommand(serverID, toolName, effect string) string {
 }
 
 func shellToken(value string) string {
-	if value == "" || strings.ContainsAny(value, " \t\n\r'\"`#\\$&|;()<>*?[]{}!") {
+	if value == "" || strings.ContainsAny(value, " \t\n\r'\"`#~\\$&|;()<>*?[]{}!") {
 		return shellQuote(value)
 	}
 	return value

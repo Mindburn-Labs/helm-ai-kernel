@@ -539,6 +539,7 @@ func TestShellTokenQuotesCommandSubstitutionAndComments(t *testing.T) {
 		"tool`touch /tmp/pwned`",
 		"tool# ignored",
 		"tool\rnext-command",
+		"~other-user/tool",
 	} {
 		quoted := shellToken(value)
 		if quoted == value || !strings.HasPrefix(quoted, "'") || !strings.HasSuffix(quoted, "'") {

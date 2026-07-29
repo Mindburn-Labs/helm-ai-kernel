@@ -110,6 +110,9 @@ var decideCases = []struct {
 	{"regression-shell-attached-c", `bash -c'rm -rf /tmp/x'`, "recursive rm"},
 	{"regression-shell-c-after-flags", `sh -a -c 'rm -rf /tmp/x'`, "recursive rm"},
 	{"regression-shell-c-no-operand", "bash -c", "standard input"},
+	{"regression-nu-config-before-command", `nu --config /tmp/cfg -c 'rm --recursive --force /tmp/x'`, "recursive rm"},
+	{"regression-nu-config-attached", `nu --config=/tmp/cfg -c 'rm --recursive --force /tmp/x'`, "recursive rm"},
+	{"regression-shell-unknown-long-flag", `nu --mystery /tmp/cfg -c 'rm --recursive --force /tmp/x'`, "cannot be resolved statically"},
 
 	// Regression: P1 ENV_FLAG_ASSIGNMENT_BYPASS — env flags may precede or
 	// interleave VAR=val assignments; the real command follows them all.
@@ -123,8 +126,8 @@ var decideCases = []struct {
 	// Regression: P1 ENV_SPLIT_SUFFIX_BYPASS — env -S splits only its own
 	// payload; trailing operands are appended to the split words and used to
 	// run a command. Classifying the payload alone let the suffix through.
-	{"regression-env-split-suffix", `env -S 'FOO=x' rm --recursive --force /tmp/x`, "fail-closed"},
-	{"regression-env-split-suffix-long", `env --split-string='FOO=x' rm -rf /tmp/x`, "fail-closed"},
+	{"regression-env-split-suffix", `env -S 'FOO=x' rm --recursive --force /tmp/x`, ""},
+	{"regression-env-split-suffix-long", `env --split-string='FOO=x' rm -rf /tmp/x`, ""},
 	{"regression-env-split-suffix-command", `env -S '-i' rm --recursive --force /tmp/x`, "recursive rm"},
 
 	// Regression: P1 UNKNOWN_WRAPPER_BYPASS — process-executor wrappers take

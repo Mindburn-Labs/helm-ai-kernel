@@ -110,11 +110,21 @@ Two consequences worth stating plainly, because both have been misread:
   on hold under the operating contract above. GitHub does not enforce that hold
   by itself.
 
-Verify with:
+Verify each control plane independently:
 
 ```bash
 gh api repos/Mindburn-Labs/helm-ai-kernel/rulesets/16024605 \
   --jq '{rules, bypass_actors}'
+
+# Expected while classic branch protection is disabled: HTTP 404.
+gh api --include \
+  repos/Mindburn-Labs/helm-ai-kernel/branches/main/protection
+
+gh api repos/Mindburn-Labs/helm-ai-kernel/actions/workflows --paginate \
+  --jq '[.workflows[] | select(
+    .name == "HELM Autonomous Release Permit" or
+    .name == "Code Quality Copilot review"
+  ) | {id, name, path, state}]'
 ```
 
 A breaking API change is any change to `protocols/`, `api/openapi/`, the

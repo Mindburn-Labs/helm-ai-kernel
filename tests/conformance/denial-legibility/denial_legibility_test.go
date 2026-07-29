@@ -149,7 +149,7 @@ func observe(t *testing.T, profile contracts.WorkstationPolicyProfile) []observa
 			EffectType: sc.event.EffectType,
 			ReasonCode: code,
 		}
-		workstation.AnnotateDenial(&denied, profile, sc.event, code)
+		workstation.AnnotateDenial(&denied, profile, sc.event)
 		out = append(out, observation{
 			Case:           sc.name,
 			Verdict:        verdict,
@@ -239,7 +239,7 @@ func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
 			ReasonCode: code,
 			Reason:     reason,
 		}
-		workstation.AnnotateDenial(&denied, profile, sc.event, code)
+		workstation.AnnotateDenial(&denied, profile, sc.event)
 		encoded, err := json.Marshal(denied)
 		if err != nil {
 			t.Fatalf("marshal %s: %v", sc.name, err)
@@ -251,6 +251,35 @@ func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
 		if err := schema.Validate(doc); err != nil {
 			t.Errorf("case %s produced a denied effect the published schema rejects: %v", sc.name, err)
 		}
+	}
+}
+
+// A caller can preserve a claimed reason code as observed evidence, but it
+// cannot use a different code to make an evaluated denial teach a different
+// lesson. This exercises the exported annotation boundary directly rather
+// than relying on the importer's internal caller.
+func TestAnnotationRejectsCallerControlledReasonCode(t *testing.T) {
+	profile := loadSnapshot(t)
+	event := workstation.ToolEvent{
+		EventID:      "spoofed-denial",
+		Type:         "memory_write",
+		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
+		EffectMode:   contracts.WorkstationEffectModeOperate,
+		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
+	}
+	verdict, evaluatedCode, _ := workstation.EvaluateEvent(profile, event)
+	if verdict != contracts.WorkstationVerdictDeny || evaluatedCode != "MEMORY_TTL_EXCEEDS_POLICY" {
+		t.Fatalf("EvaluateEvent() = %s/%s, want DENY/MEMORY_TTL_EXCEEDS_POLICY", verdict, evaluatedCode)
+	}
+
+	denied := contracts.AgentDeniedEffect{
+		EffectID:   event.EventID,
+		EffectType: event.EffectType,
+		ReasonCode: "OPERATE_PERMISSION_NOT_GRANTED",
+	}
+	workstation.AnnotateDenial(&denied, profile, event)
+	if denied.Finality != "" || denied.Counterfactual != nil {
+		t.Fatalf("caller-controlled reason code emitted finality=%q counterfactual=%+v", denied.Finality, denied.Counterfactual)
 	}
 }
 
@@ -404,7 +433,7 @@ func TestOptOutEmitsNothing(t *testing.T) {
 	for _, sc := range denialScenarios() {
 		_, code, _ := workstation.EvaluateEvent(profile, sc.event)
 		denied := contracts.AgentDeniedEffect{EffectID: sc.event.EventID, ReasonCode: code}
-		workstation.AnnotateDenial(&denied, profile, sc.event, code)
+		workstation.AnnotateDenial(&denied, profile, sc.event)
 		encoded, err := json.Marshal(denied)
 		if err != nil {
 			t.Fatalf("marshal: %v", err)

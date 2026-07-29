@@ -77,11 +77,11 @@ func TestSetMembershipDenialsDiscloseNothing(t *testing.T) {
 			if verdict != contracts.WorkstationVerdictDeny || code != tc.code {
 				t.Fatalf("EvaluateEvent() = %s/%s, want DENY/%s", verdict, code, tc.code)
 			}
-			if got := DenialCounterfactualFor(profile, tc.event, code); got != nil {
+			if got := denialCounterfactualFor(profile, tc.event, code); got != nil {
 				t.Fatalf("%s disclosed a counterfactual %+v: membership and class denials must disclose nothing", code, got)
 			}
-			if got := DenialFinality(code); got != tc.want {
-				t.Fatalf("DenialFinality(%s) = %q, want %q", code, got, tc.want)
+			if got := denialFinality(code); got != tc.want {
+				t.Fatalf("denialFinality(%s) = %q, want %q", code, got, tc.want)
 			}
 		})
 	}
@@ -101,12 +101,12 @@ func TestScalarBoundDisclosesTheCeiling(t *testing.T) {
 	if verdict != contracts.WorkstationVerdictDeny || code != "MEMORY_TTL_EXCEEDS_POLICY" {
 		t.Fatalf("EvaluateEvent() = %s/%s, want DENY/MEMORY_TTL_EXCEEDS_POLICY", verdict, code)
 	}
-	if got := DenialFinality(code); got != contracts.DenialInstanceParameter {
-		t.Fatalf("DenialFinality() = %q, want instance_parameter", got)
+	if got := denialFinality(code); got != contracts.DenialInstanceParameter {
+		t.Fatalf("denialFinality() = %q, want instance_parameter", got)
 	}
-	got := DenialCounterfactualFor(profile, event, code)
+	got := denialCounterfactualFor(profile, event, code)
 	if got == nil || got.Field != "ttl_days" || got.Requested != 90 || got.Max != 30 {
-		t.Fatalf("DenialCounterfactualFor() = %+v, want ttl_days requested=90 max=30", got)
+		t.Fatalf("denialCounterfactualFor() = %+v, want ttl_days requested=90 max=30", got)
 	}
 }
 
@@ -125,12 +125,12 @@ func TestUngrantedNamesTheCapability(t *testing.T) {
 	if verdict != contracts.WorkstationVerdictDeny || code != "OPERATE_PERMISSION_NOT_GRANTED" {
 		t.Fatalf("EvaluateEvent() = %s/%s, want DENY/OPERATE_PERMISSION_NOT_GRANTED", verdict, code)
 	}
-	if got := DenialFinality(code); got != contracts.DenialUngranted {
-		t.Fatalf("DenialFinality() = %q, want ungranted", got)
+	if got := denialFinality(code); got != contracts.DenialUngranted {
+		t.Fatalf("denialFinality() = %q, want ungranted", got)
 	}
-	got := DenialCounterfactualFor(profile, event, code)
+	got := denialCounterfactualFor(profile, event, code)
 	if got == nil || got.Capability == "" {
-		t.Fatalf("DenialCounterfactualFor() = %+v, want a named capability", got)
+		t.Fatalf("denialCounterfactualFor() = %+v, want a named capability", got)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestDisabledByDefaultLeavesReceiptsByteIdentical(t *testing.T) {
 	_, code, _ := EvaluateEvent(profile, event)
 
 	denied := contracts.AgentDeniedEffect{EffectID: "e1", EffectType: event.EffectType, ReasonCode: code}
-	AnnotateDenial(&denied, profile, event, code)
+	AnnotateDenial(&denied, profile, event)
 
 	encoded, err := json.Marshal(denied)
 	if err != nil {
@@ -220,7 +220,7 @@ func TestCapabilityDisclosureRejectsUnknownVocabulary(t *testing.T) {
 	if verdict != contracts.WorkstationVerdictDeny || code != "OPERATE_PERMISSION_NOT_GRANTED" {
 		t.Fatalf("EvaluateEvent() = %s/%s, want DENY/OPERATE_PERMISSION_NOT_GRANTED", verdict, code)
 	}
-	if got := DenialCounterfactualFor(profile, event, code); got != nil {
+	if got := denialCounterfactualFor(profile, event, code); got != nil {
 		t.Fatalf("disclosed %+v for an unrecognised effect type: capability must come from the fixed vocabulary", got)
 	}
 }
@@ -242,7 +242,7 @@ func TestUndeclaredTTLDisclosesNothing(t *testing.T) {
 	if code != "MEMORY_TTL_EXCEEDS_POLICY" {
 		t.Fatalf("EvaluateEvent() reason = %q, want MEMORY_TTL_EXCEEDS_POLICY", code)
 	}
-	if got := DenialCounterfactualFor(profile, event, code); got != nil {
+	if got := denialCounterfactualFor(profile, event, code); got != nil {
 		t.Fatalf("disclosed %+v for an undeclared TTL: %d is the policy default, not a request", got, profile.Memory.DefaultTTLDays)
 	}
 }
@@ -263,11 +263,11 @@ func TestForbiddenClassNeverDiscloses(t *testing.T) {
 // Unknown codes fail closed: no finality, no counterfactual, no guessing.
 func TestUnknownCodeDisclosesNothing(t *testing.T) {
 	profile := learningProfile()
-	if got := DenialFinality("SOME_FUTURE_CODE"); got != "" {
-		t.Fatalf("DenialFinality(unknown) = %q, want empty", got)
+	if got := denialFinality("SOME_FUTURE_CODE"); got != "" {
+		t.Fatalf("denialFinality(unknown) = %q, want empty", got)
 	}
-	if got := DenialCounterfactualFor(profile, ToolEvent{}, "SOME_FUTURE_CODE"); got != nil {
-		t.Fatalf("DenialCounterfactualFor(unknown) = %+v, want nil", got)
+	if got := denialCounterfactualFor(profile, ToolEvent{}, "SOME_FUTURE_CODE"); got != nil {
+		t.Fatalf("denialCounterfactualFor(unknown) = %+v, want nil", got)
 	}
 }
 

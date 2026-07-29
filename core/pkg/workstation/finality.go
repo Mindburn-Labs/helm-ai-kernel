@@ -3,9 +3,9 @@ package workstation
 import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 
 // Denial finality and counterfactuals are derived here, from the reason code
-// that fired. Nothing in this file is reachable from a caller-supplied value:
-// an evaluator returns a reason code, and the tables below decide what may be
-// said about it. That is the whole point — a denial that teaches has to teach
+// that fired. The public annotation entry point re-evaluates the event before
+// it writes either field, and the tables below decide what may be said about
+// that result. That is the whole point — a denial that teaches has to teach
 // the same lesson every time, and a hand-assigned field drifts from the rule
 // it claims to describe.
 
@@ -67,21 +67,18 @@ var denialCatalog = map[string]denialClass{
 	"EGRESS_ALLOWLIST_EMPTY":         {contracts.DenialUngranted, discloseNothing},
 }
 
-// DenialFinality returns the finality for a workstation deny reason code.
-// Unknown codes return "" — a denial HELM cannot classify says nothing about
-// itself rather than guessing.
-func DenialFinality(reasonCode string) contracts.DenialFinality {
+// denialFinality returns the finality for an evaluated workstation deny reason
+// code. Unknown codes return "" — a denial HELM cannot classify says nothing
+// about itself rather than guessing.
+func denialFinality(reasonCode string) contracts.DenialFinality {
 	return denialCatalog[reasonCode].finality
 }
 
-// DenialCounterfactualFor returns the nearest allowed envelope for a denial, or
-// nil when the denial's disclosure class forbids one. Every path that does not
-// explicitly build a counterfactual returns nil, so an unclassified code
-// discloses nothing.
-//
-// Exported because a conformance consumer has to be able to observe what a
-// denial discloses without reconstructing the import pipeline.
-func DenialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode string) *contracts.DenialCounterfactual {
+// denialCounterfactualFor returns the nearest allowed envelope for an
+// evaluated denial, or nil when the denial's disclosure class forbids one.
+// Every path that does not explicitly build a counterfactual returns nil, so
+// an unclassified code discloses nothing.
+func denialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode string) *contracts.DenialCounterfactual {
 	switch denialCatalog[reasonCode].disclosure {
 	case discloseScalarBound:
 		// Only MEMORY_TTL_EXCEEDS_POLICY carries a scalar today. A future
@@ -127,17 +124,25 @@ func DenialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 // rather than empty, so receipts from profiles that never opted in stay
 // byte-identical.
 //
-// reasonCode must be the code the evaluator produced, never one declared by
-// the agent's own event log — see normalizeEvents.
-func AnnotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode string) {
+// AnnotateDenial independently evaluates event and requires the recorded code
+// to agree with that evaluation. A caller-declared reason code therefore cannot
+// steer the learning fields on a receipt — see normalizeEvents.
+func AnnotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.WorkstationPolicyProfile, event ToolEvent) {
+	if denied == nil {
+		return
+	}
 	learning := profile.Learning
 	if learning == nil {
 		return
 	}
+	verdict, reasonCode, _ := EvaluateEvent(profile, event)
+	if verdict != contracts.WorkstationVerdictDeny || denied.ReasonCode != reasonCode {
+		return
+	}
 	if learning.EmitFinality {
-		denied.Finality = DenialFinality(reasonCode)
+		denied.Finality = denialFinality(reasonCode)
 	}
 	if learning.EmitCounterfactual {
-		denied.Counterfactual = DenialCounterfactualFor(profile, event, reasonCode)
+		denied.Counterfactual = denialCounterfactualFor(profile, event, reasonCode)
 	}
 }

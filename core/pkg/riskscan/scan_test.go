@@ -254,6 +254,18 @@ func TestScanFailsClosedOnInvalidRecognizedConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 		},
+		"mcp json missing server map": func(t *testing.T, root string) {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{"metadata":{}}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"mcp json malformed server map": func(t *testing.T, root string) {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{"mcpServers":[]}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
 		"codex toml": func(t *testing.T, root string) {
 			t.Helper()
 			dir := filepath.Join(root, ".codex")
@@ -464,6 +476,30 @@ command = "browser"
 	}
 	if obs.StaticConfigFilesRead != 5 {
 		t.Errorf("static config files read = %d, want 5", obs.StaticConfigFilesRead)
+	}
+	if obs.ManagedSettingsPresent {
+		t.Error("ordinary Claude user config must not report managed settings")
+	}
+}
+
+func TestCollectConfigObservationAllowsOnlyDisabledPluginsWithoutRegistry(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(claudeDir, "settings.json"), map[string]any{
+		"enabledPlugins": map[string]bool{"disabled@official": false},
+	})
+
+	obs, err := collectConfigObservation(t.TempDir(), true, true)
+	if err != nil {
+		t.Fatalf("disabled plugins: %v", err)
+	}
+	if obs.MCPServerCount != 0 {
+		t.Fatalf("mcp server count = %d, want 0", obs.MCPServerCount)
 	}
 }
 

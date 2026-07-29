@@ -200,7 +200,14 @@ func applyUserAgentConfigs(obs *ConfigObservation, absRoot string) error {
 }
 
 func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enabledPlugins map[string]bool) error {
-	if len(enabledPlugins) == 0 {
+	hasEnabledPlugin := false
+	for _, enabled := range enabledPlugins {
+		if enabled {
+			hasEnabledPlugin = true
+			break
+		}
+	}
+	if !hasEnabledPlugin {
 		return nil
 	}
 	registryPath := filepath.Join(home, ".claude", "plugins", "installed_plugins.json")
@@ -250,7 +257,7 @@ func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enab
 				return scanCoverageError("enabled plugin configuration could not be read")
 			}
 			obs.StaticConfigFilesRead++
-			if err := applyConfigObservation(obs, "mcp_json", manifest); err != nil {
+			if err := applyConfigObservation(obs, "plugin_mcp_json", manifest); err != nil {
 				return scanCoverageError("enabled plugin configuration is invalid")
 			}
 		}
@@ -598,10 +605,16 @@ func applyConfigObservation(obs *ConfigObservation, kind string, data []byte) er
 	switch kind {
 	case "claude_json":
 		obs.AgentSurface = riskenvelope.AgentSurfaceClaudeCode
-		obs.ManagedSettingsPresent = true
 		return applyJSONConfig(obs, data)
 	case "mcp_json":
-		if err := applyMCPJSONConfig(obs, data); err != nil {
+		if err := applyMCPJSONConfig(obs, data, false); err != nil {
+			return err
+		}
+		if obs.AgentSurface == riskenvelope.AgentSurfaceUnknown {
+			obs.AgentSurface = riskenvelope.AgentSurfaceMCP
+		}
+	case "plugin_mcp_json":
+		if err := applyMCPJSONConfig(obs, data, true); err != nil {
 			return err
 		}
 		if obs.AgentSurface == riskenvelope.AgentSurfaceUnknown {
@@ -626,19 +639,29 @@ func applyJSONConfig(obs *ConfigObservation, data []byte) error {
 	return nil
 }
 
-func applyMCPJSONConfig(obs *ConfigObservation, data []byte) error {
+func applyMCPJSONConfig(obs *ConfigObservation, data []byte, allowDirect bool) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	if servers, ok := raw["mcpServers"].(map[string]any); ok {
+	if raw == nil {
+		return fmt.Errorf("MCP configuration must be an object")
+	}
+	if value, found := raw["mcpServers"]; found {
+		servers, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("mcpServers must be an object")
+		}
 		obs.MCPServerCount += len(servers)
-	} else {
+	} else if allowDirect {
 		for _, server := range raw {
-			if _, ok := server.(map[string]any); ok {
-				obs.MCPServerCount++
+			if _, ok := server.(map[string]any); !ok {
+				return fmt.Errorf("plugin MCP server configuration must be an object")
 			}
 		}
+		obs.MCPServerCount += len(raw)
+	} else {
+		return fmt.Errorf("mcpServers object is required")
 	}
 	if mode := findString(raw, "permissionMode", "defaultMode", "approval_policy", "approvalPolicy"); mode != "" {
 		obs.PermissionMode = normalizePermissionMode(mode)

@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
 )
 
@@ -42,8 +43,7 @@ func runTrustCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  eu-list status   Print EU LOTL state (last refresh, signer, qualified-TSA count)")
 		return 0
 	default:
-		fmt.Fprintf(stderr, "Unknown trust subcommand: %s\n", args[0])
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("trust", "unknown subcommand: %s", args[0]).WithHint("run `helm-ai-kernel trust help`"))
 	}
 }
 
@@ -56,14 +56,12 @@ func runTrustEUList(args []string, stdout, stderr io.Writer) int {
 	case "status":
 		return runTrustEUListStatus(args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "Unknown eu-list subcommand: %s\n", args[0])
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("trust eu-list", "unknown subcommand: %s", args[0]))
 	}
 }
 
 func runTrustEUListStatus(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("trust eu-list status", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		jsonOut    bool
@@ -72,14 +70,21 @@ func runTrustEUListStatus(args []string, stdout, stderr io.Writer) int {
 		endpoint   string
 		timeoutSec int
 	)
-	cmd.BoolVar(&jsonOut, "json", false, "Emit machine-readable JSON")
+	cmd.BoolVar(&jsonOut, "json", false, "Emit machine-readable JSON (alias for --format=json)")
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 	cmd.StringVar(&fixture, "fixture", os.Getenv("HELM_LOTL_FIXTURE"), "Path to a local LOTL XML fixture (offline mode)")
 	cmd.BoolVar(&offline, "offline", false, "Skip the network refresh and report only what is in the local cache")
 	cmd.StringVar(&endpoint, "endpoint", "", "Override the LOTL endpoint URL")
 	cmd.IntVar(&timeoutSec, "timeout", 30, "Seconds to wait for the LOTL fetch")
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "trust eu-list status", cliui.FormatText); !ok {
+		return code
+	}
+	jsonOut = jsonOut || formatFlag.IsJSON()
+	// Errors follow the effective output mode (legacy --json included).
+	errFormat := cliui.FormatText
+	if jsonOut {
+		errFormat = cliui.FormatJSON
 	}
 
 	cfg := trust.EUTrustedListConfig{}
@@ -91,12 +96,10 @@ func runTrustEUListStatus(args []string, stdout, stderr io.Writer) int {
 	if fixture != "" {
 		data, err := os.ReadFile(fixture)
 		if err != nil {
-			fmt.Fprintf(stderr, "Error: cannot read LOTL fixture %s: %v\n", fixture, err)
-			return 2
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "trust eu-list status", "cannot read LOTL fixture %s", fixture), errFormat)
 		}
 		if err := list.LoadFromBytes(data); err != nil {
-			fmt.Fprintf(stderr, "Error: cannot parse LOTL fixture %s: %v\n", fixture, err)
-			return 2
+			return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "trust eu-list status", "cannot parse LOTL fixture %s", fixture), errFormat)
 		}
 	} else if !offline {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)

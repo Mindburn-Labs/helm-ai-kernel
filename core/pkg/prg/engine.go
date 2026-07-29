@@ -126,8 +126,7 @@ func (pe *PolicyEngine) warmRequirements(reqs []Requirement) error {
 // during EvaluateRequirementSetDetail. It exists so a deny verdict can name
 // the specific unmet requirement instead of a bare MISSING_REQUIREMENT code.
 type RequirementFailure struct {
-	ID         string
-	Expression string
+	ID string
 }
 
 // EvaluateRequirementSet recursively evaluates a RequirementSet against the input.
@@ -195,7 +194,7 @@ func (pe *PolicyEngine) evaluateLeaves(reqs []Requirement, input map[string]inte
 			}
 			results = append(results, val)
 			if !val {
-				failures = append(failures, RequirementFailure{ID: req.ID, Expression: req.Expression})
+				failures = append(failures, RequirementFailure{ID: req.ID})
 			}
 			continue
 		}

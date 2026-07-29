@@ -2,6 +2,7 @@ package prg
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -477,6 +478,32 @@ func TestEvaluateRequirementSet_CELWithInput(t *testing.T) {
 	}
 	if !result {
 		t.Fatal("expected true for level=5 > 3")
+	}
+}
+
+func TestEvaluateRequirementSetDetail_DoesNotExposePolicySource(t *testing.T) {
+	pe, _ := NewPolicyEngine()
+	const secret = "private-policy-literal"
+	rs := RequirementSet{
+		Requirements: []Requirement{{
+			ID:         "safe-requirement-id",
+			Expression: `input["tier"] == "` + secret + `"`,
+		}},
+	}
+
+	valid, failures, err := pe.EvaluateRequirementSetDetail(rs, map[string]interface{}{"tier": "public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid || len(failures) != 1 || failures[0].ID != "safe-requirement-id" {
+		t.Fatalf("failures = %#v, want safe requirement id", failures)
+	}
+	serialized, err := json.Marshal(failures)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(serialized), secret) || strings.Contains(strings.ToLower(string(serialized)), "expression") {
+		t.Fatalf("requirement failure exposed policy source: %s", serialized)
 	}
 }
 

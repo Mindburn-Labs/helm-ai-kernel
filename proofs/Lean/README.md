@@ -99,8 +99,8 @@ It does **not** verify the following:
    authority by themselves. The governance operating contract additionally
    requires a distinct-provider exact-head machine interlock for every code
    merge. There is no human approval requirement to preserve: `main` requires
-   zero approving reviews. No such interlock is currently active or enforced
-   by the GitHub ruleset.
+   zero approving reviews. Permit-named workflow runs are visible, but no
+   source-identity-bound interlock is currently enforced by the GitHub ruleset.
 
 These omissions are deliberate. Each one corresponds to an existing test
 surface (1, 3, 4), a future workstream (5, 6), or the separate GitHub authority

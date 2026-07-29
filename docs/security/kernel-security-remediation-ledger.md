@@ -500,6 +500,37 @@ Post-sign mutation, the other v5 blocker, is now partly closed:
 `buildNextCausalReceipt` no longer assigns `ExecutorID` to an already-signed
 receipt; it requires the builder to bind the session before signing.
 
+### 2026-07-27 — F-21 closed: launchpad receipts now form a chain
+
+Every launchpad receipt was built by `NewReceipt` with `LamportClock: 1`
+hardcoded and no `PrevHash` at all. A launch emitted six to eighteen receipts
+that each claimed to be the genesis of their own chain and none of which
+referenced another. The EvidencePack therefore asserted no chain of custody,
+which is materially weaker than the product's claim.
+
+`receipts.Chain` now threads `PrevHash` and a monotonic clock through the
+receipts of one launch, in creation order.
+
+Two things this surfaced, both recorded rather than papered over:
+
+**Teardown cannot link to its launch.** `DeleteLaunch` runs as a separate
+operation and `LaunchRun` does not persist the launch chain's head hash, so the
+teardown receipt has nothing to chain from. It is emitted through
+`NewReceiptForSession` under a distinct session key — an explicit single-receipt
+genesis — rather than dropped into the launch's chain where the verifier would
+correctly read a second genesis as a fork. Linking the two requires persisting
+the head, which is the same missing-persistence shape as ADR 0002.
+
+**Receipts needed a session key.** The verifier groups causal chains by
+`ExecutorID`, which launchpad never set, so every receipt in a pack landed in
+one implicit group. `newLinkedReceipt` now sets it. Without this the launch
+chain and the teardown genesis were indistinguishable from a forked chain.
+
+F-20 is unchanged and still open: the launchpad `Hash` is
+`sha256(json.Marshal(receipt))` with the hash and receipt-id fields still empty
+at the time of hashing. It is reproducible only by a Go implementation that
+knows the struct field order, so no third-party verifier can recompute it. That
+is ADR 0002 territory, not a chaining fix.
 ### 2026-07-27 — F-24: unbounded provenance-pack extraction, and the lint-security triage
 
 | ID | Sev | Finding | Status |

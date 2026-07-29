@@ -276,23 +276,57 @@ func TestRunMCPAuthorizeCallClearsReceiptPathWhenWriteFails(t *testing.T) {
 	}
 	t.Setenv("HELM_DATA_DIR", dataFile)
 
-	var stdout, stderr bytes.Buffer
+	var escalateOut, escalateErr bytes.Buffer
 	code := runMCPAuthorizeCall([]string{
 		"--server-id", "srv-write-failure",
 		"--tool-name", "file_read",
 		"--json",
-	}, &stdout, &stderr)
+	}, &escalateOut, &escalateErr)
 	if code != 1 {
-		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+		t.Fatalf("escalate exit code = %d stderr=%s", code, escalateErr.String())
 	}
-	var record struct {
-		DecisionReceiptPath string `json:"decision_receipt_path"`
+	var escalate contracts.ExecutionBoundaryRecord
+	if err := json.Unmarshal(escalateOut.Bytes(), &escalate); err != nil {
+		t.Fatalf("parse escalate json: %v\n%s", err, escalateOut.String())
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
-		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	if escalate.Verdict != contracts.VerdictEscalate || escalate.ReasonCode != contracts.ReasonApprovalRequired {
+		t.Fatalf("non-ALLOW verdict changed after receipt failure: %+v", escalate)
 	}
-	if record.DecisionReceiptPath != "" {
-		t.Fatalf("decision_receipt_path = %q after write failure, want empty", record.DecisionReceiptPath)
+	if escalate.DecisionReceiptPath != "" {
+		t.Fatalf("escalate decision_receipt_path = %q after write failure, want empty", escalate.DecisionReceiptPath)
+	}
+
+	schema := map[string]any{"type": "object"}
+	schemaJSON, _ := json.Marshal(schema)
+	hash, err := mcppkg.ToolSchemaHash(mcppkg.ToolRef{Name: "local.allow-write-failure", Schema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var allowOut, allowErr bytes.Buffer
+	code = runMCPAuthorizeCall([]string{
+		"--server-id", "srv-allow-write-failure",
+		"--tool-name", "local.allow-write-failure",
+		"--approved",
+		"--tool-schema-json", string(schemaJSON),
+		"--pinned-schema-hash", hash,
+		"--json",
+	}, &allowOut, &allowErr)
+	if code != 1 {
+		t.Fatalf("ALLOW receipt failure exit code = %d, want 1 stderr=%s", code, allowErr.String())
+	}
+	var denied contracts.ExecutionBoundaryRecord
+	if err := json.Unmarshal(allowOut.Bytes(), &denied); err != nil {
+		t.Fatalf("parse failed-ALLOW json: %v\n%s", err, allowOut.String())
+	}
+	if denied.Verdict != contracts.VerdictDeny || denied.ReasonCode != contracts.ReasonVerification {
+		t.Fatalf("ALLOW without receipt must fail closed, got %+v", denied)
+	}
+	if denied.DecisionReceiptPath != "" || denied.RecordHash == "" {
+		t.Fatalf("failed-ALLOW record must be sealed without a receipt path: %+v", denied)
+	}
+	stored, ok := newLocalSurfaceRegistry().GetRecord(denied.RecordID)
+	if !ok || stored.Verdict != contracts.VerdictDeny || stored.ReasonCode != contracts.ReasonVerification || stored.DecisionReceiptPath != "" {
+		t.Fatalf("stored failed-ALLOW record is not fail-closed: stored=%+v found=%t", stored, ok)
 	}
 }
 

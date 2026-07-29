@@ -1079,6 +1079,10 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if writeLocalMCPReceipt(record.RecordID, "decision", sealed) == "" {
+		if record.Verdict == contracts.VerdictAllow {
+			record.Verdict = contracts.VerdictDeny
+			record.ReasonCode = contracts.ReasonVerification
+		}
 		record.DecisionReceiptPath = ""
 		sealed, err = record.Seal()
 		if err != nil {
@@ -1212,6 +1216,8 @@ func mcpVerdictReason(record contracts.ExecutionBoundaryRecord) string {
 		return "MCP tool schema requires approval or pinning"
 	case contracts.ReasonInsufficientPrivilege:
 		return "granted scopes do not cover the tool's required scopes"
+	case contracts.ReasonVerification:
+		return "durable decision receipt could not be written"
 	}
 	if record.Verdict == contracts.VerdictAllow {
 		return "approved scope, schema pin, and policy checks passed"

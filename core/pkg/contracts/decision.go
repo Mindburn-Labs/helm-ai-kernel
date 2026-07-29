@@ -57,10 +57,19 @@ type DecisionRecord struct {
 	SessionCentroidHash    string  `json:"session_centroid_hash,omitempty"`
 	RiskAccumulationWindow int     `json:"risk_accumulation_window,omitempty"`
 	// RequirementSetHash links this decision to the specific Proof Requirement Graph rules satisfied.
-	RequirementSetHash string    `json:"requirement_set_hash,omitempty"`
-	Signature          string    `json:"signature"`
-	SignatureType      string    `json:"signature_type"`
-	Timestamp          time.Time `json:"timestamp"`
+	RequirementSetHash string `json:"requirement_set_hash,omitempty"`
+	// GateRosterHash digests the Guardian gate roster (guardian.GateRoster)
+	// that produced this verdict, so evidence states which gates ran instead
+	// of leaving that to code review. An uninjected gate is skipped rather
+	// than refused, so two kernels can return the same verdict from different
+	// enforcement: without this the difference is invisible downstream.
+	// NOTE: outside the decision signature — folding it into the signing
+	// preimage is a preimage-version migration (crypto.ReceiptPreimageV5).
+	// It is still tamper-evident via the receipt envelope chain hash.
+	GateRosterHash string    `json:"gate_roster_hash,omitempty"`
+	Signature      string    `json:"signature"`
+	SignatureType  string    `json:"signature_type"`
+	Timestamp      time.Time `json:"timestamp"`
 
 	// Intervention Metadata (Temporal Guardian)
 	Intervention *InterventionMetadata `json:"intervention,omitempty"`

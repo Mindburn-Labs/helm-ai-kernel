@@ -19,8 +19,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # Fast gate (~5s): decide which languages actually changed. The four
-  # CodeQL matrix jobs and Rust audit are required status checks, so the
+  # Fast gate (~5s): decide which CodeQL languages actually changed. The four
+  # CodeQL matrix jobs are required status checks, so the
   # workflow must still trigger on every PR/push — when a language did not
   # change, its job reports success without running analysis.
   changes:
@@ -33,7 +33,6 @@ jobs:
       javascript-typescript: ${{ steps.filter.outputs.javascript-typescript }}
       python: ${{ steps.filter.outputs.python }}
       java-kotlin: ${{ steps.filter.outputs.java-kotlin }}
-      rust: ${{ steps.filter.outputs.rust }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -49,19 +48,18 @@ jobs:
           fi
           # schedule / workflow_dispatch / unknown base → full sweep
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            for k in go javascript-typescript python java-kotlin rust; do
+            for k in go javascript-typescript python java-kotlin; do
               echo "$k=true" >> "$GITHUB_OUTPUT"
             done
             exit 0
           fi
           # NUL-delimited paths preserve names containing spaces, newlines, or
           # non-ASCII bytes. Unknown files deliberately trigger a full sweep:
-          # only Markdown and legal-text-only changes can skip CodeQL entirely.
+          # Markdown, legal text, and Rust-only inputs can skip CodeQL entirely.
           go=false
           javascript_typescript=false
           python=false
           java_kotlin=false
-          rust=false
           full=false
           while IFS= read -r -d '' file; do
             case "$file" in
@@ -83,7 +81,6 @@ jobs:
                 java_kotlin=true
                 ;;
               *.rs|Cargo.toml|*/Cargo.toml|Cargo.lock|*/Cargo.lock|.cargo/*|*/.cargo/*)
-                rust=true
                 ;;
               *)
                 full=true
@@ -95,14 +92,12 @@ jobs:
             javascript_typescript=true
             python=true
             java_kotlin=true
-            rust=true
           fi
           {
             echo "go=$go"
             echo "javascript-typescript=$javascript_typescript"
             echo "python=$python"
             echo "java-kotlin=$java_kotlin"
-            echo "rust=$rust"
           } >> "$GITHUB_OUTPUT"
 
   analyze:
@@ -158,20 +153,12 @@ jobs:
 
   rust-audit:
     name: Rust audit
-    needs: changes
     runs-on: ubuntu-latest
     steps:
-      - name: Skip when no relevant changes
-        if: needs.changes.outputs.rust != 'true'
-        run: echo "no Rust changes in this range; audit skipped"
-      - if: needs.changes.outputs.rust == 'true'
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - if: needs.changes.outputs.rust == 'true'
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - if: needs.changes.outputs.rust == 'true'
-        name: Install cargo-audit
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install cargo-audit
         run: cargo install cargo-audit --locked
-      - if: needs.changes.outputs.rust == 'true'
-        name: Audit Rust SDK dependencies
+      - name: Audit Rust SDK dependencies
         working-directory: sdk/rust
         run: cargo audit

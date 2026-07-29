@@ -102,9 +102,11 @@ routine work without removing an irreversible effect:
   Bare force forms (`--force`, clustered `-f`, and `+refspec`) are denied.
 - Recursive delete whose every operand is a relative, regenerable build
   directory (`node_modules`, `dist`, `.next`, `target`, `coverage`, `.venv`
-  and similar). Any absolute path, parent-relative path, variable, or
-  unrecognized operand fails closed and is denied — including
-  `rm -rf /tmp/...`.
+  and similar), with `rm` as the first command token and no other command
+  segment that could change how the path resolves. Any preceding `cd`, wrapper,
+  absolute path, parent-relative path, variable, or unrecognized operand fails
+  closed and is denied — including
+  `cd /srv/production && rm -rf build` and `rm -rf /tmp/...`.
 
 ## Operator workflow
 

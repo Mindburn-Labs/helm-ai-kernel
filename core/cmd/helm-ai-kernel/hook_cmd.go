@@ -366,9 +366,9 @@ func isForcePush(c string) bool {
 	return false
 }
 
-// removesOnlyBuildArtifacts reports whether every operand of every rm invocation
-// in the command is a regenerable build directory. It fails closed: an rm whose
-// operands cannot be resolved to that set is treated as destructive.
+// removesOnlyBuildArtifacts reports whether every command segment is an rm whose
+// operands are regenerable build directories. It fails closed when another
+// segment could change what a relative operand resolves to.
 func removesOnlyBuildArtifacts(c string) bool {
 	found := false
 	for _, segment := range splitShellSegments(c) {
@@ -376,12 +376,15 @@ func removesOnlyBuildArtifacts(c string) bool {
 		start := -1
 		for i, field := range fields {
 			if filepath.Base(strings.Trim(field, `"'`)) == "rm" {
+				if i != 0 {
+					return false
+				}
 				start = i + 1
 				break
 			}
 		}
 		if start < 0 {
-			continue
+			return false
 		}
 		found = true
 		operands := 0

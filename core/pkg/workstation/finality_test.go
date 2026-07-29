@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
@@ -174,8 +175,11 @@ func TestAnnotateDenialClearsStaleLearning(t *testing.T) {
 	event := ToolEvent{
 		EventID:      "e-memory",
 		Type:         "memory_write",
+		ToolID:       "tool-memory",
+		Action:       "write",
 		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
 		EffectMode:   contracts.WorkstationEffectModeOperate,
+		OccurredAt:   time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
 	}
 	_, code, _ := EvaluateEvent(learningProfile(), event)
@@ -193,21 +197,33 @@ func TestAnnotateDenialClearsStaleLearning(t *testing.T) {
 		reasonCode         string
 		wantFinality       contracts.DenialFinality
 		wantCounterfactual bool
+		mutate             func(*contracts.AgentDeniedEffect)
 	}{
-		{"policy_disabled", disabled, code, "", false},
-		{"finality_disabled", finalityOff, code, "", true},
-		{"counterfactual_disabled", counterfactualOff, code, contracts.DenialInstanceParameter, false},
-		{"evaluator_mismatch", learningProfile(), "TAINTED_CONTEXT_REQUIRES_DENY", "", false},
+		{"policy_disabled", disabled, code, "", false, nil},
+		{"finality_disabled", finalityOff, code, "", true, nil},
+		{"counterfactual_disabled", counterfactualOff, code, contracts.DenialInstanceParameter, false, nil},
+		{"evaluator_mismatch", learningProfile(), "TAINTED_CONTEXT_REQUIRES_DENY", "", false, nil},
+		{"effect_id_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.EffectID = "other" }},
+		{"effect_type_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.EffectType = "other" }},
+		{"tool_id_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.ToolID = "other" }},
+		{"action_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.Action = "other" }},
+		{"occurred_at_mismatch", learningProfile(), code, "", false, func(denied *contracts.AgentDeniedEffect) { denied.OccurredAt = denied.OccurredAt.Add(time.Second) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			denied := contracts.AgentDeniedEffect{
 				EffectID:   "e-memory",
 				EffectType: event.EffectType,
+				ToolID:     event.ToolID,
+				Action:     event.Action,
 				ReasonCode: tc.reasonCode,
+				OccurredAt: event.OccurredAt,
 				Finality:   contracts.DenialClassForbidden,
 				Counterfactual: &contracts.DenialCounterfactual{
 					Field: "stale", Requested: 1, Max: 1,
 				},
+			}
+			if tc.mutate != nil {
+				tc.mutate(&denied)
 			}
 			AnnotateDenial(&denied, tc.profile, event)
 			if got := denied.Finality; got != tc.wantFinality {

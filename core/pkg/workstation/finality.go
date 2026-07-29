@@ -131,9 +131,9 @@ func denialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 // rather than empty, so receipts from profiles that never opted in stay
 // byte-identical.
 //
-// AnnotateDenial independently evaluates event and requires the recorded code
-// to agree with that evaluation. A caller-declared reason code therefore cannot
-// steer the learning fields on a receipt — see normalizeEvents.
+// AnnotateDenial independently evaluates event and requires the receipt identity
+// and recorded code to agree with that evaluation. A caller-declared reason code
+// therefore cannot steer the learning fields on another receipt — see normalizeEvents.
 func AnnotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.WorkstationPolicyProfile, event ToolEvent) {
 	if denied == nil {
 		return
@@ -147,7 +147,13 @@ func AnnotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.Works
 		return
 	}
 	verdict, reasonCode, _ := EvaluateEvent(profile, event)
-	if verdict != contracts.WorkstationVerdictDeny || denied.ReasonCode != reasonCode {
+	if verdict != contracts.WorkstationVerdictDeny ||
+		denied.EffectID != event.EventID ||
+		denied.EffectType != event.EffectType ||
+		denied.ToolID != event.ToolID ||
+		denied.Action != event.Action ||
+		!denied.OccurredAt.Equal(event.OccurredAt) ||
+		denied.ReasonCode != reasonCode {
 		return
 	}
 	if learning.EmitFinality {

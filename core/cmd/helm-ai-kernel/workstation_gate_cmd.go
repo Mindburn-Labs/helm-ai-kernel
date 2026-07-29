@@ -64,7 +64,7 @@ func runWorkstationGateCmd(args []string, stdout, stderr io.Writer) int {
 			_, _ = fmt.Fprintln(stderr, "Error: --approval-id is valid only for a pending dev-profile command")
 			return 2
 		}
-		if err := consumeShellGateApproval(decision, approvalID, rawURL, apiKeyFile, dataDir); err != nil {
+		if err := consumeShellGateApproval(decision, approvalID, rawURL, apiKeyFile); err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error: approval cannot authorize command: %v\n", err)
 			return 1
 		}
@@ -149,7 +149,7 @@ func requestShellGateApproval(decision workstation.ShellGateDecision, rawURL, ap
 	return nil
 }
 
-func consumeShellGateApproval(decision workstation.ShellGateDecision, approvalID, rawURL, apiKeyFile, dataDir string) error {
+func consumeShellGateApproval(decision workstation.ShellGateDecision, approvalID, rawURL, apiKeyFile string) error {
 	client, err := shellGateApprovalClient(rawURL, apiKeyFile)
 	if err != nil {
 		return err
@@ -176,7 +176,11 @@ func consumeShellGateApproval(decision workstation.ShellGateDecision, approvalID
 		if !workstation.ApprovalBindsToCommand(approval.Reason, decision.Command) {
 			return fmt.Errorf("approval %s is bound to a different command", approvalID)
 		}
-		return workstation.NewConsumedApprovalStore(workstation.DefaultConsumedApprovalPath(dataDir)).MarkConsumed(approvalID)
+		_, err := client.TransitionApproval(ctx, approvalID, "revoke", "workstation.shellgate", "consumed by workstation shell gate")
+		if err != nil {
+			return fmt.Errorf("consume approval %s: %w", approvalID, err)
+		}
+		return nil
 	}
 	return fmt.Errorf("approval %s not found", approvalID)
 }

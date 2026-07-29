@@ -63,7 +63,8 @@ func TestApprovalHTTPClientListApprovalsUnauthorized(t *testing.T) {
 
 func TestApprovalHTTPClientTransition(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != approvalAPIBasePath+"/ap-9/approve" || r.Method != http.MethodPost {
+		if r.Method != http.MethodPost ||
+			(r.URL.Path != approvalAPIBasePath+"/ap-9/approve" && r.URL.Path != approvalAPIBasePath+"/ap-9/revoke") {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
 		var body struct {
@@ -76,11 +77,15 @@ func TestApprovalHTTPClientTransition(t *testing.T) {
 		if body.Actor != "operator.cli" {
 			t.Fatalf("actor = %q, want operator.cli", body.Actor)
 		}
+		state := contracts.ApprovalCeremonyAllowed
+		if strings.HasSuffix(r.URL.Path, "/revoke") {
+			state = contracts.ApprovalCeremonyRevoked
+		}
 		_ = json.NewEncoder(w).Encode(contracts.ApprovalCeremony{
 			ApprovalID: "ap-9",
 			Subject:    "shell_command",
 			Action:     "shell_operate",
-			State:      contracts.ApprovalCeremonyAllowed,
+			State:      state,
 		})
 	}))
 	defer server.Close()
@@ -96,8 +101,9 @@ func TestApprovalHTTPClientTransition(t *testing.T) {
 	if ceremony.State != contracts.ApprovalCeremonyAllowed {
 		t.Fatalf("state = %s, want approved", ceremony.State)
 	}
-	if _, err := client.TransitionApproval(context.Background(), "ap-9", "revoke", "operator.cli", ""); err == nil {
-		t.Fatal("revoke must be rejected client-side")
+	ceremony, err = client.TransitionApproval(context.Background(), "ap-9", "revoke", "operator.cli", "consumed")
+	if err != nil || ceremony.State != contracts.ApprovalCeremonyRevoked {
+		t.Fatalf("revoke = %+v err=%v, want revoked", ceremony, err)
 	}
 }
 

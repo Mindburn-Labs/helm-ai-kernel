@@ -159,7 +159,19 @@ func (m *watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.tickCmd()
 		}
 		m.lastErr = nil
+		selectedID := ""
+		if m.selected >= 0 && m.selected < len(m.pending) {
+			selectedID = m.pending[m.selected].ApprovalID
+		}
 		m.pending = filterPendingApprovals(typed.items)
+		if selectedID != "" {
+			for i := range m.pending {
+				if m.pending[i].ApprovalID == selectedID {
+					m.selected = i
+					break
+				}
+			}
+		}
 		if m.selected >= len(m.pending) {
 			m.selected = len(m.pending) - 1
 		}
@@ -279,8 +291,12 @@ func formatApprovalRow(item contracts.ApprovalCeremony, now time.Time) string {
 	if len(flags) > 0 {
 		suffix = " [" + strings.Join(flags, ",") + "]"
 	}
-	return fmt.Sprintf("%s  %s:%s  by %s  age %s%s",
-		item.ApprovalID, item.Subject, item.Action, item.RequestedBy, age, suffix)
+	reason := ""
+	if strings.TrimSpace(item.Reason) != "" {
+		reason = fmt.Sprintf("  reason %q", item.Reason)
+	}
+	return fmt.Sprintf("%s  %s:%s  by %s  age %s%s%s",
+		item.ApprovalID, item.Subject, item.Action, item.RequestedBy, age, suffix, reason)
 }
 
 // renderApprovalSnapshot prints a non-interactive snapshot of the pending

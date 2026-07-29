@@ -149,18 +149,27 @@ func TestWorkstationGateConsumesExactApprovalOnce(t *testing.T) {
 		RequestedBy: "operator.cli",
 		Reason:      "approved; " + workstation.ShellCommandBinding(command),
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode([]contracts.ApprovalCeremony{approval})
+	revokeCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == approvalAPIBasePath:
+			_ = json.NewEncoder(w).Encode([]contracts.ApprovalCeremony{approval})
+		case r.Method == http.MethodPost && r.URL.Path == approvalAPIBasePath+"/"+approval.ApprovalID+"/revoke":
+			revokeCount++
+			approval.State = contracts.ApprovalCeremonyRevoked
+			_ = json.NewEncoder(w).Encode(approval)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
 	}))
 	defer server.Close()
 	t.Setenv(watchAdminAPIKeyEnv, "test-key")
 
-	dataDir := t.TempDir()
 	allowlist := gateTestAllowlist(t, []string{"ls"})
 	args := []string{
 		"--profile", "dev",
 		"--allowlist", allowlist,
-		"--data-dir", dataDir,
+		"--data-dir", t.TempDir(),
 		"--approval-id", approval.ApprovalID,
 		"--url", server.URL,
 		"--command", command,
@@ -169,9 +178,10 @@ func TestWorkstationGateConsumesExactApprovalOnce(t *testing.T) {
 	if code != exitGateAllow {
 		t.Fatalf("first consume exit = %d, want allow; out=%s err=%s", code, out, errOut)
 	}
+	args[5] = t.TempDir()
 	code, _, errOut = runGateForTest(t, args...)
-	if code != 1 || !strings.Contains(errOut, "already consumed") {
-		t.Fatalf("second consume exit = %d err=%s, want fail-closed consumed error", code, errOut)
+	if code != 1 || !strings.Contains(errOut, "not approved") || revokeCount != 1 {
+		t.Fatalf("cross-ledger reuse exit=%d revokes=%d err=%s, want server-side consumed rejection", code, revokeCount, errOut)
 	}
 }
 

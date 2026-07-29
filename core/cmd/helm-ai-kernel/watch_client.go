@@ -100,7 +100,7 @@ func (c *approvalHTTPClient) ListApprovals(ctx context.Context) ([]contracts.App
 
 func (c *approvalHTTPClient) TransitionApproval(ctx context.Context, approvalID, action, actor, reason string) (contracts.ApprovalCeremony, error) {
 	switch action {
-	case "approve", "deny":
+	case "approve", "deny", "revoke":
 	default:
 		return contracts.ApprovalCeremony{}, fmt.Errorf("unsupported approval transition action %q", action)
 	}

@@ -194,6 +194,24 @@ func TestWatchModelApproveDenyFlow(t *testing.T) {
 	}
 }
 
+func TestWatchModelRefreshPreservesSelectedApproval(t *testing.T) {
+	now := time.Now()
+	m := newWatchModel(&fakeApprovalClient{}, "operator.cli", time.Second)
+	m, _ = updateModel(t, m, approvalsFetchedMsg{items: []contracts.ApprovalCeremony{
+		pendingCeremony("ap-1", now),
+		pendingCeremony("ap-2", now.Add(time.Second)),
+	}})
+	m.selected = 1
+	m, _ = updateModel(t, m, approvalsFetchedMsg{items: []contracts.ApprovalCeremony{
+		pendingCeremony("ap-new", now.Add(-time.Second)),
+		pendingCeremony("ap-1", now),
+		pendingCeremony("ap-2", now.Add(time.Second)),
+	}})
+	if got := m.pending[m.selected].ApprovalID; got != "ap-2" {
+		t.Fatalf("refresh changed selection to %q, want ap-2", got)
+	}
+}
+
 func TestWatchModelTransitionErrorKeepsQueue(t *testing.T) {
 	client := &fakeApprovalClient{transitionErr: errors.New("conflict")}
 	m := newWatchModel(client, "operator.cli", time.Second)
@@ -240,11 +258,13 @@ func TestWatchModelQuitAndGuards(t *testing.T) {
 func TestWatchModelView(t *testing.T) {
 	client := &fakeApprovalClient{}
 	m := newWatchModel(client, "operator.cli", time.Second)
+	item := pendingCeremony("ap-1", time.Now().Add(-time.Minute))
+	item.Reason = `blocked command "rm /tmp/x"`
 	m, _ = updateModel(t, m, approvalsFetchedMsg{items: []contracts.ApprovalCeremony{
-		pendingCeremony("ap-1", time.Now().Add(-time.Minute)),
+		item,
 	}})
 	view := m.View()
-	for _, want := range []string{"ap-1", "a approve", "d deny", "q quit", "shell_command"} {
+	for _, want := range []string{"ap-1", "a approve", "d deny", "q quit", "shell_command", "rm /tmp/x"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}

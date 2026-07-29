@@ -34,7 +34,6 @@ var DefaultShellAllowlist = []string{
 	"jq",
 	"ls",
 	"pwd",
-	"yq",
 	"whoami",
 }
 

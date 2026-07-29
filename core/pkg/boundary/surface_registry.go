@@ -464,12 +464,16 @@ func (r *SurfaceRegistry) ListCheckpoints() []contracts.BoundaryCheckpoint {
 }
 
 func (r *SurfaceRegistry) PutApproval(approval contracts.ApprovalCeremony) (contracts.ApprovalCeremony, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.putApprovalLocked(approval)
+}
+
+func (r *SurfaceRegistry) putApprovalLocked(approval contracts.ApprovalCeremony) (contracts.ApprovalCeremony, error) {
 	sealed, err := approval.Seal()
 	if err != nil {
 		return contracts.ApprovalCeremony{}, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.approvals[sealed.ApprovalID] = sealed
 	if err := r.appendEventLocked("approval", sealed.ApprovalID, sealed); err != nil {
 		return contracts.ApprovalCeremony{}, err
@@ -492,23 +496,27 @@ func (r *SurfaceRegistry) ListApprovals() []contracts.ApprovalCeremony {
 }
 
 func (r *SurfaceRegistry) TransitionApproval(id string, state contracts.ApprovalCeremonyState, actor, receiptID, reason string) (contracts.ApprovalCeremony, error) {
-	r.mu.RLock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	approval, ok := r.approvals[id]
-	r.mu.RUnlock()
 	if !ok {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("approval %q not found", id)
+	}
+	if approval.State != contracts.ApprovalCeremonyPending &&
+		!(approval.State == contracts.ApprovalCeremonyAllowed && state == contracts.ApprovalCeremonyRevoked) {
+		return contracts.ApprovalCeremony{}, fmt.Errorf("approval %q cannot transition from %s to %s", id, approval.State, state)
 	}
 	now := r.now().UTC()
 	if !approval.ExpiresAt.IsZero() && now.After(approval.ExpiresAt) && state == contracts.ApprovalCeremonyAllowed {
 		approval.State = contracts.ApprovalCeremonyExpired
 		approval.UpdatedAt = now
 		approval.Reason = "approval expired before assertion"
-		return r.PutApproval(approval)
+		return r.putApprovalLocked(approval)
 	}
 	if state == contracts.ApprovalCeremonyAllowed && !approval.TimelockUntil.IsZero() && now.Before(approval.TimelockUntil) {
 		approval.UpdatedAt = now
 		approval.Reason = "approval timelock has not elapsed"
-		return r.PutApproval(approval)
+		return r.putApprovalLocked(approval)
 	}
 	if state == contracts.ApprovalCeremonyAllowed && approval.BreakGlass && (strings.TrimSpace(reason) == "" || strings.TrimSpace(receiptID) == "") {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("break-glass approval requires reason and receipt_id")
@@ -539,7 +547,7 @@ func (r *SurfaceRegistry) TransitionApproval(id string, state contracts.Approval
 			approval.Reason = fmt.Sprintf(
 				"approval requires a %d-party quorum, which cannot be established from an asserted actor name; "+
 					"verified approver credentials are required", quorumFor(approval))
-			return r.PutApproval(approval)
+			return r.putApprovalLocked(approval)
 		}
 	}
 
@@ -559,7 +567,7 @@ func (r *SurfaceRegistry) TransitionApproval(id string, state contracts.Approval
 			approval.Reason = fmt.Sprintf("approval quorum pending: %d/%d", len(approval.Approvers), quorum)
 		}
 	}
-	return r.PutApproval(approval)
+	return r.putApprovalLocked(approval)
 }
 
 // quorumFor normalises an unset quorum to single-approver.

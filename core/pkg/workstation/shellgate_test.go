@@ -60,22 +60,6 @@ func TestExtractCommandNames(t *testing.T) {
 	}
 }
 
-func TestConsumedApprovalStoreIsSingleUse(t *testing.T) {
-	store := NewConsumedApprovalStore(filepath.Join(t.TempDir(), "consumed"))
-	if consumed, err := store.IsConsumed("ap-1"); err != nil || consumed {
-		t.Fatalf("fresh approval consumed=%t err=%v", consumed, err)
-	}
-	if err := store.MarkConsumed("ap-1"); err != nil {
-		t.Fatalf("first consume: %v", err)
-	}
-	if err := store.MarkConsumed("ap-1"); err == nil {
-		t.Fatal("second consume must fail")
-	}
-	if consumed, err := store.IsConsumed("ap-1"); err != nil || !consumed {
-		t.Fatalf("consumed approval consumed=%t err=%v", consumed, err)
-	}
-}
-
 func TestBlockedCommandNames(t *testing.T) {
 	allowlist := []string{"cat", "grep", "ls", "sudo", "echo"}
 	cases := []struct {
@@ -152,6 +136,18 @@ func TestGateShellCommandProfiles(t *testing.T) {
 	})
 }
 
+func TestGateShellCommandDetectsQuotedRedirectAndYQInPlace(t *testing.T) {
+	for _, command := range []string{`cat input > "/tmp/out"`, `yq -i '.x = 1' config.yaml`, `yq --in-place '.x = 1' config.yaml`} {
+		decision := GateShellCommand(ShellGateProfileProduction, command, []string{"cat", "yq"})
+		if decision.Verdict != ShellGateVerdictDeny || len(decision.WriteTargets) == 0 {
+			t.Fatalf("GateShellCommand(%q) = %+v, want detected write denial", command, decision)
+		}
+	}
+	if got := ExtractWriteTargets(`echo "a > b"`); got != nil {
+		t.Fatalf("operator inside quoted text produced targets %v", got)
+	}
+}
+
 func writeShellAllowlist(t *testing.T, path string, payload any, mode os.FileMode) time.Time {
 	t.Helper()
 	data, err := json.Marshal(payload)
@@ -190,6 +186,12 @@ func TestShellAllowlistStoreSeedsDefaults(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("seeded file mode = %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestDefaultShellAllowlistExcludesYQ(t *testing.T) {
+	if containsString(DefaultShellAllowlist, "yq") {
+		t.Fatal("default allowlist must exclude yq because it can edit files in place")
 	}
 }
 

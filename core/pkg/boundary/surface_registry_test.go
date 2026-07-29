@@ -68,6 +68,20 @@ func TestApprovalTransitionSealsCeremony(t *testing.T) {
 	}
 }
 
+func TestApprovedApprovalCanOnlyBeRevokedOnce(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry := NewSurfaceRegistry(func() time.Time { return now })
+	if _, err := registry.TransitionApproval("approval-bootstrap", contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt-1", "reviewed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.TransitionApproval("approval-bootstrap", contracts.ApprovalCeremonyRevoked, "workstation.shellgate", "", "consumed"); err != nil {
+		t.Fatalf("first revoke: %v", err)
+	}
+	if _, err := registry.TransitionApproval("approval-bootstrap", contracts.ApprovalCeremonyRevoked, "workstation.shellgate", "", "consumed"); err == nil {
+		t.Fatal("second revoke must fail atomically")
+	}
+}
+
 func TestApprovalTransitionEnforcesQuorumAndTimelock(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })

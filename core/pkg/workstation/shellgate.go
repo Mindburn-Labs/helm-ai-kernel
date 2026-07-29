@@ -26,12 +26,12 @@
 //     is allowlisted. An allowlisted `cat` must not become `cat x > /etc/y`.
 //
 // Threat-model limit (documented, accepted): gating is command-name and
-// write-target based, not a full shell parser. Quoted operators, glob
-// expansions, and arguments that a program itself interprets as write
-// destinations (e.g. `tee file`, `dd of=file`, `sed -i`) are out of scope for
-// name extraction; programs with intrinsic write behavior must stay off the
-// allowlist. Redirection scanning strips quoted spans first and may still
-// false-positive on unusual unquoted `>` usage — that fails closed.
+// write-target based, not a full shell parser. Glob expansions and arguments
+// that a program itself interprets as write destinations (e.g. `tee file`,
+// `dd of=file`, `sed -i`) are out of scope; programs with intrinsic write
+// behavior must stay off the allowlist. Redirection scanning understands
+// quoted operators and targets but may still false-positive on unusual
+// unquoted `>` usage — that fails closed.
 package workstation
 
 import (
@@ -203,11 +203,6 @@ func BlockedCommandNames(command string, allowlist []string) []string {
 	return blocked
 }
 
-// quotedSpanPattern matches single- or double-quoted spans so redirection
-// scanning can ignore operators inside quotes (`echo "a > b"` is not a
-// write).
-var quotedSpanPattern = regexp.MustCompile(`'[^']*'|"[^"]*"`)
-
 // outputValueFlags are flags whose value is a file the command writes to
 // (curl/wget style). The value may be inline (`--output=file`), concatenated
 // (`-ofile`), or the next token (`-o file`).
@@ -228,16 +223,17 @@ var outputBooleanFlags = map[string]struct{}{
 // ExtractWriteTargets returns the write destinations a shell command line
 // would create or overwrite: output redirections (`>`, `>>`, `>|`, with
 // optional fd prefixes like `2>`) and downloader-style output flags. File
-// descriptor duplication (`2>&1`) is not a write. Quoted spans are stripped
-// before scanning; unquoted corner cases may false-positive, which fails
-// closed. The result is sorted and de-duplicated.
+// descriptor duplication (`2>&1`) is not a write. Operators inside quoted
+// strings are ignored, while quoted destinations are retained.
 func ExtractWriteTargets(command string) []string {
-	stripped := quotedSpanPattern.ReplaceAllString(command, " ")
 	seen := make(map[string]struct{})
-	for _, target := range redirectionTargets(stripped) {
+	for _, target := range redirectionTargets(command) {
 		seen[target] = struct{}{}
 	}
-	for _, target := range outputFlagTargets(stripped) {
+	for _, target := range outputFlagTargets(command) {
+		seen[target] = struct{}{}
+	}
+	for _, target := range inPlaceWriteTargets(command) {
 		seen[target] = struct{}{}
 	}
 	targets := make([]string, 0, len(seen))
@@ -256,7 +252,23 @@ func ExtractWriteTargets(command string) []string {
 // duplication such as `2>&1`) is not a file write and is skipped.
 func redirectionTargets(line string) []string {
 	var targets []string
+	var quote byte
 	for i := 0; i < len(line); i++ {
+		if line[i] == '\\' && quote != '\'' {
+			i++
+			continue
+		}
+		if line[i] == '\'' || line[i] == '"' {
+			if quote == 0 {
+				quote = line[i]
+			} else if quote == line[i] {
+				quote = 0
+			}
+			continue
+		}
+		if quote != 0 {
+			continue
+		}
 		if line[i] != '>' {
 			continue
 		}
@@ -275,15 +287,56 @@ func redirectionTargets(line string) []string {
 			j++
 		}
 		start := j
-		for j < len(line) && !strings.ContainsRune(" \t\r\n|;&<>()$`", rune(line[j])) {
+		var targetQuote byte
+		for j < len(line) {
+			if line[j] == '\\' && targetQuote != '\'' && j+1 < len(line) {
+				j += 2
+				continue
+			}
+			if line[j] == '\'' || line[j] == '"' {
+				if targetQuote == 0 {
+					targetQuote = line[j]
+				} else if targetQuote == line[j] {
+					targetQuote = 0
+				}
+				j++
+				continue
+			}
+			if targetQuote == 0 && strings.ContainsRune(" \t\r\n|;&<>()$`", rune(line[j])) {
+				break
+			}
 			j++
 		}
 		if j > start {
-			targets = append(targets, line[start:j])
+			targets = append(targets, strings.Trim(line[start:j], `"'`))
 		}
 		i = j
 	}
 	return targets
+}
+
+// inPlaceWriteTargets catches allowlisted tools whose flags turn a read into
+// an in-place write. yq is intentionally absent from the default allowlist,
+// but a user-added yq must still require approval when invoked with -i.
+func inPlaceWriteTargets(command string) []string {
+	if !containsString(ExtractCommandNames(command), "yq") {
+		return nil
+	}
+	for _, field := range strings.Fields(command) {
+		if field == "-i" || field == "--in-place" {
+			return []string{"<in-place>"}
+		}
+	}
+	return nil
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 // outputFlagTargets scans for downloader-style output flags: `-o file`,

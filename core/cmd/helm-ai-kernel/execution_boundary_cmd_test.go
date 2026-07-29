@@ -290,6 +290,11 @@ func TestRunMCPAuthorizeCallSchemaPinNextStepHumanMessage(t *testing.T) {
 	code := runMCPAuthorizeCall([]string{
 		"--server-id", "helm-governance",
 		"--tool-name", "file_read",
+		"--effect", "side_effect",
+		"--args-hash", "sha256:custom-args",
+		"--scopes", "files.read,audit.write",
+		"--oauth-resource", "https://example.test/mcp",
+		"--receipt-id", "receipt-context",
 		"--approved",
 	}, &stdout, &stderr)
 	if code != 1 {
@@ -301,7 +306,13 @@ func TestRunMCPAuthorizeCallSchemaPinNextStepHumanMessage(t *testing.T) {
 		"reason: MCP tool schema requires approval or pinning",
 		"receipt:",
 		"next:",
-		"helm-ai-kernel mcp authorize-call --server-id helm-governance --tool-name file_read --pinned-schema-hash sha256:",
+		"helm-ai-kernel mcp authorize-call --server-id helm-governance --tool-name file_read",
+		"--pinned-schema-hash sha256:",
+		"--effect side_effect",
+		"--args-hash sha256:custom-args",
+		"--scopes files.read,audit.write",
+		"--oauth-resource https://example.test/mcp",
+		"--receipt-id receipt-context",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
@@ -323,6 +334,11 @@ func TestRunMCPAuthorizeCallSchemaPinNextStepHumanMessage(t *testing.T) {
 	allowCode := runMCPAuthorizeCall([]string{
 		"--server-id", "helm-governance",
 		"--tool-name", "file_read",
+		"--effect", "side_effect",
+		"--args-hash", "sha256:custom-args",
+		"--scopes", "files.read,audit.write",
+		"--oauth-resource", "https://example.test/mcp",
+		"--receipt-id", "receipt-context",
 		"--approved",
 		"--pinned-schema-hash", hash,
 	}, &allowOut, &allowErr)

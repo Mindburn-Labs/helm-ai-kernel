@@ -1054,7 +1054,7 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	}
 	firewall := mcppkg.NewExecutionFirewall(catalog, quarantine, "local-cli")
 	firewall.RequirePinnedSchema = true
-	record, err := firewall.AuthorizeToolCall(context.Background(), mcppkg.ToolCallAuthorization{
+	authorization := mcppkg.ToolCallAuthorization{
 		ServerID:         *serverID,
 		ToolName:         *toolName,
 		Effect:           *effect,
@@ -1063,7 +1063,8 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		PinnedSchemaHash: *pinnedSchema,
 		OAuthResource:    *oauthResource,
 		ReceiptID:        *receiptID,
-	})
+	}
+	record, err := firewall.AuthorizeToolCall(context.Background(), authorization)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
@@ -1097,7 +1098,7 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "decision: %s\n", record.RecordID)
 	fmt.Fprintf(stdout, "reason: %s\n", mcpVerdictReason(record))
 	fmt.Fprintf(stdout, "receipt: %s\n", record.DecisionReceiptPath)
-	if nextStep := mcpAuthorizeCallNextStep(record, catalog, *serverID, *toolName); nextStep != "" {
+	if nextStep := mcpAuthorizeCallNextStep(record, catalog, authorization); nextStep != "" {
 		fmt.Fprintln(stdout, "next:")
 		fmt.Fprintf(stdout, "  %s\n", nextStep)
 	}
@@ -1107,44 +1108,56 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 // mcpAuthorizeCallNextStep returns the exact command that moves the call
 // toward ALLOW, or "" when there is no single next step (ALLOW already
 // reached, or the fix is not a CLI command).
-func mcpAuthorizeCallNextStep(record contracts.ExecutionBoundaryRecord, catalog *mcppkg.ToolCatalog, serverID, toolName string) string {
+func mcpAuthorizeCallNextStep(record contracts.ExecutionBoundaryRecord, catalog *mcppkg.ToolCatalog, authorization mcppkg.ToolCallAuthorization) string {
 	if record.ApprovalCommand != "" {
 		return record.ApprovalCommand
 	}
 	if record.ReasonCode != contracts.ReasonSchemaViolation {
 		return ""
 	}
+	serverID, toolName := authorization.ServerID, authorization.ToolName
+	next := []string{
+		"helm-ai-kernel mcp authorize-call",
+		"--server-id " + shellToken(serverID),
+		"--tool-name " + shellToken(toolName),
+		"--effect " + shellToken(authorization.Effect),
+		"--args-hash " + shellToken(authorization.ArgsHash),
+		"--oauth-resource " + shellToken(authorization.OAuthResource),
+	}
+	if len(authorization.GrantedScopes) > 0 {
+		next = append(next, "--scopes "+shellToken(strings.Join(authorization.GrantedScopes, ",")))
+	}
+	if authorization.ReceiptID != "" {
+		next = append(next, "--receipt-id "+shellToken(authorization.ReceiptID))
+	}
 	tool, ok := catalog.Lookup(toolName)
 	if !ok || (tool.ServerID != "" && tool.ServerID != serverID) {
 		// The tool is not in the local catalog, so there is no schema to pin;
 		// the caller must supply one explicitly.
-		return "helm-ai-kernel mcp authorize-call --server-id " + shellToken(serverID) +
-			" --tool-name " + shellToken(toolName) +
-			" --tool-schema-json '<tool JSON Schema>' --pinned-schema-hash <hash>"
+		next = append(next, "--tool-schema-json '<tool JSON Schema>'", "--pinned-schema-hash <hash>")
+		return strings.Join(next, " ")
 	}
 	hash, err := mcppkg.ToolSchemaHash(tool)
 	if err != nil {
 		return ""
 	}
-	next := "helm-ai-kernel mcp authorize-call --server-id " + shellToken(serverID) +
-		" --tool-name " + shellToken(toolName) +
-		" --pinned-schema-hash " + shellToken(hash)
+	next = append(next, "--pinned-schema-hash "+shellToken(hash))
 	if tool.ServerID == "" {
-		return next
+		return strings.Join(next, " ")
 	}
 	toolSchema, err := json.Marshal(tool.Schema)
 	if err != nil {
 		return ""
 	}
-	next += " --tool-schema-json " + shellToken(string(toolSchema))
+	next = append(next, "--tool-schema-json "+shellToken(string(toolSchema)))
 	if tool.OutputSchema != nil {
 		outputSchema, err := json.Marshal(tool.OutputSchema)
 		if err != nil {
 			return ""
 		}
-		next += " --output-schema-json " + shellToken(string(outputSchema))
+		next = append(next, "--output-schema-json "+shellToken(string(outputSchema)))
 	}
-	return next
+	return strings.Join(next, " ")
 }
 
 func mcpApprovalCommand(serverID, toolName, effect string) string {

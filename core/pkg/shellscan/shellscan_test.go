@@ -39,6 +39,7 @@ var decideCases = []struct {
 	{"evasion-git-reset-path", "/usr/bin/git reset --hard", "git reset"},
 	{"evasion-git-global-flag", "git -C /repo reset --hard", "git reset"},
 	{"evasion-kubectl-ns-flag", "kubectl -n prod delete deploy/api", "kubectl delete"},
+	{"regression-kubectl-unknown-global-value", "kubectl --request-timeout 5s delete pod victim", "dynamic subcommand"},
 	{"evasion-docker-long", "docker rm --force c1", "docker rm"},
 	{"evasion-docker-container-rm", "docker container rm -f c1", "docker rm"},
 
@@ -73,6 +74,7 @@ var decideCases = []struct {
 	{"evasion-base64-pipe-sh", "echo cm0gLXJmIC8= | base64 -d | sh", "encoded payload"},
 	{"evasion-base64-pipe-bash", "echo cm0gLXJmIC8= | base64 --decode | bash", "encoded payload"},
 	{"evasion-xxd-pipe-sh", "cat payload.hex | xxd -r | sh", "encoded payload"},
+	{"regression-generated-script", "printf 'rm %s /tmp/x\\n' -rf >/tmp/run.sh; bash /tmp/run.sh", "generated earlier"},
 
 	// Evasion: path obfuscation.
 	{"evasion-path-dots", "/bin/./rm -rf /tmp/x", "recursive rm"},
@@ -254,6 +256,7 @@ var passCases = []struct {
 	{"safe-strace-ls", "strace -f ls /tmp"},
 	{"safe-empty", "   "},
 	{"safe-base64-encode", "echo hello | base64"},
+	{"safe-unrelated-decode-and-shell", "base64 -d payload.txt >/tmp/out; printf x | cat; bash scripts/deploy.sh"},
 	{"safe-xargs-echo", "echo a b | xargs echo"},
 	{"safe-eval-static-benign", `eval "echo hello"`},
 	{"safe-git-clean-dry", "git clean -nd"},

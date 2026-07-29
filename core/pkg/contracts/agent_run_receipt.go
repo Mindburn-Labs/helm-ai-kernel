@@ -203,7 +203,8 @@ const (
 // It is emitted for scalar bounds and required-capability names only. Denials
 // that turn on set membership never carry one — an egress allowlist or a set of
 // workspace roots is a map of internal infrastructure, and disclosing it would
-// turn every denial into a free probe. See counterfactualFor.
+// turn every denial into a free probe. The workstation producer derives this
+// through its exported DenialCounterfactualFor helper.
 //
 // Despite the shared word, this is not a CounterfactualReceipt. This value
 // rides a denial the boundary actually enforced and describes the nearest

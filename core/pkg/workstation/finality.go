@@ -73,9 +73,8 @@ func denialFinality(reasonCode string) contracts.DenialFinality {
 }
 
 // DenialFinality classifies a workstation denial code for compatibility with
-// downstream consumers. It is read-only: receipt learning fields must still
-// be produced through EvaluateDeniedEffect, which evaluates and constructs a
-// complete denied effect together.
+// downstream consumers. It is read-only: receipt learning fields are produced
+// only while the importer constructs a signed receipt from an evaluation.
 func DenialFinality(reasonCode string) contracts.DenialFinality {
 	return denialFinality(reasonCode)
 }
@@ -127,18 +126,6 @@ func denialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 		}
 	}
 	return nil
-}
-
-// EvaluateDeniedEffect evaluates event and, when it is denied, returns the
-// complete receipt effect derived from that one evaluation. The construction is
-// deliberately atomic: counterfactual fields must not be added to a separate,
-// caller-supplied receipt effect.
-func EvaluateDeniedEffect(profile contracts.WorkstationPolicyProfile, event ToolEvent) (contracts.AgentDeniedEffect, bool) {
-	verdict, reasonCode, reason := EvaluateEvent(profile, event)
-	if verdict != contracts.WorkstationVerdictDeny {
-		return contracts.AgentDeniedEffect{}, false
-	}
-	return evaluatedDeniedEffect(profile, event, reasonCode, reason), true
 }
 
 func evaluatedDeniedEffect(profile contracts.WorkstationPolicyProfile, event ToolEvent, reasonCode, reason string) contracts.AgentDeniedEffect {

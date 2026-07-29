@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -135,19 +136,16 @@ func allowControl() scenario {
 	}}
 }
 
-// observe drives the same entry point the import pipeline uses, so the
-// snapshot's learning switches are genuinely exercised: reading the derivation
-// functions directly would bypass the opt-in gate and prove nothing about it.
+// observe drives the signed receipt path. That matters here: a counterfactual
+// is useful only when it is bound to the event and policy evaluation that made
+// it, not when it is a mutable value a caller can change before signing.
 func observe(t *testing.T, profile contracts.WorkstationPolicyProfile) []observation {
 	t.Helper()
 	scenarios := denialScenarios()
 	out := make([]observation, 0, len(scenarios))
 	for _, sc := range scenarios {
 		verdict, _, _ := workstation.EvaluateEvent(profile, sc.event)
-		denied, ok := workstation.EvaluateDeniedEffect(profile, sc.event)
-		if !ok {
-			t.Fatalf("case %s did not return a denied effect", sc.name)
-		}
+		denied := signedDeniedEffect(t, profile, sc.event)
 		out = append(out, observation{
 			Case:           sc.name,
 			Verdict:        verdict,
@@ -157,6 +155,30 @@ func observe(t *testing.T, profile contracts.WorkstationPolicyProfile) []observa
 		})
 	}
 	return out
+}
+
+func signedDeniedEffect(t *testing.T, profile contracts.WorkstationPolicyProfile, event workstation.ToolEvent) contracts.AgentDeniedEffect {
+	t.Helper()
+	result, err := workstation.BuildReceipt(workstation.RunManifest{
+		RunID:         "denial-legibility-" + event.EventID,
+		Goal:          "denial legibility conformance",
+		ActorID:       "conformance.agent",
+		WorkspaceID:   "conformance.workspace",
+		AgentSurface:  "conformance",
+		PolicyProfile: profile.ID,
+	}, workstation.DiffSummary{}, workstation.ValidationArtifact{}, []workstation.ToolEvent{event}, profile,
+		map[string]string{workstation.ManifestFile: strings.Repeat("a", 64)},
+		workstation.ImportOptions{SigningSeed: []byte("0123456789abcdef0123456789abcdef")})
+	if err != nil {
+		t.Fatalf("BuildReceipt(%s): %v", event.EventID, err)
+	}
+	if ok, err := workstation.VerifyReceiptSignature(result.Receipt); err != nil || !ok {
+		t.Fatalf("signed receipt verification = %t/%v, want true/nil", ok, err)
+	}
+	if len(result.Receipt.DeniedEffects) != 1 {
+		t.Fatalf("denied effects = %d, want 1", len(result.Receipt.DeniedEffects))
+	}
+	return result.Receipt.DeniedEffects[0]
 }
 
 func digest(t *testing.T, obs []observation) string {
@@ -230,10 +252,7 @@ func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
 	}
 	profile := loadSnapshot(t)
 	for _, sc := range denialScenarios() {
-		denied, ok := workstation.EvaluateDeniedEffect(profile, sc.event)
-		if !ok {
-			t.Fatalf("case %s did not return a denied effect", sc.name)
-		}
+		denied := signedDeniedEffect(t, profile, sc.event)
 		encoded, err := json.Marshal(denied)
 		if err != nil {
 			t.Fatalf("marshal %s: %v", sc.name, err)
@@ -248,9 +267,9 @@ func TestDisclosedFieldsSatisfyThePublishedReceiptSchema(t *testing.T) {
 	}
 }
 
-// A counterfactual belongs to the evaluation that produced it. The public API
-// returns the complete effect rather than accepting a mutable receipt field,
-// so two same-ID events cannot exchange their requested TTLs.
+// A counterfactual belongs to the signed receipt that its policy evaluation
+// produced. A caller may inspect it, but a replacement before verification
+// must invalidate the receipt.
 func TestCounterfactualBindsToTheEvaluatedEvent(t *testing.T) {
 	profile := loadSnapshot(t)
 	event := workstation.ToolEvent{
@@ -260,22 +279,34 @@ func TestCounterfactualBindsToTheEvaluatedEvent(t *testing.T) {
 		EffectMode:   contracts.WorkstationEffectModeOperate,
 		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
 	}
-	denied, ok := workstation.EvaluateDeniedEffect(profile, event)
-	if !ok || denied.Counterfactual == nil {
-		t.Fatalf("EvaluateDeniedEffect() = %+v, %t; want a scalar counterfactual", denied, ok)
+	result, err := workstation.BuildReceipt(workstation.RunManifest{
+		RunID:         "denial-legibility-substitution",
+		Goal:          "denial legibility substitution test",
+		ActorID:       "conformance.agent",
+		WorkspaceID:   "conformance.workspace",
+		AgentSurface:  "conformance",
+		PolicyProfile: profile.ID,
+	}, workstation.DiffSummary{}, workstation.ValidationArtifact{}, []workstation.ToolEvent{event}, profile,
+		map[string]string{workstation.ManifestFile: strings.Repeat("a", 64)},
+		workstation.ImportOptions{SigningSeed: []byte("0123456789abcdef0123456789abcdef")})
+	if err != nil {
+		t.Fatalf("BuildReceipt() error = %v", err)
 	}
+	if len(result.Receipt.DeniedEffects) != 1 || result.Receipt.DeniedEffects[0].Counterfactual == nil {
+		t.Fatalf("denied effects = %+v, want one scalar counterfactual", result.Receipt.DeniedEffects)
+	}
+	denied := result.Receipt.DeniedEffects[0]
 	if got := denied.Counterfactual.Requested; got != 90 {
 		t.Fatalf("counterfactual requested = %d, want 90", got)
 	}
 
-	substituted := event
-	substituted.MemoryEffect = &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 60}
-	other, ok := workstation.EvaluateDeniedEffect(profile, substituted)
-	if !ok || other.Counterfactual == nil {
-		t.Fatalf("EvaluateDeniedEffect() = %+v, %t; want substituted scalar counterfactual", other, ok)
+	result.Receipt.DeniedEffects[0].Counterfactual.Requested = 60
+	ok, err := workstation.VerifyReceiptSignature(result.Receipt)
+	if err != nil {
+		t.Fatalf("VerifyReceiptSignature() error = %v", err)
 	}
-	if got := other.Counterfactual.Requested; got != 60 {
-		t.Fatalf("substituted counterfactual requested = %d, want 60", got)
+	if ok {
+		t.Fatal("receipt verified after substituting a valid counterfactual from another event")
 	}
 }
 
@@ -442,10 +473,7 @@ func TestOptOutEmitsNothing(t *testing.T) {
 	profile := loadSnapshot(t)
 	profile.Learning = nil
 	for _, sc := range denialScenarios() {
-		denied, ok := workstation.EvaluateDeniedEffect(profile, sc.event)
-		if !ok {
-			t.Fatalf("case %s did not return a denied effect", sc.name)
-		}
+		denied := signedDeniedEffect(t, profile, sc.event)
 		encoded, err := json.Marshal(denied)
 		if err != nil {
 			t.Fatalf("marshal: %v", err)

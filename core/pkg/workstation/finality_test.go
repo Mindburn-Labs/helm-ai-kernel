@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,7 +103,6 @@ func TestPublicDenialFinalityCompatibilityLookup(t *testing.T) {
 func TestScalarBoundDisclosesTheCeiling(t *testing.T) {
 	profile := learningProfile()
 	event := ToolEvent{
-		EventID:      "e1",
 		Type:         "memory_write",
 		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
 		EffectMode:   contracts.WorkstationEffectModeOperate,
@@ -124,7 +124,6 @@ func TestScalarBoundDisclosesTheCeiling(t *testing.T) {
 func TestScalarBoundNeverDisclosesAnUnexceededRequest(t *testing.T) {
 	profile := learningProfile()
 	event := ToolEvent{
-		EventID:      "e1",
 		Type:         "memory_write",
 		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
 		EffectMode:   contracts.WorkstationEffectModeOperate,
@@ -172,22 +171,23 @@ func TestDisabledByDefaultLeavesReceiptsByteIdentical(t *testing.T) {
 		EffectMode:   contracts.WorkstationEffectModeOperate,
 		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
 	}
-	denied, ok := EvaluateDeniedEffect(profile, event)
-	if !ok {
-		t.Fatal("EvaluateDeniedEffect() did not return the denied event")
+	_, _, _, deniedEffects := normalizeEvents(profile, []ToolEvent{event})
+	if len(deniedEffects) != 1 {
+		t.Fatalf("denied effects = %d, want 1", len(deniedEffects))
 	}
+	denied := deniedEffects[0]
 
 	encoded, err := json.Marshal(denied)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	const want = `{"effect_id":"e1","effect_type":"WORKSTATION_MEMORY_WRITE","reason_code":"MEMORY_TTL_EXCEEDS_POLICY","reason":"memory TTL exceeds workstation policy","occurred_at":"0001-01-01T00:00:00Z"}`
+	const want = `{"effect_id":"e1","effect_type":"WORKSTATION_MEMORY_WRITE","tool_id":"memory_write","action":"memory_write","reason_code":"MEMORY_TTL_EXCEEDS_POLICY","reason":"memory TTL exceeds workstation policy","occurred_at":"1970-01-01T00:00:00Z"}`
 	if string(encoded) != want {
 		t.Fatalf("denied effect JSON changed with the feature off:\n got %s\nwant %s", encoded, want)
 	}
 }
 
-func TestEvaluateDeniedEffectRejectsCounterfactualEventSubstitution(t *testing.T) {
+func TestSignedReceiptRejectsCounterfactualEventSubstitution(t *testing.T) {
 	event := ToolEvent{
 		EventID:      "e-memory",
 		Type:         "memory_write",
@@ -198,22 +198,35 @@ func TestEvaluateDeniedEffectRejectsCounterfactualEventSubstitution(t *testing.T
 		OccurredAt:   time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
 	}
-	denied, ok := EvaluateDeniedEffect(learningProfile(), event)
-	if !ok {
-		t.Fatal("EvaluateDeniedEffect() did not return the denied event")
+	result, err := BuildReceipt(RunManifest{
+		RunID:        "run-denial-binding",
+		Goal:         "test signed denial binding",
+		ActorID:      "agent.test",
+		WorkspaceID:  "workspace.test",
+		AgentSurface: "test",
+	}, DiffSummary{}, ValidationArtifact{}, []ToolEvent{event}, learningProfile(),
+		map[string]string{ManifestFile: strings.Repeat("a", 64)}, workstationTestImportOptions())
+	if err != nil {
+		t.Fatalf("BuildReceipt() error = %v", err)
 	}
+	if len(result.Receipt.DeniedEffects) != 1 {
+		t.Fatalf("denied effects = %d, want 1", len(result.Receipt.DeniedEffects))
+	}
+	denied := result.Receipt.DeniedEffects[0]
 	if denied.Counterfactual == nil || denied.Counterfactual.Requested != 90 || denied.Counterfactual.Max != 30 {
 		t.Fatalf("counterfactual = %+v, want requested=90 max=30", denied.Counterfactual)
 	}
 
-	substituted := event
-	substituted.MemoryEffect = &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 60}
-	other, ok := EvaluateDeniedEffect(learningProfile(), substituted)
-	if !ok {
-		t.Fatal("EvaluateDeniedEffect() did not return the substituted denial")
+	// 60 is itself a structurally valid request above the same max. The receipt
+	// must nevertheless fail verification because that value did not come from
+	// the signed event that produced this denial.
+	result.Receipt.DeniedEffects[0].Counterfactual.Requested = 60
+	ok, err := VerifyReceiptSignature(result.Receipt)
+	if err != nil {
+		t.Fatalf("VerifyReceiptSignature() error = %v", err)
 	}
-	if other.Counterfactual == nil || other.Counterfactual.Requested != 60 || other.Counterfactual.Max != 30 {
-		t.Fatalf("substituted counterfactual = %+v, want requested=60 max=30", other.Counterfactual)
+	if ok {
+		t.Fatal("receipt verified after substituting a counterfactual from another event")
 	}
 }
 

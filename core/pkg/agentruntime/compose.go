@@ -44,6 +44,17 @@ func (r *ComposedRequest) Hash() (string, error) {
 // from the log. It fails if the log is corrupt or if no
 // model_call_requested with that index exists.
 func ComposeRequest(events []Event, callIndex int) (*ComposedRequest, error) {
+	prevHash := ""
+	for i := range events {
+		if events[i].PrevHash != prevHash {
+			return nil, fmt.Errorf("agentruntime: cannot compose from corrupt log: event %d hash chain broken", i)
+		}
+		hash, err := HashEvent(&events[i])
+		if err != nil {
+			return nil, fmt.Errorf("agentruntime: cannot compose from corrupt log: event %d: %w", i, err)
+		}
+		prevHash = hash
+	}
 	state, err := ReduceEvents(events)
 	if err != nil {
 		return nil, fmt.Errorf("agentruntime: cannot compose from corrupt log: %w", err)

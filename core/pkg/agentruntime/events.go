@@ -687,6 +687,14 @@ func (p *ToolPermissionResolved) validate() error {
 	if p.DecidedBy == "" {
 		return fmt.Errorf("tool_permission_resolved requires decided_by")
 	}
+	if p.Decision == DecisionAllow {
+		if p.DecidedBy != "kernel" {
+			return fmt.Errorf("tool permission allow must be decided by kernel")
+		}
+		if !IsSHA256Hash(p.VerdictRef) {
+			return fmt.Errorf("tool permission allow requires a content-addressed kernel verdict_ref")
+		}
+	}
 	return nil
 }
 

@@ -61,7 +61,7 @@ func TestGatedToolNeedsAnAllowCarryingAVerdict(t *testing.T) {
 	forged.PermResolved = &ToolPermissionResolved{
 		ToolCallID: "tc1",
 		Decision:   DecisionAllow,
-		DecidedBy:  "agent-itself", // decided_by is unauthenticated
+		DecidedBy:  "kernel",
 		// VerdictRef deliberately absent.
 	}
 
@@ -77,7 +77,7 @@ func TestGatedToolNeedsAnAllowCarryingAVerdict(t *testing.T) {
 	if err == nil {
 		t.Fatal("a forged allow without a verdict reference authorized a gated tool")
 	}
-	if !strings.Contains(err.Error(), "no kernel verdict reference") {
+	if !strings.Contains(err.Error(), "content-addressed kernel verdict_ref") {
 		t.Fatalf("error = %v, want the missing-verdict rejection", err)
 	}
 
@@ -89,6 +89,31 @@ func TestGatedToolNeedsAnAllowCarryingAVerdict(t *testing.T) {
 		evInv(t, "turn-ungated", "tc1", "builtin:read_file", `{"path":"/tmp/x"}`, ModeSync),
 	})
 	mustReduce(t, ungated)
+}
+
+func TestModelCannotIntroduceAnUnavailableTool(t *testing.T) {
+	events := chain(t, []Event{
+		evCreated("turn-unknown-tool"),
+		evCallReq("turn-unknown-tool", 0, "input"),
+		evCallDone("turn-unknown-tool", 0, assistantWithToolCall("tc1", "builtin:exec", `{}`)),
+	})
+	_, err := ReduceEvents(events)
+	if err == nil || !strings.Contains(err.Error(), "was not available") {
+		t.Fatalf("unknown model tool accepted: %v", err)
+	}
+}
+
+func TestPermissionRequirementMustNameDurableTool(t *testing.T) {
+	events := chain(t, []Event{
+		evCreated("turn-permission-bind"),
+		evCallReq("turn-permission-bind", 0, "input"),
+		evCallDone("turn-permission-bind", 0, assistantWithToolCall("tc1", "builtin:write_file", `{}`)),
+		evPermReq("turn-permission-bind", "tc1", "builtin:read_file"),
+	})
+	_, err := ReduceEvents(events)
+	if err == nil || !strings.Contains(err.Error(), "want \"builtin:write_file\"") {
+		t.Fatalf("mismatched permission requirement accepted: %v", err)
+	}
 }
 
 // Regression: P2 RECOVERY_REISSUE_EXHAUSTED_BUDGET — PlanRecovery always

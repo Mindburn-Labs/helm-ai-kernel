@@ -2,6 +2,7 @@ package agentruntime
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -70,7 +71,7 @@ func evPermReq(turnID, id, tool string) Event {
 
 func evPermRes(turnID, id, decision string) Event {
 	e := NewEvent(turnID, EventToolPermissionResolved, at(41))
-	e.PermResolved = &ToolPermissionResolved{ToolCallID: id, Decision: decision, DecidedBy: "kernel", VerdictRef: "decision:test-1"}
+	e.PermResolved = &ToolPermissionResolved{ToolCallID: id, Decision: decision, DecidedBy: "kernel", VerdictRef: "sha256:" + strings.Repeat("a", 64)}
 	return e
 }
 

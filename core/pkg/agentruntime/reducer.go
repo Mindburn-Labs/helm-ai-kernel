@@ -286,6 +286,9 @@ func (s *State) applyModelCallCompleted(p *ModelCallCompleted) error {
 		if _, dup := s.KnownToolCallIDs[tc.ToolCallID]; dup {
 			return fmt.Errorf("tool_call_id %q already used in this turn", tc.ToolCallID)
 		}
+		if s.toolDescriptor(tc.ToolID, p.CallIndex) == nil {
+			return fmt.Errorf("tool %q was not available to model call %d", tc.ToolID, p.CallIndex)
+		}
 	}
 	s.ModelCallOpen = false
 	s.OpenModelCallIndex = -1
@@ -324,6 +327,10 @@ func (s *State) applyToolPermissionRequired(p *ToolPermissionRequired) error {
 	}
 	if callIdx != s.lastCallIndex() {
 		return fmt.Errorf("tool call %q belongs to stale model call %d", p.ToolCallID, callIdx)
+	}
+	call, recorded := s.durableToolCall(p.ToolCallID, callIdx)
+	if !recorded || call.ToolID != p.ToolID {
+		return fmt.Errorf("permission for tool call %q names tool %q, want %q", p.ToolCallID, p.ToolID, call.ToolID)
 	}
 	if _, open := s.OpenInvocations[p.ToolCallID]; open {
 		return fmt.Errorf("tool call %q already invoked", p.ToolCallID)
@@ -396,7 +403,11 @@ func (s *State) applyToolInvocationRequested(p *ToolInvocationRequested) error {
 	}
 	// Fail-closed: a tool whose descriptor requires permission may only be
 	// invoked after a durable allow decision carrying a kernel verdict.
-	if desc := s.toolDescriptor(call.ToolID, callIdx); desc != nil && desc.RequiresPermission {
+	desc := s.toolDescriptor(call.ToolID, callIdx)
+	if desc == nil {
+		return fmt.Errorf("tool %q was not available to model call %d", call.ToolID, callIdx)
+	}
+	if desc.RequiresPermission {
 		dec, decided := s.PermissionDecisions[p.ToolCallID]
 		if !decided || dec.Decision != DecisionAllow {
 			return fmt.Errorf("tool %q requires permission; no durable allow decision for %q", call.ToolID, p.ToolCallID)

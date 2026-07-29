@@ -134,6 +134,11 @@ func TestComposeRequestErrors(t *testing.T) {
 	if _, err := ComposeRequest(corrupt, 0); err == nil {
 		t.Fatal("composed from a corrupt log")
 	}
+	corrupt = append([]Event(nil), events...)
+	corrupt[1].PrevHash = "sha256:" + strings.Repeat("0", 64)
+	if _, err := ComposeRequest(corrupt, 0); err == nil || !strings.Contains(err.Error(), "hash chain broken") {
+		t.Fatalf("composed from a broken hash chain: %v", err)
+	}
 	if _, err := ComposeRequest(nil, 0); err == nil {
 		t.Fatal("composed from an empty log")
 	}

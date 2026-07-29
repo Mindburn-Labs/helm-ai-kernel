@@ -426,6 +426,19 @@ func TestRunMCPAuthorizeCallCustomSchemaNextStepPreservesSchemas(t *testing.T) {
 	}
 }
 
+func TestShellTokenQuotesCommandSubstitutionAndComments(t *testing.T) {
+	for _, value := range []string{
+		"tool`touch /tmp/pwned`",
+		"tool# ignored",
+		"tool\rnext-command",
+	} {
+		quoted := shellToken(value)
+		if quoted == value || !strings.HasPrefix(quoted, "'") || !strings.HasSuffix(quoted, "'") {
+			t.Fatalf("shellToken(%q) = %q, want single-quoted token", value, quoted)
+		}
+	}
+}
+
 func TestRunMCPAuthorizeCallApprovedPinnedLocalToolAllowJSON(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",

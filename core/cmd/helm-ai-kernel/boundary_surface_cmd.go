@@ -1072,21 +1072,24 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	if record.ReasonCode == contracts.ReasonApprovalRequired || record.ReasonCode == contracts.ReasonApprovalTimeout {
 		record.ApprovalCommand = mcpApprovalCommand(*serverID, *toolName, *effect)
 	}
-	sealed, err := surfaces.PutRecord(record)
+	record.DecisionReceiptPath = localMCPReceiptPath(record.RecordID)
+	sealed, err := record.Seal()
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
-	record = sealed
-	receiptRecord := record
-	receiptRecord.DecisionReceiptPath = localMCPReceiptPath(record.RecordID)
-	if writtenPath := writeLocalMCPReceipt(record.RecordID, "decision", receiptRecord); writtenPath != "" {
-		record.DecisionReceiptPath = writtenPath
-		record, err = surfaces.PutRecord(record)
+	if writeLocalMCPReceipt(record.RecordID, "decision", sealed) == "" {
+		record.DecisionReceiptPath = ""
+		sealed, err = record.Seal()
 		if err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 1
 		}
+	}
+	record, err = surfaces.PutRecord(sealed)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
 	}
 	exitCode := 0
 	if record.Verdict != contracts.VerdictAllow {

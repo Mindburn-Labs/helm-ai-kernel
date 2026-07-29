@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
 
@@ -192,6 +193,79 @@ func TestRunMCPAuthorizeCallEscalateJSON(t *testing.T) {
 	}
 	if record["record_hash"] == "" {
 		t.Fatal("record_hash missing")
+	}
+}
+
+func TestRunMCPAuthorizeCallReceiptAuthenticatesFinalRecord(t *testing.T) {
+	schema := map[string]any{"type": "object"}
+	schemaJSON, _ := json.Marshal(schema)
+	allowHash, err := mcppkg.ToolSchemaHash(mcppkg.ToolRef{Name: "local.allow", Schema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		args    []string
+		code    int
+		verdict contracts.Verdict
+	}{
+		{
+			name:    "escalate",
+			args:    []string{"--server-id", "srv-receipt-escalate", "--tool-name", "file_read", "--json"},
+			code:    1,
+			verdict: contracts.VerdictEscalate,
+		},
+		{
+			name:    "deny",
+			args:    []string{"--server-id", "srv-receipt-deny", "--tool-name", "local.deny", "--approved", "--tool-schema-json", string(schemaJSON), "--pinned-schema-hash", "sha256:wrong", "--json"},
+			code:    1,
+			verdict: contracts.VerdictDeny,
+		},
+		{
+			name:    "allow",
+			args:    []string{"--server-id", "srv-receipt-allow", "--tool-name", "local.allow", "--approved", "--tool-schema-json", string(schemaJSON), "--pinned-schema-hash", allowHash, "--json"},
+			code:    0,
+			verdict: contracts.VerdictAllow,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := runMCPAuthorizeCall(tt.args, &stdout, &stderr); code != tt.code {
+				t.Fatalf("exit code = %d, want %d stderr=%s", code, tt.code, stderr.String())
+			}
+			var output contracts.ExecutionBoundaryRecord
+			if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+				t.Fatalf("parse output: %v\n%s", err, stdout.String())
+			}
+			if output.Verdict != tt.verdict {
+				t.Fatalf("verdict = %s, want %s", output.Verdict, tt.verdict)
+			}
+			data, err := os.ReadFile(output.DecisionReceiptPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var receipt struct {
+				Record contracts.ExecutionBoundaryRecord `json:"record"`
+			}
+			if err := json.Unmarshal(data, &receipt); err != nil {
+				t.Fatalf("parse receipt: %v", err)
+			}
+			resealed, err := receipt.Record.Seal()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if receipt.Record.RecordHash != resealed.RecordHash {
+				t.Fatalf("receipt record hash = %q, want final hash %q", receipt.Record.RecordHash, resealed.RecordHash)
+			}
+			if receipt.Record.RecordHash != output.RecordHash || receipt.Record.DecisionReceiptPath != output.DecisionReceiptPath {
+				t.Fatalf("receipt record does not match output: receipt=%+v output=%+v", receipt.Record, output)
+			}
+			stored, ok := newLocalSurfaceRegistry().GetRecord(output.RecordID)
+			if !ok || stored.RecordHash != output.RecordHash || stored.DecisionReceiptPath != output.DecisionReceiptPath {
+				t.Fatalf("stored record does not match output: stored=%+v found=%t output=%+v", stored, ok, output)
+			}
+		})
 	}
 }
 

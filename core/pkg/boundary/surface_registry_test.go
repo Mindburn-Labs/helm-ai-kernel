@@ -3,8 +3,10 @@ package boundary
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -190,6 +192,71 @@ func TestApprovalChallengeAssertionBindsPasskeyEvidence(t *testing.T) {
 	}
 	if approval.ChallengeHash == "" || approval.AssertionHash == "" {
 		t.Fatalf("challenge/assertion hashes missing: %+v", approval)
+	}
+}
+
+func TestApprovalChallengeAssertionCannotOverwriteConcurrentRevocation(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 100; i++ {
+		registry := NewSurfaceRegistry(func() time.Time { return now })
+		approvalID := fmt.Sprintf("approval-concurrent-%d", i)
+		if _, err := registry.PutApproval(contracts.ApprovalCeremony{
+			ApprovalID:  approvalID,
+			Subject:     "shell_command",
+			Action:      "shell_operate",
+			State:       contracts.ApprovalCeremonyPending,
+			RequestedBy: "agent.local",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		challenge, err := registry.CreateApprovalChallenge(approvalID, "passkey", time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(2)
+		var revokeErr error
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _ = registry.AssertApprovalChallenge(contracts.ApprovalWebAuthnAssertion{
+				ChallengeID: challenge.ChallengeID,
+				Actor:       "user:alice",
+				Assertion:   "signed-client-data",
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			deadline := time.Now().Add(time.Second)
+			for time.Now().Before(deadline) {
+				items := registry.ListApprovals()
+				for _, item := range items {
+					if item.ApprovalID == approvalID && item.State == contracts.ApprovalCeremonyAllowed {
+						_, revokeErr = registry.TransitionApproval(approvalID, contracts.ApprovalCeremonyRevoked, "workstation.shellgate", "", "consumed")
+						return
+					}
+				}
+			}
+		}()
+		close(start)
+		wg.Wait()
+
+		if revokeErr == nil {
+			var final contracts.ApprovalCeremony
+			for _, item := range registry.ListApprovals() {
+				if item.ApprovalID == approvalID {
+					final = item
+				}
+			}
+			if final.State != contracts.ApprovalCeremonyRevoked {
+				t.Fatalf("iteration %d: successful revoke was overwritten: %+v", i, final)
+			}
+		}
 	}
 }
 

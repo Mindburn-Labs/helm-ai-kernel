@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -606,7 +607,7 @@ func TestReceiptListReturnsCursorPagination(t *testing.T) {
 func newContractRouteTestServices(t *testing.T) (*Services, func()) {
 	t.Helper()
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
-	t.Setenv(serviceAPIKeyEnv, "test-service-key")
+	t.Setenv(serviceAPIKeyEnv, testAdminAPIKey+"-service")
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -677,7 +678,7 @@ func authorizeTestRequest(req *http.Request) {
 }
 
 func authorizeServiceTestRequest(req *http.Request) {
-	req.Header.Set("Authorization", "Bearer test-service-key")
+	req.Header.Set("Authorization", "Bearer "+os.Getenv(serviceAPIKeyEnv))
 }
 
 type overflowReceiptStore struct {

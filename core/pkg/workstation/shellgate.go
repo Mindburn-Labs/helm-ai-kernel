@@ -224,7 +224,9 @@ var outputBooleanFlags = map[string]struct{}{
 // would create or overwrite: output redirections (`>`, `>>`, `>|`, with
 // optional fd prefixes like `2>`) and downloader-style output flags. File
 // descriptor duplication (`2>&1`) is not a write. Operators inside quoted
-// strings are ignored, while quoted destinations are retained.
+// strings are ignored, while quoted destinations are retained. Destinations
+// containing shell expansion are returned as <dynamic> so the gate fails
+// closed instead of treating an unresolved path as no write.
 func ExtractWriteTargets(command string) []string {
 	seen := make(map[string]struct{})
 	for _, target := range redirectionTargets(command) {
@@ -290,6 +292,11 @@ func redirectionTargets(line string) []string {
 			j++
 		}
 		start := j
+		if j < len(line) && (line[j] == '$' || line[j] == '`') {
+			targets = append(targets, "<dynamic>")
+			i = j
+			continue
+		}
 		var targetQuote byte
 		for j < len(line) {
 			if line[j] == '\\' && targetQuote != '\'' && j+1 < len(line) {
@@ -311,7 +318,11 @@ func redirectionTargets(line string) []string {
 			j++
 		}
 		if j > start {
-			targets = append(targets, strings.Trim(line[start:j], `"'`))
+			target := strings.Trim(line[start:j], `"'`)
+			if strings.ContainsAny(target, "$`") {
+				target = "<dynamic>"
+			}
+			targets = append(targets, target)
 		}
 		i = j
 	}

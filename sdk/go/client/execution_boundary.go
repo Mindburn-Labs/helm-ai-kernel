@@ -115,7 +115,6 @@ type MCPAuthorizeCallRequest map[string]any
 type SandboxPreflightRequest map[string]any
 type SandboxPreflightResult map[string]any
 type AuthzSnapshot map[string]any
-type ApprovalCeremony map[string]any
 type ApprovalWebAuthnChallenge map[string]any
 type ApprovalWebAuthnAssertion map[string]any
 type BudgetCeiling map[string]any

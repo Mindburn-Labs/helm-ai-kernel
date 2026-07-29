@@ -137,11 +137,22 @@ func TestGateShellCommandProfiles(t *testing.T) {
 }
 
 func TestGateShellCommandDetectsQuotedRedirectAndYQInPlace(t *testing.T) {
-	for _, command := range []string{`cat input > "/tmp/out"`, `cat input >&/tmp/out`, `yq -i '.x = 1' config.yaml`, `yq --in-place '.x = 1' config.yaml`} {
+	for _, command := range []string{
+		`cat input > "/tmp/out"`,
+		`cat input >&/tmp/out`,
+		`OUT=/tmp/x; cat payload >$OUT`,
+		`cat payload >"$OUT"`,
+		"cat payload >`mktemp`",
+		`yq -i '.x = 1' config.yaml`,
+		`yq --in-place '.x = 1' config.yaml`,
+	} {
 		decision := GateShellCommand(ShellGateProfileProduction, command, []string{"cat", "yq"})
 		if decision.Verdict != ShellGateVerdictDeny || len(decision.WriteTargets) == 0 {
 			t.Fatalf("GateShellCommand(%q) = %+v, want detected write denial", command, decision)
 		}
+	}
+	if got := ExtractWriteTargets(`OUT=/tmp/x; cat payload >$OUT`); len(got) != 1 || got[0] != "<dynamic>" {
+		t.Fatalf("dynamic redirect targets = %v, want [<dynamic>]", got)
 	}
 	if got := ExtractWriteTargets(`echo "a > b"`); got != nil {
 		t.Fatalf("operator inside quoted text produced targets %v", got)

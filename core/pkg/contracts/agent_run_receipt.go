@@ -1,6 +1,10 @@
 package contracts
 
-import "time"
+import (
+	"encoding/json"
+	"errors"
+	"time"
+)
 
 const (
 	AgentRunReceiptVersion = "agent_run_receipt.v1"
@@ -185,6 +189,16 @@ const (
 	// example). The refusal was not about the action; a consumer should touch
 	// none of its stored bounds.
 	DenialInstanceContext DenialFinality = "instance_context"
+	// DenialInstanceMembership: a caller-chosen target was refused against a
+	// confidential set — an egress host outside the allowlist, a path outside
+	// the workspace roots. That target is closed; other targets may work. The
+	// set is never disclosed, so there is no bound to record and nothing to
+	// erase: stop retrying this target without unlearning anything else.
+	//
+	// Distinct from DenialClassForbidden, where the refused thing is a
+	// policy-named category of action from a fixed public vocabulary rather
+	// than a probe against a set the policy keeps private.
+	DenialInstanceMembership DenialFinality = "instance_membership"
 )
 
 // DenialCounterfactual is the nearest allowed envelope for a denial: enough for
@@ -193,15 +207,124 @@ const (
 // It is emitted for scalar bounds and required-capability names only. Denials
 // that turn on set membership never carry one — an egress allowlist or a set of
 // workspace roots is a map of internal infrastructure, and disclosing it would
-// turn every denial into a free probe. See counterfactualFor.
+// turn every denial into a free probe. The workstation producer derives this
+// while constructing the denied effect from the evaluator result.
+//
+// Despite the shared word, this is not a CounterfactualReceipt. This value
+// rides a denial the boundary actually enforced and describes the nearest
+// request that would have been allowed. A CounterfactualReceipt records the
+// verdict the PDP would have issued under an observe grant, enforces nothing,
+// and must never be presentable as enforced.
 type DenialCounterfactual struct {
 	// Field is the policy field that bound the request, e.g. "ttl_days".
 	Field string `json:"field"`
-	// Requested and Max describe a scalar bound.
+	// Requested and Max describe an exceeded scalar bound: Requested must be
+	// greater than Max. When Capability is empty, MarshalJSON emits both values
+	// — including zero — so the wire shape is never ambiguous.
 	Requested uint32 `json:"requested,omitempty"`
 	Max       uint32 `json:"max,omitempty"`
 	// Capability names the permission the action would have needed.
 	Capability string `json:"capability,omitempty"`
+}
+
+func (c DenialCounterfactual) Validate() error {
+	if c.Field == "" {
+		return errors.New("denial counterfactual field is required")
+	}
+	if c.Capability == "" && (c.Max == 0 || c.Requested <= c.Max) {
+		return errors.New("denial counterfactual scalar bound requires requested > max > 0")
+	}
+	if c.Capability != "" && (c.Requested != 0 || c.Max != 0) {
+		return errors.New("denial counterfactual cannot mix a scalar bound and capability")
+	}
+	if c.Capability != "" && !IsWorkstationPermission(c.Capability) {
+		return errors.New("denial counterfactual capability is not in the workstation permission vocabulary")
+	}
+	return nil
+}
+
+func (c DenialCounterfactual) MarshalJSON() ([]byte, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	if c.Capability != "" {
+		return json.Marshal(struct {
+			Field      string `json:"field"`
+			Capability string `json:"capability"`
+		}{c.Field, c.Capability})
+	}
+	return json.Marshal(struct {
+		Field     string `json:"field"`
+		Requested uint32 `json:"requested"`
+		Max       uint32 `json:"max"`
+	}{c.Field, c.Requested, c.Max})
+}
+
+func (c *DenialCounterfactual) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for name := range fields {
+		switch name {
+		case "field", "requested", "max", "capability":
+		default:
+			return errors.New("denial counterfactual contains an unknown field")
+		}
+	}
+
+	var wire struct {
+		Field      string  `json:"field"`
+		Requested  *uint32 `json:"requested"`
+		Max        *uint32 `json:"max"`
+		Capability *string `json:"capability"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	_, hasRequested := fields["requested"]
+	_, hasMax := fields["max"]
+	_, hasCapability := fields["capability"]
+	hasScalar := hasRequested || hasMax
+	if hasScalar == hasCapability {
+		return errors.New("denial counterfactual must contain exactly one scalar bound or capability")
+	}
+	if hasScalar && (!hasRequested || !hasMax || wire.Requested == nil || wire.Max == nil) {
+		return errors.New("denial counterfactual scalar bound requires requested and max")
+	}
+	if hasCapability && (wire.Capability == nil || !IsWorkstationPermission(*wire.Capability)) {
+		return errors.New("denial counterfactual capability is not in the workstation permission vocabulary")
+	}
+
+	decoded := DenialCounterfactual{Field: wire.Field}
+	if hasCapability {
+		decoded.Capability = *wire.Capability
+	} else {
+		decoded.Requested = *wire.Requested
+		decoded.Max = *wire.Max
+	}
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*c = decoded
+	return nil
+}
+
+// IsWorkstationPermission reports whether name belongs to the fixed public
+// permission vocabulary that a denial counterfactual may disclose.
+func IsWorkstationPermission(name string) bool {
+	switch name {
+	case WorkstationPermissionNetworkEgress,
+		WorkstationPermissionMCPMutate,
+		WorkstationPermissionMemoryWrite,
+		WorkstationPermissionLoopRegister,
+		WorkstationPermissionShellOperate,
+		WorkstationPermissionDeployPublish,
+		WorkstationPermissionSecretRead,
+		WorkstationPermissionPaymentInitiate:
+		return true
+	}
+	return false
 }
 
 // WorkstationPolicyDecisionReceipt is the selected-effect enforcement bridge

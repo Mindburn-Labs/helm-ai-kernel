@@ -120,6 +120,19 @@ func TestScalarBoundDisclosesTheCeiling(t *testing.T) {
 	}
 }
 
+func TestScalarBoundNeverDisclosesAnUnexceededRequest(t *testing.T) {
+	profile := learningProfile()
+	event := ToolEvent{
+		Type:         "memory_write",
+		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
+		EffectMode:   contracts.WorkstationEffectModeOperate,
+		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: profile.Memory.MaxTTLDays},
+	}
+	if got := denialCounterfactualFor(profile, event, "MEMORY_TTL_EXCEEDS_POLICY"); got != nil {
+		t.Fatalf("denialCounterfactualFor() = %+v, want no counterfactual for an unexceeded request", got)
+	}
+}
+
 // Ungranted names the capability the action needed — a fixed public vocabulary,
 // not infrastructure — so the agent can ask for the right thing.
 func TestUngrantedNamesTheCapability(t *testing.T) {
@@ -219,7 +232,7 @@ func TestAnnotateDenialClearsStaleLearning(t *testing.T) {
 				OccurredAt: event.OccurredAt,
 				Finality:   contracts.DenialClassForbidden,
 				Counterfactual: &contracts.DenialCounterfactual{
-					Field: "stale", Requested: 1, Max: 1,
+					Field: "stale", Requested: 2, Max: 1,
 				},
 			}
 			if tc.mutate != nil {

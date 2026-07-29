@@ -318,6 +318,20 @@ func TestPublishedReceiptSchemaRejectsAmbiguousCounterfactuals(t *testing.T) {
 	}
 }
 
+func TestPublishedReceiptContractRejectsUnexceededScalarCounterfactual(t *testing.T) {
+	var denied contracts.AgentDeniedEffect
+	err := json.Unmarshal([]byte(`{
+		"effect_id":"e1",
+		"effect_type":"WORKSTATION_MEMORY_WRITE",
+		"reason_code":"MEMORY_TTL_EXCEEDS_POLICY",
+		"occurred_at":"2026-07-29T00:00:00Z",
+		"counterfactual":{"field":"ttl_days","requested":1,"max":2}
+	}`), &denied)
+	if err == nil {
+		t.Fatal("receipt contract accepted a scalar counterfactual that did not exceed its bound")
+	}
+}
+
 // The scenario set itself is pinned. Trimming a case and regenerating the
 // golden would otherwise silently drop a whole finality class from coverage
 // while every other check still passed.

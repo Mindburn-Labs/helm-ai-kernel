@@ -93,6 +93,9 @@ func TestProtoCounterfactualCannotExpressAmbiguousShapes(t *testing.T) {
 	if !strings.Contains(scalar, "denial_scalar_bound.complete") {
 		t.Error("DenialScalarBound is missing non-empty semantic validation")
 	}
+	if !strings.Contains(scalar, "this.requested > this.max") {
+		t.Error("DenialScalarBound does not require requested to exceed max")
+	}
 	for _, forbidden := range []string{
 		"string field =",
 		"int64 requested =",

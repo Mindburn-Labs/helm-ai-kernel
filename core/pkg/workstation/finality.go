@@ -103,11 +103,15 @@ func denialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 		if requested == 0 || profile.Memory.MaxTTLDays == 0 {
 			return nil
 		}
-		return &contracts.DenialCounterfactual{
+		counterfactual := &contracts.DenialCounterfactual{
 			Field:     "ttl_days",
 			Requested: requested,
 			Max:       profile.Memory.MaxTTLDays,
 		}
+		if err := counterfactual.Validate(); err != nil {
+			return nil
+		}
+		return counterfactual
 	case discloseCapabilityName:
 		// workstationPermissionForEffect falls back to the raw effect_type
 		// for anything it does not recognise, and effect_type is producer

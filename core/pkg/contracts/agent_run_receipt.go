@@ -218,9 +218,9 @@ const (
 type DenialCounterfactual struct {
 	// Field is the policy field that bound the request, e.g. "ttl_days".
 	Field string `json:"field"`
-	// Requested and Max describe a scalar bound. When Capability is empty,
-	// MarshalJSON emits both values — including zero — so the wire shape is
-	// never ambiguous.
+	// Requested and Max describe an exceeded scalar bound: Requested must be
+	// greater than Max. When Capability is empty, MarshalJSON emits both values
+	// — including zero — so the wire shape is never ambiguous.
 	Requested uint32 `json:"requested,omitempty"`
 	Max       uint32 `json:"max,omitempty"`
 	// Capability names the permission the action would have needed.
@@ -231,8 +231,8 @@ func (c DenialCounterfactual) Validate() error {
 	if c.Field == "" {
 		return errors.New("denial counterfactual field is required")
 	}
-	if c.Capability == "" && (c.Requested == 0 || c.Max == 0) {
-		return errors.New("denial counterfactual scalar bound requires positive requested and max")
+	if c.Capability == "" && (c.Max == 0 || c.Requested <= c.Max) {
+		return errors.New("denial counterfactual scalar bound requires requested > max > 0")
 	}
 	if c.Capability != "" && (c.Requested != 0 || c.Max != 0) {
 		return errors.New("denial counterfactual cannot mix a scalar bound and capability")

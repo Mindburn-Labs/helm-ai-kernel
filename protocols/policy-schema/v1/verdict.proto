@@ -163,8 +163,8 @@ message DenialCounterfactual {
 message DenialScalarBound {
   option (buf.validate.message).cel = {
     id: "denial_scalar_bound.complete"
-    message: "field, requested, and max must be non-zero"
-    expression: "this.field != '' && this.requested > 0 && this.max > 0"
+    message: "field is required and requested must exceed max"
+    expression: "this.field != '' && this.requested > this.max && this.max > 0"
   };
 
   // Policy field that bound the request, e.g. "ttl_days".

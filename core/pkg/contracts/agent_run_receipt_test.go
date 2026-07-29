@@ -15,6 +15,8 @@ func TestDenialCounterfactualMarshalRejectsIncompleteShapes(t *testing.T) {
 		{"scalar with zero max", DenialCounterfactual{Field: "limit", Requested: 1}, ""},
 		{"scalar with zero request", DenialCounterfactual{Field: "limit", Max: 1}, ""},
 		{"zero scalar", DenialCounterfactual{Field: "limit"}, ""},
+		{"scalar within bound", DenialCounterfactual{Field: "limit", Requested: 1, Max: 2}, ""},
+		{"scalar at bound", DenialCounterfactual{Field: "limit", Requested: 1, Max: 1}, ""},
 		{"capability", DenialCounterfactual{Field: "permission", Capability: "shell.operate"}, `{"field":"permission","capability":"shell.operate"}`},
 		{"missing field", DenialCounterfactual{Capability: "shell.operate"}, ""},
 		{"mixed", DenialCounterfactual{Field: "limit", Requested: 1, Capability: "shell.operate"}, ""},
@@ -47,6 +49,8 @@ func TestDenialCounterfactualUnmarshalRejectsAmbiguousShapes(t *testing.T) {
 	}{
 		{"scalar", `{"field":"limit","requested":2,"max":1}`, false},
 		{"zero scalar", `{"field":"limit","requested":0,"max":0}`, true},
+		{"scalar within bound", `{"field":"limit","requested":1,"max":2}`, true},
+		{"scalar at bound", `{"field":"limit","requested":1,"max":1}`, true},
 		{"capability", `{"field":"permission","capability":"shell.operate"}`, false},
 		{"field only", `{"field":"limit"}`, true},
 		{"zero valued mixed", `{"field":"permission","capability":"shell.operate","requested":0}`, true},

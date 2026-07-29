@@ -238,6 +238,7 @@
         "counterfactual": {
           "type": "object",
           "description": "Nearest allowed envelope. Absent unless the profile opts in and the refusal's disclosure class permits one; refusals that turn on set membership never carry it.",
+          "$comment": "Scalar envelope invariant: requested > max. JSON Schema Draft 2020-12 cannot compare sibling instance values, so consumers must enforce this semantic invariant after structural validation.",
           "additionalProperties": false,
           "required": ["field"],
           "oneOf": [

@@ -99,10 +99,11 @@ func DenialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 		if requested == 0 || profile.Memory.MaxTTLDays == 0 {
 			return nil
 		}
+		max := profile.Memory.MaxTTLDays
 		return &contracts.DenialCounterfactual{
 			Field:     "ttl_days",
-			Requested: requested,
-			Max:       profile.Memory.MaxTTLDays,
+			Requested: &requested,
+			Max:       &max,
 		}
 	case discloseCapabilityName:
 		// workstationPermissionForEffect falls back to the raw effect_type

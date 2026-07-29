@@ -572,7 +572,7 @@ def check_published(contract: dict[str, Any], version: str, skip: set[str], only
             continue
         try:
             results.append(checker(surface, version))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, socket.timeout, KeyError, ET.ParseError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, socket.timeout, KeyError, ValueError, ET.ParseError, json.JSONDecodeError) as exc:
             results.append(published_error(surface, version, exc))
     return results
 

@@ -21,7 +21,6 @@ type Verifier interface {
 // Ed25519Verifier implements Verifier using Ed25519.
 type Ed25519Verifier struct {
 	PublicKey ed25519.PublicKey
-	cache     *ShardedCache
 }
 
 // NewEd25519Verifier creates a new verifier.
@@ -31,27 +30,20 @@ func NewEd25519Verifier(pubKeyBytes []byte) (*Ed25519Verifier, error) {
 	}
 	return &Ed25519Verifier{
 		PublicKey: ed25519.PublicKey(pubKeyBytes),
-		cache:     NewShardedCache(),
 	}, nil
 }
 
+// Verify checks a detached Ed25519 signature over message.
+//
+// As in package-level Verify, there is deliberately no result cache: the
+// previous key was sha256(message ‖ signature) with no length framing, so an
+// over-long message paired with a truncated signature collided with a genuine
+// pair and inherited its cached `true` without ed25519.Verify running.
 func (v *Ed25519Verifier) Verify(message []byte, signature []byte) bool {
-	hasher := GetHasher(&sha256Pool)
-	defer PutHasher(&sha256Pool, hasher)
-
-	hasher.Write(message)
-	hasher.Write(signature)
-
-	var cacheKey [32]byte
-	hasher.Sum(cacheKey[:0])
-
-	if val, ok := v.cache.Lookup(cacheKey); ok {
-		return val
+	if len(signature) != ed25519.SignatureSize {
+		return false
 	}
-
-	res := ed25519.Verify(v.PublicKey, message, signature)
-	v.cache.Store(cacheKey, res)
-	return res
+	return ed25519.Verify(v.PublicKey, message, signature)
 }
 
 func (v *Ed25519Verifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error) {

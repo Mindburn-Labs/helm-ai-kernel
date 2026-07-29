@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
 	"net/http"
 	"strconv"
@@ -263,6 +265,17 @@ func (rl *GlobalRateLimiter) isLowPriority(r *http.Request, endpointClass string
 	return endpointClass == "public"
 }
 
+// actorResourceKey derives the per-actor rate-limit bucket.
+//
+// The identity headers are combined with the peer address rather than used on
+// their own. They are unauthenticated at this layer — the limiter runs before
+// any route guard — so keying on them alone let a caller rotate
+// X-Helm-Actor-ID to mint a fresh bucket per request and evade the limit
+// entirely, or set a victim's actor id to exhaust that victim's bucket (F-12).
+//
+// Binding the bucket to fallbackIP keeps both closed: a rotating attacker stays
+// pinned to their own address, and one caller can no longer consume another's
+// allowance. Distinct actors behind a shared address still get distinct buckets.
 func (rl *GlobalRateLimiter) actorResourceKey(r *http.Request, fallbackIP string) string {
 	tenantID := strings.TrimSpace(r.Header.Get("X-Helm-Tenant-ID"))
 	principalID := strings.TrimSpace(r.Header.Get("X-Helm-Principal-ID"))
@@ -270,10 +283,12 @@ func (rl *GlobalRateLimiter) actorResourceKey(r *http.Request, fallbackIP string
 	if actorID == "" && tenantID != "" && principalID != "" {
 		actorID = tenantID + "/" + principalID
 	}
-	if actorID == "" {
-		actorID = fallbackIP
-	}
-	return actorID + " " + r.Method + " " + r.URL.EscapedPath()
+	// Hash the attacker-influenced portion. Concatenating raw header values with
+	// delimiters lets a caller embed the delimiter to collide with, or escape
+	// from, another actor's bucket — the same unframed-concatenation mistake
+	// that made the signature-verification cache forgeable.
+	sum := sha256.Sum256([]byte(fallbackIP + "\x00" + actorID))
+	return hex.EncodeToString(sum[:16]) + " " + r.Method + " " + r.URL.EscapedPath()
 }
 
 func tryAcquire(ch chan struct{}) bool {

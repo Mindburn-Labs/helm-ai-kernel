@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,21 +93,29 @@ func TestApprovalTransitionEnforcesQuorumAndTimelock(t *testing.T) {
 		t.Fatalf("timelocked approval should remain pending: %+v", approval)
 	}
 
+	// F-08: this test used to assert that two TransitionApproval calls naming
+	// "user:alice" and "user:bob" satisfied the 2-of-2 quorum. Both calls carry
+	// the same single credential and the name is just a string in the request,
+	// so that encoded a dual-control bypass as expected behaviour. A multi-party
+	// quorum must not be reachable from asserted actor names.
 	later := now.Add(2 * time.Minute)
 	registry.now = func() time.Time { return later }
 	approval, err = registry.TransitionApproval(approval.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt-1", "reviewed")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if approval.State != contracts.ApprovalCeremonyPending || len(approval.Approvers) != 1 {
-		t.Fatalf("approval should remain pending until quorum: %+v", approval)
+	if approval.State != contracts.ApprovalCeremonyPending {
+		t.Fatalf("approval should remain pending past the timelock without a real quorum: %+v", approval)
 	}
 	approval, err = registry.TransitionApproval(approval.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:bob", "rcpt-2", "reviewed")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if approval.State != contracts.ApprovalCeremonyAllowed {
-		t.Fatalf("approval should activate after quorum: %+v", approval)
+	if approval.State == contracts.ApprovalCeremonyAllowed {
+		t.Fatalf("a 2-of-2 quorum was satisfied by one caller asserting two names: %+v", approval)
+	}
+	if !strings.Contains(approval.Reason, "verified approver credentials") {
+		t.Fatalf("refusal should name the missing requirement, got: %q", approval.Reason)
 	}
 }
 

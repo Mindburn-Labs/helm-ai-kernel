@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/a2a"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
@@ -144,7 +145,11 @@ func (e *receiptPersistingEvaluator) EvaluateDecision(ctx context.Context, req g
 	if err != nil || decision == nil {
 		return decision, err
 	}
-	if err := persistDecisionReceipt(ctx, e.svc, decision, req.Principal, []byte(req.Action+":"+req.Resource), map[string]any{
+	body, err := canonicalize.JCS(req)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize gateway decision request: %w", err)
+	}
+	if err := persistDecisionReceipt(ctx, e.svc, decision, req.Principal, body, map[string]any{
 		"source":   "mcp.gateway",
 		"action":   req.Action,
 		"resource": req.Resource,

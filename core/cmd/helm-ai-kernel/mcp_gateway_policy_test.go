@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
@@ -320,6 +321,35 @@ func TestReceiptPersistingEvaluatorFailsClosedWhenStoreFails(t *testing.T) {
 	})
 	if decision != nil || !errors.Is(err, storeErr) {
 		t.Fatalf("persistence failure must block decision: decision=%+v err=%v", decision, err)
+	}
+}
+
+func TestGatewayDecisionReceiptPreimageBindsArguments(t *testing.T) {
+	base := guardian.DecisionRequest{
+		Principal: "session-1",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "file_read",
+		Context:   map[string]any{"path": "/tmp/a"},
+	}
+	first, err := canonicalize.JCS(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := canonicalize.JCS(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := base
+	changed.Context = map[string]any{"path": "/tmp/b"}
+	second, err := canonicalize.JCS(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, again) {
+		t.Fatal("identical decision requests must have identical receipt preimages")
+	}
+	if bytes.Equal(first, second) {
+		t.Fatal("different tool arguments must have different receipt preimages")
 	}
 }
 

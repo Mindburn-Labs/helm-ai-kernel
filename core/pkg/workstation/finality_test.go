@@ -170,6 +170,59 @@ func TestDisabledByDefaultLeavesReceiptsByteIdentical(t *testing.T) {
 	}
 }
 
+func TestAnnotateDenialClearsStaleLearning(t *testing.T) {
+	event := ToolEvent{
+		EventID:      "e-memory",
+		Type:         "memory_write",
+		EffectType:   contracts.EffectTypeWorkstationMemoryWrite,
+		EffectMode:   contracts.WorkstationEffectModeOperate,
+		MemoryEffect: &contracts.AgentMemoryEffect{MemoryClass: "episodic", TTLDays: 90},
+	}
+	_, code, _ := EvaluateEvent(learningProfile(), event)
+
+	disabled := learningProfile()
+	disabled.Learning = nil
+	finalityOff := learningProfile()
+	finalityOff.Learning.EmitFinality = false
+	counterfactualOff := learningProfile()
+	counterfactualOff.Learning.EmitCounterfactual = false
+
+	for _, tc := range []struct {
+		name               string
+		profile            contracts.WorkstationPolicyProfile
+		reasonCode         string
+		wantFinality       contracts.DenialFinality
+		wantCounterfactual bool
+	}{
+		{"policy_disabled", disabled, code, "", false},
+		{"finality_disabled", finalityOff, code, "", true},
+		{"counterfactual_disabled", counterfactualOff, code, contracts.DenialInstanceParameter, false},
+		{"evaluator_mismatch", learningProfile(), "TAINTED_CONTEXT_REQUIRES_DENY", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			denied := contracts.AgentDeniedEffect{
+				EffectID:   "e-memory",
+				EffectType: event.EffectType,
+				ReasonCode: tc.reasonCode,
+				Finality:   contracts.DenialClassForbidden,
+				Counterfactual: &contracts.DenialCounterfactual{
+					Field: "stale", Requested: 1, Max: 1,
+				},
+			}
+			AnnotateDenial(&denied, tc.profile, event)
+			if got := denied.Finality; got != tc.wantFinality {
+				t.Fatalf("finality = %q, want %q", got, tc.wantFinality)
+			}
+			if got := denied.Counterfactual != nil; got != tc.wantCounterfactual {
+				t.Fatalf("counterfactual present = %t, want %t", got, tc.wantCounterfactual)
+			}
+			if tc.wantCounterfactual && denied.Counterfactual.Field != "ttl_days" {
+				t.Fatalf("counterfactual = %+v, want a freshly derived ttl_days bound", denied.Counterfactual)
+			}
+		})
+	}
+}
+
 // The agent's own event log may declare a reason code, and normalizeEvents
 // preserves that declaration as observed evidence. When it disagrees with the
 // local policy evaluation, however, the denial must teach nothing: combining

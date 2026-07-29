@@ -138,6 +138,10 @@ func AnnotateDenial(denied *contracts.AgentDeniedEffect, profile contracts.Works
 	if denied == nil {
 		return
 	}
+	// A receipt can be reused across policy evaluations. Clear prior disclosure
+	// before any opt-out or mismatch return so stale learning cannot survive.
+	denied.Finality = ""
+	denied.Counterfactual = nil
 	learning := profile.Learning
 	if learning == nil {
 		return

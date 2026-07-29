@@ -1,11 +1,13 @@
 package agentruntime
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,8 +66,7 @@ type Store struct {
 	dir    string
 	anchor *translog.Log
 
-	mu        sync.Mutex
-	turnLocks map[string]*sync.Mutex
+	mu sync.Mutex
 }
 
 // StoreOption configures a Store.
@@ -82,22 +83,11 @@ func OpenStore(dir string, opts ...StoreOption) (*Store, error) {
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, &InfraError{Op: "create store dir", Err: err}
 	}
-	s := &Store{dir: dir, turnLocks: map[string]*sync.Mutex{}}
+	s := &Store{dir: dir}
 	for _, o := range opts {
 		o(s)
 	}
 	return s, nil
-}
-
-func (s *Store) lockFor(turnID string) *sync.Mutex {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	l, ok := s.turnLocks[turnID]
-	if !ok {
-		l = &sync.Mutex{}
-		s.turnLocks[turnID] = l
-	}
-	return l
 }
 
 func (s *Store) pathFor(turnID string) (string, error) {
@@ -121,9 +111,8 @@ func (s *Store) Append(turnID string, candidates ...Event) (*AppendResult, error
 	if err != nil {
 		return nil, err
 	}
-	lock := s.lockFor(turnID)
-	lock.Lock()
-	defer lock.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// The mutex only covers this Store value. Take the cross-process lock too,
 	// so a second Store over the same directory cannot read the same head and
@@ -172,6 +161,11 @@ func (s *Store) Append(turnID string, candidates ...Event) (*AppendResult, error
 		buf.WriteByte('\n')
 	}
 
+	_, statErr := os.Stat(path)
+	created := os.IsNotExist(statErr)
+	if statErr != nil && !created {
+		return nil, &InfraError{Op: "stat turn log", Err: statErr}
+	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) // #nosec G304 -- path is derived from the store dir and a validated turn ID
 	if err != nil {
 		return nil, &InfraError{Op: "open turn log", Err: err}
@@ -186,6 +180,19 @@ func (s *Store) Append(turnID string, candidates ...Event) (*AppendResult, error
 	}
 	if err := f.Close(); err != nil {
 		return nil, &InfraError{Op: "close turn log", Err: err}
+	}
+	if created {
+		dir, err := os.Open(s.dir) // #nosec G304 -- dir is the configured store root
+		if err != nil {
+			return nil, &InfraError{Op: "open store dir for sync", Err: err}
+		}
+		if err := dir.Sync(); err != nil {
+			_ = dir.Close()
+			return nil, &InfraError{Op: "sync store dir", Err: err}
+		}
+		if err := dir.Close(); err != nil {
+			return nil, &InfraError{Op: "close store dir", Err: err}
+		}
 	}
 
 	res := &AppendResult{
@@ -221,9 +228,13 @@ func (s *Store) Load(turnID string) ([]Event, *State, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	lock := s.lockFor(turnID)
-	lock.Lock()
-	defer lock.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	unlock, err := lockTurnFile(path)
+	if err != nil {
+		return nil, nil, &InfraError{Op: "lock", Err: err}
+	}
+	defer unlock()
 	events, state, _, err := s.loadLocked(path, turnID)
 	return events, state, err
 }
@@ -241,9 +252,13 @@ func (s *Store) HeadHash(turnID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	lock := s.lockFor(turnID)
-	lock.Lock()
-	defer lock.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	unlock, err := lockTurnFile(path)
+	if err != nil {
+		return "", &InfraError{Op: "lock", Err: err}
+	}
+	defer unlock()
 	_, _, head, err := s.loadLocked(path, turnID)
 	return head, err
 }
@@ -285,35 +300,42 @@ func (s *Store) AnchorRange(turnID string, fromSeq uint64) ([]uint64, error) {
 // chain, turn-ID drift relative to the file name, or reducer-illegal
 // sequence is a hard error.
 func (s *Store) loadLocked(path, turnID string) ([]Event, *State, string, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- path is derived from the store dir and a validated turn ID
+	f, err := os.Open(path) // #nosec G304 -- path is derived from the store dir and a validated turn ID
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil, "", nil
 		}
 		return nil, nil, "", &InfraError{Op: "read turn log", Err: err}
 	}
-	if len(data) == 0 {
-		return nil, nil, "", nil
-	}
-	if data[len(data)-1] != '\n' {
-		return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s: final line is not newline-terminated (truncated write?)", path)
-	}
-	lines := strings.Split(string(data[:len(data)-1]), "\n")
-	events := make([]Event, 0, len(lines))
+	defer f.Close()
+
+	reader := bufio.NewReader(f)
+	var events []Event
 	prevHash := ""
-	for i, line := range lines {
+	for lineNo := 1; ; lineNo++ {
+		line, readErr := reader.ReadString('\n')
+		if readErr == io.EOF {
+			if line == "" {
+				break
+			}
+			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s: final line is not newline-terminated (truncated write?)", path)
+		}
+		if readErr != nil {
+			return nil, nil, "", &InfraError{Op: "read turn log", Err: readErr}
+		}
+		line = strings.TrimSuffix(line, "\n")
 		ev, err := decodeCanonicalLine(line)
 		if err != nil {
-			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s at line %d: %w", path, i+1, err)
+			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s at line %d: %w", path, lineNo, err)
 		}
 		if ev.TurnID != turnID {
-			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s at line %d: event names turn %q, not %q", path, i+1, ev.TurnID, turnID)
+			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s at line %d: event names turn %q, not %q", path, lineNo, ev.TurnID, turnID)
 		}
 		if err := ev.Validate(); err != nil {
-			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s at line %d: %w", path, i+1, err)
+			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s at line %d: %w", path, lineNo, err)
 		}
 		if ev.PrevHash != prevHash {
-			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s at line %d: hash chain broken", path, i+1)
+			return nil, nil, "", fmt.Errorf("agentruntime: corrupt turn log %s at line %d: hash chain broken", path, lineNo)
 		}
 		h, err := HashEvent(&ev)
 		if err != nil {

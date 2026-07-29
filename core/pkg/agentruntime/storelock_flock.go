@@ -8,7 +8,7 @@ import (
 )
 
 // lockTurnFile takes an exclusive flock(2) on a per-turn lock file for the
-// duration of one Append. The in-process mutex only serializes goroutines
+// duration of one store operation. The in-process mutex only serializes goroutines
 // inside a single Store; two Store values over the same directory — or two
 // processes — would otherwise read the same head and assign the same Seq to
 // different events, forking the hash chain permanently.
@@ -18,9 +18,9 @@ import (
 // kind a marker file has. The lock file is a sidecar: it holds no state, and
 // deleting it between appends costs nothing.
 //
-// The call blocks until the lock is available. Append is the only writer and
-// holds it for one read-modify-write, so waiting is bounded by the peer's
-// append rather than by any turn-level work.
+// The call blocks until the lock is available. Append holds it for one
+// read-modify-write; strict readers take it so they never inspect a partial
+// append.
 func lockTurnFile(path string) (unlock func(), err error) {
 	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {

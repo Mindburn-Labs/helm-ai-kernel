@@ -89,9 +89,10 @@ func (s *State) durableToolCall(toolCallID string, callIndex int) (ToolCall, boo
 }
 
 func (s *State) toolDescriptor(toolID string, callIndex int) *ToolDescriptor {
-	for i, t := range s.EffectiveTools(callIndex) {
+	tools := s.EffectiveTools(callIndex)
+	for i, t := range tools {
 		if t.ToolID == toolID {
-			return &s.EffectiveTools(callIndex)[i]
+			return &tools[i]
 		}
 	}
 	return nil

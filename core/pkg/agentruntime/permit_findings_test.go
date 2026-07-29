@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // Regression: P1 TOOL_REQUEST_BINDING_BYPASS — an invocation used to be
@@ -245,5 +246,44 @@ func TestConcurrentStoresDoNotDuplicateSeq(t *testing.T) {
 			t.Fatalf("HashEvent: %v", err)
 		}
 		prev = h
+	}
+}
+
+func TestLoadWaitsForCrossProcessLock(t *testing.T) {
+	dir := t.TempDir()
+	store, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Append("turn-read-lock", evCreated("turn-read-lock")); err != nil {
+		t.Fatal(err)
+	}
+	path, err := store.pathFor("turn-read-lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := lockTurnFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := store.Load("turn-read-lock")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		unlock()
+		t.Fatalf("Load returned while append lock was held: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Load after unlock: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Load remained blocked after append lock was released")
 	}
 }

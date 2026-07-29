@@ -1,0 +1,57 @@
+{
+  "policy_snapshot": "policy-snapshot.json",
+  "digest": "db210c41a3da2f17abd6ccc471d9363ddb2853f975297e6edb7545cc95d42256",
+  "observations": [
+    {
+      "case": "instance_membership/egress_destination",
+      "verdict": "DENY",
+      "reason_code": "EGRESS_DESTINATION_NOT_ALLOWED",
+      "finality": "instance_membership"
+    },
+    {
+      "case": "class_forbidden/memory_class",
+      "verdict": "DENY",
+      "reason_code": "MEMORY_CLASS_DISALLOWED",
+      "finality": "class_forbidden"
+    },
+    {
+      "case": "instance_membership/draft_outside_workspace",
+      "verdict": "DENY",
+      "reason_code": "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE",
+      "finality": "instance_membership"
+    },
+    {
+      "case": "ungranted/operate_permission_discloses_capability",
+      "verdict": "DENY",
+      "reason_code": "OPERATE_PERMISSION_NOT_GRANTED",
+      "finality": "ungranted",
+      "counterfactual": {
+        "field": "operate.permissions",
+        "capability": "shell.operate"
+      }
+    },
+    {
+      "case": "instance_parameter/memory_ttl_discloses_bound",
+      "verdict": "DENY",
+      "reason_code": "MEMORY_TTL_EXCEEDS_POLICY",
+      "finality": "instance_parameter",
+      "counterfactual": {
+        "field": "ttl_days",
+        "requested": 90,
+        "max": 30
+      }
+    },
+    {
+      "case": "instance_parameter/recurring_loop_discloses_nothing",
+      "verdict": "DENY",
+      "reason_code": "RECURRING_LOOP_MISSING_SCHEDULE",
+      "finality": "instance_parameter"
+    },
+    {
+      "case": "instance_context/tainted",
+      "verdict": "DENY",
+      "reason_code": "TAINTED_CONTEXT_REQUIRES_DENY",
+      "finality": "instance_context"
+    }
+  ]
+}

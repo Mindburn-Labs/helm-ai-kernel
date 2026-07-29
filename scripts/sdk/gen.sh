@@ -7,6 +7,10 @@
 # spec drift breaks the build loudly instead of corrupting SDKs silently.
 set -euo pipefail
 
+# Concatenated SDK model files must not inherit a developer's locale-specific
+# glob order; the C locale is bytewise and available on every supported runner.
+export LC_ALL=C
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SPEC="$PROJECT_ROOT/api/openapi/helm.openapi.yaml"

@@ -257,6 +257,56 @@ func (c DenialCounterfactual) MarshalJSON() ([]byte, error) {
 	}{c.Field, c.Requested, c.Max})
 }
 
+func (c *DenialCounterfactual) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for name := range fields {
+		switch name {
+		case "field", "requested", "max", "capability":
+		default:
+			return errors.New("denial counterfactual contains an unknown field")
+		}
+	}
+
+	var wire struct {
+		Field      string  `json:"field"`
+		Requested  *uint32 `json:"requested"`
+		Max        *uint32 `json:"max"`
+		Capability *string `json:"capability"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	_, hasRequested := fields["requested"]
+	_, hasMax := fields["max"]
+	_, hasCapability := fields["capability"]
+	hasScalar := hasRequested || hasMax
+	if hasScalar == hasCapability {
+		return errors.New("denial counterfactual must contain exactly one scalar bound or capability")
+	}
+	if hasScalar && (!hasRequested || !hasMax || wire.Requested == nil || wire.Max == nil) {
+		return errors.New("denial counterfactual scalar bound requires requested and max")
+	}
+	if hasCapability && (wire.Capability == nil || !IsWorkstationPermission(*wire.Capability)) {
+		return errors.New("denial counterfactual capability is not in the workstation permission vocabulary")
+	}
+
+	decoded := DenialCounterfactual{Field: wire.Field}
+	if hasCapability {
+		decoded.Capability = *wire.Capability
+	} else {
+		decoded.Requested = *wire.Requested
+		decoded.Max = *wire.Max
+	}
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*c = decoded
+	return nil
+}
+
 // IsWorkstationPermission reports whether name belongs to the fixed public
 // permission vocabulary that a denial counterfactual may disclose.
 func IsWorkstationPermission(name string) bool {

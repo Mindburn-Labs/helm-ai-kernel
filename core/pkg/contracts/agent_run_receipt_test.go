@@ -37,3 +37,41 @@ func TestDenialCounterfactualMarshalRejectsAmbiguousShapes(t *testing.T) {
 		})
 	}
 }
+
+func TestDenialCounterfactualUnmarshalRejectsAmbiguousShapes(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr bool
+	}{
+		{"zero scalar", `{"field":"limit","requested":0,"max":0}`, false},
+		{"capability", `{"field":"permission","capability":"shell.operate"}`, false},
+		{"field only", `{"field":"limit"}`, true},
+		{"zero valued mixed", `{"field":"permission","capability":"shell.operate","requested":0}`, true},
+		{"partial scalar", `{"field":"limit","requested":0}`, true},
+		{"unknown capability", `{"field":"permission","capability":"attacker.chosen"}`, true},
+		{"unknown field", `{"field":"limit","requested":0,"max":0,"extra":true}`, true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var got DenialCounterfactual
+			err := json.Unmarshal([]byte(test.raw), &got)
+			if test.wantErr {
+				if err == nil {
+					t.Fatalf("json.Unmarshal() = %+v, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+			reencoded, err := json.Marshal(got)
+			if err != nil {
+				t.Fatalf("json.Marshal() error = %v", err)
+			}
+			if string(reencoded) != test.raw {
+				t.Fatalf("round trip = %s, want %s", reencoded, test.raw)
+			}
+		})
+	}
+}

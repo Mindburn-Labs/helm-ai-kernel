@@ -90,20 +90,28 @@ func runPlanCompile(args []string, stdout, stderr io.Writer) int {
 	// for: accepting --format=text and ignoring it advertises an output
 	// contract the command does not honour. Visit reports only flags actually
 	// present on the command line, so the JSON defaults stay untouched.
-	var deselected string
+	var (
+		deselected         string
+		formatSet, jsonSet bool
+	)
 	cmd.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "format":
+			formatSet = true
 			if !formatFlag.Value.IsJSON() {
 				deselected = "--format=" + string(formatFlag.Value)
 			}
 		case "json":
+			jsonSet = true
 			if !jsonOutput {
 				deselected = "--json=false"
 			}
 		}
 	})
-	if deselected != "" {
+	effectiveJSON := (!formatSet && !jsonSet) ||
+		(formatSet && formatFlag.Value.IsJSON()) ||
+		(jsonSet && jsonOutput)
+	if !effectiveJSON {
 		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("plan compile",
 			"%s is not supported: plan compile emits PlanSpec JSON only", deselected).
 			WithHint("drop the flag, or use --format=json"), errFormat)

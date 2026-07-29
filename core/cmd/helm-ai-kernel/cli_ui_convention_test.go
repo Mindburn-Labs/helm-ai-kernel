@@ -218,6 +218,22 @@ func TestCLIPlanCompileRejectsDeselectingJSON(t *testing.T) {
 	}
 }
 
+func TestCLIPlanCompileConflictingAliasesUseEffectiveMode(t *testing.T) {
+	for _, args := range [][]string{
+		{"plan", "compile", "--format=json", "--json=false", "step-one"},
+		{"plan", "compile", "--format=text", "--json=true", "step-one"},
+	} {
+		code, stdout, stderr := runCLI(t, args[0], args[1:]...)
+		if code != 0 {
+			t.Fatalf("%v: code=%d stderr=%s", args, code, stderr)
+		}
+		var plan map[string]any
+		if err := json.Unmarshal([]byte(stdout), &plan); err != nil {
+			t.Fatalf("%v: stdout not PlanSpec JSON: %v\n%s", args, err, stdout)
+		}
+	}
+}
+
 // --- Golden: JSON error envelope under --format=json (permit advisory P3) --
 
 func TestCLIJSONErrorEnvelopeWired(t *testing.T) {

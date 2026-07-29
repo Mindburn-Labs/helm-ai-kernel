@@ -79,7 +79,7 @@ func TestGuardianEvaluateDecisionAllocBudget(t *testing.T) {
 
 func TestGuardianBoundaryInterceptorsCached(t *testing.T) {
 	g := benchGuardian(t)
-	if got, want := len(g.boundaryChain), 6; got != want {
+	if got, want := len(g.boundaryChain), 7; got != want {
 		t.Fatalf("boundaryChain len = %d, want %d", got, want)
 	}
 	before := g.boundaryChain[1]

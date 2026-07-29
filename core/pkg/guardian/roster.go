@@ -23,6 +23,7 @@ type GateID string
 
 const (
 	GateAgentKillSwitch GateID = "agent_kill_switch"
+	GateAssumption      GateID = "assumption_observer"
 	GateAudit           GateID = "audit"
 	GateBehavioralTrust GateID = "behavioral_trust"
 	GateBudget          GateID = "budget"
@@ -68,6 +69,7 @@ func (r GateRoster) Hash() (string, error) {
 func (g *Guardian) GateRoster() GateRoster {
 	injected := map[GateID]bool{
 		GateAgentKillSwitch: g.agentKillSwitch != nil,
+		GateAssumption:      g.assumptionObserver != nil,
 		GateAudit:           g.auditLog != nil,
 		GateBehavioralTrust: g.behavioralScorer != nil,
 		GateBudget:          g.tracker != nil,
@@ -104,7 +106,7 @@ func (g *Guardian) GateRoster() GateRoster {
 // AllGateIDs returns every declared gate, sorted.
 func AllGateIDs() []GateID {
 	ids := []GateID{
-		GateAgentKillSwitch, GateAudit, GateBehavioralTrust, GateBudget,
+		GateAgentKillSwitch, GateAssumption, GateAudit, GateBehavioralTrust, GateBudget,
 		GateCompliance, GateContext, GateDelegation, GateEgress, GateFreeze,
 		GateIsolation, GatePDP, GatePolicySnapshots, GatePrivilege,
 		GateSafeDeprecation, GateScopedStop, GateSessionRisk, GateTemporal,

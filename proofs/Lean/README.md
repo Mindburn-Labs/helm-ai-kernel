@@ -97,8 +97,9 @@ It does **not** verify the following:
    required status checks, resolved review threads, linear history, and an
    up-to-date branch. There is no human approval requirement to preserve:
    `main` requires zero approving reviews. The release permit remains required
-   by the autonomous operating contract, but the current GitHub ruleset does
-   not enforce it; the approval-only App interlock is not live.
+   by the governance operating contract for all code merges, but the current
+   GitHub ruleset does not enforce it; the approval-only App interlock is not
+   live.
 
 These omissions are deliberate. Each one corresponds to an existing test
 surface (1, 3, 4), a future workstream (5, 6), or the separate GitHub authority

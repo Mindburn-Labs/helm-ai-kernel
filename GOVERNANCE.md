@@ -83,7 +83,7 @@ EvidencePack contracts.
 
 #### What `main` enforces today
 
-Read back from the live repository rulesets on 2026-07-26. This section records
+Read back from the live repository rulesets on 2026-07-29. This section records
 the enforced state; it is not a statement of intent.
 
 | Control | State |
@@ -97,20 +97,19 @@ the enforced state; it is not a statement of intent.
 | Required status checks | 18, strict (branch must be up to date with `main`) |
 | Linear history | Required |
 | Branch deletion / non-fast-forward | Blocked |
-| `HELM Autonomous Release Permit` | Required workflow, pinned by ruleset; organization admins carry an `always` bypass |
-| `Code Quality Copilot review` | Active on the default branch |
+| `HELM Autonomous Release Permit` | Runs in CI but is not a required ruleset status check |
+| Ruleset bypass actors | None |
+| `Code Quality Copilot review` | Disabled |
 
 Two consequences worth stating plainly, because both have been misread:
 
-- **No human approval is required to merge.** Merge authority on `main` is the
-  18 status checks, the resolved review threads, and the pinned release-permit
-  workflow. A reviewer's approval carries no enforcement weight.
-- **The release permit's own correction path is not yet operable.** Changing
-  the permit's admission policy is a generation promotion, which needs the
-  external promotion broker named in `Mindburn-Labs/.github` ADR
-  `2026-07-18-phase1-ci-authority`. That identity has not been created, so the
-  autonomous authority above is enforced but cannot yet be amended by the
-  process that governs it.
+- **No human approval is required by GitHub to merge.** The enforced ruleset
+  requires the 18 status checks, resolved review threads, linear history, and
+  an up-to-date branch. A reviewer's approval carries no enforcement weight.
+- **The release permit is additional operating-policy evidence, not a GitHub
+  merge control in the current ruleset.** Autonomous delivery still treats a
+  missing, stale, or denied exact-head permit as a hold under the operating
+  contract above; GitHub does not enforce that hold by itself.
 
 Verify with:
 

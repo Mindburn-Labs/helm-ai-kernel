@@ -105,7 +105,7 @@ func TestScalarBoundDisclosesTheCeiling(t *testing.T) {
 		t.Fatalf("DenialFinality() = %q, want instance_parameter", got)
 	}
 	got := DenialCounterfactualFor(profile, event, code)
-	if got == nil || got.Field != "ttl_days" || got.Requested == nil || *got.Requested != 90 || got.Max == nil || *got.Max != 30 {
+	if got == nil || got.Field != "ttl_days" || got.Requested != 90 || got.Max != 30 {
 		t.Fatalf("DenialCounterfactualFor() = %+v, want ttl_days requested=90 max=30", got)
 	}
 }

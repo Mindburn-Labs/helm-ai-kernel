@@ -99,11 +99,10 @@ func DenialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 		if requested == 0 || profile.Memory.MaxTTLDays == 0 {
 			return nil
 		}
-		max := profile.Memory.MaxTTLDays
 		return &contracts.DenialCounterfactual{
 			Field:     "ttl_days",
-			Requested: &requested,
-			Max:       &max,
+			Requested: requested,
+			Max:       profile.Memory.MaxTTLDays,
 		}
 	case discloseCapabilityName:
 		// workstationPermissionForEffect falls back to the raw effect_type
@@ -112,7 +111,7 @@ func DenialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 		// crafted event would land an arbitrary attacker-chosen string in a
 		// signed receipt field the contract describes as an enum.
 		required := workstationPermissionForEffect(event.EffectType, event.Type, event.Action)
-		if !isKnownPermission(required) {
+		if !contracts.IsWorkstationPermission(required) {
 			return nil
 		}
 		return &contracts.DenialCounterfactual{
@@ -121,23 +120,6 @@ func DenialCounterfactualFor(profile contracts.WorkstationPolicyProfile, event T
 		}
 	}
 	return nil
-}
-
-// knownPermissions is the closed vocabulary a counterfactual may name.
-var knownPermissions = map[string]struct{}{
-	contracts.WorkstationPermissionNetworkEgress:   {},
-	contracts.WorkstationPermissionMCPMutate:       {},
-	contracts.WorkstationPermissionMemoryWrite:     {},
-	contracts.WorkstationPermissionLoopRegister:    {},
-	contracts.WorkstationPermissionShellOperate:    {},
-	contracts.WorkstationPermissionDeployPublish:   {},
-	contracts.WorkstationPermissionSecretRead:      {},
-	contracts.WorkstationPermissionPaymentInitiate: {},
-}
-
-func isKnownPermission(name string) bool {
-	_, ok := knownPermissions[name]
-	return ok
 }
 
 // AnnotateDenial fills the learning fields on a denied effect, subject to the

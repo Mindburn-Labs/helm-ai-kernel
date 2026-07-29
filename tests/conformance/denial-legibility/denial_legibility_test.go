@@ -265,6 +265,9 @@ func TestPublishedReceiptSchemaRejectsAmbiguousCounterfactuals(t *testing.T) {
 		"mixed_shapes": map[string]any{
 			"field": "ttl_days", "requested": 90, "max": 30, "capability": "network.egress",
 		},
+		"unknown_capability": map[string]any{
+			"field": "operate.permissions", "capability": "attacker.chosen",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			doc := map[string]any{

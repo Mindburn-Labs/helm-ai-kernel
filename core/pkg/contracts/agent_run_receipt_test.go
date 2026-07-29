@@ -6,25 +6,33 @@ import (
 )
 
 func TestDenialCounterfactualMarshalRejectsAmbiguousShapes(t *testing.T) {
-	zero, one := uint32(0), uint32(1)
 	tests := []struct {
-		name    string
-		value   DenialCounterfactual
-		wantErr bool
+		name     string
+		value    DenialCounterfactual
+		wantJSON string
 	}{
-		{"scalar", DenialCounterfactual{Field: "limit", Requested: &one, Max: &zero}, false},
-		{"capability", DenialCounterfactual{Field: "permission", Capability: "shell.operate"}, false},
-		{"missing field", DenialCounterfactual{Capability: "shell.operate"}, true},
-		{"field only", DenialCounterfactual{Field: "limit"}, true},
-		{"requested only", DenialCounterfactual{Field: "limit", Requested: &one}, true},
-		{"max only", DenialCounterfactual{Field: "limit", Max: &one}, true},
-		{"mixed", DenialCounterfactual{Field: "limit", Requested: &one, Max: &zero, Capability: "shell.operate"}, true},
+		{"scalar with zero max", DenialCounterfactual{Field: "limit", Requested: 1}, `{"field":"limit","requested":1,"max":0}`},
+		{"scalar with zero request", DenialCounterfactual{Field: "limit", Max: 1}, `{"field":"limit","requested":0,"max":1}`},
+		{"capability", DenialCounterfactual{Field: "permission", Capability: "shell.operate"}, `{"field":"permission","capability":"shell.operate"}`},
+		{"missing field", DenialCounterfactual{Capability: "shell.operate"}, ""},
+		{"field only", DenialCounterfactual{Field: "limit"}, ""},
+		{"mixed", DenialCounterfactual{Field: "limit", Requested: 1, Capability: "shell.operate"}, ""},
+		{"unknown capability", DenialCounterfactual{Field: "permission", Capability: "attacker.chosen"}, ""},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := json.Marshal(test.value)
-			if (err != nil) != test.wantErr {
-				t.Fatalf("json.Marshal() error = %v, wantErr %v", err, test.wantErr)
+			got, err := json.Marshal(test.value)
+			if test.wantJSON == "" {
+				if err == nil {
+					t.Fatalf("json.Marshal() = %s, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("json.Marshal() error = %v", err)
+			}
+			if string(got) != test.wantJSON {
+				t.Fatalf("json.Marshal() = %s, want %s", got, test.wantJSON)
 			}
 		})
 	}

@@ -218,9 +218,11 @@ const (
 type DenialCounterfactual struct {
 	// Field is the policy field that bound the request, e.g. "ttl_days".
 	Field string `json:"field"`
-	// Requested and Max describe a scalar bound.
-	Requested *uint32 `json:"requested,omitempty"`
-	Max       *uint32 `json:"max,omitempty"`
+	// Requested and Max describe a scalar bound. The zero/zero pair means no
+	// scalar bound; MarshalJSON preserves an individual zero once either value
+	// selects the scalar shape.
+	Requested uint32 `json:"requested,omitempty"`
+	Max       uint32 `json:"max,omitempty"`
 	// Capability names the permission the action would have needed.
 	Capability string `json:"capability,omitempty"`
 }
@@ -229,13 +231,13 @@ func (c DenialCounterfactual) Validate() error {
 	if c.Field == "" {
 		return errors.New("denial counterfactual field is required")
 	}
-	hasScalar := c.Requested != nil || c.Max != nil
+	hasScalar := c.Requested != 0 || c.Max != 0
 	hasCapability := c.Capability != ""
 	if hasScalar == hasCapability {
 		return errors.New("denial counterfactual must contain exactly one scalar bound or capability")
 	}
-	if hasScalar && (c.Requested == nil || c.Max == nil) {
-		return errors.New("denial counterfactual scalar bound requires requested and max")
+	if hasCapability && !IsWorkstationPermission(c.Capability) {
+		return errors.New("denial counterfactual capability is not in the workstation permission vocabulary")
 	}
 	return nil
 }
@@ -244,8 +246,34 @@ func (c DenialCounterfactual) MarshalJSON() ([]byte, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
-	type wire DenialCounterfactual
-	return json.Marshal(wire(c))
+	if c.Capability != "" {
+		return json.Marshal(struct {
+			Field      string `json:"field"`
+			Capability string `json:"capability"`
+		}{c.Field, c.Capability})
+	}
+	return json.Marshal(struct {
+		Field     string `json:"field"`
+		Requested uint32 `json:"requested"`
+		Max       uint32 `json:"max"`
+	}{c.Field, c.Requested, c.Max})
+}
+
+// IsWorkstationPermission reports whether name belongs to the fixed public
+// permission vocabulary that a denial counterfactual may disclose.
+func IsWorkstationPermission(name string) bool {
+	switch name {
+	case WorkstationPermissionNetworkEgress,
+		WorkstationPermissionMCPMutate,
+		WorkstationPermissionMemoryWrite,
+		WorkstationPermissionLoopRegister,
+		WorkstationPermissionShellOperate,
+		WorkstationPermissionDeployPublish,
+		WorkstationPermissionSecretRead,
+		WorkstationPermissionPaymentInitiate:
+		return true
+	}
+	return false
 }
 
 // WorkstationPolicyDecisionReceipt is the selected-effect enforcement bridge

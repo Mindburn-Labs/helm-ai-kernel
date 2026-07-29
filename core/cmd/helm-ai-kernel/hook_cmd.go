@@ -273,7 +273,6 @@ var buildArtifactDirs = map[string]bool{
 	".turbo":        true,
 	".venv":         true,
 	"__pycache__":   true,
-	"build":         true,
 	"coverage":      true,
 	"dist":          true,
 	"node_modules":  true,
@@ -335,7 +334,7 @@ func isForcePush(c string) bool {
 		fields := strings.Fields(segment)
 		push := -1
 		for i, field := range fields {
-			if strings.Trim(field, `"'`) != "git" {
+			if filepath.Base(strings.Trim(field, `"'`)) != "git" {
 				continue
 			}
 			for j := i + 1; j < len(fields); j++ {

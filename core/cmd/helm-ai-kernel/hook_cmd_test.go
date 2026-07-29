@@ -111,6 +111,17 @@ func TestHookPreToolAllowsSafeBashWithoutApprovalOutput(t *testing.T) {
 	}
 }
 
+func TestClassifyPreToolPayloadDeniesBuildRemovalInProductionCWD(t *testing.T) {
+	classification := classifyPreToolPayload(preToolPayload{
+		ToolName:  "Bash",
+		ToolInput: map[string]any{"command": "rm -rf build"},
+		CWD:       "/srv/production",
+	})
+	if !classification.ShouldDecide || classification.Class != "shell-operate" {
+		t.Fatalf("classification = %+v, want shell-operate decision", classification)
+	}
+}
+
 func TestHookPreToolFailsClosedWhenLocalSigningKeyIsInsecure(t *testing.T) {
 	tmp := t.TempDir()
 	keyDir := filepath.Join(tmp, workstationSigningKeyDirectory)
@@ -334,10 +345,12 @@ func TestIsDestructiveShellCommand(t *testing.T) {
 		"rm -rf $BUILD_DIR",
 		"rm -rf BUILD",
 		"rm -rf DIST",
+		"rm -rf build",
 		"git push --force origin main",
 		"git push -f origin main",
 		"git push -fu origin main",
 		"git -C /repo push --force origin main",
+		"/usr/bin/git push --force origin main",
 		"git push origin +main",
 		"psql -c 'DROP DATABASE production'",
 		"dropdb production",
@@ -359,7 +372,7 @@ func TestIsDestructiveShellCommand(t *testing.T) {
 		"rm -rf .next",
 		"rm -rf -- dist",
 		"rm -rf ./coverage/",
-		"rm -rf dist build .turbo",
+		"rm -rf dist .turbo",
 		"git push --force-with-lease origin main",
 		"git push --force-if-includes origin main",
 		"git push origin main",

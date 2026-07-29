@@ -97,7 +97,7 @@ the enforced state; it is not a statement of intent.
 | Required status checks | 18, strict (branch must be up to date with `main`) |
 | Linear history | Required |
 | Branch deletion / non-fast-forward | Blocked |
-| `HELM Autonomous Release Permit` | Runs in CI but is not a required ruleset status check |
+| `HELM Autonomous Release Permit` | No active workflow or required ruleset status check |
 | Ruleset bypass actors | None |
 | `Code Quality Copilot review` | Disabled |
 
@@ -106,10 +106,9 @@ Two consequences worth stating plainly, because both have been misread:
 - **No human approval is required by GitHub to merge.** The enforced ruleset
   requires the 18 status checks, resolved review threads, linear history, and
   an up-to-date branch. A reviewer's approval carries no enforcement weight.
-- **The release permit is additional operating-policy evidence, not a GitHub
-  merge control in the current ruleset.** Autonomous delivery still treats a
-  missing, stale, or denied exact-head permit as a hold under the operating
-  contract above; GitHub does not enforce that hold by itself.
+- **The required machine interlock is not live-proven.** Autonomous code merges
+  remain on hold under the operating contract above. GitHub does not enforce
+  that hold by itself.
 
 Verify with:
 

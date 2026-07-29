@@ -97,10 +97,10 @@ It does **not** verify the following:
    today" — required status checks, resolved review threads, linear history,
    and an up-to-date branch — but those controls are not sufficient merge
    authority by themselves. The governance operating contract additionally
-   requires a distinct-provider exact-head release permit for every code
+   requires a distinct-provider exact-head machine interlock for every code
    merge. There is no human approval requirement to preserve: `main` requires
-   zero approving reviews. The current GitHub ruleset does not enforce the
-   permit, and the approval-only App interlock is not live.
+   zero approving reviews. No such interlock is currently active or enforced
+   by the GitHub ruleset.
 
 These omissions are deliberate. Each one corresponds to an existing test
 surface (1, 3, 4), a future workstream (5, 6), or the separate GitHub authority

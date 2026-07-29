@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,6 +58,7 @@ type hookClassification struct {
 	Action       string
 	ToolID       string
 	Reason       string
+	Metadata     map[string]string
 }
 
 func init() {
@@ -189,6 +191,7 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 				Action:       "shell_operate",
 				ToolID:       "shell",
 				Reason:       "shell operation: " + scan.Reason,
+				Metadata:     shellscanReceiptMetadata(scan),
 			}
 		}
 	case strings.HasPrefix(tool, "mcp__"):
@@ -249,11 +252,30 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 			"tool":   payload.ToolName,
 		},
 	}
+	for key, value := range classification.Metadata {
+		req.Metadata[key] = value
+	}
 	seed, err := resolveWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile)
 	if err != nil {
 		return nil, fmt.Errorf("load workstation signing key: %w", err)
 	}
 	return workstation.Decide(profile, req, workstation.DecisionOptions{SigningSeed: seed})
+}
+
+func shellscanReceiptMetadata(scan shellscan.Result) map[string]string {
+	commands := make([]string, 0, len(scan.Commands))
+	for _, command := range scan.Commands {
+		entry := command.Name
+		if command.Via != "" {
+			entry += " via " + command.Via
+		}
+		commands = append(commands, entry)
+	}
+	return map[string]string{
+		"shellscan.parse_ok": strconv.FormatBool(scan.ParseOK),
+		"shellscan.signals":  strings.Join(scan.Signals, ","),
+		"shellscan.commands": strings.Join(commands, ","),
+	}
 }
 
 func inputString(input map[string]any, keys ...string) string {

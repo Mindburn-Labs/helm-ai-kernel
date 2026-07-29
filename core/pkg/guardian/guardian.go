@@ -1274,7 +1274,7 @@ func inputFieldType(value any) string {
 	case string:
 		return "string"
 	case bool:
-		return "bool"
+		return "boolean"
 	case nil:
 		return "null"
 	default:

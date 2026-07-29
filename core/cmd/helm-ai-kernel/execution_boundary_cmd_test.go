@@ -195,6 +195,33 @@ func TestRunMCPAuthorizeCallEscalateJSON(t *testing.T) {
 	}
 }
 
+func TestRunMCPAuthorizeCallPreservesReceiptPathWhenWriteFails(t *testing.T) {
+	dataFile := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(dataFile, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HELM_DATA_DIR", dataFile)
+
+	var stdout, stderr bytes.Buffer
+	code := runMCPAuthorizeCall([]string{
+		"--server-id", "srv-write-failure",
+		"--tool-name", "file_read",
+		"--json",
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stderr=%s", code, stderr.String())
+	}
+	var record struct {
+		DecisionReceiptPath string `json:"decision_receipt_path"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &record); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if record.DecisionReceiptPath == "" {
+		t.Fatal("deterministic receipt path was erased after write failure")
+	}
+}
+
 func TestRunMCPAuthorizeCallEscalateHumanMessage(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runMCPAuthorizeCall([]string{

@@ -1081,7 +1081,9 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	record = sealed
-	record.DecisionReceiptPath = writeLocalMCPReceipt(record.RecordID, "decision", record)
+	if writtenPath := writeLocalMCPReceipt(record.RecordID, "decision", record); writtenPath != "" {
+		record.DecisionReceiptPath = writtenPath
+	}
 	_, _ = surfaces.PutRecord(record)
 	exitCode := 0
 	if record.Verdict != contracts.VerdictAllow {

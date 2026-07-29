@@ -138,6 +138,24 @@ func (f *GovernanceFirewall) InterceptToolExecution(ctx context.Context, req Too
 // WrapToolHandler wraps a standard tool handler with the firewall.
 type ToolHandler func(ctx context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error)
 
+// GovernedExecutor is an opaque executor produced by GovernanceFirewall.
+type GovernedExecutor struct {
+	execute ToolExecutor
+}
+
+// Execute runs the policy-wrapped tool handler.
+func (e GovernedExecutor) Execute(ctx context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+	if e.execute == nil {
+		return ToolExecutionResponse{}, fmt.Errorf("governed executor is not configured")
+	}
+	return e.execute(ctx, req)
+}
+
+// GovernedExecutor wraps a handler and marks it as policy-enforced for Gateway.
+func (f *GovernanceFirewall) GovernedExecutor(handler ToolHandler) GovernedExecutor {
+	return GovernedExecutor{execute: ToolExecutor(f.WrapToolHandler(handler))}
+}
+
 func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 	return func(ctx context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
 		// 1. Pre-Execution Check

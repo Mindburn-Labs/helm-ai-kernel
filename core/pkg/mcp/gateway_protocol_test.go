@@ -230,11 +230,10 @@ func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "ok")
 }
 
-// HELM-364: anonymous local mode has no scope-bearing identity, so policy
-// governance remains its enforcement boundary.
-func TestGateway_ToolsCallWithoutAuthenticationReachesScopedTool(t *testing.T) {
+func TestGateway_AnonymousRawExecutorCannotReachScopedTool(t *testing.T) {
+	called := false
 	exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
-		assert.Equal(t, "scoped_tool", req.ToolName)
+		called = true
 		return ToolExecutionResponse{Content: "ok"}, nil
 	}
 	catalog := NewInMemoryCatalog()
@@ -256,7 +255,36 @@ func TestGateway_ToolsCallWithoutAuthenticationReachesScopedTool(t *testing.T) {
 	}, nil)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	assert.NotContains(t, rec.Body.String(), "requires OAuth scopes")
+	assert.Contains(t, rec.Body.String(), "requires OAuth scopes")
+	assert.False(t, called)
+}
+
+// HELM-364: anonymous local mode has no scope-bearing identity, so an explicit
+// GovernanceFirewall boundary is required for scoped execution.
+func TestGateway_AnonymousGovernedExecutorReachesScopedTool(t *testing.T) {
+	handler := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		assert.Equal(t, "scoped_tool", req.ToolName)
+		return ToolExecutionResponse{Content: "ok", Evaluated: true}, nil
+	}
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	firewall := NewGovernanceFirewall(&mockEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	gw := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(handler)))
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      23,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "scoped_tool"},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "ok")
 }
 
@@ -524,7 +552,7 @@ func TestGateway_JSONRPCAndSchemaFallbackEdges(t *testing.T) {
 		Schema:         map[string]any{"type": "object"},
 		RequiredScopes: []string{"mcp:tool:scoped"},
 	}))
-	execGateway := NewGateway(catalog, GatewayConfig{}, WithExecutor(func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+	execGateway := NewGateway(catalog, GatewayConfig{AuthMode: "oauth"}, WithExecutor(func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
 		assert.Equal(t, []string{"mcp:tool:scoped"}, req.RequiredScopes)
 		assert.Equal(t, []string{"mcp:tool:scoped"}, req.OAuthScopes)
 		assert.Equal(t, []string{"https://resource.example/mcp"}, req.OAuthResources)

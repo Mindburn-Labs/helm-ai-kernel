@@ -29,6 +29,7 @@ type Gateway struct {
 	config   GatewayConfig
 	bridge   *bridge.KernelBridge // governance bridge (optional)
 	exec     ToolExecutor
+	governed bool
 	sessions *SessionStore // HTTP session store for /mcp transport
 }
 
@@ -49,6 +50,14 @@ func WithBridge(kb *bridge.KernelBridge) GatewayOption {
 func WithExecutor(exec ToolExecutor) GatewayOption {
 	return func(g *Gateway) {
 		g.exec = exec
+	}
+}
+
+// WithGovernedExecutor wires an executor already wrapped by GovernanceFirewall.
+func WithGovernedExecutor(exec GovernedExecutor) GatewayOption {
+	return func(g *Gateway) {
+		g.exec = exec.execute
+		g.governed = exec.execute != nil
 	}
 }
 
@@ -554,15 +563,16 @@ func (g *Gateway) authMode() string {
 }
 
 // hasRequiredScopes enforces a tool's OAuth scopes whenever the configured
-// authentication channel claims a client identity. Anonymous local mode has
-// no scope-bearing identity, while static-header authentication must not
-// promote possession of an API key into every delegated OAuth scope.
+// authentication channel claims a client identity. Anonymous local mode may
+// execute scoped tools only through an explicitly policy-governed executor,
+// while static-header authentication must not promote possession of an API key
+// into every delegated OAuth scope.
 func (g *Gateway) hasRequiredScopes(ctx context.Context, tool ToolRef) bool {
 	switch g.authMode() {
 	case "oauth":
 		return hasAllOAuthScopes(ctx, tool.RequiredScopes)
 	case "none":
-		return true
+		return len(tool.RequiredScopes) == 0 || g.governed
 	case "static-header":
 		return len(tool.RequiredScopes) == 0
 	default:

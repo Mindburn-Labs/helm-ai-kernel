@@ -43,23 +43,23 @@ type mcpRPCError struct {
 	Message string `json:"message"`
 }
 
-func newLocalMCPRuntime() (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntime() (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	return newLocalMCPRuntimeWithDataDir("data")
 }
 
-func newLocalMCPRuntimeWithDataDir(dataDir string) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithDataDir(dataDir string) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	return newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, nil)
 }
 
-func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, mcppkg.GovernedExecutor{}, err
 	}
 	return newLocalMCPRuntimeWithSignerAndPolicy(signer, policyGraph)
 }
 
-func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	return newLocalMCPRuntimeWithSignerAndPolicy(signer, nil)
 }
 
@@ -68,9 +68,9 @@ func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog
 // fail-closed default: the catalog stays discoverable but every execution is
 // denied, because an empty graph carries no allow rule. Pass a compiled graph
 // (see `mcp serve --policy`) to authorize the actions it declares.
-func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if signer == nil {
-		return nil, nil, fmt.Errorf("mcp signer is required")
+		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp signer is required")
 	}
 	if policyGraph == nil {
 		policyGraph = prg.NewGraph()
@@ -83,16 +83,16 @@ func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph
 // lets the deployed gateway enforce the currently reconciled policy authority
 // (including reference-pack runtime_actions) instead of a static boot-time
 // graph that never sees reconciler updates.
-func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if evaluator == nil {
-		return nil, nil, fmt.Errorf("mcp policy evaluator is required")
+		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp policy evaluator is required")
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
 	catalog.RegisterGovernanceTools()
 	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog)
 
-	return catalog, mcppkg.ToolExecutor(firewall.WrapToolHandler(runLocalMCPTool)), nil
+	return catalog, firewall.GovernedExecutor(runLocalMCPTool), nil
 }
 
 func newLocalMCPGateway() (*mcppkg.Gateway, error) {
@@ -105,7 +105,7 @@ func newConfiguredLocalMCPGateway(cfg mcppkg.GatewayConfig) (*mcppkg.Gateway, er
 		return nil, err
 	}
 
-	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithGovernedExecutor(executor)), nil
 }
 
 func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer helmcrypto.Signer) (*mcppkg.Gateway, error) {
@@ -114,7 +114,7 @@ func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer hel
 		return nil, err
 	}
 
-	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithGovernedExecutor(executor)), nil
 }
 
 // newLocalMCPGatewayWithEvaluator builds the MCP gateway on an existing
@@ -126,7 +126,7 @@ func newLocalMCPGatewayWithEvaluator(cfg mcppkg.GatewayConfig, evaluator mcppkg.
 		return nil, err
 	}
 
-	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithGovernedExecutor(executor)), nil
 }
 
 // receiptPersistingEvaluator persists a signed, queryable receipt for every
@@ -295,7 +295,7 @@ func serveLocalMCPStdioWithDataDirAndPolicy(stdin io.Reader, stdout io.Writer, d
 			return err
 		}
 
-		resp, err := handleMCPRPCRequest(req, catalog, executor)
+		resp, err := handleMCPRPCRequest(req, catalog, executor.Execute)
 		if err != nil {
 			return err
 		}
@@ -503,7 +503,7 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 	gateway := mcppkg.NewGateway(catalog, mcppkg.GatewayConfig{
 		BaseURL:  baseURL,
 		AuthMode: authMode,
-	}, mcppkg.WithExecutor(executor))
+	}, mcppkg.WithGovernedExecutor(executor))
 
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)

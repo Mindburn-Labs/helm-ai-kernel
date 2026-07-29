@@ -61,6 +61,7 @@ trap 'rm -f "$TMP" "$FILELIST"' EXIT
 {
   echo "# HELM Protected Manifest"
   echo "# Source: git-tracked files under the protected directories."
+  echo "# Scope: only PROTECTED_DIRS and PROTECTED_FILES; this is not an exhaustive repository inventory."
   echo "# Regenerate with tools/boundary/generate-manifest.sh; verify with tools/verify-boundary.sh."
   echo "# Format: SHA256  PATH"
   echo "# quantum_posture: boundary manifest only; it records crypto file hashes but is not a cryptographic control."

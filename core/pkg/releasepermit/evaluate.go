@@ -196,8 +196,8 @@ func ValidateAllowPermit(permit Permit, trustedContext Context, contextSHA256 st
 		problems = append(problems, "workflow_path must name a GitHub Actions workflow")
 	}
 	workflowRef := normalizeWorkflowRef(permit.WorkflowRepository, permit.WorkflowPath, permit.WorkflowRef)
-	if !validWorkflowRef(workflowRef, permit.WorkflowSHA) {
-		problems = append(problems, "workflow_ref must be a branch or tag ref or match workflow_sha")
+	if !validWorkflowRef(workflowRef, trustedContext.WorkflowSHA) {
+		problems = append(problems, "workflow_ref must be a branch or tag ref or match the trusted workflow_sha")
 	}
 	if strings.EqualFold(permit.Repository, permit.WorkflowRepository) &&
 		(permit.WorkflowSHA == permit.HeadSHA || permit.WorkflowSHA == permit.MergeSHA) {
@@ -503,8 +503,12 @@ func normalizeWorkflowRef(repository, path, ref string) string {
 	return strings.TrimPrefix(ref, repository+"/"+path+"@")
 }
 
-func validWorkflowRef(ref, workflowSHA string) bool {
-	return validGitRef(ref, true) || ref == workflowSHA
+// validWorkflowRef accepts branch and tag refs, or a SHA-form ref only when it
+// equals the independently trusted workflow SHA. The SHA must never come from
+// the same artifact that carries the ref: a forger controls both fields there
+// and can make them self-consistent (HELM-350).
+func validWorkflowRef(ref, trustedWorkflowSHA string) bool {
+	return validGitRef(ref, true) || ref == trustedWorkflowSHA
 }
 
 func validGitRef(ref string, allowTag bool) bool {

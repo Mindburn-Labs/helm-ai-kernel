@@ -1,0 +1,34 @@
+{
+  "id": "workstation.observe_draft.v1",
+  "mode": "enforceable",
+  "observe": {
+    "allowed_actions": ["read", "list"]
+  },
+  "draft": {
+    "workspace_roots": ["/workspace"],
+    "allow_generated_artifacts": true
+  },
+  "operate": {
+    "permissions": ["memory.write", "network.egress", "loop.register"]
+  },
+  "egress": {
+    "allowlist": [
+      { "host": "api.example.com", "protocol": "https" }
+    ]
+  },
+  "memory": {
+    "default_ttl_days": 7,
+    "max_ttl_days": 30,
+    "allowed_classes": ["episodic", "semantic"]
+  },
+  "recurring_loops": {
+    "require_schedule": true,
+    "require_max_runtime": true,
+    "require_tool_scope": true,
+    "require_expiration": true
+  },
+  "learning": {
+    "emit_finality": true,
+    "emit_counterfactual": true
+  }
+}

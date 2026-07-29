@@ -156,9 +156,9 @@ message DenialCounterfactual {
 message DenialScalarBound {
   // Policy field that bound the request, e.g. "ttl_days".
   string field = 1;
-  // Scalar bound. Minor units for money, never float, per EffectDigest.
-  int64 requested = 2;
-  int64 max = 3;
+  // Scalar bound. Unsigned to match the public Go and JSON contracts.
+  uint32 requested = 2;
+  uint32 max = 3;
 
   reserved 100 to 199;
 }

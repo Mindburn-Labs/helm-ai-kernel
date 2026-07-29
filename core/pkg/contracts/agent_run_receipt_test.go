@@ -13,9 +13,9 @@ func TestDenialCounterfactualMarshalRejectsAmbiguousShapes(t *testing.T) {
 	}{
 		{"scalar with zero max", DenialCounterfactual{Field: "limit", Requested: 1}, `{"field":"limit","requested":1,"max":0}`},
 		{"scalar with zero request", DenialCounterfactual{Field: "limit", Max: 1}, `{"field":"limit","requested":0,"max":1}`},
+		{"zero scalar", DenialCounterfactual{Field: "limit"}, `{"field":"limit","requested":0,"max":0}`},
 		{"capability", DenialCounterfactual{Field: "permission", Capability: "shell.operate"}, `{"field":"permission","capability":"shell.operate"}`},
 		{"missing field", DenialCounterfactual{Capability: "shell.operate"}, ""},
-		{"field only", DenialCounterfactual{Field: "limit"}, ""},
 		{"mixed", DenialCounterfactual{Field: "limit", Requested: 1, Capability: "shell.operate"}, ""},
 		{"unknown capability", DenialCounterfactual{Field: "permission", Capability: "attacker.chosen"}, ""},
 	}

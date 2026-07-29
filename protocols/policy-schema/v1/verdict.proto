@@ -168,9 +168,21 @@ message DenialRequiredCapability {
   string field = 1;
   // Capability the action would have needed, from the fixed permission
   // vocabulary. Never an instance identifier.
-  string capability = 2;
+  WorkstationPermission capability = 2;
 
   reserved 100 to 199;
+}
+
+enum WorkstationPermission {
+  WORKSTATION_PERMISSION_UNSPECIFIED = 0;
+  WORKSTATION_PERMISSION_NETWORK_EGRESS = 1;
+  WORKSTATION_PERMISSION_MCP_MUTATE = 2;
+  WORKSTATION_PERMISSION_MEMORY_WRITE = 3;
+  WORKSTATION_PERMISSION_LOOP_REGISTER = 4;
+  WORKSTATION_PERMISSION_SHELL_OPERATE = 5;
+  WORKSTATION_PERMISSION_DEPLOY_PUBLISH = 6;
+  WORKSTATION_PERMISSION_SECRET_READ = 7;
+  WORKSTATION_PERMISSION_PAYMENT_INITIATE = 8;
 }
 
 // ── Supporting Types ───────────────────────────────────────────

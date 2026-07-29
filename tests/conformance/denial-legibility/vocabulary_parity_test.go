@@ -100,6 +100,32 @@ func TestProtoCounterfactualCannotExpressAmbiguousShapes(t *testing.T) {
 	}
 }
 
+func TestProtoCounterfactualUsesFixedCapabilityVocabulary(t *testing.T) {
+	raw, err := os.ReadFile("../../../protocols/policy-schema/v1/verdict.proto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(raw)
+	block := protoMessageBlock(t, source, "DenialRequiredCapability")
+	if !strings.Contains(block, "WorkstationPermission capability = 2;") {
+		t.Fatal("DenialRequiredCapability does not use the fixed workstation permission enum")
+	}
+	for _, value := range []string{
+		"NETWORK_EGRESS",
+		"MCP_MUTATE",
+		"MEMORY_WRITE",
+		"LOOP_REGISTER",
+		"SHELL_OPERATE",
+		"DEPLOY_PUBLISH",
+		"SECRET_READ",
+		"PAYMENT_INITIATE",
+	} {
+		if !strings.Contains(source, "WORKSTATION_PERMISSION_"+value) {
+			t.Errorf("WorkstationPermission is missing %s", value)
+		}
+	}
+}
+
 func protoMessageBlock(t *testing.T, source, name string) string {
 	t.Helper()
 	start := strings.Index(source, "message "+name+" {")

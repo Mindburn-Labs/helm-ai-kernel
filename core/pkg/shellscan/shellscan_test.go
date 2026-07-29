@@ -145,6 +145,9 @@ var decideCases = []struct {
 	// Regression: P1 DYNAMIC_DESTRUCTIVE_ARGS_FAIL_OPEN — dynamic tokens in
 	// subcommand/flag position of destructive families must fail closed.
 	{"regression-kubectl-dynamic-sub", `kubectl "$(printf delete)" namespace prod`, "dynamic subcommand"},
+	{"regression-kubectl-empty-attached-global", "kubectl --namespace= delete pod victim", "dynamic subcommand"},
+	{"regression-kubectl-dynamic-attached-global", `kubectl --namespace="$NS" delete pod victim`, "dynamic subcommand"},
+	{"regression-kubectl-unknown-attached-global", "kubectl --request-timeout=5s delete pod victim", "dynamic subcommand"},
 	{"regression-docker-dynamic-sub", `docker "$(printf rm)" -f c1`, "dynamic subcommand"},
 	{"regression-docker-dynamic-rm-flag", `docker rm "$(printf %s -f)" c1`, "unresolvable flags"},
 	{"regression-git-reset-dynamic-flag", `git reset "$(printf %s --hard)"`, "unresolvable flags"},
@@ -241,6 +244,7 @@ var passCases = []struct {
 }{
 	{"safe-git-status", "git status --short"},
 	{"safe-git-checkout", "git checkout main"},
+	{"safe-git-attached-git-dir", "git --git-dir=/repo/.git status --short"},
 	{"safe-npm-run", "npm run build"},
 	{"safe-chain", "go build ./... && go vet ./..."},
 	{"safe-pipe", "git log --oneline | head -5"},
@@ -252,7 +256,9 @@ var passCases = []struct {
 	{"safe-rm-force-file", "rm -f /tmp/scratch.txt"},
 	{"safe-dd-no-if", "dd of=/tmp/out bs=1k count=1"},
 	{"safe-docker-ps", "docker ps -a"},
+	{"safe-docker-attached-context", "docker --context=prod ps"},
 	{"safe-kubectl-get", "kubectl get pods -n prod"},
+	{"safe-kubectl-attached-namespace", "kubectl --namespace=prod get pods"},
 	{"safe-find", "find . -name '*.go' -print"},
 	{"safe-env-only", "env | grep PATH"},
 	{"safe-bash-script", "bash scripts/deploy.sh"},

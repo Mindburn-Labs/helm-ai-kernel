@@ -1327,6 +1327,9 @@ func firstSubcommand(args []wordTok, vals map[string]bool) (sub string, dynamic,
 				i++
 				continue
 			}
+			if flag, value, attached := strings.Cut(tok.text, "="); attached && vals[flag] && value != "" {
+				continue
+			}
 			return "", true, false
 		}
 		return tok.text, false, true

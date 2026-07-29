@@ -94,10 +94,11 @@ It does **not** verify the following:
    identity, DCO sign-offs, and other commit trailers are technical or
    provenance evidence only; none authorizes a merge. What does authorize one
    is recorded in `GOVERNANCE.md` under "What `main` enforces today" — the
-   required status checks, resolved review threads, and the pinned release
-   permit. There is no human approval requirement to preserve: `main` requires
-   zero approving reviews. The remaining gap is the approval-only App
-   interlock, which is not live.
+   required status checks, resolved review threads, linear history, and an
+   up-to-date branch. There is no human approval requirement to preserve:
+   `main` requires zero approving reviews. The release permit remains required
+   by the autonomous operating contract, but the current GitHub ruleset does
+   not enforce it; the approval-only App interlock is not live.
 
 These omissions are deliberate. Each one corresponds to an existing test
 surface (1, 3, 4), a future workstream (5, 6), or the separate GitHub authority

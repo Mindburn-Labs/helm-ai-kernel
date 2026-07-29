@@ -19,21 +19,38 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - id: drift
         name: Check published registry lockstep
-        continue-on-error: true
         run: |
           VERSION="$(cat VERSION)"
           python3 scripts/release/check_version_drift.py \
+            --report \
             --expected-version "$VERSION" \
             --write-status version-status.json \
             published \
             --surface-timeout 15
+      - id: verdict
+        name: Read drift verdict
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+
+          with open("version-status.json", "r", encoding="utf-8") as f:
+              status = json.load(f)
+          if status.get("schema_version") != "mindburn.version_status.v1":
+              raise SystemExit("unrecognised version-status schema")
+          verdict = status.get("status")
+          if verdict not in {"pass", "fail"}:
+              raise SystemExit(f"unrecognised version-status verdict: {verdict!r}")
+          print(f"drift={'true' if verdict == 'fail' else 'false'}")
+          PY
       - name: Upload version status
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: version-status
           path: version-status.json
+          if-no-files-found: warn
       - name: Open or update drift issue
-        if: steps.drift.outcome == 'failure'
+        if: steps.verdict.outputs.drift == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -124,7 +141,7 @@ jobs:
               --label release-blocker
           fi
       - name: Close resolved drift issue
-        if: steps.drift.outcome == 'success'
+        if: steps.verdict.outputs.drift == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

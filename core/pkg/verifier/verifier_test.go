@@ -108,6 +108,13 @@ func createValidCanonicalBundleFixture(t *testing.T) string {
 
 func sealVerifierFixture(t *testing.T, dir, packID string) {
 	t.Helper()
+	// These fixtures are sealed with a "file-dev" signer, so the seal carries
+	// its own verification key. That is self-attestation and is refused by
+	// default (F-02). These tests exercise the verifier's *other* checks —
+	// structure, index integrity, merkle roots, replay determinism — so they
+	// opt in explicitly rather than silently relying on the old default.
+	// TestVerifyBundle_RejectsSelfAttestedSealByDefault covers the refusal.
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "1")
 	writeSealFixtureIndex(t, dir)
 	if _, err := evidencepkg.SealEvidencePack(context.Background(), dir, evidencepkg.SealEvidencePackOptions{
 		PackID:  packID,
@@ -183,6 +190,47 @@ func setBundleGates(t *testing.T, dir string, gates ...string) {
 	}
 	index["gates"] = gates
 	writeJSON(t, indexPath, index)
+}
+
+// TestVerifyBundle_RejectsSelfAttestedSealByDefault is the F-02 regression.
+//
+// dev-local is the default trust profile for `helm-ai-kernel verify`, and it
+// used to accept seal.signer.public_key — a key read out of the pack being
+// verified — as the trust root. Anyone could mint a keypair, sign their own
+// evidence pack, embed the matching public key, and get "PASS: n/n checks
+// passed". Accepting a self-attested seal must now be an explicit choice.
+func TestVerifyBundle_RejectsSelfAttestedSealByDefault(t *testing.T) {
+	dir := createValidBundleFixture(t)
+
+	// createValidBundleFixture opts in via sealVerifierFixture; withdraw that so
+	// this test observes the default posture an operator actually gets.
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.Verified {
+		t.Fatal("a self-attested evidence pack verified under the default profile: " +
+			"its signature proves internal consistency only, so reporting PASS overstates provenance")
+	}
+
+	var sealCheck *CheckResult
+	for i := range report.Checks {
+		if report.Checks[i].Name == "evidence_pack_seal" {
+			sealCheck = &report.Checks[i]
+			break
+		}
+	}
+	if sealCheck == nil {
+		t.Fatal("no evidence_pack_seal check present in report")
+	}
+	if sealCheck.Pass {
+		t.Fatal("evidence_pack_seal passed on a self-attested seal")
+	}
+	if !strings.Contains(sealCheck.Reason, "self-attested") {
+		t.Fatalf("seal failure should name self-attestation, got: %s", sealCheck.Reason)
+	}
 }
 
 func TestVerifyBundle_Valid(t *testing.T) {

@@ -228,6 +228,29 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertEqual(result.expected, "0.5.10")
         self.assertIsNone(result.actual)
 
+    def test_published_value_error_is_reported_as_a_surface_failure(self) -> None:
+        contract = {
+            "published_surfaces": [
+                {"id": "invalid-url", "kind": "example", "url": "https://example.test"},
+            ]
+        }
+        original = drift.PUBLISHED_CHECKS.copy()
+
+        def raise_value_error(_surface, _version):
+            raise ValueError("invalid URL")
+
+        drift.PUBLISHED_CHECKS["example"] = raise_value_error
+        try:
+            results = drift.check_published(contract, "0.5.12", set())
+        finally:
+            drift.PUBLISHED_CHECKS.clear()
+            drift.PUBLISHED_CHECKS.update(original)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].status, "fail")
+        self.assertTrue(results[0].blocking)
+        self.assertIn("ValueError: invalid URL", results[0].detail or "")
+
     def test_status_payload_emits_timeout_failures_without_blocking_advisory(self) -> None:
         blocking = drift.published_error(
             {

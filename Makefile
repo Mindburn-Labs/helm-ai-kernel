@@ -1,4 +1,4 @@
-.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -87,6 +87,15 @@ test-sdk-java:
 sdk-openapi-check:
 	bash scripts/sdk/openapi_check.sh
 
+sdk-gen-check:
+	bash scripts/sdk/check_drift.sh
+
+sdk-manifest-verify:
+	bash scripts/sdk/check_drift.sh --verify-only
+
+test-sdk-manifest:
+	python3 -m unittest discover -s scripts/sdk/tests -v
+
 sdk-examples-smoke:
 	bash scripts/sdk/examples_smoke.sh
 
@@ -124,6 +133,23 @@ bench-report:
 lint: docs-coverage docs-truth
 	cd core && go vet ./...
 	cd core && test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
+
+# lint-security runs golangci-lint with gosec over the trusted computing base.
+#
+# .golangci.yml has existed for some time but nothing ever executed it: `lint`
+# above runs only go vet and gofmt, and no workflow invokes golangci-lint. gosec
+# was absent entirely (F-14). This target makes both runnable.
+#
+# It is NOT yet wired into CI: as of 2026-07-25 it reports 14 findings across the
+# TCB packages, of which several are gosec false positives (e.g. G101 firing on
+# the map-key constant ContextCredentialHash). Promoting it to a blocking gate
+# requires triaging those first — tracked in
+# docs/security/kernel-security-remediation-ledger.md.
+.PHONY: lint-security
+lint-security:
+	cd core && golangci-lint run --enable gosec --timeout 10m \
+		./pkg/crypto/... ./pkg/guardian/... ./pkg/executor/... ./pkg/pdp/... \
+		./pkg/verifier/... ./pkg/evidence/... ./pkg/boundary/...
 
 proto-lint:
 	buf lint protocols/policy-schema
@@ -405,6 +431,29 @@ codegen-check: codegen
 
 verify-boundary:
 	bash tools/verify-boundary.sh
+
+# Declared here rather than appended to the .PHONY line at the top of this file.
+# That line is a single ~1500-character string, so every branch that touches it
+# conflicts with every other one: adding two names there newly conflicted six
+# open pull requests, four of which were mergeable before. .PHONY is additive,
+# so a second declaration costs nothing.
+.PHONY: manifest test-boundary install-merge-drivers
+
+manifest:
+	bash tools/boundary/generate-manifest.sh
+
+# Asserts the gate fails on every known way of breaking the boundary. Needs a
+# clean tree: it mutates the working tree per case and restores after each.
+test-boundary:
+	bash tools/boundary/boundary_test.sh
+
+# Registers the merge driver referenced by .gitattributes. Git stores merge
+# drivers in local config, never in the repository, so every clone runs this
+# once. Skipping it is safe: the manifest just conflicts the old way.
+install-merge-drivers:
+	git config merge.helm-derived.name "derived file: resolve to ours, regenerate, CI verifies"
+	git config merge.helm-derived.driver true
+	@echo "Merge driver 'helm-derived' registered. Run 'make manifest' after any merge that touched a protected file."
 
 clean:
 	rm -rf bin/ dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json

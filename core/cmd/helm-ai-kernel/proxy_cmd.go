@@ -452,15 +452,33 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	defer store.Close()
 
-	// Ed25519 signer (used for both receipts and KernelBridge governance)
-	kernelSignerID := signKey
-	if kernelSignerID == "" {
-		kernelSignerID = "helm-proxy"
-	}
-	kernelSigner, err := helmcrypto.NewEd25519Signer(kernelSignerID)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: failed to create kernel signer: %v\n", err)
-		return 2
+	// Ed25519 signer (used for both receipts and KernelBridge governance).
+	//
+	// --sign is documented as a signing seed. It previously became the signer's
+	// key *id* while the actual keypair was generated at random, so receipts
+	// were unverifiable after a restart and the seed was published in every
+	// receipt's KeyID field (F-01).
+	var kernelSigner *helmcrypto.Ed25519Signer
+	if signKey != "" {
+		var derivedFromPassphrase bool
+		kernelSigner, derivedFromPassphrase, err = helmcrypto.NewEd25519SignerFromSecret(signKey, "helm-proxy")
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: failed to create kernel signer: %v\n", err)
+			return 2
+		}
+		if derivedFromPassphrase {
+			_, _ = fmt.Fprintln(stderr,
+				"Warning: --sign is not a 32-byte hex/base64 seed; deriving one by hashing it. "+
+					"Supply a generated seed so receipts stay verifiable and the key is not guessable.")
+		}
+	} else {
+		// No seed supplied: ephemeral identity. Receipts signed by it cannot be
+		// verified once this process exits. Fails closed under HELM_PRODUCTION.
+		kernelSigner, err = helmcrypto.NewEd25519Signer("helm-proxy")
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: failed to create kernel signer: %v\n", err)
+			return 2
+		}
 	}
 
 	// Optional: separate receipt signer (same key for now)

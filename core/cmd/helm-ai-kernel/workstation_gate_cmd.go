@@ -100,15 +100,15 @@ func printGateDecision(stdout io.Writer, decision workstation.ShellGateDecision,
 	_, _ = fmt.Fprintf(stdout, "%sShell Gate Decision%s\n", ColorBold, ColorReset)
 	_, _ = fmt.Fprintf(stdout, "  verdict:   %s\n", decision.Verdict)
 	_, _ = fmt.Fprintf(stdout, "  profile:   %s\n", decision.Profile)
-	_, _ = fmt.Fprintf(stdout, "  command:   %s\n", decision.Command)
-	_, _ = fmt.Fprintf(stdout, "  invoked:   %s\n", strings.Join(decision.Invoked, ", "))
+	_, _ = fmt.Fprintf(stdout, "  command:   %s\n", terminalSafe(decision.Command))
+	_, _ = fmt.Fprintf(stdout, "  invoked:   %s\n", terminalSafe(strings.Join(decision.Invoked, ", ")))
 	if len(decision.Blocked) > 0 {
-		_, _ = fmt.Fprintf(stdout, "  blocked:   %s\n", strings.Join(decision.Blocked, ", "))
+		_, _ = fmt.Fprintf(stdout, "  blocked:   %s\n", terminalSafe(strings.Join(decision.Blocked, ", ")))
 	}
 	if decision.Reason != "" {
-		_, _ = fmt.Fprintf(stdout, "  reason:    %s\n", decision.Reason)
+		_, _ = fmt.Fprintf(stdout, "  reason:    %s\n", terminalSafe(decision.Reason))
 	}
-	_, _ = fmt.Fprintf(stdout, "  allowlist: %s\n", allowlistPath)
+	_, _ = fmt.Fprintf(stdout, "  allowlist: %s\n", terminalSafe(allowlistPath))
 }
 
 // requestShellGateApproval turns a pending_approval verdict into an approval

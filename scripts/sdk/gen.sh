@@ -323,6 +323,7 @@ import (
 HEADER
 GO_SKIP_MODELS=(
     model_agent_identity_profile.go
+    model_approval_ceremony.go
     model_approval_web_authn_assertion.go
     model_approval_web_authn_challenge.go
     model_authz_health.go

@@ -205,6 +205,29 @@ func TestShellAllowlistStoreSeedsDefaults(t *testing.T) {
 	}
 }
 
+func TestShellAllowlistSeedDoesNotFollowSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("keep"), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	path := filepath.Join(dir, ShellAllowlistFilename)
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	if err := NewShellAllowlistStore(path).seedLocked(); err == nil {
+		t.Fatal("seed through symlink must fail")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target: %v", err)
+	}
+	if string(data) != "keep" {
+		t.Fatalf("symlink target changed to %q", data)
+	}
+}
+
 func TestDefaultShellAllowlistExcludesYQ(t *testing.T) {
 	if containsString(DefaultShellAllowlist, "yq") {
 		t.Fatal("default allowlist must exclude yq because it can edit files in place")

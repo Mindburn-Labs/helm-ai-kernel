@@ -118,8 +118,20 @@ func (s *ShellAllowlistStore) seedLocked() error {
 	if err != nil {
 		return fmt.Errorf("encode default shell allowlist: %w", err)
 	}
-	if err := os.WriteFile(s.path, append(data, '\n'), 0o600); err != nil {
+	file, err := os.OpenFile(s.path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
 		return fmt.Errorf("seed shell allowlist %s: %w", s.path, err)
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("seed shell allowlist %s: %w", s.path, err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("sync shell allowlist %s: %w", s.path, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close shell allowlist %s: %w", s.path, err)
 	}
 	return nil
 }

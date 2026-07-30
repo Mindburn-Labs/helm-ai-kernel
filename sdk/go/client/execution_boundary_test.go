@@ -36,7 +36,7 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 		writeJSON(t, w, ApprovalWebAuthnChallenge{"challenge_id": "ch1", "approval_id": "ap1"})
 	})
 	mux.HandleFunc("/api/v1/approvals/ap1/webauthn/assert", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(t, w, ApprovalCeremony{ApprovalId: stringPtr("ap1"), State: stringPtr("approved"), BindingHash: stringPtr("sha256:command")})
+		writeJSON(t, w, ApprovalCeremony{"approval_id": "ap1", "state": "approved", "binding_hash": "sha256:command"})
 	})
 	mux.HandleFunc("/api/v1/conformance/negative", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, []NegativeBoundaryVector{{ID: "pdp-outage", Category: "policy"}})
@@ -83,7 +83,7 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 		t.Fatalf("challenge = %#v, err = %v", challenge, err)
 	}
 	asserted, err := client.AssertApprovalWebAuthnChallenge("ap1", ApprovalWebAuthnAssertion{"challenge_id": "ch1", "assertion": "sig"})
-	if err != nil || asserted.GetState() != "approved" || asserted.GetBindingHash() != "sha256:command" {
+	if err != nil || (*asserted)["state"] != "approved" || (*asserted)["binding_hash"] != "sha256:command" {
 		t.Fatalf("asserted = %#v, err = %v", asserted, err)
 	}
 	vectors, err := client.ListNegativeConformanceVectors()
@@ -256,7 +256,7 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 		{"get authz snapshot", "GET /api/v1/authz/snapshots/snapshot%2Fa%20b", func() error { _, err := client.GetAuthzSnapshot("snapshot/a b"); return err }},
 		{"list approvals", "GET /api/v1/approvals", func() error { _, err := client.ListApprovalCeremonies(); return err }},
 		{"create approval", "POST /api/v1/approvals", func() error {
-			_, err := client.CreateApprovalCeremony(ApprovalCeremony{ApprovalId: stringPtr("a1"), BindingHash: stringPtr("sha256:command")})
+			_, err := client.CreateApprovalCeremony(ApprovalCeremony{"approval_id": "a1", "binding_hash": "sha256:command"})
 			return err
 		}},
 		{"transition approval", "POST /api/v1/approvals/approval%2Fa%20b/approve", func() error {

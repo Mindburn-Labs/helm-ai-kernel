@@ -60,6 +60,24 @@ func TestWorkstationGateProductionDeny(t *testing.T) {
 	}
 }
 
+func TestPrintGateDecisionSanitizesTerminalText(t *testing.T) {
+	var out bytes.Buffer
+	printGateDecision(&out, workstation.ShellGateDecision{
+		Command: "\x1b[2Jrm\rspoof",
+		Invoked: []string{"rm\x00"},
+		Blocked: []string{"rm\x1b"},
+		Reason:  "blocked\u202Etxt",
+	}, "/tmp/\x1ballowlist")
+	if strings.Count(out.String(), "\x1b") != 2 || strings.Contains(out.String(), "\x1b[2J") {
+		t.Fatalf("gate output contains attacker-controlled terminal escape: %q", out.String())
+	}
+	for _, control := range []string{"\r", "\x00", "\u202E"} {
+		if strings.Contains(out.String(), control) {
+			t.Fatalf("gate output contains terminal control %q: %q", control, out.String())
+		}
+	}
+}
+
 func TestWorkstationGateDevEscalates(t *testing.T) {
 	allowlist := gateTestAllowlist(t, []string{"ls"})
 	code, out, _ := runGateForTest(t, "--profile", "dev", "--allowlist", allowlist, "--command", "ls && rm -rf /tmp/x")

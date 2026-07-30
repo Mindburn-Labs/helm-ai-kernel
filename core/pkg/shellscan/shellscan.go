@@ -831,6 +831,10 @@ func scanShellScriptFlag(shell string, rest []wordTok) (script wordTok, found, s
 }
 
 func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
+	if depth > maxWrapperDepth {
+		c.decide("wrapper nesting too deep to classify statically")
+		return
+	}
 	for len(args) > 0 {
 		head := args[0]
 		if head.dynamic {
@@ -1202,6 +1206,9 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				return
 			case found && script.dynamic:
 				c.decide(name + " -c with a dynamic payload")
+				return
+			case found && (name == "pwsh" || name == "powershell"):
+				c.decide(name + " inline payload requires a PowerShell-aware decision (fail-closed)")
 				return
 			case found:
 				c.classifyString(script.text, joinVia(via, name+" -c"), depth+1)

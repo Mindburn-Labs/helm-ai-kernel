@@ -230,7 +230,7 @@ var decideCases = []struct {
 	// POSIX set must also have their -c payloads classified.
 	{"regression-fish-c", `fish -c 'rm -R -f /tmp/x'`, "recursive rm"},
 	{"regression-nu-c", `nu -c 'rm -rf /tmp/x'`, "recursive rm"},
-	{"regression-pwsh-c", `pwsh -c 'rm -rf /tmp/x'`, "recursive rm"},
+	{"regression-pwsh-c", `pwsh -c 'Remove-Item -Recurse -Force /tmp/x'`, "PowerShell-aware"},
 	{"regression-elvish-c", `elvish -c 'rm -rf /tmp/x'`, "recursive rm"},
 	{"regression-fish-unknown-flag", `fish -d 3 -c 'rm -rf /tmp/x'`, "cannot be resolved statically"},
 	{"regression-pwsh-word-flag", `pwsh -NoProfile -c 'rm -rf /tmp/x'`, "cannot be resolved statically"},
@@ -325,6 +325,17 @@ func TestClassifyPassesBenign(t *testing.T) {
 				t.Fatalf("Classify(%q).Decide = true (%s), want false — allowlist regression", tc.command, res.Reason)
 			}
 		})
+	}
+}
+
+func TestClassifyBoundsNestedFindExec(t *testing.T) {
+	command := "echo ok"
+	for i := 0; i < maxWrapperDepth+2; i++ {
+		command = "find . -exec " + command + " {} +"
+	}
+	res := Classify(command)
+	if !res.Decide || !strings.Contains(res.Reason, "nesting too deep") {
+		t.Fatalf("Classify(nested find) = %+v, want bounded fail-closed decision", res)
 	}
 }
 

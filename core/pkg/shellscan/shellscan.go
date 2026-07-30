@@ -1347,7 +1347,7 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 	case cmd.Name == "git":
 		c.matchGit(args)
 	case cmd.Name == "kubectl":
-		sub, dynamic, found := firstSubcommand(args[1:], kubectlValueFlags)
+		sub, dynamic, found := firstSubcommand(args[1:], kubectlValueFlags, kubectlBoolFlags)
 		if dynamic {
 			c.decide("kubectl with a dynamic subcommand (fail-closed)")
 			return
@@ -1377,7 +1377,18 @@ var gitValueFlags = map[string]bool{
 var kubectlValueFlags = map[string]bool{
 	"-n": true, "--namespace": true, "--context": true, "--cluster": true,
 	"--user": true, "--server": true, "-s": true, "--kubeconfig": true,
-	"--token": true, "--as": true, "--as-group": true,
+	"--token": true, "--as": true, "--as-group": true, "--request-timeout": true,
+}
+
+var gitBoolFlags = map[string]bool{
+	"--bare": true, "--glob-pathspecs": true, "--icase-pathspecs": true,
+	"--literal-pathspecs": true, "--no-pager": true, "--no-replace-objects": true,
+	"--noglob-pathspecs": true, "--paginate": true, "-P": true, "-p": true,
+}
+
+var kubectlBoolFlags = map[string]bool{
+	"--disable-compression": true, "--insecure-skip-tls-verify": true,
+	"--match-server-version": true, "--warnings-as-errors": true,
 }
 
 var dockerValueFlags = map[string]bool{
@@ -1387,7 +1398,7 @@ var dockerValueFlags = map[string]bool{
 // firstSubcommand finds the first positional token, skipping flags and the
 // values of known value-flags. dynamic is true when scanning hit a word that
 // cannot be resolved statically (the subcommand may be hidden).
-func firstSubcommand(args []wordTok, vals map[string]bool) (sub string, dynamic, found bool) {
+func firstSubcommand(args []wordTok, vals, bools map[string]bool) (sub string, dynamic, found bool) {
 	for i := 0; i < len(args); i++ {
 		tok := args[i]
 		if tok.dynamic {
@@ -1407,6 +1418,9 @@ func firstSubcommand(args []wordTok, vals map[string]bool) (sub string, dynamic,
 				i++
 				continue
 			}
+			if bools[tok.text] {
+				continue
+			}
 			if flag, value, attached := strings.Cut(tok.text, "="); attached && vals[flag] && value != "" {
 				continue
 			}
@@ -1418,7 +1432,7 @@ func firstSubcommand(args []wordTok, vals map[string]bool) (sub string, dynamic,
 }
 
 func (c *collector) matchGit(args []wordTok) {
-	sub, dynamic, found := firstSubcommand(args[1:], gitValueFlags)
+	sub, dynamic, found := firstSubcommand(args[1:], gitValueFlags, gitBoolFlags)
 	if dynamic {
 		c.decide("git invocation with a dynamic subcommand (fail-closed)")
 		return
@@ -1484,7 +1498,7 @@ func (c *collector) matchGit(args []wordTok) {
 }
 
 func (c *collector) matchDocker(args []wordTok) {
-	sub, dynamic, found := firstSubcommand(args[1:], dockerValueFlags)
+	sub, dynamic, found := firstSubcommand(args[1:], dockerValueFlags, nil)
 	if dynamic {
 		c.decide("docker invocation with a dynamic subcommand (fail-closed)")
 		return
@@ -1495,7 +1509,7 @@ func (c *collector) matchDocker(args []wordTok) {
 	rest := args[1:]
 	isRm := sub == "rm"
 	if sub == "container" {
-		next, nextDynamic, nextFound := firstSubcommand(rest[indexOfToken(rest, "container")+1:], nil)
+		next, nextDynamic, nextFound := firstSubcommand(rest[indexOfToken(rest, "container")+1:], nil, nil)
 		if nextDynamic {
 			c.decide("docker container with a dynamic subcommand (fail-closed)")
 			return

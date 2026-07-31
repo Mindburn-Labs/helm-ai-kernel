@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 type cliSupportMatrix struct {
@@ -26,7 +29,7 @@ func supportMatrix() cliSupportMatrix {
 }
 
 func printFrontDoor(out io.Writer) {
-	fmt.Fprintf(out, "%sHELM AI Kernel%s %s (%s)\n\n", ColorBold, ColorReset, displayVersion(), displayCommit())
+	fmt.Fprintf(out, "%s %s (%s)\n\n", terminalTitle(out, "HELM AI Kernel"), displayVersion(), displayCommit())
 	fmt.Fprintln(out, "Start:")
 	fmt.Fprintln(out, "  helm-ai-kernel quickstart")
 	fmt.Fprintln(out, "  helm-ai-kernel setup claude-code --yes")
@@ -71,13 +74,30 @@ func runVersionCommand(args []string, stdout, _ io.Writer) int {
 	if len(args) == 1 && args[0] == "--json" {
 		return writeVersionJSON(stdout)
 	}
-	fmt.Fprintf(stdout, "%sHELM AI Kernel%s %s (%s)\n", ColorBold, ColorReset, displayVersion(), displayCommit())
+	fmt.Fprintf(stdout, "%s %s (%s)\n", terminalTitle(stdout, "HELM AI Kernel"), displayVersion(), displayCommit())
 	fmt.Fprintf(stdout, "  Report Schema:          %s\n", reportSchemaVersion)
 	fmt.Fprintf(stdout, "  EvidencePack Schema:    1\n")
 	fmt.Fprintf(stdout, "  Compatibility Schema:   1\n")
 	fmt.Fprintf(stdout, "  MCP Bundle Schema:      1\n")
 	fmt.Fprintf(stdout, "  Build Time:             %s\n", displayBuildTime())
 	return 0
+}
+
+// terminalTitle applies visual hierarchy only when the destination can render it.
+// Data and piped output stay plain even when the process itself has a terminal.
+func terminalTitle(out io.Writer, title string) string {
+	file, ok := out.(*os.File)
+	if !ok {
+		return title
+	}
+	caps := ui.DetectCapabilities(os.Stdin, file, ui.TerminalOptions{
+		Format: ui.FormatText,
+		Color:  ui.ColorAuto,
+	})
+	if !caps.Color {
+		return title
+	}
+	return ColorBold + title + ColorReset
 }
 
 func writeVersionJSON(out io.Writer) int {

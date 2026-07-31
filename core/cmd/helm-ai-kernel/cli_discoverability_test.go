@@ -72,8 +72,8 @@ func TestHelpJSONCatalogIsStableAndSideEffectFree(t *testing.T) {
 	if catalogContainsName(catalog, "launchpad") {
 		t.Fatal("catalog listed alias launchpad as a canonical command")
 	}
-	if catalogContainsName(catalog, "watch") {
-		t.Fatal("catalog advertised an unintegrated watch command")
+	if !catalogContainsName(catalog, "watch") {
+		t.Fatal("catalog omitted the integrated watch command")
 	}
 }
 
@@ -100,9 +100,6 @@ func TestCompletionScriptsAreDeterministicAndSideEffectFree(t *testing.T) {
 				if !strings.Contains(first, command.Name) {
 					t.Fatalf("%s completion omitted %q", shell, command.Name)
 				}
-			}
-			if strings.Contains(first, "watch") {
-				t.Fatalf("%s completion advertised an unintegrated watch command", shell)
 			}
 		})
 	}
@@ -151,6 +148,19 @@ func TestVersionJSONIsStableForVersionAliases(t *testing.T) {
 	}
 	if version.Version != displayVersion() || version.Commit != displayCommit() || version.BuildTime != displayBuildTime() {
 		t.Fatalf("version JSON=%+v", version)
+	}
+}
+
+func TestGlobalHumanOutputIsPlainForNonTerminalWriters(t *testing.T) {
+	for _, args := range [][]string{{}, {"version"}} {
+		var stdout, stderr bytes.Buffer
+		code := Run(append([]string{"helm-ai-kernel"}, args...), &stdout, &stderr)
+		if code != 0 || stderr.Len() != 0 {
+			t.Fatalf("args=%v code=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
+		}
+		if strings.Contains(stdout.String(), "\x1b[") {
+			t.Fatalf("args=%v wrote ANSI to non-terminal output: %q", args, stdout.String())
+		}
 	}
 }
 

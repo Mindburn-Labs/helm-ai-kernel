@@ -71,8 +71,8 @@ func newApprovalHTTPClient(rawURL, apiKey string) (*approvalHTTPClient, error) {
 		return nil, errors.New("admin API key must not contain control characters")
 	}
 	return &approvalHTTPClient{
-		baseURL:    parsed,
-		apiKey:     key,
+		baseURL: parsed,
+		apiKey:  key,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 			// Never follow a redirect after attaching an admin bearer token.

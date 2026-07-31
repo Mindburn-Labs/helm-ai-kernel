@@ -118,3 +118,24 @@ func TestApprovalHTTPClientSanitizesRemoteError(t *testing.T) {
 		t.Fatalf("ListApprovals error = %q", err)
 	}
 }
+
+func TestApprovalHTTPClientRejectsRedirectWithoutForwardingBearer(t *testing.T) {
+	apiKey := "test-key"
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("redirect target received %s with Authorization=%q", r.Method, r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer redirectTarget.Close()
+	redirectSource := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectTarget.URL, http.StatusFound)
+	}))
+	defer redirectSource.Close()
+
+	client, err := newApprovalHTTPClient(redirectSource.URL, apiKey)
+	if err != nil {
+		t.Fatalf("newApprovalHTTPClient: %v", err)
+	}
+	if _, err := client.ListApprovals(context.Background()); err == nil || !strings.Contains(err.Error(), "HTTP 302") {
+		t.Fatalf("ListApprovals redirect error = %v", err)
+	}
+}

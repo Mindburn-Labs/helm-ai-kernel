@@ -333,6 +333,33 @@ func TestPrepareQuickstartResetReplacesMarkedState(t *testing.T) {
 	}
 }
 
+func TestPrepareQuickstartRefusesToClaimExistingDataDirectory(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(dataDir, "unrelated.txt")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prepareQuickstart(quickstartOptions{
+		Addr:    "127.0.0.1",
+		Port:    7714,
+		DataDir: dataDir,
+		Profile: "mcp",
+	})
+	if err == nil || !strings.Contains(err.Error(), "without a valid HELM quickstart ownership marker") {
+		t.Fatalf("prepare existing directory error = %v", err)
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("existing directory was modified: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dataDir, quickstartOwnershipMarker)); !os.IsNotExist(err) {
+		t.Fatalf("existing directory was claimed: %v", err)
+	}
+}
+
 func TestQuickstartRejectsNonLoopbackBind(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

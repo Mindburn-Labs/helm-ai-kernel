@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -97,7 +99,45 @@ func TestQuickstartDryRunJSONIsPurePreview(t *testing.T) {
 	}
 }
 
-func TestQuickstartLiveSummaryRetainsBootstrapToken(t *testing.T) {
+func TestQuickstartDryRunResetRunsOwnershipPreflight(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(dataDir, "keep")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"--reset", "--yes", "--dry-run", "--json", "--data-dir", dataDir}
+	var stdout, stderr bytes.Buffer
+
+	code := runQuickstartCmd(args, &stdout, &stderr)
+	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "unmarked target") {
+		t.Fatalf("unmarked reset preview code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("unsafe dry-run reset touched sentinel: %v", err)
+	}
+
+	if err := writeQuickstartOwnershipMarker(dataDir); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = runQuickstartCmd(args, &stdout, &stderr)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("marked reset preview code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var summary map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil || summary["operation"] != "preview" {
+		t.Fatalf("marked reset preview = %q, summary=%+v, err=%v", stdout.String(), summary, err)
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("safe dry-run reset touched sentinel: %v", err)
+	}
+}
+
+func TestQuickstartLiveSummaryDoesNotExposeBootstrapToken(t *testing.T) {
 	prepared := quickstartPrepared{
 		KernelURL: "http://127.0.0.1:7714",
 		Profile:   "mcp",
@@ -110,11 +150,63 @@ func TestQuickstartLiveSummaryRetainsBootstrapToken(t *testing.T) {
 		},
 	}
 	summary := prepared.summary("start")
-	if summary["bootstrap_token"] != "live-bootstrap-token" {
-		t.Fatalf("live summary bootstrap_token = %v", summary["bootstrap_token"])
+	if _, ok := summary["bootstrap_token"]; ok {
+		t.Fatalf("live summary exposed bootstrap token: %+v", summary)
+	}
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("marshal live summary: %v", err)
+	}
+	if strings.Contains(string(encoded), "live-bootstrap-token") {
+		t.Fatalf("live summary contains bootstrap token: %s", encoded)
 	}
 	if summary["local_session_exchange_url"] != "http://127.0.0.1:7714/api/v1/local-session/exchange" {
 		t.Fatalf("live summary exchange URL = %v", summary["local_session_exchange_url"])
+	}
+}
+
+func TestQuickstartJSONStdoutIsSingleReadyDocument(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", "previous-admin-key")
+	t.Setenv(runtimeTenantIDEnv, "previous-tenant")
+	t.Setenv(runtimePrincipalIDEnv, "previous-principal")
+	t.Setenv(quickstartExpiresAtEnv, "previous-expiry")
+	originalRunQuickstartServer := runQuickstartServer
+	t.Cleanup(func() { runQuickstartServer = originalRunQuickstartServer })
+	runQuickstartServer = func(opts serverOptions) error {
+		if !opts.JSON {
+			t.Fatal("quickstart did not propagate JSON mode to the server")
+		}
+		// Exercise the same production output boundary that runtime startup uses:
+		// human narration must be redirected while the ready callback owns stdout.
+		_, _ = fmt.Fprintf(serverNarrationWriter(opts), "%sstartup narration%s\n", ColorBold, ColorReset)
+		writeServerReady(opts, opts.BindAddr, opts.Port)
+		return nil
+	}
+
+	dataDir := filepath.Join(t.TempDir(), "state")
+	var stdout, stderr bytes.Buffer
+	code := runQuickstartCmd([]string{"--json", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("quickstart code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "\x1b") || strings.Contains(stdout.String(), "startup narration") {
+		t.Fatalf("quickstart JSON stdout contains terminal narration: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "startup narration") {
+		t.Fatalf("quickstart JSON did not route narration to stderr: %q", stderr.String())
+	}
+
+	decoder := json.NewDecoder(&stdout)
+	var summary map[string]any
+	if err := decoder.Decode(&summary); err != nil {
+		t.Fatalf("quickstart JSON stdout is not parseable: %v\n%s", err, stdout.String())
+	}
+	if summary["operation"] != "start" || summary["bootstrap_token"] != nil {
+		t.Fatalf("quickstart ready summary = %+v", summary)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		t.Fatalf("quickstart JSON stdout contains more than one document: extra=%+v err=%v", extra, err)
 	}
 }
 

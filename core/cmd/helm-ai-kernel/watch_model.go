@@ -96,10 +96,37 @@ func (m *watchModel) pendingApproval(approvalID string) (contracts.ApprovalCerem
 	}
 	for _, item := range m.pending {
 		if item.ApprovalID == approvalID {
+			if reason := watchTransitionBlockReason(item); reason != "" {
+				return contracts.ApprovalCeremony{}, fmt.Errorf("pending approval %q is read-only in watch: %s", terminalSafe(approvalID), reason)
+			}
 			return item, nil
 		}
 	}
 	return contracts.ApprovalCeremony{}, fmt.Errorf("pending approval %q is not available", terminalSafe(approvalID))
+}
+
+// watchTransitionBlockReason identifies ceremony evidence that a typed terminal
+// confirmation and shared admin key cannot cryptographically satisfy. Watch
+// keeps those records visible, but must not turn its review UI into a bypass of
+// the required assertion flow.
+func watchTransitionBlockReason(item contracts.ApprovalCeremony) string {
+	requirements := make([]string, 0, 4)
+	if strings.TrimSpace(item.AuthMethod) != "" {
+		requirements = append(requirements, "auth_method")
+	}
+	if strings.TrimSpace(item.ChallengeID) != "" {
+		requirements = append(requirements, "challenge_id")
+	}
+	if strings.TrimSpace(item.ChallengeHash) != "" {
+		requirements = append(requirements, "challenge_hash")
+	}
+	if strings.TrimSpace(item.AssertionHash) != "" {
+		requirements = append(requirements, "assertion_hash")
+	}
+	if len(requirements) == 0 {
+		return ""
+	}
+	return "it declares " + strings.Join(requirements, ", ") + "; use a verified approval flow that can satisfy those requirements"
 }
 
 // filterPendingApprovals keeps only pending ceremonies. It sorts by creation

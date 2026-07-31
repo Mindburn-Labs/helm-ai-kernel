@@ -51,17 +51,21 @@ func main() {
 var startServer = runServer
 
 type serverOptions struct {
-	Mode       string
-	BindAddr   string
-	Port       int
-	DataDir    string
-	SQLitePath string
-	PolicyPath string
-	Quickstart *quickstartRuntime
-	OnReady    func(bindAddr string, port int)
-	JSON       bool
-	Stdout     io.Writer
-	Stderr     io.Writer
+	Mode             string
+	BindAddr         string
+	Port             int
+	DataDir          string
+	SQLitePath       string
+	PolicyPath       string
+	Quickstart       *quickstartRuntime
+	ConsoleMode      bool
+	ConsolePeerProof *localConsolePeerProof
+	OnReady          func(bindAddr string, port int) error
+	OnShutdown       func()
+	RuntimeExit      <-chan struct{}
+	JSON             bool
+	Stdout           io.Writer
+	Stderr           io.Writer
 }
 
 // Run is the entrypoint for testing
@@ -564,31 +568,47 @@ func runServerWithOptions(opts serverOptions) error {
 		}()
 	}
 
-	writeServerReady(opts, bindAddr, port)
+	shutdown := func() {
+		if opts.OnShutdown != nil {
+			opts.OnShutdown()
+		}
+		runtimeCancel()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[helm] API server shutdown error: %v", err)
+		}
+		if err := healthServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[helm] health server shutdown error: %v", err)
+		}
+		if metricsServer != nil {
+			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+				log.Printf("[helm] metrics server shutdown error: %v", err)
+			}
+		}
+	}
+	if err := writeServerReady(opts, bindAddr, port); err != nil {
+		shutdown()
+		return err
+	}
 	log.Println("[helm] press ctrl+c to stop")
 
 	// Graceful Shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-	log.Println("[helm] shutting down...")
-	runtimeCancel()
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[helm] API server shutdown error: %v", err)
+	defer signal.Stop(sigChan)
+	var runtimeErr error
+	select {
+	case <-sigChan:
+		log.Println("[helm] shutting down...")
+	case <-opts.RuntimeExit:
+		runtimeErr = fmt.Errorf("local Console exited")
+		log.Println("[helm] local Console exited; shutting down...")
 	}
-	if err := healthServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[helm] health server shutdown error: %v", err)
-	}
-	if metricsServer != nil {
-		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-			log.Printf("[helm] metrics server shutdown error: %v", err)
-		}
-	}
+	shutdown()
 	log.Println("[helm] shutdown complete")
-	return nil
+	return runtimeErr
 }
 
 // serverNarrationWriter keeps human-only startup prose out of a command's JSON
@@ -601,7 +621,12 @@ func serverNarrationWriter(opts serverOptions) io.Writer {
 	return opts.Stdout
 }
 
-func writeServerReady(opts serverOptions, bindAddr string, port int) {
+func writeServerReady(opts serverOptions, bindAddr string, port int) error {
+	if opts.OnReady != nil {
+		if err := opts.OnReady(bindAddr, port); err != nil {
+			return err
+		}
+	}
 	if opts.JSON && (opts.Mode != "quickstart" || opts.OnReady == nil) {
 		_ = json.NewEncoder(opts.Stdout).Encode(map[string]any{
 			"name":   "helm-edge-local",
@@ -615,9 +640,7 @@ func writeServerReady(opts serverOptions, bindAddr string, port int) {
 	} else {
 		log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
 	}
-	if opts.OnReady != nil {
-		opts.OnReady(bindAddr, port)
-	}
+	return nil
 }
 
 func servicesInitFailureIsFatal() bool {

@@ -17,15 +17,18 @@ import (
 )
 
 type quickstartOptions struct {
-	Addr    string
-	Port    int
-	DataDir string
-	Reset   bool
-	Offline bool
-	Profile string
-	JSON    bool
-	DryRun  bool
-	Yes     bool
+	Addr        string
+	Port        int
+	DataDir     string
+	Reset       bool
+	Offline     bool
+	Profile     string
+	JSON        bool
+	DryRun      bool
+	Yes         bool
+	Console     bool
+	ConsolePort int
+	NoOpen      bool
 }
 
 func init() {
@@ -77,27 +80,46 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		fmt.Fprintf(stderr, "quickstart: %v\n", err)
 		return 1
 	}
+	var console *localConsoleSupervisor
+	if opts.Console {
+		console, err = newLocalConsoleSupervisor(prepared.ConsoleBundle, opts.ConsolePort, prepared.Runtime)
+		if err != nil {
+			fmt.Fprintf(stderr, "quickstart: %v\n", err)
+			return 1
+		}
+	}
 	installQuickstartRuntimeEnv(prepared.Runtime)
 
 	if err := runQuickstartServer(serverOptions{
-		Mode:       "quickstart",
-		BindAddr:   opts.Addr,
-		Port:       opts.Port,
-		DataDir:    opts.DataDir,
-		PolicyPath: prepared.PolicyPath,
-		Quickstart: prepared.Runtime,
-		JSON:       opts.JSON,
-		OnReady: func(bindAddr string, port int) {
+		Mode:             "quickstart",
+		BindAddr:         opts.Addr,
+		Port:             opts.Port,
+		DataDir:          opts.DataDir,
+		PolicyPath:       prepared.PolicyPath,
+		Quickstart:       prepared.Runtime,
+		ConsoleMode:      opts.Console,
+		ConsolePeerProof: consolePeerProof(console),
+		RuntimeExit:      consoleDone(console),
+		OnShutdown:       consoleStop(console),
+		JSON:             opts.JSON,
+		OnReady: func(bindAddr string, port int) error {
+			consoleURL := ""
+			if console != nil {
+				kernelURL := localKernelOrigin(bindAddr, port)
+				var err error
+				consoleURL, err = console.Start(kernelURL)
+				if err != nil {
+					return err
+				}
+				if err := ensureLocalConsoleReadyThenOpen(console.WaitReady, opts.NoOpen, consoleURL); err != nil {
+					return err
+				}
+			}
 			if onReady != nil {
 				onReady()
 			}
-			if opts.JSON {
-				_ = json.NewEncoder(stdout).Encode(prepared.summary("start"))
-			} else {
-				fmt.Fprintf(stdout, "HELM quickstart ready\n\n")
-				fmt.Fprintf(stdout, "Kernel:  http://%s:%d\n", bindAddr, port)
-				fmt.Fprintf(stdout, "Policy:  %s\n\n", prepared.PolicyPath)
-			}
+			writeQuickstartReady(stdout, prepared, bindAddr, port, consoleURL, opts.JSON)
+			return nil
 		},
 		Stdout: stdout,
 		Stderr: stderr,
@@ -136,6 +158,9 @@ func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, in
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable startup summary")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print a startup preview without changing local state")
 	fs.BoolVar(&opts.Yes, "yes", false, "Confirm --reset deletion of HELM-owned quickstart state")
+	fs.BoolVar(&opts.Console, "console", false, "Start the packaged local Console sidecar")
+	fs.IntVar(&opts.ConsolePort, "console-port", 3400, "Local Console port (0 chooses a loopback ephemeral port)")
+	fs.BoolVar(&opts.NoOpen, "no-open", false, "Do not open the local Console in a browser")
 	if err := fs.Parse(args); err != nil {
 		return opts, 2
 	}
@@ -160,6 +185,14 @@ func validateQuickstartOptions(opts quickstartOptions) error {
 	if opts.Port <= 0 || opts.Port > 65535 {
 		return fmt.Errorf("--port must be between 1 and 65535")
 	}
+	if opts.Console {
+		if opts.ConsolePort < 0 || opts.ConsolePort > 65535 {
+			return fmt.Errorf("--console-port must be between 0 and 65535")
+		}
+		if err := rejectLocalConsoleOverrides(); err != nil {
+			return err
+		}
+	}
 	switch strings.ToLower(strings.TrimSpace(opts.Profile)) {
 	case "claude", "codex", "mcp", "openai-compatible":
 		return nil
@@ -176,6 +209,8 @@ type quickstartPrepared struct {
 	PlannedActions             []string
 	Runtime                    *quickstartRuntime
 	LocalSessionCredentialPath string
+	ConsoleBundle              localConsoleBundle
+	Console                    bool
 }
 
 func (p quickstartPrepared) summary(operation string) map[string]any {
@@ -192,7 +227,10 @@ func (p quickstartPrepared) summary(operation string) map[string]any {
 		"requires_docker":    false,
 		"requires_model_key": false,
 	}
-	if operation == "start" && p.Runtime != nil {
+	if p.Console {
+		summary["console"] = true
+	}
+	if operation == "start" && p.Runtime != nil && !p.Console {
 		summary["tenant_id"] = p.Runtime.TenantID
 		summary["principal_id"] = p.Runtime.PrincipalID
 		summary["local_session_ttl"] = time.Until(p.Runtime.ExpiresAt).String()
@@ -223,13 +261,23 @@ func planQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if opts.Reset {
 		plannedActions = append([]string{"reset HELM-owned quickstart state"}, plannedActions...)
 	}
-	return quickstartPrepared{
+	prepared := quickstartPrepared{
 		DataDir:        dataDir,
-		KernelURL:      fmt.Sprintf("http://%s:%d", opts.Addr, opts.Port),
+		KernelURL:      localKernelOrigin(opts.Addr, opts.Port),
 		PolicyPath:     filepath.Join(dataDir, "quickstart", "oss_local_first_run.toml"),
 		Profile:        strings.ToLower(opts.Profile),
 		PlannedActions: plannedActions,
-	}, nil
+		Console:        opts.Console,
+	}
+	if opts.Console {
+		bundle, err := discoverLocalConsoleBundle()
+		if err != nil {
+			return quickstartPrepared{}, err
+		}
+		prepared.ConsoleBundle = bundle
+		prepared.PlannedActions = append(prepared.PlannedActions, "start the packaged local Console sidecar")
+	}
+	return prepared, nil
 }
 
 func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
@@ -271,9 +319,14 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if err != nil {
 		return quickstartPrepared{}, fmt.Errorf("generate local session: %w", err)
 	}
-	credentialPath, err := writeQuickstartSessionCredential(opts.DataDir, prepared.KernelURL, runtime)
-	if err != nil {
-		return quickstartPrepared{}, err
+	credentialPath := ""
+	if opts.Console {
+		runtime.BootstrapToken = ""
+	} else {
+		credentialPath, err = writeQuickstartSessionCredential(opts.DataDir, prepared.KernelURL, runtime)
+		if err != nil {
+			return quickstartPrepared{}, err
+		}
 	}
 	prepared.PolicyPath = policyPath
 	prepared.Runtime = runtime
@@ -306,8 +359,46 @@ const (
 )
 
 func printQuickstartUsage(stdout io.Writer) {
-	fmt.Fprintln(stdout, "Usage: helm-ai-kernel quickstart [--addr ADDR] [--port PORT] [--data-dir DIR] [--profile PROFILE] [--offline] [--json] [--dry-run]")
+	fmt.Fprintln(stdout, "Usage: helm-ai-kernel quickstart [--addr ADDR] [--port PORT] [--data-dir DIR] [--profile PROFILE] [--console --console-port PORT --no-open] [--offline] [--json] [--dry-run]")
 	fmt.Fprintln(stdout, "Pass --reset --yes only to replace HELM-owned quickstart state.")
+}
+
+func consoleDone(console *localConsoleSupervisor) <-chan struct{} {
+	if console == nil {
+		return nil
+	}
+	return console.Done()
+}
+
+func consolePeerProof(console *localConsoleSupervisor) *localConsolePeerProof {
+	if console == nil {
+		return nil
+	}
+	return console.PeerProof()
+}
+
+func consoleStop(console *localConsoleSupervisor) func() {
+	if console == nil {
+		return nil
+	}
+	return console.Stop
+}
+
+func writeQuickstartReady(stdout io.Writer, prepared quickstartPrepared, bindAddr string, port int, consoleURL string, jsonOutput bool) {
+	if jsonOutput {
+		summary := prepared.summary("start")
+		if prepared.Console {
+			summary["console_url"] = consoleURL
+		}
+		_ = json.NewEncoder(stdout).Encode(summary)
+		return
+	}
+	fmt.Fprintf(stdout, "HELM quickstart ready\n\n")
+	fmt.Fprintf(stdout, "Kernel:  http://%s:%d\n", bindAddr, port)
+	if prepared.Console {
+		fmt.Fprintf(stdout, "Console: %s\n", consoleURL)
+	}
+	fmt.Fprintf(stdout, "Policy:  %s\n\n", prepared.PolicyPath)
 }
 
 func validateQuickstartResetTarget(opts quickstartOptions) (string, error) {

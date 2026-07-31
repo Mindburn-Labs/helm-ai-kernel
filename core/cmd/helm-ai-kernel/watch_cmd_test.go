@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -99,6 +100,69 @@ func TestWatchInteractiveRoutesApproveAndDenyThroughConfirmation(t *testing.T) {
 			got := client.transitions[0]
 			if got.action != test.want || got.approvalID != "ap-1" || got.actor != "operator.cli" || got.reason == "" {
 				t.Fatalf("transition = %+v", got)
+			}
+		})
+	}
+}
+
+type pendingWatchTransitionClient struct {
+	items        []contracts.ApprovalCeremony
+	transitioned contracts.ApprovalCeremony
+	listCalls    int
+	transitions  []watchTransition
+}
+
+func (f *pendingWatchTransitionClient) ListApprovals(context.Context) ([]contracts.ApprovalCeremony, error) {
+	f.listCalls++
+	return append([]contracts.ApprovalCeremony(nil), f.items...), nil
+}
+
+func (f *pendingWatchTransitionClient) TransitionApproval(_ context.Context, approvalID, action, actor, reason string) (contracts.ApprovalCeremony, error) {
+	f.transitions = append(f.transitions, watchTransition{approvalID: approvalID, action: action, actor: actor, reason: reason})
+	return f.transitioned, nil
+}
+
+func TestWatchInteractiveDoesNotReportPendingApproveAsSuccess(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		reason string
+	}{
+		{name: "timelock", reason: "approval timelock has not elapsed"},
+		{name: "quorum", reason: "approval requires a 2-party quorum"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			item := watchTestCeremony("ap-1", time.Unix(1, 0))
+			pending := item
+			pending.State = contracts.ApprovalCeremonyPending
+			pending.Reason = test.reason
+			client := &pendingWatchTransitionClient{
+				items:        []contracts.ApprovalCeremony{item},
+				transitioned: pending,
+			}
+
+			var chrome bytes.Buffer
+			code := runWatchInteractive(client, "operator.cli", strings.NewReader("ap-1\nAPPROVE\nAPPROVE\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+			if code != 0 {
+				t.Fatalf("exit code = %d, chrome=%s", code, chrome.String())
+			}
+			if len(client.transitions) != 1 {
+				t.Fatalf("transitions = %+v", client.transitions)
+			}
+			if client.listCalls < 2 {
+				t.Fatalf("list calls = %d, want refresh after non-terminal transition", client.listCalls)
+			}
+			out := chrome.String()
+			for _, want := range []string{
+				"[WAIT] APPROVE did not reach approved state for ap-1",
+				"Server state: pending.",
+				test.reason,
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("watch output missing %q:\n%s", want, out)
+				}
+			}
+			if strings.Contains(out, "APPROVE recorded for ap-1") {
+				t.Fatalf("pending approval was reported as success:\n%s", out)
 			}
 		})
 	}

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -532,6 +533,51 @@ func TestLocalConsoleSupervisorDetectsCrashAndStopsOnKernelShutdown(t *testing.T
 	}
 }
 
+func TestLocalConsoleSupervisorGracefullyStopsWrapperChildAndPort(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("Node is required to exercise the packaged sidecar signal handoff")
+	}
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	bundle := writeLocalConsoleSignalForwardingBundle(t, filepath.Join(t.TempDir(), "bundle"), target)
+	originalLookPath, originalCommand := localConsoleLookPath, localConsoleCommand
+	localConsoleLookPath = func(string) (string, error) { return node, nil }
+	localConsoleCommand = exec.Command
+	t.Cleanup(func() {
+		localConsoleLookPath = originalLookPath
+		localConsoleCommand = originalCommand
+	})
+
+	supervisor, err := newLocalConsoleSupervisor(bundle, 0, &quickstartRuntime{
+		SessionToken: "kernel-secret-token",
+		TenantID:     "tenant-local",
+		PrincipalID:  "local-console-graceful-stop",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	consoleURL, err := supervisor.Start("http://127.0.0.1:7714")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(supervisor.Stop)
+	waitForLocalConsoleTestListener(t, consoleURL)
+
+	supervisor.Stop()
+	select {
+	case <-supervisor.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("local Console wrapper did not exit after graceful stop")
+	}
+	if _, err := os.Stat(filepath.Join(bundle.AppRoot, "graceful-stop")); err != nil {
+		t.Fatalf("local Console child did not receive the forwarded interrupt: %v", err)
+	}
+	assertLocalConsoleTestPortReleased(t, strings.TrimPrefix(consoleURL, "http://"))
+}
+
 func TestQuickstartConsoleSuppressesBootstrapExchangeAndSummaryTokens(t *testing.T) {
 	runtime := &quickstartRuntime{
 		BootstrapToken: "bootstrap-secret",
@@ -586,6 +632,46 @@ func TestLocalConsoleHelperProcess(t *testing.T) {
 	}
 }
 
+func waitForLocalConsoleTestListener(t *testing.T, url string) {
+	t.Helper()
+	client := &http.Client{
+		Timeout: time.Second,
+		Transport: &http.Transport{
+			Proxy:             nil,
+			DisableKeepAlives: true,
+		},
+	}
+	defer client.CloseIdleConnections()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		response, err := client.Get(url)
+		if err == nil {
+			_ = response.Body.Close()
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("local Console test listener did not start at %s: %v", url, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func assertLocalConsoleTestPortReleased(t *testing.T, address string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		listener, err := net.Listen("tcp", address)
+		if err == nil {
+			_ = listener.Close()
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("local Console child kept %s bound after wrapper exit: %v", address, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func writeLocalConsoleBundle(t *testing.T, root, target, server string) localConsoleBundle {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(root, "app"), 0750); err != nil {
@@ -602,13 +688,89 @@ func writeLocalConsoleBundle(t *testing.T, root, target, server string) localCon
 	return bundle
 }
 
-func localConsoleInventoryContents(t *testing.T, root string) string {
+func writeLocalConsoleSignalForwardingBundle(t *testing.T, root, target string) localConsoleBundle {
 	t.Helper()
-	fileHash, err := sha256LocalConsoleFile(filepath.Join(root, filepath.FromSlash(localConsoleServerFile)))
-	if err != nil {
+	appRoot := filepath.Join(root, "app")
+	if err := os.MkdirAll(appRoot, 0750); err != nil {
 		t.Fatal(err)
 	}
-	return fileHash + "  " + localConsoleServerFile + "\n"
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(localConsoleServerFile)), []byte(localConsoleSignalForwardingWrapper), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appRoot, "server.js"), []byte(localConsoleSignalForwardingChild), 0700); err != nil {
+		t.Fatal(err)
+	}
+	inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, "app/server.js")
+	writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
+	bundle, err := loadLocalConsoleBundle(root, target)
+	if err != nil {
+		t.Fatalf("load signal-forwarding Console bundle: %v", err)
+	}
+	return bundle
+}
+
+const localConsoleSignalForwardingWrapper = `import { spawn } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const server = resolve(dirname(fileURLToPath(import.meta.url)), 'server.js');
+const child = spawn(process.execPath, [server], { env: process.env, stdio: 'ignore', shell: false });
+let forwardedSignal = false;
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    if (!forwardedSignal && !child.killed) {
+      forwardedSignal = true;
+      child.kill(signal);
+    }
+  });
+}
+
+child.once('error', () => { process.exitCode = 1; });
+child.once('exit', (code) => { process.exitCode = code ?? 1; });
+`
+
+const localConsoleSignalForwardingChild = `import { writeFileSync } from 'node:fs';
+import http from 'node:http';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const marker = resolve(dirname(fileURLToPath(import.meta.url)), 'graceful-stop');
+const server = http.createServer((_, response) => {
+  response.writeHead(204);
+  response.end();
+});
+let stopping = false;
+function stop() {
+  if (stopping) return;
+  stopping = true;
+  writeFileSync(marker, 'stopped\\n');
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 1000).unref();
+}
+process.once('SIGINT', stop);
+process.once('SIGTERM', stop);
+server.listen(Number(process.env.PORT), process.env.HOSTNAME);
+`
+
+func localConsoleInventoryContents(t *testing.T, root string) string {
+	t.Helper()
+	return localConsoleInventoryForPaths(t, root, localConsoleServerFile)
+}
+
+func localConsoleInventoryForPaths(t *testing.T, root string, paths ...string) string {
+	t.Helper()
+	paths = append([]string(nil), paths...)
+	sort.Strings(paths)
+	lines := make([]string, 0, len(paths))
+	for _, relativePath := range paths {
+		fileHash, err := sha256LocalConsoleFile(filepath.Join(root, filepath.FromSlash(relativePath)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines = append(lines, fileHash+"  "+relativePath)
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func mutateLocalConsoleProvenance(t *testing.T, root string, mutate func([]byte) []byte) {

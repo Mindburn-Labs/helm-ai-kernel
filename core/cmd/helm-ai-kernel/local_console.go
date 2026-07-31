@@ -662,11 +662,28 @@ func (s *localConsoleSupervisor) Stop() {
 	if command == nil || command.Process == nil {
 		return
 	}
-	_ = command.Process.Kill()
-	select {
-	case <-s.done:
-	case <-time.After(localConsoleStopTimeout):
+	// The packaged sidecar entrypoint owns server.js and forwards SIGINT/SIGTERM
+	// to it. Killing that wrapper first can leave the child listener alive, so
+	// give the wrapper a cross-platform interrupt grace period before forcing a
+	// last-resort kill.
+	_ = command.Process.Signal(os.Interrupt)
+	if waitForLocalConsoleExit(s.done, localConsoleStopTimeout) {
+		return
 	}
+	_ = command.Process.Kill()
+	_ = waitForLocalConsoleExit(s.done, localConsoleStopTimeout)
+}
+
+func waitForLocalConsoleExit(done <-chan struct{}, timeout time.Duration) bool {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
+
 }
 
 func waitForLocalConsoleReady(ctx context.Context, url, secret, nonce string, done <-chan struct{}) error {

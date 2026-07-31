@@ -28,12 +28,13 @@ const (
 )
 
 type quickstartRuntime struct {
-	BootstrapToken string
-	SessionToken   string
-	TenantID       string
-	PrincipalID    string
-	Profile        string
-	ExpiresAt      time.Time
+	BootstrapToken          string
+	BootstrapCredentialPath string
+	SessionToken            string
+	TenantID                string
+	PrincipalID             string
+	Profile                 string
+	ExpiresAt               time.Time
 
 	mu   sync.Mutex
 	used bool
@@ -77,6 +78,10 @@ func (q *quickstartRuntime) exchange(token string) (map[string]any, int, string)
 		return nil, http.StatusUnauthorized, "invalid local quickstart token"
 	}
 	q.used = true
+	if q.BootstrapCredentialPath != "" {
+		_ = os.Remove(q.BootstrapCredentialPath)
+		q.BootstrapCredentialPath = ""
+	}
 	return q.sessionDocument(), http.StatusOK, ""
 }
 

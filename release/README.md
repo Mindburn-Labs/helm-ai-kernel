@@ -49,8 +49,10 @@ The sample policy material archive contains `release.high_risk.v3.toml` and
 `reference_packs/eu_ai_act_high_risk.v1.json`. The GitHub release workflow
 attaches `*.cosign.bundle` files generated for each primary asset.
 
-Kernel releases are headless. Browser UI assets are not Kernel release assets
-and are not installed by Homebrew.
+Homebrew remains headless: it downloads only the Kernel binary and Launchpad
+data. Browser UI bundles are not Kernel release assets. Where a release
+declares the loopback Console local-sidecar, it is a verified standalone native
+closure—not a Homebrew resource or a hosted UI.
 
 ## Validation
 

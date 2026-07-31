@@ -31,7 +31,20 @@ fi
 ok=0
 fail=0
 while IFS= read -r bundle; do
-    artifact="${bundle%.cosign.bundle}"
+    case "$(basename "$bundle")" in
+        helm-console-local-sidecar-release-manifest.json.cosign.bundle)
+            # This is the Console producer's signature, not a Kernel release
+            # signature. console_local_sidecar.py verifies it against the
+            # Console workflow identity before Kernel staging.
+            echo "skipping Console producer bundle $bundle"
+            continue
+            ;;
+    esac
+    case "$bundle" in
+        *.kernel.cosign.bundle) artifact="${bundle%.kernel.cosign.bundle}" ;;
+        *.cosign.bundle) artifact="${bundle%.cosign.bundle}" ;;
+        *) echo "::error::unsupported cosign bundle suffix: $bundle"; exit 1 ;;
+    esac
     if [ ! -f "$artifact" ]; then
         echo "::warning::no artifact next to bundle $bundle; skipping"
         continue

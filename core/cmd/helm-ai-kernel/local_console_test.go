@@ -47,7 +47,9 @@ func TestDiscoverLocalConsoleBundleUsesOnlyExecutableRelativeBundle(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bundle.Root != wantRoot || bundle.ServerPath != filepath.Join(wantRoot, filepath.FromSlash(localConsoleServerFile)) {
+	if bundle.Root != wantRoot ||
+		bundle.ServerPath != filepath.Join(wantRoot, filepath.FromSlash(localConsoleServerFile)) ||
+		bundle.NodePath != filepath.Join(wantRoot, filepath.FromSlash(localConsoleNodeFile)) {
 		t.Fatalf("bundle = %#v", bundle)
 	}
 	if err := os.RemoveAll(filepath.Join(filepath.Dir(executable), localConsoleDirectory)); err != nil {
@@ -119,7 +121,12 @@ func TestLocalConsoleBundleRejectsTraversalHashTargetAndSymlink(t *testing.T) {
 			name: "hash mismatch",
 			mutate: func(t *testing.T, root string) {
 				t.Helper()
-				writeLocalConsoleInventoryAndProvenance(t, root, target, strings.Repeat("0", 64)+"  "+localConsoleServerFile+"\n", target, "v1")
+				serverHash, err := sha256LocalConsoleFile(filepath.Join(root, filepath.FromSlash(localConsoleServerFile)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				inventory := strings.Replace(localConsoleInventoryContents(t, root), serverHash+"  "+localConsoleServerFile, strings.Repeat("0", 64)+"  "+localConsoleServerFile, 1)
+				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
 			},
 			want: "file hash",
 		},
@@ -188,6 +195,92 @@ func TestLocalConsoleBundleRejectsTraversalHashTargetAndSymlink(t *testing.T) {
 				}
 			},
 			want: "symlink",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "bundle")
+			writeLocalConsoleBundle(t, root, target, "console-server")
+			tc.mutate(t, root)
+			if _, err := loadLocalConsoleBundle(root, target); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLocalConsoleBundleRequiresBundledNodeRuntime(t *testing.T) {
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		mutate func(t *testing.T, root string)
+		want   string
+	}{
+		{
+			name: "missing node inventory record",
+			mutate: func(t *testing.T, root string) {
+				t.Helper()
+				inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, localConsoleNodeLicenseFile)
+				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
+			},
+			want: "inventory is missing " + localConsoleNodeFile,
+		},
+		{
+			name: "missing node license inventory record",
+			mutate: func(t *testing.T, root string) {
+				t.Helper()
+				inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, localConsoleNodeFile)
+				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
+			},
+			want: "inventory is missing " + localConsoleNodeLicenseFile,
+		},
+		{
+			name: "non-executable node",
+			mutate: func(t *testing.T, root string) {
+				t.Helper()
+				if err := os.Chmod(filepath.Join(root, filepath.FromSlash(localConsoleNodeFile)), 0600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "bundled Node is not executable",
+		},
+		{
+			name: "node symlink",
+			mutate: func(t *testing.T, root string) {
+				t.Helper()
+				outside := filepath.Join(t.TempDir(), "node")
+				if err := os.WriteFile(outside, []byte("node"), 0700); err != nil {
+					t.Fatal(err)
+				}
+				node := filepath.Join(root, filepath.FromSlash(localConsoleNodeFile))
+				if err := os.Remove(node); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(outside, node); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+			},
+			want: "required runtime file is invalid",
+		},
+		{
+			name: "node license symlink",
+			mutate: func(t *testing.T, root string) {
+				t.Helper()
+				outside := filepath.Join(t.TempDir(), "LICENSE")
+				if err := os.WriteFile(outside, []byte("license"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				license := filepath.Join(root, filepath.FromSlash(localConsoleNodeLicenseFile))
+				if err := os.Remove(license); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(outside, license); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+			},
+			want: "required runtime file is invalid",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -484,16 +577,16 @@ func TestLocalConsoleSupervisorDetectsCrashAndStopsOnKernelShutdown(t *testing.T
 	}
 	root := filepath.Join(t.TempDir(), "bundle")
 	bundle := writeLocalConsoleBundle(t, root, target, "console-server")
-	originalLookPath, originalCommand := localConsoleLookPath, localConsoleCommand
-	localConsoleLookPath = func(string) (string, error) { return os.Args[0], nil }
-	localConsoleCommand = func(_ string, args ...string) *exec.Cmd {
+	originalCommand := localConsoleCommand
+	gotNodePath := ""
+	localConsoleCommand = func(node string, args ...string) *exec.Cmd {
+		gotNodePath = node
 		if strings.Contains(strings.Join(args, " "), "kernel-secret-token") {
 			t.Fatal("token was passed in the child argv")
 		}
 		return exec.Command(os.Args[0], "-test.run=^TestLocalConsoleHelperProcess$", "--")
 	}
 	t.Cleanup(func() {
-		localConsoleLookPath = originalLookPath
 		localConsoleCommand = originalCommand
 	})
 
@@ -507,6 +600,9 @@ func TestLocalConsoleSupervisorDetectsCrashAndStopsOnKernelShutdown(t *testing.T
 	}
 	if _, err := crashed.Start("http://127.0.0.1:7714"); err != nil {
 		t.Fatal(err)
+	}
+	if gotNodePath != bundle.NodePath {
+		t.Fatalf("sidecar executable = %q, want bundled Node %q", gotNodePath, bundle.NodePath)
 	}
 	select {
 	case <-crashed.Done():
@@ -542,12 +638,10 @@ func TestLocalConsoleSupervisorGracefullyStopsWrapperChildAndPort(t *testing.T) 
 	if err != nil {
 		t.Skip(err)
 	}
-	bundle := writeLocalConsoleSignalForwardingBundle(t, filepath.Join(t.TempDir(), "bundle"), target)
-	originalLookPath, originalCommand := localConsoleLookPath, localConsoleCommand
-	localConsoleLookPath = func(string) (string, error) { return node, nil }
+	bundle := writeLocalConsoleSignalForwardingBundle(t, filepath.Join(t.TempDir(), "bundle"), target, node)
+	originalCommand := localConsoleCommand
 	localConsoleCommand = exec.Command
 	t.Cleanup(func() {
-		localConsoleLookPath = originalLookPath
 		localConsoleCommand = originalCommand
 	})
 
@@ -680,6 +774,7 @@ func writeLocalConsoleBundle(t *testing.T, root, target, server string) localCon
 	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(localConsoleServerFile)), []byte(server), 0600); err != nil {
 		t.Fatal(err)
 	}
+	writeLocalConsoleRuntimeFixture(t, root)
 	writeLocalConsoleInventoryAndProvenance(t, root, target, localConsoleInventoryContents(t, root), target, "v1")
 	bundle, err := loadLocalConsoleBundle(root, target)
 	if err != nil {
@@ -688,7 +783,7 @@ func writeLocalConsoleBundle(t *testing.T, root, target, server string) localCon
 	return bundle
 }
 
-func writeLocalConsoleSignalForwardingBundle(t *testing.T, root, target string) localConsoleBundle {
+func writeLocalConsoleSignalForwardingBundle(t *testing.T, root, target, node string) localConsoleBundle {
 	t.Helper()
 	appRoot := filepath.Join(root, "app")
 	if err := os.MkdirAll(appRoot, 0750); err != nil {
@@ -700,13 +795,50 @@ func writeLocalConsoleSignalForwardingBundle(t *testing.T, root, target string) 
 	if err := os.WriteFile(filepath.Join(appRoot, "server.js"), []byte(localConsoleSignalForwardingChild), 0700); err != nil {
 		t.Fatal(err)
 	}
-	inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, "app/server.js")
+	writeLocalConsoleRuntimeLinkFixture(t, root, node)
+	inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, "app/server.js", localConsoleNodeFile, localConsoleNodeLicenseFile)
 	writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
 	bundle, err := loadLocalConsoleBundle(root, target)
 	if err != nil {
 		t.Fatalf("load signal-forwarding Console bundle: %v", err)
 	}
 	return bundle
+}
+
+func writeLocalConsoleRuntimeFixture(t *testing.T, root string) {
+	t.Helper()
+	node := filepath.Join(root, filepath.FromSlash(localConsoleNodeFile))
+	if err := os.MkdirAll(filepath.Dir(node), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(node, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(localConsoleNodeLicenseFile)), []byte("test node license\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeLocalConsoleRuntimeLinkFixture(t *testing.T, root, node string) {
+	t.Helper()
+	node, err := filepath.EvalSymlinks(node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(node)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+		t.Fatalf("test Node runtime is not an executable regular file: %v", err)
+	}
+	bundledNode := filepath.Join(root, filepath.FromSlash(localConsoleNodeFile))
+	if err := os.MkdirAll(filepath.Dir(bundledNode), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(node, bundledNode); err != nil {
+		t.Skipf("hard links unavailable for bundled Node fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(localConsoleNodeLicenseFile)), []byte("test node license\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 const localConsoleSignalForwardingWrapper = `import { spawn } from 'node:child_process';
@@ -755,7 +887,7 @@ server.listen(Number(process.env.PORT), process.env.HOSTNAME);
 
 func localConsoleInventoryContents(t *testing.T, root string) string {
 	t.Helper()
-	return localConsoleInventoryForPaths(t, root, localConsoleServerFile)
+	return localConsoleInventoryForPaths(t, root, localConsoleServerFile, localConsoleNodeFile, localConsoleNodeLicenseFile)
 }
 
 func localConsoleInventoryForPaths(t *testing.T, root string, paths ...string) string {

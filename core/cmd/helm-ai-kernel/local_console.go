@@ -29,8 +29,10 @@ const (
 	localConsoleProvenanceFile            = "PROVENANCE.json"
 	localConsoleInventoryFile             = "INVENTORY.sha256"
 	localConsoleServerFile                = "app/helm-local-sidecar.mjs"
+	localConsoleNodeFile                  = "runtime/node/bin/node"
+	localConsoleNodeLicenseFile           = "runtime/node/LICENSE"
 	localConsoleProvenanceSchema          = "helm.console.local-sidecar.provenance.v1"
-	localConsoleBuildClosure              = ".next/standalone plus .next/static plus helm-local-sidecar.mjs"
+	localConsoleBuildClosure              = ".next/standalone plus .next/static plus helm-local-sidecar.mjs plus runtime/node"
 	localConsoleBuildSourceSnapshot       = "fresh git archive of recorded commit; npm ci and next build ran only inside the ephemeral snapshot"
 	localConsoleBuildEnvironment          = "strict platform allowlist plus fixed kernel build flags; dotenv inputs rejected"
 	localConsoleUnsignedSignature         = "none; this unsigned local artifact has no release authority"
@@ -53,7 +55,6 @@ const (
 
 var (
 	localConsoleExecutable = os.Executable
-	localConsoleLookPath   = exec.LookPath
 	localConsoleCommand    = exec.Command
 	openLocalConsoleURL    = openLocalConsoleBrowser
 	localConsoleReadiness  = waitForLocalConsoleReady
@@ -63,6 +64,7 @@ type localConsoleBundle struct {
 	Root       string
 	AppRoot    string
 	ServerPath string
+	NodePath   string
 	Target     string
 }
 
@@ -183,6 +185,10 @@ func loadLocalConsoleBundle(root, target string) (localConsoleBundle, error) {
 	if err != nil {
 		return localConsoleBundle{}, err
 	}
+	nodePath, err := validateLocalConsoleBundledRuntime(root, entries)
+	if err != nil {
+		return localConsoleBundle{}, err
+	}
 	if err := validateLocalConsoleInventoryFiles(root, entries); err != nil {
 		return localConsoleBundle{}, err
 	}
@@ -200,6 +206,7 @@ func loadLocalConsoleBundle(root, target string) (localConsoleBundle, error) {
 		Root:       root,
 		AppRoot:    filepath.Join(root, "app"),
 		ServerPath: serverPath,
+		NodePath:   nodePath,
 		Target:     target,
 	}, nil
 }
@@ -267,7 +274,7 @@ func parseLocalConsoleInventory(contents []byte) (map[string]localConsoleInvento
 			return nil, fmt.Errorf("local Console inventory record is invalid")
 		}
 		relativePath, err := canonicalLocalConsoleRelativePath(parts[1])
-		if err != nil || !strings.HasPrefix(relativePath, "app/") || relativePath <= lastPath {
+		if err != nil || !validLocalConsoleInventoryPath(relativePath) || relativePath <= lastPath {
 			return nil, fmt.Errorf("local Console inventory path is invalid")
 		}
 		if _, duplicate := entries[relativePath]; duplicate {
@@ -277,6 +284,41 @@ func parseLocalConsoleInventory(contents []byte) (map[string]localConsoleInvento
 		lastPath = relativePath
 	}
 	return entries, nil
+}
+
+func validLocalConsoleInventoryPath(relativePath string) bool {
+	return strings.HasPrefix(relativePath, "app/") ||
+		relativePath == localConsoleNodeFile ||
+		relativePath == localConsoleNodeLicenseFile
+}
+
+func validateLocalConsoleBundledRuntime(root string, entries map[string]localConsoleInventoryEntry) (string, error) {
+	nodePath, nodeInfo, err := localConsoleRequiredRuntimeFile(root, entries, localConsoleNodeFile)
+	if err != nil {
+		return "", err
+	}
+	if nodeInfo.Mode().Perm()&0111 == 0 {
+		return "", fmt.Errorf("local Console bundled Node is not executable")
+	}
+	if _, _, err := localConsoleRequiredRuntimeFile(root, entries, localConsoleNodeLicenseFile); err != nil {
+		return "", err
+	}
+	return nodePath, nil
+}
+
+func localConsoleRequiredRuntimeFile(root string, entries map[string]localConsoleInventoryEntry, relativePath string) (string, fs.FileInfo, error) {
+	if _, ok := entries[relativePath]; !ok {
+		return "", nil, fmt.Errorf("local Console inventory is missing %s", relativePath)
+	}
+	filePath, err := localConsoleBundlePath(root, relativePath)
+	if err != nil {
+		return "", nil, fmt.Errorf("local Console required runtime file is invalid: %s", relativePath)
+	}
+	info, err := os.Lstat(filePath)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return "", nil, fmt.Errorf("local Console required runtime file is invalid: %s", relativePath)
+	}
+	return filePath, info, nil
 }
 
 func validateLocalConsoleInventoryFiles(root string, entries map[string]localConsoleInventoryEntry) error {
@@ -582,9 +624,9 @@ func (s *localConsoleSupervisor) Start(kernelOrigin string) (string, error) {
 	s.started = true
 	s.mu.Unlock()
 
-	node, err := localConsoleLookPath("node")
-	if err != nil {
-		return "", fmt.Errorf("locate Node for local Console: %w", err)
+	node := s.bundle.NodePath
+	if node == "" || !filepath.IsAbs(node) {
+		return "", fmt.Errorf("local Console bundled Node is not configured")
 	}
 	reservation, port, err := reserveLocalConsolePort(s.requestedPort)
 	if err != nil {

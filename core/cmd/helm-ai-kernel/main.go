@@ -70,6 +70,16 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		printFrontDoor(stdout)
 		return 0
 	}
+	if args[1] == "help" {
+		return runHelpCommand(args[2:], stdout, stderr)
+	}
+	if isHelpRequest(args[2:]) {
+		if code, ok := Dispatch(args[1], []string{"--help"}, stdout, stderr); ok {
+			return code
+		}
+		printGlobalCommandHelp(args[1], stdout)
+		return 0
+	}
 
 	// Attempt to dispatch from registry
 	if code, ok := Dispatch(args[1], args[2:], stdout, stderr); ok {
@@ -107,13 +117,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  MCP Bundle Schema:      1\n")
 		fmt.Fprintf(stdout, "  Build Time:             %s\n", displayBuildTime())
 		return 0
-	case "help":
-		if len(args) > 2 && args[2] == "--all" {
-			printUsageAll(stdout)
-			return 0
-		}
-		printFrontDoor(stdout)
-		return 0
 	case "--help", "-h":
 		printFrontDoor(stdout)
 		return 0
@@ -129,6 +132,36 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runHelpCommand(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "--all" {
+		printUsageAll(stdout)
+		return 0
+	}
+	if len(args) > 0 {
+		if code, ok := Dispatch(args[0], []string{"--help"}, stdout, stderr); ok {
+			return code
+		}
+		printGlobalCommandHelp(args[0], stdout)
+		return 0
+	}
+	printFrontDoor(stdout)
+	return 0
+}
+
+func printGlobalCommandHelp(name string, stdout io.Writer) {
+	switch name {
+	case "server":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel server [--policy PATH] [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
+	case "serve":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel serve --policy PATH [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
+	case "threat":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel threat <scan|test> [flags]")
+	default:
+		fmt.Fprintf(stdout, "Usage: helm-ai-kernel %s [options]\n", name)
+	}
+	fmt.Fprintln(stdout, "Run `helm-ai-kernel help --all` to list commands.")
 }
 
 // ANSI Colors

@@ -30,9 +30,16 @@ func init() {
 }
 
 func runLaunchCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printLaunchUsage(stdout)
+		return 0
+	}
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch <matrix|apps|substrates|plan|status|logs|repair|delete|evidence|promote|secrets|imports|app> [args]")
+		printLaunchUsage(stderr)
 		return 2
+	}
+	if args[0] == "delete" {
+		return runLaunchDelete(args[1:], stdout, stderr)
 	}
 	catalog, err := lpregistry.LoadCatalog("")
 	if err != nil {
@@ -58,8 +65,6 @@ func runLaunchCmd(args []string, stdout, stderr io.Writer) int {
 		return runLaunchLogs(args[1:], stdout, stderr)
 	case "repair":
 		return runLaunchRepair(args[1:], stdout, stderr)
-	case "delete":
-		return runLaunchDelete(args[1:], stdout, stderr)
 	case "evidence":
 		return runLaunchEvidence(args[1:], stdout, stderr)
 	case "promote":
@@ -71,6 +76,10 @@ func runLaunchCmd(args []string, stdout, stderr io.Writer) int {
 	default:
 		return runLaunchStart(args, catalog, stdout, stderr)
 	}
+}
+
+func printLaunchUsage(out io.Writer) {
+	fmt.Fprintln(out, "Usage: helm-ai-kernel launch <matrix|apps|substrates|plan|status|logs|repair|delete|evidence|promote|secrets|imports|app> [args]")
 }
 
 type launchEvidenceExport struct {
@@ -684,27 +693,26 @@ func runLaunchRepair(args []string, stdout, stderr io.Writer) int {
 	return writeLaunchJSON(stdout, lprepair.EscalatedPlan(args[0], diagnostics))
 }
 
+var deleteCloudResources = deleteCloudResourcesForRun
+
 func runLaunchDelete(args []string, stdout, stderr io.Writer) int {
-	cascade := false
-	rest := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg == "--cascade" {
-			cascade = true
-			continue
-		}
-		rest = append(rest, arg)
+	if isHelpRequest(args) {
+		printLaunchDeleteUsage(stdout)
+		return 0
 	}
-	if len(rest) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel launch delete <launch_id> --cascade")
+	launchID, cascade, err := parseLaunchDeleteArgs(args)
+	if err != nil {
+		fmt.Fprintf(stderr, "launch delete: %v\n", err)
+		printLaunchDeleteUsage(stderr)
 		return 2
 	}
 	store := session.NewStore("")
-	run, err := store.Get(rest[0])
+	run, err := store.Get(launchID)
 	if err != nil {
 		fmt.Fprintf(stderr, "launch delete error: %v\n", err)
 		return 1
 	}
-	cloudArtifacts, cloudReceiptRefs, err := deleteCloudResourcesForRun(run)
+	cloudArtifacts, cloudReceiptRefs, err := deleteCloudResources(run)
 	if err != nil {
 		fmt.Fprintf(stderr, "launch delete error: %v\n", err)
 		return 1
@@ -719,7 +727,7 @@ func runLaunchDelete(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	deleted, err := session.NewExecutor(store).DeleteLaunch(rest[0], cascade)
+	deleted, err := session.NewExecutor(store).DeleteLaunch(launchID, cascade)
 	if err != nil {
 		fmt.Fprintf(stderr, "launch delete error: %v\n", err)
 		return 1
@@ -739,6 +747,36 @@ func runLaunchDelete(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	return writeLaunchJSON(stdout, deleted)
+}
+
+func printLaunchDeleteUsage(out io.Writer) {
+	fmt.Fprintln(out, "Usage: helm-ai-kernel launch delete <launch_id> --cascade")
+}
+
+func parseLaunchDeleteArgs(args []string) (string, bool, error) {
+	launchID := ""
+	cascade := false
+	for _, arg := range args {
+		switch {
+		case arg == "--cascade":
+			cascade = true
+		case strings.HasPrefix(arg, "-"):
+			return "", false, fmt.Errorf("unknown flag %q", arg)
+		case strings.TrimSpace(arg) == "":
+			return "", false, fmt.Errorf("launch_id must not be blank")
+		case launchID != "":
+			return "", false, fmt.Errorf("exactly one launch_id is required")
+		default:
+			launchID = arg
+		}
+	}
+	if launchID == "" {
+		return "", false, fmt.Errorf("launch_id is required")
+	}
+	if !cascade {
+		return "", false, fmt.Errorf("--cascade is required to delete a launch")
+	}
+	return launchID, true, nil
 }
 
 func deleteCloudResourcesForRun(run session.LaunchRun) (map[string][]byte, []string, error) {

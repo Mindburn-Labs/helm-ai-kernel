@@ -13,6 +13,7 @@ type Subcommand struct {
 	Aliases []string
 	Usage   string
 	RunFn   func(args []string, stdout, stderr io.Writer) int
+	HelpFn  func(stdout io.Writer)
 }
 
 var subcommands = make(map[string]Subcommand)
@@ -20,6 +21,20 @@ var subcommands = make(map[string]Subcommand)
 // Register adds a subcommand to the CLI registry.
 // This should be called from init() functions in cmd/ files.
 func Register(cmd Subcommand) {
+	names := append([]string{cmd.Name}, cmd.Aliases...)
+	seen := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		if name == "" {
+			panic("helm-ai-kernel: subcommand names must not be empty")
+		}
+		if _, ok := seen[name]; ok {
+			panic(fmt.Sprintf("helm-ai-kernel: duplicate subcommand name or alias %q", name))
+		}
+		seen[name] = struct{}{}
+		if _, ok := subcommands[name]; ok {
+			panic(fmt.Sprintf("helm-ai-kernel: duplicate subcommand name or alias %q", name))
+		}
+	}
 	subcommands[cmd.Name] = cmd
 	for _, alias := range cmd.Aliases {
 		subcommands[alias] = cmd
@@ -32,7 +47,32 @@ func Dispatch(name string, args []string, stdout, stderr io.Writer) (int, bool) 
 	if !ok {
 		return 0, false
 	}
+	if isHelpRequest(args) {
+		printSubcommandHelp(cmd, stdout)
+		return 0, true
+	}
 	return cmd.RunFn(args, stdout, stderr), true
+}
+
+func isHelpRequest(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" || arg == "help" {
+			return true
+		}
+	}
+	return false
+}
+
+func printSubcommandHelp(cmd Subcommand, stdout io.Writer) {
+	if cmd.HelpFn != nil {
+		cmd.HelpFn(stdout)
+		return
+	}
+	fmt.Fprintf(stdout, "Usage: helm-ai-kernel %s [options]\n", cmd.Name)
+	if cmd.Usage != "" {
+		fmt.Fprintln(stdout, cmd.Usage)
+	}
+	fmt.Fprintln(stdout, "Run `helm-ai-kernel help --all` to list commands.")
 }
 
 func printUsage(out io.Writer) {

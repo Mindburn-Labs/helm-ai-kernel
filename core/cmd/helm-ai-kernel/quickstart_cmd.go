@@ -24,6 +24,7 @@ type quickstartOptions struct {
 	Profile string
 	JSON    bool
 	DryRun  bool
+	Yes     bool
 }
 
 func init() {
@@ -39,6 +40,10 @@ func runQuickstartCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady func()) int {
+	if isHelpRequest(args) {
+		printQuickstartUsage(stdout)
+		return 0
+	}
 	opts, code := parseQuickstartArgs(args, stderr)
 	if code != 0 {
 		return code
@@ -47,16 +52,22 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		fmt.Fprintf(stderr, "quickstart: %v\n", err)
 		return 2
 	}
+	planned, err := planQuickstart(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "quickstart: %v\n", err)
+		return 1
+	}
+	if opts.DryRun {
+		_ = json.NewEncoder(stdout).Encode(planned.summary("preview"))
+		return 0
+	}
 	prepared, err := prepareQuickstart(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "quickstart: %v\n", err)
 		return 1
 	}
-	if opts.JSON || opts.DryRun {
-		_ = json.NewEncoder(stdout).Encode(prepared.summary())
-	}
-	if opts.DryRun {
-		return 0
+	if opts.JSON {
+		_ = json.NewEncoder(stdout).Encode(prepared.summary("start"))
 	}
 
 	installQuickstartRuntimeEnv(prepared.Runtime)
@@ -113,7 +124,8 @@ func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, in
 	fs.BoolVar(&opts.Offline, "offline", false, "Refuse optional network checks during setup")
 	fs.StringVar(&opts.Profile, "profile", opts.Profile, "Onboarding profile: claude, codex, mcp, openai-compatible")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable startup summary")
-	fs.BoolVar(&opts.DryRun, "dry-run", false, "Prepare and print startup summary without starting the server")
+	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print a startup preview without changing local state")
+	fs.BoolVar(&opts.Yes, "yes", false, "Confirm --reset deletion of HELM-owned quickstart state")
 	if err := fs.Parse(args); err != nil {
 		return opts, 2
 	}
@@ -125,6 +137,12 @@ func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, in
 }
 
 func validateQuickstartOptions(opts quickstartOptions) error {
+	if strings.TrimSpace(opts.DataDir) == "" {
+		return fmt.Errorf("--data-dir must not be empty")
+	}
+	if opts.Reset && !opts.Yes {
+		return fmt.Errorf("--reset requires --yes")
+	}
 	ip := net.ParseIP(opts.Addr)
 	if ip == nil || !ip.IsLoopback() {
 		return fmt.Errorf("--addr must be a loopback address, got %q", opts.Addr)
@@ -141,33 +159,78 @@ func validateQuickstartOptions(opts quickstartOptions) error {
 }
 
 type quickstartPrepared struct {
-	KernelURL  string
-	PolicyPath string
-	Runtime    *quickstartRuntime
+	DataDir        string
+	KernelURL      string
+	PolicyPath     string
+	Profile        string
+	PlannedActions []string
+	Runtime        *quickstartRuntime
 }
 
-func (p quickstartPrepared) summary() map[string]any {
-	return map[string]any{
-		"kernel_url":                 p.KernelURL,
-		"policy_path":                p.PolicyPath,
-		"tenant_id":                  p.Runtime.TenantID,
-		"principal_id":               p.Runtime.PrincipalID,
-		"profile":                    p.Runtime.Profile,
-		"entitlements":               []string{"OSS_CORE"},
-		"local_session_ttl":          time.Until(p.Runtime.ExpiresAt).String(),
-		"local_session_exchange_url": p.KernelURL + "/api/v1/local-session/exchange",
-		"bootstrap_token":            p.Runtime.BootstrapToken,
-		"start_onboarding":           true,
-		"requires_cloud":             false,
-		"requires_docker":            false,
-		"requires_model_key":         false,
+func (p quickstartPrepared) summary(operation string) map[string]any {
+	summary := map[string]any{
+		"operation":          operation,
+		"data_dir":           p.DataDir,
+		"kernel_url":         p.KernelURL,
+		"policy_path":        p.PolicyPath,
+		"profile":            p.Profile,
+		"entitlements":       []string{"OSS_CORE"},
+		"planned_actions":    p.PlannedActions,
+		"start_onboarding":   true,
+		"requires_cloud":     false,
+		"requires_docker":    false,
+		"requires_model_key": false,
 	}
+	if operation == "start" && p.Runtime != nil {
+		summary["tenant_id"] = p.Runtime.TenantID
+		summary["principal_id"] = p.Runtime.PrincipalID
+		summary["local_session_ttl"] = time.Until(p.Runtime.ExpiresAt).String()
+		summary["local_session_exchange_url"] = p.KernelURL + "/api/v1/local-session/exchange"
+		summary["bootstrap_token"] = p.Runtime.BootstrapToken
+	}
+	return summary
+}
+
+func planQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
+	dataDir, err := resolveQuickstartDataDir(opts.DataDir)
+	if err != nil {
+		return quickstartPrepared{}, err
+	}
+	plannedActions := []string{
+		"create local evidence and artifact directories",
+		"initialize local SQLite state",
+		"generate a local trust root",
+		"write the local quickstart policy and reference pack",
+		"start the local Kernel",
+	}
+	if opts.Reset {
+		plannedActions = append([]string{"reset HELM-owned quickstart state"}, plannedActions...)
+	}
+	return quickstartPrepared{
+		DataDir:        dataDir,
+		KernelURL:      fmt.Sprintf("http://%s:%d", opts.Addr, opts.Port),
+		PolicyPath:     filepath.Join(dataDir, "quickstart", "oss_local_first_run.toml"),
+		Profile:        strings.ToLower(opts.Profile),
+		PlannedActions: plannedActions,
+	}, nil
 }
 
 func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
+	prepared, err := planQuickstart(opts)
+	if err != nil {
+		return quickstartPrepared{}, err
+	}
+	opts.DataDir = prepared.DataDir
 	if opts.Reset {
-		if err := os.RemoveAll(opts.DataDir); err != nil {
-			return quickstartPrepared{}, fmt.Errorf("reset data dir: %w", err)
+		resetTarget, err := validateQuickstartResetTarget(opts)
+		if err != nil {
+			return quickstartPrepared{}, err
+		}
+		opts.DataDir = resetTarget
+		prepared.DataDir = resetTarget
+		prepared.PolicyPath = filepath.Join(resetTarget, "quickstart", "oss_local_first_run.toml")
+		if err := os.RemoveAll(resetTarget); err != nil {
+			return quickstartPrepared{}, fmt.Errorf("reset data dir %q: %w", resetTarget, err)
 		}
 	}
 	if err := os.MkdirAll(filepath.Join(opts.DataDir, "evidence"), 0750); err != nil {
@@ -192,12 +255,129 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if err != nil {
 		return quickstartPrepared{}, fmt.Errorf("generate local session: %w", err)
 	}
-	kernelURL := fmt.Sprintf("http://%s:%d", opts.Addr, opts.Port)
-	return quickstartPrepared{
-		KernelURL:  kernelURL,
-		PolicyPath: policyPath,
-		Runtime:    runtime,
-	}, nil
+	if err := writeQuickstartOwnershipMarker(opts.DataDir); err != nil {
+		return quickstartPrepared{}, err
+	}
+	prepared.PolicyPath = policyPath
+	prepared.Runtime = runtime
+	return prepared, nil
+}
+
+const (
+	quickstartOwnershipMarker         = ".helm-ai-kernel-quickstart"
+	quickstartOwnershipMarkerContents = "HELM AI Kernel quickstart state v1\n"
+)
+
+func printQuickstartUsage(stdout io.Writer) {
+	fmt.Fprintln(stdout, "Usage: helm-ai-kernel quickstart [--addr ADDR] [--port PORT] [--data-dir DIR] [--profile PROFILE] [--offline] [--json] [--dry-run]")
+	fmt.Fprintln(stdout, "Pass --reset --yes only to replace HELM-owned quickstart state.")
+}
+
+func validateQuickstartResetTarget(opts quickstartOptions) (string, error) {
+	if !opts.Yes {
+		return "", fmt.Errorf("--reset requires --yes")
+	}
+	if strings.TrimSpace(opts.DataDir) == "" {
+		return "", fmt.Errorf("--data-dir must not be empty")
+	}
+	if filepath.Clean(opts.DataDir) == "." {
+		return "", fmt.Errorf("refusing to reset current working directory")
+	}
+	target, err := resolveQuickstartDataDir(opts.DataDir)
+	if err != nil {
+		return "", err
+	}
+	if target == filesystemRoot(target) {
+		return "", fmt.Errorf("refusing to reset filesystem root %q", target)
+	}
+	cwd, err := resolveQuickstartDataDir(".")
+	if err != nil {
+		return "", fmt.Errorf("resolve current working directory: %w", err)
+	}
+	if isPathSameOrAncestor(target, cwd) {
+		return "", fmt.Errorf("refusing to reset protected current workspace target %q", target)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || !filepath.IsAbs(home) {
+		return "", fmt.Errorf("resolve absolute home directory before reset")
+	}
+	home, err = resolveQuickstartDataDir(home)
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	if isPathSameOrAncestor(target, home) {
+		return "", fmt.Errorf("refusing to reset protected home target %q", target)
+	}
+	info, err := os.Stat(target)
+	if os.IsNotExist(err) {
+		return target, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("inspect reset target %q: %w", target, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("refusing to reset non-directory target %q", target)
+	}
+	marker, err := os.ReadFile(filepath.Join(target, quickstartOwnershipMarker))
+	if os.IsNotExist(err) {
+		return "", fmt.Errorf("refusing to reset unmarked target %q; preserve it or initialize a new quickstart directory", target)
+	}
+	if err != nil {
+		return "", fmt.Errorf("read quickstart ownership marker in %q: %w", target, err)
+	}
+	if string(marker) != quickstartOwnershipMarkerContents {
+		return "", fmt.Errorf("refusing to reset target %q with an invalid quickstart ownership marker", target)
+	}
+	return target, nil
+}
+
+func resolveQuickstartDataDir(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("--data-dir must not be empty")
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve data directory %q: %w", path, err)
+	}
+	return resolveExistingSymlinks(filepath.Clean(absPath))
+}
+
+func resolveExistingSymlinks(path string) (string, error) {
+	ancestor := path
+	var missing []string
+	for {
+		if _, err := os.Lstat(ancestor); err == nil {
+			resolved, err := filepath.EvalSymlinks(ancestor)
+			if err != nil {
+				return "", fmt.Errorf("resolve symlinks for %q: %w", path, err)
+			}
+			return filepath.Join(append([]string{resolved}, missing...)...), nil
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("inspect data directory %q: %w", ancestor, err)
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			return "", fmt.Errorf("resolve data directory %q", path)
+		}
+		missing = append([]string{filepath.Base(ancestor)}, missing...)
+		ancestor = parent
+	}
+}
+
+func filesystemRoot(path string) string {
+	return filepath.VolumeName(path) + string(filepath.Separator)
+}
+
+func isPathSameOrAncestor(target, protected string) bool {
+	rel, err := filepath.Rel(target, protected)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func writeQuickstartOwnershipMarker(dataDir string) error {
+	if err := os.WriteFile(filepath.Join(dataDir, quickstartOwnershipMarker), []byte(quickstartOwnershipMarkerContents), 0600); err != nil {
+		return fmt.Errorf("write quickstart ownership marker: %w", err)
+	}
+	return nil
 }
 
 func ensureQuickstartPolicy(opts quickstartOptions) (string, error) {

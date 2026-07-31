@@ -75,6 +75,30 @@ for artifact in \
     require_file "$ROOT/$artifact"
 done
 
+source_version="$(tr -d '\r\n' < "$ROOT/VERSION")"
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "::error file=scripts/release/stage_release_assets.sh::release version must be plain semver, got $VERSION" >&2
+    exit 1
+fi
+if [ "$source_version" != "$VERSION" ]; then
+    echo "::error file=scripts/release/stage_release_assets.sh::source-controlled VERSION $source_version does not match release version $VERSION" >&2
+    exit 1
+fi
+python3 - "$ROOT/bin/helm-ai-kernel" "$TAG" <<'PY'
+import re
+import subprocess
+import sys
+
+binary, expected = sys.argv[1:]
+try:
+    output = subprocess.check_output([binary, "version"], stderr=subprocess.STDOUT, text=True)
+except (OSError, subprocess.CalledProcessError) as exc:
+    raise SystemExit(f"cannot execute release binary version command: {type(exc).__name__}") from exc
+clean = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", output)
+if not re.search(rf"^HELM AI Kernel {re.escape(expected)} \([^)]*\)$", clean, re.MULTILINE):
+    raise SystemExit(f"release binary does not report expected version {expected}")
+PY
+
 vex_path="$ROOT/release/vex/${TAG}.openvex.json"
 if [ ! -f "$vex_path" ]; then
     if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
@@ -97,6 +121,18 @@ cp "$ROOT"/dist/helm-ai-kernel.mcpb "$ASSETS_DIR/"
 cp "$ROOT"/sbom.json "$ASSETS_DIR/"
 cp "$vex_path" "$ASSETS_DIR/$(basename "$vex_path")"
 cp "$ROOT"/release.high_risk.v3.toml "$ASSETS_DIR/"
+
+if [ -n "${HELM_CONSOLE_LOCAL_SIDECAR_DIR:-}" ]; then
+    log_step "verifying pinned Console local-sidecar release input"
+    python3 "$ROOT/scripts/release/console_local_sidecar.py" stage \
+        --input-dir "$HELM_CONSOLE_LOCAL_SIDECAR_DIR" \
+        --output-dir "$ASSETS_DIR" \
+        --pins "$ROOT/release/console-local-sidecar-pins.json" \
+        --kernel-release "$TAG"
+elif [ "${HELM_REQUIRE_CONSOLE_LOCAL_SIDECAR:-0}" = "1" ]; then
+    echo "::error file=scripts/release/stage_release_assets.sh::a pinned Console local-sidecar input is required for this release" >&2
+    exit 1
+fi
 
 python3 - "$ROOT" "$ASSETS_DIR/sample-policy-material.tar" <<'PY'
 import pathlib
@@ -274,6 +310,7 @@ payload = {
         "evidence_pack_verified": True,
         "sample_policy_material_includes_reference_pack": True,
         "homebrew_formula_generated": True,
+        "console_local_sidecar_verified": (assets_dir / "helm-console-local-sidecar-release-manifest.json").is_file(),
     },
     "artifacts": artifacts,
 }

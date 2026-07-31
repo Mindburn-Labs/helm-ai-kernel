@@ -93,7 +93,7 @@ if "\n\n\n" in formula:
     raise SystemExit("Homebrew formula contains extra blank lines")
 if formula.find("on_macos do") > formula.find('resource "launchpad-data" do'):
     raise SystemExit("Homebrew formula platform blocks must precede resources")
-if "console-web" in formula or "helm-console-web" in formula:
+if "console-web" in formula or "helm-console-web" in formula or "helm-console-local-sidecar" in formula:
     raise SystemExit("Homebrew formula must remain headless and must not install console web assets")
 
 with tarfile.open(assets / "sample-policy-material.tar", "r") as tar:

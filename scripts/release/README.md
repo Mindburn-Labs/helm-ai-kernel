@@ -15,6 +15,7 @@ specific GitHub release attached a matching asset.
 | `generate_vex.sh` | Emits `release/vex/v<version>.openvex.json` from the current `sbom.json` baseline. | `make vex`, release workflow. |
 | `homebrew_formula.rb` | Generates a Homebrew formula from version and checksum inputs. | release workflow. |
 | `pin_benchmarks.sh` | Pins a benchmark snapshot for a release tag. | `make bench-pin`, release workflow. |
+| `console_local_sidecar.py` | Resolves an exact Console source pin, verifies its signed aggregate manifest and each native closure, then stages the verified files. | Kernel tag release only. |
 | `stage_release_assets.sh` | Stages the complete release asset directory, including exact tag OpenVEX, verified EvidencePack, sample policy material, attestation, Homebrew formula, and checksums. | `make release-assets`, release workflow. |
 | `verify_cosign.sh` | Verifies local artifacts that have adjacent `*.cosign.bundle` files. | `make verify-cosign`, manual verification. |
 | `distribute.sh` | Legacy/manual multi-package publication helper. | Manual only; do not treat as automatic release proof. |
@@ -34,12 +35,22 @@ make docs-coverage docs-truth
 make version-drift-published
 ```
 
-On tag builds, the Makefile derives `VERSION` from `GITHUB_REF_NAME` so the
-binary version, SBOM component version, OpenVEX filename, Homebrew formula, and
-release attestation all match the tag. `stage_release_assets.sh` requires the
-matching OpenVEX file, generates a non-seeded release EvidencePack from release
-build inputs, verifies `evidence-pack.tar`, and writes the final checksum
-manifest.
+`VERSION` is source-controlled release truth. A tag build first proves that
+`GITHUB_REF_NAME` equals `v$(VERSION)`; `stage_release_assets.sh` then rejects
+both a source-version mismatch and a built CLI whose displayed version differs
+from that tag. It also requires the matching OpenVEX file, generates a
+non-seeded release EvidencePack from release build inputs, verifies
+`evidence-pack.tar`, and writes the final checksum manifest.
+
+The local Console browser sidecar is a standalone-release asset, never a
+Homebrew resource. A tag release first dispatches the Console's native closure
+builder from a checked-in exact source pin. `console_local_sidecar.py` requires
+the Console keyless manifest signature, all four native targets, archive and
+inventory integrity, and source/provenance agreement before the files enter
+`dist/release-assets/`. The Kernel release attests the closure and adds a
+separate Kernel signature without rewriting the producer bundle. The Console
+producer bundle remains alongside a separate
+`*.kernel.cosign.bundle` so neither signature overwrites the other.
 
 The Makefile uses `SOURCE_DATE_EPOCH` for reproducible binary builds, defaulting
 to the current `HEAD` commit timestamp unless overridden. For `make vex`, an

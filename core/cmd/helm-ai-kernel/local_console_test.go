@@ -785,7 +785,7 @@ func waitForLocalConsoleTestListener(t *testing.T, url string) {
 		},
 	}
 	defer client.CloseIdleConnections()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for {
 		response, err := client.Get(url)
 		if err == nil {

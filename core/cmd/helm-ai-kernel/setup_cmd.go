@@ -35,6 +35,20 @@ var (
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	}
+	setupFindClient = func(target string) (string, error) {
+		return exec.LookPath(setupClientCommand(target))
+	}
+	setupProbeClient = func(target, dir string) error {
+		client, err := setupFindClient(target)
+		if err != nil {
+			return err
+		}
+		cmd := exec.Command(client, "mcp", "get", setupMCPServerName)
+		cmd.Dir = dir
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		return cmd.Run()
+	}
 )
 
 type setupOptions struct {
@@ -47,6 +61,7 @@ type setupOptions struct {
 	DryRun          bool
 	JSON            bool
 	NoQuickstart    bool
+	Quickstart      bool
 	DataDir         string
 	SigningSeedFile string
 }
@@ -56,6 +71,7 @@ type setupSummary struct {
 	Target           string `json:"target"`
 	Workspace        string `json:"workspace"`
 	BinaryPath       string `json:"binary_path"`
+	ClientBinaryPath string `json:"client_binary_path,omitempty"`
 	ClientConfigPath string `json:"client_config_path"`
 	HookConfigPath   string `json:"hook_config_path"`
 	DataDir          string `json:"data_dir"`
@@ -64,8 +80,13 @@ type setupSummary struct {
 	DraftPolicyPath  string `json:"draft_policy_path"`
 	UninstallCommand string `json:"uninstall_command"`
 	Scope            string `json:"scope,omitempty"`
-	MCPInstalled     bool   `json:"mcp_installed,omitempty"`
-	HookInstalled    bool   `json:"hook_installed,omitempty"`
+	// MCPInstalled and HookInstalled mean HELM's exact configuration is
+	// present on disk. They do not claim the client has loaded it.
+	MCPInstalled   bool   `json:"mcp_installed,omitempty"`
+	HookInstalled  bool   `json:"hook_installed,omitempty"`
+	ClientDetected bool   `json:"client_detected"`
+	NativeLoaded   bool   `json:"native_loaded"`
+	ClientState    string `json:"client_state,omitempty"`
 	// CodexTrustPending is true when a project-scoped Codex config is written
 	// but the workspace is not recorded as trusted in ~/.codex/config.toml.
 	// Codex ignores project-scoped config until trust is granted, so the
@@ -74,12 +95,13 @@ type setupSummary struct {
 	CodexTrustPending bool     `json:"codex_trust_pending,omitempty"`
 	QuickstartStarted bool     `json:"quickstart_started"`
 	PlannedActions    []string `json:"planned_actions"`
+	RetainedData      bool     `json:"retained_data,omitempty"`
 }
 
 func init() {
 	Register(Subcommand{
 		Name:  "setup",
-		Usage: "Install local Claude Code or Codex MCP/hook integration and start the headless proof path",
+		Usage: "Install local Claude Code or Codex MCP/hook integration",
 		RunFn: runSetupCmd,
 	})
 }
@@ -95,6 +117,8 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "status":
 		return runSetupStatusCmd(args[1:], stdout, stderr)
+	case "repair":
+		return runSetupRepairCmd(args[1:], stdout, stderr)
 	case "remove":
 		return runSetupRemoveCmd(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -151,10 +175,15 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup: %v\n", err)
 		return 2
 	}
+	if err := preflightSetup(opts, &summary); err != nil {
+		fmt.Fprintf(stderr, "setup: %v\n", err)
+		return 1
+	}
 	if opts.DryRun {
 		printSetupSummary(stdout, summary, opts.JSON)
 		return 0
 	}
+	printSetupPlan(stderr, summary)
 	if err := os.MkdirAll(opts.DataDir, 0o750); err != nil {
 		fmt.Fprintf(stderr, "setup: create data dir: %v\n", err)
 		return 1
@@ -180,8 +209,13 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	summary.MCPInstalled = true
 	summary.HookInstalled = true
+	summary.ClientDetected = true
+	summary.ClientState = "configured"
 	if opts.Target == "codex" && opts.Scope == "project" {
 		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
+		if summary.CodexTrustPending {
+			summary.ClientState = "trust_pending"
+		}
 	}
 	if opts.NoQuickstart {
 		printSetupSummary(stdout, summary, opts.JSON)
@@ -225,9 +259,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
-	if opts.Target == "codex" && opts.Scope == "project" && (summary.MCPInstalled || summary.HookInstalled) {
-		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
-	}
+	observeSetupClientState(opts, &summary)
 	if grade := readSetupScanGrade(filepath.Join(opts.DataDir, "autoconfigure", "inventory.json")); grade != "" {
 		summary.ScanGrade = grade
 	}
@@ -238,6 +270,56 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	return 1
+}
+
+func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
+	opts, code := parseSetupInspectArgs("setup repair", args, stderr, true)
+	if code != 0 {
+		return code
+	}
+	if opts.DryRun {
+		opts.Operation = "preview_repair"
+	} else {
+		opts.Operation = "repair"
+	}
+	if !opts.Yes && !opts.DryRun {
+		fmt.Fprintln(stderr, "setup repair: pass --yes to repair HELM-owned config, or --dry-run to preview changes")
+		return 2
+	}
+	summary, err := buildSetupSummary(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup repair: %v\n", err)
+		return 2
+	}
+	if err := preflightSetup(opts, &summary); err != nil {
+		fmt.Fprintf(stderr, "setup repair: %v\n", err)
+		return 1
+	}
+	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
+	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
+	summary.PlannedActions = setupRepairActions(summary)
+	if opts.DryRun {
+		printSetupSummary(stdout, summary, opts.JSON)
+		return 0
+	}
+	printSetupPlan(stderr, summary)
+	if !summary.MCPInstalled {
+		if err := installSetupMCP(opts, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup repair: install MCP server: %v\n", err)
+			return 1
+		}
+		summary.MCPInstalled = true
+	}
+	if !summary.HookInstalled {
+		if err := installSetupHook(opts, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup repair: install pre-tool hook: %v\n", err)
+			return 1
+		}
+		summary.HookInstalled = true
+	}
+	observeSetupClientState(opts, &summary)
+	printSetupSummary(stdout, summary, opts.JSON)
+	return 0
 }
 
 func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
@@ -259,15 +341,34 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup remove: %v\n", err)
 		return 2
 	}
+	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
+	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
+	summary.PlannedActions = setupRemoveActions(summary)
+	summary.RetainedData = true
 	if !opts.DryRun {
-		if err := removeSetupHook(opts, summary.BinaryPath); err != nil {
-			fmt.Fprintf(stderr, "setup remove: remove hook: %v\n", err)
-			return 1
+		printSetupPlan(stderr, summary)
+		// Remove the MCP entry before the hook. If the client command cannot
+		// remove an owned MCP entry, the hook remains in place and the setup is
+		// still repairable rather than silently half-removed.
+		if summary.MCPInstalled {
+			if err := removeSetupMCP(opts); err != nil {
+				fmt.Fprintf(stderr, "setup remove: remove MCP server: %v\n", err)
+				return 1
+			}
+			summary.MCPInstalled = false
 		}
-		if err := removeSetupMCP(opts); err != nil {
-			fmt.Fprintf(stderr, "setup remove: remove MCP server: %v\n", err)
-			return 1
+		if summary.HookInstalled {
+			if err := removeSetupHook(opts, summary.BinaryPath); err != nil {
+				fmt.Fprintf(stderr, "setup remove: remove hook: %v\n", err)
+				return 1
+			}
+			summary.HookInstalled = false
 		}
+	}
+	if opts.DryRun {
+		summary.ClientState = "planned_removal"
+	} else {
+		summary.ClientState = "removed"
 	}
 	printSetupSummary(stdout, summary, opts.JSON)
 	return 0
@@ -286,15 +387,16 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "Manage:")
 	fmt.Fprintln(w, "  helm-ai-kernel setup codex --scope project --workspace DIR --dry-run --json")
 	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex> [--scope user|project] [--workspace DIR] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup repair <claude-code|codex> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "")
 	printSupportMatrix(w)
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "No config is written without --yes.")
+	fmt.Fprintln(w, "No config is written without --yes. Setup does not start Quickstart unless --quickstart is supplied.")
 }
 
 func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) {
-	opts := setupOptions{Scope: "user"}
+	opts := setupOptions{Scope: "user", NoQuickstart: true}
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Scope, "scope", opts.Scope, "Install scope: user or project")
@@ -302,7 +404,8 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.Yes, "yes", false, "Install without prompting")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
-	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Install without starting the blocking Quickstart server")
+	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", opts.NoQuickstart, "Install without starting the blocking Quickstart server")
+	fs.BoolVar(&opts.Quickstart, "quickstart", false, "Start the blocking Quickstart server after setup")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -313,6 +416,9 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 			opts.WorkspaceSet = true
 		}
 	})
+	if opts.Quickstart {
+		opts.NoQuickstart = false
+	}
 	opts.Target = args[0]
 	return normalizeSetupOptions(opts, stderr)
 }
@@ -455,22 +561,185 @@ func buildSetupSummary(opts setupOptions) (setupSummary, error) {
 func setupPlannedActions(opts setupOptions) []string {
 	switch opts.Operation {
 	case "preview":
-		actions := []string{
-			"scan selected workspace and write draft-only inventory artifacts",
-			"configure the HELM MCP server with the selected local data directory",
-			"configure the HELM PreToolUse hook for the selected client",
-		}
-		if !opts.NoQuickstart {
-			actions = append(actions, "start the local Quickstart proof path")
-		}
-		return actions
-	case "preview_remove":
-		return []string{
-			"remove the HELM PreToolUse hook from the selected scope",
-			"remove the HELM MCP server from the selected scope",
-		}
+		return setupInstallActions(opts)
 	default:
 		return []string{}
+	}
+}
+
+func setupInstallActions(opts setupOptions) []string {
+	actions := []string{
+		"create or reuse the local receipt signing key under " + filepath.Join(opts.DataDir, workstationSigningKeyDirectory),
+		"write draft-only inventory and policy artifacts under " + filepath.Join(opts.DataDir, "autoconfigure"),
+		"configure the HELM MCP server in " + setupClientConfigPath(opts),
+		"configure the HELM PreToolUse hook in " + setupHookConfigPath(opts),
+	}
+	if !opts.NoQuickstart {
+		actions = append(actions, "start the local Quickstart proof path")
+	}
+	return actions
+}
+
+func setupRepairActions(summary setupSummary) []string {
+	actions := make([]string, 0, 2)
+	if !summary.MCPInstalled {
+		actions = append(actions, "configure the HELM MCP server in "+summary.ClientConfigPath)
+	}
+	if !summary.HookInstalled {
+		actions = append(actions, "configure the HELM PreToolUse hook in "+summary.HookConfigPath)
+	}
+	return actions
+}
+
+func setupRemoveActions(summary setupSummary) []string {
+	actions := make([]string, 0, 2)
+	if summary.MCPInstalled {
+		actions = append(actions, "remove the HELM MCP server from "+summary.ClientConfigPath)
+	}
+	if summary.HookInstalled {
+		actions = append(actions, "remove the HELM PreToolUse hook from "+summary.HookConfigPath)
+	}
+	return actions
+}
+
+func setupClientCommand(target string) string {
+	if target == "claude-code" {
+		return "claude"
+	}
+	return "codex"
+}
+
+func preflightSetup(opts setupOptions, summary *setupSummary) error {
+	if err := preflightSetupDataDir(opts.DataDir); err != nil {
+		return err
+	}
+	client, err := setupFindClient(opts.Target)
+	if err != nil {
+		return fmt.Errorf("%s client is not available on PATH; install %q and retry", opts.Target, setupClientCommand(opts.Target))
+	}
+	summary.ClientBinaryPath = client
+	summary.ClientDetected = true
+	if summary.ClientState == "" {
+		summary.ClientState = "planned"
+	}
+	if err := preflightWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile); err != nil {
+		return fmt.Errorf("validate local receipt signing key: %w", err)
+	}
+	if err := preflightSetupClientConfig(opts); err != nil {
+		return err
+	}
+	if err := preflightSetupHookConfig(opts); err != nil {
+		return err
+	}
+	return nil
+}
+
+func preflightSetupDataDir(dataDir string) error {
+	info, err := os.Lstat(dataDir)
+	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return fmt.Errorf("data directory %q must be a directory, not a symlink or special file", dataDir)
+		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect data directory %q: %w", dataDir, err)
+	}
+	if _, err := resolvePrivateFileParent(filepath.Dir(dataDir)); err != nil {
+		return fmt.Errorf("inspect data directory parent: %w", err)
+	}
+	return nil
+}
+
+func preflightSetupClientConfig(opts setupOptions) error {
+	path := setupClientConfigPath(opts)
+	if _, err := privateFileWritePath(path, setupPrivateFileRoot(opts)); err != nil {
+		return err
+	}
+	switch opts.Target {
+	case "claude-code":
+		if _, err := readJSONObject(path); err != nil {
+			return fmt.Errorf("parse existing Claude config: %w", err)
+		}
+	case "codex":
+		raw, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil {
+			if err := validateCodexProjectTOML(string(raw)); err != nil {
+				return fmt.Errorf("parse existing Codex config: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func preflightSetupHookConfig(opts setupOptions) error {
+	path := setupHookConfigPath(opts)
+	if _, err := privateFileWritePath(path, setupPrivateFileRoot(opts)); err != nil {
+		return err
+	}
+	if _, err := readJSONObject(path); err != nil {
+		return fmt.Errorf("parse existing hook config: %w", err)
+	}
+	return nil
+}
+
+func observeSetupClientState(opts setupOptions, summary *setupSummary) {
+	summary.ClientDetected = false
+	summary.NativeLoaded = false
+	if !summary.MCPInstalled && !summary.HookInstalled {
+		summary.ClientState = "absent"
+		return
+	}
+	if !summary.MCPInstalled || !summary.HookInstalled {
+		summary.ClientState = "degraded"
+		return
+	}
+	if opts.Target == "codex" && opts.Scope == "project" && codexProjectTrustPending(opts.Workspace) {
+		summary.CodexTrustPending = true
+		summary.ClientState = "trust_pending"
+		return
+	}
+	if _, err := setupFindClient(opts.Target); err != nil {
+		summary.ClientState = "configured_client_missing"
+		return
+	}
+	summary.ClientDetected = true
+	// Codex's native `mcp get` command reads the user-level registry, so it
+	// cannot prove that a project-local config is loaded. Keep this state
+	// deliberately conservative instead of borrowing a global success signal.
+	if opts.Target == "codex" && opts.Scope == "project" {
+		summary.ClientState = "configured_unverified"
+		return
+	}
+	if err := setupProbeClient(opts.Target, setupCommandDir(opts)); err != nil {
+		summary.ClientState = "configured_unverified"
+		return
+	}
+	summary.NativeLoaded = true
+	summary.ClientState = "native_loaded"
+}
+
+func printSetupPlan(w io.Writer, summary setupSummary) {
+	actions := summary.PlannedActions
+	if len(actions) == 0 {
+		switch summary.Operation {
+		case "install":
+			actions = []string{
+				"create or reuse local HELM state under " + summary.DataDir,
+				"configure the HELM MCP server in " + summary.ClientConfigPath,
+				"configure the HELM PreToolUse hook in " + summary.HookConfigPath,
+			}
+		case "repair", "remove":
+			actions = []string{"no HELM-owned configuration changes are needed"}
+		}
+	}
+	fmt.Fprintln(w, "Planned changes:")
+	fmt.Fprintf(w, "  Client binary: %s\n", summary.ClientBinaryPath)
+	for _, action := range actions {
+		fmt.Fprintf(w, "  - %s\n", action)
 	}
 }
 
@@ -528,7 +797,9 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	fmt.Fprintf(stdout, "  MCP config:    %s\n", summary.ClientConfigPath)
 	fmt.Fprintf(stdout, "  Hook config:   %s\n", summary.HookConfigPath)
 	fmt.Fprintf(stdout, "  Data dir:      %s\n", summary.DataDir)
-	fmt.Fprintf(stdout, "  Kernel:        %s\n", summary.KernelURL)
+	if summary.KernelURL != "" {
+		fmt.Fprintf(stdout, "  Kernel:        %s\n", summary.KernelURL)
+	}
 	fmt.Fprintf(stdout, "  Scan grade:    %s\n", summary.ScanGrade)
 	fmt.Fprintf(stdout, "  Draft policy:  %s\n", summary.DraftPolicyPath)
 	fmt.Fprintf(stdout, "  Uninstall:     %s\n", summary.UninstallCommand)
@@ -539,10 +810,16 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 		}
 	}
 	if summary.MCPInstalled || summary.HookInstalled {
-		fmt.Fprintf(stdout, "  Installed:     mcp=%v hook=%v\n", summary.MCPInstalled, summary.HookInstalled)
+		fmt.Fprintf(stdout, "  Configured:    mcp=%v hook=%v\n", summary.MCPInstalled, summary.HookInstalled)
+	}
+	if summary.ClientState != "" {
+		fmt.Fprintf(stdout, "  Client state:  %s (detected=%v native_loaded=%v)\n", summary.ClientState, summary.ClientDetected, summary.NativeLoaded)
 	}
 	if summary.CodexTrustPending {
 		fmt.Fprintf(stdout, "  Codex trust:   PENDING — Codex will ignore this project config until you trust the workspace (run `codex` in %s and approve it, or set trust_level=\"trusted\" in ~/.codex/config.toml). Governance is not active until then.\n", summary.Workspace)
+	}
+	if summary.RetainedData {
+		fmt.Fprintln(stdout, "  Local state:   retained (keys, evidence, and receipts were not removed)")
 	}
 }
 
@@ -650,11 +927,22 @@ func setupMCPInstalled(opts setupOptions, path, bin string) bool {
 }
 
 func setupHookInstalled(opts setupOptions, path, bin string) bool {
-	root, err := readJSONObject(path)
+	if filepath.Clean(path) != filepath.Clean(setupHookConfigPath(opts)) {
+		return false
+	}
+	readPath := path
+	if root := setupPrivateFileRoot(opts); root != "" {
+		resolved, err := privateFileWritePath(path, root)
+		if err != nil {
+			return false
+		}
+		readPath = resolved
+	}
+	config, err := readJSONObject(readPath)
 	if err != nil {
 		return false
 	}
-	hooks, ok := root["hooks"].(map[string]any)
+	hooks, ok := config["hooks"].(map[string]any)
 	if !ok {
 		return false
 	}

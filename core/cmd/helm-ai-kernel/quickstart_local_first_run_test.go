@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -364,6 +365,98 @@ func TestPrepareQuickstartRefusesToClaimExistingDataDirectory(t *testing.T) {
 	}
 }
 
+func TestPrepareQuickstartMigratesCompleteLegacyState(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	writeLegacyQuickstartFixture(t, dataDir)
+
+	prepared, err := prepareQuickstart(quickstartOptions{
+		Addr:    "127.0.0.1",
+		Port:    7714,
+		DataDir: dataDir,
+		Profile: "mcp",
+	})
+	if err != nil {
+		t.Fatalf("migrate legacy quickstart: %v", err)
+	}
+	if prepared.Runtime == nil || prepared.LocalSessionCredentialPath == "" {
+		t.Fatalf("legacy migration did not finish normal startup preparation: %+v", prepared)
+	}
+	if err := validateQuickstartOwnershipMarker(dataDir); err != nil {
+		t.Fatalf("legacy migration did not write current ownership marker: %v", err)
+	}
+}
+
+func TestQuickstartLegacyMigrationRejectsForeignState(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	writeLegacyQuickstartFixture(t, dataDir)
+	sentinel := filepath.Join(dataDir, "unrelated.txt")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prepareQuickstart(quickstartOptions{
+		Addr:    "127.0.0.1",
+		Port:    7714,
+		DataDir: dataDir,
+		Profile: "mcp",
+	})
+	if err == nil || !strings.Contains(err.Error(), "legacy quickstart layout is not a complete ownership proof") {
+		t.Fatalf("foreign state was accepted as legacy quickstart: %v", err)
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("foreign state was modified: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dataDir, quickstartOwnershipMarker)); !os.IsNotExist(err) {
+		t.Fatalf("foreign state was claimed: %v", err)
+	}
+	if _, err := validateQuickstartResetTarget(quickstartOptions{DataDir: dataDir, Reset: true, Yes: true}); err == nil {
+		t.Fatal("foreign state was accepted for reset")
+	}
+}
+
+func TestQuickstartLegacyMigrationDoesNotReplaceMalformedMarker(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	writeLegacyQuickstartFixture(t, dataDir)
+	markerPath := filepath.Join(dataDir, quickstartOwnershipMarker)
+	if err := os.WriteFile(markerPath, []byte("not a HELM marker\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := prepareQuickstart(quickstartOptions{
+		Addr:    "127.0.0.1",
+		Port:    7714,
+		DataDir: dataDir,
+		Profile: "mcp",
+	})
+	if err == nil || !strings.Contains(err.Error(), "ownership marker is invalid") {
+		t.Fatalf("malformed marker fell back to legacy migration: %v", err)
+	}
+	marker, err := os.ReadFile(markerPath)
+	if err != nil || string(marker) != "not a HELM marker\n" {
+		t.Fatalf("malformed marker was replaced: %q, %v", marker, err)
+	}
+}
+
+func TestQuickstartResetPreflightAcceptsCompleteLegacyState(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	writeLegacyQuickstartFixture(t, dataDir)
+
+	target, err := validateQuickstartResetTarget(quickstartOptions{DataDir: dataDir, Reset: true, Yes: true})
+	if err != nil {
+		t.Fatalf("legacy state was rejected for explicit reset: %v", err)
+	}
+	resolvedDataDir, err := resolveQuickstartDataDir(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target != resolvedDataDir {
+		t.Fatalf("reset target = %q, want %q", target, resolvedDataDir)
+	}
+	if _, err := os.Lstat(filepath.Join(dataDir, quickstartOwnershipMarker)); !os.IsNotExist(err) {
+		t.Fatalf("reset preflight mutated legacy state: %v", err)
+	}
+}
+
 func TestPrepareQuickstartWritesPrivateLocalSessionCredential(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "state")
 	prepared, err := prepareQuickstart(quickstartOptions{
@@ -654,4 +747,31 @@ func authorizeQuickstartRequest(req *http.Request, runtime *quickstartRuntime) {
 	req.Header.Set("Authorization", "Bearer "+runtime.SessionToken)
 	req.Header.Set(tenantHeader, runtime.TenantID)
 	req.Header.Set(principalHeader, runtime.PrincipalID)
+}
+
+func writeLegacyQuickstartFixture(t *testing.T, dataDir string) {
+	t.Helper()
+	t.Setenv("HELM_RECEIPT_PROFILE", "")
+	if err := os.MkdirAll(filepath.Join(dataDir, "evidence"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dataDir, "artifacts"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	db, _, _, err := setupLiteModeWithDataDir(context.Background(), dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadOrGenerateSignerWithDataDir(dataDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ensureQuickstartPolicy(quickstartOptions{Addr: "127.0.0.1", Port: 7714, DataDir: dataDir}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(dataDir, quickstartOwnershipMarker)); !os.IsNotExist(err) {
+		t.Fatalf("legacy fixture unexpectedly has ownership marker: %v", err)
+	}
 }

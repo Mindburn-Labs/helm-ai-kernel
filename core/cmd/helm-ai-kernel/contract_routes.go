@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -1230,7 +1231,6 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		var req struct {
-			Actor     string `json:"actor"`
 			ReceiptID string `json:"receipt_id"`
 			Reason    string `json:"reason"`
 		}
@@ -1247,7 +1247,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteNotFound(w, "approval action not found")
 			return
 		}
-		approval, err := surfaces.TransitionApproval(approvalID, state, req.Actor, req.ReceiptID, req.Reason)
+		principal, err := helmauth.GetPrincipal(r.Context())
+		if err != nil || principal == nil || strings.TrimSpace(principal.GetID()) == "" {
+			api.WriteUnauthorized(w, "Authenticated principal is required for approval transition")
+			return
+		}
+		approval, err := surfaces.TransitionApproval(approvalID, state, principal.GetID(), req.ReceiptID, req.Reason)
 		if err != nil {
 			api.WriteBadRequest(w, err.Error())
 			return

@@ -60,8 +60,8 @@ func (c redactingApprovalClient) ListApprovals(ctx context.Context) ([]contracts
 	return items, redactWatchError(err, c.secret)
 }
 
-func (c redactingApprovalClient) TransitionApproval(ctx context.Context, approvalID, action, actor, reason string) (contracts.ApprovalCeremony, error) {
-	item, err := c.delegate.TransitionApproval(ctx, approvalID, action, actor, reason)
+func (c redactingApprovalClient) TransitionApproval(ctx context.Context, approvalID, action, reason string) (contracts.ApprovalCeremony, error) {
+	item, err := c.delegate.TransitionApproval(ctx, approvalID, action, reason)
 	return item, redactWatchError(err, c.secret)
 }
 
@@ -105,21 +105,16 @@ func runWatchCmd(args []string, stdout, stderr io.Writer) int {
 func runWatchCmdWithRuntime(args []string, stdout, stderr io.Writer, runtime watchRuntime) int {
 	cmd := flag.NewFlagSet("watch", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	var rawURL, apiKeyFile, actor string
+	var rawURL, apiKeyFile string
 	var once, jsonOut bool
 	cmd.StringVar(&rawURL, "url", "", "Kernel server URL (default $HELM_KERNEL_URL or "+defaultWatchURL+")")
 	cmd.StringVar(&apiKeyFile, "api-key-file", "", "Path to a private file containing the admin API key")
-	cmd.StringVar(&actor, "actor", "operator.cli", "Actor recorded on approval transitions")
 	cmd.BoolVar(&once, "once", false, "Print one stable snapshot and exit")
 	cmd.BoolVar(&jsonOut, "json", false, "Print the stable snapshot as JSON and exit")
 	if err := cmd.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
-		return 2
-	}
-	if strings.TrimSpace(actor) == "" {
-		writeWatchError(stderr, errors.New("--actor is required"))
 		return 2
 	}
 	if rawURL == "" {
@@ -148,7 +143,7 @@ func runWatchCmdWithRuntime(args []string, stdout, stderr io.Writer, runtime wat
 	if jsonOut || once || !runtime.outputTTY || !runtime.caps.Interactive {
 		return runWatchSnapshot(client, jsonOut, stdout, stderr)
 	}
-	return runWatchInteractive(client, strings.TrimSpace(actor), runtime.input, stderr, runtime.caps)
+	return runWatchInteractive(client, runtime.input, stderr, runtime.caps)
 }
 
 // runWatchSnapshot always writes data to stdout and diagnostics to stderr.
@@ -181,14 +176,14 @@ func runWatchSnapshot(client approvalClient, jsonOut bool, stdout, stderr io.Wri
 // chooses an ID and decision word, then ui.ConfirmDecision renders the full
 // context and requires a second exact APPROVE or DENY word before its callback
 // may call TransitionApproval.
-func runWatchInteractive(client approvalClient, actor string, input io.Reader, chrome io.Writer, caps ui.Capabilities) int {
+func runWatchInteractive(client approvalClient, input io.Reader, chrome io.Writer, caps ui.Capabilities) int {
 	if !caps.Interactive || input == nil {
 		writeWatchError(chrome, ui.ErrNonInteractive)
 		return 2
 	}
 	renderer := ui.NewRenderer(chrome, caps)
 	reader := bufio.NewReader(input)
-	model := newWatchModel(client, actor)
+	model := newWatchModel(client)
 
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), watchRequestTimeout)
@@ -256,7 +251,6 @@ func runWatchInteractive(client approvalClient, actor string, input io.Reader, c
 				transitionCtx,
 				item.ApprovalID,
 				strings.ToLower(string(action)),
-				model.actor,
 				"operator decision via helm-ai-kernel watch",
 			)
 			transitionedState = string(transitioned.State)

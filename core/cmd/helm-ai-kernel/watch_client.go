@@ -21,7 +21,7 @@ import (
 // records an explicitly confirmed approval or denial.
 type approvalClient interface {
 	ListApprovals(ctx context.Context) ([]contracts.ApprovalCeremony, error)
-	TransitionApproval(ctx context.Context, approvalID, action, actor, reason string) (contracts.ApprovalCeremony, error)
+	TransitionApproval(ctx context.Context, approvalID, action, reason string) (contracts.ApprovalCeremony, error)
 }
 
 const approvalAPIBasePath = "/api/v1/approvals"
@@ -115,7 +115,7 @@ func (c *approvalHTTPClient) ListApprovals(ctx context.Context) ([]contracts.App
 	return ceremonies, nil
 }
 
-func (c *approvalHTTPClient) TransitionApproval(ctx context.Context, approvalID, action, actor, reason string) (contracts.ApprovalCeremony, error) {
+func (c *approvalHTTPClient) TransitionApproval(ctx context.Context, approvalID, action, reason string) (contracts.ApprovalCeremony, error) {
 	switch action {
 	case "approve", "deny":
 	default:
@@ -124,13 +124,9 @@ func (c *approvalHTTPClient) TransitionApproval(ctx context.Context, approvalID,
 	if strings.TrimSpace(approvalID) == "" {
 		return contracts.ApprovalCeremony{}, errors.New("approval id is required")
 	}
-	if strings.TrimSpace(actor) == "" {
-		return contracts.ApprovalCeremony{}, errors.New("approval transition actor is required")
-	}
 	body := struct {
-		Actor  string `json:"actor"`
 		Reason string `json:"reason,omitempty"`
-	}{Actor: actor, Reason: reason}
+	}{Reason: reason}
 	var ceremony contracts.ApprovalCeremony
 	path := approvalAPIBasePath + "/" + url.PathEscape(approvalID) + "/" + action
 	if err := c.do(ctx, http.MethodPost, path, body, &ceremony); err != nil {

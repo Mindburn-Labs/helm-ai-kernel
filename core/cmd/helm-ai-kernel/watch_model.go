@@ -19,7 +19,6 @@ import (
 // prompting and delegates every state change to ui.ConfirmDecision.
 type watchModel struct {
 	client approvalClient
-	actor  string
 
 	pending     []contracts.ApprovalCeremony
 	lastErr     error
@@ -30,8 +29,8 @@ type watchModel struct {
 	inFlight   bool
 }
 
-func newWatchModel(client approvalClient, actor string, _ ...time.Duration) *watchModel {
-	return &watchModel{client: client, actor: strings.TrimSpace(actor)}
+func newWatchModel(client approvalClient) *watchModel {
+	return &watchModel{client: client}
 }
 
 // beginRefresh starts a generation only when no other refresh is active.

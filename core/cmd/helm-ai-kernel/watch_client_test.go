@@ -29,14 +29,14 @@ func TestApprovalHTTPClientListsAndTransitions(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Fatalf("transition method = %s", r.Method)
 			}
-			var body struct {
-				Actor  string `json:"actor"`
-				Reason string `json:"reason"`
-			}
+			var body map[string]json.RawMessage
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatalf("decode transition: %v", err)
 			}
-			if body.Actor != "operator.cli" || body.Reason == "" {
+			if _, ok := body["actor"]; ok {
+				t.Fatalf("watch transition sent caller-controlled actor: %s", body["actor"])
+			}
+			if len(body["reason"]) == 0 {
 				t.Fatalf("transition body = %+v", body)
 			}
 			item := watchTestCeremony("ap-1", time.Unix(1, 0))
@@ -56,7 +56,7 @@ func TestApprovalHTTPClientListsAndTransitions(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].ApprovalID != "ap-1" {
 		t.Fatalf("ListApprovals = %+v, %v", items, err)
 	}
-	transitioned, err := client.TransitionApproval(context.Background(), "ap-1", "approve", "operator.cli", "reviewed")
+	transitioned, err := client.TransitionApproval(context.Background(), "ap-1", "approve", "reviewed")
 	if err != nil || transitioned.State != contracts.ApprovalCeremonyAllowed {
 		t.Fatalf("TransitionApproval = %+v, %v", transitioned, err)
 	}
@@ -99,7 +99,7 @@ func TestApprovalHTTPClientRejectsUnsafeInputs(t *testing.T) {
 	if err != nil || client == nil {
 		t.Fatalf("loopback HTTP client = %v, %v", client, err)
 	}
-	if _, err := client.TransitionApproval(context.Background(), "ap-1", "revoke", "operator", ""); err == nil {
+	if _, err := client.TransitionApproval(context.Background(), "ap-1", "revoke", ""); err == nil {
 		t.Fatal("watch client must not expose revoke")
 	}
 }

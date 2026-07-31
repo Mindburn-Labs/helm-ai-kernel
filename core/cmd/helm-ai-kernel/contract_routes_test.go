@@ -395,6 +395,38 @@ func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
 	}
 }
 
+func TestApprovalRouteDerivesRawTransitionActorFromAuthenticatedPrincipal(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(`{"approval_id":"approval-raw-admin","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1}`))
+	authorizeTestRequest(createReq)
+	createRec := httptest.NewRecorder()
+	mux.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create approval status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+
+	transitionReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-raw-admin/approve", strings.NewReader(`{"actor":"user:attacker","reason":"reviewed"}`))
+	authorizeTestRequest(transitionReq)
+	// The raw admin path must ignore both body and tenant-header identities.
+	transitionReq.Header.Set(principalHeader, "user:attacker")
+	transitionRec := httptest.NewRecorder()
+	mux.ServeHTTP(transitionRec, transitionReq)
+	if transitionRec.Code != http.StatusOK {
+		t.Fatalf("transition approval status=%d body=%s", transitionRec.Code, transitionRec.Body.String())
+	}
+	var approval contracts.ApprovalCeremony
+	if err := json.Unmarshal(transitionRec.Body.Bytes(), &approval); err != nil {
+		t.Fatal(err)
+	}
+	if approval.State != contracts.ApprovalCeremonyAllowed || len(approval.Approvers) != 1 || approval.Approvers[0] != "system-admin" {
+		t.Fatalf("raw shared-admin transition trusted caller identity: %+v", approval)
+	}
+}
+
 func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()

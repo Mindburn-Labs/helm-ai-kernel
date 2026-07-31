@@ -139,8 +139,9 @@ func TestQuickstartDryRunResetRunsOwnershipPreflight(t *testing.T) {
 
 func TestQuickstartLiveSummaryDoesNotExposeBootstrapToken(t *testing.T) {
 	prepared := quickstartPrepared{
-		KernelURL: "http://127.0.0.1:7714",
-		Profile:   "mcp",
+		KernelURL:                  "http://127.0.0.1:7714",
+		Profile:                    "mcp",
+		LocalSessionCredentialPath: "/private/state/.helm-local-session.json",
 		Runtime: &quickstartRuntime{
 			BootstrapToken: "live-bootstrap-token",
 			TenantID:       "tenant-local",
@@ -162,6 +163,9 @@ func TestQuickstartLiveSummaryDoesNotExposeBootstrapToken(t *testing.T) {
 	}
 	if summary["local_session_exchange_url"] != "http://127.0.0.1:7714/api/v1/local-session/exchange" {
 		t.Fatalf("live summary exchange URL = %v", summary["local_session_exchange_url"])
+	}
+	if summary["local_session_credential_path"] != prepared.LocalSessionCredentialPath {
+		t.Fatalf("live summary credential path = %v", summary["local_session_credential_path"])
 	}
 }
 
@@ -357,6 +361,50 @@ func TestPrepareQuickstartRefusesToClaimExistingDataDirectory(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(dataDir, quickstartOwnershipMarker)); !os.IsNotExist(err) {
 		t.Fatalf("existing directory was claimed: %v", err)
+	}
+}
+
+func TestPrepareQuickstartWritesPrivateLocalSessionCredential(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	prepared, err := prepareQuickstart(quickstartOptions{
+		Addr:    "127.0.0.1",
+		Port:    7714,
+		DataDir: dataDir,
+		Profile: "mcp",
+	})
+	if err != nil {
+		t.Fatalf("prepare quickstart: %v", err)
+	}
+	info, err := os.Stat(prepared.LocalSessionCredentialPath)
+	if err != nil {
+		t.Fatalf("stat private credential file: %v", err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Fatalf("private credential mode = %#o", info.Mode().Perm())
+	}
+	var credential struct {
+		Schema         string `json:"schema"`
+		ExchangeURL    string `json:"exchange_url"`
+		BootstrapToken string `json:"bootstrap_token"`
+	}
+	content, err := os.ReadFile(prepared.LocalSessionCredentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(content, &credential); err != nil {
+		t.Fatal(err)
+	}
+	if credential.Schema != "helm.local-session-bootstrap/v1" || credential.ExchangeURL != prepared.KernelURL+"/api/v1/local-session/exchange" || credential.BootstrapToken != prepared.Runtime.BootstrapToken {
+		t.Fatalf("credential = %+v", credential)
+	}
+
+	mux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(mux, &Services{}, serverOptions{BindAddr: "127.0.0.1", Port: 7714, Quickstart: prepared.Runtime})
+	if rec := postLocalExchange(t, mux, credential.BootstrapToken, "127.0.0.1:49152"); rec.Code != http.StatusOK {
+		t.Fatalf("credential exchange status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(prepared.LocalSessionCredentialPath); !os.IsNotExist(err) {
+		t.Fatalf("one-time credential remained after exchange: %v", err)
 	}
 }
 

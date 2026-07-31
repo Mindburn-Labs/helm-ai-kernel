@@ -169,12 +169,13 @@ func validateQuickstartOptions(opts quickstartOptions) error {
 }
 
 type quickstartPrepared struct {
-	DataDir        string
-	KernelURL      string
-	PolicyPath     string
-	Profile        string
-	PlannedActions []string
-	Runtime        *quickstartRuntime
+	DataDir                    string
+	KernelURL                  string
+	PolicyPath                 string
+	Profile                    string
+	PlannedActions             []string
+	Runtime                    *quickstartRuntime
+	LocalSessionCredentialPath string
 }
 
 func (p quickstartPrepared) summary(operation string) map[string]any {
@@ -196,9 +197,13 @@ func (p quickstartPrepared) summary(operation string) map[string]any {
 		summary["principal_id"] = p.Runtime.PrincipalID
 		summary["local_session_ttl"] = time.Until(p.Runtime.ExpiresAt).String()
 		summary["local_session_exchange_url"] = p.KernelURL + "/api/v1/local-session/exchange"
+		if p.LocalSessionCredentialPath != "" {
+			summary["local_session_credential_path"] = p.LocalSessionCredentialPath
+		}
 		// The bootstrap token exchanges for a local session and must never be
 		// emitted in machine-readable command output, where it is commonly
-		// redirected to logs or a pipe.
+		// redirected to logs or a pipe. The private local credential document
+		// gives interactive clients a usable delivery path without doing so.
 	}
 	return summary
 }
@@ -266,8 +271,13 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if err != nil {
 		return quickstartPrepared{}, fmt.Errorf("generate local session: %w", err)
 	}
+	credentialPath, err := writeQuickstartSessionCredential(opts.DataDir, prepared.KernelURL, runtime)
+	if err != nil {
+		return quickstartPrepared{}, err
+	}
 	prepared.PolicyPath = policyPath
 	prepared.Runtime = runtime
+	prepared.LocalSessionCredentialPath = credentialPath
 	return prepared, nil
 }
 
@@ -292,6 +302,7 @@ func preflightQuickstartReset(opts quickstartOptions, prepared quickstartPrepare
 const (
 	quickstartOwnershipMarker         = ".helm-ai-kernel-quickstart"
 	quickstartOwnershipMarkerContents = "HELM AI Kernel quickstart state v1\n"
+	quickstartSessionCredentialFile   = ".helm-local-session.json"
 )
 
 func printQuickstartUsage(stdout io.Writer) {
@@ -456,6 +467,35 @@ func writeQuickstartOwnershipMarker(dataDir string) error {
 		return fmt.Errorf("close quickstart ownership marker: %w", err)
 	}
 	return nil
+}
+
+// writeQuickstartSessionCredential supplies the one-time bootstrap token only
+// through a private local file. Command output may name this path but never
+// carries the secret itself.
+func writeQuickstartSessionCredential(dataDir, kernelURL string, runtime *quickstartRuntime) (string, error) {
+	if runtime == nil || runtime.BootstrapToken == "" {
+		return "", errors.New("local quickstart bootstrap credential is required")
+	}
+	document, err := json.Marshal(struct {
+		Schema         string `json:"schema"`
+		ExchangeURL    string `json:"exchange_url"`
+		BootstrapToken string `json:"bootstrap_token"`
+		ExpiresAt      string `json:"expires_at"`
+	}{
+		Schema:         "helm.local-session-bootstrap/v1",
+		ExchangeURL:    kernelURL + "/api/v1/local-session/exchange",
+		BootstrapToken: runtime.BootstrapToken,
+		ExpiresAt:      runtime.ExpiresAt.Format(time.RFC3339),
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode local quickstart credential: %w", err)
+	}
+	credentialPath := filepath.Join(dataDir, quickstartSessionCredentialFile)
+	if err := writePrivateFileAtomicAtPath(credentialPath, append(document, '\n')); err != nil {
+		return "", fmt.Errorf("write local quickstart credential: %w", err)
+	}
+	runtime.BootstrapCredentialPath = credentialPath
+	return credentialPath, nil
 }
 
 func ensureQuickstartPolicy(opts quickstartOptions) (string, error) {

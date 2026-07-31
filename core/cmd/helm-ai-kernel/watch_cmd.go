@@ -197,6 +197,8 @@ func runWatchInteractive(client approvalClient, actor string, input io.Reader, c
 			continue
 		}
 
+		var transitionedState string
+		var transitionedReason string
 		err = renderer.ConfirmDecision(reader, watchDecisionContext(item, action), func() error {
 			// Recheck under the callback: no transition is possible if the
 			// snapshot became unavailable or another action is in flight.
@@ -207,13 +209,15 @@ func runWatchInteractive(client approvalClient, actor string, input io.Reader, c
 			defer func() { model.busy = false }()
 			transitionCtx, cancel := context.WithTimeout(context.Background(), watchRequestTimeout)
 			defer cancel()
-			_, err := client.TransitionApproval(
+			transitioned, err := client.TransitionApproval(
 				transitionCtx,
 				item.ApprovalID,
 				strings.ToLower(string(action)),
 				model.actor,
 				"operator decision via helm-ai-kernel watch",
 			)
+			transitionedState = string(transitioned.State)
+			transitionedReason = terminalSafe(transitioned.Reason)
 			return err
 		})
 		if err != nil {
@@ -222,6 +226,19 @@ func runWatchInteractive(client approvalClient, actor string, input io.Reader, c
 				continue
 			}
 			writeWatchError(chrome, fmt.Errorf("approval transition was not recorded: %w", err))
+			continue
+		}
+		expectedState := watchDecisionState(action)
+		if transitionedState != expectedState {
+			detail := fmt.Sprintf("Server state: %s. Refreshing state before another action.", terminalSafe(transitionedState))
+			if transitionedReason != "" {
+				detail = fmt.Sprintf("Server state: %s. %s Refreshing state before another action.", terminalSafe(transitionedState), transitionedReason)
+			}
+			renderer.WriteTimeline("HELM watch", []ui.Step{{
+				Status: ui.StatusWait,
+				Title:  fmt.Sprintf("%s did not reach %s state for %s", action, expectedState, terminalSafe(item.ApprovalID)),
+				Detail: detail,
+			}})
 			continue
 		}
 		renderer.WriteTimeline("HELM watch", []ui.Step{{
@@ -252,6 +269,13 @@ func watchDecisionAction(value string) (ui.DecisionAction, error) {
 	default:
 		return "", errors.New("decision must be APPROVE or DENY; no state change was recorded")
 	}
+}
+
+func watchDecisionState(action ui.DecisionAction) string {
+	if action == ui.DecisionDeny {
+		return "denied"
+	}
+	return "approved"
 }
 
 // resolveWatchAPIKey accepts an environment key or a regular, private key

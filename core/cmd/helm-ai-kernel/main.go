@@ -88,6 +88,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	// Handle specific global commands that don't fit the registry pattern
 	switch args[1] {
+	case "completion":
+		return runCompletionCommand(args[2:], stdout, stderr)
 	case "server", "serve":
 		return runServerCommand(args[1], args[2:], stdout, stderr)
 
@@ -110,13 +112,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel run maintenance [--once|--schedule]")
 		return 2
 	case "version", "--version", "-v":
-		fmt.Fprintf(stdout, "%sHELM AI Kernel%s %s (%s)\n", ColorBold, ColorReset, displayVersion(), displayCommit())
-		fmt.Fprintf(stdout, "  Report Schema:          %s\n", reportSchemaVersion)
-		fmt.Fprintf(stdout, "  EvidencePack Schema:    1\n")
-		fmt.Fprintf(stdout, "  Compatibility Schema:   1\n")
-		fmt.Fprintf(stdout, "  MCP Bundle Schema:      1\n")
-		fmt.Fprintf(stdout, "  Build Time:             %s\n", displayBuildTime())
-		return 0
+		return runVersionCommand(args[2:], stdout, stderr)
 	case "--help", "-h":
 		printFrontDoor(stdout)
 		return 0
@@ -135,6 +131,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 func runHelpCommand(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "--json" {
+		return writeCommandCatalogJSON(stdout)
+	}
 	if len(args) > 0 && args[0] == "--all" {
 		printUsageAll(stdout)
 		return 0
@@ -152,12 +151,18 @@ func runHelpCommand(args []string, stdout, stderr io.Writer) int {
 
 func printGlobalCommandHelp(name string, stdout io.Writer) {
 	switch name {
+	case "completion":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel completion <bash|zsh|fish|powershell>")
+	case "help":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel help [--all|--json|<command>]")
 	case "server":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel server [--policy PATH] [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
 	case "serve":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel serve --policy PATH [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
 	case "threat":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel threat <scan|test> [flags]")
+	case "version":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel version [--json]")
 	default:
 		fmt.Fprintf(stdout, "Usage: helm-ai-kernel %s [options]\n", name)
 	}

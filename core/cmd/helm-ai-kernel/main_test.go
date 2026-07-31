@@ -49,7 +49,9 @@ func TestRun_Help(t *testing.T) {
 	exitCode := Run(args, &stdout, &stderr)
 
 	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout.String(), "Protect an agent:")
+	assert.Contains(t, stdout.String(), "Start:")
+	assert.Contains(t, stdout.String(), "Inspect:")
+	assert.Contains(t, stdout.String(), "Operate:")
 	assert.Contains(t, stdout.String(), "helm-ai-kernel help --all")
 }
 
@@ -58,7 +60,10 @@ func TestRunNoArgsPrintsFrontDoor(t *testing.T) {
 	exitCode := Run([]string{"helm"}, &stdout, &stderr)
 
 	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout.String(), "helm-ai-kernel quickstart")
 	assert.Contains(t, stdout.String(), "helm-ai-kernel setup claude-code --yes")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel mcp authorize-call")
+	assert.NotContains(t, stdout.String(), "watch")
 	assert.Empty(t, stderr.String())
 }
 

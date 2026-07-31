@@ -388,6 +388,18 @@ func TestLocalConsolePeerProofRouteIsAbsentOutsideConsoleMode(t *testing.T) {
 	}
 }
 
+func TestWriteQuickstartReadyFormatsIPv6KernelURL(t *testing.T) {
+	var stdout bytes.Buffer
+	writeQuickstartReady(&stdout, quickstartPrepared{PolicyPath: "policy.toml"}, "::1", 7714, "", false)
+
+	if got, want := stdout.String(), "Kernel:  http://[::1]:7714\n"; !strings.Contains(got, want) {
+		t.Fatalf("quickstart readiness output = %q, want valid IPv6 Kernel URL %q", got, want)
+	}
+	if strings.Contains(stdout.String(), "http://::1:") {
+		t.Fatalf("quickstart readiness output contains invalid IPv6 URL: %q", stdout.String())
+	}
+}
+
 func TestLocalConsoleSupervisorUsesDistinctCSPRNGReadinessAndPeerSecrets(t *testing.T) {
 	supervisor, err := newLocalConsoleSupervisor(localConsoleBundle{}, 0, &quickstartRuntime{})
 	if err != nil {

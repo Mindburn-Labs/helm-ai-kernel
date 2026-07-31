@@ -286,6 +286,32 @@ func TestApprovalConsumptionRoutesHaveExactRegistryMetadata(t *testing.T) {
 	}
 }
 
+func TestLocalConsolePeerProofRoutesHaveExactInternalRegistryMetadata(t *testing.T) {
+	expected := []RuntimeRouteSpec{
+		{Method: http.MethodGet, Path: localConsolePeerProofPath, MuxPattern: localConsolePeerProofPath, Auth: RouteAuthLoopback, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "getLocalConsolePeerProof", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodHead, Path: localConsolePeerProofPath, MuxPattern: localConsolePeerProofPath, Auth: RouteAuthLoopback, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "checkLocalConsolePeerProof", Owner: "core/cmd/helm-ai-kernel"},
+	}
+	registered := make(map[string]RuntimeRouteSpec, len(RuntimeRouteSpecs()))
+	for _, spec := range RuntimeRouteSpecs() {
+		registered[spec.Method+" "+spec.Path] = spec
+	}
+	for _, want := range expected {
+		key := want.Method + " " + want.Path
+		got, ok := registered[key]
+		if !ok {
+			t.Fatalf("local Console peer-proof route %s is missing from the runtime registry", key)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("local Console peer-proof route %s metadata = %+v, want %+v", key, got, want)
+		}
+	}
+	for _, spec := range PublicRuntimeRouteSpecs() {
+		if spec.Path == localConsolePeerProofPath {
+			t.Fatalf("local Console peer-proof route %s must remain internal, not public", spec.Method+" "+spec.Path)
+		}
+	}
+}
+
 func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 	registered := map[string]RuntimeRouteSpec{}
 	for _, spec := range RuntimeRouteSpecs() {

@@ -3,9 +3,10 @@ package main
 import "strings"
 
 var (
-	version   = "0.0.0-dev"
-	commit    = "unknown"
-	buildTime = "unknown"
+	version                           = "0.0.0-dev"
+	commit                            = "unknown"
+	buildTime                         = "unknown"
+	consoleLocalSidecarManifestSHA256 = ""
 )
 
 func displayVersion() string {

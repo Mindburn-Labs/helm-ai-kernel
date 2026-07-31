@@ -1,11 +1,14 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -35,8 +38,10 @@ func TestDiscoverLocalConsoleBundleUsesOnlyExecutableRelativeBundle(t *testing.T
 	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
 		t.Fatal(err)
 	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+	_, manifestDigest := writeTrustedLocalConsoleRelease(t, executable, target)
+	consoleLocalSidecarManifestSHA256 = manifestDigest
 	root := filepath.Join(filepath.Dir(executable), localConsoleDirectory, localConsoleBundlePrefix+target)
-	writeLocalConsoleBundle(t, root, target, "console-server")
 
 	original := localConsoleExecutable
 	localConsoleExecutable = func() (string, error) { return executable, nil }
@@ -57,7 +62,7 @@ func TestDiscoverLocalConsoleBundleUsesOnlyExecutableRelativeBundle(t *testing.T
 	if err := os.RemoveAll(filepath.Join(filepath.Dir(executable), localConsoleDirectory)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := discoverLocalConsoleBundle(); err == nil || err.Error() != "matching console bundle is missing for "+target {
+	if _, err := discoverLocalConsoleBundle(); err == nil || !strings.Contains(err.Error(), "read local Console release manifest") {
 		t.Fatalf("missing bundle error = %v", err)
 	}
 }
@@ -82,8 +87,10 @@ func TestDiscoverLocalConsoleBundleResolvesExecutableSymlink(t *testing.T) {
 	if err := os.Symlink(realExecutable, invocationPath); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+	_, manifestDigest := writeTrustedLocalConsoleRelease(t, realExecutable, target)
+	consoleLocalSidecarManifestSHA256 = manifestDigest
 	wantRoot := filepath.Join(filepath.Dir(realExecutable), localConsoleDirectory, localConsoleBundlePrefix+target)
-	writeLocalConsoleBundle(t, wantRoot, target, "console-server")
 
 	original := localConsoleExecutable
 	localConsoleExecutable = func() (string, error) { return invocationPath, nil }
@@ -115,7 +122,7 @@ func TestLocalConsoleBundleRejectsTraversalHashTargetAndSymlink(t *testing.T) {
 			name: "traversal",
 			mutate: func(t *testing.T, root string) {
 				t.Helper()
-				writeLocalConsoleInventoryAndProvenance(t, root, target, strings.Repeat("0", 64)+"  ../outside\n", target, "v1")
+				writeLocalConsoleInventoryAndProvenance(t, root, target, strings.Repeat("0", 64)+"  ../outside\n", target, "0.2.0")
 			},
 			want: "inventory path",
 		},
@@ -128,7 +135,7 @@ func TestLocalConsoleBundleRejectsTraversalHashTargetAndSymlink(t *testing.T) {
 					t.Fatal(err)
 				}
 				inventory := strings.Replace(localConsoleInventoryContents(t, root), serverHash+"  "+localConsoleServerFile, strings.Repeat("0", 64)+"  "+localConsoleServerFile, 1)
-				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
+				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "0.2.0")
 			},
 			want: "file hash",
 		},
@@ -141,7 +148,7 @@ func TestLocalConsoleBundleRejectsTraversalHashTargetAndSymlink(t *testing.T) {
 				if target == otherTarget {
 					otherTarget = "darwin-arm64"
 				}
-				writeLocalConsoleInventoryAndProvenance(t, root, target, contents, otherTarget, "v1")
+				writeLocalConsoleInventoryAndProvenance(t, root, target, contents, otherTarget, "0.2.0")
 			},
 			want: "target does not match",
 		},
@@ -225,7 +232,7 @@ func TestLocalConsoleBundleRequiresBundledNodeRuntime(t *testing.T) {
 			mutate: func(t *testing.T, root string) {
 				t.Helper()
 				inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, localConsoleNodeLicenseFile)
-				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
+				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "0.2.0")
 			},
 			want: "inventory is missing " + localConsoleNodeFile,
 		},
@@ -234,7 +241,7 @@ func TestLocalConsoleBundleRequiresBundledNodeRuntime(t *testing.T) {
 			mutate: func(t *testing.T, root string) {
 				t.Helper()
 				inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, localConsoleNodeFile)
-				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
+				writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "0.2.0")
 			},
 			want: "inventory is missing " + localConsoleNodeLicenseFile,
 		},
@@ -541,11 +548,184 @@ func TestQuickstartConsoleFailsBeforeMutationForExternalOverrideOrMissingBundle(
 	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 1 {
 		t.Fatalf("dry-run exit code = %d, stderr = %s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "matching console bundle is missing") {
-		t.Fatalf("missing bundle error = %s", stderr.String())
+	if !strings.Contains(stderr.String(), "valid compiled release manifest digest") {
+		t.Fatalf("missing compiled digest error = %s", stderr.String())
 	}
 	if _, statErr := os.Stat(dataDir); !os.IsNotExist(statErr) {
 		t.Fatalf("missing bundle dry-run mutated %q: %v", dataDir, statErr)
+	}
+}
+
+func TestTrustedLocalConsoleReleaseRejectsMissingDigestAndTampering(t *testing.T) {
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		digest bool
+		mutate func(t *testing.T, consoleRoot string, bundle localConsoleBundle)
+		want   string
+	}{
+		{
+			name:   "missing compiled digest",
+			digest: false,
+			want:   "valid compiled release manifest digest",
+		},
+		{
+			name:   "accepted trusted release",
+			digest: true,
+		},
+		{
+			name:   "tampered manifest",
+			digest: true,
+			mutate: func(t *testing.T, consoleRoot string, _ localConsoleBundle) {
+				t.Helper()
+				manifestPath := filepath.Join(consoleRoot, localConsoleReleaseManifestFile)
+				contents, err := os.ReadFile(manifestPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(manifestPath, append(contents, ' '), 0600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "does not match the compiled digest",
+		},
+		{
+			name:   "tampered raw archive",
+			digest: true,
+			mutate: func(t *testing.T, consoleRoot string, _ localConsoleBundle) {
+				t.Helper()
+				archivePath := filepath.Join(consoleRoot, localConsoleBundlePrefix+target+".tar.gz")
+				if err := os.WriteFile(archivePath, []byte("tampered archive"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "artifact hash does not match",
+		},
+		{
+			name:   "tampered extracted tree",
+			digest: true,
+			mutate: func(t *testing.T, _ string, bundle localConsoleBundle) {
+				t.Helper()
+				if err := os.WriteFile(bundle.ServerPath, []byte("tampered sidecar"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: "inventory file hash does not match",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+			if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+			bundle, manifestDigest := writeTrustedLocalConsoleRelease(t, executable, target)
+			if tc.digest {
+				consoleLocalSidecarManifestSHA256 = manifestDigest
+			}
+			if tc.mutate != nil {
+				tc.mutate(t, filepath.Join(filepath.Dir(executable), localConsoleDirectory), bundle)
+			}
+			originalExecutable := localConsoleExecutable
+			localConsoleExecutable = func() (string, error) { return executable, nil }
+			t.Cleanup(func() { localConsoleExecutable = originalExecutable })
+			_, err := discoverLocalConsoleBundle()
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("trusted release rejected: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestTrustedLocalConsoleReleaseRequiresExplicitInnerReleaseAuthority(t *testing.T) {
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+	if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+	_, _ = writeTrustedLocalConsoleRelease(t, executable, target)
+	manifestPath := filepath.Join(filepath.Dir(executable), localConsoleDirectory, localConsoleReleaseManifestFile)
+	manifestBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	targets, ok := manifest["targets"].([]any)
+	if !ok || len(targets) == 0 {
+		t.Fatal("fixture manifest has no targets")
+	}
+	first, ok := targets[0].(map[string]any)
+	if !ok {
+		t.Fatal("fixture target is invalid")
+	}
+	inner, ok := first["inner_artifact"].(map[string]any)
+	if !ok {
+		t.Fatal("fixture inner artifact is invalid")
+	}
+	delete(inner, "release_authority")
+	manifestBytes, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, manifestBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	consoleLocalSidecarManifestSHA256 = sha256Hex(manifestBytes)
+	originalExecutable := localConsoleExecutable
+	localConsoleExecutable = func() (string, error) { return executable, nil }
+	t.Cleanup(func() { localConsoleExecutable = originalExecutable })
+	if _, err := discoverLocalConsoleBundle(); err == nil || !strings.Contains(err.Error(), "target \"linux-amd64\" is invalid") {
+		t.Fatalf("missing release_authority error = %v", err)
+	}
+}
+
+func TestQuickstartConsoleRejectsMissingDigestBeforeStateMutation(t *testing.T) {
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+	if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+	originalExecutable := localConsoleExecutable
+	localConsoleExecutable = func() (string, error) { return executable, nil }
+	t.Cleanup(func() { localConsoleExecutable = originalExecutable })
+	dataDir := filepath.Join(dir, "quickstart-data")
+	var stdout, stderr bytes.Buffer
+	if code := runQuickstartCmdWithReady([]string{"--console", "--no-open", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 1 {
+		t.Fatalf("quickstart exit code = %d, stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "valid compiled release manifest digest") {
+		t.Fatalf("quickstart error = %s", stderr.String())
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("missing digest quickstart mutated %q: %v", dataDir, err)
 	}
 }
 
@@ -710,8 +890,9 @@ func TestPrepareQuickstartConsoleSkipsLocalSessionCredential(t *testing.T) {
 	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	root := filepath.Join(filepath.Dir(executable), localConsoleDirectory, localConsoleBundlePrefix+target)
-	writeLocalConsoleBundle(t, root, target, "console-server")
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+	_, manifestDigest := writeTrustedLocalConsoleRelease(t, executable, target)
+	consoleLocalSidecarManifestSHA256 = manifestDigest
 	originalExecutable := localConsoleExecutable
 	localConsoleExecutable = func() (string, error) { return executable, nil }
 	t.Cleanup(func() { localConsoleExecutable = originalExecutable })
@@ -815,6 +996,180 @@ func assertLocalConsoleTestPortReleased(t *testing.T, address string) {
 	}
 }
 
+func setLocalConsoleReleaseBuildInfo(t *testing.T, releaseVersion, manifestDigest string) {
+	t.Helper()
+	originalVersion := version
+	originalDigest := consoleLocalSidecarManifestSHA256
+	version = releaseVersion
+	consoleLocalSidecarManifestSHA256 = manifestDigest
+	t.Cleanup(func() {
+		version = originalVersion
+		consoleLocalSidecarManifestSHA256 = originalDigest
+	})
+}
+
+func writeTrustedLocalConsoleRelease(t *testing.T, executable, runtimeTarget string) (localConsoleBundle, string) {
+	t.Helper()
+	consoleRoot := filepath.Join(filepath.Dir(executable), localConsoleDirectory)
+	if err := os.MkdirAll(consoleRoot, 0750); err != nil {
+		t.Fatal(err)
+	}
+	targets := []string{"linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64"}
+	manifest := localConsoleReleaseManifest{
+		Schema:               localConsoleReleaseManifestSchema,
+		Component:            localConsoleReleaseComponent,
+		SourceRepository:     localConsoleReleaseRepository,
+		KernelReleaseVersion: displayVersion(),
+		OuterSignature: localConsoleOuterSignature{
+			SignedFile:          localConsoleReleaseManifestFile,
+			Bundle:              localConsoleReleaseManifestBundleFile,
+			Issuer:              localConsoleCosignIssuer,
+			CertificateIdentity: localConsoleCosignIdentity,
+		},
+	}
+	var selected localConsoleBundle
+	for _, target := range targets {
+		bundleRoot := filepath.Join(t.TempDir(), localConsoleBundlePrefix+target)
+		if target == runtimeTarget {
+			bundleRoot = filepath.Join(consoleRoot, localConsoleBundlePrefix+target)
+		}
+		bundle := writeLocalConsoleBundle(t, bundleRoot, target, "console-server")
+		record, source := writeLocalConsoleReleaseTarget(t, consoleRoot, bundleRoot, target)
+		if manifest.Source == (localConsoleSource{}) {
+			manifest.Source = source
+		} else if manifest.Source != source {
+			t.Fatalf("fixture source mismatch: %#v != %#v", manifest.Source, source)
+		}
+		manifest.Targets = append(manifest.Targets, record)
+		if target == runtimeTarget {
+			selected = bundle
+		}
+	}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(consoleRoot, localConsoleReleaseManifestFile), manifestBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, bundleName := range []string{localConsoleReleaseManifestBundleFile, localConsoleKernelManifestBundleFile} {
+		if err := os.WriteFile(filepath.Join(consoleRoot, bundleName), []byte("test-only release evidence\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return selected, sha256Hex(manifestBytes)
+}
+
+func writeLocalConsoleReleaseTarget(t *testing.T, consoleRoot, bundleRoot, target string) (localConsoleReleaseTarget, localConsoleSource) {
+	t.Helper()
+	archiveName := localConsoleBundlePrefix + target + ".tar.gz"
+	archivePath := filepath.Join(consoleRoot, archiveName)
+	inventoryBytes, err := os.ReadFile(filepath.Join(bundleRoot, localConsoleInventoryFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	embeddedProvenance, err := os.ReadFile(filepath.Join(bundleRoot, localConsoleProvenanceFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var provenance localConsoleProvenance
+	if err := decodeLocalConsoleJSON(embeddedProvenance, &provenance); err != nil {
+		t.Fatal(err)
+	}
+
+	archive, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := gzip.NewWriter(archive)
+	writer := tar.NewWriter(compressed)
+	rootName := localConsoleBundlePrefix + target
+	for _, directory := range []string{rootName + "/", rootName + "/app/", rootName + "/runtime/", rootName + "/runtime/node/", rootName + "/runtime/node/bin/"} {
+		writeLocalConsoleTarDirectory(t, writer, directory)
+	}
+	for _, relativePath := range []string{localConsoleInventoryFile, localConsoleProvenanceFile, localConsoleServerFile, localConsoleNodeFile, localConsoleNodeLicenseFile} {
+		contents, err := os.ReadFile(filepath.Join(bundleRoot, filepath.FromSlash(relativePath)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		mode := int64(0644)
+		if relativePath == localConsoleNodeFile {
+			mode = 0755
+		}
+		writeLocalConsoleTarFile(t, writer, rootName+"/"+relativePath, contents, mode)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archiveDigest, err := sha256LocalConsoleFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var external map[string]any
+	if err := json.Unmarshal(embeddedProvenance, &external); err != nil {
+		t.Fatal(err)
+	}
+	external["archive"] = map[string]string{"file": archiveName, "sha256": archiveDigest}
+	externalBytes, err := json.Marshal(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checksumBytes := []byte(archiveDigest + "  " + archiveName + "\n")
+	files := localConsoleReleaseArtifacts{
+		Archive:         localConsoleArtifactRecord{File: archiveName, SHA256: archiveDigest},
+		ArchiveChecksum: localConsoleArtifactRecord{File: archiveName + ".sha256", SHA256: sha256Hex(checksumBytes)},
+		Inventory:       localConsoleArtifactRecord{File: archiveName + ".inventory.sha256", SHA256: sha256Hex(inventoryBytes)},
+		Provenance:      localConsoleArtifactRecord{File: archiveName + ".provenance.json", SHA256: sha256Hex(externalBytes)},
+	}
+	for fileName, contents := range map[string][]byte{
+		files.ArchiveChecksum.File: checksumBytes,
+		files.Inventory.File:       inventoryBytes,
+		files.Provenance.File:      externalBytes,
+	} {
+		if err := os.WriteFile(filepath.Join(consoleRoot, fileName), contents, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	parts := strings.Split(target, "-")
+	return localConsoleReleaseTarget{
+		Target: localConsoleTargetDescriptor{OS: parts[0], Arch: parts[1]},
+		InnerArtifact: localConsoleInnerArtifact{
+			ProvenanceSchema: localConsoleProvenanceSchema,
+			Signature:        provenance.Signature,
+			ReleaseAuthority: localConsoleBool(false),
+			BundleSHA256:     provenance.BundleSHA256,
+		},
+		Artifacts: files,
+	}, provenance.Source
+}
+
+func localConsoleBool(value bool) *bool {
+	return &value
+}
+
+func writeLocalConsoleTarDirectory(t *testing.T, writer *tar.Writer, name string) {
+	t.Helper()
+	if err := writer.WriteHeader(&tar.Header{Name: name, Mode: 0755, Typeflag: tar.TypeDir}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeLocalConsoleTarFile(t *testing.T, writer *tar.Writer, name string, contents []byte, mode int64) {
+	t.Helper()
+	if err := writer.WriteHeader(&tar.Header{Name: name, Mode: mode, Size: int64(len(contents)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write(contents); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeLocalConsoleBundle(t *testing.T, root, target, server string) localConsoleBundle {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(root, "app"), 0750); err != nil {
@@ -824,7 +1179,7 @@ func writeLocalConsoleBundle(t *testing.T, root, target, server string) localCon
 		t.Fatal(err)
 	}
 	writeLocalConsoleRuntimeFixture(t, root)
-	writeLocalConsoleInventoryAndProvenance(t, root, target, localConsoleInventoryContents(t, root), target, "v1")
+	writeLocalConsoleInventoryAndProvenance(t, root, target, localConsoleInventoryContents(t, root), target, "0.2.0")
 	bundle, err := loadLocalConsoleBundle(root, target)
 	if err != nil {
 		t.Fatalf("load test bundle: %v", err)
@@ -852,7 +1207,7 @@ func writeLocalConsoleSignalForwardingBundle(t *testing.T, root, target string) 
 	}
 	writeLocalConsoleRuntimeExecFixture(t, root)
 	inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, localConsoleNodeFile, localConsoleNodeLicenseFile)
-	writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
+	writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "0.2.0")
 	bundle, err := loadLocalConsoleBundle(root, target)
 	if err != nil {
 		t.Fatalf("load signal-forwarding Console bundle: %v", err)
@@ -978,8 +1333,10 @@ func writeLocalConsoleInventoryAndProvenance(t *testing.T, root, target, invento
 		t.Fatal("invalid test target")
 	}
 	libcFamily := "glibc"
+	libcVersion := "2.39"
 	if parts[0] == "darwin" {
 		libcFamily = "libSystem"
+		libcVersion = "host-reported-unavailable"
 	}
 	provenance := fmt.Sprintf(`{
   "schema": %q,
@@ -988,16 +1345,17 @@ func writeLocalConsoleInventoryAndProvenance(t *testing.T, root, target, invento
   "source": {"commit": %q, "tree": %q, "version": %q, "package_lock_sha256": %q},
   "bundle_sha256": %q,
   "inventory": "INVENTORY.sha256",
-  "bundle_hash_scope": "sorted sha256 records for app payload files; this binds the exact build and is not a cross-checkout byte-reproducibility claim",
+  "bundle_hash_scope": %q,
   "runtime": {
     "node": "v22.0.0",
+	"bundled_node": {"executable": "runtime/node/bin/node", "license_notice": "runtime/node/LICENSE"},
     "npm": "10.0.0",
     "next": "15.0.0",
     "platform": {"os": %q, "arch": %q, "target": %q},
-    "libc": {"family": %q, "version": "test"}
+    "libc": {"family": %q, "version": %q}
   },
   "signature": %q
-}`, localConsoleProvenanceSchema, parts[0], parts[1], localConsoleBuildClosure, localConsoleBuildSourceSnapshot, localConsoleBuildEnvironment, strings.Repeat("a", 40), strings.Repeat("b", 40), version, strings.Repeat("c", 64), sha256Hex([]byte(inventory)), parts[0], parts[1], manifestTarget, libcFamily, localConsoleUnsignedSignature) + "\n"
+}`, localConsoleProvenanceSchema, parts[0], parts[1], localConsoleBuildClosure, localConsoleBuildSourceSnapshot, localConsoleBuildEnvironment, strings.Repeat("a", 40), strings.Repeat("b", 40), version, strings.Repeat("c", 64), sha256Hex([]byte(inventory)), localConsoleBundleHashScope, parts[0], parts[1], manifestTarget, libcFamily, libcVersion, localConsoleUnsignedSignature) + "\n"
 	if err := os.WriteFile(filepath.Join(root, localConsoleProvenanceFile), []byte(provenance), 0600); err != nil {
 		t.Fatal(err)
 	}

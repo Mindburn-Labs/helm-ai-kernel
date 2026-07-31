@@ -699,6 +699,55 @@ func TestQuickstartConsoleSuppressesBootstrapExchangeAndSummaryTokens(t *testing
 	}
 }
 
+func TestPrepareQuickstartConsoleSkipsLocalSessionCredential(t *testing.T) {
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+	if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(filepath.Dir(executable), localConsoleDirectory, localConsoleBundlePrefix+target)
+	writeLocalConsoleBundle(t, root, target, "console-server")
+	originalExecutable := localConsoleExecutable
+	localConsoleExecutable = func() (string, error) { return executable, nil }
+	t.Cleanup(func() { localConsoleExecutable = originalExecutable })
+
+	dataDir := filepath.Join(dir, "state")
+	prepared, err := prepareQuickstart(quickstartOptions{
+		Addr:    "127.0.0.1",
+		Port:    7714,
+		DataDir: dataDir,
+		Profile: "mcp",
+		Console: true,
+	})
+	if err != nil {
+		t.Fatalf("prepare Console quickstart: %v", err)
+	}
+	if prepared.LocalSessionCredentialPath != "" {
+		t.Fatalf("Console quickstart credential path = %q, want empty", prepared.LocalSessionCredentialPath)
+	}
+	if prepared.Runtime == nil || prepared.Runtime.BootstrapToken != "" || prepared.Runtime.BootstrapCredentialPath != "" {
+		t.Fatal("Console quickstart retained bootstrap credential state")
+	}
+	if _, err := os.Lstat(filepath.Join(dataDir, quickstartSessionCredentialFile)); !os.IsNotExist(err) {
+		t.Fatalf("Console quickstart wrote a local session credential: %v", err)
+	}
+	if marker, err := os.ReadFile(filepath.Join(dataDir, quickstartOwnershipMarker)); err != nil || string(marker) != quickstartOwnershipMarkerContents {
+		t.Fatalf("Console quickstart ownership marker = %q, err=%v", marker, err)
+	}
+	for _, field := range []string{"local_session_exchange_url", "local_session_credential_path", "tenant_id", "principal_id"} {
+		if _, present := prepared.summary("start")[field]; present {
+			t.Fatalf("Console quickstart summary exposed %s", field)
+		}
+	}
+}
+
 func TestReserveLocalConsolePortUsesLoopbackAndAvoidsActiveCollision(t *testing.T) {
 	listener, port, err := reserveLocalConsolePort(0)
 	if err != nil {

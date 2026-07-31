@@ -2,6 +2,8 @@ version: v2
 modules:
   - path: v1
     name: buf.build/helm/policy
+deps:
+  - buf.build/bufbuild/protovalidate
 lint:
   use:
     - STANDARD

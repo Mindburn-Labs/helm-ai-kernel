@@ -13,9 +13,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -630,15 +632,11 @@ func TestLocalConsoleSupervisorDetectsCrashAndStopsOnKernelShutdown(t *testing.T
 }
 
 func TestLocalConsoleSupervisorGracefullyStopsWrapperChildAndPort(t *testing.T) {
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("Node is required to exercise the packaged sidecar signal handoff")
-	}
 	target, err := localConsoleTarget()
 	if err != nil {
 		t.Skip(err)
 	}
-	bundle := writeLocalConsoleSignalForwardingBundle(t, filepath.Join(t.TempDir(), "bundle"), target, node)
+	bundle := writeLocalConsoleSignalForwardingBundle(t, filepath.Join(t.TempDir(), "bundle"), target)
 	originalCommand := localConsoleCommand
 	localConsoleCommand = exec.Command
 	t.Cleanup(func() {
@@ -772,6 +770,8 @@ func TestLocalConsoleHelperProcess(t *testing.T) {
 		return
 	case "local-console-sleep":
 		select {}
+	case "local-console-graceful-child":
+		localConsoleGracefulChildMain()
 	}
 }
 
@@ -832,7 +832,7 @@ func writeLocalConsoleBundle(t *testing.T, root, target, server string) localCon
 	return bundle
 }
 
-func writeLocalConsoleSignalForwardingBundle(t *testing.T, root, target, node string) localConsoleBundle {
+func writeLocalConsoleSignalForwardingBundle(t *testing.T, root, target string) localConsoleBundle {
 	t.Helper()
 	appRoot := filepath.Join(root, "app")
 	if err := os.MkdirAll(appRoot, 0750); err != nil {
@@ -841,11 +841,17 @@ func writeLocalConsoleSignalForwardingBundle(t *testing.T, root, target, node st
 	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(localConsoleServerFile)), []byte(localConsoleSignalForwardingWrapper), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(appRoot, "server.js"), []byte(localConsoleSignalForwardingChild), 0700); err != nil {
+	testBinary, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
-	writeLocalConsoleRuntimeLinkFixture(t, root, node)
-	inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, "app/server.js", localConsoleNodeFile, localConsoleNodeLicenseFile)
+	wrapper := strings.ReplaceAll(localConsoleSignalForwardingWrapper, "__TEST_BINARY__", shellSingleQuote(testBinary))
+	wrapper = strings.ReplaceAll(wrapper, "__MARKER__", shellSingleQuote(filepath.Join(appRoot, "graceful-stop")))
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(localConsoleServerFile)), []byte(wrapper), 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeLocalConsoleRuntimeExecFixture(t, root)
+	inventory := localConsoleInventoryForPaths(t, root, localConsoleServerFile, localConsoleNodeFile, localConsoleNodeLicenseFile)
 	writeLocalConsoleInventoryAndProvenance(t, root, target, inventory, target, "v1")
 	bundle, err := loadLocalConsoleBundle(root, target)
 	if err != nil {
@@ -868,71 +874,67 @@ func writeLocalConsoleRuntimeFixture(t *testing.T, root string) {
 	}
 }
 
-func writeLocalConsoleRuntimeLinkFixture(t *testing.T, root, node string) {
+func writeLocalConsoleRuntimeExecFixture(t *testing.T, root string) {
 	t.Helper()
-	node, err := filepath.EvalSymlinks(node)
-	if err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Stat(node)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-		t.Fatalf("test Node runtime is not an executable regular file: %v", err)
-	}
 	bundledNode := filepath.Join(root, filepath.FromSlash(localConsoleNodeFile))
 	if err := os.MkdirAll(filepath.Dir(bundledNode), 0750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Link(node, bundledNode); err != nil {
-		t.Skipf("hard links unavailable for bundled Node fixture: %v", err)
+	if err := os.WriteFile(bundledNode, []byte(localConsoleExecRuntime), 0700); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(localConsoleNodeLicenseFile)), []byte("test node license\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 }
 
-const localConsoleSignalForwardingWrapper = `import { spawn } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const server = resolve(dirname(fileURLToPath(import.meta.url)), 'server.js');
-const child = spawn(process.execPath, [server], { env: process.env, stdio: 'ignore', shell: false });
-let forwardedSignal = false;
-
-for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => {
-    if (!forwardedSignal && !child.killed) {
-      forwardedSignal = true;
-      child.kill(signal);
-    }
-  });
-}
-
-child.once('error', () => { process.exitCode = 1; });
-child.once('exit', (code) => { process.exitCode = code ?? 1; });
+const localConsoleExecRuntime = `#!/bin/sh
+exec /bin/sh "$@"
 `
 
-const localConsoleSignalForwardingChild = `import { writeFileSync } from 'node:fs';
-import http from 'node:http';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const marker = resolve(dirname(fileURLToPath(import.meta.url)), 'graceful-stop');
-const server = http.createServer((_, response) => {
-  response.writeHead(204);
-  response.end();
-});
-let stopping = false;
-function stop() {
-  if (stopping) return;
-  stopping = true;
-  writeFileSync(marker, 'stopped\\n');
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(1), 1000).unref();
+const localConsoleSignalForwardingWrapper = `#!/bin/sh
+child=""
+forward() {
+  if [ -n "$child" ]; then
+    kill -INT "$child" 2>/dev/null || true
+  fi
 }
-process.once('SIGINT', stop);
-process.once('SIGTERM', stop);
-server.listen(Number(process.env.PORT), process.env.HOSTNAME);
+trap forward INT TERM
+HELM_KERNEL_PRINCIPAL=local-console-graceful-child HELM_LOCAL_CONSOLE_MARKER=__MARKER__ __TEST_BINARY__ -test.run '^TestLocalConsoleHelperProcess$' -- &
+child=$!
+wait "$child"
 `
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+}
+
+func localConsoleGracefulChildMain() {
+	marker := os.Getenv("HELM_LOCAL_CONSOLE_MARKER")
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+			response.WriteHeader(http.StatusNoContent)
+		}),
+	}
+	listener, err := net.Listen("tcp", net.JoinHostPort(os.Getenv("HOSTNAME"), os.Getenv("PORT")))
+	if err != nil {
+		os.Exit(1)
+	}
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signalCh)
+	go func() {
+		_ = server.Serve(listener)
+	}()
+	<-signalCh
+	if marker != "" {
+		_ = os.WriteFile(marker, []byte("stopped\n"), 0600)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = server.Shutdown(ctx)
+	os.Exit(0)
+}
 
 func localConsoleInventoryContents(t *testing.T, root string) string {
 	t.Helper()

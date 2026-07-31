@@ -73,7 +73,15 @@ func newApprovalHTTPClient(rawURL, apiKey string) (*approvalHTTPClient, error) {
 	return &approvalHTTPClient{
 		baseURL:    parsed,
 		apiKey:     key,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+			// Never follow a redirect after attaching an admin bearer token.
+			// Returning the first response makes redirects explicit failures and
+			// ensures the key cannot be forwarded to another endpoint.
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}, nil
 }
 

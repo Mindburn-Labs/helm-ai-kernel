@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -240,6 +241,9 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 			return quickstartPrepared{}, fmt.Errorf("reset data dir %q: %w", opts.DataDir, err)
 		}
 	}
+	if err := ensureQuickstartDataDirOwnership(opts.DataDir); err != nil {
+		return quickstartPrepared{}, err
+	}
 	if err := os.MkdirAll(filepath.Join(opts.DataDir, "evidence"), 0750); err != nil {
 		return quickstartPrepared{}, fmt.Errorf("create evidence dir: %w", err)
 	}
@@ -261,9 +265,6 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	runtime, err := newQuickstartRuntime(strings.ToLower(opts.Profile), 30*time.Minute)
 	if err != nil {
 		return quickstartPrepared{}, fmt.Errorf("generate local session: %w", err)
-	}
-	if err := writeQuickstartOwnershipMarker(opts.DataDir); err != nil {
-		return quickstartPrepared{}, err
 	}
 	prepared.PolicyPath = policyPath
 	prepared.Runtime = runtime
@@ -343,15 +344,8 @@ func validateQuickstartResetTarget(opts quickstartOptions) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("refusing to reset non-directory target %q", target)
 	}
-	marker, err := os.ReadFile(filepath.Join(target, quickstartOwnershipMarker))
-	if os.IsNotExist(err) {
-		return "", fmt.Errorf("refusing to reset unmarked target %q; preserve it or initialize a new quickstart directory", target)
-	}
-	if err != nil {
-		return "", fmt.Errorf("read quickstart ownership marker in %q: %w", target, err)
-	}
-	if string(marker) != quickstartOwnershipMarkerContents {
-		return "", fmt.Errorf("refusing to reset target %q with an invalid quickstart ownership marker", target)
+	if err := validateQuickstartOwnershipMarker(target); err != nil {
+		return "", fmt.Errorf("refusing to reset unmarked target %q; preserve it or initialize a new quickstart directory: %w", target, err)
 	}
 	return target, nil
 }
@@ -398,9 +392,68 @@ func isPathSameOrAncestor(target, protected string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// ensureQuickstartDataDirOwnership creates and marks only a directory that
+// this invocation created. An existing directory must already carry the exact
+// marker, so normal startup cannot turn unrelated files into resettable state.
+func ensureQuickstartDataDirOwnership(dataDir string) error {
+	info, err := os.Lstat(dataDir)
+	if os.IsNotExist(err) {
+		if err := os.MkdirAll(filepath.Dir(dataDir), 0750); err != nil {
+			return fmt.Errorf("create quickstart parent directory: %w", err)
+		}
+		if err := os.Mkdir(dataDir, 0750); err == nil {
+			return writeQuickstartOwnershipMarker(dataDir)
+		} else if !os.IsExist(err) {
+			return fmt.Errorf("create quickstart data directory: %w", err)
+		}
+		info, err = os.Lstat(dataDir)
+	}
+	if err != nil {
+		return fmt.Errorf("inspect quickstart data directory %q: %w", dataDir, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("refusing non-directory quickstart data target %q", dataDir)
+	}
+	if err := validateQuickstartOwnershipMarker(dataDir); err != nil {
+		return fmt.Errorf("refusing to initialize existing data directory %q without a valid HELM quickstart ownership marker: %w", dataDir, err)
+	}
+	return nil
+}
+
+func validateQuickstartOwnershipMarker(dataDir string) error {
+	markerPath := filepath.Join(dataDir, quickstartOwnershipMarker)
+	info, err := os.Lstat(markerPath)
+	if os.IsNotExist(err) {
+		return errors.New("quickstart ownership marker is missing")
+	}
+	if err != nil {
+		return fmt.Errorf("inspect quickstart ownership marker: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return errors.New("quickstart ownership marker must be a regular file")
+	}
+	marker, err := os.ReadFile(markerPath)
+	if err != nil {
+		return fmt.Errorf("read quickstart ownership marker: %w", err)
+	}
+	if string(marker) != quickstartOwnershipMarkerContents {
+		return errors.New("quickstart ownership marker is invalid")
+	}
+	return nil
+}
+
 func writeQuickstartOwnershipMarker(dataDir string) error {
-	if err := os.WriteFile(filepath.Join(dataDir, quickstartOwnershipMarker), []byte(quickstartOwnershipMarkerContents), 0600); err != nil {
+	markerPath := filepath.Join(dataDir, quickstartOwnershipMarker)
+	marker, err := os.OpenFile(markerPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return fmt.Errorf("create quickstart ownership marker: %w", err)
+	}
+	if _, err := marker.WriteString(quickstartOwnershipMarkerContents); err != nil {
+		_ = marker.Close()
 		return fmt.Errorf("write quickstart ownership marker: %w", err)
+	}
+	if err := marker.Close(); err != nil {
+		return fmt.Errorf("close quickstart ownership marker: %w", err)
 	}
 	return nil
 }

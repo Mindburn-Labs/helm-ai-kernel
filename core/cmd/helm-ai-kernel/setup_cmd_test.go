@@ -805,6 +805,7 @@ func TestSetupProjectScopeDefaultsToCurrentDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(workspace)
+	restore := stubSetupSideEffects(t)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--dry-run", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
@@ -826,7 +827,6 @@ func TestSetupProjectScopeDefaultsToCurrentDirectory(t *testing.T) {
 		t.Fatalf("client config path = %q", summary.ClientConfigPath)
 	}
 
-	restore := stubSetupSideEffects(t)
 	stdout.Reset()
 	stderr.Reset()
 	code = Run([]string{"helm-ai-kernel", "setup", "codex", "--scope", "project", "--yes", "--no-quickstart", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)

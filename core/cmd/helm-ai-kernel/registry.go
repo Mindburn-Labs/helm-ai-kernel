@@ -70,8 +70,11 @@ func Dispatch(name string, args []string, stdout, stderr io.Writer) (int, bool) 
 }
 
 func isHelpRequest(args []string) bool {
-	for _, arg := range args {
-		if arg == "--help" || arg == "-h" || arg == "help" {
+	for index, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+		if index == 0 && arg == "help" {
 			return true
 		}
 	}
@@ -95,7 +98,7 @@ func printUsage(out io.Writer) {
 }
 
 func printUsageAll(out io.Writer) {
-	fmt.Fprintf(out, "%sHELM AI Kernel%s: Canonical Execution Verifier (Version %s, Commit %s)\n\n", ColorBold, ColorReset, displayVersion(), displayCommit())
+	fmt.Fprintf(out, "%s: Canonical Execution Verifier (Version %s, Commit %s)\n\n", terminalTitle(out, "HELM AI Kernel"), displayVersion(), displayCommit())
 	fmt.Fprintln(out, "Usage: helm-ai-kernel <command> [options]")
 	fmt.Fprintln(out, "\nCommands:")
 

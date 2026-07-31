@@ -152,7 +152,7 @@ func TestVersionJSONIsStableForVersionAliases(t *testing.T) {
 }
 
 func TestGlobalHumanOutputIsPlainForNonTerminalWriters(t *testing.T) {
-	for _, args := range [][]string{{}, {"version"}} {
+	for _, args := range [][]string{{}, {"version"}, {"help", "--all"}} {
 		var stdout, stderr bytes.Buffer
 		code := Run(append([]string{"helm-ai-kernel"}, args...), &stdout, &stderr)
 		if code != 0 || stderr.Len() != 0 {
@@ -161,6 +161,31 @@ func TestGlobalHumanOutputIsPlainForNonTerminalWriters(t *testing.T) {
 		if strings.Contains(stdout.String(), "\x1b[") {
 			t.Fatalf("args=%v wrote ANSI to non-terminal output: %q", args, stdout.String())
 		}
+	}
+}
+
+func TestLiteralHelpArgumentDoesNotTriggerGlobalHelp(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "help")
+	canonicalParent, err := filepath.EvalSymlinks(filepath.Dir(dataDir))
+	if err != nil {
+		t.Fatalf("resolve data directory parent: %v", err)
+	}
+	wantDataDir := filepath.Join(canonicalParent, filepath.Base(dataDir))
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "quickstart", "--data-dir", dataDir, "--dry-run"}, &stdout, &stderr)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	var preview struct {
+		Operation string `json:"operation"`
+		DataDir   string `json:"data_dir"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &preview); err != nil {
+		t.Fatalf("decode quickstart preview: %v\n%s", err, stdout.String())
+	}
+	if preview.Operation != "preview" || preview.DataDir != wantDataDir {
+		t.Fatalf("preview=%+v, want operation=preview data_dir=%q", preview, wantDataDir)
 	}
 }
 

@@ -394,7 +394,7 @@ func writeQuickstartReady(stdout io.Writer, prepared quickstartPrepared, bindAdd
 		return
 	}
 	fmt.Fprintf(stdout, "HELM quickstart ready\n\n")
-	fmt.Fprintf(stdout, "Kernel:  http://%s:%d\n", bindAddr, port)
+	fmt.Fprintf(stdout, "Kernel:  %s\n", localKernelOrigin(bindAddr, port))
 	if prepared.Console {
 		fmt.Fprintf(stdout, "Console: %s\n", consoleURL)
 	}

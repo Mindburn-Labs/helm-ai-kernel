@@ -1,3 +1,5 @@
+// quantum_posture: launch evidence tests exercise classical Ed25519 evidence
+// seals only; they do not make a post-quantum assurance claim.
 package main
 
 import (

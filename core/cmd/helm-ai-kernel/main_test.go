@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -126,6 +127,28 @@ func TestRunServerCommandReportsStartupFailure(t *testing.T) {
 
 	assert.Equal(t, 1, exitCode)
 	assert.Contains(t, stderr.String(), "bind failed")
+}
+
+func TestServerNarrationWriterSeparatesJSONAndText(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		json       bool
+		wantStdout string
+		wantStderr string
+	}{
+		{name: "json", json: true, wantStderr: "human startup narration"},
+		{name: "text", wantStdout: "human startup narration"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if _, err := fmt.Fprint(serverNarrationWriter(serverOptions{JSON: test.json, Stdout: &stdout, Stderr: &stderr}), "human startup narration"); err != nil {
+				t.Fatal(err)
+			}
+			if stdout.String() != test.wantStdout || stderr.String() != test.wantStderr {
+				t.Fatalf("narration routing stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+		})
+	}
 }
 
 func TestRunLegacyServerFlagsReportStartupFailure(t *testing.T) {

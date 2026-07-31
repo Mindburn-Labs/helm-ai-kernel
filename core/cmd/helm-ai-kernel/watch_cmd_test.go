@@ -58,6 +58,60 @@ func TestWatchJSONAndNonTTYAreSnapshotOnly(t *testing.T) {
 	}
 }
 
+func TestWatchRedactsReflectedResolvedAPIKeyErrors(t *testing.T) {
+	const apiKey = "reflected-admin-key"
+	t.Setenv(watchAdminAPIKeyEnv, apiKey)
+	reflected := errors.New("remote response reflected Bearer " + apiKey)
+	if !errors.Is(redactWatchError(reflected, apiKey), reflected) {
+		t.Fatal("redaction must preserve the wrapped error for structured callers")
+	}
+
+	t.Run("snapshot stderr", func(t *testing.T) {
+		client := &watchFakeClient{listErr: reflected}
+		var stdout, stderr bytes.Buffer
+		code := runWatchCmdWithRuntime([]string{"--json"}, &stdout, &stderr, testWatchRuntime("", client, false, true))
+		if code != 1 || stdout.Len() != 0 {
+			t.Fatalf("snapshot code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+		if strings.Contains(stderr.String(), apiKey) || !strings.Contains(stderr.String(), "[REDACTED]") {
+			t.Fatalf("snapshot error leaked resolved API key: %q", stderr.String())
+		}
+	})
+
+	t.Run("client construction", func(t *testing.T) {
+		runtime := testWatchRuntime("", nil, false, true)
+		runtime.newClient = func(_, key string) (approvalClient, error) {
+			if key != apiKey {
+				t.Fatalf("constructor key = %q", key)
+			}
+			return nil, reflected
+		}
+		var stdout, stderr bytes.Buffer
+		code := runWatchCmdWithRuntime([]string{"--json"}, &stdout, &stderr, runtime)
+		if code != 2 || stdout.Len() != 0 {
+			t.Fatalf("constructor code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+		if strings.Contains(stderr.String(), apiKey) || !strings.Contains(stderr.String(), "[REDACTED]") {
+			t.Fatalf("constructor error leaked resolved API key: %q", stderr.String())
+		}
+	})
+
+	t.Run("interactive chrome", func(t *testing.T) {
+		client := &watchFakeClient{
+			items:         []contracts.ApprovalCeremony{watchTestCeremony("ap-1", time.Unix(1, 0))},
+			transitionErr: reflected,
+		}
+		var stdout, stderr bytes.Buffer
+		code := runWatchCmdWithRuntime(nil, &stdout, &stderr, testWatchRuntime("ap-1\nAPPROVE\nAPPROVE\n\n", client, true, true))
+		if code != 0 || stdout.Len() != 0 {
+			t.Fatalf("interactive code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+		if strings.Contains(stderr.String(), apiKey) || !strings.Contains(stderr.String(), "[REDACTED]") || !strings.Contains(stderr.String(), "HELM watch") {
+			t.Fatalf("interactive watch chrome leaked resolved API key: %q", stderr.String())
+		}
+	})
+}
+
 func TestWatchInteractiveTransitionRequiresExactSecondConfirmation(t *testing.T) {
 	item := watchTestCeremony("ap-1", time.Unix(1, 0))
 	client := &watchFakeClient{items: []contracts.ApprovalCeremony{item}}
@@ -100,6 +154,59 @@ func TestWatchInteractiveRoutesApproveAndDenyThroughConfirmation(t *testing.T) {
 			got := client.transitions[0]
 			if got.action != test.want || got.approvalID != "ap-1" || got.actor != "operator.cli" || got.reason == "" {
 				t.Fatalf("transition = %+v", got)
+			}
+		})
+	}
+}
+
+func TestWatchInteractiveKeepsCredentialBoundCeremoniesReadOnly(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*contracts.ApprovalCeremony)
+	}{
+		{
+			name: "auth method",
+			mutate: func(item *contracts.ApprovalCeremony) {
+				item.AuthMethod = "webauthn"
+			},
+		},
+		{
+			name: "challenge",
+			mutate: func(item *contracts.ApprovalCeremony) {
+				item.ChallengeID = "challenge-1"
+			},
+		},
+		{
+			name: "challenge hash",
+			mutate: func(item *contracts.ApprovalCeremony) {
+				item.ChallengeHash = "sha256:challenge"
+			},
+		},
+		{
+			name: "assertion",
+			mutate: func(item *contracts.ApprovalCeremony) {
+				item.AssertionHash = "sha256:assertion"
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			item := watchTestCeremony("ap-1", time.Unix(1, 0))
+			test.mutate(&item)
+			client := &watchFakeClient{items: []contracts.ApprovalCeremony{item}}
+			var chrome bytes.Buffer
+
+			code := runWatchInteractive(client, "operator.cli", strings.NewReader("ap-1\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+			if code != 0 {
+				t.Fatalf("exit code = %d, chrome=%s", code, chrome.String())
+			}
+			if len(client.transitions) != 0 {
+				t.Fatalf("credential-bound ceremony issued transition: %+v", client.transitions)
+			}
+			if !strings.Contains(chrome.String(), "read-only in watch") || !strings.Contains(chrome.String(), "verified approval flow") {
+				t.Fatalf("watch did not explain the read-only state:\n%s", chrome.String())
+			}
+			if strings.Contains(chrome.String(), "Type APPROVE") {
+				t.Fatalf("watch opened a confirmation prompt for a credential-bound ceremony:\n%s", chrome.String())
 			}
 		})
 	}

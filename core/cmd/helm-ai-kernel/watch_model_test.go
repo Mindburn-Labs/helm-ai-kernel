@@ -53,10 +53,6 @@ func watchTestCeremony(id string, createdAt time.Time) contracts.ApprovalCeremon
 		RequestedBy:      "agent.local",
 		Approvers:        []string{"alice", "bob"},
 		Quorum:           2,
-		AuthMethod:       "webauthn",
-		ChallengeID:      "challenge-1",
-		ChallengeHash:    "sha256:challenge",
-		AssertionHash:    "sha256:assertion",
 		Reason:           "review destructive command",
 		ReceiptID:        "receipt-1",
 		BoundaryRecordID: "boundary-1",
@@ -128,6 +124,10 @@ func TestWatchSnapshotIsSortedAndTerminalSafe(t *testing.T) {
 func TestWatchDecisionContextShowsEveryCeremonyField(t *testing.T) {
 	item := watchTestCeremony("ap-1", time.Unix(1, 0))
 	item.BreakGlass = true
+	item.AuthMethod = "webauthn"
+	item.ChallengeID = "challenge-1"
+	item.ChallengeHash = "sha256:challenge"
+	item.AssertionHash = "sha256:assertion"
 	item.TimelockUntil = time.Unix(4, 0)
 	item.ExpiresAt = time.Unix(5, 0)
 	context := watchDecisionContext(item, ui.DecisionApprove)

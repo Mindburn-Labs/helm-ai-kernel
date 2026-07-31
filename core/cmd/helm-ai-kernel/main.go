@@ -198,6 +198,7 @@ func runServerWithOptions(opts serverOptions) error {
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
 	}
+	narration := serverNarrationWriter(opts)
 	// SEC: Default to localhost to prevent accidental network exposure.
 	// HELM_BIND_ADDR=0.0.0.0 remains an explicit opt-in for server mode.
 	bindAddr := opts.BindAddr
@@ -223,7 +224,7 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	defer func() { _ = apiListener.Close() }()
 
-	fmt.Fprintf(opts.Stdout, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(narration, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
 	// Stamp trace_id/span_id/correlation_id from ctx onto every record
@@ -249,7 +250,7 @@ func runServerWithOptions(opts serverOptions) error {
 	// 0.2 Connect to Database (Infrastructure)
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		fmt.Fprintf(opts.Stdout, "ℹ️  DATABASE_URL not set. Falling back to %sLite Mode%s (SQLite).\n", ColorBold+ColorCyan, ColorReset)
+		fmt.Fprintf(narration, "ℹ️  DATABASE_URL not set. Falling back to %sLite Mode%s (SQLite).\n", ColorBold+ColorCyan, ColorReset)
 		if opts.SQLitePath != "" {
 			db, _, receiptStore, err = setupLiteModeWithDBPath(ctx, opts.SQLitePath)
 			dataDir = filepath.Dir(opts.SQLitePath)
@@ -306,7 +307,7 @@ func runServerWithOptions(opts serverOptions) error {
 		log.Fatalf("Failed to init signer: %v", err)
 	}
 	verifier, _ := crypto.NewEd25519Verifier(signer.PublicKeyBytes())
-	fmt.Fprintf(opts.Stdout, "🔑 Trust Root: %s%s%s\n", ColorBold+ColorGreen, signer.PublicKey(), ColorReset)
+	fmt.Fprintf(narration, "🔑 Trust Root: %s%s%s\n", ColorBold+ColorGreen, signer.PublicKey(), ColorReset)
 
 	// 2. Registry
 	reg := registry.NewPostgresRegistry(db)
@@ -563,22 +564,7 @@ func runServerWithOptions(opts serverOptions) error {
 		}()
 	}
 
-	if opts.JSON {
-		_ = json.NewEncoder(opts.Stdout).Encode(map[string]any{
-			"name":   "helm-edge-local",
-			"addr":   bindAddr,
-			"port":   port,
-			"ready":  true,
-			"policy": opts.PolicyPath,
-		})
-	} else if opts.Mode == "serve" {
-		fmt.Fprintf(opts.Stdout, "helm-edge-local · listening :%d · ready\n", port)
-	} else {
-		log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
-	}
-	if opts.OnReady != nil {
-		opts.OnReady(bindAddr, port)
-	}
+	writeServerReady(opts, bindAddr, port)
 	log.Println("[helm] press ctrl+c to stop")
 
 	// Graceful Shutdown
@@ -603,6 +589,35 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	log.Println("[helm] shutdown complete")
 	return nil
+}
+
+// serverNarrationWriter keeps human-only startup prose out of a command's JSON
+// data stream. JSON callers retain stdout for machine data and receive
+// diagnostics and narration on stderr.
+func serverNarrationWriter(opts serverOptions) io.Writer {
+	if opts.JSON {
+		return opts.Stderr
+	}
+	return opts.Stdout
+}
+
+func writeServerReady(opts serverOptions, bindAddr string, port int) {
+	if opts.JSON && (opts.Mode != "quickstart" || opts.OnReady == nil) {
+		_ = json.NewEncoder(opts.Stdout).Encode(map[string]any{
+			"name":   "helm-edge-local",
+			"addr":   bindAddr,
+			"port":   port,
+			"ready":  true,
+			"policy": opts.PolicyPath,
+		})
+	} else if opts.Mode == "serve" {
+		fmt.Fprintf(opts.Stdout, "helm-edge-local · listening :%d · ready\n", port)
+	} else {
+		log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
+	}
+	if opts.OnReady != nil {
+		opts.OnReady(bindAddr, port)
+	}
 }
 
 func servicesInitFailureIsFatal() bool {

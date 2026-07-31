@@ -39,6 +39,8 @@ func runQuickstartCmd(args []string, stdout, stderr io.Writer) int {
 	return runQuickstartCmdWithReady(args, stdout, stderr, nil)
 }
 
+var runQuickstartServer = runServerWithOptions
+
 func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady func()) int {
 	if isHelpRequest(args) {
 		printQuickstartUsage(stdout)
@@ -58,6 +60,14 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		return 1
 	}
 	if opts.DryRun {
+		// A reset preview must exercise the same ownership and target guard as a
+		// real reset. The guard is read-only; emitting a success preview before
+		// it passes would falsely imply that deletion is authorized.
+		_, planned, err = preflightQuickstartReset(opts, planned)
+		if err != nil {
+			fmt.Fprintf(stderr, "quickstart: %v\n", err)
+			return 1
+		}
 		_ = json.NewEncoder(stdout).Encode(planned.summary("preview"))
 		return 0
 	}
@@ -66,24 +76,23 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		fmt.Fprintf(stderr, "quickstart: %v\n", err)
 		return 1
 	}
-	if opts.JSON {
-		_ = json.NewEncoder(stdout).Encode(prepared.summary("start"))
-	}
-
 	installQuickstartRuntimeEnv(prepared.Runtime)
 
-	if err := runServerWithOptions(serverOptions{
+	if err := runQuickstartServer(serverOptions{
 		Mode:       "quickstart",
 		BindAddr:   opts.Addr,
 		Port:       opts.Port,
 		DataDir:    opts.DataDir,
 		PolicyPath: prepared.PolicyPath,
 		Quickstart: prepared.Runtime,
+		JSON:       opts.JSON,
 		OnReady: func(bindAddr string, port int) {
 			if onReady != nil {
 				onReady()
 			}
-			if !opts.JSON {
+			if opts.JSON {
+				_ = json.NewEncoder(stdout).Encode(prepared.summary("start"))
+			} else {
 				fmt.Fprintf(stdout, "HELM quickstart ready\n\n")
 				fmt.Fprintf(stdout, "Kernel:  http://%s:%d\n", bindAddr, port)
 				fmt.Fprintf(stdout, "Policy:  %s\n\n", prepared.PolicyPath)
@@ -186,7 +195,9 @@ func (p quickstartPrepared) summary(operation string) map[string]any {
 		summary["principal_id"] = p.Runtime.PrincipalID
 		summary["local_session_ttl"] = time.Until(p.Runtime.ExpiresAt).String()
 		summary["local_session_exchange_url"] = p.KernelURL + "/api/v1/local-session/exchange"
-		summary["bootstrap_token"] = p.Runtime.BootstrapToken
+		// The bootstrap token exchanges for a local session and must never be
+		// emitted in machine-readable command output, where it is commonly
+		// redirected to logs or a pipe.
 	}
 	return summary
 }
@@ -220,17 +231,13 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if err != nil {
 		return quickstartPrepared{}, err
 	}
-	opts.DataDir = prepared.DataDir
+	opts, prepared, err = preflightQuickstartReset(opts, prepared)
+	if err != nil {
+		return quickstartPrepared{}, err
+	}
 	if opts.Reset {
-		resetTarget, err := validateQuickstartResetTarget(opts)
-		if err != nil {
-			return quickstartPrepared{}, err
-		}
-		opts.DataDir = resetTarget
-		prepared.DataDir = resetTarget
-		prepared.PolicyPath = filepath.Join(resetTarget, "quickstart", "oss_local_first_run.toml")
-		if err := os.RemoveAll(resetTarget); err != nil {
-			return quickstartPrepared{}, fmt.Errorf("reset data dir %q: %w", resetTarget, err)
+		if err := os.RemoveAll(opts.DataDir); err != nil {
+			return quickstartPrepared{}, fmt.Errorf("reset data dir %q: %w", opts.DataDir, err)
 		}
 	}
 	if err := os.MkdirAll(filepath.Join(opts.DataDir, "evidence"), 0750); err != nil {
@@ -261,6 +268,24 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	prepared.PolicyPath = policyPath
 	prepared.Runtime = runtime
 	return prepared, nil
+}
+
+// preflightQuickstartReset performs the non-mutating reset ownership and
+// target validation shared by real resets and dry-run previews. It also keeps
+// the prepared paths canonical after symlink resolution.
+func preflightQuickstartReset(opts quickstartOptions, prepared quickstartPrepared) (quickstartOptions, quickstartPrepared, error) {
+	opts.DataDir = prepared.DataDir
+	if !opts.Reset {
+		return opts, prepared, nil
+	}
+	resetTarget, err := validateQuickstartResetTarget(opts)
+	if err != nil {
+		return opts, prepared, err
+	}
+	opts.DataDir = resetTarget
+	prepared.DataDir = resetTarget
+	prepared.PolicyPath = filepath.Join(resetTarget, "quickstart", "oss_local_first_run.toml")
+	return opts, prepared, nil
 }
 
 const (

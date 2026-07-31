@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 const (
@@ -43,6 +44,47 @@ type watchRuntime struct {
 	caps      ui.Capabilities
 	outputTTY bool
 	newClient watchClientFactory
+}
+
+// redactingApprovalClient keeps a resolved bearer credential out of every
+// server or transport error before the watch UI can render it. The wrapped
+// error remains available through Unwrap so callers retain errors.Is/As
+// behavior and any structured error metadata.
+type redactingApprovalClient struct {
+	delegate approvalClient
+	secret   string
+}
+
+func (c redactingApprovalClient) ListApprovals(ctx context.Context) ([]contracts.ApprovalCeremony, error) {
+	items, err := c.delegate.ListApprovals(ctx)
+	return items, redactWatchError(err, c.secret)
+}
+
+func (c redactingApprovalClient) TransitionApproval(ctx context.Context, approvalID, action, actor, reason string) (contracts.ApprovalCeremony, error) {
+	item, err := c.delegate.TransitionApproval(ctx, approvalID, action, actor, reason)
+	return item, redactWatchError(err, c.secret)
+}
+
+type redactedWatchError struct {
+	cause   error
+	message string
+}
+
+func (e redactedWatchError) Error() string { return e.message }
+func (e redactedWatchError) Unwrap() error { return e.cause }
+
+func redactWatchError(err error, secret string) error {
+	if err == nil || secret == "" {
+		return err
+	}
+	message := err.Error()
+	if !strings.Contains(message, secret) {
+		return err
+	}
+	return redactedWatchError{
+		cause:   err,
+		message: strings.ReplaceAll(message, secret, "[REDACTED]"),
+	}
 }
 
 func runWatchCmd(args []string, stdout, stderr io.Writer) int {
@@ -96,9 +138,10 @@ func runWatchCmdWithRuntime(args []string, stdout, stderr io.Writer, runtime wat
 	}
 	client, err := runtime.newClient(rawURL, apiKey)
 	if err != nil {
-		writeWatchError(stderr, err)
+		writeWatchError(stderr, redactWatchError(err, apiKey))
 		return 2
 	}
+	client = redactingApprovalClient{delegate: client, secret: apiKey}
 
 	// JSON and every non-terminal combination are snapshot-only. There is no
 	// prompt, ANSI chrome, or state-changing path outside a real terminal.

@@ -6,6 +6,7 @@
       "gates": [
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -35,6 +36,7 @@
         "quality-self-test",
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -70,6 +72,7 @@
         "quality-self-test",
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -223,6 +226,17 @@
       ]
     },
     {
+      "id": "release-workflow-contract",
+      "title": "Release workflow provenance contract",
+      "command": "python3 scripts/ci/release_workflow_contract_test.py",
+      "timeout_seconds": 60,
+      "paths": [
+        ".github/workflows/release.yml",
+        "scripts/ci/quality-gates.json",
+        "scripts/ci/release_workflow_contract_test.py"
+      ]
+    },
+    {
       "id": "presentation-hygiene",
       "title": "Presentation hygiene",
       "command": "make verify-presentation",
@@ -287,7 +301,7 @@
     {
       "id": "command-tests",
       "title": "CLI command tests",
-      "command": "go test ./core/cmd/helm-ai-kernel -count=1",
+      "command": "cd core && go test ./cmd/helm-ai-kernel -count=1",
       "timeout_seconds": 900,
       "paths": [
         "core/cmd/**",

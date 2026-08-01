@@ -403,6 +403,31 @@ func TestValidateAllowPermitRejectsRecomputedKernelSelfPin(t *testing.T) {
 	}
 }
 
+func TestValidateAllowPermitRejectsSelfAttestedSHAWorkflowRef(t *testing.T) {
+	context := validContext()
+	permit, err := Evaluate(context, testContextSHA, validReviews(context))
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	// A forger controls every permit field, so a SHA-form workflow_ref and the
+	// permit's own workflow_sha can be made self-consistent. Only equality with
+	// the trusted context's workflow SHA may vouch for a SHA-form ref.
+	candidate := permit
+	candidate.WorkflowRef = candidate.WorkflowRepository + "/" + candidate.WorkflowPath + "@" + testBaseSHA
+	candidate.WorkflowSHA = testBaseSHA
+	candidate.PermitID, err = calculatePermitID(candidate)
+	if err != nil {
+		t.Fatalf("calculatePermitID() error = %v", err)
+	}
+	err = ValidateAllowPermit(candidate, context, testContextSHA)
+	if err == nil {
+		t.Fatal("ValidateAllowPermit() error = nil, want rejection")
+	}
+	if !strings.Contains(err.Error(), "workflow_ref must be a branch or tag ref or match the trusted workflow_sha") {
+		t.Fatalf("ValidateAllowPermit() error = %v, want the trusted workflow_sha ref rejection", err)
+	}
+}
+
 func TestValidateAllowPermitRejectsRecomputedContextSubstitution(t *testing.T) {
 	context := validContext()
 	permit, err := Evaluate(context, testContextSHA, validReviews(context))

@@ -69,9 +69,17 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
         github_release = self.job("github-release")
         self.assertIn("console-release-assets", github_release)
-        self.assertNotIn("console-local-sidecar", github_release)
+        self.assertNotIn("needs: console-local-sidecar", github_release)
         self.assertIn("name: console-release-assets", github_release)
-        self.assertIn("console-release-assets/*", github_release)
+        self.assertNotIn("console-release-assets/*", github_release)
+        for asset in (
+            "console-release-assets/helm-console-local-sidecar-*",
+            "console-release-assets/helm-ai-kernel-*-console.tar.gz",
+            "console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle",
+            "console-release-assets/CONSOLE-SHA256SUMS.txt",
+            "console-release-assets/CONSOLE-SHA256SUMS.txt.cosign.bundle",
+        ):
+            self.assertIn(asset, github_release)
 
     def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
@@ -81,6 +89,9 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("make release-binaries-reproducible", console_assets)
         self.assertIn("console_local_sidecar.py stage", console_assets)
         self.assertIn("console_local_sidecar.py layout", console_assets)
+        self.assertIn("layout_input=console-layout-input", console_assets)
+        self.assertIn('cp "${assets}"/* "${layout_input}/"', console_assets)
+        self.assertIn('"${layout_input}/"', console_assets)
         self.assertIn("CONSOLE-SHA256SUMS.txt", console_assets)
         self.assertIn("cosign sign-blob", console_assets)
         self.assertIn("actions/upload-artifact", console_assets)

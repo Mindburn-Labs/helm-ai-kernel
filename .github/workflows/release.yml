@@ -1148,7 +1148,11 @@ jobs:
             cosign/**/*.cosign.bundle
             benchmarks-release/*.json
             version-status/version-status.json
-            console-release-assets/*
+            console-release-assets/helm-console-local-sidecar-*
+            console-release-assets/helm-ai-kernel-*-console.tar.gz
+            console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle
+            console-release-assets/CONSOLE-SHA256SUMS.txt
+            console-release-assets/CONSOLE-SHA256SUMS.txt.cosign.bundle
 
   console-release-assets:
     # v0.8.0 includes the local Console. Build and verify every Console asset
@@ -1205,21 +1209,23 @@ jobs:
         run: |
           set -euo pipefail
           assets=console-release-assets
-          mkdir -p "${assets}"
-          cp \
-            bin/helm-ai-kernel-linux-amd64 \
-            bin/helm-ai-kernel-linux-arm64 \
-            bin/helm-ai-kernel-darwin-amd64 \
-            bin/helm-ai-kernel-darwin-arm64 \
-            "${assets}/"
+          layout_input=console-layout-input
+          mkdir -p "${assets}" "${layout_input}"
           python3 scripts/release/console_local_sidecar.py stage \
             --input-dir console-local-sidecar \
             --output-dir "${assets}" \
             --pins release/console-local-sidecar-pins.json \
             --kernel-release "${GITHUB_REF_NAME}" \
             --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          cp "${assets}"/* "${layout_input}/"
+          cp \
+            bin/helm-ai-kernel-linux-amd64 \
+            bin/helm-ai-kernel-linux-arm64 \
+            bin/helm-ai-kernel-darwin-amd64 \
+            bin/helm-ai-kernel-darwin-arm64 \
+            "${layout_input}/"
           python3 scripts/release/console_local_sidecar.py layout \
-            --input-dir "${assets}" \
+            --input-dir "${layout_input}" \
             --output-dir "${assets}" \
             --pins release/console-local-sidecar-pins.json \
             --kernel-release "${GITHUB_REF_NAME}" \

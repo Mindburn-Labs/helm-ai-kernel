@@ -34,6 +34,23 @@ type ReceiptStore interface {
 	GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error)
 }
 
+// causalReceiptAppender is an optional capability implemented by durable
+// receipt stores. Keeping it separate preserves the minimal ReceiptStore
+// contract used by legacy adapters and test doubles.
+type causalReceiptAppender interface {
+	AppendCausal(ctx context.Context, sessionID string, build func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error)) error
+}
+
+// tenantScopedCausalReceiptAppender keeps tenant isolation in a store-only
+// chain key. SessionID remains the external value in the signed receipt.
+type tenantScopedCausalReceiptAppender interface {
+	AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error)) error
+}
+
+type receiptTimestampNormalizer interface {
+	NormalizeReceiptTimestamp(time.Time) time.Time
+}
+
 // MCPClient defines the interface for interacting with the Managed Capability Platform.
 // Kept for backward compatibility if needed, but ToolDriver is preferred.
 type MCPClient interface {

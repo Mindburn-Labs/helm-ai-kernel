@@ -42,6 +42,13 @@ pub struct DecisionRecord {
     /// evidence. Optional; outside the decision signature until HELM-303.
     #[prost(string, tag = "13")]
     pub correlation_id: ::prost::alloc::string::String,
+    /// HELM-303 decision.v2 signing envelope fields.
+    #[prost(string, tag = "14")]
+    pub signature_version: ::prost::alloc::string::String,
+    #[prost(string, tag = "15")]
+    pub phenotype_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "16")]
+    pub policy_content_hash: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizedExecutionIntent {
@@ -103,6 +110,22 @@ pub struct Receipt {
     /// to. Optional; outside the receipt signature until HELM-303.
     #[prost(string, tag = "17")]
     pub correlation_id: ::prost::alloc::string::String,
+    /// HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+    /// reason_code fields are also signed by receipt.v5.
+    #[prost(string, tag = "18")]
+    pub signature_version: ::prost::alloc::string::String,
+    #[prost(string, tag = "19")]
+    pub status: ::prost::alloc::string::String,
+    #[prost(string, tag = "20")]
+    pub output_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "21")]
+    pub prev_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "22")]
+    pub args_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "23")]
+    pub policy_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "24")]
+    pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PdpRequest {

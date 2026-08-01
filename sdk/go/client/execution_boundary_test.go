@@ -108,6 +108,49 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 	}
 }
 
+// This guards the generated request model against a root-schema composition
+// change that would turn EvaluateRequest into a union and silently drop its
+// canonical V5 fields during serialization. The public schema intentionally
+// keeps those fields optional for legacy direct-daemon compatibility; the SDK
+// method enforces its canonical V5 contract before sending a request.
+func TestEvaluateRequestGeneratedModelSupportsCanonicalSession(t *testing.T) {
+	tool := "read_file"
+	effectLevel := "read"
+	topLevelSession := "session-top"
+	request := NewEvaluateRequest()
+	request.SetTool(tool)
+	request.SetEffectLevel(effectLevel)
+	request.SetSessionId(topLevelSession)
+	request.Args = map[string]interface{}{"path": "/tmp/input"}
+	request.Context = map[string]interface{}{"request_id": "req-1"}
+
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal top-level session request: %v", err)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(encoded, &body); err != nil {
+		t.Fatalf("decode top-level session request: %v", err)
+	}
+	if body["tool"] != tool || body["effect_level"] != effectLevel || body["session_id"] != topLevelSession {
+		t.Fatalf("generated request dropped normal fields: %#v", body)
+	}
+	if args, ok := body["args"].(map[string]interface{}); !ok || args["path"] != "/tmp/input" {
+		t.Fatalf("generated request dropped args: %#v", body)
+	}
+
+	var incomplete EvaluateRequest
+	if err := json.Unmarshal([]byte(`{"tool":"read_file","effect_level":"read"}`), &incomplete); err != nil {
+		t.Fatalf("public compatibility model rejected partial request: %v", err)
+	}
+	if got := incomplete.GetSessionId(); got != "" {
+		t.Fatalf("unset optional session_id = %q, want empty", got)
+	}
+	if _, err := New("http://invalid.example").EvaluateDecision(incomplete); err == nil {
+		t.Fatal("SDK EvaluateDecision accepted a request without a canonical top-level session_id")
+	}
+}
+
 func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 	var seen []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +200,17 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			}
 			return err
 		}},
-		{"evaluate decision", "POST /api/v1/evaluate", func() error { _, err := client.EvaluateDecision(SurfaceRecord{"effect": "read"}); return err }},
+		{"evaluate decision", "POST /api/v1/evaluate", func() error {
+			request := NewEvaluateRequest()
+			request.SetTool("read_file")
+			request.SetEffectLevel("read")
+			request.SetSessionId("session-test")
+			result, err := client.EvaluateDecision(*request)
+			if err == nil && (result.ReceiptId != "receipt-evaluate" || result.LamportClock != 1) {
+				t.Fatalf("canonical evaluate response = %#v", result)
+			}
+			return err
+		}},
 		{"run public demo", "POST /api/demo/run", func() error { _, err := client.RunPublicDemo("read_ticket", SurfaceRecord{"id": 1}); return err }},
 		{"verify public demo receipt", "POST /api/demo/verify", func() error {
 			_, err := client.VerifyPublicDemoReceipt(SurfaceRecord{"receipt_id": "r1"}, "hash")
@@ -288,6 +341,17 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 
 func responseForClientMatrix(method string, u *url.URL) any {
 	switch u.Path {
+	case "/api/v1/evaluate":
+		return EvaluateResponse{
+			Allow:        true,
+			Verdict:      "ALLOW",
+			ReceiptId:    "receipt-evaluate",
+			DecisionId:   "decision-evaluate",
+			DecisionHash: "sha256:decision",
+			ReasonCode:   "",
+			PolicyRef:    "helm:test",
+			LamportClock: 1,
+		}
 	case "/healthz":
 		return map[string]string{"status": "ok", "version": "test"}
 	case "/api/v1/proofgraph/sessions",

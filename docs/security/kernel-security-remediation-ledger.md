@@ -298,13 +298,11 @@ type, and vulnerability alerts are raised for review rather than merged.
 
 ### Remaining after this session
 
-- **v5 activation** — blocked on the receipt-store schema. `ensureColumn` in
-  `core/pkg/store/receipt_store_sqlite.go` is the additive-migration pattern to
-  follow; five columns are needed (`key_id`, `public_key_set`,
-  `signature_profile`, `signature_algorithm`, `correlation_id`) across both the
-  SQLite and Postgres backends, in the schema, `receiptColumns`, the scan, and
-  the insert. Then flip `SignReceipt` to `ReceiptPreimageV5` and invert
-  `TestDemoVerifyRejectsUnsignedEnvelopeMutation`.
+- **Broader receipt signing scope** — active `receipt.v5` binds the durable
+  causal and governance fields listed below. The historical whole-receipt JCS
+  helper is retained only for compatibility; any future widening of the active
+  envelope needs its own version and durability proof rather than silently
+  claiming that every receipt field is signed.
 - **F-14 promotion** — triage the 14 `make lint-security` findings (several are
   gosec false positives) and make the target blocking in CI.
 - **F-20** — self-declared receipt `hash` values have no specified preimage.
@@ -355,6 +353,34 @@ point both `VerifyReceipt` methods at `VerifyReceiptSignature`, restore the
 `TestF05_PreviouslyUnsignedFieldsAreNowCovered` cases, and invert
 `TestDemoVerifyRejectsUnsignedEnvelopeMutation`, which still asserts that
 mutating `Metadata` leaves the signature valid.
+
+### 2026-08-01 — HELM-303 durable receipt.v5 activation
+
+`SignReceipt` now stamps `signature_version: "receipt.v5"` and signs a narrow
+JCS envelope over the durable causal fields (`receipt_id`, `decision_id`,
+`effect_id`, `status`, `output_hash`, `prev_hash`, `lamport_clock`,
+`args_hash`) plus the governance fields (`verdict`, `reason_code`,
+`policy_hash`, `session_id`). The declared v5 verifier reconstructs only that
+envelope and does not downgrade to a legacy preimage; unversioned history keeps
+its legacy verification path.
+
+`003_add_receipt_v5_governance.sql` and
+`004_add_receipt_decision_hash.sql`, the PostgreSQL store, and the SQLite
+additive migration path persist and reload the V5 governance columns plus the
+semantic `decision_hash`. Existing V5 rows recover that hash only from an
+already-persisted metadata value; if it cannot be recovered, read paths fail
+closed with an actionable migration/restore error rather than returning an
+empty required decision hash. Executor, HTTP/demo, and MCP-proof producers
+populate the governance fields before signing when their source data is
+available. The Guardian's basic policy denial now emits the machine-readable
+`POLICY_VIOLATION` reason code, and decisions use the versioned
+`decision_record.v2` preimage to sign `reason_code` instead of free-text
+reason.
+
+This is deliberately **not** a claim that the whole receipt is signed: fields
+outside the durable V5 envelope, including post-sign transparency anchoring,
+remain separately verified or recorded claims. It is source/test evidence only;
+it does not establish deployment or production-runtime proof.
 
 ### 2026-07-25 — F-22: panic instead of denial when no verifier is configured
 

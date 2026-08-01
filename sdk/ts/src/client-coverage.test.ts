@@ -43,7 +43,7 @@ describe("HelmClient coverage matrix", () => {
 
   it("exercises every JSON endpoint wrapper", async () => {
     const calls: Array<[string, unknown[]]> = [
-      ["evaluateDecision", [{ effect: "read" }]],
+      ["evaluateDecision", [{ tool: "read_file", effect_level: "read_file", session_id: "current-session" }]],
       ["runPublicDemo", ["read_ticket", { id: 1 }]],
       ["verifyPublicDemoReceipt", [{ receipt_id: "r1" }, "hash"]],
       ["approveIntent", [{ intent_hash: "h", signature_b64: "sig", public_key_b64: "pk" }]],
@@ -145,6 +145,41 @@ describe("HelmClient coverage matrix", () => {
     await expect(client.chatCompletionsWithReceipt({ model: "gpt", messages: [] })).resolves.toMatchObject({
       governance: { receiptId: "", lamportClock: 0, toolCalls: 0 },
     });
+  });
+
+  it("uses the canonical V5 evaluate request and response", async () => {
+    const response = {
+      allow: true,
+      verdict: "ALLOW",
+      receipt_id: "receipt-1",
+      decision_id: "decision-1",
+      decision_hash: "sha256:decision",
+      reason_code: "",
+      policy_ref: "helm:test",
+      lamport_clock: 1,
+    };
+    fetchSpy.mockResolvedValueOnce(jsonResponse(response));
+
+    const result = await client.evaluateDecision({
+      tool: "read_file",
+      effect_level: "read_file",
+      session_id: "current-session",
+    });
+    expect(result.decision_id).toBe("decision-1");
+    expect(JSON.parse(String((fetchSpy.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+      tool: "read_file",
+      effect_level: "read_file",
+      session_id: "current-session",
+    });
+  });
+
+  it("rejects blank canonical evaluate fields before making a request", async () => {
+    await expect(client.evaluateDecision({
+      tool: "read_file",
+      effect_level: "read_file",
+      session_id: "  ",
+    })).rejects.toThrow("non-blank session_id");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("covers binary and form endpoints including error branches", async () => {

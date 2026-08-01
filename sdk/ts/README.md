@@ -37,12 +37,17 @@ import { HelmClient } from "@mindburn/helm-ai-kernel";
 
 const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
 const decision = await client.evaluateDecision({
-  principal: "example-agent",
-  action: "read-ticket",
-  resource: "ticket:123",
+  tool: "read-ticket",
+  effect_level: "ticket:123",
+  session_id: "example-session",
 });
-console.log(decision.verdict); // ALLOW, DENY, or ESCALATE
+console.log(decision.verdict); // ALLOW or DENY
 ```
+
+`tool`, `effect_level`, and `session_id` must all be non-blank. The SDK sends
+only this canonical V5 request shape; legacy direct-daemon callers are not an
+SDK contract. The authenticated principal, not a body `principal`, is recorded
+on the receipt.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.

@@ -95,6 +95,60 @@ func TestReceipt_V5Fields_BackwardCompat(t *testing.T) {
 	}
 }
 
+func TestReceiptV5JSONPreservesEmptySignedFields(t *testing.T) {
+	receipt := contracts.Receipt{
+		ReceiptID:        "rcpt-v5-empty",
+		DecisionID:       "dec-v5-empty",
+		EffectID:         "effect-v5-empty",
+		Status:           "DENY",
+		Timestamp:        time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		SignatureVersion: contracts.ReceiptSignatureV5,
+		PrevHash:         "",
+		LamportClock:     1,
+	}
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatalf("marshal V5 receipt: %v", err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatalf("decode V5 receipt: %v", err)
+	}
+	for _, field := range []string{"output_hash", "args_hash", "verdict", "reason_code", "policy_hash", "session_id"} {
+		value, ok := document[field]
+		if !ok {
+			t.Fatalf("V5 JSON omitted signed field %q: %s", field, data)
+		}
+		var got string
+		if err := json.Unmarshal(value, &got); err != nil || got != "" {
+			t.Fatalf("V5 JSON field %q = %s, want empty string", field, value)
+		}
+	}
+}
+
+func TestReceiptLegacyJSONKeepsOptionalSignedFieldsOmitted(t *testing.T) {
+	receipt := contracts.Receipt{
+		ReceiptID:  "rcpt-legacy",
+		DecisionID: "dec-legacy",
+		EffectID:   "effect-legacy",
+		Status:     "DENY",
+		Timestamp:  time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+	}
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatalf("marshal legacy receipt: %v", err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatalf("decode legacy receipt: %v", err)
+	}
+	for _, field := range []string{"output_hash", "args_hash", "verdict", "reason_code", "policy_hash", "session_id"} {
+		if _, ok := document[field]; ok {
+			t.Fatalf("legacy JSON unexpectedly added %q: %s", field, data)
+		}
+	}
+}
+
 func TestEvidencePack_V2Fields_Roundtrip(t *testing.T) {
 	pack := contracts.EvidencePack{
 		PackID:        "ep-1",

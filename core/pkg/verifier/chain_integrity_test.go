@@ -1,3 +1,4 @@
+// quantum_posture: chain-integrity fixtures use classical Ed25519 only; no post-quantum assurance is claimed.
 package verifier
 
 // F-03 regression: the offline verifier's chain-of-custody checks must detect
@@ -8,12 +9,14 @@ package verifier
 // every scenario below reported PASS.
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 // buildReceiptChain returns n receipts correctly linked genesis-to-head.
@@ -38,6 +41,42 @@ func buildReceiptChain(t *testing.T, session string, n int) []*contracts.Receipt
 		}
 		prevHash = h
 		chain = append(chain, r)
+	}
+	return chain
+}
+
+func buildSignedV5ReceiptChain(t *testing.T, signer *helmcrypto.Ed25519Signer, session, prefix string, n int) []*contracts.Receipt {
+	t.Helper()
+	var chain []*contracts.Receipt
+	prevHash := ""
+	for i := 1; i <= n; i++ {
+		suffix := string(rune('a' + i - 1))
+		receipt := &contracts.Receipt{
+			ReceiptID:    prefix + "-" + suffix,
+			DecisionID:   "decision-" + prefix + "-" + suffix,
+			EffectID:     "effect-" + prefix + "-" + suffix,
+			Status:       "APPLIED",
+			OutputHash:   "sha256:out-" + prefix + "-" + suffix,
+			PrevHash:     prevHash,
+			LamportClock: uint64(i),
+			ArgsHash:     "sha256:args-" + prefix + "-" + suffix,
+			Verdict:      "ALLOW",
+			ReasonCode:   "POLICY_ALLOW",
+			PolicyHash:   "sha256:policy-" + prefix,
+			SessionID:    session,
+		}
+		if err := signer.SignReceipt(receipt); err != nil {
+			t.Fatalf("sign %s receipt %d: %v", session, i, err)
+		}
+		if ok, err := signer.VerifyReceipt(receipt); err != nil || !ok {
+			t.Fatalf("verify %s receipt %d: ok=%v err=%v", session, i, ok, err)
+		}
+		hash, err := contracts.ReceiptChainHash(receipt)
+		if err != nil {
+			t.Fatalf("ReceiptChainHash(%s receipt %d): %v", session, i, err)
+		}
+		prevHash = hash
+		chain = append(chain, receipt)
 	}
 	return chain
 }
@@ -69,7 +108,7 @@ func writeChain(t *testing.T, receipts []*contracts.Receipt) string {
 	return dir
 }
 
-func TestChainIntegrity_AcceptsWellFormedChain(t *testing.T) {
+func TestChainIntegrity_AcceptsLegacyExecutorIDOnlyChain(t *testing.T) {
 	dir := writeChain(t, buildReceiptChain(t, "session-1", 4))
 
 	if got := checkChainIntegrity(dir); !got.Pass {
@@ -77,6 +116,60 @@ func TestChainIntegrity_AcceptsWellFormedChain(t *testing.T) {
 	}
 	if got := checkLamportMonotonicity(dir); !got.Pass {
 		t.Fatalf("a correctly ordered chain must verify, got: %s", got.Reason)
+	}
+}
+
+func TestChainIntegritySeparatesSignedV5SessionsWithoutExecutorID(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519SignerFromSeed(make([]byte, ed25519.SeedSize), "v5-chain-test")
+	if err != nil {
+		t.Fatalf("new receipt signer: %v", err)
+	}
+	alpha := buildSignedV5ReceiptChain(t, signer, "session-alpha", "alpha", 2)
+	beta := buildSignedV5ReceiptChain(t, signer, "session-beta", "beta", 2)
+	for _, receipt := range append(append([]*contracts.Receipt{}, alpha...), beta...) {
+		if receipt.ExecutorID != "" || receipt.SessionID == "" || receipt.SignatureVersion != contracts.ReceiptSignatureV5 {
+			t.Fatalf("fixture must be a signed V5 session receipt with no executor id: %+v", receipt)
+		}
+	}
+	dir := writeChain(t, append(alpha, beta...))
+
+	if got := checkChainIntegrity(dir); !got.Pass {
+		t.Fatalf("independent V5 session chains must verify: %s", got.Reason)
+	}
+	if got := checkLamportMonotonicity(dir); !got.Pass {
+		t.Fatalf("independent V5 session Lamport clocks must verify: %s", got.Reason)
+	}
+	chains, result := loadReceiptChains(dir, "test_v5_session_grouping")
+	if result != nil {
+		t.Fatalf("load V5 session chains: %s", result.Reason)
+	}
+	if len(chains) != 2 || chains[0].sessionID != "session-alpha" || chains[1].sessionID != "session-beta" {
+		t.Fatalf("V5 session grouping = %+v, want independent alpha and beta chains", chains)
+	}
+	for _, chain := range chains {
+		if len(chain.ordered) != 2 {
+			t.Fatalf("session %q chain length = %d, want 2", chain.sessionID, len(chain.ordered))
+		}
+	}
+}
+
+func TestChainIntegrityKeepsLegacyReceiptsScopedByExecutor(t *testing.T) {
+	alpha := buildReceiptChain(t, "legacy-alpha", 1)
+	beta := buildReceiptChain(t, "legacy-beta", 1)
+	// session_id was not signed by legacy receipts. A post-upgrade store may
+	// populate it for lookup, but it must not merge independent legacy chains.
+	alpha[0].SessionID = "shared-backfill-value"
+	beta[0].SessionID = "shared-backfill-value"
+	alpha[0].ReceiptID = "legacy-alpha-receipt"
+	beta[0].ReceiptID = "legacy-beta-receipt"
+
+	dir := writeChain(t, append(alpha, beta...))
+	chains, result := loadReceiptChains(dir, "legacy_executor_scope")
+	if result != nil {
+		t.Fatalf("load legacy receipt chains: %s", result.Reason)
+	}
+	if len(chains) != 2 || chains[0].sessionID != "legacy-alpha" || chains[1].sessionID != "legacy-beta" {
+		t.Fatalf("legacy chains must remain executor scoped, got %+v", chains)
 	}
 }
 

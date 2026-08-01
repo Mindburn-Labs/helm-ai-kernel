@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
@@ -521,9 +522,10 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 	if v := firstUint(document, "lamport_clock"); v != nil {
 		lamport = *v
 	}
-	// Mirrors crypto.CanonicalizeReceipt — receipt_id:decision_id:effect_id:
-	// status:output_hash:prev_hash:lamport_clock:args_hash.
-	payload := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
+	// Mirrors crypto.CanonicalizeReceipt for legacy V4. The active receipt.v5
+	// payload below is a narrow JCS envelope so its field boundaries cannot
+	// collide when a signed value contains a colon.
+	payload := []byte(fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
 		firstString(document, "receipt_id"),
 		firstString(document, "decision_id"),
 		firstString(document, "effect_id"),
@@ -532,8 +534,70 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 		firstString(document, "prev_hash"),
 		lamport,
 		firstString(document, "args_hash"),
-	)
-	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
+	))
+	switch sigVersion := firstString(document, "signature_version"); sigVersion {
+	case "":
+		// legacy V4 — payload as built
+	case "receipt.v5":
+		// V5 has a fixed signed schema. firstString deliberately treats a
+		// missing legacy alias and an explicit empty value alike, but doing so
+		// here would let an attacker remove an explicitly empty genesis
+		// prev_hash without changing the reconstructed payload.
+		for _, field := range []string{
+			"signature_version", "receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash",
+			"args_hash", "verdict", "reason_code", "policy_hash", "session_id",
+		} {
+			if _, ok := document[field].(string); !ok {
+				return false
+			}
+		}
+		lamportValue := firstUint(document, "lamport_clock")
+		if lamportValue == nil {
+			return false
+		}
+		var err error
+		payload, err = canonicalize.JCS(receiptV5DocumentEnvelope{
+			SignatureVersion: sigVersion,
+			ReceiptID:        firstString(document, "receipt_id"),
+			DecisionID:       firstString(document, "decision_id"),
+			EffectID:         firstString(document, "effect_id"),
+			Status:           firstString(document, "status"),
+			OutputHash:       firstString(document, "output_hash"),
+			PrevHash:         firstString(document, "prev_hash"),
+			LamportClock:     *lamportValue,
+			ArgsHash:         firstString(document, "args_hash"),
+			Verdict:          firstString(document, "verdict"),
+			ReasonCode:       firstString(document, "reason_code"),
+			PolicyHash:       firstString(document, "policy_hash"),
+			SessionID:        firstString(document, "session_id"),
+		})
+		if err != nil {
+			return false
+		}
+	default:
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), payload, sigBytes)
+}
+
+// receiptV5DocumentEnvelope must stay structurally identical to
+// crypto.receiptV5SigningEnvelope. The offline verifier intentionally does
+// not import the signer package, so it reconstructs the public signing
+// contract from the exported receipt document instead.
+type receiptV5DocumentEnvelope struct {
+	SignatureVersion string `json:"signature_version"`
+	ReceiptID        string `json:"receipt_id"`
+	DecisionID       string `json:"decision_id"`
+	EffectID         string `json:"effect_id"`
+	Status           string `json:"status"`
+	OutputHash       string `json:"output_hash"`
+	PrevHash         string `json:"prev_hash"`
+	LamportClock     uint64 `json:"lamport_clock"`
+	ArgsHash         string `json:"args_hash"`
+	Verdict          string `json:"verdict"`
+	ReasonCode       string `json:"reason_code"`
+	PolicyHash       string `json:"policy_hash"`
+	SessionID        string `json:"session_id"`
 }
 
 // verifyWitnessReceiptSignature verifies a witness attestation: an Ed25519
@@ -1065,9 +1129,13 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 			receipt.ReceiptID, _ = raw["receipt_id"].(string)
 		}
 
-		// ExecutorID is the session key the typed producer chains on; receipts
-		// without one form a single implicit chain.
+		// Only receipt.v5 binds SessionID in its signing envelope. Legacy
+		// receipts retain their historical ExecutorID chain scope even when a
+		// later storage migration has populated session_id for lookup purposes.
 		session := receipt.ExecutorID
+		if receipt.SignatureVersion == contracts.ReceiptSignatureV5 {
+			session = receipt.SessionID
+		}
 		bySession[session] = append(bySession[session], receiptNode{
 			receipt: &receipt, hashes: hashes, file: entry.Name(),
 		})

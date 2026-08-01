@@ -60,6 +60,10 @@ telemetry export, and coexistence capabilities. These methods mirror public
 OpenAPI execution-boundary routes without making external evidence envelopes
 authoritative.
 
+`evaluateDecision` accepts `TypesGen.EvaluateRequest` only. Set non-blank
+`tool`, `effect_level`, and `session_id`; it returns the receipt-bearing
+`TypesGen.EvaluateResponse`.
+
 ## Release Notes
 
 `0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the OpenAPI client surface

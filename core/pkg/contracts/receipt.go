@@ -1,6 +1,9 @@
 package contracts
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Receipt represents a proof of effect execution, linked to a decision.
 type Receipt struct {
@@ -33,6 +36,14 @@ type Receipt struct {
 	PrevHash     string `json:"prev_hash"`           // SHA-256 of the previous canonical signed receipt envelope
 	LamportClock uint64 `json:"lamport_clock"`       // Monotonic logical clock per session
 	ArgsHash     string `json:"args_hash,omitempty"` // SHA-256 of JCS-canonicalized tool args bound at the PEP boundary
+
+	// SignatureVersion names the signing-preimage revision this receipt's
+	// Signature was computed over (HELM-303). Empty = the legacy V4 preimage
+	// (receipt_id, decision_id, effect_id, status, output_hash, prev_hash,
+	// lamport, args_hash). ReceiptSignatureV5 additionally binds verdict,
+	// reason_code, policy_hash and session_id, so the governance meaning of a
+	// receipt can no longer be rewritten without invalidating its signature.
+	SignatureVersion string `json:"signature_version,omitempty"`
 
 	// Receipt-as-First-Class Artifact Extensions
 	ReplayScript     *ReplayScriptRef   `json:"replay_script,omitempty"`     // Link to deterministic replay script
@@ -104,6 +115,43 @@ type Receipt struct {
 	LeafIndex    uint64              `json:"leaf_index,omitempty"`
 }
 
+// receiptJSONAlias prevents Receipt.MarshalJSON from recursing. It also keeps
+// the historical JSON view available to ReceiptChainHash so V5 wire-format
+// requirements never rewrite legacy causal hashes.
+type receiptJSONAlias Receipt
+
+// receiptV5JSON keeps every field in the declared V5 signing envelope
+// structurally present. Empty values are signed values, not optional transport
+// fields: omitting one would make an otherwise valid V5 signature unverifiable
+// by an offline verifier.
+type receiptV5JSON struct {
+	receiptJSONAlias
+	OutputHash string `json:"output_hash"`
+	ArgsHash   string `json:"args_hash"`
+	Verdict    string `json:"verdict"`
+	ReasonCode string `json:"reason_code"`
+	PolicyHash string `json:"policy_hash"`
+	SessionID  string `json:"session_id"`
+}
+
+// MarshalJSON preserves the legacy receipt wire format while making a declared
+// receipt.v5 self-contained for offline verification. The V5 preimage includes
+// the fields overridden by receiptV5JSON even when their signed value is empty.
+func (r Receipt) MarshalJSON() ([]byte, error) {
+	if r.SignatureVersion != ReceiptSignatureV5 {
+		return json.Marshal(receiptJSONAlias(r))
+	}
+	return json.Marshal(receiptV5JSON{
+		receiptJSONAlias: receiptJSONAlias(r),
+		OutputHash:       r.OutputHash,
+		ArgsHash:         r.ArgsHash,
+		Verdict:          r.Verdict,
+		ReasonCode:       r.ReasonCode,
+		PolicyHash:       r.PolicyHash,
+		SessionID:        r.SessionID,
+	})
+}
+
 type Projection struct {
 	Agent string `json:"agent"`
 	Path  string `json:"path"`
@@ -148,3 +196,12 @@ type WitnessSignature struct {
 	WitnessID string `json:"witness_id"`
 	Signature string `json:"signature"`
 }
+
+// ReceiptSignatureV5 marks the HELM-303 signing preimage: the legacy V4
+// fields plus verdict, reason_code, policy_hash and session_id. The
+// emergency/safe_dep tail stays deliberately outside the receipt preimage —
+// emergency authority is already signature-bound via the V2
+// AuthorizedExecutionIntent preimage, and double-binding it here would force
+// a receipt re-sign on every intent-side evolution. Revisit in V6 only with
+// a concrete threat that the intent binding does not already cover.
+const ReceiptSignatureV5 = "receipt.v5"

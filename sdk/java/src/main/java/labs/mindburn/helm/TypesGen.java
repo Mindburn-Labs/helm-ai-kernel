@@ -981,8 +981,6 @@ public static class A2AAgentCardCapabilities {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -990,8 +988,6 @@ public static class A2AAgentCardCapabilities {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -1158,8 +1154,6 @@ public static class A2AAgentCardProvider {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -1167,8 +1161,6 @@ public static class A2AAgentCardProvider {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -1959,8 +1951,6 @@ public static class AccountEntitlements {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -1968,8 +1958,6 @@ public static class AccountEntitlements {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -2536,8 +2524,6 @@ public static class AccountSession {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -2545,8 +2531,6 @@ public static class AccountSession {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -3009,8 +2993,6 @@ public static class AddTrustKey200Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -3018,8 +3000,6 @@ public static class AddTrustKey200Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -3217,8 +3197,6 @@ public static class AddTrustKeyRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -3226,8 +3204,6 @@ public static class AddTrustKeyRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -4585,8 +4561,6 @@ public static class ApprovalRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -4594,8 +4568,6 @@ public static class ApprovalRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -5152,8 +5124,6 @@ public static class AssertApprovalWebAuthnChallengeRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -5161,8 +5131,6 @@ public static class AssertApprovalWebAuthnChallengeRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -5432,8 +5400,6 @@ public static class AuthzHealth {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -5441,8 +5407,6 @@ public static class AuthzHealth {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -5836,8 +5800,6 @@ public static class AuthzSnapshot {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -5845,8 +5807,6 @@ public static class AuthzSnapshot {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -6074,8 +6034,6 @@ public static class BindLaunchpadSecretGrantRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -6083,8 +6041,6 @@ public static class BindLaunchpadSecretGrantRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -6861,8 +6817,6 @@ public static class BoundaryCheckpoint {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -6870,8 +6824,6 @@ public static class BoundaryCheckpoint {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -8163,8 +8115,6 @@ public static class BoundaryStatus {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -8172,8 +8122,6 @@ public static class BoundaryStatus {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -8622,8 +8570,6 @@ public static class BudgetCeiling {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -8631,8 +8577,6 @@ public static class BudgetCeiling {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -10297,8 +10241,6 @@ public static class ChatCompletionRequestMessagesInner {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -10306,8 +10248,6 @@ public static class ChatCompletionRequestMessagesInner {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -10507,8 +10447,6 @@ public static class ChatCompletionRequestToolsInner {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -10516,8 +10454,6 @@ public static class ChatCompletionRequestToolsInner {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -10710,8 +10646,6 @@ public static class ChatCompletionRequestToolsInnerFunction {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -10719,8 +10653,6 @@ public static class ChatCompletionRequestToolsInnerFunction {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -11247,8 +11179,6 @@ public static class ChatCompletionResponseChoicesInner {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -11256,8 +11186,6 @@ public static class ChatCompletionResponseChoicesInner {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -11695,8 +11623,6 @@ public static class ChatCompletionResponseChoicesInnerMessageToolCallsInner {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -11704,8 +11630,6 @@ public static class ChatCompletionResponseChoicesInnerMessageToolCallsInner {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -11872,8 +11796,6 @@ public static class ChatCompletionResponseChoicesInnerMessageToolCallsInnerFunct
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -11881,8 +11803,6 @@ public static class ChatCompletionResponseChoicesInnerMessageToolCallsInnerFunct
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -12075,8 +11995,6 @@ public static class ChatCompletionResponseUsage {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -12084,8 +12002,6 @@ public static class ChatCompletionResponseUsage {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -12675,8 +12591,6 @@ public static class ConformanceRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -12684,8 +12598,6 @@ public static class ConformanceRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -13006,8 +12918,6 @@ public static class ConformanceResult {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -13015,8 +12925,6 @@ public static class ConformanceResult {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -13594,8 +13502,6 @@ public static class ConsoleBootstrapConformance {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -13603,8 +13509,6 @@ public static class ConsoleBootstrapConformance {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -13833,8 +13737,6 @@ public static class ConsoleBootstrapCounts {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -13842,8 +13744,6 @@ public static class ConsoleBootstrapCounts {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -14077,8 +13977,6 @@ public static class ConsoleBootstrapHealth {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -14086,8 +13984,6 @@ public static class ConsoleBootstrapHealth {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -14505,8 +14401,6 @@ public static class ConsoleBootstrapWorkspace {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -14514,8 +14408,6 @@ public static class ConsoleBootstrapWorkspace {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -15139,8 +15031,8 @@ public static class ConsoleDiagnostics {
     if (getRuntime() != null) {
       for (String _key : getRuntime().keySet()) {
         joiner.add(String.format("%sruntime%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getRuntime().get(_key), URLEncoder.encode(String.valueOf(getRuntime().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getRuntime().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -15148,8 +15040,8 @@ public static class ConsoleDiagnostics {
     if (getAccess() != null) {
       for (String _key : getAccess().keySet()) {
         joiner.add(String.format("%saccess%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getAccess().get(_key), URLEncoder.encode(String.valueOf(getAccess().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getAccess().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -15599,8 +15491,6 @@ public static class ConsoleRouteDiagnostic {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -15608,8 +15498,6 @@ public static class ConsoleRouteDiagnostic {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -15971,8 +15859,6 @@ public static class ConsoleStoreDiagnostic {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -15980,8 +15866,6 @@ public static class ConsoleStoreDiagnostic {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -16784,8 +16668,8 @@ public static class ConsoleSurfaceState {
     if (getSummary() != null) {
       for (String _key : getSummary().keySet()) {
         joiner.add(String.format("%ssummary%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getSummary().get(_key), URLEncoder.encode(String.valueOf(getSummary().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getSummary().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -16945,8 +16829,6 @@ public static class CreateApprovalWebAuthnChallengeRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -16954,8 +16836,6 @@ public static class CreateApprovalWebAuthnChallengeRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -17117,8 +16997,6 @@ public static class CreateLaunchpadImport202Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -17126,8 +17004,6 @@ public static class CreateLaunchpadImport202Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -17351,8 +17227,6 @@ public static class CreateSandboxGrantRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -17360,8 +17234,6 @@ public static class CreateSandboxGrantRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -17415,6 +17287,11 @@ public static class CreateSandboxGrantRequest {
   DecisionRecord.JSON_PROPERTY_RESOURCE,
   DecisionRecord.JSON_PROPERTY_VERDICT,
   DecisionRecord.JSON_PROPERTY_REASON,
+  DecisionRecord.JSON_PROPERTY_SIGNATURE_VERSION,
+  DecisionRecord.JSON_PROPERTY_REASON_CODE,
+  DecisionRecord.JSON_PROPERTY_PHENOTYPE_HASH,
+  DecisionRecord.JSON_PROPERTY_POLICY_CONTENT_HASH,
+  DecisionRecord.JSON_PROPERTY_EFFECT_DIGEST,
   DecisionRecord.JSON_PROPERTY_POLICY_VERSION,
   DecisionRecord.JSON_PROPERTY_POLICY_DECISION_HASH,
   DecisionRecord.JSON_PROPERTY_SIGNATURE
@@ -17435,6 +17312,21 @@ public static class DecisionRecord {
 
   public static final String JSON_PROPERTY_REASON = "reason";
   private String reason;
+
+  public static final String JSON_PROPERTY_SIGNATURE_VERSION = "signature_version";
+  private String signatureVersion;
+
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_PHENOTYPE_HASH = "phenotype_hash";
+  private String phenotypeHash;
+
+  public static final String JSON_PROPERTY_POLICY_CONTENT_HASH = "policy_content_hash";
+  private String policyContentHash;
+
+  public static final String JSON_PROPERTY_EFFECT_DIGEST = "effect_digest";
+  private String effectDigest;
 
   public static final String JSON_PROPERTY_POLICY_VERSION = "policy_version";
   private String policyVersion;
@@ -17573,6 +17465,131 @@ public static class DecisionRecord {
   }
 
 
+  public DecisionRecord signatureVersion(String signatureVersion) {
+    this.signatureVersion = signatureVersion;
+    return this;
+  }
+
+   /**
+   * Get signatureVersion
+   * @return signatureVersion
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignatureVersion() {
+    return signatureVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureVersion(String signatureVersion) {
+    this.signatureVersion = signatureVersion;
+  }
+
+
+  public DecisionRecord reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public DecisionRecord phenotypeHash(String phenotypeHash) {
+    this.phenotypeHash = phenotypeHash;
+    return this;
+  }
+
+   /**
+   * Get phenotypeHash
+   * @return phenotypeHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PHENOTYPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPhenotypeHash() {
+    return phenotypeHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PHENOTYPE_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPhenotypeHash(String phenotypeHash) {
+    this.phenotypeHash = phenotypeHash;
+  }
+
+
+  public DecisionRecord policyContentHash(String policyContentHash) {
+    this.policyContentHash = policyContentHash;
+    return this;
+  }
+
+   /**
+   * Get policyContentHash
+   * @return policyContentHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_CONTENT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyContentHash() {
+    return policyContentHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_CONTENT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyContentHash(String policyContentHash) {
+    this.policyContentHash = policyContentHash;
+  }
+
+
+  public DecisionRecord effectDigest(String effectDigest) {
+    this.effectDigest = effectDigest;
+    return this;
+  }
+
+   /**
+   * Get effectDigest
+   * @return effectDigest
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECT_DIGEST)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEffectDigest() {
+    return effectDigest;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECT_DIGEST)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffectDigest(String effectDigest) {
+    this.effectDigest = effectDigest;
+  }
+
+
   public DecisionRecord policyVersion(String policyVersion) {
     this.policyVersion = policyVersion;
     return this;
@@ -17665,6 +17682,11 @@ public static class DecisionRecord {
         Objects.equals(this.resource, decisionRecord.resource) &&
         Objects.equals(this.verdict, decisionRecord.verdict) &&
         Objects.equals(this.reason, decisionRecord.reason) &&
+        Objects.equals(this.signatureVersion, decisionRecord.signatureVersion) &&
+        Objects.equals(this.reasonCode, decisionRecord.reasonCode) &&
+        Objects.equals(this.phenotypeHash, decisionRecord.phenotypeHash) &&
+        Objects.equals(this.policyContentHash, decisionRecord.policyContentHash) &&
+        Objects.equals(this.effectDigest, decisionRecord.effectDigest) &&
         Objects.equals(this.policyVersion, decisionRecord.policyVersion) &&
         Objects.equals(this.policyDecisionHash, decisionRecord.policyDecisionHash) &&
         Objects.equals(this.signature, decisionRecord.signature);
@@ -17672,7 +17694,7 @@ public static class DecisionRecord {
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, action, resource, verdict, reason, policyVersion, policyDecisionHash, signature);
+    return Objects.hash(id, action, resource, verdict, reason, signatureVersion, reasonCode, phenotypeHash, policyContentHash, effectDigest, policyVersion, policyDecisionHash, signature);
   }
 
   @Override
@@ -17684,6 +17706,11 @@ public static class DecisionRecord {
     sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
     sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    signatureVersion: ").append(toIndentedString(signatureVersion)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    phenotypeHash: ").append(toIndentedString(phenotypeHash)).append("\n");
+    sb.append("    policyContentHash: ").append(toIndentedString(policyContentHash)).append("\n");
+    sb.append("    effectDigest: ").append(toIndentedString(effectDigest)).append("\n");
     sb.append("    policyVersion: ").append(toIndentedString(policyVersion)).append("\n");
     sb.append("    policyDecisionHash: ").append(toIndentedString(policyDecisionHash)).append("\n");
     sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
@@ -17719,8 +17746,6 @@ public static class DecisionRecord {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -17728,8 +17753,6 @@ public static class DecisionRecord {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -17757,6 +17780,31 @@ public static class DecisionRecord {
     // add `reason` to the URL query string
     if (getReason() != null) {
       joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_version` to the URL query string
+    if (getSignatureVersion() != null) {
+      joiner.add(String.format("%ssignature_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `phenotype_hash` to the URL query string
+    if (getPhenotypeHash() != null) {
+      joiner.add(String.format("%sphenotype_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPhenotypeHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_content_hash` to the URL query string
+    if (getPolicyContentHash() != null) {
+      joiner.add(String.format("%spolicy_content_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyContentHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `effect_digest` to the URL query string
+    if (getEffectDigest() != null) {
+      joiner.add(String.format("%seffect_digest%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectDigest()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `policy_version` to the URL query string
@@ -17795,7 +17843,7 @@ public static class DecisionRecord {
 
 
 /**
- * DecisionRequest
+ * Legacy direct-daemon evaluation shape. It is retained only for existing callers; generated SDKs must use EvaluateRequest with a top-level session_id.
  */
 @JsonPropertyOrder({
   DecisionRequest.JSON_PROPERTY_PRINCIPAL,
@@ -18025,8 +18073,8 @@ public static class DecisionRequest {
     if (getContext() != null) {
       for (String _key : getContext().keySet()) {
         joiner.add(String.format("%scontext%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getContext().get(_key), URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -18883,8 +18931,8 @@ public static class Effect {
     if (getParams() != null) {
       for (String _key : getParams().keySet()) {
         joiner.add(String.format("%sparams%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getParams().get(_key), URLEncoder.encode(String.valueOf(getParams().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getParams().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -19108,8 +19156,8 @@ public static class EffectBoundary {
     if (getContext() != null) {
       for (String _key : getContext().keySet()) {
         joiner.add(String.format("%scontext%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getContext().get(_key), URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -19570,8 +19618,6 @@ public static class EntitlementCapabilities {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -19579,8 +19625,6 @@ public static class EntitlementCapabilities {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -20192,8 +20236,6 @@ public static class EntitlementDecision extends HashMap<String, Object> {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -20201,8 +20243,6 @@ public static class EntitlementDecision extends HashMap<String, Object> {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -20631,8 +20671,6 @@ public static class EntitlementDecisionRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -20640,8 +20678,6 @@ public static class EntitlementDecisionRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -20904,8 +20940,6 @@ public static class EntitlementDecisionRequestCurrentUsage {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -20913,8 +20947,6 @@ public static class EntitlementDecisionRequestCurrentUsage {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -21256,8 +21288,6 @@ public static class EntitlementLimits {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -21265,8 +21295,6 @@ public static class EntitlementLimits {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -21615,6 +21643,1091 @@ public static class EnvExposurePolicy {
 
 
 /**
+ * Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
+ */
+@JsonPropertyOrder({
+  EvaluateRequest.JSON_PROPERTY_PRINCIPAL,
+  EvaluateRequest.JSON_PROPERTY_ACTION,
+  EvaluateRequest.JSON_PROPERTY_RESOURCE,
+  EvaluateRequest.JSON_PROPERTY_TOOL,
+  EvaluateRequest.JSON_PROPERTY_ARGS,
+  EvaluateRequest.JSON_PROPERTY_AGENT_ID,
+  EvaluateRequest.JSON_PROPERTY_EFFECT_LEVEL,
+  EvaluateRequest.JSON_PROPERTY_SESSION_ID,
+  EvaluateRequest.JSON_PROPERTY_CONTEXT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EvaluateRequest {
+  public static final String JSON_PROPERTY_PRINCIPAL = "principal";
+  private String principal;
+
+  public static final String JSON_PROPERTY_ACTION = "action";
+  private String action;
+
+  public static final String JSON_PROPERTY_RESOURCE = "resource";
+  private String resource;
+
+  public static final String JSON_PROPERTY_TOOL = "tool";
+  private String tool;
+
+  public static final String JSON_PROPERTY_ARGS = "args";
+  private Map<String, Object> args = new HashMap<>();
+
+  public static final String JSON_PROPERTY_AGENT_ID = "agent_id";
+  private String agentId;
+
+  public static final String JSON_PROPERTY_EFFECT_LEVEL = "effect_level";
+  private String effectLevel;
+
+  public static final String JSON_PROPERTY_SESSION_ID = "session_id";
+  private String sessionId;
+
+  public static final String JSON_PROPERTY_CONTEXT = "context";
+  private Map<String, Object> context = new HashMap<>();
+
+  public EvaluateRequest() {
+  }
+
+  public EvaluateRequest principal(String principal) {
+    this.principal = principal;
+    return this;
+  }
+
+   /**
+   * Ignored; the authenticated principal is recorded as the receipt executor.
+   * @return principal
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPrincipal() {
+    return principal;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPrincipal(String principal) {
+    this.principal = principal;
+  }
+
+
+  public EvaluateRequest action(String action) {
+    this.action = action;
+    return this;
+  }
+
+   /**
+   * Legacy direct-daemon alias for tool.
+   * @return action
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAction() {
+    return action;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAction(String action) {
+    this.action = action;
+  }
+
+
+  public EvaluateRequest resource(String resource) {
+    this.resource = resource;
+    return this;
+  }
+
+   /**
+   * Legacy direct-daemon alias for effect_level.
+   * @return resource
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getResource() {
+    return resource;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setResource(String resource) {
+    this.resource = resource;
+  }
+
+
+  public EvaluateRequest tool(String tool) {
+    this.tool = tool;
+    return this;
+  }
+
+   /**
+   * Get tool
+   * @return tool
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOOL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTool() {
+    return tool;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOOL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTool(String tool) {
+    this.tool = tool;
+  }
+
+
+  public EvaluateRequest args(Map<String, Object> args) {
+    this.args = args;
+    return this;
+  }
+
+  public EvaluateRequest putArgsItem(String key, Object argsItem) {
+    if (this.args == null) {
+      this.args = new HashMap<>();
+    }
+    this.args.put(key, argsItem);
+    return this;
+  }
+
+   /**
+   * Get args
+   * @return args
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ARGS)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getArgs() {
+    return args;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ARGS)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setArgs(Map<String, Object> args) {
+    this.args = args;
+  }
+
+
+  public EvaluateRequest agentId(String agentId) {
+    this.agentId = agentId;
+    return this;
+  }
+
+   /**
+   * Ignored; the authenticated principal is recorded as the receipt executor.
+   * @return agentId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_AGENT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAgentId() {
+    return agentId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_AGENT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAgentId(String agentId) {
+    this.agentId = agentId;
+  }
+
+
+  public EvaluateRequest effectLevel(String effectLevel) {
+    this.effectLevel = effectLevel;
+    return this;
+  }
+
+   /**
+   * Policy resource used to evaluate the governed tool call.
+   * @return effectLevel
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECT_LEVEL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEffectLevel() {
+    return effectLevel;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECT_LEVEL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffectLevel(String effectLevel) {
+    this.effectLevel = effectLevel;
+  }
+
+
+  public EvaluateRequest sessionId(String sessionId) {
+    this.sessionId = sessionId;
+    return this;
+  }
+
+   /**
+   * Non-whitespace signed causal session identifier.
+   * @return sessionId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSessionId() {
+    return sessionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSessionId(String sessionId) {
+    this.sessionId = sessionId;
+  }
+
+
+  public EvaluateRequest context(Map<String, Object> context) {
+    this.context = context;
+    return this;
+  }
+
+  public EvaluateRequest putContextItem(String key, Object contextItem) {
+    if (this.context == null) {
+      this.context = new HashMap<>();
+    }
+    this.context.put(key, contextItem);
+    return this;
+  }
+
+   /**
+   * Optional input context; authenticated principal and tenant fields are added by the server.
+   * @return context
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONTEXT)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getContext() {
+    return context;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONTEXT)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setContext(Map<String, Object> context) {
+    this.context = context;
+  }
+
+
+  /**
+   * Return true if this EvaluateRequest object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EvaluateRequest evaluateRequest = (EvaluateRequest) o;
+    return Objects.equals(this.principal, evaluateRequest.principal) &&
+        Objects.equals(this.action, evaluateRequest.action) &&
+        Objects.equals(this.resource, evaluateRequest.resource) &&
+        Objects.equals(this.tool, evaluateRequest.tool) &&
+        Objects.equals(this.args, evaluateRequest.args) &&
+        Objects.equals(this.agentId, evaluateRequest.agentId) &&
+        Objects.equals(this.effectLevel, evaluateRequest.effectLevel) &&
+        Objects.equals(this.sessionId, evaluateRequest.sessionId) &&
+        Objects.equals(this.context, evaluateRequest.context);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(principal, action, resource, tool, args, agentId, effectLevel, sessionId, context);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EvaluateRequest {\n");
+    sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
+    sb.append("    action: ").append(toIndentedString(action)).append("\n");
+    sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
+    sb.append("    tool: ").append(toIndentedString(tool)).append("\n");
+    sb.append("    args: ").append(toIndentedString(args)).append("\n");
+    sb.append("    agentId: ").append(toIndentedString(agentId)).append("\n");
+    sb.append("    effectLevel: ").append(toIndentedString(effectLevel)).append("\n");
+    sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
+    sb.append("    context: ").append(toIndentedString(context)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `principal` to the URL query string
+    if (getPrincipal() != null) {
+      joiner.add(String.format("%sprincipal%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipal()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `action` to the URL query string
+    if (getAction() != null) {
+      joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `resource` to the URL query string
+    if (getResource() != null) {
+      joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `tool` to the URL query string
+    if (getTool() != null) {
+      joiner.add(String.format("%stool%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTool()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `args` to the URL query string
+    if (getArgs() != null) {
+      for (String _key : getArgs().keySet()) {
+        joiner.add(String.format("%sargs%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getArgs().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `agent_id` to the URL query string
+    if (getAgentId() != null) {
+      joiner.add(String.format("%sagent_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAgentId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `effect_level` to the URL query string
+    if (getEffectLevel() != null) {
+      joiner.add(String.format("%seffect_level%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectLevel()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `session_id` to the URL query string
+    if (getSessionId() != null) {
+      joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `context` to the URL query string
+    if (getContext() != null) {
+      for (String _key : getContext().keySet()) {
+        joiner.add(String.format("%scontext%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * EvaluateResponse
+ */
+@JsonPropertyOrder({
+  EvaluateResponse.JSON_PROPERTY_ALLOW,
+  EvaluateResponse.JSON_PROPERTY_VERDICT,
+  EvaluateResponse.JSON_PROPERTY_RECEIPT_ID,
+  EvaluateResponse.JSON_PROPERTY_DECISION_ID,
+  EvaluateResponse.JSON_PROPERTY_DECISION_HASH,
+  EvaluateResponse.JSON_PROPERTY_REASON_CODE,
+  EvaluateResponse.JSON_PROPERTY_POLICY_REF,
+  EvaluateResponse.JSON_PROPERTY_LAMPORT_CLOCK,
+  EvaluateResponse.JSON_PROPERTY_ID,
+  EvaluateResponse.JSON_PROPERTY_ACTION,
+  EvaluateResponse.JSON_PROPERTY_RESOURCE,
+  EvaluateResponse.JSON_PROPERTY_REASON,
+  EvaluateResponse.JSON_PROPERTY_POLICY_VERSION,
+  EvaluateResponse.JSON_PROPERTY_POLICY_DECISION_HASH,
+  EvaluateResponse.JSON_PROPERTY_SIGNATURE
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EvaluateResponse {
+  public static final String JSON_PROPERTY_ALLOW = "allow";
+  private Boolean allow;
+
+  public static final String JSON_PROPERTY_VERDICT = "verdict";
+  private String verdict;
+
+  public static final String JSON_PROPERTY_RECEIPT_ID = "receipt_id";
+  private String receiptId;
+
+  public static final String JSON_PROPERTY_DECISION_ID = "decision_id";
+  private String decisionId;
+
+  public static final String JSON_PROPERTY_DECISION_HASH = "decision_hash";
+  private String decisionHash;
+
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_POLICY_REF = "policy_ref";
+  private String policyRef;
+
+  public static final String JSON_PROPERTY_LAMPORT_CLOCK = "lamport_clock";
+  private Long lamportClock;
+
+  public static final String JSON_PROPERTY_ID = "id";
+  private String id;
+
+  public static final String JSON_PROPERTY_ACTION = "action";
+  private String action;
+
+  public static final String JSON_PROPERTY_RESOURCE = "resource";
+  private String resource;
+
+  public static final String JSON_PROPERTY_REASON = "reason";
+  private String reason;
+
+  public static final String JSON_PROPERTY_POLICY_VERSION = "policy_version";
+  private String policyVersion;
+
+  public static final String JSON_PROPERTY_POLICY_DECISION_HASH = "policy_decision_hash";
+  private String policyDecisionHash;
+
+  public static final String JSON_PROPERTY_SIGNATURE = "signature";
+  private String signature;
+
+  public EvaluateResponse() {
+  }
+
+  public EvaluateResponse allow(Boolean allow) {
+    this.allow = allow;
+    return this;
+  }
+
+   /**
+   * Get allow
+   * @return allow
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ALLOW)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Boolean getAllow() {
+    return allow;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ALLOW)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setAllow(Boolean allow) {
+    this.allow = allow;
+  }
+
+
+  public EvaluateResponse verdict(String verdict) {
+    this.verdict = verdict;
+    return this;
+  }
+
+   /**
+   * ALLOW or DENY for a receipt-bearing decision; empty when evaluation fails before receipt issuance.
+   * @return verdict
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getVerdict() {
+    return verdict;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setVerdict(String verdict) {
+    this.verdict = verdict;
+  }
+
+
+  public EvaluateResponse receiptId(String receiptId) {
+    this.receiptId = receiptId;
+    return this;
+  }
+
+   /**
+   * Issued V5 receipt identifier; empty when evaluation fails before receipt issuance.
+   * @return receiptId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_RECEIPT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getReceiptId() {
+    return receiptId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RECEIPT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReceiptId(String receiptId) {
+    this.receiptId = receiptId;
+  }
+
+
+  public EvaluateResponse decisionId(String decisionId) {
+    this.decisionId = decisionId;
+    return this;
+  }
+
+   /**
+   * Get decisionId
+   * @return decisionId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DECISION_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getDecisionId() {
+    return decisionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DECISION_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDecisionId(String decisionId) {
+    this.decisionId = decisionId;
+  }
+
+
+  public EvaluateResponse decisionHash(String decisionHash) {
+    this.decisionHash = decisionHash;
+    return this;
+  }
+
+   /**
+   * Get decisionHash
+   * @return decisionHash
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getDecisionHash() {
+    return decisionHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDecisionHash(String decisionHash) {
+    this.decisionHash = decisionHash;
+  }
+
+
+  public EvaluateResponse reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public EvaluateResponse policyRef(String policyRef) {
+    this.policyRef = policyRef;
+    return this;
+  }
+
+   /**
+   * Get policyRef
+   * @return policyRef
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_POLICY_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPolicyRef() {
+    return policyRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPolicyRef(String policyRef) {
+    this.policyRef = policyRef;
+  }
+
+
+  public EvaluateResponse lamportClock(Long lamportClock) {
+    this.lamportClock = lamportClock;
+    return this;
+  }
+
+   /**
+   * Get lamportClock
+   * minimum: 0
+   * @return lamportClock
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_LAMPORT_CLOCK)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Long getLamportClock() {
+    return lamportClock;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LAMPORT_CLOCK)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setLamportClock(Long lamportClock) {
+    this.lamportClock = lamportClock;
+  }
+
+
+  public EvaluateResponse id(String id) {
+    this.id = id;
+    return this;
+  }
+
+   /**
+   * Legacy decision identifier alias for decision_id.
+   * @return id
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getId() {
+    return id;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setId(String id) {
+    this.id = id;
+  }
+
+
+  public EvaluateResponse action(String action) {
+    this.action = action;
+    return this;
+  }
+
+   /**
+   * Legacy decision action.
+   * @return action
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAction() {
+    return action;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAction(String action) {
+    this.action = action;
+  }
+
+
+  public EvaluateResponse resource(String resource) {
+    this.resource = resource;
+    return this;
+  }
+
+   /**
+   * Legacy decision resource.
+   * @return resource
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getResource() {
+    return resource;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setResource(String resource) {
+    this.resource = resource;
+  }
+
+
+  public EvaluateResponse reason(String reason) {
+    this.reason = reason;
+    return this;
+  }
+
+   /**
+   * Legacy human-readable decision reason.
+   * @return reason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReason() {
+    return reason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReason(String reason) {
+    this.reason = reason;
+  }
+
+
+  public EvaluateResponse policyVersion(String policyVersion) {
+    this.policyVersion = policyVersion;
+    return this;
+  }
+
+   /**
+   * Legacy policy version.
+   * @return policyVersion
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyVersion() {
+    return policyVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyVersion(String policyVersion) {
+    this.policyVersion = policyVersion;
+  }
+
+
+  public EvaluateResponse policyDecisionHash(String policyDecisionHash) {
+    this.policyDecisionHash = policyDecisionHash;
+    return this;
+  }
+
+   /**
+   * Legacy policy decision hash.
+   * @return policyDecisionHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyDecisionHash() {
+    return policyDecisionHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyDecisionHash(String policyDecisionHash) {
+    this.policyDecisionHash = policyDecisionHash;
+  }
+
+
+  public EvaluateResponse signature(String signature) {
+    this.signature = signature;
+    return this;
+  }
+
+   /**
+   * Legacy decision signature.
+   * @return signature
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignature() {
+    return signature;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignature(String signature) {
+    this.signature = signature;
+  }
+
+
+  /**
+   * Return true if this EvaluateResponse object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EvaluateResponse evaluateResponse = (EvaluateResponse) o;
+    return Objects.equals(this.allow, evaluateResponse.allow) &&
+        Objects.equals(this.verdict, evaluateResponse.verdict) &&
+        Objects.equals(this.receiptId, evaluateResponse.receiptId) &&
+        Objects.equals(this.decisionId, evaluateResponse.decisionId) &&
+        Objects.equals(this.decisionHash, evaluateResponse.decisionHash) &&
+        Objects.equals(this.reasonCode, evaluateResponse.reasonCode) &&
+        Objects.equals(this.policyRef, evaluateResponse.policyRef) &&
+        Objects.equals(this.lamportClock, evaluateResponse.lamportClock) &&
+        Objects.equals(this.id, evaluateResponse.id) &&
+        Objects.equals(this.action, evaluateResponse.action) &&
+        Objects.equals(this.resource, evaluateResponse.resource) &&
+        Objects.equals(this.reason, evaluateResponse.reason) &&
+        Objects.equals(this.policyVersion, evaluateResponse.policyVersion) &&
+        Objects.equals(this.policyDecisionHash, evaluateResponse.policyDecisionHash) &&
+        Objects.equals(this.signature, evaluateResponse.signature);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(allow, verdict, receiptId, decisionId, decisionHash, reasonCode, policyRef, lamportClock, id, action, resource, reason, policyVersion, policyDecisionHash, signature);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EvaluateResponse {\n");
+    sb.append("    allow: ").append(toIndentedString(allow)).append("\n");
+    sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
+    sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
+    sb.append("    decisionId: ").append(toIndentedString(decisionId)).append("\n");
+    sb.append("    decisionHash: ").append(toIndentedString(decisionHash)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    policyRef: ").append(toIndentedString(policyRef)).append("\n");
+    sb.append("    lamportClock: ").append(toIndentedString(lamportClock)).append("\n");
+    sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    action: ").append(toIndentedString(action)).append("\n");
+    sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
+    sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    policyVersion: ").append(toIndentedString(policyVersion)).append("\n");
+    sb.append("    policyDecisionHash: ").append(toIndentedString(policyDecisionHash)).append("\n");
+    sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `allow` to the URL query string
+    if (getAllow() != null) {
+      joiner.add(String.format("%sallow%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAllow()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `verdict` to the URL query string
+    if (getVerdict() != null) {
+      joiner.add(String.format("%sverdict%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerdict()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `receipt_id` to the URL query string
+    if (getReceiptId() != null) {
+      joiner.add(String.format("%sreceipt_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReceiptId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `decision_id` to the URL query string
+    if (getDecisionId() != null) {
+      joiner.add(String.format("%sdecision_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDecisionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `decision_hash` to the URL query string
+    if (getDecisionHash() != null) {
+      joiner.add(String.format("%sdecision_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDecisionHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_ref` to the URL query string
+    if (getPolicyRef() != null) {
+      joiner.add(String.format("%spolicy_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `lamport_clock` to the URL query string
+    if (getLamportClock() != null) {
+      joiner.add(String.format("%slamport_clock%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLamportClock()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `id` to the URL query string
+    if (getId() != null) {
+      joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `action` to the URL query string
+    if (getAction() != null) {
+      joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `resource` to the URL query string
+    if (getResource() != null) {
+      joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason` to the URL query string
+    if (getReason() != null) {
+      joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_version` to the URL query string
+    if (getPolicyVersion() != null) {
+      joiner.add(String.format("%spolicy_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_decision_hash` to the URL query string
+    if (getPolicyDecisionHash() != null) {
+      joiner.add(String.format("%spolicy_decision_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyDecisionHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature` to the URL query string
+    if (getSignature() != null) {
+      joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * EvidenceEnvelopeExportRequest
  */
 @JsonPropertyOrder({
@@ -21879,8 +22992,6 @@ public static class EvidenceEnvelopeExportRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -21888,8 +22999,6 @@ public static class EvidenceEnvelopeExportRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -22328,8 +23437,6 @@ public static class EvidenceEnvelopeManifest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -22337,8 +23444,6 @@ public static class EvidenceEnvelopeManifest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -23621,8 +24726,6 @@ public static class ExportRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -23630,8 +24733,6 @@ public static class ExportRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -23859,8 +24960,6 @@ public static class FilesystemPreopen {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -23868,8 +24967,6 @@ public static class FilesystemPreopen {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -24271,8 +25368,8 @@ public static class FrameworkAdapter {
     if (getMetadata() != null) {
       for (String _key : getMetadata().keySet()) {
         joiner.add(String.format("%smetadata%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getMetadata().get(_key), URLEncoder.encode(String.valueOf(getMetadata().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getMetadata().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -24280,8 +25377,8 @@ public static class FrameworkAdapter {
     if (getMatch() != null) {
       for (String _key : getMatch().keySet()) {
         joiner.add(String.format("%smatch%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getMatch().get(_key), URLEncoder.encode(String.valueOf(getMatch().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getMatch().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -24294,8 +25391,8 @@ public static class FrameworkAdapter {
     if (getEntrypoints() != null) {
       for (String _key : getEntrypoints().keySet()) {
         joiner.add(String.format("%sentrypoints%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getEntrypoints().get(_key), URLEncoder.encode(String.valueOf(getEntrypoints().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEntrypoints().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -24303,8 +25400,8 @@ public static class FrameworkAdapter {
     if (getBuild() != null) {
       for (String _key : getBuild().keySet()) {
         joiner.add(String.format("%sbuild%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getBuild().get(_key), URLEncoder.encode(String.valueOf(getBuild().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getBuild().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -24961,8 +26058,6 @@ public static class GUIActionReceipt {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -24970,8 +26065,6 @@ public static class GUIActionReceipt {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -25573,8 +26666,6 @@ public static class GetAgentUIRuntimeInfo200Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -25582,8 +26673,6 @@ public static class GetAgentUIRuntimeInfo200Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -25724,8 +26813,6 @@ public static class GetLaunchpadImport200Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -25733,8 +26820,6 @@ public static class GetLaunchpadImport200Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -26195,8 +27280,6 @@ public static class GetPublicDemoHealth200Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -26204,8 +27287,6 @@ public static class GetPublicDemoHealth200Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -27220,8 +28301,6 @@ public static class GroundedActionRef {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -27229,8 +28308,6 @@ public static class GroundedActionRef {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -27999,8 +29076,8 @@ public static class HarnessChangeContract {
     if (getCanaryScope() != null) {
       for (String _key : getCanaryScope().keySet()) {
         joiner.add(String.format("%scanary_scope%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getCanaryScope().get(_key), URLEncoder.encode(String.valueOf(getCanaryScope().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getCanaryScope().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -28008,8 +29085,8 @@ public static class HarnessChangeContract {
     if (getRollbackPlan() != null) {
       for (String _key : getRollbackPlan().keySet()) {
         joiner.add(String.format("%srollback_plan%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getRollbackPlan().get(_key), URLEncoder.encode(String.valueOf(getRollbackPlan().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getRollbackPlan().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -29036,8 +30113,6 @@ public static class HealthCheck200Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -29045,8 +30120,6 @@ public static class HealthCheck200Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -29177,8 +30250,6 @@ public static class HelmError {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -29186,8 +30257,6 @@ public static class HelmError {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -29584,8 +30653,8 @@ public static class HelmErrorError {
     if (getDetails() != null) {
       for (String _key : getDetails().keySet()) {
         joiner.add(String.format("%sdetails%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getDetails().get(_key), URLEncoder.encode(String.valueOf(getDetails().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getDetails().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -32175,8 +33244,8 @@ public static class LaunchpadApp extends HashMap<String, Object> {
     if (getHealthcheck() != null) {
       for (String _key : getHealthcheck().keySet()) {
         joiner.add(String.format("%shealthcheck%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getHealthcheck().get(_key), URLEncoder.encode(String.valueOf(getHealthcheck().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getHealthcheck().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -32184,8 +33253,8 @@ public static class LaunchpadApp extends HashMap<String, Object> {
     if (getTeardownRecipe() != null) {
       for (String _key : getTeardownRecipe().keySet()) {
         joiner.add(String.format("%steardown_recipe%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getTeardownRecipe().get(_key), URLEncoder.encode(String.valueOf(getTeardownRecipe().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getTeardownRecipe().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -32193,8 +33262,8 @@ public static class LaunchpadApp extends HashMap<String, Object> {
     if (getEvidenceProfile() != null) {
       for (String _key : getEvidenceProfile().keySet()) {
         joiner.add(String.format("%sevidence_profile%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getEvidenceProfile().get(_key), URLEncoder.encode(String.valueOf(getEvidenceProfile().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getEvidenceProfile().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -32941,8 +34010,6 @@ public static class LaunchpadFixAction extends HashMap<String, Object> {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -32950,8 +34017,6 @@ public static class LaunchpadFixAction extends HashMap<String, Object> {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -34204,8 +35269,6 @@ public static class LaunchpadImportRecord extends HashMap<String, Object> {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -34213,8 +35276,6 @@ public static class LaunchpadImportRecord extends HashMap<String, Object> {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -34447,8 +35508,6 @@ public static class LaunchpadImportRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -34456,8 +35515,6 @@ public static class LaunchpadImportRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -35361,8 +36418,6 @@ public static class LaunchpadMatrixCell extends HashMap<String, Object> {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -35370,8 +36425,6 @@ public static class LaunchpadMatrixCell extends HashMap<String, Object> {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -35609,8 +36662,6 @@ public static class LaunchpadPlanRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -35618,8 +36669,6 @@ public static class LaunchpadPlanRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -36174,8 +37223,6 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -36183,8 +37230,6 @@ public static class LaunchpadPlanResponse extends HashMap<String, Object> {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -36798,8 +37843,8 @@ public static class LaunchpadPolicySimulation extends HashMap<String, Object> {
     if (getStructured() != null) {
       for (String _key : getStructured().keySet()) {
         joiner.add(String.format("%sstructured%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getStructured().get(_key), URLEncoder.encode(String.valueOf(getStructured().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getStructured().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -36816,8 +37861,8 @@ public static class LaunchpadPolicySimulation extends HashMap<String, Object> {
     if (getRaw() != null) {
       for (String _key : getRaw().keySet()) {
         joiner.add(String.format("%sraw%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getRaw().get(_key), URLEncoder.encode(String.valueOf(getRaw().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getRaw().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -37756,8 +38801,8 @@ public static class LaunchpadRun extends HashMap<String, Object> {
     if (getRuntimeHandles() != null) {
       for (String _key : getRuntimeHandles().keySet()) {
         joiner.add(String.format("%sruntime_handles%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getRuntimeHandles().get(_key), URLEncoder.encode(String.valueOf(getRuntimeHandles().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getRuntimeHandles().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -38157,8 +39202,8 @@ public static class LaunchpadRunDetail extends HashMap<String, Object> {
     if (getOfflineVerification() != null) {
       for (String _key : getOfflineVerification().keySet()) {
         joiner.add(String.format("%soffline_verification%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getOfflineVerification().get(_key), URLEncoder.encode(String.valueOf(getOfflineVerification().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getOfflineVerification().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -40467,8 +41512,6 @@ public static class LaunchpadSecretGrant extends HashMap<String, Object> {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -40476,8 +41519,6 @@ public static class LaunchpadSecretGrant extends HashMap<String, Object> {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -40845,8 +41886,6 @@ public static class LaunchpadSubstrate extends HashMap<String, Object> {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -40854,8 +41893,6 @@ public static class LaunchpadSubstrate extends HashMap<String, Object> {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -42570,8 +43607,6 @@ public static class LocalSessionExchangeRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -42579,8 +43614,6 @@ public static class LocalSessionExchangeRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -43835,8 +44868,8 @@ public static class MCPAuthorizeCallRequest {
     if (getToolSchema() != null) {
       for (String _key : getToolSchema().keySet()) {
         joiner.add(String.format("%stool_schema%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getToolSchema().get(_key), URLEncoder.encode(String.valueOf(getToolSchema().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getToolSchema().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -43844,8 +44877,8 @@ public static class MCPAuthorizeCallRequest {
     if (getOutputSchema() != null) {
       for (String _key : getOutputSchema().keySet()) {
         joiner.add(String.format("%soutput_schema%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getOutputSchema().get(_key), URLEncoder.encode(String.valueOf(getOutputSchema().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getOutputSchema().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -44263,8 +45296,6 @@ public static class MCPJSONRPCError {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -44272,8 +45303,6 @@ public static class MCPJSONRPCError {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -44572,8 +45601,8 @@ public static class MCPJSONRPCRequest {
     if (getParams() != null) {
       for (String _key : getParams().keySet()) {
         joiner.add(String.format("%sparams%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getParams().get(_key), URLEncoder.encode(String.valueOf(getParams().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getParams().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -44808,8 +45837,6 @@ public static class MCPJSONRPCRequestId extends AbstractOpenApiSchema {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -44817,8 +45844,6 @@ public static class MCPJSONRPCRequestId extends AbstractOpenApiSchema {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -45115,8 +46140,8 @@ public static class MCPJSONRPCResponse {
     if (getResult() != null) {
       for (String _key : getResult().keySet()) {
         joiner.add(String.format("%sresult%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getResult().get(_key), URLEncoder.encode(String.valueOf(getResult().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getResult().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -45356,8 +46381,6 @@ public static class MCPJSONRPCResponseId extends AbstractOpenApiSchema {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -45365,8 +46388,6 @@ public static class MCPJSONRPCResponseId extends AbstractOpenApiSchema {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -46607,8 +47628,6 @@ public static class MCPRegistryApprovalRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -46616,8 +47635,6 @@ public static class MCPRegistryApprovalRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -47782,8 +48799,8 @@ public static class MCPScanRequest {
     if (getManifest() != null) {
       for (String _key : getManifest().keySet()) {
         joiner.add(String.format("%smanifest%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getManifest().get(_key), URLEncoder.encode(String.valueOf(getManifest().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getManifest().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -48474,8 +49491,8 @@ public static class MCPToolCallRequest {
     if (getParams() != null) {
       for (String _key : getParams().keySet()) {
         joiner.add(String.format("%sparams%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getParams().get(_key), URLEncoder.encode(String.valueOf(getParams().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getParams().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -48750,8 +49767,6 @@ public static class MCPToolCallResponse {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -48759,8 +49774,6 @@ public static class MCPToolCallResponse {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -49053,8 +50066,8 @@ public static class MCPToolCallResponseResult extends AbstractOpenApiSchema {
         if (getActualInstance() != null) {
           for (String _key : ((Map<String, Object>)getActualInstance()).keySet()) {
             joiner.add(String.format("%sone_of_1%s%s=%s", prefix, suffix,
-                "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-                ((Map<String, Object>)getActualInstance()).get(_key), URLEncoder.encode(String.valueOf(((Map<String, Object>)getActualInstance()).get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+                "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+                URLEncoder.encode(String.valueOf(((Map<String, Object>)getActualInstance()).get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
           }
         }
         return joiner.toString();
@@ -49311,8 +50324,8 @@ public static class MCPToolRef {
     if (getSchema() != null) {
       for (String _key : getSchema().keySet()) {
         joiner.add(String.format("%sschema%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getSchema().get(_key), URLEncoder.encode(String.valueOf(getSchema().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getSchema().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -50656,8 +51669,6 @@ public static class OnboardingRunStepRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -50665,8 +51676,6 @@ public static class OnboardingRunStepRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -51500,8 +52509,6 @@ public static class OnboardingStep {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -51509,8 +52516,6 @@ public static class OnboardingStep {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -51666,8 +52671,6 @@ public static class PDPRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -51675,8 +52678,6 @@ public static class PDPRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -51802,8 +52803,6 @@ public static class PDPResponse {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -51811,8 +52810,6 @@ public static class PDPResponse {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -52515,8 +53512,8 @@ public static class PlanTransaction {
     if (getRollbackPolicy() != null) {
       for (String _key : getRollbackPolicy().keySet()) {
         joiner.add(String.format("%srollback_policy%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getRollbackPolicy().get(_key), URLEncoder.encode(String.valueOf(getRollbackPolicy().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getRollbackPolicy().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -52838,8 +53835,6 @@ public static class PolicyBundle {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -52847,8 +53842,6 @@ public static class PolicyBundle {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -53348,8 +54341,6 @@ public static class PreflightLaunchpadImport202Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -53357,8 +54348,6 @@ public static class PreflightLaunchpadImport202Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -53404,9 +54393,14 @@ public static class PreflightLaunchpadImport202Response {
 @JsonPropertyOrder({
   Receipt.JSON_PROPERTY_RECEIPT_ID,
   Receipt.JSON_PROPERTY_DECISION_ID,
+  Receipt.JSON_PROPERTY_CORRELATION_ID,
   Receipt.JSON_PROPERTY_EFFECT_ID,
+  Receipt.JSON_PROPERTY_EXTERNAL_REFERENCE_ID,
   Receipt.JSON_PROPERTY_STATUS,
+  Receipt.JSON_PROPERTY_SIGNATURE_VERSION,
+  Receipt.JSON_PROPERTY_VERDICT,
   Receipt.JSON_PROPERTY_REASON_CODE,
+  Receipt.JSON_PROPERTY_DECISION_HASH,
   Receipt.JSON_PROPERTY_OUTPUT_HASH,
   Receipt.JSON_PROPERTY_BLOB_HASH,
   Receipt.JSON_PROPERTY_PREV_HASH,
@@ -53420,6 +54414,8 @@ public static class PreflightLaunchpadImport202Response {
   Receipt.JSON_PROPERTY_PRINCIPAL,
   Receipt.JSON_PROPERTY_EXECUTOR_ID,
   Receipt.JSON_PROPERTY_ARGS_HASH,
+  Receipt.JSON_PROPERTY_POLICY_HASH,
+  Receipt.JSON_PROPERTY_SESSION_ID,
   Receipt.JSON_PROPERTY_METADATA
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
@@ -53430,14 +54426,29 @@ public static class Receipt {
   public static final String JSON_PROPERTY_DECISION_ID = "decision_id";
   private String decisionId;
 
+  public static final String JSON_PROPERTY_CORRELATION_ID = "correlation_id";
+  private String correlationId;
+
   public static final String JSON_PROPERTY_EFFECT_ID = "effect_id";
   private String effectId;
+
+  public static final String JSON_PROPERTY_EXTERNAL_REFERENCE_ID = "external_reference_id";
+  private String externalReferenceId;
 
   public static final String JSON_PROPERTY_STATUS = "status";
   private String status;
 
+  public static final String JSON_PROPERTY_SIGNATURE_VERSION = "signature_version";
+  private String signatureVersion;
+
+  public static final String JSON_PROPERTY_VERDICT = "verdict";
+  private String verdict;
+
   public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
   private String reasonCode;
+
+  public static final String JSON_PROPERTY_DECISION_HASH = "decision_hash";
+  private String decisionHash;
 
   public static final String JSON_PROPERTY_OUTPUT_HASH = "output_hash";
   private String outputHash;
@@ -53515,6 +54526,12 @@ public static class Receipt {
   public static final String JSON_PROPERTY_ARGS_HASH = "args_hash";
   private String argsHash;
 
+  public static final String JSON_PROPERTY_POLICY_HASH = "policy_hash";
+  private String policyHash;
+
+  public static final String JSON_PROPERTY_SESSION_ID = "session_id";
+  private String sessionId;
+
   public static final String JSON_PROPERTY_METADATA = "metadata";
   private Map<String, Object> metadata = new HashMap<>();
 
@@ -53571,6 +54588,31 @@ public static class Receipt {
   }
 
 
+  public Receipt correlationId(String correlationId) {
+    this.correlationId = correlationId;
+    return this;
+  }
+
+   /**
+   * Get correlationId
+   * @return correlationId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CORRELATION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getCorrelationId() {
+    return correlationId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CORRELATION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCorrelationId(String correlationId) {
+    this.correlationId = correlationId;
+  }
+
+
   public Receipt effectId(String effectId) {
     this.effectId = effectId;
     return this;
@@ -53593,6 +54635,31 @@ public static class Receipt {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setEffectId(String effectId) {
     this.effectId = effectId;
+  }
+
+
+  public Receipt externalReferenceId(String externalReferenceId) {
+    this.externalReferenceId = externalReferenceId;
+    return this;
+  }
+
+   /**
+   * Get externalReferenceId
+   * @return externalReferenceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EXTERNAL_REFERENCE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getExternalReferenceId() {
+    return externalReferenceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EXTERNAL_REFERENCE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setExternalReferenceId(String externalReferenceId) {
+    this.externalReferenceId = externalReferenceId;
   }
 
 
@@ -53621,6 +54688,56 @@ public static class Receipt {
   }
 
 
+  public Receipt signatureVersion(String signatureVersion) {
+    this.signatureVersion = signatureVersion;
+    return this;
+  }
+
+   /**
+   * Get signatureVersion
+   * @return signatureVersion
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignatureVersion() {
+    return signatureVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureVersion(String signatureVersion) {
+    this.signatureVersion = signatureVersion;
+  }
+
+
+  public Receipt verdict(String verdict) {
+    this.verdict = verdict;
+    return this;
+  }
+
+   /**
+   * Get verdict
+   * @return verdict
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getVerdict() {
+    return verdict;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setVerdict(String verdict) {
+    this.verdict = verdict;
+  }
+
+
   public Receipt reasonCode(String reasonCode) {
     this.reasonCode = reasonCode;
     return this;
@@ -53643,6 +54760,31 @@ public static class Receipt {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setReasonCode(String reasonCode) {
     this.reasonCode = reasonCode;
+  }
+
+
+  public Receipt decisionHash(String decisionHash) {
+    this.decisionHash = decisionHash;
+    return this;
+  }
+
+   /**
+   * PDP decision hash, bound by the V5-signed output_hash for API-minted receipts.
+   * @return decisionHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getDecisionHash() {
+    return decisionHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDecisionHash(String decisionHash) {
+    this.decisionHash = decisionHash;
   }
 
 
@@ -53877,7 +55019,7 @@ public static class Receipt {
   }
 
    /**
-   * Get timestamp
+   * Canonical RFC3339Nano receipt timestamp.
    * @return timestamp
   **/
   @javax.annotation.Nullable
@@ -53971,6 +55113,56 @@ public static class Receipt {
   }
 
 
+  public Receipt policyHash(String policyHash) {
+    this.policyHash = policyHash;
+    return this;
+  }
+
+   /**
+   * Get policyHash
+   * @return policyHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyHash() {
+    return policyHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyHash(String policyHash) {
+    this.policyHash = policyHash;
+  }
+
+
+  public Receipt sessionId(String sessionId) {
+    this.sessionId = sessionId;
+    return this;
+  }
+
+   /**
+   * Get sessionId
+   * @return sessionId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSessionId() {
+    return sessionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSessionId(String sessionId) {
+    this.sessionId = sessionId;
+  }
+
+
   public Receipt metadata(Map<String, Object> metadata) {
     this.metadata = metadata;
     return this;
@@ -54018,9 +55210,14 @@ public static class Receipt {
     Receipt receipt = (Receipt) o;
     return Objects.equals(this.receiptId, receipt.receiptId) &&
         Objects.equals(this.decisionId, receipt.decisionId) &&
+        Objects.equals(this.correlationId, receipt.correlationId) &&
         Objects.equals(this.effectId, receipt.effectId) &&
+        Objects.equals(this.externalReferenceId, receipt.externalReferenceId) &&
         Objects.equals(this.status, receipt.status) &&
+        Objects.equals(this.signatureVersion, receipt.signatureVersion) &&
+        Objects.equals(this.verdict, receipt.verdict) &&
         Objects.equals(this.reasonCode, receipt.reasonCode) &&
+        Objects.equals(this.decisionHash, receipt.decisionHash) &&
         Objects.equals(this.outputHash, receipt.outputHash) &&
         Objects.equals(this.blobHash, receipt.blobHash) &&
         Objects.equals(this.prevHash, receipt.prevHash) &&
@@ -54034,12 +55231,14 @@ public static class Receipt {
         Objects.equals(this.principal, receipt.principal) &&
         Objects.equals(this.executorId, receipt.executorId) &&
         Objects.equals(this.argsHash, receipt.argsHash) &&
+        Objects.equals(this.policyHash, receipt.policyHash) &&
+        Objects.equals(this.sessionId, receipt.sessionId) &&
         Objects.equals(this.metadata, receipt.metadata);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(receiptId, decisionId, effectId, status, reasonCode, outputHash, blobHash, prevHash, lamportClock, signature, signatureProfile, signatureAlgorithm, keyId, publicKeySet, timestamp, principal, executorId, argsHash, metadata);
+    return Objects.hash(receiptId, decisionId, correlationId, effectId, externalReferenceId, status, signatureVersion, verdict, reasonCode, decisionHash, outputHash, blobHash, prevHash, lamportClock, signature, signatureProfile, signatureAlgorithm, keyId, publicKeySet, timestamp, principal, executorId, argsHash, policyHash, sessionId, metadata);
   }
 
   @Override
@@ -54048,9 +55247,14 @@ public static class Receipt {
     sb.append("class Receipt {\n");
     sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
     sb.append("    decisionId: ").append(toIndentedString(decisionId)).append("\n");
+    sb.append("    correlationId: ").append(toIndentedString(correlationId)).append("\n");
     sb.append("    effectId: ").append(toIndentedString(effectId)).append("\n");
+    sb.append("    externalReferenceId: ").append(toIndentedString(externalReferenceId)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    signatureVersion: ").append(toIndentedString(signatureVersion)).append("\n");
+    sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
     sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    decisionHash: ").append(toIndentedString(decisionHash)).append("\n");
     sb.append("    outputHash: ").append(toIndentedString(outputHash)).append("\n");
     sb.append("    blobHash: ").append(toIndentedString(blobHash)).append("\n");
     sb.append("    prevHash: ").append(toIndentedString(prevHash)).append("\n");
@@ -54064,6 +55268,8 @@ public static class Receipt {
     sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
     sb.append("    executorId: ").append(toIndentedString(executorId)).append("\n");
     sb.append("    argsHash: ").append(toIndentedString(argsHash)).append("\n");
+    sb.append("    policyHash: ").append(toIndentedString(policyHash)).append("\n");
+    sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
     sb.append("    metadata: ").append(toIndentedString(metadata)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -54122,9 +55328,19 @@ public static class Receipt {
       joiner.add(String.format("%sdecision_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDecisionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `correlation_id` to the URL query string
+    if (getCorrelationId() != null) {
+      joiner.add(String.format("%scorrelation_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCorrelationId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `effect_id` to the URL query string
     if (getEffectId() != null) {
       joiner.add(String.format("%seffect_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `external_reference_id` to the URL query string
+    if (getExternalReferenceId() != null) {
+      joiner.add(String.format("%sexternal_reference_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExternalReferenceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `status` to the URL query string
@@ -54132,9 +55348,24 @@ public static class Receipt {
       joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `signature_version` to the URL query string
+    if (getSignatureVersion() != null) {
+      joiner.add(String.format("%ssignature_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `verdict` to the URL query string
+    if (getVerdict() != null) {
+      joiner.add(String.format("%sverdict%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerdict()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `reason_code` to the URL query string
     if (getReasonCode() != null) {
       joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `decision_hash` to the URL query string
+    if (getDecisionHash() != null) {
+      joiner.add(String.format("%sdecision_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDecisionHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `output_hash` to the URL query string
@@ -54202,12 +55433,22 @@ public static class Receipt {
       joiner.add(String.format("%sargs_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getArgsHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `policy_hash` to the URL query string
+    if (getPolicyHash() != null) {
+      joiner.add(String.format("%spolicy_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `session_id` to the URL query string
+    if (getSessionId() != null) {
+      joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `metadata` to the URL query string
     if (getMetadata() != null) {
       for (String _key : getMetadata().keySet()) {
         joiner.add(String.format("%smetadata%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getMetadata().get(_key), URLEncoder.encode(String.valueOf(getMetadata().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getMetadata().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -54584,8 +55825,6 @@ public static class RevokeMcpRegistryRecordRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -54593,8 +55832,6 @@ public static class RevokeMcpRegistryRecordRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -54751,8 +55988,6 @@ public static class RevokeTrustKeyRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -54760,8 +55995,6 @@ public static class RevokeTrustKeyRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -55113,8 +56346,8 @@ public static class RunAgentUIRuntimeRequest {
     if (getState() != null) {
       for (String _key : getState().keySet()) {
         joiner.add(String.format("%sstate%s%s=%s", prefix, suffix,
-            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
-            getState().get(_key), URLEncoder.encode(String.valueOf(getState().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getState().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -55462,8 +56695,6 @@ public static class RunPublicDemo200Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -55471,8 +56702,6 @@ public static class RunPublicDemo200Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -55690,8 +56919,6 @@ public static class RunPublicDemo200ResponseProofRefs {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -55699,8 +56926,6 @@ public static class RunPublicDemo200ResponseProofRefs {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -55943,8 +57168,6 @@ public static class RunPublicDemoRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -55952,8 +57175,6 @@ public static class RunPublicDemoRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -56318,8 +57539,6 @@ public static class SandboxBackendProfile {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -56327,8 +57546,6 @@ public static class SandboxBackendProfile {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -57423,8 +58640,6 @@ public static class SandboxGrantLimits {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -57432,8 +58647,6 @@ public static class SandboxGrantLimits {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -57729,8 +58942,6 @@ public static class SandboxPreflightRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -57738,8 +58949,6 @@ public static class SandboxPreflightRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -58676,8 +59885,6 @@ public static class Session {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -58685,8 +59892,6 @@ public static class Session {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -58982,8 +60187,6 @@ public static class SourceFileSummary {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -58991,8 +60194,6 @@ public static class SourceFileSummary {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -59916,8 +61117,6 @@ public static class TamperPublicDemoReceipt200Response {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -59925,8 +61124,6 @@ public static class TamperPublicDemoReceipt200Response {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -60149,8 +61346,6 @@ public static class TamperPublicDemoReceiptRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -60158,8 +61353,6 @@ public static class TamperPublicDemoReceiptRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -60910,8 +62103,6 @@ public static class TeardownLaunchpadRuntimeRunRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -60919,8 +62110,6 @@ public static class TeardownLaunchpadRuntimeRunRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -61294,8 +62483,6 @@ public static class TelemetryExportRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -61303,8 +62490,6 @@ public static class TelemetryExportRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -61594,8 +62779,6 @@ public static class TelemetryExportResult {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -61603,8 +62786,6 @@ public static class TelemetryExportResult {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -62104,8 +63285,6 @@ public static class TransitionApprovalCeremonyRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -62113,8 +63292,6 @@ public static class TransitionApprovalCeremonyRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -62708,8 +63885,6 @@ public static class VerificationResultChecks {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -62717,8 +63892,6 @@ public static class VerificationResultChecks {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -62916,8 +64089,6 @@ public static class VerificationResultRoots {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -62925,8 +64096,6 @@ public static class VerificationResultRoots {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -64136,8 +65305,6 @@ public static class VerifyPublicDemoReceiptRequest {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -64145,8 +65312,6 @@ public static class VerifyPublicDemoReceiptRequest {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -64370,8 +65535,6 @@ public static class VersionInfo {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
-    String containerSuffix = "";
-    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -64379,8 +65542,6 @@ public static class VersionInfo {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
-      containerSuffix = "]";
-      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -64408,6 +65569,5 @@ public static class VersionInfo {
     return joiner.toString();
   }
 }
-
 
 }

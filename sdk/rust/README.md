@@ -52,6 +52,10 @@ telemetry export, and coexistence capabilities. `SandboxGrantInspection`
 returns either backend profiles or a sealed grant depending on whether a
 runtime query is provided.
 
+`evaluate_decision` accepts only `EvaluateRequest`, whose `tool`,
+`effect_level`, and `session_id` must be non-blank. The returned value is the
+receipt-bearing `EvaluateResponse`.
+
 ## Release Notes
 
 `0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the OpenAPI client surface and optional protobuf codegen.

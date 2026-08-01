@@ -10,12 +10,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 
@@ -23,6 +29,12 @@ import (
 )
 
 const testAdminAPIKey = "test-admin-key"
+
+type receiptRouteStaticDriver struct{}
+
+func (receiptRouteStaticDriver) Execute(context.Context, string, map[string]any) (any, error) {
+	return "result", nil
+}
 
 func TestContractRoutesServeDocumentedEvidenceProofgraphAndConformancePaths(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
@@ -36,7 +48,7 @@ func TestContractRoutesServeDocumentedEvidenceProofgraphAndConformancePaths(t *t
 		body   string
 	}{
 		{http.MethodGet, "/api/v1/proofgraph/sessions", ""},
-		{http.MethodGet, "/api/v1/proofgraph/sessions/agent.test/receipts", ""},
+		{http.MethodGet, "/api/v1/proofgraph/sessions/session-test/receipts", ""},
 		{http.MethodGet, "/api/v1/proofgraph/receipts/rcpt-test", ""},
 		{http.MethodPost, "/api/v1/conformance/run", `{"level":"L1","profile":"runtime"}`},
 		{http.MethodGet, "/api/v1/conformance/reports/conf_test", ""},
@@ -118,7 +130,7 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
 
-	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"agent.test","format":"tar.gz"}`))
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"session-test","format":"tar.gz"}`))
 	authorizeTestRequest(exportReq)
 	exportRec := httptest.NewRecorder()
 	mux.ServeHTTP(exportRec, exportReq)
@@ -145,6 +157,74 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTenantEvidenceExportExcludesGlobalSurfaceRegistryArtifacts(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
+	if _, err := registry.PutVerificationScope(contracts.VerificationScope{
+		VerificationScopeID: "tenant-b-global-scope",
+		SubjectHash:         "sha256:tenant-b-sensitive-subject",
+		RiskClass:           "T2",
+		ChecksPerformed:     []string{"hash"},
+		VerifierHash:        "sha256:verifier",
+		PolicyHash:          "sha256:policy",
+	}); err != nil {
+		t.Fatalf("seed global verification scope: %v", err)
+	}
+	svc.BoundarySurfaces = registry
+
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"session-test","format":"tar.gz"}`))
+	authorizeTestRequest(exportReq)
+	exportRec := httptest.NewRecorder()
+	mux.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("export status = %d body=%s", exportRec.Code, exportRec.Body.String())
+	}
+	bundle, err := readEvidenceBundle(exportRec.Body.Bytes())
+	if err != nil {
+		t.Fatalf("read evidence bundle: %v", err)
+	}
+	for name, data := range bundle.Files {
+		for _, prefix := range []string{
+			"verification_scopes/", "harness_traces/", "plan_transactions/",
+			"harness_change_contracts/", "grounded_action_refs/", "gui_action_receipts/",
+		} {
+			if strings.HasPrefix(name, prefix) {
+				t.Fatalf("tenant evidence export included global artifact %q", name)
+			}
+		}
+		if bytes.Contains(data, []byte("tenant-b-sensitive-subject")) {
+			t.Fatalf("tenant evidence export leaked global artifact content in %q", name)
+		}
+	}
+}
+
+func TestContractReceiptsForExportUsesTenantKeysetCursorAcrossSessions(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	second := &contracts.Receipt{
+		ReceiptID:  "rcpt-next",
+		DecisionID: "dec-next",
+		EffectID:   "EXECUTE_TOOL",
+		Status:     string(contracts.VerdictAllow),
+		Timestamp:  time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID: "agent.peer",
+		Signature:  "sig-next",
+		ArgsHash:   "args-next",
+	}
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "session-peer", second)
+
+	receipts, err := contractReceiptsForExportWithPageSize(context.Background(), svc, defaultRuntimeTenantID, "", 1)
+	if err != nil {
+		t.Fatalf("collect tenant evidence receipts: %v", err)
+	}
+	if got := receiptIDSet(receipts); len(got) != 2 || !got["rcpt-test"] || !got["rcpt-next"] {
+		t.Fatalf("tenant evidence pagination omitted or duplicated tied-Lamport receipts: %+v", got)
+	}
+}
+
 func TestEvidenceExportFailsWhenReceiptLimitWouldTruncate(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	mux := http.NewServeMux()
@@ -159,6 +239,222 @@ func TestEvidenceExportFailsWhenReceiptLimitWouldTruncate(t *testing.T) {
 	}
 	if !strings.Contains(exportRec.Header().Get("Content-Type"), "application/problem+json") {
 		t.Fatalf("export error content type = %q", exportRec.Header().Get("Content-Type"))
+	}
+}
+
+func TestEvaluateReceiptIsRetrievableAndExportableBySignedSession(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	svc, _ := newEvaluateRouteTestServices(t)
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	receiptStore, err := store.NewSQLiteReceiptStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.ReceiptStore = receiptStore
+
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+	registerContractRoutes(mux, svc)
+
+	const sessionID = "evaluate-session-e2e"
+	evaluateReq := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", strings.NewReader(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"`+sessionID+`"}`))
+	authorizeTestRequest(evaluateReq)
+	evaluateRec := httptest.NewRecorder()
+	mux.ServeHTTP(evaluateRec, evaluateReq)
+	if evaluateRec.Code != http.StatusOK {
+		t.Fatalf("evaluate status=%d body=%s", evaluateRec.Code, evaluateRec.Body.String())
+	}
+	var response api.EvaluateResponse
+	if err := json.Unmarshal(evaluateRec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.ReceiptID == "" || response.ID != response.DecisionID || response.Action != "EXECUTE_TOOL" || response.Resource != "local.echo" {
+		t.Fatalf("evaluate did not retain compatibility response fields: %+v", response)
+	}
+	if response.DecisionHash == "" {
+		t.Fatalf("evaluate response did not include decision_hash: %+v", response)
+	}
+	signer, ok := svc.ReceiptSigner.(*helmcrypto.Ed25519Signer)
+	if !ok {
+		t.Fatalf("evaluate receipt signer type = %T, want Ed25519 signer", svc.ReceiptSigner)
+	}
+	persisted, err := receiptStore.GetByReceiptIDForTenant(context.Background(), defaultRuntimeTenantID, response.ReceiptID)
+	if err != nil {
+		t.Fatalf("tenant get persisted evaluate receipt: %v", err)
+	}
+	if persisted.DecisionHash != response.DecisionHash {
+		t.Fatalf("persisted decision_hash = %q, evaluate response = %q", persisted.DecisionHash, response.DecisionHash)
+	}
+	if valid, err := signer.VerifyReceipt(persisted); err != nil || !valid {
+		t.Fatalf("persisted V5 receipt did not verify: valid=%v err=%v", valid, err)
+	}
+	listed, err := receiptStore.ListByTenantCursor(context.Background(), defaultRuntimeTenantID, store.TenantReceiptCursor{}, 10)
+	if err != nil || len(listed) != 1 || listed[0].DecisionHash != response.DecisionHash {
+		t.Fatalf("tenant list decision_hash = %+v err=%v, want %q", listed, err, response.DecisionHash)
+	}
+	if valid, err := signer.VerifyReceipt(listed[0]); err != nil || !valid {
+		t.Fatalf("listed V5 receipt did not verify: valid=%v err=%v", valid, err)
+	}
+
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":`+strconv.Quote(sessionID)+`,"format":"tar.gz"}`))
+	authorizeTestRequest(exportReq)
+	exportRec := httptest.NewRecorder()
+	mux.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("evidence export status=%d body=%s", exportRec.Code, exportRec.Body.String())
+	}
+	bundle, err := readEvidenceBundle(exportRec.Body.Bytes())
+	if err != nil {
+		t.Fatalf("read evidence bundle: %v", err)
+	}
+	var exported contracts.Receipt
+	if err := json.Unmarshal(bundle.Files["receipts/"+response.ReceiptID+".json"], &exported); err != nil {
+		t.Fatalf("decode exported receipt: %v", err)
+	}
+	if exported.DecisionHash != response.DecisionHash {
+		t.Fatalf("exported decision_hash = %q, evaluate response = %q", exported.DecisionHash, response.DecisionHash)
+	}
+	if valid, err := signer.VerifyReceipt(&exported); err != nil || !valid {
+		t.Fatalf("exported V5 receipt did not verify: valid=%v err=%v", valid, err)
+	}
+	assertReceiptSessionRetrievalAndExport(t, mux, sessionID, response.ReceiptID)
+}
+
+func TestStandaloneExecutorReceiptIsRetrievableAndExportableBySignedSession(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	receiptStore, err := store.NewSQLiteReceiptStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := helmcrypto.NewEd25519Signer("standalone-route-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Unix(1700000000, 0).UTC()
+	effect := &contracts.Effect{
+		EffectID:   "effect-standalone-route",
+		EffectType: "EXECUTE_TOOL",
+		ArgsHash:   "args-standalone-route",
+		Params:     map[string]any{"tool_name": "ls"},
+	}
+	effectDigest, err := contracts.CanonicalEffectDigest(effect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := &contracts.DecisionRecord{
+		ID:                "decision-standalone-route",
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "policy-standalone-route",
+		EffectDigest:      effectDigest,
+		InputContext:      map[string]any{"tenant_id": defaultRuntimeTenantID},
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:       decision.ID,
+		EffectDigestHash: decision.EffectDigest,
+		AllowedTool:      "ls",
+		ExpiresAt:        clock.Add(time.Hour),
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+	safeExecutor := executor.NewSafeExecutor(signer, signer, receiptRouteStaticDriver{}, receiptStore, nil, nil, "", nil, nil, nil, func() time.Time {
+		return clock
+	})
+	receipt, _, err := safeExecutor.Execute(context.Background(), effect, decision, intent)
+	if err != nil {
+		t.Fatalf("execute standalone receipt: %v", err)
+	}
+	wantSessionID := "standalone:decision:" + decision.ID
+	if receipt.SessionID != wantSessionID || receipt.SignatureVersion != contracts.ReceiptSignatureV5 {
+		t.Fatalf("standalone receipt identity=%q version=%q", receipt.SessionID, receipt.SignatureVersion)
+	}
+	expectedDecisionHash, err := helmcrypto.DecisionSemanticHash(decision)
+	if err != nil {
+		t.Fatalf("derive decision hash: %v", err)
+	}
+	repeatedDecisionHash, err := helmcrypto.DecisionSemanticHash(decision)
+	if err != nil || repeatedDecisionHash != expectedDecisionHash {
+		t.Fatalf("semantic decision hash must be deterministic: first=%q second=%q err=%v", expectedDecisionHash, repeatedDecisionHash, err)
+	}
+	if receipt.DecisionHash != expectedDecisionHash || receipt.DecisionHash == receipt.OutputHash {
+		t.Fatalf("receipt decision_hash must use the canonical decision preimage, not execution output: receipt=%+v expected=%q", receipt, expectedDecisionHash)
+	}
+	if receipts, err := receiptStore.ListByTenantSession(context.Background(), "other-tenant", wantSessionID, 0, 10); err != nil || len(receipts) != 0 {
+		t.Fatalf("cross-tenant session read receipts=%+v err=%v, want no records", receipts, err)
+	}
+	if _, err := receiptStore.GetByReceiptIDForTenant(context.Background(), "other-tenant", receipt.ReceiptID); err == nil {
+		t.Fatal("cross-tenant receipt lookup unexpectedly succeeded")
+	}
+
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, &Services{ReceiptStore: receiptStore})
+	registerContractRoutes(mux, &Services{ReceiptStore: receiptStore})
+	assertReceiptSessionRetrievalAndExport(t, mux, wantSessionID, receipt.ReceiptID)
+}
+
+func assertReceiptSessionRetrievalAndExport(t *testing.T, mux *http.ServeMux, sessionID, receiptID string) {
+	t.Helper()
+	sessionPath := "/api/v1/proofgraph/sessions/" + url.PathEscape(sessionID) + "/receipts"
+	sessionReq := httptest.NewRequest(http.MethodGet, sessionPath, nil)
+	authorizeTestRequest(sessionReq)
+	sessionRec := httptest.NewRecorder()
+	mux.ServeHTTP(sessionRec, sessionReq)
+	if sessionRec.Code != http.StatusOK {
+		t.Fatalf("session receipts status=%d body=%s", sessionRec.Code, sessionRec.Body.String())
+	}
+	var sessionReceipts []*contracts.Receipt
+	if err := json.Unmarshal(sessionRec.Body.Bytes(), &sessionReceipts); err != nil {
+		t.Fatal(err)
+	}
+	if len(sessionReceipts) != 1 || sessionReceipts[0].ReceiptID != receiptID || sessionReceipts[0].SessionID != sessionID {
+		t.Fatalf("session receipts=%+v, want receipt=%q session=%q", sessionReceipts, receiptID, sessionID)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?session_id="+url.QueryEscape(sessionID), nil)
+	authorizeTestRequest(listReq)
+	listRec := httptest.NewRecorder()
+	mux.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK || !strings.Contains(listRec.Body.String(), receiptID) {
+		t.Fatalf("receipt list status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+receiptID, nil)
+	authorizeTestRequest(getReq)
+	getRec := httptest.NewRecorder()
+	mux.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK || !strings.Contains(getRec.Body.String(), `"session_id":"`+sessionID+`"`) {
+		t.Fatalf("receipt get status=%d body=%s", getRec.Code, getRec.Body.String())
+	}
+
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":`+strconv.Quote(sessionID)+`,"format":"tar.gz"}`))
+	authorizeTestRequest(exportReq)
+	exportRec := httptest.NewRecorder()
+	mux.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("evidence export status=%d body=%s", exportRec.Code, exportRec.Body.String())
+	}
+	bundle, err := readEvidenceBundle(exportRec.Body.Bytes())
+	if err != nil {
+		t.Fatalf("read evidence bundle: %v", err)
+	}
+	if bundle.Manifest.SessionID != sessionID {
+		t.Fatalf("evidence manifest session=%q, want %q", bundle.Manifest.SessionID, sessionID)
+	}
+	if _, ok := bundle.Files["receipts/"+receiptID+".json"]; !ok {
+		t.Fatalf("evidence bundle omitted receipt %q: %v", receiptID, bundle.Files)
 	}
 }
 
@@ -321,7 +617,7 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
 
-	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"agent.test","format":"tar.gz"}`))
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"session-test","format":"tar.gz"}`))
 	authorizeTestRequest(exportReq)
 	exportRec := httptest.NewRecorder()
 	mux.ServeHTTP(exportRec, exportReq)
@@ -448,8 +744,17 @@ func TestApprovalRouteDerivesActorAndRejectsStaleCeremony(t *testing.T) {
 }
 
 func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
-	svc, cleanup := newContractRouteTestServices(t)
-	defer cleanup()
+	good := &contracts.Receipt{
+		ReceiptID:    "rcpt-good",
+		DecisionID:   "dec-good",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		Signature:    "sig-good",
+		LamportClock: 1,
+		ArgsHash:     "args-good",
+	}
 	broken := &contracts.Receipt{
 		ReceiptID:    "rcpt-broken",
 		DecisionID:   "dec-broken",
@@ -462,21 +767,14 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 		LamportClock: 2,
 		ArgsHash:     "args-broken",
 	}
-	if err := svc.ReceiptStore.Store(context.Background(), broken); err != nil {
-		t.Fatal(err)
+	bundle, err := buildEvidenceBundle("session-test", []*contracts.Receipt{good, broken})
+	if err != nil {
+		t.Fatalf("build valid-manifest bundle: %v", err)
 	}
 	mux := http.NewServeMux()
-	registerContractRoutes(mux, svc)
+	registerContractRoutes(mux, &Services{})
 
-	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"agent.test","format":"tar.gz"}`))
-	authorizeTestRequest(exportReq)
-	exportRec := httptest.NewRecorder()
-	mux.ServeHTTP(exportRec, exportReq)
-	if exportRec.Code != http.StatusOK {
-		t.Fatalf("export status = %d body=%s", exportRec.Code, exportRec.Body.String())
-	}
-
-	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/replay/verify", bytes.NewReader(exportRec.Body.Bytes()))
+	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/replay/verify", bytes.NewReader(bundle))
 	verifyReq.Header.Set("Content-Type", "application/octet-stream")
 	verifyRec := httptest.NewRecorder()
 	mux.ServeHTTP(verifyRec, verifyReq)
@@ -542,35 +840,75 @@ func TestProtectedRuntimeRoutesFailClosedWithoutCredentials(t *testing.T) {
 	}
 }
 
-func TestReceiptListReturnsCursorPagination(t *testing.T) {
+func TestReceiptListUsesOpaqueTenantKeysetCursorAcrossSessions(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	second := &contracts.Receipt{
-		ReceiptID:    "rcpt-next",
-		DecisionID:   "dec-next",
-		EffectID:     "EXECUTE_TOOL",
-		Status:       string(contracts.VerdictAllow),
-		Timestamp:    time.Date(2026, 5, 5, 0, 1, 0, 0, time.UTC),
-		ExecutorID:   "agent.test",
-		Signature:    "sig-next",
-		LamportClock: 2,
-		ArgsHash:     "args-next",
+		ReceiptID:  "rcpt-next",
+		DecisionID: "dec-next",
+		EffectID:   "EXECUTE_TOOL",
+		Status:     string(contracts.VerdictAllow),
+		Timestamp:  time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID: "agent.peer",
+		Signature:  "sig-next",
+		ArgsHash:   "args-next",
 	}
-	if err := svc.ReceiptStore.Store(context.Background(), second); err != nil {
-		t.Fatal(err)
-	}
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "session-peer", second)
 
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
 	firstPage := requestReceiptList(t, mux, "/api/v1/receipts?limit=1")
-	if firstPage["count"] != float64(1) || firstPage["has_more"] != true || firstPage["next_cursor"] != "lamport:1" {
+	firstCursor, _ := firstPage["next_cursor"].(string)
+	if firstPage["count"] != float64(1) || firstPage["has_more"] != true || !strings.HasPrefix(firstCursor, tenantReceiptCursorVersionPrefix) {
 		t.Fatalf("first page pagination metadata = %+v", firstPage)
 	}
-	secondPage := requestReceiptList(t, mux, "/api/v1/receipts?since=lamport:1&limit=1")
-	if secondPage["count"] != float64(1) || secondPage["has_more"] != false || secondPage["next_cursor"] != "lamport:2" {
+	secondPage := requestReceiptList(t, mux, "/api/v1/receipts?since="+url.QueryEscape(firstCursor)+"&limit=1")
+	if secondPage["count"] != float64(1) || secondPage["has_more"] != false {
 		t.Fatalf("second page pagination metadata = %+v", secondPage)
 	}
+	firstIDs := receiptIDsFromPage(t, firstPage)
+	secondIDs := receiptIDsFromPage(t, secondPage)
+	for receiptID := range secondIDs {
+		if firstIDs[receiptID] {
+			t.Fatalf("tenant keyset cursor duplicated receipt %q", receiptID)
+		}
+		firstIDs[receiptID] = true
+	}
+	if len(firstIDs) != 2 || !firstIDs["rcpt-test"] || !firstIDs["rcpt-next"] {
+		t.Fatalf("tenant keyset cursor omitted tied-Lamport receipts: %+v", firstIDs)
+	}
+
+	legacyReq := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?since=lamport:1&limit=1", nil)
+	authorizeTestRequest(legacyReq)
+	legacyRec := httptest.NewRecorder()
+	mux.ServeHTTP(legacyRec, legacyReq)
+	if legacyRec.Code != http.StatusBadRequest {
+		t.Fatalf("tenant-wide scalar cursor status = %d body=%s", legacyRec.Code, legacyRec.Body.String())
+	}
+}
+
+func receiptIDsFromPage(t *testing.T, page map[string]any) map[string]bool {
+	t.Helper()
+	encoded, err := json.Marshal(page["receipts"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipts []*contracts.Receipt
+	if err := json.Unmarshal(encoded, &receipts); err != nil {
+		t.Fatal(err)
+	}
+	return receiptIDSet(receipts)
+}
+
+func receiptIDSet(receipts []*contracts.Receipt) map[string]bool {
+	ids := make(map[string]bool, len(receipts))
+	for _, receipt := range receipts {
+		if receipt != nil {
+			ids[receipt.ReceiptID] = true
+		}
+	}
+	return ids
 }
 
 func newContractRouteTestServices(t *testing.T) (*Services, func()) {
@@ -593,14 +931,28 @@ func newContractRouteTestServices(t *testing.T) (*Services, func()) {
 		Timestamp:    time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
 		ExecutorID:   "agent.test",
 		Signature:    "sig-test",
-		LamportClock: 1,
+		DecisionHash: "sha256:test-decision",
 		ArgsHash:     "args-test",
 	}
-	if err := receiptStore.Store(context.Background(), receipt); err != nil {
-		_ = db.Close()
-		t.Fatal(err)
-	}
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-test", receipt)
 	return &Services{ReceiptStore: receiptStore}, func() { _ = db.Close() }
+}
+
+func appendTenantScopedReceipt(t *testing.T, receiptStore *store.SQLiteReceiptStore, tenantID, sessionID string, receipt *contracts.Receipt) {
+	t.Helper()
+	if err := receiptStore.AppendCausalScoped(context.Background(), tenantID, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		copy := *receipt
+		copy.SignatureVersion = contracts.ReceiptSignatureV5
+		if strings.TrimSpace(copy.DecisionHash) == "" {
+			copy.DecisionHash = "sha256:test-decision-" + copy.DecisionID
+		}
+		copy.SessionID = sessionID
+		copy.LamportClock = lamport
+		copy.PrevHash = prevHash
+		return &copy, nil
+	}); err != nil {
+		t.Fatalf("append tenant-scoped receipt: %v", err)
+	}
 }
 
 func requestReceiptList(t *testing.T, mux *http.ServeMux, target string) map[string]any {
@@ -657,19 +1009,34 @@ func (s *overflowReceiptStore) ListSince(_ context.Context, since uint64, limit 
 	return overflowReceipts("agent.overflow", since, limit), nil
 }
 
+func (s *overflowReceiptStore) GetByReceiptIDForTenant(ctx context.Context, _ string, receiptID string) (*contracts.Receipt, error) {
+	return s.GetByReceiptID(ctx, receiptID)
+}
+
+func (s *overflowReceiptStore) ListByTenant(_ context.Context, _ string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	return overflowReceipts("session.overflow", since, limit), nil
+}
+
+func (s *overflowReceiptStore) ListByTenantSession(_ context.Context, _, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	return overflowReceipts(sessionID, since, limit), nil
+}
+
 func overflowReceipts(agentID string, since uint64, limit int) []*contracts.Receipt {
 	receipts := make([]*contracts.Receipt, 0, limit)
 	for i := 0; i < limit; i++ {
 		lamport := since + uint64(i) + 1
 		receipts = append(receipts, &contracts.Receipt{
-			ReceiptID:    fmt.Sprintf("rcpt-overflow-%d", lamport),
-			DecisionID:   fmt.Sprintf("dec-overflow-%d", lamport),
-			EffectID:     "EXECUTE_TOOL",
-			Status:       string(contracts.VerdictDeny),
-			Timestamp:    time.Unix(int64(lamport), 0).UTC(),
-			ExecutorID:   agentID,
-			Signature:    "sig-overflow",
-			LamportClock: lamport,
+			ReceiptID:        fmt.Sprintf("rcpt-overflow-%d", lamport),
+			DecisionID:       fmt.Sprintf("dec-overflow-%d", lamport),
+			EffectID:         "EXECUTE_TOOL",
+			Status:           string(contracts.VerdictDeny),
+			Timestamp:        time.Unix(int64(lamport), 0).UTC(),
+			ExecutorID:       agentID,
+			Signature:        "sig-overflow",
+			DecisionHash:     fmt.Sprintf("sha256:overflow-decision-%d", lamport),
+			LamportClock:     lamport,
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        agentID,
 		})
 	}
 	return receipts

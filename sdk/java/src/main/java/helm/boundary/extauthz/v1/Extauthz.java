@@ -751,7 +751,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         schemaVersion_ = s;
@@ -767,7 +767,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getSchemaVersionBytes() {
       java.lang.Object ref = schemaVersion_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         schemaVersion_ = b;
@@ -790,7 +790,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         contractVersion_ = s;
@@ -806,7 +806,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getContractVersionBytes() {
       java.lang.Object ref = contractVersion_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         contractVersion_ = b;
@@ -829,7 +829,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         requestId_ = s;
@@ -845,7 +845,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRequestIdBytes() {
       java.lang.Object ref = requestId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         requestId_ = b;
@@ -868,7 +868,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         tenantId_ = s;
@@ -884,7 +884,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getTenantIdBytes() {
       java.lang.Object ref = tenantId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         tenantId_ = b;
@@ -907,7 +907,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         workspaceId_ = s;
@@ -923,7 +923,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getWorkspaceIdBytes() {
       java.lang.Object ref = workspaceId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         workspaceId_ = b;
@@ -946,7 +946,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         principalId_ = s;
@@ -962,7 +962,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPrincipalIdBytes() {
       java.lang.Object ref = principalId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         principalId_ = b;
@@ -996,7 +996,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         agentIdentityProfileRef_ = s;
@@ -1012,7 +1012,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getAgentIdentityProfileRefBytes() {
       java.lang.Object ref = agentIdentityProfileRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         agentIdentityProfileRef_ = b;
@@ -1053,7 +1053,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         actionUrn_ = s;
@@ -1069,7 +1069,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getActionUrnBytes() {
       java.lang.Object ref = actionUrn_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         actionUrn_ = b;
@@ -1092,7 +1092,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         toolUrn_ = s;
@@ -1108,7 +1108,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getToolUrnBytes() {
       java.lang.Object ref = toolUrn_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         toolUrn_ = b;
@@ -1131,7 +1131,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         connectorId_ = s;
@@ -1147,7 +1147,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getConnectorIdBytes() {
       java.lang.Object ref = connectorId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         connectorId_ = b;
@@ -1170,7 +1170,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         connectorContractHash_ = s;
@@ -1186,7 +1186,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getConnectorContractHashBytes() {
       java.lang.Object ref = connectorContractHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         connectorContractHash_ = b;
@@ -1209,7 +1209,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         executorKind_ = s;
@@ -1225,7 +1225,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getExecutorKindBytes() {
       java.lang.Object ref = executorKind_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         executorKind_ = b;
@@ -1248,7 +1248,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         effectClass_ = s;
@@ -1264,7 +1264,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getEffectClassBytes() {
       java.lang.Object ref = effectClass_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         effectClass_ = b;
@@ -1287,7 +1287,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         riskClass_ = s;
@@ -1303,7 +1303,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRiskClassBytes() {
       java.lang.Object ref = riskClass_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         riskClass_ = b;
@@ -1326,7 +1326,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         argsC14NHash_ = s;
@@ -1342,7 +1342,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getArgsC14NHashBytes() {
       java.lang.Object ref = argsC14NHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         argsC14NHash_ = b;
@@ -1365,7 +1365,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         requestBodyHash_ = s;
@@ -1381,7 +1381,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRequestBodyHashBytes() {
       java.lang.Object ref = requestBodyHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         requestBodyHash_ = b;
@@ -1404,7 +1404,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         planHash_ = s;
@@ -1420,7 +1420,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPlanHashBytes() {
       java.lang.Object ref = planHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         planHash_ = b;
@@ -1443,7 +1443,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyHash_ = s;
@@ -1459,7 +1459,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPolicyHashBytes() {
       java.lang.Object ref = policyHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyHash_ = b;
@@ -1482,7 +1482,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         p0Hash_ = s;
@@ -1498,7 +1498,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getP0HashBytes() {
       java.lang.Object ref = p0Hash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         p0Hash_ = b;
@@ -1521,7 +1521,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyEpoch_ = s;
@@ -1537,7 +1537,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPolicyEpochBytes() {
       java.lang.Object ref = policyEpoch_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyEpoch_ = b;
@@ -1560,7 +1560,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         idempotencyKeyCandidate_ = s;
@@ -1576,7 +1576,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getIdempotencyKeyCandidateBytes() {
       java.lang.Object ref = idempotencyKeyCandidate_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         idempotencyKeyCandidate_ = b;
@@ -1599,7 +1599,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         payloadClass_ = s;
@@ -1615,7 +1615,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPayloadClassBytes() {
       java.lang.Object ref = payloadClass_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         payloadClass_ = b;
@@ -1638,7 +1638,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         redactionProfile_ = s;
@@ -1654,7 +1654,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRedactionProfileBytes() {
       java.lang.Object ref = redactionProfile_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         redactionProfile_ = b;
@@ -1677,7 +1677,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         upstreamTraceId_ = s;
@@ -1693,7 +1693,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getUpstreamTraceIdBytes() {
       java.lang.Object ref = upstreamTraceId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         upstreamTraceId_ = b;
@@ -1716,7 +1716,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         upstreamRunId_ = s;
@@ -1732,7 +1732,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getUpstreamRunIdBytes() {
       java.lang.Object ref = upstreamRunId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         upstreamRunId_ = b;
@@ -1792,7 +1792,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         riskContextHash_ = s;
@@ -1808,7 +1808,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRiskContextHashBytes() {
       java.lang.Object ref = riskContextHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         riskContextHash_ = b;
@@ -2852,7 +2852,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getSchemaVersionBytes() {
         java.lang.Object ref = schemaVersion_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           schemaVersion_ = b;
@@ -2924,7 +2924,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getContractVersionBytes() {
         java.lang.Object ref = contractVersion_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           contractVersion_ = b;
@@ -2996,7 +2996,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRequestIdBytes() {
         java.lang.Object ref = requestId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           requestId_ = b;
@@ -3068,7 +3068,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getTenantIdBytes() {
         java.lang.Object ref = tenantId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           tenantId_ = b;
@@ -3140,7 +3140,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getWorkspaceIdBytes() {
         java.lang.Object ref = workspaceId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           workspaceId_ = b;
@@ -3212,7 +3212,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPrincipalIdBytes() {
         java.lang.Object ref = principalId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           principalId_ = b;
@@ -3316,7 +3316,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getAgentIdentityProfileRefBytes() {
         java.lang.Object ref = agentIdentityProfileRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           agentIdentityProfileRef_ = b;
@@ -3440,7 +3440,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getActionUrnBytes() {
         java.lang.Object ref = actionUrn_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           actionUrn_ = b;
@@ -3512,7 +3512,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getToolUrnBytes() {
         java.lang.Object ref = toolUrn_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           toolUrn_ = b;
@@ -3584,7 +3584,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getConnectorIdBytes() {
         java.lang.Object ref = connectorId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           connectorId_ = b;
@@ -3656,7 +3656,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getConnectorContractHashBytes() {
         java.lang.Object ref = connectorContractHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           connectorContractHash_ = b;
@@ -3728,7 +3728,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getExecutorKindBytes() {
         java.lang.Object ref = executorKind_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           executorKind_ = b;
@@ -3800,7 +3800,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getEffectClassBytes() {
         java.lang.Object ref = effectClass_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           effectClass_ = b;
@@ -3872,7 +3872,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRiskClassBytes() {
         java.lang.Object ref = riskClass_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           riskClass_ = b;
@@ -3944,7 +3944,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getArgsC14NHashBytes() {
         java.lang.Object ref = argsC14NHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           argsC14NHash_ = b;
@@ -4016,7 +4016,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRequestBodyHashBytes() {
         java.lang.Object ref = requestBodyHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           requestBodyHash_ = b;
@@ -4088,7 +4088,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPlanHashBytes() {
         java.lang.Object ref = planHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           planHash_ = b;
@@ -4160,7 +4160,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPolicyHashBytes() {
         java.lang.Object ref = policyHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyHash_ = b;
@@ -4232,7 +4232,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getP0HashBytes() {
         java.lang.Object ref = p0Hash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           p0Hash_ = b;
@@ -4304,7 +4304,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPolicyEpochBytes() {
         java.lang.Object ref = policyEpoch_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyEpoch_ = b;
@@ -4376,7 +4376,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getIdempotencyKeyCandidateBytes() {
         java.lang.Object ref = idempotencyKeyCandidate_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           idempotencyKeyCandidate_ = b;
@@ -4448,7 +4448,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPayloadClassBytes() {
         java.lang.Object ref = payloadClass_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           payloadClass_ = b;
@@ -4520,7 +4520,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRedactionProfileBytes() {
         java.lang.Object ref = redactionProfile_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           redactionProfile_ = b;
@@ -4592,7 +4592,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getUpstreamTraceIdBytes() {
         java.lang.Object ref = upstreamTraceId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           upstreamTraceId_ = b;
@@ -4664,7 +4664,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getUpstreamRunIdBytes() {
         java.lang.Object ref = upstreamRunId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           upstreamRunId_ = b;
@@ -4851,7 +4851,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Struct risk_context = 29;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Struct, com.google.protobuf.Struct.Builder, com.google.protobuf.StructOrBuilder> 
+          com.google.protobuf.Struct, com.google.protobuf.Struct.Builder, com.google.protobuf.StructOrBuilder>
           internalGetRiskContextFieldBuilder() {
         if (riskContextBuilder_ == null) {
           riskContextBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -4889,7 +4889,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRiskContextHashBytes() {
         java.lang.Object ref = riskContextHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           riskContextHash_ = b;
@@ -5723,7 +5723,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         schemaVersion_ = s;
@@ -5739,7 +5739,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getSchemaVersionBytes() {
       java.lang.Object ref = schemaVersion_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         schemaVersion_ = b;
@@ -5762,7 +5762,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         contractVersion_ = s;
@@ -5778,7 +5778,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getContractVersionBytes() {
       java.lang.Object ref = contractVersion_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         contractVersion_ = b;
@@ -5801,7 +5801,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         requestId_ = s;
@@ -5817,7 +5817,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRequestIdBytes() {
       java.lang.Object ref = requestId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         requestId_ = b;
@@ -5840,7 +5840,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         tenantId_ = s;
@@ -5856,7 +5856,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getTenantIdBytes() {
       java.lang.Object ref = tenantId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         tenantId_ = b;
@@ -5879,7 +5879,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         workspaceId_ = s;
@@ -5895,7 +5895,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getWorkspaceIdBytes() {
       java.lang.Object ref = workspaceId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         workspaceId_ = b;
@@ -5918,7 +5918,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         principalId_ = s;
@@ -5934,7 +5934,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPrincipalIdBytes() {
       java.lang.Object ref = principalId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         principalId_ = b;
@@ -5968,7 +5968,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         agentIdentityProfileRef_ = s;
@@ -5984,7 +5984,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getAgentIdentityProfileRefBytes() {
       java.lang.Object ref = agentIdentityProfileRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         agentIdentityProfileRef_ = b;
@@ -6025,7 +6025,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         actionUrn_ = s;
@@ -6041,7 +6041,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getActionUrnBytes() {
       java.lang.Object ref = actionUrn_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         actionUrn_ = b;
@@ -6064,7 +6064,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         toolUrn_ = s;
@@ -6080,7 +6080,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getToolUrnBytes() {
       java.lang.Object ref = toolUrn_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         toolUrn_ = b;
@@ -6103,7 +6103,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         connectorId_ = s;
@@ -6119,7 +6119,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getConnectorIdBytes() {
       java.lang.Object ref = connectorId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         connectorId_ = b;
@@ -6142,7 +6142,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         connectorContractHash_ = s;
@@ -6158,7 +6158,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getConnectorContractHashBytes() {
       java.lang.Object ref = connectorContractHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         connectorContractHash_ = b;
@@ -6181,7 +6181,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         executorKind_ = s;
@@ -6197,7 +6197,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getExecutorKindBytes() {
       java.lang.Object ref = executorKind_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         executorKind_ = b;
@@ -6220,7 +6220,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         effectClass_ = s;
@@ -6236,7 +6236,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getEffectClassBytes() {
       java.lang.Object ref = effectClass_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         effectClass_ = b;
@@ -6259,7 +6259,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         riskClass_ = s;
@@ -6275,7 +6275,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRiskClassBytes() {
       java.lang.Object ref = riskClass_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         riskClass_ = b;
@@ -6298,7 +6298,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         argsC14NHash_ = s;
@@ -6314,7 +6314,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getArgsC14NHashBytes() {
       java.lang.Object ref = argsC14NHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         argsC14NHash_ = b;
@@ -6337,7 +6337,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         requestBodyHash_ = s;
@@ -6353,7 +6353,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRequestBodyHashBytes() {
       java.lang.Object ref = requestBodyHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         requestBodyHash_ = b;
@@ -6376,7 +6376,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         planHash_ = s;
@@ -6392,7 +6392,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPlanHashBytes() {
       java.lang.Object ref = planHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         planHash_ = b;
@@ -6415,7 +6415,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyHash_ = s;
@@ -6431,7 +6431,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPolicyHashBytes() {
       java.lang.Object ref = policyHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyHash_ = b;
@@ -6454,7 +6454,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         p0Hash_ = s;
@@ -6470,7 +6470,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getP0HashBytes() {
       java.lang.Object ref = p0Hash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         p0Hash_ = b;
@@ -6493,7 +6493,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyEpoch_ = s;
@@ -6509,7 +6509,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPolicyEpochBytes() {
       java.lang.Object ref = policyEpoch_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyEpoch_ = b;
@@ -6532,7 +6532,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         idempotencyKeyCandidate_ = s;
@@ -6548,7 +6548,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getIdempotencyKeyCandidateBytes() {
       java.lang.Object ref = idempotencyKeyCandidate_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         idempotencyKeyCandidate_ = b;
@@ -6571,7 +6571,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         payloadClass_ = s;
@@ -6587,7 +6587,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPayloadClassBytes() {
       java.lang.Object ref = payloadClass_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         payloadClass_ = b;
@@ -6610,7 +6610,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         redactionProfile_ = s;
@@ -6626,7 +6626,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRedactionProfileBytes() {
       java.lang.Object ref = redactionProfile_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         redactionProfile_ = b;
@@ -6649,7 +6649,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         upstreamTraceId_ = s;
@@ -6665,7 +6665,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getUpstreamTraceIdBytes() {
       java.lang.Object ref = upstreamTraceId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         upstreamTraceId_ = b;
@@ -6688,7 +6688,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         upstreamRunId_ = s;
@@ -6704,7 +6704,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getUpstreamRunIdBytes() {
       java.lang.Object ref = upstreamRunId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         upstreamRunId_ = b;
@@ -6738,7 +6738,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         riskContextHash_ = s;
@@ -6754,7 +6754,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getRiskContextHashBytes() {
       java.lang.Object ref = riskContextHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         riskContextHash_ = b;
@@ -6795,7 +6795,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         reasonCode_ = s;
@@ -6811,7 +6811,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getReasonCodeBytes() {
       java.lang.Object ref = reasonCode_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         reasonCode_ = b;
@@ -6834,7 +6834,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         kernelTrustRootId_ = s;
@@ -6850,7 +6850,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getKernelTrustRootIdBytes() {
       java.lang.Object ref = kernelTrustRootId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         kernelTrustRootId_ = b;
@@ -6873,7 +6873,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signingKeyRef_ = s;
@@ -6889,7 +6889,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getSigningKeyRefBytes() {
       java.lang.Object ref = signingKeyRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signingKeyRef_ = b;
@@ -6912,7 +6912,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         kernelVerdictRef_ = s;
@@ -6928,7 +6928,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getKernelVerdictRefBytes() {
       java.lang.Object ref = kernelVerdictRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         kernelVerdictRef_ = b;
@@ -6951,7 +6951,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         kernelVerdictHash_ = s;
@@ -6967,7 +6967,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getKernelVerdictHashBytes() {
       java.lang.Object ref = kernelVerdictHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         kernelVerdictHash_ = b;
@@ -7057,7 +7057,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         effectPermitRef_ = s;
@@ -7077,7 +7077,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getEffectPermitRefBytes() {
       java.lang.Object ref = effectPermitRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         effectPermitRef_ = b;
@@ -7100,7 +7100,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         permitNonce_ = s;
@@ -7116,7 +7116,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getPermitNonceBytes() {
       java.lang.Object ref = permitNonce_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         permitNonce_ = b;
@@ -7165,7 +7165,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         proofSessionRef_ = s;
@@ -7181,7 +7181,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getProofSessionRefBytes() {
       java.lang.Object ref = proofSessionRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         proofSessionRef_ = b;
@@ -7204,7 +7204,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         evidenceReservationRef_ = s;
@@ -7220,7 +7220,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getEvidenceReservationRefBytes() {
       java.lang.Object ref = evidenceReservationRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         evidenceReservationRef_ = b;
@@ -7243,7 +7243,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         budgetReservationRef_ = s;
@@ -7259,7 +7259,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getBudgetReservationRefBytes() {
       java.lang.Object ref = budgetReservationRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         budgetReservationRef_ = b;
@@ -7282,7 +7282,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         cachePolicy_ = s;
@@ -7298,7 +7298,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getCachePolicyBytes() {
       java.lang.Object ref = cachePolicy_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         cachePolicy_ = b;
@@ -7321,7 +7321,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         replayHint_ = s;
@@ -7337,7 +7337,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getReplayHintBytes() {
       java.lang.Object ref = replayHint_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         replayHint_ = b;
@@ -7364,7 +7364,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         denialReceiptRef_ = s;
@@ -7384,7 +7384,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getDenialReceiptRefBytes() {
       java.lang.Object ref = denialReceiptRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         denialReceiptRef_ = b;
@@ -7407,7 +7407,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         escalationRef_ = s;
@@ -7423,7 +7423,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getEscalationRefBytes() {
       java.lang.Object ref = escalationRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         escalationRef_ = b;
@@ -7446,7 +7446,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         escalationReceiptRef_ = s;
@@ -7462,7 +7462,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getEscalationReceiptRefBytes() {
       java.lang.Object ref = escalationReceiptRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         escalationReceiptRef_ = b;
@@ -7485,7 +7485,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         proofObligation_ = s;
@@ -7501,7 +7501,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getProofObligationBytes() {
       java.lang.Object ref = proofObligation_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         proofObligation_ = b;
@@ -7524,7 +7524,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         connectorReceiptPolicy_ = s;
@@ -7540,7 +7540,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getConnectorReceiptPolicyBytes() {
       java.lang.Object ref = connectorReceiptPolicy_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         connectorReceiptPolicy_ = b;
@@ -7563,7 +7563,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         proofFinalizationPolicy_ = s;
@@ -7579,7 +7579,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
         getProofFinalizationPolicyBytes() {
       java.lang.Object ref = proofFinalizationPolicy_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         proofFinalizationPolicy_ = b;
@@ -9183,7 +9183,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getSchemaVersionBytes() {
         java.lang.Object ref = schemaVersion_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           schemaVersion_ = b;
@@ -9255,7 +9255,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getContractVersionBytes() {
         java.lang.Object ref = contractVersion_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           contractVersion_ = b;
@@ -9327,7 +9327,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRequestIdBytes() {
         java.lang.Object ref = requestId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           requestId_ = b;
@@ -9399,7 +9399,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getTenantIdBytes() {
         java.lang.Object ref = tenantId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           tenantId_ = b;
@@ -9471,7 +9471,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getWorkspaceIdBytes() {
         java.lang.Object ref = workspaceId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           workspaceId_ = b;
@@ -9543,7 +9543,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPrincipalIdBytes() {
         java.lang.Object ref = principalId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           principalId_ = b;
@@ -9647,7 +9647,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getAgentIdentityProfileRefBytes() {
         java.lang.Object ref = agentIdentityProfileRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           agentIdentityProfileRef_ = b;
@@ -9771,7 +9771,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getActionUrnBytes() {
         java.lang.Object ref = actionUrn_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           actionUrn_ = b;
@@ -9843,7 +9843,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getToolUrnBytes() {
         java.lang.Object ref = toolUrn_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           toolUrn_ = b;
@@ -9915,7 +9915,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getConnectorIdBytes() {
         java.lang.Object ref = connectorId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           connectorId_ = b;
@@ -9987,7 +9987,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getConnectorContractHashBytes() {
         java.lang.Object ref = connectorContractHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           connectorContractHash_ = b;
@@ -10059,7 +10059,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getExecutorKindBytes() {
         java.lang.Object ref = executorKind_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           executorKind_ = b;
@@ -10131,7 +10131,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getEffectClassBytes() {
         java.lang.Object ref = effectClass_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           effectClass_ = b;
@@ -10203,7 +10203,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRiskClassBytes() {
         java.lang.Object ref = riskClass_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           riskClass_ = b;
@@ -10275,7 +10275,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getArgsC14NHashBytes() {
         java.lang.Object ref = argsC14NHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           argsC14NHash_ = b;
@@ -10347,7 +10347,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRequestBodyHashBytes() {
         java.lang.Object ref = requestBodyHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           requestBodyHash_ = b;
@@ -10419,7 +10419,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPlanHashBytes() {
         java.lang.Object ref = planHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           planHash_ = b;
@@ -10491,7 +10491,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPolicyHashBytes() {
         java.lang.Object ref = policyHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyHash_ = b;
@@ -10563,7 +10563,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getP0HashBytes() {
         java.lang.Object ref = p0Hash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           p0Hash_ = b;
@@ -10635,7 +10635,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPolicyEpochBytes() {
         java.lang.Object ref = policyEpoch_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyEpoch_ = b;
@@ -10707,7 +10707,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getIdempotencyKeyCandidateBytes() {
         java.lang.Object ref = idempotencyKeyCandidate_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           idempotencyKeyCandidate_ = b;
@@ -10779,7 +10779,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPayloadClassBytes() {
         java.lang.Object ref = payloadClass_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           payloadClass_ = b;
@@ -10851,7 +10851,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRedactionProfileBytes() {
         java.lang.Object ref = redactionProfile_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           redactionProfile_ = b;
@@ -10923,7 +10923,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getUpstreamTraceIdBytes() {
         java.lang.Object ref = upstreamTraceId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           upstreamTraceId_ = b;
@@ -10995,7 +10995,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getUpstreamRunIdBytes() {
         java.lang.Object ref = upstreamRunId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           upstreamRunId_ = b;
@@ -11099,7 +11099,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getRiskContextHashBytes() {
         java.lang.Object ref = riskContextHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           riskContextHash_ = b;
@@ -11223,7 +11223,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getReasonCodeBytes() {
         java.lang.Object ref = reasonCode_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           reasonCode_ = b;
@@ -11295,7 +11295,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getKernelTrustRootIdBytes() {
         java.lang.Object ref = kernelTrustRootId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           kernelTrustRootId_ = b;
@@ -11367,7 +11367,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getSigningKeyRefBytes() {
         java.lang.Object ref = signingKeyRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signingKeyRef_ = b;
@@ -11439,7 +11439,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getKernelVerdictRefBytes() {
         java.lang.Object ref = kernelVerdictRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           kernelVerdictRef_ = b;
@@ -11511,7 +11511,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getKernelVerdictHashBytes() {
         java.lang.Object ref = kernelVerdictHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           kernelVerdictHash_ = b;
@@ -11698,7 +11698,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp kernel_verdict_issued_at = 37;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetKernelVerdictIssuedAtFieldBuilder() {
         if (kernelVerdictIssuedAtBuilder_ == null) {
           kernelVerdictIssuedAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -11819,7 +11819,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp kernel_verdict_expires_at = 38;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetKernelVerdictExpiresAtFieldBuilder() {
         if (kernelVerdictExpiresAtBuilder_ == null) {
           kernelVerdictExpiresAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -11865,7 +11865,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getEffectPermitRefBytes() {
         java.lang.Object ref = effectPermitRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           effectPermitRef_ = b;
@@ -11949,7 +11949,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getPermitNonceBytes() {
         java.lang.Object ref = permitNonce_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           permitNonce_ = b;
@@ -12104,7 +12104,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp permit_expiry = 41;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetPermitExpiryFieldBuilder() {
         if (permitExpiryBuilder_ == null) {
           permitExpiryBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -12142,7 +12142,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getProofSessionRefBytes() {
         java.lang.Object ref = proofSessionRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           proofSessionRef_ = b;
@@ -12214,7 +12214,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getEvidenceReservationRefBytes() {
         java.lang.Object ref = evidenceReservationRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           evidenceReservationRef_ = b;
@@ -12286,7 +12286,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getBudgetReservationRefBytes() {
         java.lang.Object ref = budgetReservationRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           budgetReservationRef_ = b;
@@ -12358,7 +12358,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getCachePolicyBytes() {
         java.lang.Object ref = cachePolicy_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           cachePolicy_ = b;
@@ -12430,7 +12430,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getReplayHintBytes() {
         java.lang.Object ref = replayHint_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           replayHint_ = b;
@@ -12510,7 +12510,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getDenialReceiptRefBytes() {
         java.lang.Object ref = denialReceiptRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           denialReceiptRef_ = b;
@@ -12594,7 +12594,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getEscalationRefBytes() {
         java.lang.Object ref = escalationRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           escalationRef_ = b;
@@ -12666,7 +12666,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getEscalationReceiptRefBytes() {
         java.lang.Object ref = escalationReceiptRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           escalationReceiptRef_ = b;
@@ -12738,7 +12738,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getProofObligationBytes() {
         java.lang.Object ref = proofObligation_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           proofObligation_ = b;
@@ -12810,7 +12810,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getConnectorReceiptPolicyBytes() {
         java.lang.Object ref = connectorReceiptPolicy_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           connectorReceiptPolicy_ = b;
@@ -12882,7 +12882,7 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
           getProofFinalizationPolicyBytes() {
         java.lang.Object ref = proofFinalizationPolicy_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           proofFinalizationPolicy_ = b;
@@ -12982,12 +12982,12 @@ public final class Extauthz extends com.google.protobuf.GeneratedFile {
 
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_boundary_extauthz_v1_AuthorizationRequest_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_boundary_extauthz_v1_AuthorizationRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_boundary_extauthz_v1_AuthorizationResponse_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_boundary_extauthz_v1_AuthorizationResponse_fieldAccessorTable;
 

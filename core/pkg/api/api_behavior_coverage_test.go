@@ -32,7 +32,7 @@ func TestEvaluate_InvalidJSON(t *testing.T) {
 
 func TestEvaluate_GeneratesArgsHash(t *testing.T) {
 	srv := newTestServer(t)
-	body := EvaluateRequest{Tool: "read_file", Args: map[string]any{"path": "/x"}, AgentID: "a", SessionID: "s1"}
+	body := EvaluateRequest{Tool: "read_file", Args: map[string]any{"path": "/x"}, AgentID: "a", EffectLevel: "read_file", SessionID: "s1"}
 	reqBody, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
@@ -54,7 +54,7 @@ func TestEvaluate_GeneratesArgsHash(t *testing.T) {
 func TestReceipts_ListAll(t *testing.T) {
 	srv := newTestServer(t)
 	// Create a receipt first
-	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
+	body := EvaluateRequest{Tool: "read_file", AgentID: "a", EffectLevel: "read_file", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
 	srv.ServeHTTP(httptest.NewRecorder(), req)
@@ -69,7 +69,7 @@ func TestReceipts_ListAll(t *testing.T) {
 
 func TestReceipts_CompleteEndpoint(t *testing.T) {
 	srv := newTestServer(t)
-	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
+	body := EvaluateRequest{Tool: "read_file", AgentID: "a", EffectLevel: "read_file", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()

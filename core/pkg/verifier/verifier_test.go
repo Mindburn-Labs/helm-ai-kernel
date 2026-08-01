@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
@@ -464,6 +465,55 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		}
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
+}
+
+func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := map[string]any{
+		"receipt_id":        "rcpt-001",
+		"decision_id":       "dec-001",
+		"effect_id":         "mcp.tools.call/proof.read",
+		"status":            "DENY",
+		"output_hash":       "sha256:out",
+		"prev_hash":         "",
+		"lamport_clock":     float64(1),
+		"args_hash":         "sha256:args",
+		"signature_version": "receipt.v5",
+		"verdict":           "DENY",
+		"reason_code":       "POLICY:VIOLATION",
+		"policy_hash":       "sha256:policy",
+		"session_id":        "session-1",
+	}
+	payload, err := canonicalize.JCS(receiptV5DocumentEnvelope{
+		SignatureVersion: "receipt.v5",
+		ReceiptID:        "rcpt-001",
+		DecisionID:       "dec-001",
+		EffectID:         "mcp.tools.call/proof.read",
+		Status:           "DENY",
+		OutputHash:       "sha256:out",
+		PrevHash:         "",
+		LamportClock:     1,
+		ArgsHash:         "sha256:args",
+		Verdict:          "DENY",
+		ReasonCode:       "POLICY:VIOLATION",
+		PolicyHash:       "sha256:policy",
+		SessionID:        "session-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	document["signature"] = hex.EncodeToString(ed25519.Sign(priv, payload))
+
+	if !verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
+		t.Fatal("structured V5 receipt must verify")
+	}
+	document["policy_hash"] = "sha256:tampered"
+	if verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
+		t.Fatal("tampered V5 governance field must not verify")
+	}
 }
 
 func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {

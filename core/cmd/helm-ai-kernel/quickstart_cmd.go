@@ -1,3 +1,5 @@
+// quantum_posture: quickstart migration validates classical Ed25519 local root
+// material only; it does not provide or claim post-quantum assurance.
 package main
 
 import (

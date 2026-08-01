@@ -1,3 +1,5 @@
+// quantum_posture: local Console release binding and peer proofs use classical
+// SHA-256/HMAC integrity only; this runtime path makes no post-quantum claim.
 package main
 
 import (

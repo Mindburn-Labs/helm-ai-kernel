@@ -17843,7 +17843,7 @@ public static class DecisionRecord {
 
 
 /**
- * Legacy evaluation shape. Supply the signed causal session identifier as context.session_id.
+ * Legacy direct-daemon evaluation shape. It is retained only for existing callers; generated SDKs must use EvaluateRequest with a top-level session_id.
  */
 @JsonPropertyOrder({
   DecisionRequest.JSON_PROPERTY_PRINCIPAL,
@@ -21643,16 +21643,13 @@ public static class EnvExposurePolicy {
 
 
 /**
- * V5 evaluation shape. Legacy action/resource aliases are accepted when tool/effect_level are omitted. The server trims and uses a non-whitespace session_id, or falls back to context.session_id.
+ * Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
  */
 @JsonPropertyOrder({
   EvaluateRequest.JSON_PROPERTY_TOOL,
   EvaluateRequest.JSON_PROPERTY_ARGS,
   EvaluateRequest.JSON_PROPERTY_AGENT_ID,
   EvaluateRequest.JSON_PROPERTY_EFFECT_LEVEL,
-  EvaluateRequest.JSON_PROPERTY_PRINCIPAL,
-  EvaluateRequest.JSON_PROPERTY_ACTION,
-  EvaluateRequest.JSON_PROPERTY_RESOURCE,
   EvaluateRequest.JSON_PROPERTY_SESSION_ID,
   EvaluateRequest.JSON_PROPERTY_CONTEXT
 })
@@ -21669,15 +21666,6 @@ public static class EvaluateRequest {
 
   public static final String JSON_PROPERTY_EFFECT_LEVEL = "effect_level";
   private String effectLevel;
-
-  public static final String JSON_PROPERTY_PRINCIPAL = "principal";
-  private String principal;
-
-  public static final String JSON_PROPERTY_ACTION = "action";
-  private String action;
-
-  public static final String JSON_PROPERTY_RESOURCE = "resource";
-  private String resource;
 
   public static final String JSON_PROPERTY_SESSION_ID = "session_id";
   private String sessionId;
@@ -21697,9 +21685,9 @@ public static class EvaluateRequest {
    * Get tool
    * @return tool
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_TOOL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getTool() {
     return tool;
@@ -21707,7 +21695,7 @@ public static class EvaluateRequest {
 
 
   @JsonProperty(JSON_PROPERTY_TOOL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setTool(String tool) {
     this.tool = tool;
   }
@@ -21780,9 +21768,9 @@ public static class EvaluateRequest {
    * Policy resource used to evaluate the governed tool call.
    * @return effectLevel
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_EFFECT_LEVEL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getEffectLevel() {
     return effectLevel;
@@ -21790,84 +21778,9 @@ public static class EvaluateRequest {
 
 
   @JsonProperty(JSON_PROPERTY_EFFECT_LEVEL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setEffectLevel(String effectLevel) {
     this.effectLevel = effectLevel;
-  }
-
-
-  public EvaluateRequest principal(String principal) {
-    this.principal = principal;
-    return this;
-  }
-
-   /**
-   * Legacy field ignored; the authenticated principal is recorded as the receipt executor.
-   * @return principal
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public String getPrincipal() {
-    return principal;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setPrincipal(String principal) {
-    this.principal = principal;
-  }
-
-
-  public EvaluateRequest action(String action) {
-    this.action = action;
-    return this;
-  }
-
-   /**
-   * Legacy alias for tool when tool is omitted.
-   * @return action
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_ACTION)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public String getAction() {
-    return action;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_ACTION)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setAction(String action) {
-    this.action = action;
-  }
-
-
-  public EvaluateRequest resource(String resource) {
-    this.resource = resource;
-    return this;
-  }
-
-   /**
-   * Legacy alias for effect_level when effect_level is omitted.
-   * @return resource
-  **/
-  @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_RESOURCE)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-
-  public String getResource() {
-    return resource;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_RESOURCE)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setResource(String resource) {
-    this.resource = resource;
   }
 
 
@@ -21880,9 +21793,9 @@ public static class EvaluateRequest {
    * Non-whitespace signed causal session identifier.
    * @return sessionId
   **/
-  @javax.annotation.Nullable
+  @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
   public String getSessionId() {
     return sessionId;
@@ -21890,7 +21803,7 @@ public static class EvaluateRequest {
 
 
   @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setSessionId(String sessionId) {
     this.sessionId = sessionId;
   }
@@ -21945,16 +21858,13 @@ public static class EvaluateRequest {
         Objects.equals(this.args, evaluateRequest.args) &&
         Objects.equals(this.agentId, evaluateRequest.agentId) &&
         Objects.equals(this.effectLevel, evaluateRequest.effectLevel) &&
-        Objects.equals(this.principal, evaluateRequest.principal) &&
-        Objects.equals(this.action, evaluateRequest.action) &&
-        Objects.equals(this.resource, evaluateRequest.resource) &&
         Objects.equals(this.sessionId, evaluateRequest.sessionId) &&
         Objects.equals(this.context, evaluateRequest.context);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(tool, args, agentId, effectLevel, principal, action, resource, sessionId, context);
+    return Objects.hash(tool, args, agentId, effectLevel, sessionId, context);
   }
 
   @Override
@@ -21965,9 +21875,6 @@ public static class EvaluateRequest {
     sb.append("    args: ").append(toIndentedString(args)).append("\n");
     sb.append("    agentId: ").append(toIndentedString(agentId)).append("\n");
     sb.append("    effectLevel: ").append(toIndentedString(effectLevel)).append("\n");
-    sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
-    sb.append("    action: ").append(toIndentedString(action)).append("\n");
-    sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
     sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
     sb.append("}");
@@ -22041,21 +21948,6 @@ public static class EvaluateRequest {
       joiner.add(String.format("%seffect_level%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectLevel()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `principal` to the URL query string
-    if (getPrincipal() != null) {
-      joiner.add(String.format("%sprincipal%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipal()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
-    // add `action` to the URL query string
-    if (getAction() != null) {
-      joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
-    // add `resource` to the URL query string
-    if (getResource() != null) {
-      joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
     // add `session_id` to the URL query string
     if (getSessionId() != null) {
       joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -22068,449 +21960,6 @@ public static class EvaluateRequest {
             "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
             URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
-    }
-
-    return joiner.toString();
-  }
-}
-
-/*
- * HELM Kernel API
- * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
- *
- * The version of the OpenAPI document: 0.7.5
- *
- *
- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
- * https://openapi-generator.tech
- * Do not edit the class manually.
- */
-
-
-
-
-
-/**
- * EvaluateRequestNotAllOfNot
- */
-@JsonPropertyOrder({
-  EvaluateRequestNotAllOfNot.JSON_PROPERTY_SESSION_ID
-})
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class EvaluateRequestNotAllOfNot {
-  public static final String JSON_PROPERTY_SESSION_ID = "session_id";
-  private String sessionId;
-
-  public EvaluateRequestNotAllOfNot() {
-  }
-
-  public EvaluateRequestNotAllOfNot sessionId(String sessionId) {
-    this.sessionId = sessionId;
-    return this;
-  }
-
-   /**
-   * Get sessionId
-   * @return sessionId
-  **/
-  @javax.annotation.Nonnull
-  @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
-
-  public String getSessionId() {
-    return sessionId;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
-  public void setSessionId(String sessionId) {
-    this.sessionId = sessionId;
-  }
-
-
-  /**
-   * Return true if this EvaluateRequest_not_allOf_not object is equal to o.
-   */
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-    EvaluateRequestNotAllOfNot evaluateRequestNotAllOfNot = (EvaluateRequestNotAllOfNot) o;
-    return Objects.equals(this.sessionId, evaluateRequestNotAllOfNot.sessionId);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(sessionId);
-  }
-
-  @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("class EvaluateRequestNotAllOfNot {\n");
-    sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
-    sb.append("}");
-    return sb.toString();
-  }
-
-  /**
-   * Convert the given object to string with each line indented by 4 spaces
-   * (except the first line).
-   */
-  private String toIndentedString(Object o) {
-    if (o == null) {
-      return "null";
-    }
-    return o.toString().replace("\n", "\n    ");
-  }
-
-  /**
-   * Convert the instance into URL query string.
-   *
-   * @return URL query string
-   */
-  public String toUrlQueryString() {
-    return toUrlQueryString(null);
-  }
-
-  /**
-   * Convert the instance into URL query string.
-   *
-   * @param prefix prefix of the query string
-   * @return URL query string
-   */
-  public String toUrlQueryString(String prefix) {
-    String suffix = "";
-    if (prefix == null) {
-      // style=form, explode=true, e.g. /pet?name=cat&type=manx
-      prefix = "";
-    } else {
-      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
-      prefix = prefix + "[";
-      suffix = "]";
-    }
-
-    StringJoiner joiner = new StringJoiner("&");
-
-    // add `session_id` to the URL query string
-    if (getSessionId() != null) {
-      joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
-    }
-
-    return joiner.toString();
-  }
-}
-
-/*
- * HELM Kernel API
- * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
- *
- * The version of the OpenAPI document: 0.7.5
- *
- *
- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
- * https://openapi-generator.tech
- * Do not edit the class manually.
- */
-
-
-
-
-
-/**
- * EvaluateRequestNotAllOfNot1
- */
-@JsonPropertyOrder({
-  EvaluateRequestNotAllOfNot1.JSON_PROPERTY_CONTEXT
-})
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class EvaluateRequestNotAllOfNot1 {
-  public static final String JSON_PROPERTY_CONTEXT = "context";
-  private EvaluateRequestNotAllOfNot1Context context;
-
-  public EvaluateRequestNotAllOfNot1() {
-  }
-
-  public EvaluateRequestNotAllOfNot1 context(EvaluateRequestNotAllOfNot1Context context) {
-    this.context = context;
-    return this;
-  }
-
-   /**
-   * Get context
-   * @return context
-  **/
-  @javax.annotation.Nonnull
-  @JsonProperty(JSON_PROPERTY_CONTEXT)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
-
-  public EvaluateRequestNotAllOfNot1Context getContext() {
-    return context;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_CONTEXT)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
-  public void setContext(EvaluateRequestNotAllOfNot1Context context) {
-    this.context = context;
-  }
-
-
-  /**
-   * Return true if this EvaluateRequest_not_allOf_not_1 object is equal to o.
-   */
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-    EvaluateRequestNotAllOfNot1 evaluateRequestNotAllOfNot1 = (EvaluateRequestNotAllOfNot1) o;
-    return Objects.equals(this.context, evaluateRequestNotAllOfNot1.context);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(context);
-  }
-
-  @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("class EvaluateRequestNotAllOfNot1 {\n");
-    sb.append("    context: ").append(toIndentedString(context)).append("\n");
-    sb.append("}");
-    return sb.toString();
-  }
-
-  /**
-   * Convert the given object to string with each line indented by 4 spaces
-   * (except the first line).
-   */
-  private String toIndentedString(Object o) {
-    if (o == null) {
-      return "null";
-    }
-    return o.toString().replace("\n", "\n    ");
-  }
-
-  /**
-   * Convert the instance into URL query string.
-   *
-   * @return URL query string
-   */
-  public String toUrlQueryString() {
-    return toUrlQueryString(null);
-  }
-
-  /**
-   * Convert the instance into URL query string.
-   *
-   * @param prefix prefix of the query string
-   * @return URL query string
-   */
-  public String toUrlQueryString(String prefix) {
-    String suffix = "";
-    if (prefix == null) {
-      // style=form, explode=true, e.g. /pet?name=cat&type=manx
-      prefix = "";
-    } else {
-      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
-      prefix = prefix + "[";
-      suffix = "]";
-    }
-
-    StringJoiner joiner = new StringJoiner("&");
-
-    // add `context` to the URL query string
-    if (getContext() != null) {
-      joiner.add(getContext().toUrlQueryString(prefix + "context" + suffix));
-    }
-
-    return joiner.toString();
-  }
-}
-
-/*
- * HELM Kernel API
- * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
- *
- * The version of the OpenAPI document: 0.7.5
- *
- *
- * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
- * https://openapi-generator.tech
- * Do not edit the class manually.
- */
-
-
-
-
-
-/**
- * EvaluateRequestNotAllOfNot1Context
- */
-@JsonPropertyOrder({
-  EvaluateRequestNotAllOfNot1Context.JSON_PROPERTY_SESSION_ID
-})
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
-public static class EvaluateRequestNotAllOfNot1Context extends HashMap<String, Object> {
-  public static final String JSON_PROPERTY_SESSION_ID = "session_id";
-  private String sessionId;
-
-  public EvaluateRequestNotAllOfNot1Context() {
-  }
-
-  public EvaluateRequestNotAllOfNot1Context sessionId(String sessionId) {
-    this.sessionId = sessionId;
-    return this;
-  }
-
-   /**
-   * Get sessionId
-   * @return sessionId
-  **/
-  @javax.annotation.Nonnull
-  @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
-
-  public String getSessionId() {
-    return sessionId;
-  }
-
-
-  @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
-  public void setSessionId(String sessionId) {
-    this.sessionId = sessionId;
-  }
-
-  /**
-   * A container for additional, undeclared properties.
-   * This is a holder for any undeclared properties as specified with
-   * the 'additionalProperties' keyword in the OAS document.
-   */
-  private Map<String, Object> additionalProperties;
-
-  /**
-   * Set the additional (undeclared) property with the specified name and value.
-   * If the property does not already exist, create it otherwise replace it.
-   * @param key the name of the property
-   * @param value the value of the property
-   * @return self reference
-   */
-  @JsonAnySetter
-  public EvaluateRequestNotAllOfNot1Context putAdditionalProperty(String key, Object value) {
-    if (this.additionalProperties == null) {
-        this.additionalProperties = new HashMap<String, Object>();
-    }
-    this.additionalProperties.put(key, value);
-    return this;
-  }
-
-  /**
-   * Return the additional (undeclared) properties.
-   * @return the additional (undeclared) properties
-   */
-  @JsonAnyGetter
-  public Map<String, Object> getAdditionalProperties() {
-    return additionalProperties;
-  }
-
-  /**
-   * Return the additional (undeclared) property with the specified name.
-   * @param key the name of the property
-   * @return the additional (undeclared) property with the specified name
-   */
-  public Object getAdditionalProperty(String key) {
-    if (this.additionalProperties == null) {
-        return null;
-    }
-    return this.additionalProperties.get(key);
-  }
-
-  /**
-   * Return true if this EvaluateRequest_not_allOf_not_1_context object is equal to o.
-   */
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-    EvaluateRequestNotAllOfNot1Context evaluateRequestNotAllOfNot1Context = (EvaluateRequestNotAllOfNot1Context) o;
-    return Objects.equals(this.sessionId, evaluateRequestNotAllOfNot1Context.sessionId)&&
-        Objects.equals(this.additionalProperties, evaluateRequestNotAllOfNot1Context.additionalProperties) &&
-        super.equals(o);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(sessionId, super.hashCode(), additionalProperties);
-  }
-
-  @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("class EvaluateRequestNotAllOfNot1Context {\n");
-    sb.append("    ").append(toIndentedString(super.toString())).append("\n");
-    sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
-    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
-    sb.append("}");
-    return sb.toString();
-  }
-
-  /**
-   * Convert the given object to string with each line indented by 4 spaces
-   * (except the first line).
-   */
-  private String toIndentedString(Object o) {
-    if (o == null) {
-      return "null";
-    }
-    return o.toString().replace("\n", "\n    ");
-  }
-
-  /**
-   * Convert the instance into URL query string.
-   *
-   * @return URL query string
-   */
-  public String toUrlQueryString() {
-    return toUrlQueryString(null);
-  }
-
-  /**
-   * Convert the instance into URL query string.
-   *
-   * @param prefix prefix of the query string
-   * @return URL query string
-   */
-  public String toUrlQueryString(String prefix) {
-    String suffix = "";
-    if (prefix == null) {
-      // style=form, explode=true, e.g. /pet?name=cat&type=manx
-      prefix = "";
-    } else {
-      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
-      prefix = prefix + "[";
-      suffix = "]";
-    }
-
-    StringJoiner joiner = new StringJoiner("&");
-
-    // add `session_id` to the URL query string
-    if (getSessionId() != null) {
-      joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

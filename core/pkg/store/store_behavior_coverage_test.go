@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
@@ -133,6 +134,49 @@ func TestSQLiteReceiptStoreAndGet(t *testing.T) {
 	got, err := store.Get(context.Background(), "d1")
 	if err != nil || got.ReceiptID != "r1" {
 		t.Fatalf("expected r1, got err=%v, receipt=%+v", err, got)
+	}
+}
+
+func TestSQLiteReceiptV5RoundTripKeepsSignedGovernanceFields(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+
+	signer, err := helmcrypto.NewEd25519Signer("sqlite-receipt-v5")
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	receipt := &contracts.Receipt{
+		ReceiptID:        "r-v5",
+		DecisionID:       "d-v5",
+		EffectID:         "e-v5",
+		Status:           "OK",
+		OutputHash:       "output-hash",
+		PrevHash:         "previous-hash",
+		LamportClock:     7,
+		ArgsHash:         "args-hash",
+		SignatureVersion: contracts.ReceiptSignatureV5,
+		Verdict:          "DENY",
+		ReasonCode:       "POLICY_VIOLATION",
+		PolicyHash:       "policy-content-hash",
+		SessionID:        "session-v5",
+		Timestamp:        time.Unix(1700000000, 0).UTC(),
+	}
+	if err := signer.SignReceipt(receipt); err != nil {
+		t.Fatalf("sign receipt: %v", err)
+	}
+	if err := store.Store(context.Background(), receipt); err != nil {
+		t.Fatalf("store receipt: %v", err)
+	}
+
+	got, err := store.GetByReceiptID(context.Background(), receipt.ReceiptID)
+	if err != nil {
+		t.Fatalf("load receipt: %v", err)
+	}
+	if got.SignatureVersion != contracts.ReceiptSignatureV5 || got.Verdict != "DENY" || got.ReasonCode != "POLICY_VIOLATION" || got.PolicyHash != "policy-content-hash" || got.SessionID != "session-v5" {
+		t.Fatalf("V5 governance fields did not round-trip: %+v", got)
+	}
+	if ok, err := signer.VerifyReceipt(got); err != nil || !ok {
+		t.Fatalf("reloaded V5 receipt did not verify: ok=%v err=%v", ok, err)
 	}
 }
 

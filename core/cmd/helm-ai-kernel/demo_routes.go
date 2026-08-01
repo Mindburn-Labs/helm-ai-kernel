@@ -242,10 +242,18 @@ func buildDemoReceipt(svc *Services, decision *contracts.DecisionRecord, body []
 		OutputHash:   decision.PolicyDecisionHash,
 		Timestamp:    timestamp,
 		ExecutorID:   agentID,
+		Verdict:      decision.Verdict,
+		ReasonCode:   decision.ReasonCode,
+		PolicyHash:   decision.PolicyContentHash,
 		Metadata:     metadata,
 		PrevHash:     "",
 		LamportClock: 1,
 		ArgsHash:     argsHash,
+	}
+	if decision.InputContext != nil {
+		if sessionID, ok := decision.InputContext["session_id"].(string); ok {
+			receipt.SessionID = strings.TrimSpace(sessionID)
+		}
 	}
 	if err := svc.ReceiptSigner.SignReceipt(receipt); err != nil {
 		return nil, fmt.Errorf("sign demo receipt %s: %w", receiptID, err)

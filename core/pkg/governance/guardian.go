@@ -57,18 +57,21 @@ func (g *Guardian) Authorize(action string, riskScore int) (*contracts.DecisionR
 
 	verdict := "DENY"
 	reason := fmt.Sprintf("risk_score %d >= threshold 80 for action %q", riskScore, action)
+	reasonCode := string(contracts.ReasonPolicyViolation)
 	if allowed {
 		verdict = "ALLOW"
 		reason = fmt.Sprintf("risk_score %d < threshold 80 for action %q", riskScore, action)
+		reasonCode = ""
 	}
 
 	dec := &contracts.DecisionRecord{
-		ID:        fmt.Sprintf("gdec-%d", time.Now().UnixNano()),
-		SubjectID: "guardian",
-		Action:    action,
-		Verdict:   verdict,
-		Reason:    reason,
-		Timestamp: time.Now(),
+		ID:         fmt.Sprintf("gdec-%d", time.Now().UnixNano()),
+		SubjectID:  "guardian",
+		Action:     action,
+		Verdict:    verdict,
+		Reason:     reason,
+		ReasonCode: reasonCode,
+		Timestamp:  time.Now(),
 	}
 
 	// Sign the decision

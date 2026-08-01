@@ -2,6 +2,7 @@ package shellscan
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"strings"
 
@@ -24,6 +25,7 @@ const (
 	SignalInterpreterInvocation = "interpreter-invocation"
 	SignalSensitiveRedirect     = "sensitive-redirect"
 	SignalSensitiveTarget       = "sensitive-target"
+	SignalSensitiveDestructive  = "sensitive-destructive"
 )
 
 // maxWrapperDepth bounds recursive unwrapping of eval / sh -c payloads so
@@ -51,6 +53,10 @@ type Result struct {
 	// SensitiveTarget is the static sensitive target that caused routing to
 	// the signed decision path. Callers must avoid persisting it verbatim.
 	SensitiveTarget string
+	// RequiresShellPermission is true when a statically identified sensitive
+	// target is combined with a concrete destructive shell effect. Consumers
+	// must require shell permission in addition to the sensitive-file write.
+	RequiresShellPermission bool
 }
 
 // legacyNeedles is the pre-AST substring list from hook_cmd.go, kept verbatim
@@ -121,6 +127,7 @@ func ClassifyAt(raw, cwd string) Result {
 	res.Signals = c.signalList()
 	res.ParseOK = c.parseOK
 	res.SensitiveTarget = c.sensitiveTarget
+	res.RequiresShellPermission = c.requiresShellPermission
 	return res
 }
 
@@ -134,6 +141,8 @@ type collector struct {
 	writtenPaths    map[string]bool
 	cwd             string
 	sensitiveTarget string
+	destructiveEffect bool
+	requiresShellPermission bool
 }
 
 func (c *collector) decide(reason string) {
@@ -346,9 +355,27 @@ func (c *collector) recordSensitiveTarget(tok wordTok, operation, signal string)
 			c.sensitiveTarget = tok.text
 		}
 		c.signal(signal)
+		c.recordCompoundEffect()
 		c.decide(fmt.Sprintf("%s to sensitive target %q", operation, tok.text))
 		return
 	}
+}
+
+// recordDestructiveEffect marks a statically identified effect that needs a
+// shell-operate permission when it is combined with a protected file target.
+// It deliberately excludes opaque or merely suspicious commands: callers use
+// it only after matching a concrete destructive operation.
+func (c *collector) recordDestructiveEffect() {
+	c.destructiveEffect = true
+	c.recordCompoundEffect()
+}
+
+func (c *collector) recordCompoundEffect() {
+	if !c.destructiveEffect || c.sensitiveTarget == "" {
+		return
+	}
+	c.requiresShellPermission = true
+	c.signal(SignalSensitiveDestructive)
 }
 
 func (c *collector) recordTeeWrites(args []wordTok) {
@@ -1675,7 +1702,9 @@ func (c *collector) record(cmd Command) {
 func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, depth int) {
 	switch {
 	case cmd.Name == "rm":
-		c.recordRemoveWriteTargets(cmd.Name, args)
+		if c.recordRemoveWriteTargets(cmd.Name, args) {
+			c.recordDestructiveEffect()
+		}
 		recursive, force, dynamicArg, endOptions := false, false, false, false
 		for _, tok := range args[1:] {
 			if tok.dynamic {
@@ -1725,6 +1754,7 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 			return
 		}
 	case strings.HasPrefix(cmd.Name, "mkfs"):
+		c.recordDestructiveEffect()
 		c.decide("filesystem format command " + cmd.Name)
 	case cmd.Name == "dd":
 		for _, tok := range args[1:] {
@@ -1733,6 +1763,7 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 				return
 			}
 			if strings.HasPrefix(strings.ToLower(tok.text), "if=") {
+				c.recordDestructiveEffect()
 				c.decide("dd raw device/image read operand")
 				return
 			}
@@ -1746,6 +1777,7 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 			return
 		}
 		if found && sub == "delete" {
+			c.recordDestructiveEffect()
 			c.decide("kubectl delete")
 		}
 	case cmd.Name == "docker":
@@ -1759,7 +1791,9 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 	case cmd.Name == "cp" || cmd.Name == "mv" || cmd.Name == "install":
 		c.recordCopyWrite(cmd.Name, args)
 	case cmd.Name == "rmdir" || cmd.Name == "unlink":
-		c.recordRemoveWriteTargets(cmd.Name, args)
+		if c.recordRemoveWriteTargets(cmd.Name, args) {
+			c.recordDestructiveEffect()
+		}
 	case cmd.Name == "tar":
 		c.matchTar(args, via, depth)
 	}
@@ -1828,7 +1862,7 @@ func (c *collector) recordCopyWrite(name string, args []wordTok) {
 	}
 	if len(operands) >= 2 {
 		destination := operands[len(operands)-1]
-		if !destination.dynamic && strings.HasSuffix(destination.text, "/") {
+		if c.copyDestinationIsDirectory(destination) {
 			for _, source := range operands[:len(operands)-1] {
 				c.recordCopyIntoDirectory(name, destination, source)
 			}
@@ -1838,6 +1872,27 @@ func (c *collector) recordCopyWrite(name string, args []wordTok) {
 	}
 }
 
+// copyDestinationIsDirectory resolves static destinations against the event
+// CWD when it is available. A protected directory name remains conservative
+// when the path cannot be resolved (for example, because the scanner is used
+// without CWD or a concurrent filesystem change makes the lookup stale): it
+// is treated as a directory so copying hooks/settings cannot bypass routing.
+func (c *collector) copyDestinationIsDirectory(destination wordTok) bool {
+	if destination.dynamic {
+		return false
+	}
+	if strings.HasSuffix(destination.text, "/") {
+		return true
+	}
+	if c.cwd != "" {
+		if info, err := os.Stat(c.normalizedPath(destination.text)); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	base := strings.ToLower(path.Base(strings.ReplaceAll(destination.text, `\`, "/")))
+	return base == ".codex" || base == ".claude" || base == ".git"
+}
+
 func (c *collector) recordCopyIntoDirectory(name string, directory, source wordTok) {
 	c.recordWriteTarget(wordTok{
 		text:    path.Join(directory.text, path.Base(source.text)),
@@ -1845,7 +1900,8 @@ func (c *collector) recordCopyIntoDirectory(name string, directory, source wordT
 	}, name+" write")
 }
 
-func (c *collector) recordRemoveWriteTargets(name string, args []wordTok) {
+func (c *collector) recordRemoveWriteTargets(name string, args []wordTok) bool {
+	foundTarget := false
 	endOptions := false
 	for _, tok := range args[1:] {
 		if tok.dynamic {
@@ -1861,7 +1917,9 @@ func (c *collector) recordRemoveWriteTargets(name string, args []wordTok) {
 			}
 		}
 		c.recordWriteTarget(tok, name+" remove")
+		foundTarget = true
 	}
+	return foundTarget
 }
 
 func (c *collector) matchTar(args []wordTok, via string, depth int) {
@@ -2012,6 +2070,7 @@ func (c *collector) matchGit(args []wordTok) {
 				continue
 			}
 			if tok.text == "--hard" {
+				c.recordDestructiveEffect()
 				c.decide("git reset --hard")
 				return
 			}
@@ -2047,6 +2106,7 @@ func (c *collector) matchGit(args []wordTok) {
 			}
 		}
 		if dirs && (force || cleanForceDisabled) {
+			c.recordDestructiveEffect()
 			c.decide("git clean with forced directory delete")
 		}
 	}
@@ -2109,12 +2169,14 @@ func (c *collector) matchDocker(args []wordTok) {
 			continue
 		}
 		if tok.text == "--force" {
+			c.recordDestructiveEffect()
 			c.decide("docker rm --force")
 			return
 		}
 		if strings.HasPrefix(tok.text, "-") && !strings.HasPrefix(tok.text, "--") {
 			for _, r := range tok.text[1:] {
 				if r == 'f' {
+					c.recordDestructiveEffect()
 					c.decide("docker rm -f")
 					return
 				}
@@ -2130,6 +2192,7 @@ func (c *collector) matchFind(args []wordTok, via string, depth int) {
 			return
 		}
 		if tok.text == "-delete" {
+			c.recordDestructiveEffect()
 			c.decide("find -delete")
 			return
 		}

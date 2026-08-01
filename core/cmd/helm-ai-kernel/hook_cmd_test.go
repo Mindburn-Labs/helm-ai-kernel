@@ -314,6 +314,7 @@ func TestHookPreToolDeniesEvasiveBashViaASTClassifier(t *testing.T) {
 		"echo SECRET=x >> .env",                                                  // sensitive redirect
 		"rm --recursive --force /tmp/helm-evasion",                               // long flags
 		"/bin/./rm -rf /tmp/helm-evasion",                                        // path obfuscation
+		"/tmp/rm -rf dist",                                                       // executable basename must still classify as rm
 		"python <<'PY'\nimport shutil\nshutil.rmtree('/tmp/helm-evasion')\nPY",   // interpreter heredoc
 		"python - <<'PY'\nimport shutil\nshutil.rmtree('/tmp/helm-evasion')\nPY", // stdin marker + heredoc
 		"perl <<'PL'\nunlink '/tmp/helm-evasion'\nPL",                            // interpreter heredoc

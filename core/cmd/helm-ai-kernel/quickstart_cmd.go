@@ -33,9 +33,10 @@ type quickstartOptions struct {
 
 func init() {
 	Register(Subcommand{
-		Name:  "quickstart",
-		Usage: "Start local Kernel onboarding proof path",
-		RunFn: runQuickstartCmd,
+		Name:   "quickstart",
+		Usage:  "Start local Kernel onboarding proof path",
+		RunFn:  runQuickstartCmd,
+		HelpFn: printQuickstartUsage,
 	})
 }
 
@@ -360,7 +361,18 @@ const (
 
 func printQuickstartUsage(stdout io.Writer) {
 	fmt.Fprintln(stdout, "Usage: helm-ai-kernel quickstart [--addr ADDR] [--port PORT] [--data-dir DIR] [--profile PROFILE] [--console --console-port PORT --no-open] [--offline] [--json] [--dry-run]")
+	fmt.Fprintln(stdout)
+	printLocalConsoleJourney(stdout)
+	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Pass --reset --yes only to replace HELM-owned quickstart state.")
+}
+
+func printLocalConsoleJourney(w io.Writer) {
+	fmt.Fprintln(w, "Local browser Console:")
+	fmt.Fprintln(w, "  helm-ai-kernel quickstart --console")
+	fmt.Fprintln(w, "  helm-ai-kernel quickstart --console --no-open")
+	fmt.Fprintln(w, "Starts a loopback-only Kernel and verified packaged browser Console for local policy and receipt proof.")
+	fmt.Fprintln(w, "Primary flags: --console, --console-port (0 chooses an ephemeral port), --no-open, --data-dir, --profile, --dry-run, --json.")
 }
 
 func consoleDone(console *localConsoleSupervisor) <-chan struct{} {

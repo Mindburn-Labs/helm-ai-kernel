@@ -68,6 +68,44 @@ func TestRunNoArgsPrintsFrontDoor(t *testing.T) {
 	assert.Empty(t, stderr.String())
 }
 
+func TestRunQuickstartAndConsoleHelpPointToLocalConsole(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "quickstart",
+			args: []string{"quickstart", "--help"},
+			want: []string{
+				"Usage: helm-ai-kernel quickstart",
+				"helm-ai-kernel quickstart --console",
+				"loopback-only Kernel",
+			},
+		},
+		{
+			name: "console topic",
+			args: []string{"help", "console"},
+			want: []string{
+				"The local browser Console is launched by Quickstart",
+				"helm-ai-kernel quickstart --console",
+				"loopback-only Kernel",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := Run(append([]string{"helm"}, tc.args...), &stdout, &stderr); code != 0 {
+				t.Fatalf("exit code = %d, stderr = %s", code, stderr.String())
+			}
+			assert.Empty(t, stderr.String())
+			for _, want := range tc.want {
+				assert.Contains(t, stdout.String(), want)
+			}
+		})
+	}
+}
+
 func TestRunHelpAllPrintsFullCommandList(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	exitCode := Run([]string{"helm", "help", "--all"}, &stdout, &stderr)

@@ -155,6 +155,10 @@ func runHelpCommand(args []string, stdout, stderr io.Writer) int {
 
 func printGlobalCommandHelp(name string, stdout io.Writer) {
 	switch name {
+	case "console":
+		fmt.Fprintln(stdout, "The local browser Console is launched by Quickstart, not as a standalone server.")
+		printLocalConsoleJourney(stdout)
+		return
 	case "completion":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel completion <bash|zsh|fish|powershell>")
 	case "help":

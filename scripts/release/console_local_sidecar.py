@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import unicodedata
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -40,6 +41,8 @@ SHA_40 = re.compile(r"^[0-9a-f]{40}$")
 SAFE_FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 INNER_PROVENANCE_SCHEMA = "helm.console.local-sidecar.provenance.v1"
 UNSIGNED_INNER_SIGNATURE = "none; this unsigned local artifact has no release authority"
+BUNDLE_MAX_BYTES = 512 * 1024 * 1024
+INVENTORY_MAX_BYTES = 16 * 1024 * 1024
 BUNDLE_HASH_SCOPE = (
     "sorted sha256 records for all closure payload files, including the bundled Node runtime; "
     "this binds the exact build and is not a cross-checkout byte-reproducibility claim"
@@ -93,6 +96,15 @@ def require_safe_file_name(value: Any, label: str) -> str:
 def require_nonempty_string(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         reject(f"{label} must be a non-empty string")
+    return value
+
+
+def require_runtime_value(value: Any, label: str) -> str:
+    value = require_nonempty_string(value, label)
+    if value != value.strip() or len(value) > 512:
+        reject(f"{label} must be a trimmed string no longer than 512 bytes")
+    if any(unicodedata.category(character).startswith("C") for character in value):
+        reject(f"{label} must not contain control characters")
     return value
 
 
@@ -163,10 +175,15 @@ def safe_archive_path(name: str, *, directory: bool = False) -> str:
 
 
 def parse_inventory(data: bytes) -> dict[str, str]:
+    if not data or len(data) > INVENTORY_MAX_BYTES or data[-1] != 0x0A:
+        reject("closure inventory is invalid")
     try:
-        lines = data.decode("utf-8").splitlines()
+        text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
         reject(f"closure inventory is not UTF-8: {exc}")
+    if "\r" in text:
+        reject("closure inventory is invalid")
+    lines = text[:-1].split("\n")
     entries: dict[str, str] = {}
     ordered: list[str] = []
     for line in lines:
@@ -231,9 +248,9 @@ def verify_runtime(value: Any, target: dict[str, str]) -> dict[str, Any]:
         {"node", "bundled_node", "npm", "next", "platform", "libc"},
         "sidecar provenance.runtime",
     )
-    runtime["node"] = require_nonempty_string(runtime["node"], "sidecar provenance.runtime.node")
-    runtime["npm"] = require_nonempty_string(runtime["npm"], "sidecar provenance.runtime.npm")
-    runtime["next"] = require_nonempty_string(runtime["next"], "sidecar provenance.runtime.next")
+    runtime["node"] = require_runtime_value(runtime["node"], "sidecar provenance.runtime.node")
+    runtime["npm"] = require_runtime_value(runtime["npm"], "sidecar provenance.runtime.npm")
+    runtime["next"] = require_runtime_value(runtime["next"], "sidecar provenance.runtime.next")
     if not runtime["node"].startswith("v"):
         reject("sidecar provenance.runtime.node must be a versioned Node runtime")
     bundled_node = require_exact_keys(
@@ -256,7 +273,7 @@ def verify_runtime(value: Any, target: dict[str, str]) -> dict[str, Any]:
         reject("sidecar provenance runtime libc family does not match its target")
     if target["os"] == "darwin" and libc["version"] != "host-reported-unavailable":
         reject("Darwin sidecar provenance must use the declared libc version marker")
-    require_nonempty_string(libc["version"], "sidecar provenance.runtime.libc.version")
+    require_runtime_value(libc["version"], "sidecar provenance.runtime.libc.version")
     return runtime
 
 
@@ -318,13 +335,16 @@ def verify_archive(
     inner: dict[str, Any],
 ) -> None:
     expected_root = f"helm-console-local-sidecar-{target['os']}-{target['arch']}"
+    if archive_path.stat().st_size > BUNDLE_MAX_BYTES:
+        reject(f"sidecar archive exceeds the {BUNDLE_MAX_BYTES}-byte release limit")
     try:
         archive = tarfile.open(archive_path, "r:gz")
     except (OSError, tarfile.TarError) as exc:
         reject(f"unable to read sidecar archive {archive_path.name}: {exc}")
 
-    files: dict[str, tuple[bytes, int]] = {}
+    files: dict[str, tuple[str, int, bytes]] = {}
     seen_members: set[str] = set()
+    total = 0
     try:
         for member in archive.getmembers():
             name = safe_archive_path(member.name, directory=member.isdir())
@@ -343,27 +363,42 @@ def verify_archive(
             relative = str(PurePosixPath(*parts[1:]))
             if not relative or relative in files:
                 reject(f"archive contains duplicate or invalid payload path: {member.name}")
+            if member.size < 0 or member.size > BUNDLE_MAX_BYTES or total > BUNDLE_MAX_BYTES - member.size:
+                reject("archive payload exceeds the runtime size limit")
+            total += member.size
             handle = archive.extractfile(member)
             if handle is None:
                 reject(f"archive cannot read payload: {member.name}")
-            files[relative] = (handle.read(), member.mode)
+            capture = relative in {"INVENTORY.sha256", "PROVENANCE.json"}
+            if capture and member.size > INVENTORY_MAX_BYTES:
+                reject("archive metadata exceeds the validation limit")
+            digest = hashlib.sha256()
+            captured = bytearray() if capture else None
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                if captured is not None:
+                    captured.extend(chunk)
+            files[relative] = (digest.hexdigest(), member.mode, bytes(captured or b""))
     finally:
         archive.close()
 
     for required in {"INVENTORY.sha256", "PROVENANCE.json", "app/helm-local-sidecar.mjs", "runtime/node/bin/node", "runtime/node/LICENSE"}:
         if required not in files:
             reject(f"archive is missing required closure file: {required}")
-    if files["INVENTORY.sha256"][0] != inventory_bytes:
+    if files["INVENTORY.sha256"][2] != inventory_bytes:
         reject("archive inventory differs from the released inventory artifact")
     if files["runtime/node/bin/node"][1] & 0o111 == 0:
         reject("bundled Node runtime is not executable")
 
     inventory = parse_inventory(inventory_bytes)
-    payload = {name: contents for name, contents in files.items() if name not in {"INVENTORY.sha256", "PROVENANCE.json"}}
+    payload = {name: entry for name, entry in files.items() if name not in {"INVENTORY.sha256", "PROVENANCE.json"}}
     if set(inventory) != set(payload):
         reject("archive payload does not exactly match its closure inventory")
     for name, expected_digest in inventory.items():
-        if hashlib.sha256(payload[name][0]).hexdigest() != expected_digest:
+        if payload[name][0] != expected_digest:
             reject(f"closure inventory digest mismatch: {name}")
 
     bundle_sha256 = hashlib.sha256(inventory_bytes).hexdigest()
@@ -371,7 +406,7 @@ def verify_archive(
         reject("release manifest bundle hash does not match the archive inventory")
     verify_provenance(
         read_json_from_bytes(external_provenance_bytes, "external sidecar provenance"),
-        read_json_from_bytes(files["PROVENANCE.json"][0], "embedded sidecar provenance"),
+        read_json_from_bytes(files["PROVENANCE.json"][2], "embedded sidecar provenance"),
         archive_path.name,
         archive_digest,
         source,

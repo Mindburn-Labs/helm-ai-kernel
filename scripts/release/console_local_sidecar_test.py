@@ -14,6 +14,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import console_local_sidecar as sidecar
@@ -52,7 +53,13 @@ def write_directory(archive: tarfile.TarFile, name: str) -> None:
     archive.addfile(info)
 
 
-def build_target(root: Path, target: str) -> dict[str, object]:
+def build_target(
+    root: Path,
+    target: str,
+    *,
+    mutate_inventory: callable | None = None,
+    mutate_provenance: callable | None = None,
+) -> dict[str, object]:
     os_name, arch = target.split("-", 1)
     archive_name = f"helm-console-local-sidecar-{target}.tar.gz"
     payload = {
@@ -61,6 +68,8 @@ def build_target(root: Path, target: str) -> dict[str, object]:
         "runtime/node/bin/node": b"node-runtime",
     }
     inventory = "".join(f"{digest(payload[name])}  {name}\n" for name in sorted(payload)).encode()
+    if mutate_inventory is not None:
+        inventory = mutate_inventory(inventory)
     libc = {"family": "libSystem", "version": "host-reported-unavailable"} if os_name == "darwin" else {"family": "glibc", "version": "2.39"}
     provenance_core = {
         "schema": sidecar.INNER_PROVENANCE_SCHEMA,
@@ -80,6 +89,8 @@ def build_target(root: Path, target: str) -> dict[str, object]:
         "bundle_hash_scope": sidecar.BUNDLE_HASH_SCOPE,
         "signature": sidecar.UNSIGNED_INNER_SIGNATURE,
     }
+    if mutate_provenance is not None:
+        provenance_core = mutate_provenance(provenance_core)
     closure_root = f"helm-console-local-sidecar-{target}"
     artifact_dir = root / f"artifact-{target}"
     artifact_dir.mkdir()
@@ -131,8 +142,9 @@ def build_target(root: Path, target: str) -> dict[str, object]:
     }
 
 
-def build_release(root: Path) -> tuple[Path, Path]:
-    targets = [build_target(root, target) for target in sidecar.TARGETS]
+def build_release(root: Path, *, target_mutators: dict[str, dict[str, object]] | None = None) -> tuple[Path, Path]:
+    target_mutators = target_mutators or {}
+    targets = [build_target(root, target, **target_mutators.get(target, {})) for target in sidecar.TARGETS]
     manifest = {
         "schema": sidecar.MANIFEST_SCHEMA,
         "component": sidecar.COMPONENT,
@@ -337,6 +349,31 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             checksum.write_text(f"{'0' * 64}  helm-console-local-sidecar-darwin-arm64.tar.gz\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "archive_checksum hash"):
                 sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
+
+    def test_release_rejects_console_inventory_without_runtime_newline_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(
+                Path(directory),
+                target_mutators={"linux-amd64": {"mutate_inventory": lambda data: data.rstrip(b"\n")}},
+            )
+            with self.assertRaisesRegex(ValueError, "closure inventory is invalid"):
+                sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
+
+    def test_release_rejects_console_provenance_runtime_values_the_launcher_would_reject(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(
+                Path(directory),
+                target_mutators={"linux-amd64": {"mutate_provenance": lambda data: {**data, "runtime": {**data["runtime"], "npm": "10.9.2 "}}}},
+            )
+            with self.assertRaisesRegex(ValueError, "runtime.npm must be a trimmed string"):
+                sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
+
+    def test_release_rejects_console_archives_over_the_runtime_size_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            with mock.patch.object(sidecar, "BUNDLE_MAX_BYTES", 32):
+                with self.assertRaisesRegex(ValueError, "release limit|runtime size limit"):
+                    sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
 
     def test_release_rejects_inner_release_authority_claim(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

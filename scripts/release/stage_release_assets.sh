@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# quantum_posture: stages classical SHA-256 and Sigstore release evidence only;
+# it does not create or claim post-quantum cryptographic assurance.
 # Stage the complete GitHub Release asset set under dist/release-assets/.
 set -euo pipefail
 
@@ -97,6 +99,29 @@ cp "$ROOT"/dist/helm-ai-kernel.mcpb "$ASSETS_DIR/"
 cp "$ROOT"/sbom.json "$ASSETS_DIR/"
 cp "$vex_path" "$ASSETS_DIR/$(basename "$vex_path")"
 cp "$ROOT"/release.high_risk.v3.toml "$ASSETS_DIR/"
+
+if [ -n "${HELM_CONSOLE_LOCAL_SIDECAR_DIR:-}" ]; then
+    log_step "verifying pinned Console local-sidecar release input"
+    if [ -z "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256:-}" ]; then
+        echo "::error file=scripts/release/stage_release_assets.sh::a compiled Console aggregate manifest SHA-256 is required before sidecar staging" >&2
+        exit 1
+    fi
+    python3 "$ROOT/scripts/release/console_local_sidecar.py" stage \
+        --input-dir "$HELM_CONSOLE_LOCAL_SIDECAR_DIR" \
+        --output-dir "$ASSETS_DIR" \
+        --pins "$ROOT/release/console-local-sidecar-pins.json" \
+        --kernel-release "$TAG" \
+        --expected-manifest-sha256 "$CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256"
+    python3 "$ROOT/scripts/release/console_local_sidecar.py" layout \
+        --input-dir "$ASSETS_DIR" \
+        --output-dir "$ASSETS_DIR" \
+        --pins "$ROOT/release/console-local-sidecar-pins.json" \
+        --kernel-release "$TAG" \
+        --expected-manifest-sha256 "$CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256"
+elif [ "${HELM_REQUIRE_CONSOLE_LOCAL_SIDECAR:-0}" = "1" ]; then
+    echo "::error file=scripts/release/stage_release_assets.sh::a pinned Console local-sidecar input is required for this release" >&2
+    exit 1
+fi
 
 python3 - "$ROOT" "$ASSETS_DIR/sample-policy-material.tar" <<'PY'
 import pathlib
@@ -232,7 +257,7 @@ ruby "$ROOT/scripts/release/homebrew_formula.rb" \
     --launchpad-data-sha256 "$launchpad_data_sha" \
     --repo Mindburn-Labs/helm-ai-kernel > "$ASSETS_DIR/helm-ai-kernel.rb"
 
-python3 - "$ROOT" "$ASSETS_DIR" "$TAG" <<'PY'
+python3 - "$ROOT" "$ASSETS_DIR" "$TAG" "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256:-}" <<'PY'
 import hashlib
 import json
 import os
@@ -244,6 +269,7 @@ from datetime import datetime, timezone
 root = pathlib.Path(sys.argv[1])
 assets_dir = pathlib.Path(sys.argv[2])
 tag = sys.argv[3]
+expected_sidecar_manifest_sha256 = sys.argv[4]
 
 def sha256(path: pathlib.Path) -> str:
     digest = hashlib.sha256()
@@ -274,9 +300,33 @@ payload = {
         "evidence_pack_verified": True,
         "sample_policy_material_includes_reference_pack": True,
         "homebrew_formula_generated": True,
+        "console_local_sidecar_verified": (assets_dir / "helm-console-local-sidecar-release-manifest.json").is_file(),
     },
     "artifacts": artifacts,
 }
+sidecar_manifest = assets_dir / "helm-console-local-sidecar-release-manifest.json"
+if sidecar_manifest.is_file():
+    sidecar_manifest_sha256 = sha256(sidecar_manifest)
+    if not expected_sidecar_manifest_sha256:
+        raise SystemExit("Console local-sidecar manifest is staged without a compiled digest")
+    if sidecar_manifest_sha256 != expected_sidecar_manifest_sha256:
+        raise SystemExit("Console local-sidecar manifest differs from the compiled digest")
+    payload["console_local_sidecar"] = {
+        "aggregate_manifest": sidecar_manifest.name,
+        "aggregate_manifest_sha256": sidecar_manifest_sha256,
+        "kernel_bundle": "helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle",
+        "producer_bundle": "helm-console-local-sidecar-release-manifest.json.cosign.bundle",
+        "standalone_layouts": [
+            "helm-ai-kernel-linux-amd64-console.tar.gz",
+            "helm-ai-kernel-linux-arm64-console.tar.gz",
+            "helm-ai-kernel-darwin-amd64-console.tar.gz",
+            "helm-ai-kernel-darwin-arm64-console.tar.gz",
+        ],
+    }
+    if any(not (assets_dir / name).is_file() for name in payload["console_local_sidecar"]["standalone_layouts"]):
+        raise SystemExit("Console local-sidecar standalone layout is missing")
+elif expected_sidecar_manifest_sha256:
+    raise SystemExit("a compiled Console local-sidecar manifest digest was supplied without a staged manifest")
 (assets_dir / "release-attestation.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 

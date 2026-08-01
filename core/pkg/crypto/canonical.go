@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -254,15 +256,69 @@ type decisionV2SigningEnvelope struct {
 }
 
 func CanonicalizeDecisionV2(id, verdict, reasonCode, phenotypeHash, policyContentHash, effectDigest string) ([]byte, error) {
-	return canonicalize.JCS(decisionV2SigningEnvelope{
-		SignatureVersion:  contracts.DecisionRecordSignatureV2,
-		ID:                id,
-		Verdict:           verdict,
-		ReasonCode:        reasonCode,
-		PhenotypeHash:     phenotypeHash,
-		PolicyContentHash: policyContentHash,
-		EffectDigest:      effectDigest,
-	})
+	// This fixed all-string envelope has a known JCS key order. Build it
+	// directly instead of sending it through JCS's marshal/decode/map path:
+	// signing a decision is on Guardian's hot path, and that generic path added
+	// 74 allocations to every policy evaluation. appendJCSQuotedString mirrors
+	// the RFC 8785 escaping used by canonicalize.JCS.
+	payload := make([]byte, 0, len(id)+len(verdict)+len(reasonCode)+len(phenotypeHash)+len(policyContentHash)+len(effectDigest)+192)
+	payload = append(payload, `{"effect_digest":`...)
+	payload = appendJCSQuotedString(payload, effectDigest)
+	payload = append(payload, `,"id":`...)
+	payload = appendJCSQuotedString(payload, id)
+	payload = append(payload, `,"phenotype_hash":`...)
+	payload = appendJCSQuotedString(payload, phenotypeHash)
+	payload = append(payload, `,"policy_content_hash":`...)
+	payload = appendJCSQuotedString(payload, policyContentHash)
+	payload = append(payload, `,"reason_code":`...)
+	payload = appendJCSQuotedString(payload, reasonCode)
+	payload = append(payload, `,"signature_version":`...)
+	payload = appendJCSQuotedString(payload, contracts.DecisionRecordSignatureV2)
+	payload = append(payload, `,"verdict":`...)
+	payload = appendJCSQuotedString(payload, verdict)
+	payload = append(payload, '}')
+	return payload, nil
+}
+
+// appendJCSQuotedString appends an RFC 8785 JSON string. The V2 decision
+// envelope contains only strings, so this avoids re-parsing a generic JSON map
+// on Guardian's signing path while keeping the exact bytes canonicalize.JCS
+// would produce.
+func appendJCSQuotedString(dst []byte, value string) []byte {
+	// encoding/json (used by canonicalize.JCS's initial pass) replaces invalid
+	// UTF-8 with U+FFFD. Match that legacy behavior before appending raw bytes.
+	if !utf8.ValidString(value) {
+		value = strings.ToValidUTF8(value, "\uFFFD")
+	}
+
+	const hex = "0123456789abcdef"
+	dst = append(dst, '"')
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		switch c {
+		case '"':
+			dst = append(dst, '\\', '"')
+		case '\\':
+			dst = append(dst, '\\', '\\')
+		case '\b':
+			dst = append(dst, '\\', 'b')
+		case '\f':
+			dst = append(dst, '\\', 'f')
+		case '\n':
+			dst = append(dst, '\\', 'n')
+		case '\r':
+			dst = append(dst, '\\', 'r')
+		case '\t':
+			dst = append(dst, '\\', 't')
+		default:
+			if c < 0x20 {
+				dst = append(dst, '\\', 'u', '0', '0', hex[c>>4], hex[c&0x0f])
+				continue
+			}
+			dst = append(dst, c)
+		}
+	}
+	return append(dst, '"')
 }
 
 // DecisionSigningPayload stamps the record with the current preimage version

@@ -1,3 +1,5 @@
+// quantum_posture: local Console integrity uses classical SHA-256/HMAC and
+// Sigstore-verified release evidence; it makes no post-quantum assurance.
 package main
 
 import (

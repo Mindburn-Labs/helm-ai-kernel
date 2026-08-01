@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "quantum_posture": "quantum_posture: release version metadata records classical signature-adjacent assets only; no post-quantum assurance",
   "source_version_file": "VERSION",
   "tag_prefix": "v",
   "local_surfaces": [

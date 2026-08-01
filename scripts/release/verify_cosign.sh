@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# quantum_posture: verifies existing classical Sigstore/Cosign evidence only;
+# it does not create or claim post-quantum cryptographic assurance.
 # Verify cosign-keyless signatures on every helm-ai-kernel release artifact in a
 # given directory tree. Used as a smoke check post-release and as the
 # canonical verification recipe documented in docs/VERIFICATION.md.

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# quantum_posture: stages classical SHA-256 and Sigstore release evidence only;
+# it does not create or claim post-quantum cryptographic assurance.
 # Stage the complete GitHub Release asset set under dist/release-assets/.
 set -euo pipefail
 

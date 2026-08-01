@@ -74,7 +74,8 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			signature_profile TEXT DEFAULT '',
 			signature_algorithm TEXT DEFAULT '',
 			correlation_id TEXT DEFAULT '',
-			signature_version TEXT DEFAULT ''
+			signature_version TEXT DEFAULT '',
+			envelope JSONB
 		);
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS effect_id TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS external_reference_id TEXT;
@@ -94,6 +95,10 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		-- dropped verifies against the legacy V4 preimage and fails, which is
 		-- indistinguishable from tampering.
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_version TEXT DEFAULT '';
+		-- envelope stores the receipt document itself; the columns beside it are a
+		-- query projection. Whole-receipt signatures cannot survive a field-by-field
+		-- rebuild, so reads prefer this.
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS envelope JSONB;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS log_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS leaf_index BIGINT DEFAULT 0;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS transparency JSONB;
@@ -111,7 +116,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 }
 
 // receiptColumns is the canonical column list for receipt queries.
-const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id, COALESCE(signature_version, '') AS signature_version`
+const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id, COALESCE(signature_version, '') AS signature_version, envelope`
 
 func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE decision_id = $1`
@@ -201,14 +206,27 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 	var merkleRoot sql.NullString
 	var transparency []byte
 	var publicKeySet []byte
+	var envelope []byte
 	err := s.Scan(
 		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
 		&r.BlobHash, &r.OutputHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
 		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.LogID, &r.LeafIndex, &transparency,
 		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID, &r.SignatureVersion,
+		&envelope,
 	)
 	if err != nil {
 		return nil, err
+	}
+	// Prefer the stored document: the signature covers the whole receipt
+	// (HELM-303), and the columns are a projection that cannot carry every
+	// field. Pre-envelope rows fall through to the column path and keep
+	// verifying under the preimage they were signed with.
+	if len(envelope) > 0 && string(envelope) != "null" {
+		var stored contracts.Receipt
+		if err := json.Unmarshal(envelope, &stored); err != nil {
+			return nil, fmt.Errorf("decode receipt envelope: %w", err)
+		}
+		return &stored, nil
 	}
 	if len(metadata) > 0 && string(metadata) != "null" {
 		if err := json.Unmarshal(metadata, &r.Metadata); err != nil {
@@ -298,10 +316,10 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
 			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, args_hash, blob_hash,
 			log_id, leaf_index, transparency,
-			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, signature_version
+			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, signature_version, envelope
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb,
-			$20, $21::jsonb, $22, $23, $24, $25)
+			$20, $21::jsonb, $22, $23, $24, $25, $26::jsonb)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
@@ -314,6 +332,13 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 	publicKeySetJSON, err := encodePublicKeySet(r)
 	if err != nil {
 		return err
+	}
+	// See scanReceipt: the envelope is the stored document, the columns are a
+	// projection for querying. Whole-receipt signatures (HELM-303) cannot
+	// survive a field-by-field rebuild.
+	envelopeJSON, err := json.Marshal(r)
+	if err != nil {
+		return fmt.Errorf("marshal receipt envelope: %w", err)
 	}
 	_, err = execer.ExecContext(ctx, query,
 		r.ReceiptID,
@@ -341,6 +366,7 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		r.SignatureAlgorithm,
 		r.CorrelationID,
 		r.SignatureVersion,
+		string(envelopeJSON),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)

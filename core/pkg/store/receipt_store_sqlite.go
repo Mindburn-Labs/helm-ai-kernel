@@ -75,7 +75,8 @@ func (s *SQLiteReceiptStore) migrate() error {
 		signature_profile TEXT NOT NULL DEFAULT '',
 		signature_algorithm TEXT NOT NULL DEFAULT '',
 		correlation_id TEXT NOT NULL DEFAULT '',
-		signature_version TEXT NOT NULL DEFAULT ''
+		signature_version TEXT NOT NULL DEFAULT '',
+		envelope TEXT
 	);`
 	if _, err := s.db.ExecContext(context.Background(), query); err != nil {
 		return err
@@ -99,6 +100,9 @@ func (s *SQLiteReceiptStore) migrate() error {
 		return err
 	}
 	if err := s.ensureColumn("signature_algorithm", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("envelope", "TEXT"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn("signature_version", "TEXT NOT NULL DEFAULT ''"); err != nil {
@@ -159,7 +163,7 @@ func (s *SQLiteReceiptStore) ensureColumn(name, definition string) error {
 
 func (s *SQLiteReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version, envelope
         FROM receipts
         WHERE decision_id = ?
     `
@@ -168,7 +172,7 @@ func (s *SQLiteReceiptStore) Get(ctx context.Context, decisionID string) (*contr
 
 func (s *SQLiteReceiptStore) GetByReceiptID(ctx context.Context, receiptID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version, envelope
         FROM receipts
         WHERE receipt_id = ?
     `
@@ -177,7 +181,7 @@ func (s *SQLiteReceiptStore) GetByReceiptID(ctx context.Context, receiptID strin
 
 func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version, envelope
         FROM receipts
         ORDER BY timestamp DESC
         LIMIT ?
@@ -204,7 +208,7 @@ func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.
 
 func (s *SQLiteReceiptStore) ListByAgent(ctx context.Context, agentID string, since uint64, limit int) ([]*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version, envelope
         FROM receipts
         WHERE executor_id = ? AND lamport_clock > ?
         ORDER BY lamport_clock ASC, timestamp ASC
@@ -232,7 +236,7 @@ func (s *SQLiteReceiptStore) ListByAgent(ctx context.Context, agentID string, si
 
 func (s *SQLiteReceiptStore) ListSince(ctx context.Context, since uint64, limit int) ([]*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version, envelope
         FROM receipts
         WHERE lamport_clock > ?
         ORDER BY lamport_clock ASC, timestamp ASC
@@ -266,8 +270,8 @@ func (s *SQLiteReceiptStore) Store(ctx context.Context, r *contracts.Receipt) er
 
 func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Receipt) error {
 	query := `INSERT INTO receipts (
-		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, signature_version
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, signature_version, envelope
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
@@ -282,9 +286,17 @@ func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Rec
 		return err
 	}
 	timestamp := r.Timestamp.UTC().Format(time.RFC3339Nano)
+	// The envelope is the stored document; the columns beside it exist for
+	// querying and indexing. A signature covers the whole receipt (HELM-303),
+	// so reconstructing one field-by-field from columns silently drops every
+	// field without a column and makes a valid receipt fail as if tampered.
+	envelopeJSON, err := json.Marshal(r)
+	if err != nil {
+		return fmt.Errorf("marshal receipt envelope: %w", err)
+	}
 
 	_, err = execer.ExecContext(ctx, query,
-		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), r.KeyID, nullableJSON(publicKeySetJSON), r.SignatureProfile, r.SignatureAlgorithm, r.CorrelationID, r.SignatureVersion,
+		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), r.KeyID, nullableJSON(publicKeySetJSON), r.SignatureProfile, r.SignatureAlgorithm, r.CorrelationID, r.SignatureVersion, string(envelopeJSON),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
@@ -343,7 +355,7 @@ func (s *SQLiteReceiptStore) GetLastForSession(ctx context.Context, sessionID st
 
 func queryLastSQLiteReceipt(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, error) {
 	query := `
-        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version
+        SELECT receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, log_id, leaf_index, transparency, COALESCE(key_id,'') AS key_id, public_key_set, COALESCE(signature_profile,'') AS signature_profile, COALESCE(signature_algorithm,'') AS signature_algorithm, COALESCE(correlation_id,'') AS correlation_id, COALESCE(signature_version,'') AS signature_version, envelope
         FROM receipts
         WHERE executor_id = ?
         ORDER BY lamport_clock DESC
@@ -386,15 +398,16 @@ func (s *SQLiteReceiptStore) queryOne(ctx context.Context, query string, arg any
 		sigAlgorithm     sql.NullString
 		correlationID    sql.NullString
 		signatureVersion sql.NullString
+		envelope         sql.NullString
 	)
-	err := row.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash, &logID, &leafIndex, &transparency, &keyID, &publicKeySet, &sigProfile, &sigAlgorithm, &correlationID, &signatureVersion)
+	err := row.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash, &logID, &leafIndex, &transparency, &keyID, &publicKeySet, &sigProfile, &sigAlgorithm, &correlationID, &signatureVersion, &envelope)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("receipt not found")
 		}
 		return nil, err
 	}
-	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, argsHash, logID, leafIndex, transparency, keyID, publicKeySet, sigProfile, sigAlgorithm, correlationID, signatureVersion)
+	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, argsHash, logID, leafIndex, transparency, keyID, publicKeySet, sigProfile, sigAlgorithm, correlationID, signatureVersion, envelope)
 }
 
 type sqliteScanner interface {
@@ -427,15 +440,30 @@ func scanSQLiteReceipt(scanner sqliteScanner) (*contracts.Receipt, error) {
 		sigAlgorithm     sql.NullString
 		correlationID    sql.NullString
 		signatureVersion sql.NullString
+		envelope         sql.NullString
 	)
-	if err := scanner.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash, &logID, &leafIndex, &transparency, &keyID, &publicKeySet, &sigProfile, &sigAlgorithm, &correlationID, &signatureVersion); err != nil {
+	if err := scanner.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash, &logID, &leafIndex, &transparency, &keyID, &publicKeySet, &sigProfile, &sigAlgorithm, &correlationID, &signatureVersion, &envelope); err != nil {
 		return nil, err
 	}
-	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, argsHash, logID, leafIndex, transparency, keyID, publicKeySet, sigProfile, sigAlgorithm, correlationID, signatureVersion)
+	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, argsHash, logID, leafIndex, transparency, keyID, publicKeySet, sigProfile, sigAlgorithm, correlationID, signatureVersion, envelope)
 }
 
 func receiptFromSQLiteFields(receiptID, decisionID, effectID string, externalID sql.NullString, status, blobHash, outputHash, timestamp string, executorID, metaJSON, signature, merkleRoot, prevHash sql.NullString, lamport uint64, argsHash sql.NullString, logID sql.NullString, leafIndex uint64, transparency sql.NullString,
-	keyID, publicKeySet, sigProfile, sigAlgorithm, correlationID, signatureVersion sql.NullString) (*contracts.Receipt, error) {
+	keyID, publicKeySet, sigProfile, sigAlgorithm, correlationID, signatureVersion, envelope sql.NullString) (*contracts.Receipt, error) {
+	// A receipt written with an envelope is restored from it verbatim. The
+	// signature covers the whole receipt (HELM-303), and the column set is a
+	// projection — rebuilding from columns drops every field that has none and
+	// makes an untampered receipt fail verification. Rows written before the
+	// envelope column existed fall through to the column path below and keep
+	// verifying under their original (V4) preimage.
+	if envelope.Valid && envelope.String != "" && envelope.String != "null" {
+		var stored contracts.Receipt
+		if err := json.Unmarshal([]byte(envelope.String), &stored); err != nil {
+			return nil, fmt.Errorf("decode receipt envelope: %w", err)
+		}
+		return &stored, nil
+	}
+
 	parsedTime := parseTime(timestamp)
 
 	var meta map[string]any

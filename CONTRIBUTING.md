@@ -53,18 +53,23 @@ is no CLA or copyright assignment.
 
 ## Pull Requests
 
-- **Machine merge authority**: A code merge is authorized only when
-  source-owned deterministic gates and a distinct-provider, exact-head machine
-  interlock are live-proven. Missing, stale, or mismatched evidence fails
-  closed.
-- **Advisory routing only**: Human identity, CODEOWNERS, labels, reviews, and
-  commit trailers have zero merge-authority weight. They may route discussion
-  and stewardship, but cannot satisfy or replace the machine gates.
 - Keep PRs narrow and reviewable.
 - Include the commands you ran.
 - Update docs only when the implementation or release truth changes.
 - Link the issue or discussion that explains the user-facing value.
 - Keep launch and community copy factual: no unsupported SaaS, hosted control-plane, certification, or production-security claims.
+
+## Merge authority (build-fast, 2026-08-01)
+
+Merge authority is green required checks on the exact head, for agents and
+humans alike. An owner `hold` label or requested-changes review blocks a merge
+until that owner releases it. CI checks are deterministic
+(build/test/lint/contract-drift); no per-PR model-review or Copilot-billed
+checks run in the delivery path. The 2-of-2 machine-authority program
+continues as on-demand R&D in `contracts-autonomous-release-lab`/`-canary`
+only and is not a merge requirement here. Package publishes and release tags
+require one owner approval. Estate rules: `Mindburn-Labs/docs` →
+`docs/ai/estate-policy.md` (Linear HELM-432).
 
 ## Security Reports
 

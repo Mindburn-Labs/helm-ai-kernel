@@ -336,3 +336,9 @@ func (c *deepAdvancingClock) Now() time.Time {
 	c.t = c.t.Add(1 * time.Nanosecond)
 	return c.t
 }
+
+func TestInputFieldTypeUsesJSONBooleanName(t *testing.T) {
+	if got := inputFieldType(true); got != "boolean" {
+		t.Fatalf("inputFieldType(true) = %q, want boolean", got)
+	}
+}

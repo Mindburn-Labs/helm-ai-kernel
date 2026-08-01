@@ -11,6 +11,7 @@ import (
 // nil-check. It lives in the test so production code carries no reflection.
 var gateFieldByID = map[GateID]string{
 	GateAgentKillSwitch: "agentKillSwitch",
+	GateAssumption:      "assumptionObserver",
 	GateAudit:           "auditLog",
 	GateBehavioralTrust: "behavioralScorer",
 	GateBudget:          "tracker",
@@ -42,6 +43,7 @@ var nonGateFields = map[string]bool{
 	"registry":          true,
 	"clock":             true,
 	"envFprint":         true,
+	"gateRosterHash":    true,
 	"snapshotScope":     true,
 	"otel":              true,
 	"zeroidInterceptor": true,

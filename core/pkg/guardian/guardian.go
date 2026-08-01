@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -175,37 +177,46 @@ func WithSafeDepController(controller *safedep.Controller) GuardianOption {
 	return func(g *Guardian) { g.safeDepController = controller }
 }
 
+// WithAssumptionObserver injects the re-reader for declared assumptions.
+// Without it the freshness gate still enforces each observation's validity
+// window; with it, that window becomes a ceiling on a check against live state.
+func WithAssumptionObserver(o AssumptionObserver) GuardianOption {
+	return func(g *Guardian) { g.assumptionObserver = o }
+}
+
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
-	signer            crypto.Signer
-	prg               *prg.Graph
-	pe                *prg.PolicyEngine
-	registry          *pkg_artifact.Registry
-	clock             Clock
-	tracker           BudgetGate
-	auditLog          *AuditLog
-	temporal          *TemporalGuardian
-	envFprint         string                  // Boot-sequence fingerprint for DecisionRecords
-	pdp               pdp.PolicyDecisionPoint // Optional pluggable policy backend
-	snapshotStore     policyreconcile.PolicySnapshotStore
-	snapshotScope     policyreconcile.PolicyScope
-	complianceChecker ComplianceChecker            // Optional compliance pre-check
-	freezeCtrl        *kernel.FreezeController     // Global kill-switch
-	scopedStopReader  kernel.ScopedStopReader      // Tenant/workspace dispatch fence
-	agentKillSwitch   *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
-	contextGuard      *kernel.ContextGuard         // Environment mismatch detection
-	isolationChecker  *identity.IsolationChecker   // Agent credential reuse detection
-	egressChecker     *firewall.EgressChecker      // Network egress enforcement
-	threatScanner     *threatscan.Scanner          // Canonical threat signal scanner
-	delegationStore   identity.DelegationStore     // Delegation session store (§Gate 5)
-	behavioralScorer  *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
-	privilegeResolver PrivilegeResolver            // Privilege tier resolver
-	sessionRiskMemory *SessionRiskMemory           // Deterministic trajectory authorization gate
-	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
-	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
-	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
-	safeDepController *safedep.Controller          // Safe Deprecation emergency release plane
-	boundaryChain     []BoundaryInterceptor        // Cached request interceptors
+	signer             crypto.Signer
+	prg                *prg.Graph
+	pe                 *prg.PolicyEngine
+	registry           *pkg_artifact.Registry
+	clock              Clock
+	tracker            BudgetGate
+	auditLog           *AuditLog
+	temporal           *TemporalGuardian
+	envFprint          string                  // Boot-sequence fingerprint for DecisionRecords
+	gateRosterHash     string                  // Digest of the injected gate set; constant after construction
+	pdp                pdp.PolicyDecisionPoint // Optional pluggable policy backend
+	snapshotStore      policyreconcile.PolicySnapshotStore
+	snapshotScope      policyreconcile.PolicyScope
+	complianceChecker  ComplianceChecker            // Optional compliance pre-check
+	freezeCtrl         *kernel.FreezeController     // Global kill-switch
+	scopedStopReader   kernel.ScopedStopReader      // Tenant/workspace dispatch fence
+	agentKillSwitch    *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
+	contextGuard       *kernel.ContextGuard         // Environment mismatch detection
+	isolationChecker   *identity.IsolationChecker   // Agent credential reuse detection
+	egressChecker      *firewall.EgressChecker      // Network egress enforcement
+	threatScanner      *threatscan.Scanner          // Canonical threat signal scanner
+	delegationStore    identity.DelegationStore     // Delegation session store (§Gate 5)
+	behavioralScorer   *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
+	privilegeResolver  PrivilegeResolver            // Privilege tier resolver
+	sessionRiskMemory  *SessionRiskMemory           // Deterministic trajectory authorization gate
+	otel               *OTelInstrumentation         // Optional OTel tracing & metrics
+	warmLeaseMgr       *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
+	zeroidInterceptor  *ZeroIDInterceptor           // ZeroID identity validator
+	safeDepController  *safedep.Controller          // Safe Deprecation emergency release plane
+	assumptionObserver AssumptionObserver           // Re-reads state a declared assumption depends on
+	boundaryChain      []BoundaryInterceptor        // Cached request interceptors
 }
 
 // ZeroID returns the registered ZeroIDInterceptor.
@@ -240,6 +251,22 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 		opt(g)
 	}
 
+	// The roster is fixed once every option has been applied, so digest it
+	// here rather than per decision. Reported at construction because a gate
+	// set is otherwise only discoverable by reading each call site.
+	roster := g.GateRoster()
+	if hash, err := roster.Hash(); err != nil {
+		slog.Warn("[guardian] gate roster hash failed; decisions will not state their gate set", "error", err)
+	} else {
+		g.gateRosterHash = hash
+	}
+	slog.Info("[guardian] gate roster",
+		"active", roster.Active,
+		"inactive", roster.Inactive,
+		"active_count", len(roster.Active),
+		"declared_count", len(AllGateIDs()),
+		"roster_hash", g.gateRosterHash)
+
 	if g.zeroidInterceptor == nil {
 		g.zeroidInterceptor = NewZeroIDInterceptor(g)
 	}
@@ -258,6 +285,7 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 		NewFreezeInterceptor(g),
 		NewPDPInterceptor(g),
 		NewTaintEgressInterceptor(g),
+		NewAssumptionFreshnessInterceptor(g),
 		NewSandboxAllocationInterceptor(g),
 	}
 
@@ -389,6 +417,14 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 		decision.EffectDigest = digest
 	}
 
+	// Bind the gate roster before any signing path. Every exit below reaches
+	// SignDecision, and this is the only funnel all six DecisionRecord
+	// construction sites pass through, so binding here cannot be missed by a
+	// seventh.
+	if decision.GateRosterHash == "" {
+		decision.GateRosterHash = g.gateRosterHash
+	}
+
 	artifacts := make([]*pkg_artifact.ArtifactEnvelope, 0, len(evidenceHashes))
 	for _, hash := range evidenceHashes {
 		env, err := g.registry.GetArtifact(ctx, hash)
@@ -474,18 +510,18 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 		"taint":     contracts.NormalizeTaintLabels(effect.Taint),
 	}
 
-	valid, err := g.pe.EvaluateRequirementSet(rule, input)
+	valid, failures, err := g.pe.EvaluateRequirementSetDetail(rule, input)
 	if err != nil {
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonPRGEvalError)
-		decision.Reason = fmt.Sprintf("PRG Evaluation Error: %v", err)
+		decision.Reason = "PRG Evaluation Error: policy requirement evaluation failed"
 		return g.signer.SignDecision(decision)
 	}
 
 	if !valid {
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonMissingRequirement)
-		decision.Reason = string(contracts.ReasonMissingRequirement)
+		decision.Reason = missingRequirementReason(failures, input)
 		g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
 		return g.signer.SignDecision(decision)
 	}
@@ -1194,6 +1230,55 @@ func toMap(v any) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// missingRequirementReason builds the actionable deny reason for a PRG rule
+// that evaluated to false. It names each blocking requirement without exposing
+// policy source and lists the input.* fields the policy author can reference.
+func missingRequirementReason(failures []prg.RequirementFailure, input map[string]interface{}) string {
+	var b strings.Builder
+	b.WriteString(string(contracts.ReasonMissingRequirement))
+	b.WriteString(": policy requirement not met")
+	if len(failures) > 0 {
+		parts := make([]string, 0, len(failures))
+		for _, f := range failures {
+			parts = append(parts, f.ID)
+		}
+		b.WriteString("; blocking requirement(s): ")
+		b.WriteString(strings.Join(parts, ", "))
+	}
+	if len(input) > 0 {
+		fields := make([]string, 0, len(input))
+		for name, value := range input {
+			fields = append(fields, fmt.Sprintf("%s (%s)", name, inputFieldType(value)))
+		}
+		sort.Strings(fields)
+		b.WriteString("; available input.* fields: ")
+		b.WriteString(strings.Join(fields, ", "))
+	}
+	return b.String()
+}
+
+// inputFieldType names the JSON-level type of an input.* field value so a
+// policy author can see, for example, that input.effect is an object and not
+// a string.
+func inputFieldType(value any) string {
+	switch value.(type) {
+	case map[string]interface{}:
+		return "object"
+	case string:
+		return "string"
+	case bool:
+		return "boolean"
+	case nil:
+		return "null"
+	default:
+		rv := reflect.ValueOf(value)
+		if rv.IsValid() && (rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array) {
+			return "array"
+		}
+		return "number"
+	}
 }
 
 // OutputScanResult describes the outcome of post-execution output scanning.

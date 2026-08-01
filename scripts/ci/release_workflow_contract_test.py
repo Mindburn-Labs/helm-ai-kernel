@@ -50,6 +50,39 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("CLOSED)", homebrew)
         self.assertIn("Timed out waiting for Homebrew PR", homebrew)
 
+    def test_core_release_does_not_depend_on_console_sidecar(self) -> None:
+        binaries = self.job("binaries")
+        self.assertIn("needs: [validate, deployment-smoke, kind-smoke, release-smoke]", binaries)
+        self.assertNotIn("console-local-sidecar", binaries)
+        self.assertNotIn("HELM_REQUIRE_CONSOLE_LOCAL_SIDECAR", binaries)
+
+        reproducibility = self.job("reproducibility-check")
+        self.assertIn("needs: validate", reproducibility)
+        self.assertNotIn("console-local-sidecar", reproducibility)
+
+        github_release = self.job("github-release")
+        self.assertNotIn("console-local-sidecar", github_release)
+        self.assertNotIn("Require retained Console manifest bundles", github_release)
+
+    def test_console_attachment_is_optional_and_checks_the_v08_asset_contract(self) -> None:
+        console_assets = self.job("console-release-assets")
+        self.assertIn("needs: [console-local-sidecar, github-release]", console_assets)
+        self.assertIn("always()", console_assets)
+        self.assertIn("needs.console-local-sidecar.result == 'success'", console_assets)
+        self.assertIn("needs.github-release.result == 'success'", console_assets)
+        self.assertIn("make release-binaries-reproducible", console_assets)
+        self.assertIn("console_local_sidecar.py stage", console_assets)
+        self.assertIn("console_local_sidecar.py layout", console_assets)
+        self.assertIn("gh release upload", console_assets)
+        self.assertIn("--only github-release-console-local-sidecar", console_assets)
+
+        post_release = self.job("post-release-version-drift")
+        self.assertIn(
+            "needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]",
+            post_release,
+        )
+        self.assertIn("always()", post_release)
+
 
 if __name__ == "__main__":
     unittest.main()

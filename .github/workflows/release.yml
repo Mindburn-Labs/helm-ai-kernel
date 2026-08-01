@@ -283,7 +283,7 @@ jobs:
 
   binaries:
     runs-on: ubuntu-latest
-    needs: [validate, deployment-smoke, kind-smoke, release-smoke, console-local-sidecar]
+    needs: [validate, deployment-smoke, kind-smoke, release-smoke]
     permissions:
       actions: read
       attestations: write
@@ -298,41 +298,7 @@ jobs:
         with:
           go-version: "1.25.12"
           cache-dependency-path: "**/go.sum"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: console-local-sidecar
-          path: console-local-sidecar/
-      - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-      - name: Re-verify Console input before trust-root build
-        env:
-          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
-        run: |
-          set -euo pipefail
-          test -n "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
-          python3 scripts/release/console_local_sidecar.py verify \
-            --input-dir console-local-sidecar \
-            --pins release/console-local-sidecar-pins.json \
-            --kernel-release "${GITHUB_REF_NAME}" \
-            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
-      - name: Bind the verified Console manifest to this Kernel tag
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        run: |
-          set -euo pipefail
-          manifest="console-local-sidecar/helm-console-local-sidecar-release-manifest.json"
-          kernel_bundle="${manifest}.kernel.cosign.bundle"
-          cosign sign-blob --yes \
-            --bundle "${kernel_bundle}" \
-            "${manifest}"
-          test -s "${kernel_bundle}"
-          KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" \
-            bash scripts/release/verify_cosign.sh console-local-sidecar
       - name: Build and stage release assets
-        env:
-          HELM_CONSOLE_LOCAL_SIDECAR_DIR: ${{ github.workspace }}/console-local-sidecar
-          HELM_REQUIRE_CONSOLE_LOCAL_SIDECAR: "1"
-          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
         run: make release-assets
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
@@ -372,12 +338,6 @@ jobs:
           for f in *; do
             [ -f "$f" ] || continue
             case "$f" in
-              helm-console-local-sidecar-release-manifest.json)
-                # The exact-tag Kernel bundle was created before this tree was
-                # staged. Keep that one evidence file for the packaged layout,
-                # SHA256SUMS, and final GitHub release; do not overwrite it.
-                continue
-                ;;
               *.cosign.bundle) continue ;;
             esac
             bundle="${f}.cosign.bundle"
@@ -397,29 +357,13 @@ jobs:
 
   reproducibility-check:
     runs-on: ubuntu-latest
-    needs: [validate, console-local-sidecar]
-    env:
-      CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+    needs: validate
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25.12"
           cache-dependency-path: "**/go.sum"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: console-local-sidecar
-          path: console-local-sidecar/
-      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-      - name: Re-verify Console input for reproducible release build
-        run: |
-          set -euo pipefail
-          test -n "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
-          python3 scripts/release/console_local_sidecar.py verify \
-            --input-dir console-local-sidecar \
-            --pins release/console-local-sidecar-pins.json \
-            --kernel-release "${GITHUB_REF_NAME}" \
-            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
       - name: First reproducible build
         run: |
           make release-binaries-reproducible
@@ -1191,14 +1135,6 @@ jobs:
         with:
           name: version-status
           path: version-status/
-      - name: Require retained Console manifest bundles for publication
-        run: |
-          set -euo pipefail
-          for bundle in \
-            helm-console-local-sidecar-release-manifest.json.cosign.bundle \
-            helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle; do
-            test -s "dist/${bundle}"
-          done
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -1208,6 +1144,114 @@ jobs:
             cosign/**/*.cosign.bundle
             benchmarks-release/*.json
             version-status/version-status.json
+
+  console-release-assets:
+    # Sidecar failure must not suppress the independently valid Kernel release.
+    # Only a successful, tag-bound Console closure may attach Console assets.
+    runs-on: ubuntu-latest
+    needs: [console-local-sidecar, github-release]
+    if: >-
+      always() &&
+      needs.console-local-sidecar.result == 'success' &&
+      needs.github-release.result == 'success'
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.12"
+          cache-dependency-path: "**/go.sum"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: console-local-sidecar
+          path: console-local-sidecar/
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Re-verify Console input before optional packaging
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          python3 scripts/release/console_local_sidecar.py verify \
+            --input-dir console-local-sidecar \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+      - name: Bind the verified Console manifest to this Kernel tag
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          manifest="console-local-sidecar/helm-console-local-sidecar-release-manifest.json"
+          kernel_bundle="${manifest}.kernel.cosign.bundle"
+          cosign sign-blob --yes \
+            --bundle "${kernel_bundle}" \
+            "${manifest}"
+          test -s "${kernel_bundle}"
+          KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" \
+            bash scripts/release/verify_cosign.sh console-local-sidecar
+      - name: Build manifest-bound Kernel binaries
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: make release-binaries-reproducible
+      - name: Stage Console assets and standalone layouts
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          assets=console-release-assets
+          mkdir -p "${assets}"
+          cp \
+            bin/helm-ai-kernel-linux-amd64 \
+            bin/helm-ai-kernel-linux-arm64 \
+            bin/helm-ai-kernel-darwin-amd64 \
+            bin/helm-ai-kernel-darwin-arm64 \
+            "${assets}/"
+          python3 scripts/release/console_local_sidecar.py stage \
+            --input-dir console-local-sidecar \
+            --output-dir "${assets}" \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          python3 scripts/release/console_local_sidecar.py layout \
+            --input-dir "${assets}" \
+            --output-dir "${assets}" \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+      - name: Cosign keyless-sign standalone Console layouts
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          for layout in console-release-assets/helm-ai-kernel-*-console.tar.gz; do
+            test -f "${layout}"
+            cosign sign-blob --yes \
+              --bundle "${layout}.cosign.bundle" \
+              "${layout}"
+          done
+      - name: Verify optional Console assets before publication
+        run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh console-release-assets
+      - name: Attach verified Console assets to the existing Kernel release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "${GITHUB_REF_NAME}" \
+            console-release-assets/helm-console-local-sidecar-* \
+            console-release-assets/helm-ai-kernel-*-console.tar.gz \
+            console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle \
+            --clobber
+      - name: Require the v0.8 Console asset contract after attachment
+        run: |
+          python3 scripts/release/check_version_drift.py \
+            --expected-version "${GITHUB_REF_NAME#v}" \
+            published \
+            --only github-release-console-local-sidecar
 
   slsa-provenance:
     needs: [binaries, github-release]
@@ -1224,7 +1268,13 @@ jobs:
 
   post-release-version-drift:
     runs-on: ubuntu-latest
-    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag]
+    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]
+    if: >-
+      always() &&
+      needs.github-release.result == 'success' &&
+      needs.slsa-provenance.result == 'success' &&
+      needs.homebrew.result == 'success' &&
+      needs.go-sdk-tag.result == 'success'
     permissions:
       contents: write
     steps:

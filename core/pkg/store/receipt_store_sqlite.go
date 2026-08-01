@@ -298,6 +298,10 @@ func (s *SQLiteReceiptStore) Store(ctx context.Context, r *contracts.Receipt) er
 }
 
 func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Receipt) error {
+	return insertSQLiteReceiptWithCausalSession(ctx, execer, r, causalReceiptSessionID(r))
+}
+
+func insertSQLiteReceiptWithCausalSession(ctx context.Context, execer sqlExecer, r *contracts.Receipt, causalSessionID string) error {
 	query := `INSERT INTO receipts (
 		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -317,7 +321,7 @@ func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Rec
 	timestamp := r.Timestamp.UTC().Format(time.RFC3339Nano)
 
 	_, err = execer.ExecContext(ctx, query,
-		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.SignatureVersion, r.Verdict, r.ReasonCode, r.PolicyHash, r.SessionID, causalReceiptSessionID(r), r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), r.KeyID, nullableJSON(publicKeySetJSON), r.SignatureProfile, r.SignatureAlgorithm, r.CorrelationID,
+		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.SignatureVersion, r.Verdict, r.ReasonCode, r.PolicyHash, r.SessionID, causalSessionID, r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), r.KeyID, nullableJSON(publicKeySetJSON), r.SignatureProfile, r.SignatureAlgorithm, r.CorrelationID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
@@ -326,10 +330,27 @@ func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Rec
 }
 
 func (s *SQLiteReceiptStore) AppendCausal(ctx context.Context, sessionID string, build CausalReceiptBuilder) error {
+	return s.appendCausal(ctx, sessionID, sessionID, build)
+}
+
+// AppendCausalScoped keeps the signed receipt session caller-visible while the
+// durable chain key includes the authenticated tenant identity.
+func (s *SQLiteReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build CausalReceiptBuilder) error {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return fmt.Errorf("tenant id is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("session id is required")
+	}
+	return s.appendCausal(ctx, causalReceiptScopeKey(tenantID, sessionID), sessionID, build)
+}
+
+func (s *SQLiteReceiptStore) appendCausal(ctx context.Context, causalSessionID, externalSessionID string, build CausalReceiptBuilder) error {
 	if build == nil {
 		return fmt.Errorf("causal receipt builder is nil")
 	}
-	if sessionID == "" {
+	if strings.TrimSpace(externalSessionID) == "" {
 		return fmt.Errorf("session id is required")
 	}
 	s.writeMu.Lock()
@@ -351,15 +372,15 @@ func (s *SQLiteReceiptStore) AppendCausal(ctx context.Context, sessionID string,
 		}
 	}()
 
-	last, err := queryLastSQLiteReceipt(ctx, conn, sessionID)
+	last, err := queryLastSQLiteReceipt(ctx, conn, causalSessionID)
 	if err != nil {
 		return err
 	}
-	receipt, err := buildNextCausalReceipt(sessionID, last, build)
+	receipt, err := buildNextCausalReceiptScoped(causalSessionID, externalSessionID, last, build)
 	if err != nil {
 		return err
 	}
-	if err := insertSQLiteReceipt(ctx, conn, receipt); err != nil {
+	if err := insertSQLiteReceiptWithCausalSession(ctx, conn, receipt, causalSessionID); err != nil {
 		return err
 	}
 	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {

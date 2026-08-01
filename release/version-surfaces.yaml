@@ -1,4 +1,5 @@
 {
+  "quantum_posture": "quantum_posture: records classical Cosign release evidence only; it makes no post-quantum assurance claim",
   "schema_version": 1,
   "source_version_file": "VERSION",
   "tag_prefix": "v",

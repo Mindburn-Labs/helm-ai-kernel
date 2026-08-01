@@ -287,9 +287,11 @@ jobs:
         run: |
           set -euo pipefail
           manifest="console-local-sidecar/helm-console-local-sidecar-release-manifest.json"
+          kernel_bundle="${manifest}.kernel.cosign.bundle"
           cosign sign-blob --yes \
-            --bundle "${manifest}.kernel.cosign.bundle" \
+            --bundle "${kernel_bundle}" \
             "${manifest}"
+          test -s "${kernel_bundle}"
           KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" \
             bash scripts/release/verify_cosign.sh console-local-sidecar
       - name: Build and stage release assets
@@ -336,14 +338,15 @@ jobs:
           for f in *; do
             [ -f "$f" ] || continue
             case "$f" in
+              helm-console-local-sidecar-release-manifest.json)
+                # The exact-tag Kernel bundle was created before this tree was
+                # staged. Keep that one evidence file for the packaged layout,
+                # SHA256SUMS, and final GitHub release; do not overwrite it.
+                continue
+                ;;
               *.cosign.bundle) continue ;;
             esac
             bundle="${f}.cosign.bundle"
-            if [ "$f" = "helm-console-local-sidecar-release-manifest.json" ]; then
-              # Preserve the Console producer signature adjacent to its signed
-              # manifest and add the Kernel release signature without collision.
-              bundle="${f}.kernel.cosign.bundle"
-            fi
             echo "::group::Signing $f"
             cosign sign-blob --yes --bundle "${bundle}" "$f"
             echo "::endgroup::"
@@ -1207,6 +1210,14 @@ jobs:
         with:
           name: version-status
           path: version-status/
+      - name: Require retained Console manifest bundles for publication
+        run: |
+          set -euo pipefail
+          for bundle in \
+            helm-console-local-sidecar-release-manifest.json.cosign.bundle \
+            helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle; do
+            test -s "dist/${bundle}"
+          done
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Verify and stage a pinned Console local-sidecar closure for a Kernel release."""
+"""Verify and stage a pinned Console local-sidecar closure for a Kernel release.
+
+quantum_posture: validates classical SHA-256 and Cosign evidence only; it makes
+no post-quantum assurance claim.
+"""
 from __future__ import annotations
 
 import argparse

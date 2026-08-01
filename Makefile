@@ -383,7 +383,7 @@ vex:
 
 # Verify the cosign signature of a local artifact tree (smoke / docs example).
 verify-cosign:
-	@bash scripts/release/verify_cosign.sh
+	@KERNEL_RELEASE_TAG="$(KERNEL_RELEASE_TAG)" bash scripts/release/verify_cosign.sh
 
 # Pin the latest benchmark report to a per-release file under benchmarks/results/.
 bench-pin:

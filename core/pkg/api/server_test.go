@@ -408,6 +408,47 @@ func TestEvaluateBuildsCanonicalReceiptChain(t *testing.T) {
 	}
 }
 
+func TestEvaluateStartsCausalChainsAtOnePerSession(t *testing.T) {
+	srv := newTestServer(t)
+
+	responses := make([]EvaluateResponse, 0, 2)
+	for _, sessionID := range []string{"session-a", "session-b"} {
+		reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "caller-supplied", SessionID: sessionID})
+		if err != nil {
+			t.Fatalf("marshal evaluate request for %s: %v", sessionID, err)
+		}
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody)))
+		if w.Code != http.StatusOK {
+			t.Fatalf("evaluate %s status = %d: %s", sessionID, w.Code, w.Body.String())
+		}
+		var response EvaluateResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("decode evaluate response for %s: %v", sessionID, err)
+		}
+		responses = append(responses, response)
+	}
+
+	if responses[0].LamportClock != 1 || responses[1].LamportClock != 1 {
+		t.Fatalf("new sessions should both start at Lamport 1: %+v", responses)
+	}
+	if responses[0].ReceiptID == responses[1].ReceiptID {
+		t.Fatalf("separate session receipts must retain unique IDs: %+v", responses)
+	}
+
+	srv.mu.RLock()
+	defer srv.mu.RUnlock()
+	for _, response := range responses {
+		receipt := srv.receipts[response.ReceiptID]
+		if receipt == nil {
+			t.Fatalf("receipt %q was not retained", response.ReceiptID)
+		}
+		if receipt.ExecutorID != "operator-1" {
+			t.Fatalf("receipt executor = %q, want authenticated executor", receipt.ExecutorID)
+		}
+	}
+}
+
 func TestHealth(t *testing.T) {
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)

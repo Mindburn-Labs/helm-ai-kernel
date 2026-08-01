@@ -39,16 +39,17 @@ import (
 
 // Server is the HELM Governance REST API server.
 type Server struct {
-	mu             sync.RWMutex
-	pdp            pdp.PolicyDecisionPoint
-	receiptSigner  helmcrypto.Signer
-	receipts       map[string]*contracts.Receipt
-	sessions       map[string][]string // sessionID → []receiptID
-	lamport        uint64
-	mux            *http.ServeMux
-	edge           http.Handler // otelhttp-wrapped entry point (HELM-333)
-	allowedOrigins []string     // CORS allowed origins (nil = no CORS headers)
-	authenticator  Authenticator
+	mu              sync.RWMutex
+	pdp             pdp.PolicyDecisionPoint
+	receiptSigner   helmcrypto.Signer
+	receipts        map[string]*contracts.Receipt
+	sessions        map[string][]string // sessionID → []receiptID
+	lamport         uint64              // highest causal Lamport clock across active sessions
+	receiptSequence uint64
+	mux             *http.ServeMux
+	edge            http.Handler // otelhttp-wrapped entry point (HELM-333)
+	allowedOrigins  []string     // CORS allowed origins (nil = no CORS headers)
+	authenticator   Authenticator
 }
 
 // AuthenticatedPrincipal is the identity the legacy API trusts for protected
@@ -317,9 +318,9 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate receipt.
+	// Generate a receipt whose causal clock is scoped to its signed session.
 	s.mu.Lock()
-	lamport := s.lamport + 1
+	lamport := uint64(1)
 	prevHash := ""
 	if sessionReceipts, ok := s.sessions[req.SessionID]; ok && len(sessionReceipts) > 0 {
 		lastID := sessionReceipts[len(sessionReceipts)-1]
@@ -336,9 +337,11 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "previous receipt hash unavailable", http.StatusServiceUnavailable)
 			return
 		}
+		lamport = lastReceipt.LamportClock + 1
 	}
 
-	receiptID := fmt.Sprintf("rcpt-%s-%d", time.Now().Format("20060102-150405"), lamport)
+	s.receiptSequence++
+	receiptID := fmt.Sprintf("rcpt-%s-%d", time.Now().Format("20060102-150405"), s.receiptSequence)
 	argsJSON, _ := json.Marshal(req.Args)
 	argsHash := sha256.Sum256(argsJSON)
 
@@ -384,7 +387,9 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.lamport = lamport
+	if lamport > s.lamport {
+		s.lamport = lamport
+	}
 	s.receipts[receiptID] = receipt
 	s.sessions[req.SessionID] = append(s.sessions[req.SessionID], receiptID)
 	s.mu.Unlock()

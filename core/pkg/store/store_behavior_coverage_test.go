@@ -277,7 +277,7 @@ func TestSQLiteReceiptRoundTripsChainFieldsAndAgentFilter(t *testing.T) {
 	}
 }
 
-func TestSQLiteReceiptRejectsDuplicateExecutorLamport(t *testing.T) {
+func TestSQLiteReceiptEnforcesLamportUniquenessPerSession(t *testing.T) {
 	store, cleanup := newTestSQLiteStore(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -288,6 +288,7 @@ func TestSQLiteReceiptRejectsDuplicateExecutorLamport(t *testing.T) {
 		Status:       "OK",
 		Timestamp:    time.Now(),
 		ExecutorID:   "agent.dup",
+		SessionID:    "session-a",
 		LamportClock: 9,
 	}
 	second := &contracts.Receipt{
@@ -297,13 +298,65 @@ func TestSQLiteReceiptRejectsDuplicateExecutorLamport(t *testing.T) {
 		Status:       "OK",
 		Timestamp:    time.Now().Add(time.Second),
 		ExecutorID:   "agent.dup",
+		SessionID:    "session-b",
 		LamportClock: 9,
 	}
 	if err := store.Store(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Store(ctx, second); err == nil {
-		t.Fatal("expected duplicate executor/lamport receipt to fail")
+	if err := store.Store(ctx, second); err != nil {
+		t.Fatalf("same executor should be able to begin a second session at the same Lamport clock: %v", err)
+	}
+
+	duplicateSessionLamport := *first
+	duplicateSessionLamport.ReceiptID = "r-dup-3"
+	duplicateSessionLamport.DecisionID = "d-dup-3"
+	duplicateSessionLamport.Timestamp = time.Now().Add(2 * time.Second)
+	if err := store.Store(ctx, &duplicateSessionLamport); err == nil {
+		t.Fatal("expected duplicate session/lamport receipt to fail")
+	}
+}
+
+func TestSQLiteReceiptMigrationReplacesExecutorLamportUniqueIndex(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+
+	if _, err := store.db.Exec(`DROP INDEX idx_receipts_session_lamport_unique`); err != nil {
+		t.Fatalf("drop current session index: %v", err)
+	}
+	if _, err := store.db.Exec(`CREATE UNIQUE INDEX idx_receipts_executor_lamport_unique ON receipts(executor_id, lamport_clock) WHERE executor_id IS NOT NULL AND executor_id <> '' AND lamport_clock > 0`); err != nil {
+		t.Fatalf("install legacy executor index: %v", err)
+	}
+	if err := store.migrate(); err != nil {
+		t.Fatalf("migrate legacy executor index: %v", err)
+	}
+
+	ctx := context.Background()
+	for _, receipt := range []*contracts.Receipt{
+		{
+			ReceiptID:    "r-migrated-a",
+			DecisionID:   "d-migrated-a",
+			EffectID:     "e",
+			Status:       "OK",
+			Timestamp:    time.Now(),
+			ExecutorID:   "agent.migrated",
+			SessionID:    "session-a",
+			LamportClock: 1,
+		},
+		{
+			ReceiptID:    "r-migrated-b",
+			DecisionID:   "d-migrated-b",
+			EffectID:     "e",
+			Status:       "OK",
+			Timestamp:    time.Now().Add(time.Second),
+			ExecutorID:   "agent.migrated",
+			SessionID:    "session-b",
+			LamportClock: 1,
+		},
+	} {
+		if err := store.Store(ctx, receipt); err != nil {
+			t.Fatalf("store %s after migration: %v", receipt.ReceiptID, err)
+		}
 	}
 }
 

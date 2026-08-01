@@ -3,7 +3,10 @@
 # given directory tree. Used as a smoke check post-release and as the
 # canonical verification recipe documented in docs/VERIFICATION.md.
 #
-# Usage: verify_cosign.sh [dir]   # default: ./dist
+# Usage: KERNEL_RELEASE_TAG=vX.Y.Z verify_cosign.sh [dir]   # default: ./dist
+# A directory containing the Console local-sidecar contract is a public
+# release surface and therefore requires its exact Kernel tag. Untagged
+# local artifact checks may still use the generic workflow identity below.
 #
 # Caller: Makefile target `verify-cosign`. Documented in docs/VERIFICATION.md.
 set -euo pipefail
@@ -12,6 +15,12 @@ DIR="${1:-dist}"
 DEFAULT_IDENTITY_REGEX='^https://github\.com/Mindburn-Labs/helm-ai-kernel/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+.*)$'
 IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-$DEFAULT_IDENTITY_REGEX}"
 ISSUER="${COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
+KERNEL_RELEASE_TAG="${KERNEL_RELEASE_TAG:-}"
+CONSOLE_MANIFEST="helm-console-local-sidecar-release-manifest.json"
+CONSOLE_PRODUCER_BUNDLE="${CONSOLE_MANIFEST}.cosign.bundle"
+KERNEL_MANIFEST_BUNDLE="helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle"
+CONSOLE_PRODUCER_IDENTITY="https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@refs/heads/main"
+KERNEL_RELEASE_IDENTITY=""
 
 if ! printf '%s' "$IDENTITY_REGEX" | grep -Eq '^\^https://github\\?\.com/Mindburn-Labs/helm-ai-kernel/\\?\.github/workflows/[A-Za-z0-9_.-]+\\?\.ya?ml@refs/'; then
     echo "::error::COSIGN_IDENTITY_REGEX must be anchored to a helm-ai-kernel GitHub Actions workflow identity and refs"
@@ -28,20 +37,91 @@ if [ ! -d "$DIR" ]; then
     exit 1
 fi
 
+console_contract=0
+if find "$DIR" -type f \( -name "$CONSOLE_MANIFEST" -o -name "$CONSOLE_PRODUCER_BUNDLE" -o -name "$KERNEL_MANIFEST_BUNDLE" \) -print -quit | grep -q .; then
+    console_contract=1
+fi
+
+if [ "$console_contract" = "1" ] && [ -z "$KERNEL_RELEASE_TAG" ]; then
+    echo "::error::Console release verification requires KERNEL_RELEASE_TAG for exact Kernel tag binding"
+    exit 1
+fi
+
+if [ -n "$KERNEL_RELEASE_TAG" ]; then
+    if ! [[ "$KERNEL_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "::error::KERNEL_RELEASE_TAG must be an exact semantic release tag"
+        exit 1
+    fi
+    KERNEL_RELEASE_IDENTITY="https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${KERNEL_RELEASE_TAG}"
+    if [ "$console_contract" = "1" ]; then
+        console_manifest_path="$(find "$DIR" -type f -name "$CONSOLE_MANIFEST" -print -quit)"
+        console_manifest_count="$(find "$DIR" -type f -name "$CONSOLE_MANIFEST" -print | wc -l | tr -d ' ')"
+        console_producer_count="$(find "$DIR" -type f -name "$CONSOLE_PRODUCER_BUNDLE" -print | wc -l | tr -d ' ')"
+        console_kernel_count="$(find "$DIR" -type f -name "$KERNEL_MANIFEST_BUNDLE" -print | wc -l | tr -d ' ')"
+        if [ "$console_manifest_count" != "1" ] || [ "$console_producer_count" != "1" ] || [ "$console_kernel_count" != "1" ]; then
+            echo "::error::Kernel release verification requires exactly one Console manifest plus both producer and Kernel bundles"
+            exit 1
+        fi
+        console_dir="$(dirname "$console_manifest_path")"
+        if [ ! -f "$console_dir/$CONSOLE_PRODUCER_BUNDLE" ] || [ ! -f "$console_dir/$KERNEL_MANIFEST_BUNDLE" ]; then
+            echo "::error::Kernel release verification requires Console manifest bundles beside the manifest"
+            exit 1
+        fi
+    fi
+fi
+
 ok=0
 fail=0
 while IFS= read -r bundle; do
-    artifact="${bundle%.cosign.bundle}"
+    case "$(basename "$bundle")" in
+        "$CONSOLE_PRODUCER_BUNDLE")
+            # The Console source tuple is immutable, while its producer
+            # workflow is protected-main trust. The tag-bound Kernel bundle
+            # below is the public-release binding for this manifest.
+            if [ -z "$KERNEL_RELEASE_TAG" ]; then
+                echo "::error::Console producer bundle requires an exact Kernel release tag"
+                exit 1
+            fi
+            artifact="${bundle%.cosign.bundle}"
+            verify_args=(
+                verify-blob
+                --bundle "$bundle"
+                --certificate-identity "$CONSOLE_PRODUCER_IDENTITY"
+                --certificate-oidc-issuer "$ISSUER"
+                "$artifact"
+            )
+            ;;
+        *)
+            case "$bundle" in
+                *.kernel.cosign.bundle) artifact="${bundle%.kernel.cosign.bundle}" ;;
+                *.cosign.bundle) artifact="${bundle%.cosign.bundle}" ;;
+                *) echo "::error::unsupported cosign bundle suffix: $bundle"; exit 1 ;;
+            esac
+            if [ -n "$KERNEL_RELEASE_IDENTITY" ]; then
+                verify_args=(
+                    verify-blob
+                    --bundle "$bundle"
+                    --certificate-identity "$KERNEL_RELEASE_IDENTITY"
+                    --certificate-oidc-issuer "$ISSUER"
+                    "$artifact"
+                )
+            else
+                verify_args=(
+                    verify-blob
+                    --bundle "$bundle"
+                    --certificate-identity-regexp "$IDENTITY_REGEX"
+                    --certificate-oidc-issuer "$ISSUER"
+                    "$artifact"
+                )
+            fi
+            ;;
+    esac
     if [ ! -f "$artifact" ]; then
         echo "::warning::no artifact next to bundle $bundle; skipping"
         continue
     fi
     echo "verifying $artifact"
-    if cosign verify-blob \
-        --bundle "$bundle" \
-        --certificate-identity-regexp "$IDENTITY_REGEX" \
-        --certificate-oidc-issuer "$ISSUER" \
-        "$artifact" >/dev/null 2>&1; then
+    if cosign "${verify_args[@]}" >/dev/null 2>&1; then
         echo "  ok"
         ok=$((ok + 1))
     else

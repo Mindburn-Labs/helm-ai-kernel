@@ -1,0 +1,15 @@
+{
+  "schema": "helm.console.local-sidecar.source-pins.v1",
+  "pins": [
+    {
+      "kernel_release_version": "v0.8.0",
+      "source_repository": "Mindburn-Labs/app-helm-console",
+      "source": {
+        "commit": "4534c1bf14d987f98bab5b6bf00490b21c2f5ed8",
+        "tree": "d2cf6050ada4c9ca37249c6134b59eaa0e709bf0",
+        "version": "0.2.0",
+        "package_lock_sha256": "f31193aff2db5e6c00a39c2ecffba1d70ec72152ec0014136ed5562dbd40505f"
+      }
+    }
+  ]
+}

@@ -17,6 +17,7 @@ class VersionDriftMonitorTests(unittest.TestCase):
 
         required = {
             "github-release",
+            "github-release-console-local-sidecar",
             "artifacthub-chart",
             "ghcr-image",
             "ghcr-chart",
@@ -106,6 +107,27 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertTrue(selection.blocking)
         self.assertEqual(selection.actual, ["typo"])
         self.assertIn("unknown --only", selection.detail or "")
+
+    def test_published_surface_is_skipped_before_its_introduced_version(self) -> None:
+        results = drift.check_published(
+            {
+                "published_surfaces": [
+                    {
+                        "id": "console-sidecar",
+                        "kind": "github_release_assets",
+                        "introduced_in": "0.8.0",
+                        "url": "https://example.test/releases/v{version}",
+                        "human_url": "https://example.test/releases/v{version}",
+                        "required_assets": ["sidecar.tar.gz"],
+                    }
+                ]
+            },
+            "0.7.5",
+            set(),
+        )
+        self.assertEqual(results[0].status, "skipped")
+        self.assertFalse(results[0].blocking)
+        self.assertEqual(results[0].detail, "introduced in v0.8.0")
 
     def test_ghcr_tags_check_verifies_required_manifests(self) -> None:
         calls = []

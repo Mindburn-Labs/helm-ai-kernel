@@ -15,6 +15,7 @@ specific GitHub release attached a matching asset.
 | `generate_vex.sh` | Emits `release/vex/v<version>.openvex.json` from the current `sbom.json` baseline. | `make vex`, release workflow. |
 | `homebrew_formula.rb` | Generates a Homebrew formula from version and checksum inputs. | release workflow. |
 | `pin_benchmarks.sh` | Pins a benchmark snapshot for a release tag. | `make bench-pin`, release workflow. |
+| `console_local_sidecar.py` | Resolves an exact Console source pin, verifies its signed aggregate manifest and each native closure, then stages the verified files. | Kernel tag release only. |
 | `stage_release_assets.sh` | Stages the complete release asset directory, including exact tag OpenVEX, verified EvidencePack, sample policy material, attestation, Homebrew formula, and checksums. | `make release-assets`, release workflow. |
 | `verify_cosign.sh` | Verifies local artifacts that have adjacent `*.cosign.bundle` files. | `make verify-cosign`, manual verification. |
 | `distribute.sh` | Legacy/manual multi-package publication helper. | Manual only; do not treat as automatic release proof. |
@@ -28,7 +29,7 @@ make quality-merge
 make quality-release
 make release-readiness
 make release-assets
-bash scripts/release/verify_cosign.sh ./downloaded-release
+KERNEL_RELEASE_TAG=v<version> bash scripts/release/verify_cosign.sh ./downloaded-release
 python3 scripts/release/check_version_drift_test.py
 make docs-coverage docs-truth
 make version-drift-published
@@ -40,6 +41,52 @@ release attestation all match the tag. `stage_release_assets.sh` requires the
 matching OpenVEX file, generates a non-seeded release EvidencePack from release
 build inputs, verifies `evidence-pack.tar`, and writes the final checksum
 manifest.
+
+The local Console browser sidecar is a standalone-release asset, never a
+Homebrew resource. A tag release first dispatches the Console's native closure
+builder from a checked-in exact source pin. The immutable source tuple is
+separate from the Console producer workflow identity: that signature is trusted
+at `refs/heads/main` under the Console repository's protected-branch controls;
+it does not claim an immutable workflow revision. `console_local_sidecar.py`
+requires the Console keyless manifest signature, all four native targets,
+archive and inventory integrity, and source/provenance agreement before the
+files enter `dist/release-assets/`. The Kernel release signs that manifest once
+for its exact tag before staging the closure; the same `.kernel.cosign.bundle`
+is kept in `release-assets`, its standalone layouts, `SHA256SUMS.txt`, and the
+GitHub release. The later generic signing job verifies rather than rewrites it.
+The Console producer bundle remains alongside the separate Kernel bundle, so
+public verification must supply `KERNEL_RELEASE_TAG=v<version>` and cannot fall
+back to a Kernel `main` workflow identity.
+
+Before building any v0.8.0 release binary, the workflow re-verifies the signed
+Console input and passes the aggregate manifest SHA-256 through
+`CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256` to both normal and reproducible linker
+flags as `main.consoleLocalSidecarManifestSHA256`. The local launcher uses that
+compiled digest as its trust root: it must match manifest bytes and verify the
+manifest's pinned source, host target, archive, checksum, inventory, and
+provenance relations before creating a session or executing bundled Node. This
+runtime path needs neither host `cosign` nor network access; the producer and
+Kernel Cosign bundles remain release-assembly and audit evidence.
+
+Each matching `helm-ai-kernel-<os>-<arch>-console.tar.gz` release asset
+deterministically extracts to this runnable layout:
+
+```text
+<executable-dir>/
+  helm-ai-kernel
+  console/
+    helm-console-local-sidecar-release-manifest.json
+    helm-console-local-sidecar-release-manifest.json.cosign.bundle
+    helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle
+    helm-console-local-sidecar-<os>-<arch>.tar.gz
+    helm-console-local-sidecar-<os>-<arch>.tar.gz.sha256
+    helm-console-local-sidecar-<os>-<arch>.tar.gz.inventory.sha256
+    helm-console-local-sidecar-<os>-<arch>.tar.gz.provenance.json
+    helm-console-local-sidecar-<os>-<arch>/
+```
+
+All four target sets of raw evidence remain in `console/`; only the host target
+is extracted there. Homebrew never installs this directory.
 
 The Makefile uses `SOURCE_DATE_EPOCH` for reproducible binary builds, defaulting
 to the current `HEAD` commit timestamp unless overridden. For `make vex`, an

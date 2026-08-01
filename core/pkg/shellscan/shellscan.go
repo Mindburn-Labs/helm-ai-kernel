@@ -138,10 +138,10 @@ type collector struct {
 	signals    map[string]bool
 	parseOK    bool
 
-	writtenPaths    map[string]bool
-	cwd             string
-	sensitiveTarget string
-	destructiveEffect bool
+	writtenPaths            map[string]bool
+	cwd                     string
+	sensitiveTarget         string
+	destructiveEffect       bool
 	requiresShellPermission bool
 }
 

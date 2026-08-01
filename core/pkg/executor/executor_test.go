@@ -2,6 +2,8 @@ package executor
 
 import (
 	"context"
+	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +20,12 @@ type MockDriver struct {
 
 func (m *MockDriver) Execute(ctx context.Context, toolName string, params map[string]any) (any, error) {
 	m.Called = true
+	return "result", nil
+}
+
+type staticDriver struct{}
+
+func (staticDriver) Execute(context.Context, string, map[string]any) (any, error) {
 	return "result", nil
 }
 
@@ -57,6 +65,93 @@ func (s *MemoryReceiptStore) GetLastForSession(ctx context.Context, sessionID st
 		}
 	}
 	return last, nil
+}
+
+// causalReceiptStore models the optional atomic append capability provided by
+// the durable receipt stores. Its legacy read barrier makes the old
+// GetLastForSession + Store sequence deterministically allocate the same
+// position to two concurrent executions.
+type causalReceiptStore struct {
+	mu               sync.Mutex
+	receipts         map[string]*contracts.Receipt
+	appendCalls      int
+	directStoreCalls int
+	legacyReadCount  int
+	legacyReadsReady chan struct{}
+}
+
+func newCausalReceiptStore() *causalReceiptStore {
+	return &causalReceiptStore{
+		receipts:         make(map[string]*contracts.Receipt),
+		legacyReadsReady: make(chan struct{}),
+	}
+}
+
+func (s *causalReceiptStore) Get(_ context.Context, decisionID string) (*contracts.Receipt, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, receipt := range s.receipts {
+		if receipt.DecisionID == decisionID {
+			return receipt, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *causalReceiptStore) Store(_ context.Context, receipt *contracts.Receipt) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.directStoreCalls++
+	s.receipts[receipt.ReceiptID] = receipt
+	return nil
+}
+
+func (s *causalReceiptStore) GetLastForSession(ctx context.Context, _ string) (*contracts.Receipt, error) {
+	s.mu.Lock()
+	s.legacyReadCount++
+	if s.legacyReadCount == 2 {
+		close(s.legacyReadsReady)
+	}
+	s.mu.Unlock()
+
+	select {
+	case <-s.legacyReadsReady:
+		return nil, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (s *causalReceiptStore) AppendCausal(ctx context.Context, sessionID string, build func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var previous *contracts.Receipt
+	for _, receipt := range s.receipts {
+		if receipt.SessionID == sessionID && (previous == nil || receipt.LamportClock > previous.LamportClock) {
+			previous = receipt
+		}
+	}
+	lamport := uint64(1)
+	prevHash := ""
+	if previous != nil {
+		lamport = previous.LamportClock + 1
+		var err error
+		prevHash, err = contracts.ReceiptChainHash(previous)
+		if err != nil {
+			return err
+		}
+	}
+	receipt, err := build(previous, lamport, prevHash)
+	if err != nil {
+		return err
+	}
+	if receipt == nil {
+		return context.Canceled
+	}
+	s.appendCalls++
+	s.receipts[receipt.ReceiptID] = receipt
+	return nil
 }
 
 type safeDepGateFunc func(context.Context, safedep.GateRequest) (safedep.GateResult, error)
@@ -242,6 +337,110 @@ func TestSafeExecutorChainsReceiptsBySignedSessionID(t *testing.T) {
 	for _, receipt := range []*contracts.Receipt{first, second} {
 		if valid, verifyErr := signer.VerifyReceipt(receipt); verifyErr != nil || !valid {
 			t.Fatalf("signed session-chain receipt did not verify: valid=%v err=%v receipt=%+v", valid, verifyErr, receipt)
+		}
+	}
+}
+
+func TestSafeExecutorAllocatesConcurrentReceiptChainsAtomically(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("atomic-receipt-chain-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := newCausalReceiptStore()
+	executor := NewSafeExecutor(signer, signer, staticDriver{}, store, nil, nil, "", nil, nil, nil, time.Now)
+	const sessionID = "atomic-session"
+
+	type executionInput struct {
+		effect   *contracts.Effect
+		decision *contracts.DecisionRecord
+		intent   *contracts.AuthorizedExecutionIntent
+	}
+	inputs := make([]executionInput, 0, 2)
+	for _, id := range []string{"one", "two"} {
+		effect := &contracts.Effect{
+			EffectID:   "effect-" + id,
+			EffectType: "EXECUTE_TOOL",
+			ArgsHash:   "sha256:args-" + id,
+			Params:     map[string]any{"tool_name": "ls", "effect": id},
+		}
+		decision := &contracts.DecisionRecord{
+			ID:                "decision-" + id,
+			Verdict:           string(contracts.VerdictAllow),
+			ReasonCode:        "ALLOW_BY_POLICY",
+			PolicyContentHash: "sha256:policy",
+			InputContext:      map[string]any{"session_id": sessionID},
+			EffectDigest:      testEffectDigest(t, effect),
+		}
+		if err := signer.SignDecision(decision); err != nil {
+			t.Fatalf("sign decision %s: %v", id, err)
+		}
+		intent := &contracts.AuthorizedExecutionIntent{
+			DecisionID:       decision.ID,
+			EffectDigestHash: decision.EffectDigest,
+			AllowedTool:      "ls",
+			ExpiresAt:        time.Now().Add(time.Hour),
+		}
+		if err := signer.SignIntent(intent); err != nil {
+			t.Fatalf("sign intent %s: %v", id, err)
+		}
+		inputs = append(inputs, executionInput{effect: effect, decision: decision, intent: intent})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := make(chan struct{})
+	results := make(chan *contracts.Receipt, len(inputs))
+	errs := make(chan error, len(inputs))
+	var wg sync.WaitGroup
+	for _, input := range inputs {
+		input := input
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			receipt, _, err := executor.Execute(ctx, input.effect, input.decision, input.intent)
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- receipt
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent execution failed: %v", err)
+	}
+
+	if store.appendCalls != len(inputs) || store.directStoreCalls != 0 || store.legacyReadCount != 0 {
+		t.Fatalf("receipt allocation bypassed AppendCausal: append=%d direct_store=%d legacy_reads=%d", store.appendCalls, store.directStoreCalls, store.legacyReadCount)
+	}
+	receipts := make([]*contracts.Receipt, 0, len(inputs))
+	for receipt := range results {
+		receipts = append(receipts, receipt)
+	}
+	if len(receipts) != len(inputs) {
+		t.Fatalf("got %d receipts, want %d", len(receipts), len(inputs))
+	}
+	sort.Slice(receipts, func(i, j int) bool { return receipts[i].LamportClock < receipts[j].LamportClock })
+	if receipts[0].LamportClock != 1 || receipts[0].PrevHash != "" || receipts[1].LamportClock != 2 {
+		t.Fatalf("unexpected atomic chain positions: first=%+v second=%+v", receipts[0], receipts[1])
+	}
+	firstHash, err := contracts.ReceiptChainHash(receipts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipts[1].PrevHash != firstHash {
+		t.Fatalf("second receipt prev_hash = %q, want %q", receipts[1].PrevHash, firstHash)
+	}
+	for _, receipt := range receipts {
+		if receipt.SignatureVersion != contracts.ReceiptSignatureV5 {
+			t.Fatalf("atomic receipt signature version = %q, want %q", receipt.SignatureVersion, contracts.ReceiptSignatureV5)
+		}
+		if valid, verifyErr := signer.VerifyReceipt(receipt); verifyErr != nil || !valid {
+			t.Fatalf("receipt signature invalid after atomic append: valid=%v err=%v receipt=%+v", valid, verifyErr, receipt)
 		}
 	}
 }

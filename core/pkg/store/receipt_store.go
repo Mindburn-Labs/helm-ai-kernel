@@ -26,8 +26,10 @@ type ReceiptStore interface {
 }
 
 // CausalReceiptBuilder constructs a receipt after the store has locked the
-// session chain and assigned its next Lamport clock and previous hash.
-type CausalReceiptBuilder func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error)
+// session chain and assigned its next Lamport clock and previous hash. It is
+// an alias so consumers can detect the optional atomic append capability
+// without importing this package (which would create an executor/store cycle).
+type CausalReceiptBuilder = func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error)
 
 // causalReceiptSessionID selects the durable lookup scope without changing the
 // receipt envelope. V5 signs SessionID; legacy receipts retain ExecutorID as

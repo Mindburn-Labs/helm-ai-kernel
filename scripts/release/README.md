@@ -47,10 +47,40 @@ Homebrew resource. A tag release first dispatches the Console's native closure
 builder from a checked-in exact source pin. `console_local_sidecar.py` requires
 the Console keyless manifest signature, all four native targets, archive and
 inventory integrity, and source/provenance agreement before the files enter
-`dist/release-assets/`. The Kernel release attests the closure and adds a
-separate Kernel signature without rewriting the producer bundle. The Console
-producer bundle remains alongside a separate
+`dist/release-assets/`. The Kernel release signs that manifest for its exact
+tag before staging the closure and adds a separate Kernel signature without
+rewriting the producer bundle. The Console producer bundle remains alongside a separate
 `*.kernel.cosign.bundle` so neither signature overwrites the other.
+
+Before building any v0.8.0 release binary, the workflow re-verifies the signed
+Console input and passes the aggregate manifest SHA-256 through
+`CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256` to both normal and reproducible linker
+flags as `main.consoleLocalSidecarManifestSHA256`. The local launcher uses that
+compiled digest as its trust root: it must match manifest bytes and verify the
+manifest's pinned source, host target, archive, checksum, inventory, and
+provenance relations before creating a session or executing bundled Node. This
+runtime path needs neither host `cosign` nor network access; the producer and
+Kernel Cosign bundles remain release-assembly and audit evidence.
+
+Each matching `helm-ai-kernel-<os>-<arch>-console.tar.gz` release asset
+deterministically extracts to this runnable layout:
+
+```text
+<executable-dir>/
+  helm-ai-kernel
+  console/
+    helm-console-local-sidecar-release-manifest.json
+    helm-console-local-sidecar-release-manifest.json.cosign.bundle
+    helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle
+    helm-console-local-sidecar-<os>-<arch>.tar.gz
+    helm-console-local-sidecar-<os>-<arch>.tar.gz.sha256
+    helm-console-local-sidecar-<os>-<arch>.tar.gz.inventory.sha256
+    helm-console-local-sidecar-<os>-<arch>.tar.gz.provenance.json
+    helm-console-local-sidecar-<os>-<arch>/
+```
+
+All four target sets of raw evidence remain in `console/`; only the host target
+is extracted there. Homebrew never installs this directory.
 
 The Makefile uses `SOURCE_DATE_EPOCH` for reproducible binary builds, defaulting
 to the current `HEAD` commit timestamp unless overridden. For `make vex`, an

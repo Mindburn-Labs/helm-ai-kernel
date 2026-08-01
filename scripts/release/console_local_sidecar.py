@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import os
@@ -22,16 +23,19 @@ COMPONENT = "app-helm-console"
 CONSOLE_REPOSITORY = "Mindburn-Labs/app-helm-console"
 MANIFEST_NAME = "helm-console-local-sidecar-release-manifest.json"
 MANIFEST_BUNDLE_NAME = f"{MANIFEST_NAME}.cosign.bundle"
+KERNEL_MANIFEST_BUNDLE_NAME = f"{MANIFEST_NAME}.kernel.cosign.bundle"
 COSIGN_ISSUER = "https://token.actions.githubusercontent.com"
 COSIGN_IDENTITY = (
     "https://github.com/Mindburn-Labs/app-helm-console/"
     ".github/workflows/release-local-sidecar.yml@refs/heads/main"
 )
 TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64")
+KERNEL_BINARY_NAMES = {target: f"helm-ai-kernel-{target}" for target in TARGETS}
 HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 SHA_40 = re.compile(r"^[0-9a-f]{40}$")
 SAFE_FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 INNER_PROVENANCE_SCHEMA = "helm.console.local-sidecar.provenance.v1"
+UNSIGNED_INNER_SIGNATURE = "none; this unsigned local artifact has no release authority"
 BUNDLE_HASH_SCOPE = (
     "sorted sha256 records for all closure payload files, including the bundled Node runtime; "
     "this binds the exact build and is not a cross-checkout byte-reproducibility claim"
@@ -128,12 +132,28 @@ def locate_unique(root: Path, name: str, label: str) -> Path:
     return matches[0]
 
 
-def safe_archive_path(name: str) -> str:
-    path = PurePosixPath(name)
-    if not name or path.is_absolute() or ".." in path.parts or "." in path.parts:
+def safe_archive_path(name: str, *, directory: bool = False) -> str:
+    """Return a canonical member name without weakening tar path rules.
+
+    GNU tar emits directory members as ``root/`` while PurePosixPath renders
+    that same canonical path as ``root``.  Accept that one representation only
+    for actual directory members; files, links, and special members may never
+    use a trailing slash.
+    """
+    if not name or "\\" in name:
+        reject("archive member has an empty path")
+    raw = name
+    if raw.endswith("/"):
+        if not directory:
+            reject(f"non-directory archive member has a directory suffix: {name!r}")
+        raw = raw[:-1]
+    if not raw or raw == ".":
+        reject(f"archive member has unsafe path: {name!r}")
+    path = PurePosixPath(raw)
+    if path.is_absolute() or ".." in path.parts or "." in path.parts:
         reject(f"archive member has unsafe path: {name!r}")
     canonical = str(path)
-    if canonical != name:
+    if canonical != raw:
         reject(f"archive member path is not canonical: {name!r}")
     return canonical
 
@@ -151,6 +171,8 @@ def parse_inventory(data: bytes) -> dict[str, str]:
             reject(f"invalid closure inventory entry: {line!r}")
         digest, name = match.groups()
         safe_archive_path(name)
+        if not (name.startswith("app/") or name in {"runtime/node/bin/node", "runtime/node/LICENSE"}):
+            reject(f"closure inventory has an unsupported path: {name}")
         if name in entries:
             reject(f"duplicate closure inventory path: {name}")
         entries[name] = digest
@@ -208,6 +230,8 @@ def verify_runtime(value: Any, target: dict[str, str]) -> dict[str, Any]:
     runtime["node"] = require_nonempty_string(runtime["node"], "sidecar provenance.runtime.node")
     runtime["npm"] = require_nonempty_string(runtime["npm"], "sidecar provenance.runtime.npm")
     runtime["next"] = require_nonempty_string(runtime["next"], "sidecar provenance.runtime.next")
+    if not runtime["node"].startswith("v"):
+        reject("sidecar provenance.runtime.node must be a versioned Node runtime")
     bundled_node = require_exact_keys(
         runtime["bundled_node"],
         {"executable", "license_notice"},
@@ -296,9 +320,13 @@ def verify_archive(
         reject(f"unable to read sidecar archive {archive_path.name}: {exc}")
 
     files: dict[str, tuple[bytes, int]] = {}
+    seen_members: set[str] = set()
     try:
         for member in archive.getmembers():
-            name = safe_archive_path(member.name)
+            name = safe_archive_path(member.name, directory=member.isdir())
+            if name in seen_members:
+                reject(f"archive contains duplicate member path: {member.name}")
+            seen_members.add(name)
             parts = PurePosixPath(name).parts
             if parts[0] != expected_root:
                 reject(f"archive member escapes expected closure root: {member.name}")
@@ -370,8 +398,8 @@ def verify_target(root: Path, record: Any, source: dict[str, str]) -> tuple[str,
     )
     if inner["provenance_schema"] != INNER_PROVENANCE_SCHEMA:
         reject(f"target {target} has an unsupported inner provenance schema")
-    if not isinstance(inner["signature"], str) or not inner["signature"].startswith("none;"):
-        reject(f"target {target} must honestly declare its unsigned inner artifact")
+    if inner["signature"] != UNSIGNED_INNER_SIGNATURE:
+        reject(f"target {target} has an unexpected unsigned inner artifact signature")
     if inner["release_authority"] is not False:
         reject(f"target {target} must not claim inner release authority")
     inner["bundle_sha256"] = require_hex(inner["bundle_sha256"], f"target {target}.inner_artifact.bundle_sha256")
@@ -450,6 +478,7 @@ def verify_cosign(manifest: Path, bundle: Path) -> None:
                 str(manifest),
             ],
             check=True,
+            stdout=subprocess.DEVNULL,
         )
     except FileNotFoundError:
         reject("cosign is required to verify the Console release manifest")
@@ -457,10 +486,50 @@ def verify_cosign(manifest: Path, bundle: Path) -> None:
         reject("Console release manifest cosign verification failed")
 
 
-def verify_release(root: Path, pins_path: Path, kernel_release: str, *, require_cosign: bool) -> list[Path]:
+def verify_kernel_cosign(manifest: Path, bundle: Path, kernel_release: str) -> None:
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", kernel_release):
+        reject(f"Kernel release must be an exact semantic tag: {kernel_release!r}")
+    identity = (
+        "https://github.com/Mindburn-Labs/helm-ai-kernel/"
+        f".github/workflows/release.yml@refs/tags/{kernel_release}"
+    )
+    try:
+        subprocess.run(
+            [
+                "cosign",
+                "verify-blob",
+                "--bundle",
+                str(bundle),
+                "--certificate-identity",
+                identity,
+                "--certificate-oidc-issuer",
+                COSIGN_ISSUER,
+                str(manifest),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        reject("cosign is required to verify the Kernel release manifest binding")
+    except subprocess.CalledProcessError:
+        reject("Kernel release manifest cosign verification failed")
+
+
+def verify_release(
+    root: Path,
+    pins_path: Path,
+    kernel_release: str,
+    *,
+    require_cosign: bool,
+    expected_manifest_sha256: str | None = None,
+) -> list[Path]:
     pin = resolve_pin(pins_path, kernel_release)
     manifest = locate_unique(root, MANIFEST_NAME, "Console aggregate release manifest")
     bundle = locate_unique(root, MANIFEST_BUNDLE_NAME, "Console aggregate manifest cosign bundle")
+    manifest_sha256 = sha256_path(manifest)
+    if expected_manifest_sha256 is not None:
+        if require_hex(expected_manifest_sha256, "expected Console aggregate manifest SHA-256") != manifest_sha256:
+            reject("Console aggregate release manifest SHA-256 does not match the expected compiled digest")
     payload = require_exact_keys(
         read_json(manifest, "Console aggregate release manifest"),
         {"schema", "component", "source_repository", "kernel_release_version", "source", "targets", "outer_signature"},
@@ -509,8 +578,47 @@ def verify_release(root: Path, pins_path: Path, kernel_release: str, *, require_
     return staged
 
 
-def stage_release(root: Path, output_dir: Path, pins_path: Path, kernel_release: str, *, require_cosign: bool) -> list[Path]:
-    staged = verify_release(root, pins_path, kernel_release, require_cosign=require_cosign)
+def verify_kernel_release(
+    root: Path,
+    pins_path: Path,
+    kernel_release: str,
+    *,
+    require_cosign: bool,
+    expected_manifest_sha256: str | None,
+) -> list[Path]:
+    staged = verify_release(
+        root,
+        pins_path,
+        kernel_release,
+        require_cosign=require_cosign,
+        expected_manifest_sha256=expected_manifest_sha256,
+    )
+    kernel_bundle = locate_unique(root, KERNEL_MANIFEST_BUNDLE_NAME, "Kernel aggregate manifest cosign bundle")
+    if kernel_bundle.stat().st_size == 0:
+        reject("Kernel aggregate manifest cosign bundle must not be empty")
+    if require_cosign:
+        verify_kernel_cosign(staged[0], kernel_bundle, kernel_release)
+    return [staged[0], staged[1], kernel_bundle, *staged[2:]]
+
+
+def stage_release(
+    root: Path,
+    output_dir: Path,
+    pins_path: Path,
+    kernel_release: str,
+    *,
+    require_cosign: bool,
+    expected_manifest_sha256: str | None,
+) -> list[Path]:
+    if expected_manifest_sha256 is None:
+        reject("release staging requires the expected Console aggregate manifest SHA-256")
+    staged = verify_kernel_release(
+        root,
+        pins_path,
+        kernel_release,
+        require_cosign=require_cosign,
+        expected_manifest_sha256=expected_manifest_sha256,
+    )
     if output_dir.is_symlink():
         reject(f"release assets output directory must not be a symlink: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -524,6 +632,120 @@ def stage_release(root: Path, output_dir: Path, pins_path: Path, kernel_release:
     return copied
 
 
+def layout_archive_name(target: str) -> str:
+    return f"helm-ai-kernel-{target}-console.tar.gz"
+
+
+def layout_root_name(target: str) -> str:
+    return f"helm-ai-kernel-{target}"
+
+
+def tar_directory(archive: tarfile.TarFile, name: str) -> None:
+    info = tarfile.TarInfo(f"{name.rstrip('/')}/")
+    info.type = tarfile.DIRTYPE
+    info.mode = 0o755
+    info.uid = info.gid = 0
+    info.uname = info.gname = "root"
+    info.mtime = 0
+    archive.addfile(info)
+
+
+def tar_file(archive: tarfile.TarFile, name: str, source: Any, size: int, mode: int) -> None:
+    info = tarfile.TarInfo(name)
+    info.size = size
+    info.mode = 0o755 if mode & 0o111 else 0o644
+    info.uid = info.gid = 0
+    info.uname = info.gname = "root"
+    info.mtime = 0
+    archive.addfile(info, source)
+
+
+def tar_path(archive: tarfile.TarFile, name: str, source: Path, mode: int | None = None) -> None:
+    require_regular_file(source, f"release layout input {name}")
+    with source.open("rb") as handle:
+        tar_file(archive, name, handle, source.stat().st_size, source.stat().st_mode if mode is None else mode)
+
+
+def tar_verified_target_tree(archive: tarfile.TarFile, source: Path, target: str, layout_root: str) -> None:
+    expected_root = f"helm-console-local-sidecar-{target}"
+    try:
+        input_archive = tarfile.open(source, "r:gz")
+    except (OSError, tarfile.TarError) as exc:
+        reject(f"unable to read verified sidecar archive {source.name}: {exc}")
+    try:
+        members: list[tuple[str, tarfile.TarInfo]] = []
+        seen: set[str] = set()
+        for member in input_archive.getmembers():
+            name = safe_archive_path(member.name, directory=member.isdir())
+            if name in seen:
+                reject(f"archive contains duplicate member path: {member.name}")
+            seen.add(name)
+            if PurePosixPath(name).parts[0] != expected_root:
+                reject(f"archive member escapes expected closure root: {member.name}")
+            if member.issym() or member.islnk() or member.isdev():
+                reject(f"archive member must not be a link or device: {member.name}")
+            if not member.isdir() and not member.isfile():
+                reject(f"archive member must be a regular file: {member.name}")
+            members.append((name, member))
+        for name, member in sorted(members, key=lambda item: item[0]):
+            destination = f"{layout_root}/console/{name}"
+            if member.isdir():
+                tar_directory(archive, destination)
+                continue
+            handle = input_archive.extractfile(member)
+            if handle is None:
+                reject(f"archive cannot read payload: {member.name}")
+            tar_file(archive, destination, handle, member.size, member.mode)
+    finally:
+        input_archive.close()
+
+
+def package_release_layouts(
+    root: Path,
+    output_dir: Path,
+    pins_path: Path,
+    kernel_release: str,
+    *,
+    require_cosign: bool,
+    expected_manifest_sha256: str | None,
+) -> list[Path]:
+    if expected_manifest_sha256 is None:
+        reject("release layout packaging requires the expected Console aggregate manifest SHA-256")
+    staged = verify_kernel_release(
+        root,
+        pins_path,
+        kernel_release,
+        require_cosign=require_cosign,
+        expected_manifest_sha256=expected_manifest_sha256,
+    )
+    if output_dir.is_symlink() or not output_dir.is_dir():
+        reject(f"release layout output directory must be a real directory: {output_dir}")
+    layout_paths: list[Path] = []
+    for target in TARGETS:
+        binary = root / KERNEL_BINARY_NAMES[target]
+        require_regular_file(binary, f"Kernel binary for {target}")
+        layout_root = layout_root_name(target)
+        output = output_dir / layout_archive_name(target)
+        if output.exists() and output.is_symlink():
+            reject(f"release layout output must not be a symlink: {output}")
+        temporary = output_dir / f".{output.name}.tmp"
+        if temporary.exists() and temporary.is_symlink():
+            reject(f"release layout temporary output must not be a symlink: {temporary}")
+        with temporary.open("wb") as raw:
+            with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed:
+                with tarfile.open(fileobj=compressed, mode="w", format=tarfile.GNU_FORMAT) as archive:
+                    tar_directory(archive, layout_root)
+                    tar_path(archive, f"{layout_root}/helm-ai-kernel", binary, 0o755)
+                    tar_directory(archive, f"{layout_root}/console")
+                    for source in sorted(staged, key=lambda path: path.name):
+                        tar_path(archive, f"{layout_root}/console/{source.name}", source, 0o644)
+                    target_archive = next(path for path in staged if path.name == f"helm-console-local-sidecar-{target}.tar.gz")
+                    tar_verified_target_tree(archive, target_archive, target, layout_root)
+        os.replace(temporary, output)
+        layout_paths.append(output)
+    return layout_paths
+
+
 def write_github_output(pin: dict[str, Any]) -> None:
     output = os.environ.get("GITHUB_OUTPUT")
     if not output:
@@ -533,6 +755,14 @@ def write_github_output(pin: dict[str, Any]) -> None:
         handle.write(f"source_sha={pin['source']['commit']}\n")
 
 
+def write_github_manifest_output(manifest_sha256: str) -> None:
+    output = os.environ.get("GITHUB_OUTPUT")
+    if not output:
+        reject("GITHUB_OUTPUT is required for --github-output")
+    with Path(output).open("a", encoding="utf-8") as handle:
+        handle.write(f"manifest_sha256={manifest_sha256}\n")
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -540,13 +770,24 @@ def main(argv: list[str]) -> int:
     pin_parser.add_argument("--pins", type=Path, required=True)
     pin_parser.add_argument("--kernel-release", required=True)
     pin_parser.add_argument("--github-output", action="store_true")
-    for name in ("verify", "stage"):
-        command = commands.add_parser(name)
-        command.add_argument("--input-dir", type=Path, required=True)
-        command.add_argument("--pins", type=Path, required=True)
-        command.add_argument("--kernel-release", required=True)
-        if name == "stage":
-            command.add_argument("--output-dir", type=Path, required=True)
+    verify_parser = commands.add_parser("verify", help="verify a Console release input before Kernel assembly")
+    verify_parser.add_argument("--input-dir", type=Path, required=True)
+    verify_parser.add_argument("--pins", type=Path, required=True)
+    verify_parser.add_argument("--kernel-release", required=True)
+    verify_parser.add_argument("--expected-manifest-sha256")
+    verify_parser.add_argument("--github-output", action="store_true")
+    stage_parser = commands.add_parser("stage", help="stage a Console release input after digest binding")
+    stage_parser.add_argument("--input-dir", type=Path, required=True)
+    stage_parser.add_argument("--pins", type=Path, required=True)
+    stage_parser.add_argument("--kernel-release", required=True)
+    stage_parser.add_argument("--expected-manifest-sha256", required=True)
+    stage_parser.add_argument("--output-dir", type=Path, required=True)
+    layout_parser = commands.add_parser("layout", help="package standalone Kernel and Console layouts after digest binding")
+    layout_parser.add_argument("--input-dir", type=Path, required=True)
+    layout_parser.add_argument("--pins", type=Path, required=True)
+    layout_parser.add_argument("--kernel-release", required=True)
+    layout_parser.add_argument("--expected-manifest-sha256", required=True)
+    layout_parser.add_argument("--output-dir", type=Path, required=True)
 
     args = parser.parse_args(argv)
     try:
@@ -558,11 +799,38 @@ def main(argv: list[str]) -> int:
                 print(json.dumps(pin, sort_keys=True))
             return 0
         if args.command == "verify":
-            staged = verify_release(args.input_dir, args.pins, args.kernel_release, require_cosign=True)
-            print(json.dumps({"verified": [path.name for path in staged]}, sort_keys=True))
+            staged = verify_release(
+                args.input_dir,
+                args.pins,
+                args.kernel_release,
+                require_cosign=True,
+                expected_manifest_sha256=args.expected_manifest_sha256,
+            )
+            manifest_sha256 = sha256_path(locate_unique(args.input_dir, MANIFEST_NAME, "Console aggregate release manifest"))
+            if args.github_output:
+                write_github_manifest_output(manifest_sha256)
+            print(json.dumps({"manifest_sha256": manifest_sha256, "verified": [path.name for path in staged]}, sort_keys=True))
             return 0
-        copied = stage_release(args.input_dir, args.output_dir, args.pins, args.kernel_release, require_cosign=True)
-        print(json.dumps({"staged": [path.name for path in copied]}, sort_keys=True))
+        if args.command == "stage":
+            copied = stage_release(
+                args.input_dir,
+                args.output_dir,
+                args.pins,
+                args.kernel_release,
+                require_cosign=True,
+                expected_manifest_sha256=args.expected_manifest_sha256,
+            )
+            print(json.dumps({"manifest_sha256": args.expected_manifest_sha256, "staged": [path.name for path in copied]}, sort_keys=True))
+            return 0
+        layouts = package_release_layouts(
+            args.input_dir,
+            args.output_dir,
+            args.pins,
+            args.kernel_release,
+            require_cosign=True,
+            expected_manifest_sha256=args.expected_manifest_sha256,
+        )
+        print(json.dumps({"layouts": [path.name for path in layouts], "manifest_sha256": args.expected_manifest_sha256}, sort_keys=True))
         return 0
     except (OSError, ValueError, tarfile.TarError) as exc:
         print(f"::error file=scripts/release/console_local_sidecar.py::{exc}", file=sys.stderr)

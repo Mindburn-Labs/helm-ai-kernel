@@ -12,6 +12,9 @@ DIR="${1:-dist}"
 DEFAULT_IDENTITY_REGEX='^https://github\.com/Mindburn-Labs/helm-ai-kernel/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+.*)$'
 IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-$DEFAULT_IDENTITY_REGEX}"
 ISSUER="${COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
+KERNEL_RELEASE_TAG="${KERNEL_RELEASE_TAG:-}"
+KERNEL_MANIFEST_BUNDLE="helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle"
+KERNEL_RELEASE_IDENTITY=""
 
 if ! printf '%s' "$IDENTITY_REGEX" | grep -Eq '^\^https://github\\?\.com/Mindburn-Labs/helm-ai-kernel/\\?\.github/workflows/[A-Za-z0-9_.-]+\\?\.ya?ml@refs/'; then
     echo "::error::COSIGN_IDENTITY_REGEX must be anchored to a helm-ai-kernel GitHub Actions workflow identity and refs"
@@ -26,6 +29,20 @@ fi
 if [ ! -d "$DIR" ]; then
     echo "::error::artifact directory not found: $DIR"
     exit 1
+fi
+
+if [ -n "$KERNEL_RELEASE_TAG" ]; then
+    if ! [[ "$KERNEL_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "::error::KERNEL_RELEASE_TAG must be an exact semantic release tag"
+        exit 1
+    fi
+    KERNEL_RELEASE_IDENTITY="https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${KERNEL_RELEASE_TAG}"
+    if [ ! -f "$DIR/helm-console-local-sidecar-release-manifest.json" ] || \
+       [ ! -f "$DIR/helm-console-local-sidecar-release-manifest.json.cosign.bundle" ] || \
+       [ ! -f "$DIR/$KERNEL_MANIFEST_BUNDLE" ]; then
+        echo "::error::Kernel release verification requires the Console manifest plus both producer and Kernel bundles"
+        exit 1
+    fi
 fi
 
 ok=0
@@ -50,11 +67,24 @@ while IFS= read -r bundle; do
         continue
     fi
     echo "verifying $artifact"
-    if cosign verify-blob \
-        --bundle "$bundle" \
-        --certificate-identity-regexp "$IDENTITY_REGEX" \
-        --certificate-oidc-issuer "$ISSUER" \
-        "$artifact" >/dev/null 2>&1; then
+    if [ "$(basename "$bundle")" = "$KERNEL_MANIFEST_BUNDLE" ] && [ -n "$KERNEL_RELEASE_IDENTITY" ]; then
+        verify_args=(
+            verify-blob
+            --bundle "$bundle"
+            --certificate-identity "$KERNEL_RELEASE_IDENTITY"
+            --certificate-oidc-issuer "$ISSUER"
+            "$artifact"
+        )
+    else
+        verify_args=(
+            verify-blob
+            --bundle "$bundle"
+            --certificate-identity-regexp "$IDENTITY_REGEX"
+            --certificate-oidc-issuer "$ISSUER"
+            "$artifact"
+        )
+    fi
+    if cosign "${verify_args[@]}" >/dev/null 2>&1; then
         echo "  ok"
         ok=$((ok + 1))
     else

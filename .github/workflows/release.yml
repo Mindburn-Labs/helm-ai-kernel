@@ -133,6 +133,8 @@ jobs:
     # the Kernel release source; it never accepts a mutable Console main build.
     runs-on: ubuntu-latest
     needs: validate
+    outputs:
+      manifest_sha256: ${{ steps.console-verify.outputs.manifest_sha256 }}
     permissions:
       contents: read
     steps:
@@ -230,13 +232,15 @@ jobs:
           done
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-      - name: Verify Console signature, source pin, and native closures
+      - id: console-verify
+        name: Verify Console signature, source pin, and native closures
         run: |
           set -euo pipefail
           python3 scripts/release/console_local_sidecar.py verify \
             --input-dir console-local-sidecar \
             --pins release/console-local-sidecar-pins.json \
-            --kernel-release "${GITHUB_REF_NAME}"
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --github-output
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: console-local-sidecar
@@ -266,10 +270,33 @@ jobs:
           path: console-local-sidecar/
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Re-verify Console input before trust-root build
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          python3 scripts/release/console_local_sidecar.py verify \
+            --input-dir console-local-sidecar \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+      - name: Bind the verified Console manifest to this Kernel tag
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          manifest="console-local-sidecar/helm-console-local-sidecar-release-manifest.json"
+          cosign sign-blob --yes \
+            --bundle "${manifest}.kernel.cosign.bundle" \
+            "${manifest}"
+          KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" \
+            bash scripts/release/verify_cosign.sh console-local-sidecar
       - name: Build and stage release assets
         env:
           HELM_CONSOLE_LOCAL_SIDECAR_DIR: ${{ github.workspace }}/console-local-sidecar
           HELM_REQUIRE_CONSOLE_LOCAL_SIDECAR: "1"
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
         run: make release-assets
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
@@ -322,23 +349,40 @@ jobs:
             echo "::endgroup::"
           done
       - name: Verify cosign bundles
-        run: bash scripts/release/verify_cosign.sh release-assets
+        run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh release-assets
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cosign-bundles
           path: |
             release-assets/*.cosign.bundle
             !release-assets/helm-console-local-sidecar-release-manifest.json.cosign.bundle
+            !release-assets/helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle
 
   reproducibility-check:
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [validate, console-local-sidecar]
+    env:
+      CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25.12"
           cache-dependency-path: "**/go.sum"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: console-local-sidecar
+          path: console-local-sidecar/
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Re-verify Console input for reproducible release build
+        run: |
+          set -euo pipefail
+          test -n "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          python3 scripts/release/console_local_sidecar.py verify \
+            --input-dir console-local-sidecar \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
       - name: First reproducible build
         run: |
           make release-binaries-reproducible

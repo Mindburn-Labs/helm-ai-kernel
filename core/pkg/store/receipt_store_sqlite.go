@@ -304,6 +304,47 @@ func (s *SQLiteReceiptStore) ListByTenant(ctx context.Context, tenantID string, 
 	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, len(prefix), prefix, since, limit)
 }
 
+// ListByTenantCursor returns V5 receipts in a strict tenant-wide keyset order.
+// Unlike ListByTenant, this method is safe when separate signed sessions share
+// a Lamport clock.
+func (s *SQLiteReceiptStore) ListByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, limit int) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	cursor.ReceiptID = strings.TrimSpace(cursor.ReceiptID)
+	if cursor.ReceiptID != "" && cursor.Timestamp.IsZero() {
+		return nil, fmt.Errorf("tenant receipt cursor timestamp is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `
+		SELECT ` + sqliteReceiptColumns + `
+		FROM receipts
+		WHERE signature_version = ?
+		  AND COALESCE(session_id, '') <> ''
+		  AND substr(causal_session_id, 1, ?) = ?`
+	args := []any{contracts.ReceiptSignatureV5, len(prefix), prefix}
+	if cursor.ReceiptID != "" {
+		cursor.Timestamp = cursor.Timestamp.UTC()
+		cursorTimestamp := cursor.Timestamp.Format(time.RFC3339Nano)
+		query += `
+		  AND (lamport_clock > ?
+		       OR (lamport_clock = ? AND timestamp > ?)
+		       OR (lamport_clock = ? AND timestamp = ? AND receipt_id > ?))`
+		args = append(args,
+			cursor.LamportClock,
+			cursor.LamportClock, cursorTimestamp,
+			cursor.LamportClock, cursorTimestamp, cursor.ReceiptID,
+		)
+	}
+	query += `
+		ORDER BY lamport_clock ASC, timestamp ASC, receipt_id ASC
+		LIMIT ?
+	`
+	args = append(args, limit)
+	return s.queryReceipts(ctx, query, args...)
+}
+
 // ListByTenantSession returns the receipt chain keyed by the signed
 // Receipt.SessionID inside an authenticated tenant scope.
 func (s *SQLiteReceiptStore) ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {

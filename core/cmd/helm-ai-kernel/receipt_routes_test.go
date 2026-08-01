@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,10 +22,11 @@ import (
 )
 
 type captureReceiptStore struct {
-	last      *contracts.Receipt
-	stored    *contracts.Receipt
-	storeErr  error
-	sessionID string
+	last         *contracts.Receipt
+	stored       *contracts.Receipt
+	storeErr     error
+	sessionID    string
+	readTenantID string
 }
 
 type scopedCaptureReceiptStore struct {
@@ -73,6 +75,19 @@ func (s *captureReceiptStore) GetByReceiptID(_ context.Context, receiptID string
 		return s.stored, nil
 	}
 	return nil, errors.New("receipt not found")
+}
+
+func (s *captureReceiptStore) GetByReceiptIDForTenant(ctx context.Context, tenantID, receiptID string) (*contracts.Receipt, error) {
+	s.readTenantID = tenantID
+	return s.GetByReceiptID(ctx, receiptID)
+}
+
+func (s *captureReceiptStore) ListByTenant(context.Context, string, uint64, int) ([]*contracts.Receipt, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *captureReceiptStore) ListByTenantSession(context.Context, string, string, uint64, int) ([]*contracts.Receipt, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (s *captureReceiptStore) List(context.Context, int) ([]*contracts.Receipt, error) {
@@ -407,6 +422,9 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	if receipts.stored.ExecutorID != "principal-trusted" {
 		t.Fatalf("receipt executor = %q, want trusted principal", receipts.stored.ExecutorID)
 	}
+	if receipts.readTenantID != "tenant-trusted" {
+		t.Fatalf("evaluate response receipt read tenant = %q, want authenticated tenant", receipts.readTenantID)
+	}
 	var response api.EvaluateResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
@@ -489,6 +507,83 @@ func TestEvaluateRouteRejectsIncompleteCanonicalContract(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTenantReceiptTailUsesOpaqueKeysetCursorAcrossSessions(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	second := &contracts.Receipt{
+		ReceiptID:  "rcpt-next",
+		DecisionID: "dec-next",
+		EffectID:   "EXECUTE_TOOL",
+		Status:     string(contracts.VerdictAllow),
+		Timestamp:  time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID: "agent.peer",
+		Signature:  "sig-next",
+		ArgsHash:   "args-next",
+	}
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "session-peer", second)
+
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	firstID, firstReceiptID := requestReceiptTailEvent(t, mux, "/api/v1/receipts/tail?limit=1", "")
+	if !strings.HasPrefix(firstID, tenantReceiptCursorVersionPrefix) {
+		t.Fatalf("tenant tail event id = %q, want opaque %q cursor", firstID, tenantReceiptCursorVersionPrefix)
+	}
+	secondID, secondReceiptID := requestReceiptTailEvent(t, mux, "/api/v1/receipts/tail?limit=1", firstID)
+	if !strings.HasPrefix(secondID, tenantReceiptCursorVersionPrefix) || secondID == firstID {
+		t.Fatalf("resumed tenant tail cursor = %q after %q, want distinct opaque keyset cursors", secondID, firstID)
+	}
+	if got := map[string]bool{firstReceiptID: true, secondReceiptID: true}; len(got) != 2 || !got["rcpt-test"] || !got["rcpt-next"] {
+		t.Fatalf("tenant tail omitted or duplicated tied-Lamport receipts: first=%q second=%q", firstReceiptID, secondReceiptID)
+	}
+}
+
+type cancelAfterFirstFlushRecorder struct {
+	*httptest.ResponseRecorder
+	cancel  context.CancelFunc
+	flushed bool
+}
+
+func (r *cancelAfterFirstFlushRecorder) Flush() {
+	r.ResponseRecorder.Flush()
+	if !r.flushed {
+		r.flushed = true
+		r.cancel()
+	}
+}
+
+func requestReceiptTailEvent(t *testing.T, mux *http.ServeMux, target, lastEventID string) (string, string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, target, nil).WithContext(ctx)
+	authorizeTestRequest(req)
+	if lastEventID != "" {
+		req.Header.Set("Last-Event-ID", lastEventID)
+	}
+	rec := &cancelAfterFirstFlushRecorder{ResponseRecorder: httptest.NewRecorder(), cancel: cancel}
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("receipt tail status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var eventID string
+	var receipt contracts.Receipt
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		switch {
+		case strings.HasPrefix(line, "id: "):
+			eventID = strings.TrimPrefix(line, "id: ")
+		case strings.HasPrefix(line, "data: "):
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &receipt); err != nil {
+				t.Fatalf("decode receipt tail event: %v body=%s", err, rec.Body.String())
+			}
+		}
+	}
+	if eventID == "" || receipt.ReceiptID == "" {
+		t.Fatalf("receipt tail did not emit a receipt event: %s", rec.Body.String())
+	}
+	return eventID, receipt.ReceiptID
 }
 
 func newEvaluateRouteTestServices(t *testing.T, guardianOpts ...guardian.GuardianOption) (*Services, *captureReceiptStore) {

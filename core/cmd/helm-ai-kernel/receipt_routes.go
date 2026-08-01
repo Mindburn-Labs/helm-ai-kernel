@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -127,7 +128,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		receiptID := "rcpt_" + decision.ID
-		receipt, err := svc.ReceiptStore.GetByReceiptID(r.Context(), receiptID)
+		receipt, err := receiptForTenant(r.Context(), svc, tenantID, receiptID)
 		if err != nil {
 			api.WriteInternal(w, fmt.Errorf("load persisted receipt %s: %w", receiptID, err))
 			return
@@ -175,7 +176,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		sessionID := requestedReceiptSessionID(r)
-		since, err := parseReceiptCursor(r.URL.Query().Get("since"))
+		rawCursor := r.URL.Query().Get("since")
+		if strings.TrimSpace(rawCursor) == "" {
+			rawCursor = r.Header.Get("Last-Event-ID")
+		}
+		cursor, err := parseReceiptCursor(rawCursor, sessionID)
 		if err != nil {
 			api.WriteBadRequest(w, "Invalid since cursor")
 			return
@@ -193,7 +198,6 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
-		cursor := since
 		for {
 			receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, sessionID, cursor, limit)
 			if err != nil {
@@ -201,11 +205,21 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				flusher.Flush()
 			} else {
 				for _, receipt := range receipts {
-					if receipt.LamportClock > cursor {
-						cursor = receipt.LamportClock
+					nextCursor, cursorErr := receiptCursorForReceipt(sessionID, receipt)
+					if cursorErr != nil {
+						fmt.Fprintf(w, "event: error\ndata: %q\n\n", cursorErr.Error())
+						flusher.Flush()
+						break
 					}
+					eventID, cursorErr := formatReceiptCursor(sessionID, nextCursor)
+					if cursorErr != nil {
+						fmt.Fprintf(w, "event: error\ndata: %q\n\n", cursorErr.Error())
+						flusher.Flush()
+						break
+					}
+					cursor = nextCursor
 					data, _ := json.Marshal(receipt)
-					fmt.Fprintf(w, "id: %d\nevent: receipt\ndata: %s\n\n", receipt.LamportClock, data)
+					fmt.Fprintf(w, "id: %s\nevent: receipt\ndata: %s\n\n", eventID, data)
 					flusher.Flush()
 				}
 			}
@@ -233,12 +247,13 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		limit := parseLimit(r.URL.Query().Get("limit"), 100, 1000)
-		since, err := parseReceiptCursor(r.URL.Query().Get("since"))
+		sessionID := requestedReceiptSessionID(r)
+		cursor, err := parseReceiptCursor(r.URL.Query().Get("since"), sessionID)
 		if err != nil {
 			api.WriteBadRequest(w, "Invalid since cursor")
 			return
 		}
-		receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, requestedReceiptSessionID(r), since, limit+1)
+		receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, sessionID, cursor, limit+1)
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -247,7 +262,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		if hasMore {
 			receipts = receipts[:limit]
 		}
-		nextCursor := nextReceiptCursor(receipts)
+		nextCursor, err := nextReceiptCursor(sessionID, receipts)
+		if err != nil {
+			api.WriteInternal(w, err)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"receipts":    receipts,
@@ -319,15 +338,22 @@ func tenantScopedReceiptReader(svc *Services) (store.TenantScopedReceiptReader, 
 	return reader, nil
 }
 
-func listReceiptsForCursor(ctx context.Context, svc *Services, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
-	reader, err := tenantScopedReceiptReader(svc)
-	if err != nil {
-		return nil, err
-	}
+func listReceiptsForCursor(ctx context.Context, svc *Services, tenantID, sessionID string, cursor store.TenantReceiptCursor, limit int) ([]*contracts.Receipt, error) {
 	if strings.TrimSpace(sessionID) != "" {
-		return reader.ListByTenantSession(ctx, tenantID, sessionID, since, limit)
+		reader, err := tenantScopedReceiptReader(svc)
+		if err != nil {
+			return nil, err
+		}
+		return reader.ListByTenantSession(ctx, tenantID, sessionID, cursor.LamportClock, limit)
 	}
-	return reader.ListByTenant(ctx, tenantID, since, limit)
+	if svc == nil || svc.ReceiptStore == nil {
+		return nil, fmt.Errorf("receipt store unavailable")
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedReceiptCursorReader)
+	if !ok {
+		return nil, fmt.Errorf("receipt store lacks tenant-wide keyset cursor capability")
+	}
+	return reader.ListByTenantCursor(ctx, tenantID, cursor, limit)
 }
 
 func receiptForTenant(ctx context.Context, svc *Services, tenantID, receiptID string) (*contracts.Receipt, error) {
@@ -338,25 +364,110 @@ func receiptForTenant(ctx context.Context, svc *Services, tenantID, receiptID st
 	return reader.GetByReceiptIDForTenant(ctx, tenantID, receiptID)
 }
 
-func parseReceiptCursor(raw string) (uint64, error) {
-	raw = strings.TrimSpace(strings.TrimPrefix(raw, "lamport:"))
-	if raw == "" {
-		return 0, nil
-	}
-	return strconv.ParseUint(raw, 10, 64)
+const tenantReceiptCursorVersionPrefix = "v1."
+
+type tenantReceiptCursorWire struct {
+	LamportClock uint64 `json:"l"`
+	Timestamp    string `json:"t"`
+	ReceiptID    string `json:"r"`
 }
 
-func nextReceiptCursor(receipts []*contracts.Receipt) string {
-	var cursor uint64
-	for _, receipt := range receipts {
-		if receipt.LamportClock > cursor {
-			cursor = receipt.LamportClock
+// parseReceiptCursor preserves scalar Lamport cursors for one signed session.
+// Tenant-wide listings require an opaque composite cursor because each session
+// owns its own Lamport clock.
+func parseReceiptCursor(raw, sessionID string) (store.TenantReceiptCursor, error) {
+	raw = strings.TrimSpace(raw)
+	if strings.TrimSpace(sessionID) != "" {
+		return parseSessionReceiptCursor(raw)
+	}
+	if raw == "" {
+		return store.TenantReceiptCursor{}, nil
+	}
+	if !strings.HasPrefix(raw, tenantReceiptCursorVersionPrefix) {
+		return store.TenantReceiptCursor{}, fmt.Errorf("tenant-wide receipt cursor must be an opaque v1 cursor")
+	}
+	encoded := strings.TrimPrefix(raw, tenantReceiptCursorVersionPrefix)
+	if encoded == "" {
+		return store.TenantReceiptCursor{}, fmt.Errorf("tenant-wide receipt cursor payload is required")
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return store.TenantReceiptCursor{}, fmt.Errorf("decode tenant-wide receipt cursor: %w", err)
+	}
+	var wire tenantReceiptCursorWire
+	if err := json.Unmarshal(decoded, &wire); err != nil {
+		return store.TenantReceiptCursor{}, fmt.Errorf("decode tenant-wide receipt cursor payload: %w", err)
+	}
+	wire.ReceiptID = strings.TrimSpace(wire.ReceiptID)
+	if wire.ReceiptID == "" || strings.TrimSpace(wire.Timestamp) == "" {
+		return store.TenantReceiptCursor{}, fmt.Errorf("tenant-wide receipt cursor is incomplete")
+	}
+	timestamp, err := time.Parse(time.RFC3339Nano, wire.Timestamp)
+	if err != nil || timestamp.IsZero() {
+		return store.TenantReceiptCursor{}, fmt.Errorf("tenant-wide receipt cursor timestamp is invalid")
+	}
+	return store.TenantReceiptCursor{LamportClock: wire.LamportClock, Timestamp: timestamp.UTC(), ReceiptID: wire.ReceiptID}, nil
+}
+
+func parseSessionReceiptCursor(raw string) (store.TenantReceiptCursor, error) {
+	raw = strings.TrimSpace(strings.TrimPrefix(raw, "lamport:"))
+	if raw == "" {
+		return store.TenantReceiptCursor{}, nil
+	}
+	lamport, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return store.TenantReceiptCursor{}, err
+	}
+	return store.TenantReceiptCursor{LamportClock: lamport}, nil
+}
+
+func receiptCursorForReceipt(sessionID string, receipt *contracts.Receipt) (store.TenantReceiptCursor, error) {
+	if receipt == nil {
+		return store.TenantReceiptCursor{}, fmt.Errorf("receipt cursor requires a receipt")
+	}
+	cursor := store.TenantReceiptCursor{LamportClock: receipt.LamportClock}
+	if strings.TrimSpace(sessionID) != "" {
+		return cursor, nil
+	}
+	cursor.ReceiptID = strings.TrimSpace(receipt.ReceiptID)
+	cursor.Timestamp = receipt.Timestamp.UTC()
+	if cursor.ReceiptID == "" || cursor.Timestamp.IsZero() {
+		return store.TenantReceiptCursor{}, fmt.Errorf("tenant-wide receipt cursor requires receipt id and timestamp")
+	}
+	return cursor, nil
+}
+
+func formatReceiptCursor(sessionID string, cursor store.TenantReceiptCursor) (string, error) {
+	if strings.TrimSpace(sessionID) != "" {
+		if cursor.LamportClock == 0 {
+			return "", nil
 		}
+		return fmt.Sprintf("lamport:%d", cursor.LamportClock), nil
 	}
-	if cursor == 0 {
-		return ""
+	cursor.ReceiptID = strings.TrimSpace(cursor.ReceiptID)
+	if cursor.ReceiptID == "" || cursor.Timestamp.IsZero() {
+		return "", fmt.Errorf("tenant-wide receipt cursor is incomplete")
 	}
-	return fmt.Sprintf("lamport:%d", cursor)
+	payload, err := json.Marshal(tenantReceiptCursorWire{
+		LamportClock: cursor.LamportClock,
+		Timestamp:    cursor.Timestamp.UTC().Format(time.RFC3339Nano),
+		ReceiptID:    cursor.ReceiptID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode tenant-wide receipt cursor: %w", err)
+	}
+	return tenantReceiptCursorVersionPrefix + base64.RawURLEncoding.EncodeToString(payload), nil
+}
+
+func nextReceiptCursor(sessionID string, receipts []*contracts.Receipt) (string, error) {
+	if len(receipts) == 0 {
+		return "", nil
+	}
+	cursor, err := receiptCursorForReceipt(sessionID, receipts[len(receipts)-1])
+	if err != nil {
+		return "", err
+	}
+	return formatReceiptCursor(sessionID, cursor)
 }
 
 func parseLimit(raw string, fallback, max int) int {

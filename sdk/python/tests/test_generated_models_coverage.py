@@ -235,14 +235,14 @@ def test_generated_evaluate_request_preserves_public_compatibility_envelope() ->
     assert legacy.resource == "read"
     assert legacy.context == {"session_id": "session-legacy"}
 
-    # The generated public model accepts the legacy/additive envelope. SDK
-    # client methods and the daemon reject blank effective values at runtime.
-    whitespace = types_gen.EvaluateRequest(
-        tool="read_file",
-        effect_level="read",
-        session_id="   ",
-    )
-    assert whitespace.session_id == "   "
+    # The generated public model retains the legacy/additive envelope but its
+    # top-level session_id follows the NonBlankSessionID schema contract.
+    with pytest.raises(ValidationError):
+        types_gen.EvaluateRequest(
+            tool="read_file",
+            effect_level="read",
+            session_id="   ",
+        )
 
 
 def test_generated_models_exercise_nullable_and_nested_false_paths() -> None:

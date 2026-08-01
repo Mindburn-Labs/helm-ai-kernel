@@ -221,7 +221,7 @@ func TestEvaluateFailsClosedWithoutProductionReceiptSigner(t *testing.T) {
 	t.Setenv("HELM_PRODUCTION", "true")
 	helmPDP := pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true})
 	srv := NewServer(ServerConfig{PDP: helmPDP, Authenticator: testAPIAuthenticator})
-	reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", SessionID: "no-signer"})
+	reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", EffectLevel: "read_file", SessionID: "no-signer"})
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
@@ -240,9 +240,9 @@ func TestEvaluateRejectsBlankSessionIDBeforeReceiptIssuance(t *testing.T) {
 		name string
 		body EvaluateRequest
 	}{
-		{name: "missing", body: EvaluateRequest{Tool: "read_file"}},
-		{name: "whitespace", body: EvaluateRequest{Tool: "read_file", SessionID: " \t\n "}},
-		{name: "context whitespace", body: EvaluateRequest{Tool: "read_file", Context: map[string]any{"session_id": " \t\n "}}},
+		{name: "missing", body: EvaluateRequest{Tool: "read_file", EffectLevel: "read_file"}},
+		{name: "whitespace", body: EvaluateRequest{Tool: "read_file", EffectLevel: "read_file", SessionID: " \t\n "}},
+		{name: "context whitespace", body: EvaluateRequest{Tool: "read_file", EffectLevel: "read_file", Context: map[string]any{"session_id": " \t\n "}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := newTestServer(t)
@@ -270,13 +270,61 @@ func TestEvaluateRejectsBlankSessionIDBeforeReceiptIssuance(t *testing.T) {
 	}
 }
 
+func TestEvaluateRejectsBlankEffectiveIntentBeforeReceiptIssuance(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body EvaluateRequest
+	}{
+		{
+			name: "whitespace canonical tool",
+			body: EvaluateRequest{Tool: " \t\n ", EffectLevel: "read_file", SessionID: "session-tool"},
+		},
+		{
+			name: "whitespace legacy action",
+			body: EvaluateRequest{Tool: " \t\n ", Action: " \t\n ", EffectLevel: "read_file", SessionID: "session-action"},
+		},
+		{
+			name: "whitespace canonical effect",
+			body: EvaluateRequest{Tool: "read_file", EffectLevel: " \t\n ", SessionID: "session-effect"},
+		},
+		{
+			name: "whitespace legacy resource",
+			body: EvaluateRequest{Tool: "read_file", EffectLevel: " \t\n ", Resource: " \t\n ", SessionID: "session-resource"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newTestServer(t)
+			reqBody, err := json.Marshal(tc.body)
+			if err != nil {
+				t.Fatalf("marshal request: %v", err)
+			}
+
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody)))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("evaluate with blank effective intent = %d, want 400: %s", w.Code, w.Body.String())
+			}
+			var response map[string]string
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response["error"] != "tool and effect_level are required" {
+				t.Fatalf("error = %q, want tool and effect_level are required", response["error"])
+			}
+			if len(srv.receipts) != 0 {
+				t.Fatalf("blank effective intent issued receipts: %+v", srv.receipts)
+			}
+		})
+	}
+}
+
 func TestEvaluateRejectsBlankSessionIDBeforeSignerAvailability(t *testing.T) {
 	t.Setenv("HELM_PRODUCTION", "true")
 	srv := NewServer(ServerConfig{
 		PDP:           pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true}),
 		Authenticator: testAPIAuthenticator,
 	})
-	reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", Context: map[string]any{"session_id": " \t\n "}})
+	reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", EffectLevel: "read_file", Context: map[string]any{"session_id": " \t\n "}})
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
@@ -366,6 +414,7 @@ func TestEvaluate_Deny(t *testing.T) {
 		Tool:        "delete_file",
 		AgentID:     "agent-001",
 		EffectLevel: "E4", // maps to Resource, which is denied
+		SessionID:   "deny-session",
 	}
 	reqBody, _ := json.Marshal(body)
 
@@ -394,7 +443,7 @@ func TestEvaluate_RequiresAuthentication(t *testing.T) {
 
 func TestEvaluate_UsesAuthenticatedPrincipalNotCallerAgent(t *testing.T) {
 	srv := newTestServer(t)
-	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "victim", SessionID: "s"})
+	reqBody, _ := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "victim", EffectLevel: "read_file", SessionID: "s"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -439,7 +488,7 @@ func TestGetReceipt(t *testing.T) {
 	srv := newTestServer(t)
 
 	// Evaluate to create a receipt
-	body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
+	body := EvaluateRequest{Tool: "read_file", AgentID: "a", EffectLevel: "read_file", SessionID: "s"}
 	reqBody, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
 	w := httptest.NewRecorder()
@@ -491,7 +540,7 @@ func TestEvaluateBuildsCanonicalReceiptChain(t *testing.T) {
 	const sessionID = "canonical-chain-session"
 	receiptIDs := make([]string, 0, 2)
 	for i := 0; i < 2; i++ {
-		reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: sessionID})
+		reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "a", EffectLevel: "read_file", SessionID: sessionID})
 		if err != nil {
 			t.Fatalf("marshal evaluate request %d: %v", i, err)
 		}
@@ -574,7 +623,7 @@ func TestVerifyRejectsTamperedSignedReceipts(t *testing.T) {
 	srv := newTestServer(t)
 	issue := func(sessionID string) EvaluateResponse {
 		t.Helper()
-		body, err := json.Marshal(EvaluateRequest{Tool: "read_file", SessionID: sessionID})
+		body, err := json.Marshal(EvaluateRequest{Tool: "read_file", EffectLevel: "read_file", SessionID: sessionID})
 		if err != nil {
 			t.Fatalf("marshal evaluate request: %v", err)
 		}
@@ -634,7 +683,7 @@ func TestEvaluateScopesCausalSessionsByTenant(t *testing.T) {
 	const sessionID = "shared-caller-session"
 	issue := func(tenantID string) EvaluateResponse {
 		t.Helper()
-		body, err := json.Marshal(EvaluateRequest{Tool: "read_file", SessionID: sessionID})
+		body, err := json.Marshal(EvaluateRequest{Tool: "read_file", EffectLevel: "read_file", SessionID: sessionID})
 		if err != nil {
 			t.Fatalf("marshal evaluate request: %v", err)
 		}
@@ -698,7 +747,7 @@ func TestEvaluateStartsCausalChainsAtOnePerSession(t *testing.T) {
 
 	responses := make([]EvaluateResponse, 0, 2)
 	for _, sessionID := range []string{"session-a", "session-b"} {
-		reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "caller-supplied", SessionID: sessionID})
+		reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "caller-supplied", EffectLevel: "read_file", SessionID: sessionID})
 		if err != nil {
 			t.Fatalf("marshal evaluate request for %s: %v", sessionID, err)
 		}
@@ -781,7 +830,7 @@ func TestLamportMonotonicity(t *testing.T) {
 
 	var lamports []uint64
 	for i := 0; i < 5; i++ {
-		body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "s"}
+		body := EvaluateRequest{Tool: "read_file", AgentID: "a", EffectLevel: "read_file", SessionID: "s"}
 		reqBody, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
 		w := httptest.NewRecorder()

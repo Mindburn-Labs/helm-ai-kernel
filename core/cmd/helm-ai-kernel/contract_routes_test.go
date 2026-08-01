@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
@@ -153,6 +154,74 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 	}
 	if result["verdict"] != "PASS" {
 		t.Fatalf("verification result = %+v", result)
+	}
+}
+
+func TestTenantEvidenceExportExcludesGlobalSurfaceRegistryArtifacts(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
+	if _, err := registry.PutVerificationScope(contracts.VerificationScope{
+		VerificationScopeID: "tenant-b-global-scope",
+		SubjectHash:         "sha256:tenant-b-sensitive-subject",
+		RiskClass:           "T2",
+		ChecksPerformed:     []string{"hash"},
+		VerifierHash:        "sha256:verifier",
+		PolicyHash:          "sha256:policy",
+	}); err != nil {
+		t.Fatalf("seed global verification scope: %v", err)
+	}
+	svc.BoundarySurfaces = registry
+
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"session-test","format":"tar.gz"}`))
+	authorizeTestRequest(exportReq)
+	exportRec := httptest.NewRecorder()
+	mux.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("export status = %d body=%s", exportRec.Code, exportRec.Body.String())
+	}
+	bundle, err := readEvidenceBundle(exportRec.Body.Bytes())
+	if err != nil {
+		t.Fatalf("read evidence bundle: %v", err)
+	}
+	for name, data := range bundle.Files {
+		for _, prefix := range []string{
+			"verification_scopes/", "harness_traces/", "plan_transactions/",
+			"harness_change_contracts/", "grounded_action_refs/", "gui_action_receipts/",
+		} {
+			if strings.HasPrefix(name, prefix) {
+				t.Fatalf("tenant evidence export included global artifact %q", name)
+			}
+		}
+		if bytes.Contains(data, []byte("tenant-b-sensitive-subject")) {
+			t.Fatalf("tenant evidence export leaked global artifact content in %q", name)
+		}
+	}
+}
+
+func TestContractReceiptsForExportUsesTenantKeysetCursorAcrossSessions(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	second := &contracts.Receipt{
+		ReceiptID:  "rcpt-next",
+		DecisionID: "dec-next",
+		EffectID:   "EXECUTE_TOOL",
+		Status:     string(contracts.VerdictAllow),
+		Timestamp:  time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID: "agent.peer",
+		Signature:  "sig-next",
+		ArgsHash:   "args-next",
+	}
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "session-peer", second)
+
+	receipts, err := contractReceiptsForExportWithPageSize(context.Background(), svc, defaultRuntimeTenantID, "", 1)
+	if err != nil {
+		t.Fatalf("collect tenant evidence receipts: %v", err)
+	}
+	if got := receiptIDSet(receipts); len(got) != 2 || !got["rcpt-test"] || !got["rcpt-next"] {
+		t.Fatalf("tenant evidence pagination omitted or duplicated tied-Lamport receipts: %+v", got)
 	}
 }
 
@@ -589,7 +658,7 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 		LamportClock: 2,
 		ArgsHash:     "args-broken",
 	}
-	bundle, err := buildEvidenceBundle("session-test", []*contracts.Receipt{good, broken}, nil)
+	bundle, err := buildEvidenceBundle("session-test", []*contracts.Receipt{good, broken})
 	if err != nil {
 		t.Fatalf("build valid-manifest bundle: %v", err)
 	}
@@ -662,7 +731,7 @@ func TestProtectedRuntimeRoutesFailClosedWithoutCredentials(t *testing.T) {
 	}
 }
 
-func TestReceiptListReturnsCursorPagination(t *testing.T) {
+func TestReceiptListUsesOpaqueTenantKeysetCursorAcrossSessions(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	second := &contracts.Receipt{
@@ -670,24 +739,67 @@ func TestReceiptListReturnsCursorPagination(t *testing.T) {
 		DecisionID: "dec-next",
 		EffectID:   "EXECUTE_TOOL",
 		Status:     string(contracts.VerdictAllow),
-		Timestamp:  time.Date(2026, 5, 5, 0, 1, 0, 0, time.UTC),
-		ExecutorID: "agent.test",
+		Timestamp:  time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID: "agent.peer",
 		Signature:  "sig-next",
 		ArgsHash:   "args-next",
 	}
-	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "session-test", second)
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "session-peer", second)
 
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
 	firstPage := requestReceiptList(t, mux, "/api/v1/receipts?limit=1")
-	if firstPage["count"] != float64(1) || firstPage["has_more"] != true || firstPage["next_cursor"] != "lamport:1" {
+	firstCursor, _ := firstPage["next_cursor"].(string)
+	if firstPage["count"] != float64(1) || firstPage["has_more"] != true || !strings.HasPrefix(firstCursor, tenantReceiptCursorVersionPrefix) {
 		t.Fatalf("first page pagination metadata = %+v", firstPage)
 	}
-	secondPage := requestReceiptList(t, mux, "/api/v1/receipts?since=lamport:1&limit=1")
-	if secondPage["count"] != float64(1) || secondPage["has_more"] != false || secondPage["next_cursor"] != "lamport:2" {
+	secondPage := requestReceiptList(t, mux, "/api/v1/receipts?since="+url.QueryEscape(firstCursor)+"&limit=1")
+	if secondPage["count"] != float64(1) || secondPage["has_more"] != false {
 		t.Fatalf("second page pagination metadata = %+v", secondPage)
 	}
+	firstIDs := receiptIDsFromPage(t, firstPage)
+	secondIDs := receiptIDsFromPage(t, secondPage)
+	for receiptID := range secondIDs {
+		if firstIDs[receiptID] {
+			t.Fatalf("tenant keyset cursor duplicated receipt %q", receiptID)
+		}
+		firstIDs[receiptID] = true
+	}
+	if len(firstIDs) != 2 || !firstIDs["rcpt-test"] || !firstIDs["rcpt-next"] {
+		t.Fatalf("tenant keyset cursor omitted tied-Lamport receipts: %+v", firstIDs)
+	}
+
+	legacyReq := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?since=lamport:1&limit=1", nil)
+	authorizeTestRequest(legacyReq)
+	legacyRec := httptest.NewRecorder()
+	mux.ServeHTTP(legacyRec, legacyReq)
+	if legacyRec.Code != http.StatusBadRequest {
+		t.Fatalf("tenant-wide scalar cursor status = %d body=%s", legacyRec.Code, legacyRec.Body.String())
+	}
+}
+
+func receiptIDsFromPage(t *testing.T, page map[string]any) map[string]bool {
+	t.Helper()
+	encoded, err := json.Marshal(page["receipts"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipts []*contracts.Receipt
+	if err := json.Unmarshal(encoded, &receipts); err != nil {
+		t.Fatal(err)
+	}
+	return receiptIDSet(receipts)
+}
+
+func receiptIDSet(receipts []*contracts.Receipt) map[string]bool {
+	ids := make(map[string]bool, len(receipts))
+	for _, receipt := range receipts {
+		if receipt != nil {
+			ids[receipt.ReceiptID] = true
+		}
+	}
+	return ids
 }
 
 func newContractRouteTestServices(t *testing.T) (*Services, func()) {

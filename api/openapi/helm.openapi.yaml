@@ -4554,6 +4554,7 @@ components:
     NonBlankSessionID:
       type: string
       minLength: 1
+      pattern: '\S'
 
     EvaluateResponse:
       type: object

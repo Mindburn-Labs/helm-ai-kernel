@@ -25,6 +25,7 @@ import (
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 const (
@@ -261,7 +262,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusConflict, "No receipts available", "evidence export requires at least one receipt")
 			return
 		}
-		bundle, err := buildEvidenceBundle(req.SessionID, receipts, surfaces)
+		// SurfaceRegistry artifacts are process-global and do not carry durable
+		// tenant/session provenance. Tenant evidence exports therefore contain
+		// only tenant-scoped signed receipts until those artifacts are scoped.
+		bundle, err := buildEvidenceBundle(req.SessionID, receipts)
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -1363,7 +1367,7 @@ func contractReceipts(ctx context.Context, svc *Services, tenantID, sessionID st
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
-	return listReceiptsForCursor(ctx, svc, tenantID, sessionID, 0, limit)
+	return listReceiptsForCursor(ctx, svc, tenantID, sessionID, store.TenantReceiptCursor{}, limit)
 }
 
 func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegistry, records []mcppkg.ServerQuarantineRecord) {
@@ -1439,17 +1443,24 @@ func verifySandboxGrantForDispatch(grant contracts.SandboxGrant, expectedHash st
 }
 
 func contractReceiptsForExport(ctx context.Context, svc *Services, tenantID, sessionID string) ([]*contracts.Receipt, error) {
+	return contractReceiptsForExportWithPageSize(ctx, svc, tenantID, sessionID, evidenceExportPageSize)
+}
+
+func contractReceiptsForExportWithPageSize(ctx context.Context, svc *Services, tenantID, sessionID string, pageSize int) ([]*contracts.Receipt, error) {
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
+	if pageSize <= 0 {
+		return nil, fmt.Errorf("evidence export page size must be positive")
+	}
 	var receipts []*contracts.Receipt
-	var cursor uint64
+	var cursor store.TenantReceiptCursor
 	for {
 		remaining := maxEvidenceExportReceipts - len(receipts)
 		if remaining <= 0 {
 			return nil, errEvidenceExportTooLarge
 		}
-		limit := evidenceExportPageSize
+		limit := pageSize
 		if remaining < limit {
 			limit = remaining
 		}
@@ -1462,12 +1473,12 @@ func contractReceiptsForExport(ctx context.Context, svc *Services, tenantID, ses
 		if len(page) == 0 {
 			return receipts, nil
 		}
-		for _, receipt := range page {
-			receipts = append(receipts, receipt)
-			if receipt.LamportClock > cursor {
-				cursor = receipt.LamportClock
-			}
+		receipts = append(receipts, page...)
+		nextCursor, err := receiptCursorForReceipt(sessionID, page[len(page)-1])
+		if err != nil {
+			return nil, err
 		}
+		cursor = nextCursor
 		if len(page) < limit {
 			return receipts, nil
 		}
@@ -1528,7 +1539,7 @@ func findReceiptByReference(ctx context.Context, svc *Services, tenantID, ref st
 	return nil, fmt.Errorf("receipt not found")
 }
 
-func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) ([]byte, error) {
+func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byte, error) {
 	files := make(map[string][]byte)
 	for _, receipt := range receipts {
 		data, err := json.Marshal(receipt)
@@ -1536,26 +1547,6 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt, surfac
 			return nil, fmt.Errorf("marshal receipt %s: %w", receipt.ReceiptID, err)
 		}
 		files["receipts/"+receipt.ReceiptID+".json"] = data
-	}
-	if surfaces != nil {
-		if err := addEvidenceArtifactFiles(files, "verification_scopes", "verification_scope_id", surfaces.ListVerificationScopes()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "harness_traces", "trace_id", surfaces.ListHarnessTraces()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "plan_transactions", "plan_transaction_id", surfaces.ListPlanTransactions()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "harness_change_contracts", "change_contract_id", surfaces.ListHarnessChanges()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "grounded_action_refs", "grounded_action_id", surfaces.ListGroundedActions()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "gui_action_receipts", "receipt_id", surfaces.ListGUIReceipts()); err != nil {
-			return nil, err
-		}
 	}
 	fileHashes := make(map[string]string, len(files))
 	for name, data := range files {
@@ -1597,25 +1588,6 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt, surfac
 		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-func addEvidenceArtifactFiles[T any](files map[string][]byte, dir, idField string, values []T) error {
-	for i, value := range values {
-		data, err := json.Marshal(value)
-		if err != nil {
-			return fmt.Errorf("marshal %s artifact: %w", dir, err)
-		}
-		var probe map[string]any
-		if err := json.Unmarshal(data, &probe); err != nil {
-			return fmt.Errorf("probe %s artifact: %w", dir, err)
-		}
-		id, _ := probe[idField].(string)
-		if strings.TrimSpace(id) == "" {
-			id = fmt.Sprintf("%06d", i+1)
-		}
-		files[dir+"/"+id+".json"] = data
-	}
-	return nil
 }
 
 func writeTarEntry(tw *tar.Writer, name string, data []byte) error {

@@ -320,6 +320,10 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	if req.EffectLevel == "" {
 		req.EffectLevel = strings.TrimSpace(req.Resource)
 	}
+	if req.Tool == "" || req.EffectLevel == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tool and effect_level are required"})
+		return
+	}
 	req.SessionID = strings.TrimSpace(req.SessionID)
 	if req.SessionID == "" && req.Context != nil {
 		req.SessionID, _ = req.Context["session_id"].(string)

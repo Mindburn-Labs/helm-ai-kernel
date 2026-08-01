@@ -6159,6 +6159,16 @@ class EvaluateRequest(BaseModel):
     context: Optional[Dict[str, Any]] = Field(default=None, description="Optional input context; authenticated principal and tenant fields are added by the server.")
     __properties: ClassVar[List[str]] = ["principal", "action", "resource", "tool", "args", "agent_id", "effect_level", "session_id", "context"]
 
+    @field_validator('session_id')
+    def session_id_validate_regular_expression(cls, value):
+        """Validates the regular expression"""
+        if value is None:
+            return value
+
+        if not re.match(r"\S", value):
+            raise ValueError(r"must validate the regular expression /\S/")
+        return value
+
     model_config = ConfigDict(
         populate_by_name=True,
         validate_assignment=True,

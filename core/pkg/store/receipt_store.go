@@ -51,6 +51,25 @@ type TenantScopedReceiptReader interface {
 	ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error)
 }
 
+// TenantReceiptCursor is the stable ordering position for a tenant-wide V5
+// receipt listing. Lamport clocks are scoped to signed sessions, so a tenant
+// can legitimately contain multiple receipts with the same Lamport clock.
+// The timestamp and receipt ID complete the ordering key for lossless
+// pagination across those session chains.
+type TenantReceiptCursor struct {
+	LamportClock uint64
+	Timestamp    time.Time
+	ReceiptID    string
+}
+
+// TenantScopedReceiptCursorReader is an additive capability for tenant-wide
+// keyset pagination. Runtime tenant routes must require this interface rather
+// than falling back to the legacy scalar-Lamport ListByTenant method, because
+// a scalar cursor can skip equal-clock receipts from other signed sessions.
+type TenantScopedReceiptCursorReader interface {
+	ListByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, limit int) ([]*contracts.Receipt, error)
+}
+
 // ReceiptTimestampNormalizer exposes a store's durable timestamp precision to
 // producers. A producer must normalize before it signs or anchors a receipt
 // whose chain hash will later be reloaded from that store.
@@ -283,6 +302,37 @@ func (s *PostgresReceiptStore) ListByTenant(ctx context.Context, tenantID string
 		  AND lamport_clock > $4
 		ORDER BY lamport_clock ASC, timestamp ASC LIMIT $5`
 	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, len(prefix), prefix, since, limit)
+}
+
+// ListByTenantCursor returns V5 receipts in a strict tenant-wide keyset order.
+// Unlike ListByTenant, this method is safe when separate signed sessions share
+// a Lamport clock.
+func (s *PostgresReceiptStore) ListByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, limit int) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	cursor.ReceiptID = strings.TrimSpace(cursor.ReceiptID)
+	if cursor.ReceiptID != "" && cursor.Timestamp.IsZero() {
+		return nil, fmt.Errorf("tenant receipt cursor timestamp is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `SELECT ` + receiptColumns + ` FROM receipts
+		WHERE signature_version = $1
+		  AND COALESCE(session_id, '') <> ''
+		  AND substring(causal_session_id from 1 for $2) = $3`
+	args := []any{contracts.ReceiptSignatureV5, len(prefix), prefix}
+	if cursor.ReceiptID != "" {
+		cursor.Timestamp = s.NormalizeReceiptTimestamp(cursor.Timestamp.UTC())
+		query += `
+		  AND (lamport_clock > $4
+		       OR (lamport_clock = $4 AND timestamp > $5)
+		       OR (lamport_clock = $4 AND timestamp = $5 AND receipt_id > $6))`
+		args = append(args, cursor.LamportClock, cursor.Timestamp, cursor.ReceiptID)
+	}
+	query += fmt.Sprintf("\n\t\tORDER BY lamport_clock ASC, timestamp ASC, receipt_id ASC LIMIT $%d", len(args)+1)
+	args = append(args, limit)
+	return s.queryReceipts(ctx, query, args...)
 }
 
 // ListByTenantSession returns the receipt chain keyed by the signed

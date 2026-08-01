@@ -1,3 +1,6 @@
+// quantum_posture: doctor reports classical cryptographic setup and computes
+// diagnostic SHA-256 checksums; it does not implement hybrid or post-quantum
+// cryptographic controls.
 package main
 
 import (

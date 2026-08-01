@@ -1,6 +1,9 @@
 package contracts
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Receipt represents a proof of effect execution, linked to a decision.
 type Receipt struct {
@@ -110,6 +113,43 @@ type Receipt struct {
 	Transparency *TransparencyAnchor `json:"transparency,omitempty"`
 	LogID        string              `json:"log_id,omitempty"`
 	LeafIndex    uint64              `json:"leaf_index,omitempty"`
+}
+
+// receiptJSONAlias prevents Receipt.MarshalJSON from recursing. It also keeps
+// the historical JSON view available to ReceiptChainHash so V5 wire-format
+// requirements never rewrite legacy causal hashes.
+type receiptJSONAlias Receipt
+
+// receiptV5JSON keeps every field in the declared V5 signing envelope
+// structurally present. Empty values are signed values, not optional transport
+// fields: omitting one would make an otherwise valid V5 signature unverifiable
+// by an offline verifier.
+type receiptV5JSON struct {
+	receiptJSONAlias
+	OutputHash string `json:"output_hash"`
+	ArgsHash   string `json:"args_hash"`
+	Verdict    string `json:"verdict"`
+	ReasonCode string `json:"reason_code"`
+	PolicyHash string `json:"policy_hash"`
+	SessionID  string `json:"session_id"`
+}
+
+// MarshalJSON preserves the legacy receipt wire format while making a declared
+// receipt.v5 self-contained for offline verification. The V5 preimage includes
+// the fields overridden by receiptV5JSON even when their signed value is empty.
+func (r Receipt) MarshalJSON() ([]byte, error) {
+	if r.SignatureVersion != ReceiptSignatureV5 {
+		return json.Marshal(receiptJSONAlias(r))
+	}
+	return json.Marshal(receiptV5JSON{
+		receiptJSONAlias: receiptJSONAlias(r),
+		OutputHash:       r.OutputHash,
+		ArgsHash:         r.ArgsHash,
+		Verdict:          r.Verdict,
+		ReasonCode:       r.ReasonCode,
+		PolicyHash:       r.PolicyHash,
+		SessionID:        r.SessionID,
+	})
 }
 
 type Projection struct {

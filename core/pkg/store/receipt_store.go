@@ -29,6 +29,28 @@ type ReceiptStore interface {
 // session chain and assigned its next Lamport clock and previous hash.
 type CausalReceiptBuilder func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error)
 
+// causalReceiptSessionID selects the durable lookup scope without changing the
+// receipt envelope. V5 signs SessionID; legacy receipts retain ExecutorID as
+// their historical causal scope.
+func causalReceiptSessionID(r *contracts.Receipt) string {
+	if r == nil {
+		return ""
+	}
+	if r.SignatureVersion == contracts.ReceiptSignatureV5 {
+		return r.SessionID
+	}
+	return r.ExecutorID
+}
+
+const backfillCausalReceiptSessionsSQL = `
+	UPDATE receipts
+	SET causal_session_id = CASE
+		WHEN COALESCE(signature_version, '') = 'receipt.v5' THEN COALESCE(session_id, '')
+		ELSE COALESCE(executor_id, '')
+	END
+	WHERE COALESCE(causal_session_id, '') = '';
+`
+
 // PostgresReceiptStore is a durable SQL-based implementation.
 type PostgresReceiptStore struct {
 	db            *sql.DB
@@ -47,7 +69,7 @@ func NewPostgresReceiptStore(db *sql.DB) *PostgresReceiptStore {
 }
 
 func (s *PostgresReceiptStore) Init(ctx context.Context) error {
-	query := `
+	schemaQuery := `
 		CREATE TABLE IF NOT EXISTS receipts (
 			receipt_id TEXT PRIMARY KEY,
 			decision_id TEXT,
@@ -70,6 +92,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			reason_code TEXT DEFAULT '',
 			policy_hash TEXT DEFAULT '',
 			session_id TEXT DEFAULT '',
+			causal_session_id TEXT DEFAULT '',
 			blob_hash TEXT DEFAULT '',
 			log_id TEXT DEFAULT '',
 			leaf_index BIGINT DEFAULT 0,
@@ -92,6 +115,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS reason_code TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS policy_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS session_id TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS causal_session_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS blob_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS key_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS public_key_set JSONB;
@@ -101,18 +125,28 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS log_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS leaf_index BIGINT DEFAULT 0;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS transparency JSONB;
+	`
+	if _, err := s.db.ExecContext(ctx, schemaQuery); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, backfillCausalReceiptSessionsSQL); err != nil {
+		return err
+	}
+	indexQuery := `
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_id ON receipts(executor_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_decision_id ON receipts(decision_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport ON receipts(executor_id, lamport_clock);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport_desc ON receipts(executor_id, lamport_clock DESC);
 		DROP INDEX IF EXISTS idx_receipts_executor_lamport_unique;
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_session_lamport_unique ON receipts(session_id, lamport_clock)
-			WHERE session_id IS NOT NULL AND session_id <> '' AND lamport_clock > 0;
-		CREATE INDEX IF NOT EXISTS idx_receipts_session_lamport_desc ON receipts(session_id, lamport_clock DESC);
+		DROP INDEX IF EXISTS idx_receipts_session_lamport_unique;
+		DROP INDEX IF EXISTS idx_receipts_session_lamport_desc;
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_causal_session_lamport_unique ON receipts(causal_session_id, lamport_clock)
+			WHERE causal_session_id IS NOT NULL AND causal_session_id <> '' AND lamport_clock > 0;
+		CREATE INDEX IF NOT EXISTS idx_receipts_causal_session_lamport_desc ON receipts(causal_session_id, lamport_clock DESC);
 		CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp);
 	`
-	_, err := s.db.ExecContext(ctx, query)
+	_, err := s.db.ExecContext(ctx, indexQuery)
 	return err
 }
 
@@ -303,11 +337,11 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		INSERT INTO receipts (
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
 			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, args_hash, blob_hash,
-			signature_version, verdict, reason_code, policy_hash, session_id, log_id, leaf_index, transparency,
+			signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency,
 			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb,
-			$25, $26::jsonb, $27, $28, $29)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb,
+			$26, $27::jsonb, $28, $29, $30)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
@@ -343,6 +377,7 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		r.ReasonCode,
 		r.PolicyHash,
 		r.SessionID,
+		causalReceiptSessionID(r),
 		r.LogID,
 		r.LeafIndex,
 		nullableJSON(transparencyJSON),
@@ -426,7 +461,8 @@ func (s *PostgresReceiptStore) cachedLastReceipt(sessionID string) *contracts.Re
 }
 
 func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
-	if r == nil || r.SessionID == "" || r.LamportClock == 0 {
+	sessionID := causalReceiptSessionID(r)
+	if r == nil || sessionID == "" || r.LamportClock == 0 {
 		return
 	}
 	s.lastMu.Lock()
@@ -434,9 +470,9 @@ func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
 	if s.lastBySession == nil {
 		s.lastBySession = map[string]*contracts.Receipt{}
 	}
-	current := s.lastBySession[r.SessionID]
+	current := s.lastBySession[sessionID]
 	if current == nil || r.LamportClock >= current.LamportClock {
-		s.lastBySession[r.SessionID] = cloneReceipt(r)
+		s.lastBySession[sessionID] = cloneReceipt(r)
 	}
 }
 
@@ -479,7 +515,7 @@ type sqlQueryer interface {
 }
 
 func queryLastPostgresReceipt(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, error) {
-	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE session_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE causal_session_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
 	row := queryer.QueryRowContext(ctx, query, sessionID)
 	r, err := scanReceipt(row)
 	if err != nil {
@@ -511,14 +547,14 @@ func buildNextCausalReceipt(sessionID string, previous *contracts.Receipt, build
 	}
 	// The builder signs the receipt it returns, so assigning a field here would
 	// mutate an already-signed object and invalidate any signature that covers
-	// it. Require the builder to set SessionID before signing instead of
-	// silently defaulting it afterwards.
-	if receipt.SessionID == "" {
-		return nil, fmt.Errorf("causal receipt builder returned a receipt with no signed session id for session %q: "+
-			"the session must be bound before the receipt is signed", sessionID)
+	// it. V5 must set its signed SessionID; legacy receipts keep ExecutorID as
+	// their causal identity.
+	receiptSessionID := causalReceiptSessionID(receipt)
+	if receiptSessionID == "" {
+		return nil, fmt.Errorf("causal receipt builder returned no causal session id for session %q", sessionID)
 	}
-	if receipt.SessionID != sessionID {
-		return nil, fmt.Errorf("receipt signed session %q does not match locked session %q", receipt.SessionID, sessionID)
+	if receiptSessionID != sessionID {
+		return nil, fmt.Errorf("receipt causal session %q does not match locked session %q", receiptSessionID, sessionID)
 	}
 	if receipt.LamportClock != lamport {
 		return nil, fmt.Errorf("receipt lamport %d does not match assigned lamport %d", receipt.LamportClock, lamport)

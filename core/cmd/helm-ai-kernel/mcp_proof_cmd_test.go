@@ -71,6 +71,9 @@ func TestRunMCPProofProducesNoDispatchEvidencePack(t *testing.T) {
 		if receipt["signature"] == "" || receipt["decision_hash"] == "" {
 			t.Fatalf("receipt for %s is not signed/decision-bound: %#v", result.ScenarioID, receipt)
 		}
+		if sessionID, ok := receipt["session_id"].(string); !ok || sessionID != summary.RunID {
+			t.Fatalf("receipt for %s session_id = %#v, want proof run %q", result.ScenarioID, receipt["session_id"], summary.RunID)
+		}
 		if metadata, ok := receipt["metadata"].(map[string]any); !ok || metadata["dispatched"] != false {
 			t.Fatalf("receipt for %s does not bind dispatched=false: %#v", result.ScenarioID, receipt["metadata"])
 		}

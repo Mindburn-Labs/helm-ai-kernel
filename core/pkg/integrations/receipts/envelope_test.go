@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/integrations/capgraph"
 )
 
@@ -81,5 +82,28 @@ func TestNewDenied(t *testing.T) {
 	}
 	if r.Status != "denied" {
 		t.Errorf("expected status=denied, got %s", r.Status)
+	}
+}
+
+func TestEnvelopeJSONKeepsV5EmptySignedFields(t *testing.T) {
+	r := NewAllowed(CapabilityRef{}, AuthContext{}, "")
+	r.Receipt.SignatureVersion = contracts.ReceiptSignatureV5
+
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, field := range []string{"output_hash", "args_hash", "verdict", "reason_code", "policy_hash", "session_id"} {
+		if value, ok := raw[field]; !ok || value != "" {
+			t.Fatalf("%s = %#v, want present empty string", field, value)
+		}
+	}
+	if allowed, ok := raw["policy_decision"].(map[string]any); !ok || allowed["allowed"] != true {
+		t.Fatalf("policy_decision lost from envelope: %#v", raw["policy_decision"])
 	}
 }

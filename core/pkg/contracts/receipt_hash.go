@@ -21,7 +21,10 @@ func ReceiptChainHash(receipt *Receipt) (string, error) {
 	if receipt == nil {
 		return "", fmt.Errorf("receipt is nil")
 	}
-	chained := *receipt
+	// MarshalJSON deliberately emits structurally complete V5 transport
+	// envelopes. Chain hashes retain their historical canonical view so that
+	// serialisation hardening cannot change a legacy predecessor hash.
+	chained := receiptJSONAlias(*receipt)
 	chained.Transparency = nil
 	chained.LogID = ""
 	chained.LeafIndex = 0

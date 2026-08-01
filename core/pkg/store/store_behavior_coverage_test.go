@@ -282,24 +282,26 @@ func TestSQLiteReceiptEnforcesLamportUniquenessPerSession(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	first := &contracts.Receipt{
-		ReceiptID:    "r-dup-1",
-		DecisionID:   "d-dup-1",
-		EffectID:     "e",
-		Status:       "OK",
-		Timestamp:    time.Now(),
-		ExecutorID:   "agent.dup",
-		SessionID:    "session-a",
-		LamportClock: 9,
+		ReceiptID:        "r-dup-1",
+		DecisionID:       "d-dup-1",
+		EffectID:         "e",
+		Status:           "OK",
+		Timestamp:        time.Now(),
+		ExecutorID:       "agent.dup",
+		SignatureVersion: contracts.ReceiptSignatureV5,
+		SessionID:        "session-a",
+		LamportClock:     9,
 	}
 	second := &contracts.Receipt{
-		ReceiptID:    "r-dup-2",
-		DecisionID:   "d-dup-2",
-		EffectID:     "e",
-		Status:       "OK",
-		Timestamp:    time.Now().Add(time.Second),
-		ExecutorID:   "agent.dup",
-		SessionID:    "session-b",
-		LamportClock: 9,
+		ReceiptID:        "r-dup-2",
+		DecisionID:       "d-dup-2",
+		EffectID:         "e",
+		Status:           "OK",
+		Timestamp:        time.Now().Add(time.Second),
+		ExecutorID:       "agent.dup",
+		SignatureVersion: contracts.ReceiptSignatureV5,
+		SessionID:        "session-b",
+		LamportClock:     9,
 	}
 	if err := store.Store(ctx, first); err != nil {
 		t.Fatal(err)
@@ -321,37 +323,85 @@ func TestSQLiteReceiptMigrationReplacesExecutorLamportUniqueIndex(t *testing.T) 
 	store, cleanup := newTestSQLiteStore(t)
 	defer cleanup()
 
-	if _, err := store.db.Exec(`DROP INDEX idx_receipts_session_lamport_unique`); err != nil {
-		t.Fatalf("drop current session index: %v", err)
+	if _, err := store.db.Exec(`DROP INDEX idx_receipts_causal_session_lamport_unique`); err != nil {
+		t.Fatalf("drop current causal-session index: %v", err)
 	}
 	if _, err := store.db.Exec(`CREATE UNIQUE INDEX idx_receipts_executor_lamport_unique ON receipts(executor_id, lamport_clock) WHERE executor_id IS NOT NULL AND executor_id <> '' AND lamport_clock > 0`); err != nil {
 		t.Fatalf("install legacy executor index: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO receipts (receipt_id, decision_id, effect_id, status, blob_hash, output_hash, timestamp, executor_id, lamport_clock, signature_version, session_id, causal_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"r-legacy", "d-legacy", "e", "OK", "", "", time.Now().UTC().Format(time.RFC3339Nano), "agent.migrated", 1, "", "", ""); err != nil {
+		t.Fatalf("insert legacy receipt: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO receipts (receipt_id, decision_id, effect_id, status, blob_hash, output_hash, timestamp, executor_id, lamport_clock, signature_version, session_id, causal_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"r-v5-empty-session", "d-v5-empty-session", "e", "OK", "", "", time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano), "agent-v5", 1, contracts.ReceiptSignatureV5, "", ""); err != nil {
+		t.Fatalf("insert V5 receipt: %v", err)
 	}
 	if err := store.migrate(); err != nil {
 		t.Fatalf("migrate legacy executor index: %v", err)
 	}
 
-	ctx := context.Background()
+	for receiptID, wantCausalSession := range map[string]string{
+		"r-legacy":           "agent.migrated",
+		"r-v5-empty-session": "",
+	} {
+		var got string
+		if err := store.db.QueryRowContext(ctx, `SELECT causal_session_id FROM receipts WHERE receipt_id = ?`, receiptID).Scan(&got); err != nil {
+			t.Fatalf("read causal session for %s: %v", receiptID, err)
+		}
+		if got != wantCausalSession {
+			t.Fatalf("causal session for %s = %q, want %q", receiptID, got, wantCausalSession)
+		}
+	}
+	legacy, err := store.GetLastForSession(ctx, "agent.migrated")
+	if err != nil || legacy == nil || legacy.ReceiptID != "r-legacy" || legacy.SessionID != "" {
+		t.Fatalf("legacy receipt was not found without rewriting its envelope: receipt=%+v err=%v", legacy, err)
+	}
+
+	if err := store.AppendCausal(ctx, "agent.migrated", func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		return &contracts.Receipt{
+			ReceiptID:        "r-v5-after-legacy",
+			DecisionID:       "d-v5-after-legacy",
+			EffectID:         "e",
+			Status:           "OK",
+			Timestamp:        time.Now().UTC(),
+			ExecutorID:       "agent.migrated",
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        "agent.migrated",
+			PrevHash:         prevHash,
+			LamportClock:     lamport,
+		}, nil
+	}); err != nil {
+		t.Fatalf("append after legacy migration: %v", err)
+	}
+	continued, err := store.GetLastForSession(ctx, "agent.migrated")
+	if err != nil || continued == nil || continued.ReceiptID != "r-v5-after-legacy" || continued.LamportClock != 2 {
+		t.Fatalf("migrated legacy chain did not continue: receipt=%+v err=%v", continued, err)
+	}
+
 	for _, receipt := range []*contracts.Receipt{
 		{
-			ReceiptID:    "r-migrated-a",
-			DecisionID:   "d-migrated-a",
-			EffectID:     "e",
-			Status:       "OK",
-			Timestamp:    time.Now(),
-			ExecutorID:   "agent.migrated",
-			SessionID:    "session-a",
-			LamportClock: 1,
+			ReceiptID:        "r-migrated-a",
+			DecisionID:       "d-migrated-a",
+			EffectID:         "e",
+			Status:           "OK",
+			Timestamp:        time.Now(),
+			ExecutorID:       "agent.migrated",
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        "session-a",
+			LamportClock:     1,
 		},
 		{
-			ReceiptID:    "r-migrated-b",
-			DecisionID:   "d-migrated-b",
-			EffectID:     "e",
-			Status:       "OK",
-			Timestamp:    time.Now().Add(time.Second),
-			ExecutorID:   "agent.migrated",
-			SessionID:    "session-b",
-			LamportClock: 1,
+			ReceiptID:        "r-migrated-b",
+			DecisionID:       "d-migrated-b",
+			EffectID:         "e",
+			Status:           "OK",
+			Timestamp:        time.Now().Add(time.Second),
+			ExecutorID:       "agent.migrated",
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        "session-b",
+			LamportClock:     1,
 		},
 	} {
 		if err := store.Store(ctx, receipt); err != nil {
@@ -425,31 +475,34 @@ func TestSQLiteReceiptGetLastForSignedSessionWithoutExecutorID(t *testing.T) {
 
 	for _, receipt := range []*contracts.Receipt{
 		{
-			ReceiptID:    "r-session-1",
-			DecisionID:   "d-session-1",
-			EffectID:     "effect",
-			Status:       "OK",
-			Timestamp:    time.Unix(1700000000, 0).UTC(),
-			SessionID:    "signed-session",
-			LamportClock: 1,
+			ReceiptID:        "r-session-1",
+			DecisionID:       "d-session-1",
+			EffectID:         "effect",
+			Status:           "OK",
+			Timestamp:        time.Unix(1700000000, 0).UTC(),
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        "signed-session",
+			LamportClock:     1,
 		},
 		{
-			ReceiptID:    "r-other-session",
-			DecisionID:   "d-other-session",
-			EffectID:     "effect",
-			Status:       "OK",
-			Timestamp:    time.Unix(1700000001, 0).UTC(),
-			SessionID:    "other-session",
-			LamportClock: 99,
+			ReceiptID:        "r-other-session",
+			DecisionID:       "d-other-session",
+			EffectID:         "effect",
+			Status:           "OK",
+			Timestamp:        time.Unix(1700000001, 0).UTC(),
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        "other-session",
+			LamportClock:     99,
 		},
 		{
-			ReceiptID:    "r-session-2",
-			DecisionID:   "d-session-2",
-			EffectID:     "effect",
-			Status:       "OK",
-			Timestamp:    time.Unix(1700000002, 0).UTC(),
-			SessionID:    "signed-session",
-			LamportClock: 2,
+			ReceiptID:        "r-session-2",
+			DecisionID:       "d-session-2",
+			EffectID:         "effect",
+			Status:           "OK",
+			Timestamp:        time.Unix(1700000002, 0).UTC(),
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        "signed-session",
+			LamportClock:     2,
 		},
 	} {
 		if err := store.Store(ctx, receipt); err != nil {

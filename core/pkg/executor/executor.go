@@ -388,9 +388,6 @@ func (e *SafeExecutor) verifySnapshot(ctx context.Context, decision *contracts.D
 }
 
 func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect, blobHash string, outputHash string, safeDepResult *safedep.GateResult) (*contracts.Receipt, error) {
-	// ProofGraph DAG: query previous receipt to build causal chain
-	prevHash := ""
-	lamportClock := uint64(1)
 	sessionID := ""
 	if decision.InputContext != nil {
 		if value, ok := decision.InputContext["session_id"].(string); ok {
@@ -398,6 +395,84 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 		}
 	}
 
+	buildReceipt := func(lamportClock uint64, prevHash string, causal bool) (*contracts.Receipt, error) {
+		receipt := &contracts.Receipt{
+			ReceiptID:     "rcpt-" + decision.ID,
+			DecisionID:    decision.ID,
+			CorrelationID: decision.CorrelationID,
+			EffectID:      effect.EffectID,
+			Status:        "SUCCESS",
+			BlobHash:      blobHash,
+			OutputHash:    outputHash,
+			ArgsHash:      effect.ArgsHash, // PEP boundary hash bound into signed receipt
+			Timestamp:     e.clock(),
+			PrevHash:      prevHash,
+			LamportClock:  lamportClock,
+			Verdict:       decision.Verdict,
+			ReasonCode:    decision.ReasonCode,
+			PolicyHash:    decision.PolicyContentHash,
+			SessionID:     sessionID,
+		}
+		if receipt.CorrelationID == "" {
+			if corr, ok := tracing.GetCorrelationID(ctx); ok {
+				receipt.CorrelationID = string(corr)
+			}
+		}
+		if intent != nil {
+			receipt.EmergencyActivationID = intent.EmergencyActivationID
+			receipt.EmergencyDelegationSessionID = intent.EmergencyDelegationSessionID
+			receipt.EmergencyScopeHash = intent.EmergencyScopeHash
+		}
+		if safeDepResult != nil && safeDepResult.Classification.HazardCode != "" {
+			receipt.SafeDepState = string(safeDepResult.Classification.State)
+			receipt.SafeDepReasonCode = string(safeDepResult.ReasonCode)
+			if safeDepResult.ActivationReceipt != nil && receipt.EmergencyActivationID == "" {
+				receipt.EmergencyActivationID = safeDepResult.ActivationReceipt.ActivationID
+				receipt.EmergencyDelegationSessionID = safeDepResult.ActivationReceipt.DelegationSessionID
+			}
+		}
+		if causal {
+			// AppendCausal validates the signed V5 session scope after this
+			// builder returns. Set the declared version before signing so no
+			// signed field is mutated after the store assigns the chain position.
+			receipt.SignatureVersion = contracts.ReceiptSignatureV5
+		}
+		// Sign Receipt — Fail-Closed: unsigned receipts are never emitted.
+		// Every receipt MUST be signed per the HELM standard.
+		// The signature now covers PrevHash + LamportClock via CanonicalizeReceipt.
+		if e.signer != nil {
+			if err := e.signer.SignReceipt(receipt); err != nil {
+				return nil, fmt.Errorf("fail-closed: receipt signing failed: %w", err)
+			}
+		}
+		return receipt, nil
+	}
+
+	// Durable stores can allocate the final predecessor and Lamport clock under
+	// their transaction/session lock. Build and sign only after that assignment;
+	// otherwise a concurrent execution could sign the same causal position.
+	if appender, ok := e.receiptStore.(causalReceiptAppender); ok && sessionID != "" {
+		var receipt *contracts.Receipt
+		if err := appender.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+			built, buildErr := buildReceipt(lamport, prevHash, true)
+			if buildErr != nil {
+				return nil, buildErr
+			}
+			receipt = built
+			return built, nil
+		}); err != nil {
+			return nil, fmt.Errorf("fail-closed: receipt persistence failed: %w", err)
+		}
+		if receipt == nil {
+			return nil, errors.New("fail-closed: causal receipt store completed without building a receipt")
+		}
+		return receipt, nil
+	}
+
+	// Keep the legacy adapter path for minimal ReceiptStore implementations
+	// that do not provide atomic causal allocation.
+	prevHash := ""
+	lamportClock := uint64(1)
 	if e.receiptStore != nil {
 		if sessionID != "" {
 			prev, err := e.receiptStore.GetLastForSession(ctx, sessionID)
@@ -413,49 +488,9 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 			}
 		}
 	}
-
-	receipt := &contracts.Receipt{
-		ReceiptID:     "rcpt-" + decision.ID,
-		DecisionID:    decision.ID,
-		CorrelationID: decision.CorrelationID,
-		EffectID:      effect.EffectID,
-		Status:        "SUCCESS",
-		BlobHash:      blobHash,
-		OutputHash:    outputHash,
-		ArgsHash:      effect.ArgsHash, // PEP boundary hash bound into signed receipt
-		Timestamp:     e.clock(),
-		PrevHash:      prevHash,
-		LamportClock:  lamportClock,
-		Verdict:       decision.Verdict,
-		ReasonCode:    decision.ReasonCode,
-		PolicyHash:    decision.PolicyContentHash,
-		SessionID:     sessionID,
-	}
-	if receipt.CorrelationID == "" {
-		if corr, ok := tracing.GetCorrelationID(ctx); ok {
-			receipt.CorrelationID = string(corr)
-		}
-	}
-	if intent != nil {
-		receipt.EmergencyActivationID = intent.EmergencyActivationID
-		receipt.EmergencyDelegationSessionID = intent.EmergencyDelegationSessionID
-		receipt.EmergencyScopeHash = intent.EmergencyScopeHash
-	}
-	if safeDepResult != nil && safeDepResult.Classification.HazardCode != "" {
-		receipt.SafeDepState = string(safeDepResult.Classification.State)
-		receipt.SafeDepReasonCode = string(safeDepResult.ReasonCode)
-		if safeDepResult.ActivationReceipt != nil && receipt.EmergencyActivationID == "" {
-			receipt.EmergencyActivationID = safeDepResult.ActivationReceipt.ActivationID
-			receipt.EmergencyDelegationSessionID = safeDepResult.ActivationReceipt.DelegationSessionID
-		}
-	}
-	// Sign Receipt — Fail-Closed: unsigned receipts are never emitted.
-	// Every receipt MUST be signed per the HELM standard.
-	// The signature now covers PrevHash + LamportClock via CanonicalizeReceipt.
-	if e.signer != nil {
-		if err := e.signer.SignReceipt(receipt); err != nil {
-			return nil, fmt.Errorf("fail-closed: receipt signing failed: %w", err)
-		}
+	receipt, err := buildReceipt(lamportClock, prevHash, false)
+	if err != nil {
+		return nil, err
 	}
 	if e.receiptStore != nil {
 		if storeErr := e.receiptStore.Store(ctx, receipt); storeErr != nil {

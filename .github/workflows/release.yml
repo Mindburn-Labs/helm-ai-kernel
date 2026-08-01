@@ -35,9 +35,43 @@ jobs:
       - name: Check tag and lockstep source versions
         run: python3 scripts/release/check_version_drift.py local --tag "${GITHUB_REF_NAME}"
 
-  validate:
+  release-preflight:
     runs-on: ubuntu-latest
     needs: version-contract
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - name: Require tagged commit to be current origin/main
+        run: |
+          set -euo pipefail
+          tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
+          main_commit="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 { print $1 }')"
+          if [ "$tag_commit" != "$main_commit" ]; then
+            echo "::error::Refusing to release ${GITHUB_REF_NAME}: tag commit ${tag_commit} is not current origin/main ${main_commit}."
+            exit 1
+          fi
+      - name: Require contracts catalog OpenAPI to already match
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::DOWNSTREAM_FANOUT_TOKEN with contents:read on Mindburn-Labs/contracts-catalog is required before release publication."
+            exit 1
+          fi
+          kernel_blob="$(git hash-object --no-filters api/openapi/helm.openapi.yaml)"
+          catalog_blob="$(gh api 'repos/Mindburn-Labs/contracts-catalog/contents/api/specs/helm.openapi.yaml?ref=main' --jq '.sha')"
+          if [ "$kernel_blob" != "$catalog_blob" ]; then
+            echo "::error::contracts-catalog main OpenAPI does not match this tag. Sync and merge the catalog before tagging ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+
+  validate:
+    runs-on: ubuntu-latest
+    needs: release-preflight
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Install presentation hygiene dependency
@@ -485,82 +519,7 @@ jobs:
           gh pr merge "$pr" \
             --repo Mindburn-Labs/homebrew-tap \
             --squash \
-            --admin \
             --delete-branch
-
-  downstream-fanout:
-    # After a tag release, open auto-PRs that pull the released kernel surface
-    # into downstream contract consumers that version-drift.yml only *detects*
-    # drift on. PRs are opened (never auto-merged) so a human reviews the
-    # contract bump before it lands.
-    runs-on: ubuntu-latest
-    needs: github-release
-    steps:
-      - name: Check out released kernel ref
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          ref: ${{ github.sha }}
-      - name: Require cross-repo fan-out token
-        env:
-          DOWNSTREAM_FANOUT_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
-        run: |
-          if [ -z "$DOWNSTREAM_FANOUT_TOKEN" ]; then
-            echo "::error::DOWNSTREAM_FANOUT_TOKEN secret is not configured. The release fan-out opens pull requests against Mindburn-Labs/contracts-catalog, which is outside the scope of HOMEBREW_TAP_TOKEN (tap-only). Add a repo-scoped (or fine-grained) PAT named DOWNSTREAM_FANOUT_TOKEN with 'contents:write' and 'pull_requests:write' on the downstream repository, then re-run this job."
-            exit 1
-          fi
-      - name: Resolve release coordinates
-        id: rel
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          {
-            echo "version=${version}"
-            echo "commit=${GITHUB_SHA}"
-            echo "short=$(git rev-parse --short=12 "${GITHUB_SHA}")"
-            echo "branch=ci/helm-release-${GITHUB_REF_NAME}"
-          } >> "${GITHUB_OUTPUT}"
-      - name: Configure git identity
-        run: |
-          git config --global user.name "mindburn-release-bot"
-          git config --global user.email "release@mindburn.org"
-      - name: Open PR — contracts-catalog spec refresh
-        env:
-          GH_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
-          DOWNSTREAM_FANOUT_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
-          VERSION: ${{ steps.rel.outputs.version }}
-          COMMIT: ${{ steps.rel.outputs.commit }}
-          SHORT: ${{ steps.rel.outputs.short }}
-          BRANCH: ${{ steps.rel.outputs.branch }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          src="${GITHUB_WORKSPACE}/api/openapi/helm.openapi.yaml"
-          if [ ! -f "$src" ]; then
-            echo "::error::Released kernel spec not found at api/openapi/helm.openapi.yaml"
-            exit 1
-          fi
-          mkdir -p fanout-work
-          git clone "https://x-access-token:${DOWNSTREAM_FANOUT_TOKEN}@github.com/Mindburn-Labs/contracts-catalog.git" fanout-work/contracts-catalog
-          cd fanout-work/contracts-catalog
-          dest="api/specs/helm.openapi.yaml"
-          mkdir -p "$(dirname "$dest")"
-          cp "$src" "$dest"
-          if git diff --quiet -- "$dest"; then
-            echo "contracts-catalog spec already matches ${REF_NAME}; nothing to PR."
-            exit 0
-          fi
-          git checkout -b "$BRANCH"
-          git add "$dest"
-          git commit \
-            -m "chore: refresh helm OpenAPI spec to ${REF_NAME}" \
-            -m "Synced api/specs/helm.openapi.yaml from helm-ai-kernel api/openapi/helm.openapi.yaml at release ${REF_NAME} (${SHORT})." \
-            -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
-          git push --force-with-lease origin "$BRANCH"
-          gh pr create \
-            --repo Mindburn-Labs/contracts-catalog \
-            --base main \
-            --head "$BRANCH" \
-            --title "chore: refresh helm OpenAPI spec to ${REF_NAME}" \
-            --body "$(printf 'Automated release fan-out from helm-ai-kernel %s (%s).\n\nThis refreshes `api/specs/helm.openapi.yaml` from the released kernel `api/openapi/helm.openapi.yaml` so the catalog stays in lockstep with the published kernel contract. The openapi compat gate in this repo will validate backward compatibility.\n\nReview and merge to clear downstream contract drift.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' "${REF_NAME}" "${SHORT}")"
 
   chart:
     runs-on: ubuntu-latest
@@ -1009,7 +968,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke]
+    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke]
     permissions:
       actions: read
       contents: write
@@ -1055,7 +1014,7 @@ jobs:
 
   post-release-version-drift:
     runs-on: ubuntu-latest
-    needs: [github-release, slsa-provenance, homebrew, downstream-fanout, go-sdk-tag]
+    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag]
     permissions:
       contents: write
     steps:

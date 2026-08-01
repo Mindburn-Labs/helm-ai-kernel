@@ -111,7 +111,9 @@ func TestPersistDecisionReceiptSignsAndStoresReceipt(t *testing.T) {
 		Action:             "EXECUTE_TOOL",
 		Verdict:            string(contracts.VerdictDeny),
 		ReasonCode:         string(contracts.ReasonEmergencyStopFenced),
+		PolicyContentHash:  "sha256:policy-content",
 		PolicyDecisionHash: "sha256:pdp",
+		InputContext:       map[string]any{"session_id": "session-route"},
 		Timestamp:          time.Unix(1700000000, 0).UTC(),
 	}
 
@@ -127,6 +129,9 @@ func TestPersistDecisionReceiptSignsAndStoresReceipt(t *testing.T) {
 	}
 	if store.stored.ReasonCode != string(contracts.ReasonEmergencyStopFenced) {
 		t.Fatalf("receipt reason_code = %q", store.stored.ReasonCode)
+	}
+	if store.stored.SignatureVersion != contracts.ReceiptSignatureV5 || store.stored.Verdict != decision.Verdict || store.stored.PolicyHash != decision.PolicyContentHash || store.stored.SessionID != "session-route" {
+		t.Fatalf("receipt did not bind decision governance fields: %+v", store.stored)
 	}
 	valid, err := signer.VerifyReceipt(store.stored)
 	if err != nil || !valid {

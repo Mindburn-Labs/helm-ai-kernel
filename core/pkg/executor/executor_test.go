@@ -105,9 +105,12 @@ func TestSafeExecutor_Gating(t *testing.T) {
 
 	// 1. Valid Decision -> Execute
 	validDec := &contracts.DecisionRecord{
-		ID:           "dec-1",
-		Verdict:      string(contracts.VerdictAllow),
-		EffectDigest: testEffectDigest(t, effect),
+		ID:                "dec-1",
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "sha256:policy-content",
+		InputContext:      map[string]any{"session_id": "session-executor"},
+		EffectDigest:      testEffectDigest(t, effect),
 	}
 	// Sign the decision so it passes signature validation
 	if err := signer.SignDecision(validDec); err != nil {
@@ -140,6 +143,12 @@ func TestSafeExecutor_Gating(t *testing.T) {
 	}
 	if receipt.OutputHash != artifact.Digest {
 		t.Errorf("Receipt OutputHash %s does not match Artifact Digest %s", receipt.OutputHash, artifact.Digest)
+	}
+	if receipt.SignatureVersion != contracts.ReceiptSignatureV5 || receipt.Verdict != validDec.Verdict || receipt.ReasonCode != validDec.ReasonCode || receipt.PolicyHash != validDec.PolicyContentHash || receipt.SessionID != "session-executor" {
+		t.Fatalf("receipt did not bind decision governance fields: %+v", receipt)
+	}
+	if valid, err := signer.VerifyReceipt(receipt); err != nil || !valid {
+		t.Fatalf("V5 receipt signature invalid after issuance: valid=%v err=%v", valid, err)
 	}
 
 	// 2. Intent Mismatch -> Block

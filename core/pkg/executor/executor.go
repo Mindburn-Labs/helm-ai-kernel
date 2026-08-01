@@ -391,14 +391,14 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 	// ProofGraph DAG: query previous receipt to build causal chain
 	prevHash := "GENESIS"
 	lamportClock := uint64(1)
+	sessionID := ""
+	if decision.InputContext != nil {
+		if value, ok := decision.InputContext["session_id"].(string); ok {
+			sessionID = value
+		}
+	}
 
 	if e.receiptStore != nil {
-		sessionID := ""
-		if decision.InputContext != nil {
-			if s, ok := decision.InputContext["session_id"].(string); ok {
-				sessionID = s
-			}
-		}
 		if sessionID != "" {
 			if prev, err := e.receiptStore.GetLastForSession(ctx, sessionID); err == nil && prev != nil {
 				prevHash = prev.Signature // Causal link: hash of previous receipt's cryptographic signature
@@ -419,6 +419,10 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 		Timestamp:     e.clock(),
 		PrevHash:      prevHash,
 		LamportClock:  lamportClock,
+		Verdict:       decision.Verdict,
+		ReasonCode:    decision.ReasonCode,
+		PolicyHash:    decision.PolicyContentHash,
+		SessionID:     sessionID,
 	}
 	if receipt.CorrelationID == "" {
 		if corr, ok := tracing.GetCorrelationID(ctx); ok {

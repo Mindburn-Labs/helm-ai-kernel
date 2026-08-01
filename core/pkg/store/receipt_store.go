@@ -65,6 +65,11 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			lamport_clock BIGINT,
 			output_hash TEXT DEFAULT '',
 			args_hash TEXT DEFAULT '',
+			signature_version TEXT DEFAULT '',
+			verdict TEXT DEFAULT '',
+			reason_code TEXT DEFAULT '',
+			policy_hash TEXT DEFAULT '',
+			session_id TEXT DEFAULT '',
 			blob_hash TEXT DEFAULT '',
 			log_id TEXT DEFAULT '',
 			leaf_index BIGINT DEFAULT 0,
@@ -82,6 +87,11 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS merkle_root TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS output_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS args_hash TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_version TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS verdict TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS reason_code TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS policy_hash TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS session_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS blob_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS key_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS public_key_set JSONB;
@@ -105,7 +115,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 }
 
 // receiptColumns is the canonical column list for receipt queries.
-const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id`
+const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(signature_version, '') AS signature_version, COALESCE(verdict, '') AS verdict, COALESCE(reason_code, '') AS reason_code, COALESCE(policy_hash, '') AS policy_hash, COALESCE(session_id, '') AS session_id, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id`
 
 func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE decision_id = $1`
@@ -198,7 +208,7 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 	err := s.Scan(
 		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
 		&r.BlobHash, &r.OutputHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
-		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.LogID, &r.LeafIndex, &transparency,
+		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.SignatureVersion, &r.Verdict, &r.ReasonCode, &r.PolicyHash, &r.SessionID, &r.LogID, &r.LeafIndex, &transparency,
 		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID,
 	)
 	if err != nil {
@@ -291,11 +301,11 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		INSERT INTO receipts (
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
 			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, args_hash, blob_hash,
-			log_id, leaf_index, transparency,
+			signature_version, verdict, reason_code, policy_hash, session_id, log_id, leaf_index, transparency,
 			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb,
-			$20, $21::jsonb, $22, $23, $24)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb,
+			$25, $26::jsonb, $27, $28, $29)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
@@ -326,6 +336,11 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		r.OutputHash,
 		r.ArgsHash,
 		r.BlobHash,
+		r.SignatureVersion,
+		r.Verdict,
+		r.ReasonCode,
+		r.PolicyHash,
+		r.SessionID,
 		r.LogID,
 		r.LeafIndex,
 		nullableJSON(transparencyJSON),

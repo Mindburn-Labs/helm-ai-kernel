@@ -265,6 +265,12 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 	if svc.ReceiptSigner == nil {
 		return fmt.Errorf("receipt signer unavailable")
 	}
+	sessionID := ""
+	if decision.InputContext != nil {
+		if value, ok := decision.InputContext["session_id"].(string); ok {
+			sessionID = strings.TrimSpace(value)
+		}
+	}
 	err := svc.ReceiptStore.AppendCausal(ctx, agentID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		receipt := &contracts.Receipt{
 			ReceiptID:    receiptID,
@@ -275,7 +281,10 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 			OutputHash:   decision.PolicyDecisionHash,
 			Timestamp:    timestamp,
 			ExecutorID:   agentID,
+			Verdict:      decision.Verdict,
 			ReasonCode:   decision.ReasonCode,
+			PolicyHash:   decision.PolicyContentHash,
+			SessionID:    sessionID,
 			Metadata:     metadata,
 			PrevHash:     prevHash,
 			LamportClock: lamport,

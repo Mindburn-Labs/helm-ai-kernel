@@ -43,6 +43,11 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         homebrew = self.job("homebrew")
         self.assertNotIn("--admin", homebrew)
         self.assertIn("--delete-branch", homebrew)
+        self.assertIn("for attempt in $(seq 1 120); do", homebrew)
+        self.assertIn('state="$(gh pr view "$pr"', homebrew)
+        self.assertIn("MERGED) exit 0 ;;", homebrew)
+        self.assertIn("CLOSED)", homebrew)
+        self.assertIn("Timed out waiting for Homebrew PR", homebrew)
 
 
 if __name__ == "__main__":

@@ -520,6 +520,27 @@ jobs:
             --repo Mindburn-Labs/homebrew-tap \
             --squash \
             --delete-branch
+          for attempt in $(seq 1 120); do
+            state="$(gh pr view "$pr" \
+              --repo Mindburn-Labs/homebrew-tap \
+              --json state \
+              --jq '.state')"
+            case "$state" in
+              MERGED) exit 0 ;;
+              CLOSED)
+                echo "::error::Homebrew PR #${pr} closed without merging."
+                exit 1
+                ;;
+              OPEN) echo "Waiting for Homebrew PR #${pr} to reach MERGED (${attempt}/120)." ;;
+              *)
+                echo "::error::Homebrew PR #${pr} has unexpected state ${state}."
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          echo "::error::Timed out waiting for Homebrew PR #${pr} to reach MERGED."
+          exit 1
 
   chart:
     runs-on: ubuntu-latest

@@ -242,7 +242,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                 with tarfile.open(layout, "r:gz") as archive:
                     names = set(archive.getnames())
                     self.assertIn(f"{root_name}/helm-ai-kernel", names)
-                    self.assertTrue(raw_names <= {name.removeprefix(f"{root_name}/console/") for name in names})
+                    self.assertLessEqual(raw_names, {name.removeprefix(f"{root_name}/console/") for name in names})
                     self.assertIn(
                         f"{root_name}/console/helm-console-local-sidecar-{target}/app/helm-local-sidecar.mjs",
                         names,

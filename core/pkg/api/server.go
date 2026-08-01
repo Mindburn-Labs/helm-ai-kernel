@@ -43,8 +43,8 @@ type Server struct {
 	pdp             pdp.PolicyDecisionPoint
 	receiptSigner   helmcrypto.Signer
 	receipts        map[string]*contracts.Receipt
-	sessions        map[string][]string // sessionID → []receiptID
-	lamport         uint64              // highest causal Lamport clock across active sessions
+	sessions        map[receiptSessionKey][]string // tenant-qualified session → []receiptID
+	lamport         uint64                         // highest causal Lamport clock across active sessions
 	receiptSequence uint64
 	mux             *http.ServeMux
 	edge            http.Handler // otelhttp-wrapped entry point (HELM-333)
@@ -66,69 +66,81 @@ type Authenticator func(*http.Request) (AuthenticatedPrincipal, error)
 
 type authenticatedPrincipalContextKey struct{}
 
+// receiptSessionKey keeps caller-controlled session IDs from joining causal
+// chains across tenant boundaries. The external session ID remains the signed
+// Receipt.SessionID value; this key is internal ordering state only.
+type receiptSessionKey struct {
+	tenantID  string
+	sessionID string
+}
+
 // ReceiptDTO stored in-memory / external schema.
 type ReceiptDTO struct {
-	ReceiptID          string            `json:"receipt_id"`
-	DecisionID         string            `json:"decision_id"`
-	CorrelationID      string            `json:"correlation_id,omitempty"`
-	EffectID           string            `json:"effect_id"`
-	Status             string            `json:"status"`
-	OutputHash         string            `json:"output_hash"`
-	BlobHash           string            `json:"blob_hash,omitempty"`
-	Timestamp          string            `json:"timestamp"`
-	ExecutorID         string            `json:"executor_id,omitempty"`
-	Signature          string            `json:"signature"`
-	SignatureProfile   string            `json:"signature_profile,omitempty"`
-	SignatureAlgorithm string            `json:"signature_algorithm,omitempty"`
-	KeyID              string            `json:"key_id,omitempty"`
-	PublicKeySet       map[string]string `json:"public_key_set,omitempty"`
-	PrevHash           string            `json:"prev_hash"`
-	LamportClock       uint64            `json:"lamport_clock"`
-	DecisionHash       string            `json:"decision_hash"`
-	ArgsHash           string            `json:"args_hash,omitempty"`
-	SignatureVersion   string            `json:"signature_version"`
-	Verdict            string            `json:"verdict"`
-	ReasonCode         string            `json:"reason_code"`
-	PolicyHash         string            `json:"policy_hash"`
-	SessionID          string            `json:"session_id"`
-	Metadata           map[string]any    `json:"metadata,omitempty"`
+	ReceiptID           string            `json:"receipt_id"`
+	DecisionID          string            `json:"decision_id"`
+	CorrelationID       string            `json:"correlation_id,omitempty"`
+	EffectID            string            `json:"effect_id"`
+	ExternalReferenceID string            `json:"external_reference_id"`
+	Status              string            `json:"status"`
+	OutputHash          string            `json:"output_hash"`
+	BlobHash            string            `json:"blob_hash,omitempty"`
+	Timestamp           string            `json:"timestamp"`
+	ExecutorID          string            `json:"executor_id,omitempty"`
+	Signature           string            `json:"signature"`
+	SignatureProfile    string            `json:"signature_profile,omitempty"`
+	SignatureAlgorithm  string            `json:"signature_algorithm,omitempty"`
+	KeyID               string            `json:"key_id,omitempty"`
+	PublicKeySet        map[string]string `json:"public_key_set,omitempty"`
+	PrevHash            string            `json:"prev_hash"`
+	LamportClock        uint64            `json:"lamport_clock"`
+	DecisionHash        string            `json:"decision_hash"`
+	ArgsHash            string            `json:"args_hash,omitempty"`
+	SignatureVersion    string            `json:"signature_version"`
+	Verdict             string            `json:"verdict"`
+	ReasonCode          string            `json:"reason_code"`
+	PolicyHash          string            `json:"policy_hash"`
+	SessionID           string            `json:"session_id"`
+	Metadata            map[string]any    `json:"metadata,omitempty"`
 }
 
 func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
 	if r == nil {
 		return nil
 	}
-	decHash := ""
-	if r.Metadata != nil {
+	// DecisionHash is a canonical semantic field. Older receipts kept the
+	// value only in metadata, so retain that compatibility fallback.
+	decHash := r.DecisionHash
+	if decHash == "" && r.Metadata != nil {
 		if val, ok := r.Metadata["decision_hash"].(string); ok {
 			decHash = val
 		}
 	}
 	return &ReceiptDTO{
-		ReceiptID:          r.ReceiptID,
-		DecisionID:         r.DecisionID,
-		CorrelationID:      r.CorrelationID,
-		EffectID:           r.EffectID,
-		Status:             r.Status,
-		OutputHash:         r.OutputHash,
-		BlobHash:           r.BlobHash,
-		Timestamp:          r.Timestamp.Format(time.RFC3339),
-		ExecutorID:         r.ExecutorID,
-		Signature:          r.Signature,
-		SignatureProfile:   r.SignatureProfile,
-		SignatureAlgorithm: r.SignatureAlgorithm,
-		KeyID:              r.KeyID,
-		PublicKeySet:       r.PublicKeySet,
-		PrevHash:           r.PrevHash,
-		LamportClock:       r.LamportClock,
-		DecisionHash:       decHash,
-		ArgsHash:           r.ArgsHash,
-		SignatureVersion:   r.SignatureVersion,
-		Verdict:            r.Verdict,
-		ReasonCode:         r.ReasonCode,
-		PolicyHash:         r.PolicyHash,
-		SessionID:          r.SessionID,
-		Metadata:           r.Metadata,
+		ReceiptID:           r.ReceiptID,
+		DecisionID:          r.DecisionID,
+		CorrelationID:       r.CorrelationID,
+		EffectID:            r.EffectID,
+		ExternalReferenceID: r.ExternalReferenceID,
+		Status:              r.Status,
+		OutputHash:          r.OutputHash,
+		BlobHash:            r.BlobHash,
+		Timestamp:           r.Timestamp.UTC().Format(time.RFC3339Nano),
+		ExecutorID:          r.ExecutorID,
+		Signature:           r.Signature,
+		SignatureProfile:    r.SignatureProfile,
+		SignatureAlgorithm:  r.SignatureAlgorithm,
+		KeyID:               r.KeyID,
+		PublicKeySet:        r.PublicKeySet,
+		PrevHash:            r.PrevHash,
+		LamportClock:        r.LamportClock,
+		DecisionHash:        decHash,
+		ArgsHash:            r.ArgsHash,
+		SignatureVersion:    r.SignatureVersion,
+		Verdict:             r.Verdict,
+		ReasonCode:          r.ReasonCode,
+		PolicyHash:          r.PolicyHash,
+		SessionID:           r.SessionID,
+		Metadata:            r.Metadata,
 	}
 }
 
@@ -180,7 +192,7 @@ func NewServer(cfg ServerConfig) *Server {
 		pdp:            cfg.PDP,
 		receiptSigner:  receiptSigner,
 		receipts:       make(map[string]*contracts.Receipt),
-		sessions:       make(map[string][]string),
+		sessions:       make(map[receiptSessionKey][]string),
 		mux:            http.NewServeMux(),
 		allowedOrigins: cfg.AllowedOrigins,
 		authenticator:  cfg.Authenticator,
@@ -339,11 +351,13 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate a receipt whose causal clock is scoped to its signed session.
+	// Generate a receipt whose causal clock is scoped to the authenticated
+	// tenant and signed session identifier.
+	chainKey := receiptSessionKey{tenantID: principal.TenantID, sessionID: req.SessionID}
 	s.mu.Lock()
 	lamport := uint64(1)
 	prevHash := ""
-	if sessionReceipts, ok := s.sessions[req.SessionID]; ok && len(sessionReceipts) > 0 {
+	if sessionReceipts, ok := s.sessions[chainKey]; ok && len(sessionReceipts) > 0 {
 		lastID := sessionReceipts[len(sessionReceipts)-1]
 		lastReceipt, ok := s.receipts[lastID]
 		if !ok {
@@ -387,15 +401,19 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		CorrelationID: correlationID,
 		EffectID:      req.Tool,
 		Status:        status,
-		Timestamp:     time.Now().UTC(),
-		ExecutorID:    req.AgentID,
-		PrevHash:      prevHash,
-		LamportClock:  lamport,
-		ArgsHash:      "sha256:" + hex.EncodeToString(argsHash[:]),
-		Verdict:       status,
-		ReasonCode:    decResp.ReasonCode,
-		PolicyHash:    policyHash,
-		SessionID:     req.SessionID,
+		// OutputHash is part of the V5 signed preimage. DecisionHash remains
+		// the semantic/exported alias for SDK consumers and legacy receipts.
+		OutputHash:   decResp.DecisionHash,
+		DecisionHash: decResp.DecisionHash,
+		Timestamp:    time.Now().UTC(),
+		ExecutorID:   req.AgentID,
+		PrevHash:     prevHash,
+		LamportClock: lamport,
+		ArgsHash:     "sha256:" + hex.EncodeToString(argsHash[:]),
+		Verdict:      status,
+		ReasonCode:   decResp.ReasonCode,
+		PolicyHash:   policyHash,
+		SessionID:    req.SessionID,
 		Metadata: map[string]any{
 			"decision_hash": decResp.DecisionHash,
 			"principal_id":  principal.ID,
@@ -412,7 +430,7 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		s.lamport = lamport
 	}
 	s.receipts[receiptID] = receipt
-	s.sessions[req.SessionID] = append(s.sessions[req.SessionID], receiptID)
+	s.sessions[chainKey] = append(s.sessions[chainKey], receiptID)
 	s.mu.Unlock()
 
 	w.Header().Set("X-Helm-Decision-ID", decisionID)
@@ -504,8 +522,9 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID := strings.TrimPrefix(r.URL.Path, "/api/v1/verify/")
+	chainKey := receiptSessionKey{tenantID: principal.TenantID, sessionID: sessionID}
 	s.mu.RLock()
-	receiptIDs, exists := s.sessions[sessionID]
+	receiptIDs, exists := s.sessions[chainKey]
 	if !exists {
 		s.mu.RUnlock()
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -542,6 +561,15 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	// clocks are strictly monotonic in session order.
 	valid := true
 	for i, receipt := range receipts {
+		_, signatureValid, err := helmcrypto.VerifyReceiptProfile(
+			receipt.PublicKeySet[helmcrypto.SigPrefixEd25519],
+			receipt.PublicKeySet[helmcrypto.SigPrefixMLDSA65],
+			receipt,
+		)
+		if err != nil || !signatureValid {
+			valid = false
+			break
+		}
 		if i == 0 {
 			if receipt.PrevHash != "" {
 				valid = false

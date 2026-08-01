@@ -592,6 +592,85 @@ s = must_replace(
     "// Union matching here does not enforce full JSON schema constraints.",
     "rewrite union validation note",
 )
+
+# openapi-generator emits map query values twice: a raw value that has no
+# matching format placeholder, followed by the URL-encoded value that should
+# fill the final placeholder. Remove the raw argument for every generated map
+# field so the query string is encoded and String.format receives four values
+# for four placeholders. Map keys are strings, so their deepObject placeholder
+# must also be %s rather than the list-index %d form.
+lines = s.splitlines()
+patched_lines = []
+map_value_patches = 0
+for line in lines:
+    raw_prefix, separator, encoded = line.partition(", URLEncoder.encode(String.valueOf(")
+    candidate = raw_prefix.strip()
+    if (
+        separator
+        and candidate.endswith(".get(_key)")
+        and encoded.startswith(candidate + "), StandardCharsets.UTF_8)")
+    ):
+        indent = raw_prefix[: len(raw_prefix) - len(candidate)]
+        line = indent + "URLEncoder.encode(String.valueOf(" + encoded
+        map_value_patches += 1
+    patched_lines.append(line)
+s = "\n".join(patched_lines)
+if map_value_patches == 0:
+    raise SystemExit("java patch did not apply (encode map query values): no raw map values matched")
+if any(".get(_key), URLEncoder.encode(String.valueOf(" in line for line in patched_lines):
+    raise SystemExit("java postcondition failed: raw map query value survived encoding patch")
+
+map_key_format = 'String.format("%s%d%s", containerPrefix, _key, containerSuffix)'
+map_key_format_count = s.count(map_key_format)
+if map_key_format_count == 0:
+    raise SystemExit("java patch did not apply (string map deepObject key): no map key placeholders matched")
+s = s.replace(
+    map_key_format,
+    'String.format("%s%s%s", containerPrefix, _key, containerSuffix)',
+)
+
+# Scalar-only query serializers inherit list/map container locals from the
+# generator. Remove them only when they are demonstrably unused in that method;
+# collection serializers retain the declarations and assignments they need.
+method_marker = "  public String toUrlQueryString(String prefix) {"
+cursor = 0
+chunks = []
+unused_container_methods = 0
+while True:
+    start = s.find(method_marker, cursor)
+    if start == -1:
+        chunks.append(s[cursor:])
+        break
+    chunks.append(s[cursor:start])
+    opening_brace = s.find("{", start)
+    depth = 0
+    end = opening_brace
+    while end < len(s):
+        if s[end] == "{":
+            depth += 1
+        elif s[end] == "}":
+            depth -= 1
+            if depth == 0:
+                end += 1
+                break
+        end += 1
+    if depth != 0:
+        raise SystemExit("java patch failed (find query serializer boundary): unmatched braces")
+    method = s[start:end]
+    if method.count("containerSuffix") == 2 and method.count("containerPrefix") == 2:
+        for declaration in (
+            '    String containerSuffix = "";\n',
+            '    String containerPrefix = "";\n',
+            '      containerSuffix = "]";\n',
+            '      containerPrefix = "[";\n',
+        ):
+            method = method.replace(declaration, "")
+        unused_container_methods += 1
+    chunks.append(method)
+    cursor = end
+s = "".join(chunks)
+if unused_container_methods == 0:
+    raise SystemExit("java patch did not apply (remove unused query container locals): no scalar serializers matched")
 s = s + "\n}\n"
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY

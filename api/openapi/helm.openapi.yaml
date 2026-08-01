@@ -4145,13 +4145,18 @@ components:
       properties:
         receipt_id: { type: string }
         decision_id: { type: string }
+        correlation_id: { type: string }
         effect_id: { type: string }
+        external_reference_id: { type: string }
         status: { type: string }
         # HELM-303 receipt.v5 signing envelope fields. These are transported
         # independently so a verifier can reconstruct the signed governance view.
         signature_version: { type: string }
         verdict: { type: string }
         reason_code: { type: string }
+        decision_hash:
+          type: string
+          description: PDP decision hash, bound by the V5-signed output_hash for API-minted receipts.
         output_hash: { type: string }
         blob_hash: { type: string }
         prev_hash: { type: string }
@@ -4172,7 +4177,10 @@ components:
           additionalProperties:
             type: string
           description: Public verification keys keyed by algorithm for the emitted receipt signature.
-        timestamp: { type: string, format: date-time }
+        timestamp:
+          type: string
+          format: date-time
+          description: Canonical RFC3339Nano receipt timestamp.
         principal: { type: string }
         executor_id: { type: string }
         args_hash: { type: string }
@@ -4499,6 +4507,29 @@ components:
     EvaluateRequest:
       description: V5 evaluation shape. Legacy action/resource aliases are accepted when tool/effect_level are omitted. The server trims and uses a non-whitespace session_id, or falls back to context.session_id.
       type: object
+      # JSON Schema form of `top-level nonblank session_id OR
+      # context.session_id`: `not(allOf(not A, not B))`. It rejects only the
+      # state where neither accepted session shape is present. Keeping this
+      # as one object (rather than a root anyOf) preserves the generated SDK
+      # request fields while still allowing a valid context fallback when the
+      # top-level value is blank.
+      not:
+        allOf:
+          - not:
+              required: [session_id]
+              properties:
+                session_id:
+                  $ref: '#/components/schemas/NonBlankSessionID'
+          - not:
+              required: [context]
+              properties:
+                context:
+                  type: object
+                  required: [session_id]
+                  properties:
+                    session_id:
+                      $ref: '#/components/schemas/NonBlankSessionID'
+                  additionalProperties: true
       properties:
         tool: { type: string }
         args:
@@ -4521,12 +4552,15 @@ components:
           description: Legacy alias for effect_level when effect_level is omitted.
         session_id:
           type: string
-          pattern: '.*\S.*'
           description: Non-whitespace signed causal session identifier.
         context:
           type: object
           additionalProperties: true
           description: Optional input context; authenticated principal and tenant fields are added by the server.
+
+    NonBlankSessionID:
+      type: string
+      pattern: '.*\S.*'
 
     EvaluateResponse:
       type: object

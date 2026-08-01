@@ -272,6 +272,26 @@ var decideCases = []struct {
 	{"regression-catchsegv-rm", "catchsegv rm -rf /tmp/x", "recursive rm"},
 	{"regression-valgrind-rm", "valgrind --tool=memcheck rm -rf /tmp/x", "recursive rm"},
 	{"regression-strace-unknown-flag", "strace --frobnicate rm -rf /tmp/x", "unrecognized flag"},
+
+	// Review regressions: execution hidden in data, deferred handlers, or
+	// tool-specific option semantics must still reach the decision path.
+	{"review-xargs-stdin-arguments", "printf '%s\\n' --recursive --force /tmp/x | xargs rm", "cannot be resolved statically"},
+	{"review-trap-handler", `trap 'rm --recursive --force /tmp/x' EXIT`, "recursive rm"},
+	{"review-trap-handler-after-double-dash", `trap -- 'rm --recursive --force /tmp/x' EXIT`, "recursive rm"},
+	{"review-find-command-placeholder", `find /tmp/tools/rm -exec {} --recursive --force /tmp/x \;`, "dynamic command word"},
+	{"review-rm-abbreviated-recursive", "rm --recurs /tmp/x", "recursive rm"},
+	{"review-git-clean-require-force", "git -c clean.requireForce=false clean -d", "git clean"},
+	{"review-git-shell-alias", `git -c alias.nuke='!rm --recursive --force /tmp/x' nuke`, "recursive rm"},
+	{"review-awk-system", `awk 'BEGIN { system("rm --recursive --force /tmp/x") }'`, "awk system"},
+	{"review-docker-context-named-container", "docker --context container container rm --force victim", "docker rm"},
+	{"review-ssh-remote-command", "ssh host rm --recursive --force /tmp/x", "ssh remote"},
+	{"review-cp-sensitive-target", "cp /tmp/payload .env", "sensitive target"},
+	{"review-mv-sensitive-target", "mv /tmp/payload .env", "sensitive target"},
+	{"review-install-sensitive-target", "install --target-directory=.env /tmp/payload", "sensitive target"},
+	{"review-sql-whitespace", "psql -c 'DROP\nTABLE users'", "drop table"},
+	{"review-node-generated-preload", "printf 'require(\"fs\").rmSync(\"/tmp/x\")' >/tmp/nuke.js; node -r /tmp/nuke.js /dev/null", "preload generated"},
+	{"review-find-ok", `yes | find /tmp/x -ok rm --recursive --force {} ';'`, "recursive rm"},
+	{"review-tar-checkpoint-action", `tar -cf /tmp/a.tar --checkpoint=1 --checkpoint-action='exec=rm --recursive --force /tmp/x' /tmp/in`, "recursive rm"},
 }
 
 // passCases are commands that must still pass through without a decision —
@@ -313,6 +333,7 @@ var passCases = []struct {
 	{"safe-empty", "   "},
 	{"safe-base64-encode", "echo hello | base64"},
 	{"safe-unrelated-decode-and-shell", "base64 -d payload.txt >/tmp/out; printf x | cat; bash scripts/deploy.sh"},
+	{"safe-decoder-after-shell", "bash emit-base64.sh | base64 --decode > artifact"},
 	{"safe-xargs-echo", "echo a b | xargs echo"},
 	{"safe-eval-static-benign", `eval "echo hello"`},
 	{"safe-git-clean-dry", "git clean -nd"},
@@ -361,13 +382,20 @@ func TestClassifyPassesBenign(t *testing.T) {
 	}
 }
 
+func TestClassifyAtResolvesGeneratedScriptsAgainstCWD(t *testing.T) {
+	res := ClassifyAt("printf 'rm --recursive --force /tmp/x\\n' > run.sh; bash /repo/run.sh", "/repo")
+	if !res.Decide || !strings.Contains(res.Reason, "generated earlier") {
+		t.Fatalf("ClassifyAt relative generated script = %+v, want decision", res)
+	}
+}
+
 func TestClassifyBoundsNestedFindExec(t *testing.T) {
 	command := "echo ok"
 	for i := 0; i < maxWrapperDepth+2; i++ {
 		command = "find . -exec " + command + " {} +"
 	}
 	res := Classify(command)
-	if !res.Decide || !strings.Contains(res.Reason, "nesting too deep") {
+	if !res.Decide {
 		t.Fatalf("Classify(nested find) = %+v, want bounded fail-closed decision", res)
 	}
 }

@@ -349,6 +349,16 @@ func TestHookPreToolDeniesEvasiveBashViaASTClassifier(t *testing.T) {
 	}
 }
 
+func TestHookPreToolResolvesGeneratedScriptsAgainstCWD(t *testing.T) {
+	tmp := t.TempDir()
+	payload := `{"tool_name":"Bash","tool_input":{"command":"printf 'rm --recursive --force /tmp/x\\n' > run.sh; bash /repo/run.sh"},"cwd":"/repo"}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+		t.Fatalf("relative generated script = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestShellscanReceiptMetadataPreservesAuditSignals(t *testing.T) {
 	scan := shellscan.Classify("sudo rm -r -f /tmp/x")
 	metadata := shellscanReceiptMetadata(scan)

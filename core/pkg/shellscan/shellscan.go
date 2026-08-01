@@ -83,13 +83,24 @@ var sensitiveRedirectTargets = []string{
 // Fail-closed: anything the classifier cannot statically understand in a
 // security-relevant position is decision-worthy, never safe.
 func Classify(raw string) Result {
+	return ClassifyAt(raw, "")
+}
+
+// ClassifyAt parses and structurally classifies a raw shell command string in
+// cwd. Relative paths written and later executed in the same command are
+// normalized against cwd before their generated-source relationship is tested.
+func ClassifyAt(raw, cwd string) Result {
 	res := Result{ParseOK: true}
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return res
 	}
 
-	c := &collector{parseOK: true}
+	cwd = strings.TrimSpace(cwd)
+	if cwd != "" {
+		cwd = path.Clean(cwd)
+	}
+	c := &collector{parseOK: true, cwd: cwd}
 	// Fallback layer: legacy substring needles on the raw text.
 	if needle := legacyNeedleHit(trimmed); needle != "" {
 		c.decide(fmt.Sprintf("legacy needle %q", needle))
@@ -112,6 +123,7 @@ type collector struct {
 	parseOK    bool
 
 	writtenPaths map[string]bool
+	cwd          string
 }
 
 func (c *collector) decide(reason string) {
@@ -143,6 +155,18 @@ func (c *collector) signalList() []string {
 		}
 	}
 	return out
+}
+
+func (c *collector) normalizedPath(value string) string {
+	value = path.Clean(value)
+	if c.cwd != "" && !path.IsAbs(value) {
+		return path.Join(c.cwd, value)
+	}
+	return value
+}
+
+func (c *collector) isWrittenPath(value string) bool {
+	return c.writtenPaths != nil && c.writtenPaths[c.normalizedPath(value)]
 }
 
 // classifyString parses a shell snippet and walks every command node,
@@ -187,26 +211,49 @@ func (c *collector) classifyString(src, via string, depth int) {
 	})
 }
 
-func encodedPipeline(node syntax.Node) bool {
-	decoded, executed := false, false
-	syntax.Walk(node, func(child syntax.Node) bool {
-		call, ok := child.(*syntax.CallExpr)
-		if !ok || len(call.Args) == 0 {
-			return true
+func encodedPipeline(node *syntax.BinaryCmd) bool {
+	decoded := false
+	for _, call := range pipelineCalls(node) {
+		if len(call.Args) == 0 {
+			continue
 		}
 		args := make([]wordTok, 0, len(call.Args))
 		for _, word := range call.Args {
 			args = append(args, resolveWord(word))
 		}
 		if args[0].dynamic {
-			return true
+			continue
 		}
 		name := path.Base(path.Clean(args[0].text))
-		executed = executed || name == "eval" || shellNames[name]
-		decoded = decoded || isDecoderCall(name, args[1:])
-		return true
-	})
-	return decoded && executed
+		if decoded && (name == "eval" || shellNames[name]) {
+			return true
+		}
+		if isDecoderCall(name, args[1:]) {
+			decoded = true
+		}
+	}
+	return false
+}
+
+func pipelineCalls(node *syntax.BinaryCmd) []*syntax.CallExpr {
+	var calls []*syntax.CallExpr
+	var walkStmt func(*syntax.Stmt)
+	walkStmt = func(stmt *syntax.Stmt) {
+		if stmt == nil {
+			return
+		}
+		if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok && binary.Op == syntax.Pipe {
+			walkStmt(binary.X)
+			walkStmt(binary.Y)
+			return
+		}
+		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
+			calls = append(calls, call)
+		}
+	}
+	walkStmt(node.X)
+	walkStmt(node.Y)
+	return calls
 }
 
 func isDecoderCall(name string, args []wordTok) bool {
@@ -264,7 +311,7 @@ func (c *collector) recordWriteTarget(tok wordTok, source string) {
 	if c.writtenPaths == nil {
 		c.writtenPaths = map[string]bool{}
 	}
-	c.writtenPaths[path.Clean(tok.text)] = true
+	c.writtenPaths[c.normalizedPath(tok.text)] = true
 	for _, needle := range sensitiveRedirectTargets {
 		if strings.Contains(target, needle) {
 			c.signal(SignalSensitiveRedirect)
@@ -638,18 +685,25 @@ func (c *collector) classifyInterpreter(name string, args []wordTok, via string,
 				continue
 			}
 			if containsString(spec.valueLong, flag) {
+				value := wordTok{}
 				if attached {
 					if len(tok.text) == len(flag)+1 {
 						c.decide(name + " " + flag + " with an empty value (fail-closed)")
 						return
 					}
-					continue
+					value = wordTok{text: strings.TrimPrefix(tok.text, flag+"=")}
+				} else {
+					if i+1 >= len(args) || args[i+1].dynamic {
+						c.decide(name + " " + flag + " with an unresolvable value (fail-closed)")
+						return
+					}
+					value = args[i+1]
+					i++
 				}
-				if i+1 >= len(args) || args[i+1].dynamic {
-					c.decide(name + " " + flag + " with an unresolvable value (fail-closed)")
+				if isNodePreloadFlag(name, flag) && c.isWrittenPath(value.text) {
+					c.decide(name + " executes a preload generated earlier in the command")
 					return
 				}
-				i++
 				continue
 			}
 			c.decide(name + " with an unrecognized flag " + tok.text + " (fail-closed)")
@@ -667,12 +721,20 @@ func (c *collector) classifyInterpreter(name string, args []wordTok, via string,
 					continue
 				}
 				if strings.IndexByte(spec.valueShort, flag) >= 0 {
+					value := wordTok{}
 					if j+1 == len(cluster) {
 						if i+1 >= len(args) || args[i+1].dynamic {
 							c.decide(name + " -" + string(flag) + " with an unresolvable value (fail-closed)")
 							return
 						}
+						value = args[i+1]
 						i++
+					} else {
+						value = wordTok{text: cluster[j+1:]}
+					}
+					if isNodePreloadShortFlag(name, flag) && c.isWrittenPath(value.text) {
+						c.decide(name + " executes a preload generated earlier in the command")
+						return
 					}
 					break
 				}
@@ -702,7 +764,7 @@ func (c *collector) classifyInterpreterScript(name string, args []wordTok, scrip
 		c.decide(name + " interpreter invocation with a dynamic argument (fail-closed)")
 		return
 	}
-	if c.writtenPaths[path.Clean(script.text)] {
+	if c.isWrittenPath(script.text) {
 		c.decide(name + " executes a script generated earlier in the command")
 		return
 	}
@@ -710,6 +772,14 @@ func (c *collector) classifyInterpreterScript(name string, args []wordTok, scrip
 	tokens = append(tokens, name)
 	tokens = append(tokens, staticTokens(args)...)
 	c.record(Command{Name: name, Tokens: tokens, Prefix: Prefix(tokens), Via: via})
+}
+
+func isNodePreloadFlag(name, flag string) bool {
+	return (name == "node" || name == "nodejs") && (flag == "--require" || flag == "--loader" || flag == "--experimental-loader")
+}
+
+func isNodePreloadShortFlag(name string, flag byte) bool {
+	return (name == "node" || name == "nodejs") && flag == 'r'
 }
 
 // splitEnvPayload splits an env -S/--split-string payload into words using
@@ -1031,7 +1101,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			c.decide("dynamic command word cannot be classified statically")
 			return
 		}
-		if c.writtenPaths[path.Clean(head.text)] {
+		if c.isWrittenPath(head.text) {
 			// A command path created earlier in this same compound command is
 			// opaque executable source, even when invoked directly rather than
 			// through a shell or language interpreter.
@@ -1211,6 +1281,11 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				c.decide("xargs invokes a command supplied only at runtime")
 				return
 			}
+			if args != nil {
+				// xargs appends stdin-derived arguments to the static template.
+				// Preserve that unknown operand through recursive classification.
+				args = append(args, wordTok{dynamic: true})
+			}
 		case name == "busybox":
 			c.signal(SignalEnvWrapper)
 			args = args[1:]
@@ -1381,6 +1456,9 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			}
 			c.classifyString(b.String(), joinVia(via, "eval"), depth+1)
 			return
+		case name == "trap":
+			c.classifyTrap(args, via, depth)
+			return
 		case name == "." || name == "source":
 			if len(args) < 2 {
 				c.decide(name + " without a script path (fail-closed)")
@@ -1391,7 +1469,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				c.decide(name + " with a dynamic script path (fail-closed)")
 				return
 			}
-			if c.writtenPaths[path.Clean(script.text)] {
+			if c.isWrittenPath(script.text) {
 				c.decide(name + " executes a script generated earlier in the command")
 				return
 			}
@@ -1426,7 +1504,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				// signal without routing to the decision path. The script path
 				// itself was already required to be static by scanShellScriptFlag;
 				// later dynamic words are ordinary script arguments, not source.
-				if positional.text != "" && c.writtenPaths[path.Clean(positional.text)] {
+				if positional.text != "" && c.isWrittenPath(positional.text) {
 					c.decide(name + " executes a script generated earlier in the command")
 					return
 				}
@@ -1462,6 +1540,32 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 		}
 	}
 	// Wrapper chain consumed all tokens (e.g. bare `sudo`): nothing executes.
+}
+
+func (c *collector) classifyTrap(args []wordTok, via string, depth int) {
+	c.record(Command{Name: "trap", Tokens: staticTokens(args), Prefix: "trap", Via: via})
+	if len(args) < 2 {
+		return
+	}
+	handlerIndex := 1
+	if !args[handlerIndex].dynamic && args[handlerIndex].text == "--" {
+		handlerIndex++
+		if handlerIndex >= len(args) {
+			return
+		}
+	}
+	handler := args[handlerIndex]
+	if handler.dynamic {
+		c.decide("trap handler cannot be resolved statically (fail-closed)")
+		return
+	}
+	if handler.text == "" || handler.text == "-" || handler.text == "-p" || handler.text == "-l" {
+		return
+	}
+	c.classifyString(handler.text, joinVia(via, "trap"), depth+1)
+	if c.decideFlag {
+		c.decide("trap handler requires a decision")
+	}
 }
 
 func joinVia(via, next string) string {
@@ -1509,11 +1613,14 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 				continue
 			}
 			if strings.HasPrefix(tok.text, "--") {
-				switch tok.text {
-				case "--recursive":
+				switch {
+				case strings.HasPrefix("--recursive", tok.text):
 					recursive = true
-				case "--force":
+				case strings.HasPrefix("--force", tok.text):
 					force = true
+				case tok.text != "--help" && tok.text != "--version" && tok.text != "--verbose" && tok.text != "--preserve-root" && tok.text != "--no-preserve-root":
+					c.decide("rm with an unrecognized long option " + tok.text + " (fail-closed)")
+					return
 				}
 				continue
 			}
@@ -1550,7 +1657,7 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 	case cmd.Name == "git":
 		c.matchGit(args)
 	case cmd.Name == "kubectl":
-		sub, dynamic, found := firstSubcommand(args[1:], kubectlValueFlags, kubectlBoolFlags)
+		sub, _, dynamic, found := firstSubcommand(args[1:], kubectlValueFlags, kubectlBoolFlags)
 		if dynamic {
 			c.decide("kubectl with a dynamic subcommand (fail-closed)")
 			return
@@ -1562,6 +1669,97 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 		c.matchDocker(args)
 	case cmd.Name == "find":
 		c.matchFind(args, via, depth)
+	case cmd.Name == "awk" || cmd.Name == "gawk" || cmd.Name == "mawk" || cmd.Name == "nawk":
+		c.matchAwk(args)
+	case cmd.Name == "ssh":
+		c.decide("ssh remote execution requires a decision")
+	case cmd.Name == "cp" || cmd.Name == "mv" || cmd.Name == "install":
+		c.recordCopyWrite(cmd.Name, args)
+	case cmd.Name == "tar":
+		c.matchTar(args, via, depth)
+	}
+}
+
+func (c *collector) matchAwk(args []wordTok) {
+	for _, tok := range args[1:] {
+		if tok.dynamic {
+			c.decide("awk program cannot be resolved statically (fail-closed)")
+			return
+		}
+		if strings.Contains(strings.ToLower(tok.text), "system(") {
+			c.decide("awk system call requires a decision")
+			return
+		}
+	}
+}
+
+func (c *collector) recordCopyWrite(name string, args []wordTok) {
+	var operands []wordTok
+	directoryMode := false
+	for i := 1; i < len(args); i++ {
+		tok := args[i]
+		if tok.dynamic {
+			c.decide(name + " with an unresolvable target (fail-closed)")
+			return
+		}
+		if tok.text == "--" {
+			operands = append(operands, args[i+1:]...)
+			break
+		}
+		switch tok.text {
+		case "-t", "--target-directory":
+			if i+1 >= len(args) || args[i+1].dynamic {
+				c.decide(name + " with an unresolvable target (fail-closed)")
+				return
+			}
+			c.recordWriteTarget(args[i+1], name+" write")
+			return
+		case "-d", "--directory":
+			directoryMode = true
+			continue
+		}
+		if strings.HasPrefix(tok.text, "--target-directory=") {
+			c.recordWriteTarget(wordTok{text: strings.TrimPrefix(tok.text, "--target-directory=")}, name+" write")
+			return
+		}
+		if !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
+			operands = append(operands, tok)
+		}
+	}
+	if directoryMode {
+		for _, target := range operands {
+			c.recordWriteTarget(target, name+" write")
+		}
+		return
+	}
+	if len(operands) >= 2 {
+		c.recordWriteTarget(operands[len(operands)-1], name+" write")
+	}
+}
+
+func (c *collector) matchTar(args []wordTok, via string, depth int) {
+	for i, tok := range args[1:] {
+		if tok.dynamic {
+			continue
+		}
+		payload := ""
+		switch {
+		case strings.HasPrefix(tok.text, "--checkpoint-action="):
+			payload = strings.TrimPrefix(tok.text, "--checkpoint-action=")
+		case tok.text == "--checkpoint-action":
+			if i+2 >= len(args) || args[i+2].dynamic {
+				c.decide("tar checkpoint action cannot be resolved statically (fail-closed)")
+				return
+			}
+			payload = args[i+2].text
+		}
+		if strings.HasPrefix(payload, "exec=") {
+			c.classifyString(strings.TrimPrefix(payload, "exec="), joinVia(via, "tar checkpoint"), depth+1)
+			if c.decideFlag {
+				c.decide("tar checkpoint action requires a decision")
+			}
+			return
+		}
 	}
 }
 
@@ -1601,20 +1799,20 @@ var dockerValueFlags = map[string]bool{
 // firstSubcommand finds the first positional token, skipping flags and the
 // values of known value-flags. dynamic is true when scanning hit a word that
 // cannot be resolved statically (the subcommand may be hidden).
-func firstSubcommand(args []wordTok, vals, bools map[string]bool) (sub string, dynamic, found bool) {
+func firstSubcommand(args []wordTok, vals, bools map[string]bool) (sub string, index int, dynamic, found bool) {
 	for i := 0; i < len(args); i++ {
 		tok := args[i]
 		if tok.dynamic {
-			return "", true, false
+			return "", -1, true, false
 		}
 		if tok.text == "--" {
 			if i+1 < len(args) && !args[i+1].dynamic {
-				return args[i+1].text, false, true
+				return args[i+1].text, i + 1, false, true
 			}
 			if i+1 < len(args) {
-				return "", true, false
+				return "", -1, true, false
 			}
-			return "", false, false
+			return "", -1, false, false
 		}
 		if strings.HasPrefix(tok.text, "-") && tok.text != "-" {
 			if vals[tok.text] {
@@ -1627,15 +1825,15 @@ func firstSubcommand(args []wordTok, vals, bools map[string]bool) (sub string, d
 			if flag, value, attached := strings.Cut(tok.text, "="); attached && vals[flag] && value != "" {
 				continue
 			}
-			return "", true, false
+			return "", -1, true, false
 		}
-		return tok.text, false, true
+		return tok.text, i, false, true
 	}
-	return "", false, false
+	return "", -1, false, false
 }
 
 func (c *collector) matchGit(args []wordTok) {
-	sub, dynamic, found := firstSubcommand(args[1:], gitValueFlags, gitBoolFlags)
+	sub, subIndex, dynamic, found := firstSubcommand(args[1:], gitValueFlags, gitBoolFlags)
 	if dynamic {
 		c.decide("git invocation with a dynamic subcommand (fail-closed)")
 		return
@@ -1644,6 +1842,33 @@ func (c *collector) matchGit(args []wordTok) {
 		return
 	}
 	rest := args[1:]
+	configs, ambiguous := gitConfigEntries(rest[:subIndex])
+	if ambiguous {
+		c.decide("git -c configuration cannot be resolved statically (fail-closed)")
+		return
+	}
+	cleanForceDisabled := false
+	for _, config := range configs {
+		key, value, ok := strings.Cut(config.text, "=")
+		if !ok {
+			c.decide("git -c configuration is malformed (fail-closed)")
+			return
+		}
+		key = strings.ToLower(strings.TrimSpace(key))
+		if key == "clean.requireforce" {
+			switch strings.ToLower(strings.TrimSpace(value)) {
+			case "false", "0", "no", "off":
+				cleanForceDisabled = true
+			}
+		}
+		if strings.TrimPrefix(key, "alias.") == strings.ToLower(sub) && strings.HasPrefix(value, "!") {
+			c.classifyString(strings.TrimPrefix(value, "!"), "git alias "+sub, 1)
+			if c.decideFlag {
+				c.decide("git shell alias requires a decision")
+			}
+			return
+		}
+	}
 	switch sub {
 	case "reset":
 		endOptions := false
@@ -1694,14 +1919,33 @@ func (c *collector) matchGit(args []wordTok) {
 				}
 			}
 		}
-		if force && dirs {
+		if dirs && (force || cleanForceDisabled) {
 			c.decide("git clean with forced directory delete")
 		}
 	}
 }
 
+func gitConfigEntries(args []wordTok) ([]wordTok, bool) {
+	var entries []wordTok
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		if tok.text == "-c" {
+			if i+1 >= len(args) || args[i+1].dynamic {
+				return nil, true
+			}
+			entries = append(entries, args[i+1])
+			i++
+			continue
+		}
+		if !tok.dynamic && strings.HasPrefix(tok.text, "-c") && len(tok.text) > 2 {
+			entries = append(entries, wordTok{text: tok.text[2:]})
+		}
+	}
+	return entries, false
+}
+
 func (c *collector) matchDocker(args []wordTok) {
-	sub, dynamic, found := firstSubcommand(args[1:], dockerValueFlags, nil)
+	sub, subIndex, dynamic, found := firstSubcommand(args[1:], dockerValueFlags, nil)
 	if dynamic {
 		c.decide("docker invocation with a dynamic subcommand (fail-closed)")
 		return
@@ -1712,7 +1956,7 @@ func (c *collector) matchDocker(args []wordTok) {
 	rest := args[1:]
 	isRm := sub == "rm"
 	if sub == "container" {
-		next, nextDynamic, nextFound := firstSubcommand(rest[indexOfToken(rest, "container")+1:], nil, nil)
+		next, _, nextDynamic, nextFound := firstSubcommand(rest[subIndex+1:], nil, nil)
 		if nextDynamic {
 			c.decide("docker container with a dynamic subcommand (fail-closed)")
 			return
@@ -1752,15 +1996,6 @@ func (c *collector) matchDocker(args []wordTok) {
 	}
 }
 
-func indexOfToken(args []wordTok, text string) int {
-	for i, tok := range args {
-		if !tok.dynamic && tok.text == text {
-			return i
-		}
-	}
-	return -1
-}
-
 func (c *collector) matchFind(args []wordTok, via string, depth int) {
 	for i, tok := range args[1:] {
 		if tok.dynamic {
@@ -1771,10 +2006,10 @@ func (c *collector) matchFind(args []wordTok, via string, depth int) {
 			c.decide("find -delete")
 			return
 		}
-		if tok.text == "-exec" || tok.text == "-execdir" {
+		if tok.text == "-exec" || tok.text == "-execdir" || tok.text == "-ok" || tok.text == "-okdir" {
 			// Recursively classify the exec payload (terminated by ";" or
 			// "+") so wrappers such as sh -c cannot hide destructive work.
-			payload := args[i+2:]
+			payload := append([]wordTok(nil), args[i+2:]...)
 			end := len(payload)
 			for j, p := range payload {
 				if !p.dynamic && (p.text == ";" || p.text == "+") {
@@ -1782,10 +2017,11 @@ func (c *collector) matchFind(args []wordTok, via string, depth int) {
 					break
 				}
 				if p.dynamic {
-					// A dynamic word inside the exec payload may hide the
-					// executed command or its flags; fail closed.
 					c.decide("find " + tok.text + " with a dynamic payload (fail-closed)")
 					return
+				}
+				if p.text == "{}" {
+					payload[j].dynamic = true
 				}
 			}
 			if end == 0 {
@@ -1797,13 +2033,14 @@ func (c *collector) matchFind(args []wordTok, via string, depth int) {
 				c.decide("find " + tok.text + " payload requires a decision")
 				return
 			}
+			return
 		}
 	}
 }
 
 // legacyNeedleHit reproduces the pre-AST substring classification verbatim.
 func legacyNeedleHit(command string) string {
-	lower := strings.ToLower(strings.TrimSpace(command))
+	lower := strings.ToLower(strings.Join(strings.Fields(command), " "))
 	for _, needle := range legacyNeedles {
 		if strings.Contains(lower, needle) || strings.HasPrefix(lower, strings.TrimSpace(needle)) {
 			return needle

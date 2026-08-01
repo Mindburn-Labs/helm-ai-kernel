@@ -183,7 +183,7 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 		// advisory input only: it decides whether the command reaches the
 		// existing signed decision path; the permit/receipt verdict is still
 		// produced by workstation.Decide, fail-closed as before.
-		if scan := shellscan.Classify(command); scan.Decide {
+		if scan := shellscan.ClassifyAt(command, payload.CWD); scan.Decide {
 			return hookClassification{
 				ShouldDecide: true,
 				Class:        "shell-operate",

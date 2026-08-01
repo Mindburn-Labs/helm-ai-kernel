@@ -106,6 +106,9 @@ var decideCases = []struct {
 	{"evasion-path-dots", "/bin/./rm -rf /tmp/x", "recursive rm"},
 	{"evasion-path-relative", "./../../bin/rm -rf /tmp/x", "recursive rm"},
 	{"evasion-escaped-command-name", `r\m -rf /tmp/x`, "recursive rm"},
+	{"evasion-escaped-rm-flag", `rm --rec\ursive /tmp/x`, "recursive rm"},
+	{"evasion-escaped-git-hard-flag", `git reset --ha\rd`, "git reset --hard"},
+	{"evasion-escaped-sensitive-redirect", `echo SECRET=x >> .e\nv`, "sensitive target"},
 
 	// Evasion: find-based deletion.
 	{"evasion-find-delete", "find /tmp/x -name '*.log' -delete", "find -delete"},

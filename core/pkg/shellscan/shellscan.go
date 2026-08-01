@@ -327,7 +327,7 @@ type wordTok struct {
 	dynamic bool
 }
 
-func unescapeCommandLit(s string) string {
+func unescapeLit(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\\' && i+1 < len(s) {
@@ -343,7 +343,7 @@ func resolveCommandWord(w *syntax.Word) wordTok {
 	for _, part := range w.Parts {
 		switch p := part.(type) {
 		case *syntax.Lit:
-			b.WriteString(unescapeCommandLit(p.Value))
+			b.WriteString(unescapeLit(p.Value))
 		case *syntax.SglQuoted:
 			b.WriteString(p.Value)
 		case *syntax.DblQuoted:
@@ -367,7 +367,7 @@ func resolveWord(w *syntax.Word) wordTok {
 	for _, part := range w.Parts {
 		switch p := part.(type) {
 		case *syntax.Lit:
-			b.WriteString(p.Value)
+			b.WriteString(unescapeLit(p.Value))
 		case *syntax.SglQuoted:
 			b.WriteString(p.Value)
 		case *syntax.DblQuoted:

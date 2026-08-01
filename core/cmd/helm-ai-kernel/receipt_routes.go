@@ -122,7 +122,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteInternal(w, err)
 			return
 		}
-		if err := persistDecisionReceipt(r.Context(), svc, decision, principalID, args, map[string]any{
+		if err := persistDecisionReceiptForTenant(r.Context(), svc, decision, principalID, tenantID, args, map[string]any{
 			"source":   "api.evaluate",
 			"action":   req.Tool,
 			"resource": req.EffectLevel,
@@ -314,6 +314,14 @@ func parseLimit(raw string, fallback, max int) int {
 }
 
 func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contracts.DecisionRecord, agentID string, body []byte, metadata map[string]any) error {
+	return persistDecisionReceiptForTenant(ctx, svc, decision, agentID, "", body, metadata)
+}
+
+// persistDecisionReceiptForTenant may use the tenant-qualified causal-store
+// capability only when the caller supplies an independently authenticated
+// tenant ID. Generic paths intentionally remain unscoped rather than deriving
+// a durable namespace from caller-controlled decision context.
+func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decision *contracts.DecisionRecord, agentID, authenticatedTenantID string, body []byte, metadata map[string]any) error {
 	if svc == nil || svc.ReceiptStore == nil || decision == nil {
 		return fmt.Errorf("receipt persistence unavailable")
 	}
@@ -337,13 +345,9 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 		return fmt.Errorf("receipt signer unavailable")
 	}
 	sessionID := ""
-	tenantID := ""
 	if decision.InputContext != nil {
 		if value, ok := decision.InputContext["session_id"].(string); ok {
 			sessionID = strings.TrimSpace(value)
-		}
-		if value, ok := decision.InputContext["tenant_id"].(string); ok {
-			tenantID = strings.TrimSpace(value)
 		}
 	}
 	if sessionID == "" {
@@ -388,8 +392,8 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 		return receipt, nil
 	}
 	var err error
-	if scoped, ok := svc.ReceiptStore.(store.TenantScopedCausalReceiptAppender); ok && tenantID != "" {
-		err = scoped.AppendCausalScoped(ctx, tenantID, sessionID, build)
+	if scoped, ok := svc.ReceiptStore.(store.TenantScopedCausalReceiptAppender); ok && strings.TrimSpace(authenticatedTenantID) != "" {
+		err = scoped.AppendCausalScoped(ctx, strings.TrimSpace(authenticatedTenantID), sessionID, build)
 	} else {
 		err = svc.ReceiptStore.AppendCausal(ctx, sessionID, build)
 	}

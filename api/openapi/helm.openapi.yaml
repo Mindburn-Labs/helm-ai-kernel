@@ -376,7 +376,7 @@ paths:
               $ref: '#/components/schemas/EvaluateRequest'
       responses:
         '200':
-          description: Guardian decision record
+          description: Governed evaluation result and receipt reference
           headers:
             X-Helm-Idempotency-Replayed:
               schema: { type: string, enum: ["true"] }
@@ -384,7 +384,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DecisionRecord'
+                $ref: '#/components/schemas/EvaluateResponse'
         '400':
           $ref: '#/components/responses/HelmError'
         '401':
@@ -4485,6 +4485,7 @@ components:
         receipt_hash: { type: string }
 
     DecisionRequest:
+      description: Legacy evaluation shape. Supply the signed causal session identifier as context.session_id.
       type: object
       required: [action, resource]
       properties:
@@ -4496,8 +4497,8 @@ components:
           additionalProperties: true
 
     EvaluateRequest:
+      description: V5 evaluation shape. Legacy action/resource aliases are accepted when tool/effect_level are omitted. The server trims and uses a non-whitespace session_id, or falls back to context.session_id.
       type: object
-      required: [session_id]
       properties:
         tool: { type: string }
         args:
@@ -4509,14 +4510,43 @@ components:
         effect_level:
           type: string
           description: Policy resource used to evaluate the governed tool call.
+        principal:
+          type: string
+          description: Legacy field ignored; the authenticated principal is recorded as the receipt executor.
+        action:
+          type: string
+          description: Legacy alias for tool when tool is omitted.
+        resource:
+          type: string
+          description: Legacy alias for effect_level when effect_level is omitted.
         session_id:
           type: string
-          minLength: 1
+          pattern: '.*\S.*'
           description: Non-whitespace signed causal session identifier.
         context:
           type: object
           additionalProperties: true
           description: Optional input context; authenticated principal and tenant fields are added by the server.
+
+    EvaluateResponse:
+      type: object
+      required: [allow, verdict, receipt_id, decision_id, decision_hash, reason_code, policy_ref, lamport_clock]
+      properties:
+        allow: { type: boolean }
+        verdict:
+          type: string
+          description: ALLOW or DENY for a receipt-bearing decision; empty when evaluation fails before receipt issuance.
+        receipt_id:
+          type: string
+          description: Issued V5 receipt identifier; empty when evaluation fails before receipt issuance.
+        decision_id: { type: string }
+        decision_hash: { type: string }
+        reason_code: { type: string }
+        policy_ref: { type: string }
+        lamport_clock:
+          type: integer
+          format: int64
+          minimum: 0
 
     DecisionRecord:
       type: object

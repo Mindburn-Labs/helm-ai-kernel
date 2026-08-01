@@ -37,12 +37,18 @@ import { HelmClient } from "@mindburn/helm-ai-kernel";
 
 const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
 const decision = await client.evaluateDecision({
-  principal: "example-agent",
-  action: "read-ticket",
-  resource: "ticket:123",
+  tool: "read-ticket",
+  effect_level: "ticket:123",
+  session_id: "example-session",
 });
-console.log(decision.verdict); // ALLOW, DENY, or ESCALATE
+console.log(decision.verdict); // ALLOW or DENY
 ```
+
+`session_id` is trimmed and bound into the V5 receipt chain. For compatibility,
+legacy `{ action, resource, context }` callers remain supported when
+`context.session_id` is non-blank; a non-blank top-level `session_id` takes
+precedence when both are present. The authenticated principal, not a body
+`principal`, is recorded on the receipt.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.

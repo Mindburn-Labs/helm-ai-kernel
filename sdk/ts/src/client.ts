@@ -14,6 +14,8 @@ import type {
   HelmError,
   ReasonCode,
   DecisionRequest,
+  EvaluateRequest,
+  EvaluateResponse,
 } from './types.gen.js';
 
 export type { ReasonCode, HelmError };
@@ -112,6 +114,8 @@ export interface SandboxGrant {
 }
 
 export type SurfaceRecord = Record<string, unknown>;
+export type EvaluateDecisionRequest = DecisionRequest | EvaluateRequest | SurfaceRecord;
+export type EvaluateDecisionResponse = EvaluateResponse & SurfaceRecord;
 export type BoundaryStatus = SurfaceRecord;
 export type BoundaryCapabilitySummary = SurfaceRecord;
 export type ExecutionBoundaryRecord = SurfaceRecord;
@@ -275,8 +279,8 @@ export class HelmClient {
   }
 
   // ── Decision Evaluation ──────────────────────────
-  async evaluateDecision(req: DecisionRequest | SurfaceRecord): Promise<SurfaceRecord> {
-    return this.request<SurfaceRecord>('POST', '/api/v1/evaluate', req);
+  async evaluateDecision(req: EvaluateDecisionRequest): Promise<EvaluateDecisionResponse> {
+    return this.request<EvaluateDecisionResponse>('POST', '/api/v1/evaluate', req);
   }
 
   async runPublicDemo(actionId: string, args: SurfaceRecord = {}): Promise<DemoRunResult> {

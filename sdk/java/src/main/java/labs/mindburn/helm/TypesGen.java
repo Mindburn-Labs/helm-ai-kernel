@@ -17975,7 +17975,7 @@ public static class DecisionRecord {
 
 
 /**
- * DecisionRequest
+ * Legacy evaluation shape. Supply the signed causal session identifier as context.session_id.
  */
 @JsonPropertyOrder({
   DecisionRequest.JSON_PROPERTY_PRINCIPAL,
@@ -21795,13 +21795,16 @@ public static class EnvExposurePolicy {
 
 
 /**
- * EvaluateRequest
+ * V5 evaluation shape. Legacy action/resource aliases are accepted when tool/effect_level are omitted. The server trims and uses a non-whitespace session_id, or falls back to context.session_id.
  */
 @JsonPropertyOrder({
   EvaluateRequest.JSON_PROPERTY_TOOL,
   EvaluateRequest.JSON_PROPERTY_ARGS,
   EvaluateRequest.JSON_PROPERTY_AGENT_ID,
   EvaluateRequest.JSON_PROPERTY_EFFECT_LEVEL,
+  EvaluateRequest.JSON_PROPERTY_PRINCIPAL,
+  EvaluateRequest.JSON_PROPERTY_ACTION,
+  EvaluateRequest.JSON_PROPERTY_RESOURCE,
   EvaluateRequest.JSON_PROPERTY_SESSION_ID,
   EvaluateRequest.JSON_PROPERTY_CONTEXT
 })
@@ -21818,6 +21821,15 @@ public static class EvaluateRequest {
 
   public static final String JSON_PROPERTY_EFFECT_LEVEL = "effect_level";
   private String effectLevel;
+
+  public static final String JSON_PROPERTY_PRINCIPAL = "principal";
+  private String principal;
+
+  public static final String JSON_PROPERTY_ACTION = "action";
+  private String action;
+
+  public static final String JSON_PROPERTY_RESOURCE = "resource";
+  private String resource;
 
   public static final String JSON_PROPERTY_SESSION_ID = "session_id";
   private String sessionId;
@@ -21936,6 +21948,81 @@ public static class EvaluateRequest {
   }
 
 
+  public EvaluateRequest principal(String principal) {
+    this.principal = principal;
+    return this;
+  }
+
+   /**
+   * Legacy field ignored; the authenticated principal is recorded as the receipt executor.
+   * @return principal
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPrincipal() {
+    return principal;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPrincipal(String principal) {
+    this.principal = principal;
+  }
+
+
+  public EvaluateRequest action(String action) {
+    this.action = action;
+    return this;
+  }
+
+   /**
+   * Legacy alias for tool when tool is omitted.
+   * @return action
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAction() {
+    return action;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAction(String action) {
+    this.action = action;
+  }
+
+
+  public EvaluateRequest resource(String resource) {
+    this.resource = resource;
+    return this;
+  }
+
+   /**
+   * Legacy alias for effect_level when effect_level is omitted.
+   * @return resource
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getResource() {
+    return resource;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setResource(String resource) {
+    this.resource = resource;
+  }
+
+
   public EvaluateRequest sessionId(String sessionId) {
     this.sessionId = sessionId;
     return this;
@@ -21945,9 +22032,9 @@ public static class EvaluateRequest {
    * Non-whitespace signed causal session identifier.
    * @return sessionId
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getSessionId() {
     return sessionId;
@@ -21955,7 +22042,7 @@ public static class EvaluateRequest {
 
 
   @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setSessionId(String sessionId) {
     this.sessionId = sessionId;
   }
@@ -22010,13 +22097,16 @@ public static class EvaluateRequest {
         Objects.equals(this.args, evaluateRequest.args) &&
         Objects.equals(this.agentId, evaluateRequest.agentId) &&
         Objects.equals(this.effectLevel, evaluateRequest.effectLevel) &&
+        Objects.equals(this.principal, evaluateRequest.principal) &&
+        Objects.equals(this.action, evaluateRequest.action) &&
+        Objects.equals(this.resource, evaluateRequest.resource) &&
         Objects.equals(this.sessionId, evaluateRequest.sessionId) &&
         Objects.equals(this.context, evaluateRequest.context);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(tool, args, agentId, effectLevel, sessionId, context);
+    return Objects.hash(tool, args, agentId, effectLevel, principal, action, resource, sessionId, context);
   }
 
   @Override
@@ -22027,6 +22117,9 @@ public static class EvaluateRequest {
     sb.append("    args: ").append(toIndentedString(args)).append("\n");
     sb.append("    agentId: ").append(toIndentedString(agentId)).append("\n");
     sb.append("    effectLevel: ").append(toIndentedString(effectLevel)).append("\n");
+    sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
+    sb.append("    action: ").append(toIndentedString(action)).append("\n");
+    sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
     sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
     sb.append("}");
@@ -22100,6 +22193,21 @@ public static class EvaluateRequest {
       joiner.add(String.format("%seffect_level%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectLevel()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `principal` to the URL query string
+    if (getPrincipal() != null) {
+      joiner.add(String.format("%sprincipal%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipal()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `action` to the URL query string
+    if (getAction() != null) {
+      joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `resource` to the URL query string
+    if (getResource() != null) {
+      joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `session_id` to the URL query string
     if (getSessionId() != null) {
       joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -22112,6 +22220,395 @@ public static class EvaluateRequest {
             "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
             getContext().get(_key), URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * EvaluateResponse
+ */
+@JsonPropertyOrder({
+  EvaluateResponse.JSON_PROPERTY_ALLOW,
+  EvaluateResponse.JSON_PROPERTY_VERDICT,
+  EvaluateResponse.JSON_PROPERTY_RECEIPT_ID,
+  EvaluateResponse.JSON_PROPERTY_DECISION_ID,
+  EvaluateResponse.JSON_PROPERTY_DECISION_HASH,
+  EvaluateResponse.JSON_PROPERTY_REASON_CODE,
+  EvaluateResponse.JSON_PROPERTY_POLICY_REF,
+  EvaluateResponse.JSON_PROPERTY_LAMPORT_CLOCK
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EvaluateResponse {
+  public static final String JSON_PROPERTY_ALLOW = "allow";
+  private Boolean allow;
+
+  public static final String JSON_PROPERTY_VERDICT = "verdict";
+  private String verdict;
+
+  public static final String JSON_PROPERTY_RECEIPT_ID = "receipt_id";
+  private String receiptId;
+
+  public static final String JSON_PROPERTY_DECISION_ID = "decision_id";
+  private String decisionId;
+
+  public static final String JSON_PROPERTY_DECISION_HASH = "decision_hash";
+  private String decisionHash;
+
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_POLICY_REF = "policy_ref";
+  private String policyRef;
+
+  public static final String JSON_PROPERTY_LAMPORT_CLOCK = "lamport_clock";
+  private Long lamportClock;
+
+  public EvaluateResponse() {
+  }
+
+  public EvaluateResponse allow(Boolean allow) {
+    this.allow = allow;
+    return this;
+  }
+
+   /**
+   * Get allow
+   * @return allow
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_ALLOW)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Boolean getAllow() {
+    return allow;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ALLOW)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setAllow(Boolean allow) {
+    this.allow = allow;
+  }
+
+
+  public EvaluateResponse verdict(String verdict) {
+    this.verdict = verdict;
+    return this;
+  }
+
+   /**
+   * ALLOW or DENY for a receipt-bearing decision; empty when evaluation fails before receipt issuance.
+   * @return verdict
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getVerdict() {
+    return verdict;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setVerdict(String verdict) {
+    this.verdict = verdict;
+  }
+
+
+  public EvaluateResponse receiptId(String receiptId) {
+    this.receiptId = receiptId;
+    return this;
+  }
+
+   /**
+   * Issued V5 receipt identifier; empty when evaluation fails before receipt issuance.
+   * @return receiptId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_RECEIPT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getReceiptId() {
+    return receiptId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RECEIPT_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReceiptId(String receiptId) {
+    this.receiptId = receiptId;
+  }
+
+
+  public EvaluateResponse decisionId(String decisionId) {
+    this.decisionId = decisionId;
+    return this;
+  }
+
+   /**
+   * Get decisionId
+   * @return decisionId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DECISION_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getDecisionId() {
+    return decisionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DECISION_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDecisionId(String decisionId) {
+    this.decisionId = decisionId;
+  }
+
+
+  public EvaluateResponse decisionHash(String decisionHash) {
+    this.decisionHash = decisionHash;
+    return this;
+  }
+
+   /**
+   * Get decisionHash
+   * @return decisionHash
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getDecisionHash() {
+    return decisionHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDecisionHash(String decisionHash) {
+    this.decisionHash = decisionHash;
+  }
+
+
+  public EvaluateResponse reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public EvaluateResponse policyRef(String policyRef) {
+    this.policyRef = policyRef;
+    return this;
+  }
+
+   /**
+   * Get policyRef
+   * @return policyRef
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_POLICY_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getPolicyRef() {
+    return policyRef;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_REF)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setPolicyRef(String policyRef) {
+    this.policyRef = policyRef;
+  }
+
+
+  public EvaluateResponse lamportClock(Long lamportClock) {
+    this.lamportClock = lamportClock;
+    return this;
+  }
+
+   /**
+   * Get lamportClock
+   * minimum: 0
+   * @return lamportClock
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_LAMPORT_CLOCK)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Long getLamportClock() {
+    return lamportClock;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_LAMPORT_CLOCK)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setLamportClock(Long lamportClock) {
+    this.lamportClock = lamportClock;
+  }
+
+
+  /**
+   * Return true if this EvaluateResponse object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EvaluateResponse evaluateResponse = (EvaluateResponse) o;
+    return Objects.equals(this.allow, evaluateResponse.allow) &&
+        Objects.equals(this.verdict, evaluateResponse.verdict) &&
+        Objects.equals(this.receiptId, evaluateResponse.receiptId) &&
+        Objects.equals(this.decisionId, evaluateResponse.decisionId) &&
+        Objects.equals(this.decisionHash, evaluateResponse.decisionHash) &&
+        Objects.equals(this.reasonCode, evaluateResponse.reasonCode) &&
+        Objects.equals(this.policyRef, evaluateResponse.policyRef) &&
+        Objects.equals(this.lamportClock, evaluateResponse.lamportClock);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(allow, verdict, receiptId, decisionId, decisionHash, reasonCode, policyRef, lamportClock);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EvaluateResponse {\n");
+    sb.append("    allow: ").append(toIndentedString(allow)).append("\n");
+    sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
+    sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
+    sb.append("    decisionId: ").append(toIndentedString(decisionId)).append("\n");
+    sb.append("    decisionHash: ").append(toIndentedString(decisionHash)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    policyRef: ").append(toIndentedString(policyRef)).append("\n");
+    sb.append("    lamportClock: ").append(toIndentedString(lamportClock)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `allow` to the URL query string
+    if (getAllow() != null) {
+      joiner.add(String.format("%sallow%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAllow()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `verdict` to the URL query string
+    if (getVerdict() != null) {
+      joiner.add(String.format("%sverdict%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerdict()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `receipt_id` to the URL query string
+    if (getReceiptId() != null) {
+      joiner.add(String.format("%sreceipt_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReceiptId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `decision_id` to the URL query string
+    if (getDecisionId() != null) {
+      joiner.add(String.format("%sdecision_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDecisionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `decision_hash` to the URL query string
+    if (getDecisionHash() != null) {
+      joiner.add(String.format("%sdecision_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDecisionHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_ref` to the URL query string
+    if (getPolicyRef() != null) {
+      joiner.add(String.format("%spolicy_ref%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyRef()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `lamport_clock` to the URL query string
+    if (getLamportClock() != null) {
+      joiner.add(String.format("%slamport_clock%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLamportClock()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

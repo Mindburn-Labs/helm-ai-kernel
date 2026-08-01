@@ -194,15 +194,16 @@ func TestEvaluateFailsClosedWithoutProductionReceiptSigner(t *testing.T) {
 
 func TestEvaluateRejectsBlankSessionIDBeforeReceiptIssuance(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		sessionID string
+		name string
+		body EvaluateRequest
 	}{
-		{name: "missing", sessionID: ""},
-		{name: "whitespace", sessionID: " \t\n "},
+		{name: "missing", body: EvaluateRequest{Tool: "read_file"}},
+		{name: "whitespace", body: EvaluateRequest{Tool: "read_file", SessionID: " \t\n "}},
+		{name: "context whitespace", body: EvaluateRequest{Tool: "read_file", Context: map[string]any{"session_id": " \t\n "}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := newTestServer(t)
-			reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", SessionID: tc.sessionID})
+			reqBody, err := json.Marshal(tc.body)
 			if err != nil {
 				t.Fatalf("marshal request: %v", err)
 			}
@@ -232,7 +233,7 @@ func TestEvaluateRejectsBlankSessionIDBeforeSignerAvailability(t *testing.T) {
 		PDP:           pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true}),
 		Authenticator: testAPIAuthenticator,
 	})
-	reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file"})
+	reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", Context: map[string]any{"session_id": " \t\n "}})
 	if err != nil {
 		t.Fatalf("marshal request: %v", err)
 	}
@@ -244,6 +245,69 @@ func TestEvaluateRejectsBlankSessionIDBeforeSignerAvailability(t *testing.T) {
 	}
 	if len(srv.receipts) != 0 {
 		t.Fatalf("blank session_id issued receipts: %+v", srv.receipts)
+	}
+}
+
+func TestEvaluateAcceptsCurrentAndLegacyRequestSessions(t *testing.T) {
+	srv := NewServer(ServerConfig{
+		PDP: pdp.NewHelmPDP("test-v1", map[string]bool{
+			"modern-resource":  true,
+			"context-resource": true,
+			"legacy-resource":  true,
+		}),
+		Authenticator: testAPIAuthenticator,
+	})
+
+	for _, tc := range []struct {
+		name          string
+		body          string
+		wantSessionID string
+		wantTool      string
+	}{
+		{
+			name:          "current top-level session wins",
+			body:          `{"tool":"modern-tool","effect_level":"modern-resource","session_id":"  modern-session  ","context":{"session_id":"context-session"}}`,
+			wantSessionID: "modern-session",
+			wantTool:      "modern-tool",
+		},
+		{
+			name:          "current context session fallback",
+			body:          `{"tool":"context-tool","effect_level":"context-resource","session_id":" \t ","context":{"session_id":"  context-session  "}}`,
+			wantSessionID: "context-session",
+			wantTool:      "context-tool",
+		},
+		{
+			name:          "legacy decision request",
+			body:          `{"principal":"untrusted","action":"legacy-tool","resource":"legacy-resource","context":{"session_id":"  legacy-session  "}}`,
+			wantSessionID: "legacy-session",
+			wantTool:      "legacy-tool",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(tc.body)))
+			if w.Code != http.StatusOK {
+				t.Fatalf("evaluate status = %d: %s", w.Code, w.Body.String())
+			}
+
+			var response EvaluateResponse
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if !response.Allow {
+				t.Fatalf("evaluate denied compatible request: %+v", response)
+			}
+
+			srv.mu.RLock()
+			receipt := srv.receipts[response.ReceiptID]
+			srv.mu.RUnlock()
+			if receipt == nil {
+				t.Fatal("evaluate did not retain a receipt")
+			}
+			if receipt.SessionID != tc.wantSessionID || receipt.EffectID != tc.wantTool {
+				t.Fatalf("receipt = session %q, tool %q; want session %q, tool %q", receipt.SessionID, receipt.EffectID, tc.wantSessionID, tc.wantTool)
+			}
+		})
 	}
 }
 

@@ -278,12 +278,28 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req EvaluateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var payload struct {
+		EvaluateRequest
+		Action   string `json:"action"`
+		Resource string `json:"resource"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
+	req := payload.EvaluateRequest
+	// Preserve DecisionRequest callers while the V5 shape uses tool/effect_level.
+	if req.Tool == "" {
+		req.Tool = payload.Action
+	}
+	if req.EffectLevel == "" {
+		req.EffectLevel = payload.Resource
+	}
 	req.SessionID = strings.TrimSpace(req.SessionID)
+	if req.SessionID == "" && req.Context != nil {
+		req.SessionID, _ = req.Context["session_id"].(string)
+		req.SessionID = strings.TrimSpace(req.SessionID)
+	}
 	if req.SessionID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id is required"})
 		return

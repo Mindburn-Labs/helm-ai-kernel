@@ -43,7 +43,8 @@ describe("HelmClient coverage matrix", () => {
 
   it("exercises every JSON endpoint wrapper", async () => {
     const calls: Array<[string, unknown[]]> = [
-      ["evaluateDecision", [{ effect: "read" }]],
+      ["evaluateDecision", [{ action: "read_file", resource: "read_file", context: { session_id: "legacy-session" } }]],
+      ["evaluateDecision", [{ tool: "read_file", effect_level: "read_file", session_id: "current-session" }]],
       ["runPublicDemo", ["read_ticket", { id: 1 }]],
       ["verifyPublicDemoReceipt", [{ receipt_id: "r1" }, "hash"]],
       ["approveIntent", [{ intent_hash: "h", signature_b64: "sig", public_key_b64: "pk" }]],
@@ -145,6 +146,40 @@ describe("HelmClient coverage matrix", () => {
     await expect(client.chatCompletionsWithReceipt({ model: "gpt", messages: [] })).resolves.toMatchObject({
       governance: { receiptId: "", lamportClock: 0, toolCalls: 0 },
     });
+  });
+
+  it("preserves legacy callers while exposing the V5 evaluate response", async () => {
+    const response = {
+      allow: true,
+      verdict: "ALLOW",
+      receipt_id: "receipt-1",
+      decision_id: "decision-1",
+      decision_hash: "sha256:decision",
+      reason_code: "",
+      policy_ref: "helm:test",
+      lamport_clock: 1,
+    };
+    fetchSpy.mockResolvedValueOnce(jsonResponse(response));
+
+    const legacyResult: Record<string, unknown> = await client.evaluateDecision({
+      action: "read_file",
+      resource: "read_file",
+      context: { session_id: "legacy-session" },
+    });
+    expect(legacyResult.receipt_id).toBe("receipt-1");
+    expect(JSON.parse(String((fetchSpy.mock.calls[0]?.[1] as RequestInit).body))).toMatchObject({
+      action: "read_file",
+      resource: "read_file",
+      context: { session_id: "legacy-session" },
+    });
+
+    fetchSpy.mockResolvedValueOnce(jsonResponse(response));
+    const currentResult = await client.evaluateDecision({
+      tool: "read_file",
+      effect_level: "read_file",
+      session_id: "current-session",
+    });
+    expect(currentResult.decision_id).toBe("decision-1");
   });
 
   it("covers binary and form endpoints including error branches", async () => {

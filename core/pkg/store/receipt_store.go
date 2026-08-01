@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -31,6 +33,20 @@ type ReceiptStore interface {
 // without importing this package (which would create an executor/store cycle).
 type CausalReceiptBuilder = func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error)
 
+// TenantScopedCausalReceiptAppender allocates a causal receipt position under
+// a durable tenant-qualified lookup key. The receipt's signed SessionID stays
+// caller-visible; only the database key is qualified.
+type TenantScopedCausalReceiptAppender interface {
+	AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build CausalReceiptBuilder) error
+}
+
+// ReceiptTimestampNormalizer exposes a store's durable timestamp precision to
+// producers. A producer must normalize before it signs or anchors a receipt
+// whose chain hash will later be reloaded from that store.
+type ReceiptTimestampNormalizer interface {
+	NormalizeReceiptTimestamp(time.Time) time.Time
+}
+
 // causalReceiptSessionID selects the durable lookup scope without changing the
 // receipt envelope. V5 signs SessionID; legacy receipts retain ExecutorID as
 // their historical causal scope.
@@ -42,6 +58,13 @@ func causalReceiptSessionID(r *contracts.Receipt) string {
 		return r.SessionID
 	}
 	return r.ExecutorID
+}
+
+// causalReceiptScopeKey keeps an authenticated tenant out of the signed
+// receipt envelope while giving durable stores an unambiguous lookup key. The
+// length framing avoids collisions between arbitrary tenant/session strings.
+func causalReceiptScopeKey(tenantID, sessionID string) string {
+	return fmt.Sprintf("tenant:%d:%s:session:%d:%s", len(tenantID), tenantID, len(sessionID), sessionID)
 }
 
 const backfillCausalReceiptSessionsSQL = `
@@ -323,6 +346,7 @@ func (s *PostgresReceiptStore) queryOne(ctx context.Context, query string, arg a
 }
 
 func (s *PostgresReceiptStore) Store(ctx context.Context, r *contracts.Receipt) error {
+	s.normalizeReceiptTimestamp(r)
 	if err := insertPostgresReceipt(ctx, s.db, r); err != nil {
 		return err
 	}
@@ -335,6 +359,10 @@ type sqlExecer interface {
 }
 
 func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.Receipt) error {
+	return insertPostgresReceiptWithCausalSession(ctx, execer, r, causalReceiptSessionID(r))
+}
+
+func insertPostgresReceiptWithCausalSession(ctx context.Context, execer sqlExecer, r *contracts.Receipt, causalSessionID string) error {
 	query := `
 		INSERT INTO receipts (
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
@@ -379,7 +407,7 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		r.ReasonCode,
 		r.PolicyHash,
 		r.SessionID,
-		causalReceiptSessionID(r),
+		causalSessionID,
 		r.LogID,
 		r.LeafIndex,
 		nullableJSON(transparencyJSON),
@@ -396,26 +424,44 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 }
 
 func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID string, build CausalReceiptBuilder) error {
+	return s.appendCausal(ctx, sessionID, sessionID, build)
+}
+
+// AppendCausalScoped preserves the external SessionID in the signed receipt
+// while serializing and indexing the chain by its authenticated tenant scope.
+func (s *PostgresReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build CausalReceiptBuilder) error {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return fmt.Errorf("tenant id is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("session id is required")
+	}
+	return s.appendCausal(ctx, causalReceiptScopeKey(tenantID, sessionID), sessionID, build)
+}
+
+func (s *PostgresReceiptStore) appendCausal(ctx context.Context, causalSessionID, externalSessionID string, build CausalReceiptBuilder) error {
 	if build == nil {
 		return fmt.Errorf("causal receipt builder is nil")
 	}
-	if sessionID == "" {
+	if strings.TrimSpace(externalSessionID) == "" {
 		return fmt.Errorf("session id is required")
 	}
-	localLock := s.sessionLock(sessionID)
+	localLock := s.sessionLock(causalSessionID)
 	localLock.Lock()
 	defer localLock.Unlock()
 
-	if last := s.cachedLastReceipt(sessionID); last != nil {
-		receipt, err := buildNextCausalReceipt(sessionID, last, build)
+	if last := s.cachedLastReceipt(causalSessionID); last != nil {
+		receipt, err := buildNextCausalReceiptScoped(causalSessionID, externalSessionID, last, build)
 		if err != nil {
 			return err
 		}
-		if err := insertPostgresReceipt(ctx, s.db, receipt); err != nil {
-			s.forgetLastReceipt(sessionID)
+		s.normalizeReceiptTimestamp(receipt)
+		if err := insertPostgresReceiptWithCausalSession(ctx, s.db, receipt, causalSessionID); err != nil {
+			s.forgetLastReceipt(causalSessionID)
 			return err
 		}
-		s.rememberLastReceipt(receipt)
+		s.rememberLastReceiptForSession(causalSessionID, receipt)
 		return nil
 	}
 
@@ -429,25 +475,26 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 			_ = tx.Rollback()
 		}
 	}()
-	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, sessionID); err != nil {
-		return fmt.Errorf("lock receipt session %s: %w", sessionID, err)
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, causalSessionID); err != nil {
+		return fmt.Errorf("lock receipt session %s: %w", causalSessionID, err)
 	}
-	last, err := queryLastPostgresReceipt(ctx, tx, sessionID)
+	last, err := queryLastPostgresReceipt(ctx, tx, causalSessionID)
 	if err != nil {
 		return err
 	}
-	receipt, err := buildNextCausalReceipt(sessionID, last, build)
+	receipt, err := buildNextCausalReceiptScoped(causalSessionID, externalSessionID, last, build)
 	if err != nil {
 		return err
 	}
-	if err := insertPostgresReceipt(ctx, tx, receipt); err != nil {
+	s.normalizeReceiptTimestamp(receipt)
+	if err := insertPostgresReceiptWithCausalSession(ctx, tx, receipt, causalSessionID); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit receipt transaction: %w", err)
 	}
 	committed = true
-	s.rememberLastReceipt(receipt)
+	s.rememberLastReceiptForSession(causalSessionID, receipt)
 	return nil
 }
 
@@ -464,6 +511,10 @@ func (s *PostgresReceiptStore) cachedLastReceipt(sessionID string) *contracts.Re
 
 func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
 	sessionID := causalReceiptSessionID(r)
+	s.rememberLastReceiptForSession(sessionID, r)
+}
+
+func (s *PostgresReceiptStore) rememberLastReceiptForSession(sessionID string, r *contracts.Receipt) {
 	if r == nil || sessionID == "" || r.LamportClock == 0 {
 		return
 	}
@@ -475,6 +526,19 @@ func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
 	current := s.lastBySession[sessionID]
 	if current == nil || r.LamportClock >= current.LamportClock {
 		s.lastBySession[sessionID] = cloneReceipt(r)
+	}
+}
+
+// NormalizeReceiptTimestamp matches PostgreSQL TIMESTAMPTZ microsecond
+// precision. It is intentionally exported as a capability, not a global
+// policy: SQLite preserves RFC3339 nanoseconds.
+func (s *PostgresReceiptStore) NormalizeReceiptTimestamp(timestamp time.Time) time.Time {
+	return timestamp.UTC().Truncate(time.Microsecond)
+}
+
+func (s *PostgresReceiptStore) normalizeReceiptTimestamp(r *contracts.Receipt) {
+	if r != nil {
+		r.Timestamp = s.NormalizeReceiptTimestamp(r.Timestamp)
 	}
 }
 
@@ -530,13 +594,17 @@ func queryLastPostgresReceipt(ctx context.Context, queryer sqlQueryer, sessionID
 }
 
 func buildNextCausalReceipt(sessionID string, previous *contracts.Receipt, build CausalReceiptBuilder) (*contracts.Receipt, error) {
+	return buildNextCausalReceiptScoped(sessionID, sessionID, previous, build)
+}
+
+func buildNextCausalReceiptScoped(causalSessionID, externalSessionID string, previous *contracts.Receipt, build CausalReceiptBuilder) (*contracts.Receipt, error) {
 	lamport := uint64(1)
 	prevHash := ""
 	if previous != nil {
 		lamport = previous.LamportClock + 1
 		hash, err := contracts.ReceiptChainHash(previous)
 		if err != nil {
-			return nil, fmt.Errorf("hash previous receipt for %s: %w", sessionID, err)
+			return nil, fmt.Errorf("hash previous receipt for %s: %w", causalSessionID, err)
 		}
 		prevHash = hash
 	}
@@ -553,10 +621,10 @@ func buildNextCausalReceipt(sessionID string, previous *contracts.Receipt, build
 	// their causal identity.
 	receiptSessionID := causalReceiptSessionID(receipt)
 	if receiptSessionID == "" {
-		return nil, fmt.Errorf("causal receipt builder returned no causal session id for session %q", sessionID)
+		return nil, fmt.Errorf("causal receipt builder returned no causal session id for session %q", causalSessionID)
 	}
-	if receiptSessionID != sessionID {
-		return nil, fmt.Errorf("receipt causal session %q does not match locked session %q", receiptSessionID, sessionID)
+	if receiptSessionID != externalSessionID {
+		return nil, fmt.Errorf("receipt causal session %q does not match signed session %q", receiptSessionID, externalSessionID)
 	}
 	if receipt.LamportClock != lamport {
 		return nil, fmt.Errorf("receipt lamport %d does not match assigned lamport %d", receipt.LamportClock, lamport)

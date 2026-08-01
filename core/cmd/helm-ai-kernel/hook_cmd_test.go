@@ -304,16 +304,24 @@ func TestHookPreToolDeniesEvasiveBashViaASTClassifier(t *testing.T) {
 	// This matrix covers both legacy-needle parity and AST-only evasions; all
 	// must route through the signed decision path and deny by default.
 	evasive := []string{
-		"rm -r -f /tmp/helm-evasion",               // split flags
-		"sudo rm -rf /var/lib/helm-evasion",        // privilege wrapper
-		`bash -c "rm -rf /tmp/helm-evasion"`,       // shell -c wrapper
-		"cat targets.txt | xargs rm -rf",           // pipe into xargs
-		"echo ok && rm -rf /tmp/helm-evasion",      // chaining
-		"find /tmp/helm-evasion -delete",           // find -delete
-		"echo cm0gLXJmIC8= | base64 -d | sh",       // decode into shell
-		"echo SECRET=x >> .env",                    // sensitive redirect
-		"rm --recursive --force /tmp/helm-evasion", // long flags
-		"/bin/./rm -rf /tmp/helm-evasion",          // path obfuscation
+		"rm -r -f /tmp/helm-evasion",                                             // split flags
+		"sudo rm -rf /var/lib/helm-evasion",                                      // privilege wrapper
+		`bash -c "rm -rf /tmp/helm-evasion"`,                                     // shell -c wrapper
+		"cat targets.txt | xargs rm -rf",                                         // pipe into xargs
+		"echo ok && rm -rf /tmp/helm-evasion",                                    // chaining
+		"find /tmp/helm-evasion -delete",                                         // find -delete
+		"echo cm0gLXJmIC8= | base64 -d | sh",                                     // decode into shell
+		"echo SECRET=x >> .env",                                                  // sensitive redirect
+		"rm --recursive --force /tmp/helm-evasion",                               // long flags
+		"/bin/./rm -rf /tmp/helm-evasion",                                        // path obfuscation
+		"python <<'PY'\nimport shutil\nshutil.rmtree('/tmp/helm-evasion')\nPY",   // interpreter heredoc
+		"python - <<'PY'\nimport shutil\nshutil.rmtree('/tmp/helm-evasion')\nPY", // stdin marker + heredoc
+		"perl <<'PL'\nunlink '/tmp/helm-evasion'\nPL",                            // interpreter heredoc
+		"ruby <<'RB'\nFile.delete('/tmp/helm-evasion')\nRB",                      // interpreter heredoc
+		"node <<'JS'\nrequire('fs').rmSync('/tmp/helm-evasion')\nJS",             // interpreter heredoc
+		"cat <<'PY' >/tmp/run.py\nimport shutil\nshutil.rmtree('/tmp/helm-evasion')\nPY\npython /tmp/run.py",    // generated script
+		"printf 'import shutil\\nshutil.rmtree(\\\"/tmp/helm-evasion\\\")\\n' >/tmp/run.py; python /tmp/run.py", // generated script
+		"python <(printf 'import shutil\\nshutil.rmtree(\\\"/tmp/helm-evasion\\\")\\n')",                        // process substitution
 	}
 	for _, command := range evasive {
 		t.Run(command, func(t *testing.T) {

@@ -11,17 +11,18 @@ import (
 // Signal names recorded during classification. Signals are audit metadata for
 // the decision receipt; they never grant anything by themselves.
 const (
-	SignalParseError          = "parse-error"
-	SignalCommandSubstitution = "command-substitution"
-	SignalChaining            = "command-chaining"
-	SignalRedirect            = "redirect"
-	SignalEncodedWrapper      = "encoded-wrapper"
-	SignalPathObfuscation     = "path-obfuscation"
-	SignalPrivilegeWrapper    = "privilege-wrapper"
-	SignalEnvWrapper          = "env-wrapper"
-	SignalEvalWrapper         = "eval-wrapper"
-	SignalShellInvocation     = "shell-invocation"
-	SignalSensitiveRedirect   = "sensitive-redirect"
+	SignalParseError            = "parse-error"
+	SignalCommandSubstitution   = "command-substitution"
+	SignalChaining              = "command-chaining"
+	SignalRedirect              = "redirect"
+	SignalEncodedWrapper        = "encoded-wrapper"
+	SignalPathObfuscation       = "path-obfuscation"
+	SignalPrivilegeWrapper      = "privilege-wrapper"
+	SignalEnvWrapper            = "env-wrapper"
+	SignalEvalWrapper           = "eval-wrapper"
+	SignalShellInvocation       = "shell-invocation"
+	SignalInterpreterInvocation = "interpreter-invocation"
+	SignalSensitiveRedirect     = "sensitive-redirect"
 )
 
 // maxWrapperDepth bounds recursive unwrapping of eval / sh -c payloads so
@@ -522,6 +523,184 @@ var strictFlagShells = map[string]bool{
 	"elvish": true, "xonsh": true,
 }
 
+// interpreterSpec describes a common language interpreter whose code source
+// can be supplied directly on the command line or through standard input.
+// We intentionally do not parse these languages: an opaque interpreter source
+// is routed to the signed decision path instead.
+type interpreterSpec struct {
+	codeShort    string
+	codeLong     []string
+	valueShort   string
+	valueLong    []string
+	noValueShort string
+	noValueLong  []string
+}
+
+var interpreterSpecs = map[string]interpreterSpec{
+	"python": {
+		codeShort:    "c",
+		valueShort:   "WX",
+		valueLong:    []string{"--check-hash-based-pycs"},
+		noValueShort: "BEIOqsuv",
+		noValueLong: []string{
+			"--help", "--version", "--verbose", "--quiet", "--isolated",
+			"--ignore-environment", "--no-site", "--no-user-site",
+			"--bytes-warning", "--dont-write-bytecode",
+		},
+	},
+	"perl": {
+		codeShort:    "eE",
+		noValueShort: "v",
+		noValueLong:  []string{"--help", "--version"},
+	},
+	"ruby": {
+		codeShort:    "e",
+		noValueShort: "v",
+		noValueLong:  []string{"--help", "--version"},
+	},
+	"node": {
+		codeShort:    "ep",
+		codeLong:     []string{"--eval", "--print"},
+		valueShort:   "r",
+		valueLong:    []string{"--input-type", "--require", "--loader", "--experimental-loader"},
+		noValueShort: "hv",
+		noValueLong:  []string{"--help", "--version"},
+	},
+}
+
+// interpreterSpecFor resolves common versioned interpreter names without
+// treating arbitrary commands that merely share a prefix as interpreters.
+func interpreterSpecFor(name string) (interpreterSpec, bool) {
+	if spec, ok := interpreterSpecs[name]; ok {
+		return spec, true
+	}
+	if strings.HasPrefix(name, "python") && isInterpreterVersion(strings.TrimPrefix(name, "python")) {
+		return interpreterSpecs["python"], true
+	}
+	if name == "nodejs" {
+		return interpreterSpecs["node"], true
+	}
+	return interpreterSpec{}, false
+}
+
+func isInterpreterVersion(s string) bool {
+	if s == "" {
+		return true
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *collector) classifyInterpreter(name string, args []wordTok, via string, spec interpreterSpec) {
+	c.signal(SignalInterpreterInvocation)
+	if len(args) == 0 {
+		c.decide(name + " reads interpreter source from standard input (fail-closed)")
+		return
+	}
+
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		if tok.dynamic {
+			c.decide(name + " interpreter invocation with a dynamic argument (fail-closed)")
+			return
+		}
+		if tok.text == "-" {
+			c.decide(name + " reads interpreter source from standard input (fail-closed)")
+			return
+		}
+		if tok.text == "--" {
+			if i+1 >= len(args) {
+				c.decide(name + " reads interpreter source from standard input (fail-closed)")
+				return
+			}
+			c.classifyInterpreterScript(name, args, i+1, via)
+			return
+		}
+		if strings.HasPrefix(tok.text, "--") {
+			flag := tok.text
+			attached := false
+			if idx := strings.IndexByte(flag, '='); idx >= 0 {
+				flag, attached = flag[:idx], true
+			}
+			if containsString(spec.codeLong, flag) {
+				c.decide(name + " executes interpreter source via " + flag + " (fail-closed)")
+				return
+			}
+			if containsString(spec.noValueLong, flag) && !attached {
+				continue
+			}
+			if containsString(spec.valueLong, flag) {
+				if attached {
+					if len(tok.text) == len(flag)+1 {
+						c.decide(name + " " + flag + " with an empty value (fail-closed)")
+						return
+					}
+					continue
+				}
+				if i+1 >= len(args) || args[i+1].dynamic {
+					c.decide(name + " " + flag + " with an unresolvable value (fail-closed)")
+					return
+				}
+				i++
+				continue
+			}
+			c.decide(name + " with an unrecognized flag " + tok.text + " (fail-closed)")
+			return
+		}
+		if strings.HasPrefix(tok.text, "-") {
+			cluster := tok.text[1:]
+			for j := 0; j < len(cluster); j++ {
+				flag := cluster[j]
+				if strings.IndexByte(spec.codeShort, flag) >= 0 {
+					c.decide(name + " executes interpreter source via -" + string(flag) + " (fail-closed)")
+					return
+				}
+				if strings.IndexByte(spec.noValueShort, flag) >= 0 {
+					continue
+				}
+				if strings.IndexByte(spec.valueShort, flag) >= 0 {
+					if j+1 == len(cluster) {
+						if i+1 >= len(args) || args[i+1].dynamic {
+							c.decide(name + " -" + string(flag) + " with an unresolvable value (fail-closed)")
+							return
+						}
+						i++
+					}
+					break
+				}
+				c.decide(name + " with an unrecognized flag -" + string(flag) + " (fail-closed)")
+				return
+			}
+			continue
+		}
+
+		c.classifyInterpreterScript(name, args, i, via)
+		return
+	}
+
+	c.decide(name + " reads interpreter source from standard input (fail-closed)")
+}
+
+func (c *collector) classifyInterpreterScript(name string, args []wordTok, scriptIndex int, via string) {
+	script := args[scriptIndex]
+	if script.dynamic {
+		c.decide(name + " interpreter invocation with a dynamic argument (fail-closed)")
+		return
+	}
+	if c.writtenPaths[path.Clean(script.text)] {
+		c.decide(name + " executes a script generated earlier in the command")
+		return
+	}
+	tokens := make([]string, 0, len(args)+1)
+	tokens = append(tokens, name)
+	tokens = append(tokens, staticTokens(args)...)
+	c.record(Command{Name: name, Tokens: tokens, Prefix: Prefix(tokens), Via: via})
+}
+
 // splitEnvPayload splits an env -S/--split-string payload into words using
 // the shell parser (env's splitting is shell-like: quotes are honored).
 // The payload must reduce to a single simple command line.
@@ -841,6 +1020,13 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			c.decide("dynamic command word cannot be classified statically")
 			return
 		}
+		if c.writtenPaths[path.Clean(head.text)] {
+			// A command path created earlier in this same compound command is
+			// opaque executable source, even when invoked directly rather than
+			// through a shell or language interpreter.
+			c.decide("executes a script generated earlier in the command")
+			return
+		}
 		name := head.text
 		if strings.Contains(name, "/") {
 			cleaned := path.Clean(name)
@@ -848,6 +1034,10 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 				c.signal(SignalPathObfuscation)
 			}
 			name = path.Base(cleaned)
+		}
+		if spec, ok := interpreterSpecFor(name); ok {
+			c.classifyInterpreter(name, args[1:], via, spec)
+			return
 		}
 		switch {
 		case name == "sudo" || name == "doas":

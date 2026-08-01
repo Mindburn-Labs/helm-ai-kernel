@@ -6,6 +6,7 @@
       "gates": [
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -35,6 +36,7 @@
         "quality-self-test",
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -70,6 +72,7 @@
         "quality-self-test",
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -220,6 +223,17 @@
         "docs/VERIFICATION.md",
         "docs/RELEASE_SECURITY.md",
         "README.md"
+      ]
+    },
+    {
+      "id": "release-workflow-contract",
+      "title": "Release workflow provenance contract",
+      "command": "python3 scripts/ci/release_workflow_contract_test.py",
+      "timeout_seconds": 60,
+      "paths": [
+        ".github/workflows/release.yml",
+        "scripts/ci/quality-gates.json",
+        "scripts/ci/release_workflow_contract_test.py"
       ]
     },
     {

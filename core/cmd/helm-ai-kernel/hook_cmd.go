@@ -231,7 +231,7 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 				ToolID:                  "shell",
 				Reason:                  reason,
 				Metadata:                shellscanReceiptMetadata(scan),
-				RequiresShellPermission: scan.SensitiveTarget != "" && len(scan.Commands) > 1,
+				RequiresShellPermission: scan.RequiresShellPermission,
 			}
 		}
 	case strings.HasPrefix(tool, "mcp__"):

@@ -641,7 +641,7 @@ func TestHookPreToolRequiresFileAndShellPermissionForCompoundSensitiveCommand(t 
 	if err := os.WriteFile(profilePath, profileBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	payload := `{"tool_name":"Bash","tool_input":{"command":"echo x > .env; rm -rf /tmp/helm-cleanup"}}`
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf .env /tmp/helm-cleanup"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profilePath, "--policy-profile-sha256", hookPolicyProfileDigest(t, profilePath)}, strings.NewReader(payload), &stdout, &stderr)
 	if code != 0 {

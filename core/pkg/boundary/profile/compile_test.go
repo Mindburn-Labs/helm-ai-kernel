@@ -62,6 +62,11 @@ table inet helm_boundary {
 		ct state established,related accept
 		ip daddr 203.0.113.0/24 tcp dport 443 accept
 	}
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+		ct state established,related accept
+		ip daddr 203.0.113.0/24 tcp dport 443 accept
+	}
 }
 `
 
@@ -220,8 +225,52 @@ const nftListRendering = `table inet helm_boundary {
 		ct state established,related accept
 		ip daddr 203.0.113.0/24 tcp dport 443 accept
 	}
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+		ct state established,related accept
+		ip daddr 203.0.113.0/24 tcp dport 443 accept
+	}
 }
 `
+
+// A workload in its own network namespace egresses as forwarded traffic and
+// never traverses the output hook, so an output-only table claims default-drop
+// egress while leaving every containerised workload unpoliced. Measured on
+// Linux 6.12: with the output chain alone a nested-netns process reached the
+// internet; adding this forward chain blocked it.
+func TestNftRulesetPolicesForwardedEgress(t *testing.T) {
+	in := fixtureInput()
+	in.Egress.AllowedCIDRs = nil
+	in.Egress.AllowedProtocols = nil
+	ruleset := string(emitNftRuleset(in))
+
+	for _, want := range []string{
+		"chain output {",
+		"type filter hook output priority filter; policy drop;",
+		"chain forward {",
+		"type filter hook forward priority filter; policy drop;",
+	} {
+		if !strings.Contains(ruleset, want) {
+			t.Fatalf("ruleset missing %q — egress is unpoliced on that path:\n%s", want, ruleset)
+		}
+	}
+	// Loopback is never forwarded; exempting it there would be noise that
+	// diverges the file form from the `nft list` rendering.
+	forward := ruleset[strings.Index(ruleset, "chain forward {"):]
+	if strings.Contains(forward, "oifname \"lo\"") {
+		t.Fatalf("forward chain must not carry a loopback exemption:\n%s", forward)
+	}
+
+	// The allowlist governs both paths identically: a rule that opens a
+	// destination for host processes must open it for forwarded ones too,
+	// or the two hooks enforce different policies from one input.
+	in.Egress.AllowedCIDRs = []string{"203.0.113.0/24"}
+	in.Egress.AllowedProtocols = []string{"https"}
+	withAllow := string(emitNftRuleset(in))
+	if got := strings.Count(withAllow, "ip daddr 203.0.113.0/24 tcp dport 443 accept"); got != 2 {
+		t.Fatalf("allow rule must appear on both hooks, found %d:\n%s", got, withAllow)
+	}
+}
 
 func TestNormalizeNftRulesetConvergesFileAndListForms(t *testing.T) {
 	fromFile := NormalizeNftRuleset(goldenNftRuleset)

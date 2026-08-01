@@ -70,8 +70,13 @@ monorepo jobs do not look for a nonexistent root `go.sum`.
 
 Tag-triggered release jobs treat the repository `VERSION` file as release
 truth. The first release job fails when `GITHUB_REF_NAME` is not exactly
-`v$(cat VERSION)`, and release jobs must not patch chart or SDK package
-versions in CI.
+`v$(cat VERSION)`. Before any release publication, the preflight also requires
+the tag's peeled commit to equal current `origin/main` and the Kernel OpenAPI
+blob to exactly match `Mindburn-Labs/contracts-catalog` `main`. The workflow
+never creates a downstream catalog PR; sync and merge that catalog change
+before tagging. `DOWNSTREAM_FANOUT_TOKEN` is retained only as a
+`contents:read` token for that preflight. Release jobs must not patch chart or
+SDK package versions in CI.
 
 ## Documentation Contract
 

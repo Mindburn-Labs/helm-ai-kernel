@@ -1114,7 +1114,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke]
+    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-local-sidecar]
     permissions:
       actions: read
       contents: write
@@ -1146,14 +1146,10 @@ jobs:
             version-status/version-status.json
 
   console-release-assets:
-    # Sidecar failure must not suppress the independently valid Kernel release.
-    # Only a successful, tag-bound Console closure may attach Console assets.
+    # v0.8.0 includes the local Console, so release creation is gated on the
+    # verified, tag-bound sidecar closure rather than attaching it best-effort.
     runs-on: ubuntu-latest
     needs: [console-local-sidecar, github-release]
-    if: >-
-      always() &&
-      needs.console-local-sidecar.result == 'success' &&
-      needs.github-release.result == 'success'
     permissions:
       actions: read
       contents: write
@@ -1293,7 +1289,8 @@ jobs:
       needs.github-release.result == 'success' &&
       needs.slsa-provenance.result == 'success' &&
       needs.homebrew.result == 'success' &&
-      needs.go-sdk-tag.result == 'success'
+      needs.go-sdk-tag.result == 'success' &&
+      needs.console-release-assets.result == 'success'
     permissions:
       contents: write
     steps:

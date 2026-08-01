@@ -57,7 +57,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("CLOSED)", homebrew)
         self.assertIn("Timed out waiting for Homebrew PR", homebrew)
 
-    def test_core_release_does_not_depend_on_console_sidecar(self) -> None:
+    def test_release_creation_requires_verified_console_sidecar(self) -> None:
         binaries = self.job("binaries")
         self.assertIn("needs: [validate, deployment-smoke, kind-smoke, release-smoke]", binaries)
         self.assertNotIn("console-local-sidecar", binaries)
@@ -68,15 +68,13 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("console-local-sidecar", reproducibility)
 
         github_release = self.job("github-release")
-        self.assertNotIn("console-local-sidecar", github_release)
+        self.assertIn("console-local-sidecar", github_release)
         self.assertNotIn("Require retained Console manifest bundles", github_release)
 
-    def test_console_attachment_is_optional_and_checks_the_v08_asset_contract(self) -> None:
+    def test_console_attachment_is_required_and_checks_the_v08_asset_contract(self) -> None:
         console_assets = self.job("console-release-assets")
         self.assertIn("needs: [console-local-sidecar, github-release]", console_assets)
-        self.assertIn("always()", console_assets)
-        self.assertIn("needs.console-local-sidecar.result == 'success'", console_assets)
-        self.assertIn("needs.github-release.result == 'success'", console_assets)
+        self.assertNotIn("always()", console_assets)
         self.assertIn("make release-binaries-reproducible", console_assets)
         self.assertIn("console_local_sidecar.py stage", console_assets)
         self.assertIn("console_local_sidecar.py layout", console_assets)
@@ -98,6 +96,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             post_release,
         )
         self.assertIn("always()", post_release)
+        self.assertIn("needs.console-release-assets.result == 'success'", post_release)
         self.assertRegex(post_release, r"- name: Replace release version status with full post-release status\n\s+if: always\(\)")
 
 

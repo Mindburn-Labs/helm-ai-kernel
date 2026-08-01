@@ -5,6 +5,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,6 +28,7 @@ var (
 type hookOptions struct {
 	Client          string
 	DataDir         string
+	PolicyProfile   string
 	SigningSeedFile string
 	JSON            bool
 }
@@ -90,6 +93,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code or codex")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
+	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	fs.BoolVar(&opts.JSON, "json", false, "Reserved for structured diagnostics")
 	if err := fs.Parse(args); err != nil {
@@ -120,13 +124,13 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: local receipt signer is unavailable")
 	}
-	if receipt.Verdict != contracts.WorkstationVerdictDeny {
-		return 0
-	}
 	receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
 		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: receipt persistence is unavailable")
+	}
+	if receipt.Verdict != contracts.WorkstationVerdictDeny {
+		return 0
 	}
 	return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s)", classification.Reason, receipt.ReasonCode, receiptPath))
 }
@@ -149,7 +153,7 @@ func writeHookDeny(stdout io.Writer, reason string) error {
 }
 
 func printHookUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--signing-seed-file PATH]")
+	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--policy-profile PATH] [--signing-seed-file PATH]")
 }
 
 func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
@@ -224,7 +228,8 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 	effectType, effectMode, defaultAction, defaultTool := workstation.EffectDefaults(classification.Class)
 	action := firstNonEmptyString(classification.Action, defaultAction)
 	toolID := firstNonEmptyString(classification.ToolID, payload.ToolName, defaultTool)
-	profile, err := workstation.LoadPolicyProfileFile("")
+	targetFingerprint := fingerprintHookTarget(classification.Target)
+	profile, err := workstation.LoadPolicyProfileFile(opts.PolicyProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +253,18 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 	if err != nil {
 		return nil, fmt.Errorf("load workstation signing key: %w", err)
 	}
-	return workstation.Decide(profile, req, workstation.DecisionOptions{SigningSeed: seed})
+	return workstation.Decide(profile, req, workstation.DecisionOptions{
+		SigningSeed:     seed,
+		PersistedTarget: targetFingerprint,
+		PersistedMetadata: map[string]string{
+			"target_binding": "sha256:utf-8",
+		},
+	})
+}
+
+func fingerprintHookTarget(target string) string {
+	sum := sha256.Sum256([]byte(target))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func inputString(input map[string]any, keys ...string) string {

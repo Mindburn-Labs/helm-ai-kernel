@@ -17,6 +17,7 @@ import (
 func TestHookPreToolDeniesDestructiveBashAndWritesReceipt(t *testing.T) {
 	tmp := t.TempDir()
 	restoreHookClock(t)
+	command := "rm -rf /tmp/helm-demo"
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s1","cwd":"/repo"}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
@@ -40,6 +41,12 @@ func TestHookPreToolDeniesDestructiveBashAndWritesReceipt(t *testing.T) {
 	}
 	if receipt.Verdict != contracts.WorkstationVerdictDeny || receipt.ReasonCode != "OPERATE_PERMISSIONS_EMPTY" {
 		t.Fatalf("receipt = %s/%s, want DENY/OPERATE_PERMISSIONS_EMPTY", receipt.Verdict, receipt.ReasonCode)
+	}
+	if receipt.Request.Target != fingerprintHookTarget(command) {
+		t.Fatalf("receipt target = %q, want fingerprint", receipt.Request.Target)
+	}
+	if receipt.Request.Metadata["target_binding"] != "sha256:utf-8" {
+		t.Fatalf("target binding = %q, want sha256:utf-8", receipt.Request.Metadata["target_binding"])
 	}
 	if ok, err := workstation.VerifyDecisionReceiptSignature(receipt); err != nil || !ok {
 		t.Fatalf("receipt signature ok=%v err=%v", ok, err)
@@ -80,8 +87,11 @@ func TestHookPreToolDeniesDestructiveBashAndWritesReceipt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read receipt for tamper test: %v", err)
 	}
+	if strings.Contains(string(raw), command) {
+		t.Fatalf("receipt leaked raw command: %s", string(raw))
+	}
 	tampered := filepath.Join(tmp, "tampered-decision.json")
-	if err := os.WriteFile(tampered, []byte(strings.Replace(string(raw), "rm -rf /tmp/helm-demo", "rm -rf /tmp/helm-demo2", 1)), 0o600); err != nil {
+	if err := os.WriteFile(tampered, []byte(strings.Replace(string(raw), fingerprintHookTarget(command), fingerprintHookTarget(command+"2"), 1)), 0o600); err != nil {
 		t.Fatalf("write tampered receipt: %v", err)
 	}
 	stdout.Reset()
@@ -92,6 +102,88 @@ func TestHookPreToolDeniesDestructiveBashAndWritesReceipt(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "integrity: false") {
 		t.Fatalf("tampered verify-decision output missing integrity=false: %s", stdout.String())
+	}
+}
+
+func TestHookPreToolPersistsAllowReceiptWithCustomPolicyProfile(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	command := "rm -rf /tmp/helm-allow"
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-allow"},"session_id":"allow-session","cwd":"/repo"}`
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("allow hook should not emit denial output, got %s", stdout.String())
+	}
+	receipts := globReceipts(t, tmp)
+	if len(receipts) != 1 {
+		t.Fatalf("receipts = %v, want one", receipts)
+	}
+	receipt, err := workstation.LoadDecisionReceipt(receipts[0])
+	if err != nil {
+		t.Fatalf("load receipt: %v", err)
+	}
+	if receipt.Verdict != contracts.WorkstationVerdictAllow {
+		t.Fatalf("verdict = %s, want ALLOW", receipt.Verdict)
+	}
+	if receipt.Request.Target != fingerprintHookTarget(command) {
+		t.Fatalf("receipt target = %q, want fingerprint", receipt.Request.Target)
+	}
+	if ok, err := workstation.VerifyDecisionReceiptSignature(receipt); err != nil || !ok {
+		t.Fatalf("receipt signature ok=%v err=%v", ok, err)
+	}
+	trustedKey, err := loadTrustedPublicKeyFile(workstationSigningPublicKeyPath(tmp))
+	if err != nil {
+		t.Fatalf("load hook trusted public key: %v", err)
+	}
+	if ok, err := workstation.VerifyDecisionReceiptWithTrustedKey(receipt, trustedKey); err != nil || !ok {
+		t.Fatalf("trusted receipt verification ok=%v err=%v", ok, err)
+	}
+}
+
+func TestBuildHookDecisionReceiptEvaluatesRawTargetBeforePersistingFingerprint(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	target := "https://api.github.com/repos/Mindburn-Labs/helm"
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	receipt, err := buildHookDecisionReceipt(
+		hookOptions{Client: "codex", DataDir: tmp, PolicyProfile: profile},
+		preToolPayload{ToolName: "Bash", SessionID: "network-allow", CWD: "/repo"},
+		hookClassification{
+			ShouldDecide: true,
+			Class:        "network",
+			Target:       target,
+			Action:       "network_egress",
+			ToolID:       "shell",
+			Reason:       "network egress",
+		},
+	)
+	if err != nil {
+		t.Fatalf("build receipt: %v", err)
+	}
+	if receipt.Verdict != contracts.WorkstationVerdictAllow {
+		t.Fatalf("verdict = %s/%s, want ALLOW", receipt.Verdict, receipt.ReasonCode)
+	}
+	if receipt.Request.Target != fingerprintHookTarget(target) {
+		t.Fatalf("receipt target = %q, want fingerprint", receipt.Request.Target)
+	}
+	path, err := writeDecisionReceipt(filepath.Join(tmp, "hook-network.json"), "", receipt)
+	if err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read receipt: %v", err)
+	}
+	if strings.Contains(string(raw), target) {
+		t.Fatalf("receipt leaked raw target: %s", string(raw))
+	}
+	if ok, err := workstation.VerifyDecisionReceiptSignature(receipt); err != nil || !ok {
+		t.Fatalf("receipt signature ok=%v err=%v", ok, err)
 	}
 }
 
@@ -181,6 +273,26 @@ func TestHookPreToolFailsClosedWhenReceiptCannotPersist(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "receipt persistence is unavailable") {
 		t.Fatalf("hook should explicitly deny receipt persistence failure, output=%s", stdout.String())
+	}
+}
+
+func TestHookPreToolFailsClosedWhenAllowReceiptCannotPersist(t *testing.T) {
+	tmp := t.TempDir()
+	if _, err := ensureLocalWorkstationSigningSeed(tmp); err != nil {
+		t.Fatalf("prepare local signing key: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "receipts"), []byte("not a directory\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/allowed-by-profile"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "receipt persistence is unavailable") {
+		t.Fatalf("hook should explicitly deny allow-receipt persistence failure, output=%s", stdout.String())
 	}
 }
 
@@ -292,8 +404,8 @@ func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load receipt: %v", err)
 	}
-	if receipt.Request.Target != ".env" {
-		t.Fatalf("receipt target = %q, want .env", receipt.Request.Target)
+	if receipt.Request.Target != fingerprintHookTarget(".env") {
+		t.Fatalf("receipt target = %q, want fingerprint", receipt.Request.Target)
 	}
 }
 

@@ -18,7 +18,9 @@ import (
 )
 
 type DecisionOptions struct {
-	SigningSeed []byte
+	SigningSeed       []byte
+	PersistedTarget   string
+	PersistedMetadata map[string]string
 }
 
 func LoadPolicyProfileFile(path string) (contracts.WorkstationPolicyProfile, error) {
@@ -57,16 +59,17 @@ func Decide(
 		Metadata:   req.Metadata,
 	}
 	verdict, reasonCode, reason := EvaluateEvent(profile, event)
+	persistedReq := persistedDecisionRequest(req, opts)
 	receipt := &contracts.WorkstationPolicyDecisionReceipt{
 		ReceiptVersion: contracts.AgentRunReceiptVersion,
 		DecisionID: deterministicID(
 			"wpd",
 			req.RequestID,
 			req.EffectType,
-			req.Target,
+			persistedReq.Target,
 			firstNonEmpty(profile.ID, contracts.PolicyProfileWorkstationObserveDraftV1),
 		),
-		Request:       req,
+		Request:       persistedReq,
 		PolicyProfile: firstNonEmpty(profile.ID, contracts.PolicyProfileWorkstationObserveDraftV1),
 		Verdict:       verdict,
 		ReasonCode:    reasonCode,
@@ -78,6 +81,36 @@ func Decide(
 		return nil, err
 	}
 	return receipt, nil
+}
+
+func persistedDecisionRequest(req contracts.WorkstationDecisionRequest, opts DecisionOptions) contracts.WorkstationDecisionRequest {
+	persisted := req
+	if opts.PersistedTarget != "" {
+		persisted.Target = opts.PersistedTarget
+	}
+	if len(opts.PersistedMetadata) == 0 {
+		return persisted
+	}
+	metadata := cloneStringMap(req.Metadata)
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	for key, value := range opts.PersistedMetadata {
+		metadata[key] = value
+	}
+	persisted.Metadata = metadata
+	return persisted
+}
+
+func cloneStringMap(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 // VerifyDecisionReceiptSignature checks receipt integrity against the public key

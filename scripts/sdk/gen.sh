@@ -198,6 +198,7 @@ cat > "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'HEADER'
 from __future__ import annotations
 import json
 import pprint
+import re
 from datetime import datetime
 from typing import Annotated, Any, ClassVar, Dict, List, Literal, Optional, Set, Union
 

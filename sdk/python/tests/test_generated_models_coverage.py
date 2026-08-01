@@ -218,6 +218,21 @@ def test_generated_models_exercise_json_entrypoints() -> None:
     assert len(exercised) >= 250, failures[:10]
 
 
+def test_generated_evaluate_request_session_id_regex_uses_stdlib_re() -> None:
+    request = types_gen.EvaluateRequest(
+        tool="read_file",
+        effect_level="read",
+        session_id="session-1",
+    )
+    assert request.session_id == "session-1"
+    with pytest.raises(ValidationError):
+        types_gen.EvaluateRequest(
+            tool="read_file",
+            effect_level="read",
+            session_id="   ",
+        )
+
+
 def test_generated_models_exercise_nullable_and_nested_false_paths() -> None:
     exercised: list[str] = []
     for name, model in CLASSES.items():

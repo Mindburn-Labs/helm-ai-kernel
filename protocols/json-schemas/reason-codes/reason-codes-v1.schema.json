@@ -47,7 +47,23 @@
             "isolation",
             "jurisdiction",
             "industry",
-            "custom"
+            "custom",
+            "agent_lifecycle",
+            "approval",
+            "compute",
+            "connector",
+            "connector.ton.acton",
+            "delegation",
+            "environment",
+            "gui-action",
+            "harness",
+            "host_evidence",
+            "identity",
+            "network",
+            "operations",
+            "privilege",
+            "safe-deprecation",
+            "threat"
           ],
           "description": "Functional domain of this reason code"
         },
@@ -67,6 +83,16 @@
           "type": "string",
           "pattern": "^\\d+\\.\\d+\\.\\d+$",
           "description": "Registry version that introduced this code"
+        },
+        "finality": {
+          "type": "string",
+          "enum": ["class_forbidden", "ungranted", "instance_parameter", "instance_context", "instance_membership"],
+          "description": "What kind of refusal this code represents, when the lesson is unambiguous. Absent means unclassified: a denial on this code teaches a consumer nothing. Vocabulary shared with DenialFinality in policy-schema/v1/verdict.proto and the workstation receipt schema."
+        },
+        "disclosure": {
+          "type": "string",
+          "enum": ["none", "scalar_bound", "capability_name"],
+          "description": "What a counterfactual on this code may reveal. Absent means not yet considered; an explicit none means considered and deliberately discloses nothing. scalar_bound pairs only with finality instance_parameter, capability_name only with ungranted."
         }
       },
       "required": ["code", "applies_to", "domain", "description", "since"]

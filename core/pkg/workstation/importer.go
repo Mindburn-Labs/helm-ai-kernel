@@ -327,7 +327,11 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 
 	for i, event := range events {
 		normalizeEvent(&event, i)
-		verdict, reasonCode, reason := EvaluateEvent(profile, event)
+		evaluatedVerdict, evaluatedReasonCode, evaluatedReason := EvaluateEvent(profile, event)
+		verdict, reasonCode, reason := evaluatedVerdict, evaluatedReasonCode, evaluatedReason
+		// The declared verdict and reason code below record the observed event,
+		// but are untrusted. A complete learning receipt is emitted only when the
+		// recorded code agrees with the evaluation that produced it.
 		if event.Verdict != "" {
 			verdict = strings.ToUpper(event.Verdict)
 		}
@@ -373,7 +377,7 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 			recurringEffects = append(recurringEffects, loop)
 		}
 		if verdict == contracts.WorkstationVerdictDeny {
-			deniedEffects = append(deniedEffects, contracts.AgentDeniedEffect{
+			denied := contracts.AgentDeniedEffect{
 				EffectID:   event.EventID,
 				EffectType: event.EffectType,
 				ToolID:     event.ToolID,
@@ -381,7 +385,11 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 				ReasonCode: reasonCode,
 				Reason:     firstNonEmpty(event.Reason, reason),
 				OccurredAt: event.OccurredAt,
-			})
+			}
+			if evaluatedVerdict == contracts.WorkstationVerdictDeny && reasonCode == evaluatedReasonCode {
+				denied = evaluatedDeniedEffect(profile, event, evaluatedReasonCode, evaluatedReason)
+			}
+			deniedEffects = append(deniedEffects, denied)
 		}
 	}
 	return toolActions, memoryEffects, recurringEffects, deniedEffects

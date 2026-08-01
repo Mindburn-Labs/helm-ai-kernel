@@ -4,6 +4,11 @@
 // proof unless separately bound to HELM verdict receipts or EvidencePacks.
 package agentprovenance
 
+// quantum_posture: agent provenance verification uses classical Ed25519
+// signatures and SHA-256 digests in this release. The pack-extraction bound
+// added for F-24 is a resource limit and carries no cryptographic claim; no
+// post-quantum assurance is made by this package.
+
 import (
 	"archive/tar"
 	"crypto/ed25519"
@@ -109,6 +114,12 @@ type redactionReport struct {
 	Profile  string   `json:"profile"`
 	Failures []string `json:"failures,omitempty"`
 }
+
+// maxProvenancePackBytes caps the total decompressed size of an agent
+// provenance pack. Packs are verification inputs from an untrusted source; the
+// limit is generous for legitimate packs and small enough that a decompression
+// bomb cannot exhaust the verifier's disk.
+const maxProvenancePackBytes int64 = 512 << 20 // 512 MiB
 
 func ParseTrustedKeysJSON(raw []byte) (TrustedKeySet, error) {
 	var keyed map[string]string
@@ -444,6 +455,11 @@ func unpackTar(path string) (string, func(), error) {
 	}
 	cleanup := func() { _ = os.RemoveAll(tmp) }
 	tr := tar.NewReader(f)
+	// Bound the extraction. The path-traversal check below shows tar safety was
+	// considered, but nothing capped the decompressed size, so a small crafted
+	// archive could fill the disk of whoever verifies it — and the party running
+	// this is verifying provenance of an artifact they do not yet trust.
+	var extracted int64
 	for {
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -461,21 +477,32 @@ func unpackTar(path string) (string, func(), error) {
 			return "", func() {}, fmt.Errorf("unsafe tar path %q", header.Name)
 		}
 		dest := filepath.Join(tmp, filepath.FromSlash(header.Name))
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		// The extraction directory is a private staging area for verification,
+		// so it need not be group- or world-readable.
+		if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
 			cleanup()
 			return "", func() {}, err
 		}
-		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
+		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
 		if err != nil {
 			cleanup()
 			return "", func() {}, err
 		}
-		if _, err := io.Copy(out, tr); err != nil {
-			_ = out.Close()
-			cleanup()
-			return "", func() {}, err
-		}
+		// CopyN with one byte of headroom: reaching the cap means the archive
+		// declared less than it carries, which is the bomb signature.
+		written, copyErr := io.CopyN(out, tr, maxProvenancePackBytes-extracted+1)
 		_ = out.Close()
+		if copyErr != nil && !errors.Is(copyErr, io.EOF) {
+			cleanup()
+			return "", func() {}, copyErr
+		}
+		extracted += written
+		if extracted > maxProvenancePackBytes {
+			cleanup()
+			return "", func() {}, fmt.Errorf(
+				"agent provenance pack exceeds %d bytes when decompressed; refusing to extract further",
+				maxProvenancePackBytes)
+		}
 	}
 	return tmp, cleanup, nil
 }

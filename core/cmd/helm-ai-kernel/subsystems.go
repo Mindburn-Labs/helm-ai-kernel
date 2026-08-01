@@ -164,11 +164,12 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	RegisterLaunchpadRoutes(mux, svc)
 
 	// --- Obligation ---
-	mux.HandleFunc("/api/v1/obligation/create", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/obligation/create", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var req struct {
 			GoalSpec string `json:"goal_spec"`
 		}
@@ -183,10 +184,10 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(obl)
-	})
+	}))
 
 	// --- Boundary ---
-	mux.HandleFunc("/api/v1/boundary/check", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/boundary/check", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		if svc.BoundaryEnforcer == nil {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "disabled"})
@@ -205,22 +206,22 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"enforcer": "active", "status": "ready"})
-	})
+	}))
 
 	// --- Sandbox ---
-	mux.HandleFunc("/api/v1/sandbox/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/sandbox/status", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"sandbox": "in-process", "status": "active"})
-	})
+	}))
 
 	// --- Config ---
-	mux.HandleFunc("/api/v1/config/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/config/status", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"port":      svc.Config.Port,
 			"log_level": svc.Config.LogLevel,
 		})
-	})
+	}))
 
 	// --- Credentials ---
 	if svc.Creds != nil {
@@ -255,7 +256,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	// ═══════════════════════════════════════════════════════════════
 
 	// --- Governed Memory (LKS/CKS) ---
-	mux.HandleFunc("/api/v1/memory/list", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/memory/list", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		tier := memory.MemoryTier(r.URL.Query().Get("tier"))
 		if tier == "" {
 			tier = memory.TierLKS
@@ -268,13 +269,15 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"tier": tier, "entries": entries, "count": len(entries)})
-	})
+	}))
 
-	mux.HandleFunc("/api/v1/memory/promote", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/memory/promote", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
+		// Bound the body: this handler mutates governed memory.
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var req memory.PromotionRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			api.WriteBadRequest(w, "Invalid body")
@@ -287,49 +290,49 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(result)
-	})
+	}))
 
 	// --- Context Bundles ---
-	mux.HandleFunc("/api/v1/context/bundles", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/context/bundles", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		bundles := svc.BundleStore.ListContexts()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"bundles": bundles, "count": len(bundles)})
-	})
+	}))
 
 	// --- Economic Ledger ---
-	mux.HandleFunc("/api/v1/economic/authorities", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/economic/authorities", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		authorities := svc.EconLedger.ListAuthorities()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"authorities": authorities, "count": len(authorities)})
-	})
+	}))
 
-	mux.HandleFunc("/api/v1/economic/charges", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/economic/charges", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		charges := svc.EconLedger.ListCharges()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"charges": charges, "count": len(charges)})
-	})
+	}))
 
-	mux.HandleFunc("/api/v1/economic/allocations", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/economic/allocations", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		allocations := svc.EconLedger.ListAllocations()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"allocations": allocations, "count": len(allocations)})
-	})
+	}))
 
 	// --- Edge Governance ---
-	mux.HandleFunc("/api/v1/governance/edge/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/governance/edge/status", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"mode":           svc.EdgeAssistant.Config.Mode,
 			"fallback":       svc.EdgeAssistant.Fallback.Strategy,
 			"max_latency_ms": svc.EdgeAssistant.Config.MaxLatencyMs,
 		})
-	})
+	}))
 
 	// --- Compatibility Matrix ---
-	mux.HandleFunc("/api/v1/compatibility", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/compatibility", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(svc.CompatMatrix)
-	})
+	}))
 
 	// Suppress unused variable
 	_ = ctx

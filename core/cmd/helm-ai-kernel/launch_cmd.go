@@ -185,7 +185,9 @@ func verifyLaunchEvidenceRefs(refs []string) []launchEvidenceCheck {
 			}
 			verifyTarget = tempDir
 		}
-		report, err := verifier.VerifyBundle(verifyTarget)
+		// Pack was sealed by this process, so its dev-local self-attested
+		// seal carries no provenance question (F-02).
+		report, err := verifier.VerifyLocallyProducedBundle(verifyTarget)
 		if cleanup != nil {
 			cleanup()
 		}

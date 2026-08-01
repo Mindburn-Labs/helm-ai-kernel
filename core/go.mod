@@ -16,7 +16,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/google/cel-go v0.28.0
+	github.com/google/cel-go v0.29.0
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.12.3
 	github.com/minio/minio-go/v7 v7.0.100
@@ -27,19 +27,20 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tetratelabs/wazero v1.11.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.65.0
-	go.opentelemetry.io/otel v1.43.0
+	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.43.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0
-	go.opentelemetry.io/otel/metric v1.43.0
+	go.opentelemetry.io/otel/metric v1.44.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
-	go.opentelemetry.io/otel/trace v1.43.0
+	go.opentelemetry.io/otel/trace v1.44.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/text v0.39.0
 	golang.org/x/time v0.15.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.48.2
+	mvdan.cc/sh/v3 v3.11.0
 )
 
 require (

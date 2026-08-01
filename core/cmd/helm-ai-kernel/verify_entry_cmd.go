@@ -1,5 +1,10 @@
 package main
 
+// quantum_posture: single-entry verification checks SHA-256 Merkle inclusion
+// and passes SD-JWT presentations through unverified; all primitives are
+// classical (Ed25519/SHA-256) and no post-quantum assurance is claimed or
+// provided by this file.
+
 import (
 	"encoding/json"
 	"flag"
@@ -8,6 +13,7 @@ import (
 	"os"
 	"strings"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
 )
 
@@ -28,34 +34,39 @@ import (
 // Exit codes: 0 = entry verified · 1 = verification failed · 2 = runtime error.
 func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("verify-entry", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		entryPath  string
+		packRoot   string
 		proofPath  string
 		jsonOutput bool
 	)
 	cmd.StringVar(&entryPath, "entry", "", "Manifest entry path to verify (e.g. receipts/decision-001.json)")
+	cmd.StringVar(&packRoot, "entries-merkle-root", "", "The pack's entries_merkle_root, obtained independently (00_INDEX.json, a signed seal, or a transparency log). Without it the proof can only be checked against the root it carries about itself, which proves nothing.")
 	cmd.StringVar(&proofPath, "proof", "", "Path to the inclusion-proof JSON artifact")
-	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON")
+	cmd.BoolVar(&jsonOutput, "json", false, "Output result as JSON (alias for --format=json)")
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "verify entry", cliui.FormatText); !ok {
+		return code
+	}
+	jsonOutput = jsonOutput || formatFlag.IsJSON()
+	// Errors follow the effective output mode (legacy --json included).
+	errFormat := cliui.FormatText
+	if jsonOutput {
+		errFormat = cliui.FormatJSON
 	}
 	if proofPath == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --proof <file> is required for single-entry verification")
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("verify entry", "--proof <file> is required for single-entry verification"), errFormat)
 	}
 
 	data, err := os.ReadFile(proofPath)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: cannot read proof: %v\n", err)
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify entry", "cannot read proof"), errFormat)
 	}
 	var proof evidencepack.InclusionProof
 	if err := json.Unmarshal(data, &proof); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: invalid proof JSON: %v\n", err)
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify entry", "invalid proof JSON"), errFormat)
 	}
 
 	// If --entry is supplied, it MUST match the proof's bound entry. This stops a
@@ -78,7 +89,22 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 		CreatedAt:    proof.Binding.CreatedAt,
 	}
 
-	if err := evidencepack.VerifyInclusionProof(&proof); err != nil {
+	// Without an externally supplied root every input is drawn from the same
+	// attacker-controlled document, so membership cannot be established (F-10).
+	if strings.TrimSpace(packRoot) == "" {
+		if err := evidencepack.VerifyInclusionProof(&proof); err != nil {
+			result.Verified = false
+			result.Reason = err.Error()
+			return emitEntryResult(stdout, result, jsonOutput)
+		}
+		result.Verified = false
+		result.SelfAttested = true
+		result.Reason = "proof is internally consistent, but no --entries-merkle-root was supplied: " +
+			"the root was read from the proof itself, so this does not show the entry belongs to any pack"
+		return emitEntryResult(stdout, result, jsonOutput)
+	}
+
+	if err := evidencepack.VerifyInclusionProofAgainstRoot(&proof, strings.TrimSpace(packRoot)); err != nil {
 		result.Verified = false
 		result.Reason = err.Error()
 		return emitEntryResult(stdout, result, jsonOutput)
@@ -93,6 +119,9 @@ func runVerifyEntryCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 type entryVerifyResult struct {
+	// SelfAttested marks a result where the merkle root came from the proof
+	// itself rather than an external source, so membership was not established.
+	SelfAttested    bool     `json:"self_attested,omitempty"`
 	Verified        bool     `json:"verified"`
 	Entry           string   `json:"entry"`
 	PackID          string   `json:"pack_id,omitempty"`

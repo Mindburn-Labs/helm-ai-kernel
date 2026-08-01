@@ -1,8 +1,10 @@
 package crypto
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
@@ -137,6 +139,58 @@ func TestDecisionV2_JCSEnvelopePreventsFieldBoundaryCollisions(t *testing.T) {
 	}
 	if string(first) == string(second) {
 		t.Fatalf("distinct V2 decision fields must not share a signing payload: %s", first)
+	}
+}
+
+func TestDecisionV2PreimageMatchesGenericJCS(t *testing.T) {
+	const (
+		id                = "dec-\u2028\"quoted\""
+		verdict           = "DENY\ncontrol\x01"
+		reasonCode        = "POLICY\\DENY"
+		phenotypeHash     = "sha256:<phenotype>"
+		policyContentHash = "sha256:policy"
+		effectDigest      = "sha256:effect"
+	)
+
+	got, err := CanonicalizeDecisionV2(id, verdict, reasonCode, phenotypeHash, policyContentHash, effectDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := canonicalize.JCS(decisionV2SigningEnvelope{
+		SignatureVersion:  contracts.DecisionRecordSignatureV2,
+		ID:                id,
+		Verdict:           verdict,
+		ReasonCode:        reasonCode,
+		PhenotypeHash:     phenotypeHash,
+		PolicyContentHash: policyContentHash,
+		EffectDigest:      effectDigest,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("V2 preimage drifted from JCS\n got: %s\nwant: %s", got, want)
+	}
+
+	invalidUTF8 := string([]byte{0xff})
+	got, err = CanonicalizeDecisionV2(invalidUTF8, verdict, reasonCode, phenotypeHash, policyContentHash, effectDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err = canonicalize.JCS(decisionV2SigningEnvelope{
+		SignatureVersion:  contracts.DecisionRecordSignatureV2,
+		ID:                invalidUTF8,
+		Verdict:           verdict,
+		ReasonCode:        reasonCode,
+		PhenotypeHash:     phenotypeHash,
+		PolicyContentHash: policyContentHash,
+		EffectDigest:      effectDigest,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("V2 invalid UTF-8 preimage drifted from JCS\n got: %s\nwant: %s", got, want)
 	}
 }
 

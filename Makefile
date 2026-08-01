@@ -6,7 +6,9 @@ VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
 PREPARE_VERSION := $(if $(filter command line,$(origin VERSION)),$(VERSION),$(RELEASE_VERSION))
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
+CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256 ?=
+CONSOLE_LOCAL_SIDECAR_MANIFEST_LDFLAG := $(if $(strip $(CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256)),-X main.consoleLocalSidecarManifestSHA256=$(CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256))
+LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME) $(CONSOLE_LOCAL_SIDECAR_MANIFEST_LDFLAG)
 QUALITY := python3 scripts/ci/quality.py
 PYTHON ?= python3
 
@@ -357,7 +359,7 @@ SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date -u +%s)
 VEX_FILE := release/vex/v$(VERSION).openvex.json
 VEX_SOURCE_DATE_EPOCH := $(if $(filter undefined,$(SOURCE_DATE_EPOCH_ORIGIN)),$(shell python3 -c 'import datetime,json,sys; data=json.load(open(sys.argv[1])); print(int(datetime.datetime.fromisoformat(data["timestamp"].replace("Z","+00:00")).timestamp()))' "$(VEX_FILE)" 2>/dev/null || printf '%s' "$(SOURCE_DATE_EPOCH)"),$(SOURCE_DATE_EPOCH))
 REPRO_BUILD_TIME := $(shell { date -u -r $(SOURCE_DATE_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$(SOURCE_DATE_EPOCH)" +%Y-%m-%dT%H:%M:%SZ; })
-REPRO_LDFLAGS := -s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(REPRO_BUILD_TIME)
+REPRO_LDFLAGS := -s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(REPRO_BUILD_TIME) $(CONSOLE_LOCAL_SIDECAR_MANIFEST_LDFLAG)
 REPRO_GOFLAGS := -trimpath -buildvcs=false
 
 release-binaries-reproducible:

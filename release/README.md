@@ -54,6 +54,16 @@ data. Browser UI bundles are not Kernel release assets. Where a release
 declares the loopback Console local-sidecar, it is a verified standalone native
 closure—not a Homebrew resource or a hosted UI.
 
+For v0.8.0, the signed Console aggregate manifest is source-pinned and its
+SHA-256 is compiled into every standalone Kernel binary before release staging.
+Each `helm-ai-kernel-<os>-<arch>-console.tar.gz` asset contains that binary
+alongside the exact `console/` layout: both manifest bundles, all raw native
+target assets, and the matching extracted closure. The local launcher must
+match the compiled manifest digest and recheck the archive, checksum, inventory,
+provenance, source, and target relations before it issues a session or executes
+the bundled Node runtime. No host Cosign installation or network call is
+required at runtime.
+
 ## Validation
 
 ```bash

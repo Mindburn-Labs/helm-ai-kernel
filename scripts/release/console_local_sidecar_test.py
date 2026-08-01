@@ -22,6 +22,12 @@ SOURCE = {
     "package_lock_sha256": "c" * 64,
 }
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+RELEASE_SOURCE_PIN = {
+    "commit": "4534c1bf14d987f98bab5b6bf00490b21c2f5ed8",
+    "tree": "d2cf6050ada4c9ca37249c6134b59eaa0e709bf0",
+    "version": "0.2.0",
+    "package_lock_sha256": "f31193aff2db5e6c00a39c2ecffba1d70ec72152ec0014136ed5562dbd40505f",
+}
 
 
 def digest(data: bytes) -> str:
@@ -33,6 +39,13 @@ def write_file(archive: tarfile.TarFile, name: str, data: bytes, mode: int = 0o6
     info.size = len(data)
     info.mode = mode
     archive.addfile(info, io.BytesIO(data))
+
+
+def write_directory(archive: tarfile.TarFile, name: str) -> None:
+    info = tarfile.TarInfo(f"{name}/")
+    info.type = tarfile.DIRTYPE
+    info.mode = 0o755
+    archive.addfile(info)
 
 
 def build_target(root: Path, target: str) -> dict[str, object]:
@@ -51,7 +64,7 @@ def build_target(root: Path, target: str) -> dict[str, object]:
         "build": sidecar.BUILD_CONTRACT,
         "source": SOURCE,
         "runtime": {
-            "node": "22.16.0",
+            "node": "v22.16.0",
             "bundled_node": {"executable": "runtime/node/bin/node", "license_notice": "runtime/node/LICENSE"},
             "npm": "10.9.2",
             "next": "15.4.2",
@@ -61,13 +74,23 @@ def build_target(root: Path, target: str) -> dict[str, object]:
         "bundle_sha256": digest(inventory),
         "inventory": "INVENTORY.sha256",
         "bundle_hash_scope": sidecar.BUNDLE_HASH_SCOPE,
-        "signature": "none; this unsigned local artifact has no release authority",
+        "signature": sidecar.UNSIGNED_INNER_SIGNATURE,
     }
     closure_root = f"helm-console-local-sidecar-{target}"
     artifact_dir = root / f"artifact-{target}"
     artifact_dir.mkdir()
     archive = artifact_dir / archive_name
     with tarfile.open(archive, "w:gz") as output:
+        # Match the canonical directory entries produced by the Console
+        # packager's `tar -czf -C <parent> <closure-root>` invocation.
+        for directory in (
+            closure_root,
+            f"{closure_root}/app",
+            f"{closure_root}/runtime",
+            f"{closure_root}/runtime/node",
+            f"{closure_root}/runtime/node/bin",
+        ):
+            write_directory(output, directory)
         for name, data in payload.items():
             write_file(output, f"{closure_root}/{name}", data, 0o755 if name.endswith("/node") else 0o644)
         write_file(output, f"{closure_root}/INVENTORY.sha256", inventory)
@@ -124,6 +147,7 @@ def build_release(root: Path) -> tuple[Path, Path]:
     manifest_dir.mkdir()
     (manifest_dir / sidecar.MANIFEST_NAME).write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
     (manifest_dir / sidecar.MANIFEST_BUNDLE_NAME).write_text("test-only bundle", encoding="utf-8")
+    (manifest_dir / sidecar.KERNEL_MANIFEST_BUNDLE_NAME).write_text("test-only Kernel bundle", encoding="utf-8")
     pins = root / "pins.json"
     pins.write_text(json.dumps({
         "schema": sidecar.PINS_SCHEMA,
@@ -136,16 +160,143 @@ def build_release(root: Path) -> tuple[Path, Path]:
     return root, pins
 
 
+def manifest_digest(root: Path) -> str:
+    return sidecar.sha256_path(next(root.rglob(sidecar.MANIFEST_NAME)))
+
+
+def write_kernel_binaries(root: Path) -> None:
+    for target, name in sidecar.KERNEL_BINARY_NAMES.items():
+        path = root / name
+        path.write_bytes(f"kernel binary for {target}\n".encode())
+        path.chmod(0o755)
+
+
 class ConsoleLocalSidecarTests(unittest.TestCase):
+    def test_release_accepts_canonical_console_packager_directory_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            # build_target writes explicit `root/` directory records, exactly
+            # as the native Console release packager does.
+            verified = sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
+            self.assertEqual(len(verified), 18)
+
     def test_valid_pinned_release_stages_all_verified_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, pins = build_release(Path(directory))
             verified = sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
             self.assertEqual(len(verified), 18)
             output = root / "staged"
-            copied = sidecar.stage_release(root, output, pins, "v0.8.0", require_cosign=False)
-            self.assertEqual({path.name for path in copied}, {path.name for path in verified})
+            copied = sidecar.stage_release(
+                root,
+                output,
+                pins,
+                "v0.8.0",
+                require_cosign=False,
+                expected_manifest_sha256=manifest_digest(root),
+            )
+            self.assertEqual(
+                {path.name for path in copied},
+                {path.name for path in [*verified, next(root.rglob(sidecar.KERNEL_MANIFEST_BUNDLE_NAME))]},
+            )
             self.assertTrue((output / sidecar.MANIFEST_NAME).is_file())
+
+    def test_release_layouts_package_the_verified_console_tree_next_to_each_kernel_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            assets = root / "release-assets"
+            copied = sidecar.stage_release(
+                root,
+                assets,
+                pins,
+                "v0.8.0",
+                require_cosign=False,
+                expected_manifest_sha256=manifest_digest(root),
+            )
+            write_kernel_binaries(assets)
+            layouts = sidecar.package_release_layouts(
+                assets,
+                assets,
+                pins,
+                "v0.8.0",
+                require_cosign=False,
+                expected_manifest_sha256=manifest_digest(root),
+            )
+            first = {path.name: path.read_bytes() for path in layouts}
+            repeated = sidecar.package_release_layouts(
+                assets,
+                assets,
+                pins,
+                "v0.8.0",
+                require_cosign=False,
+                expected_manifest_sha256=manifest_digest(root),
+            )
+            self.assertEqual(first, {path.name: path.read_bytes() for path in repeated})
+
+            raw_names = {path.name for path in copied}
+            for target, layout in zip(sidecar.TARGETS, layouts):
+                root_name = sidecar.layout_root_name(target)
+                with tarfile.open(layout, "r:gz") as archive:
+                    names = set(archive.getnames())
+                    self.assertIn(f"{root_name}/helm-ai-kernel", names)
+                    self.assertTrue(raw_names <= {name.removeprefix(f"{root_name}/console/") for name in names})
+                    self.assertIn(
+                        f"{root_name}/console/helm-console-local-sidecar-{target}/app/helm-local-sidecar.mjs",
+                        names,
+                    )
+                    kernel = archive.extractfile(f"{root_name}/helm-ai-kernel")
+                    self.assertIsNotNone(kernel)
+                    self.assertEqual(kernel.read(), f"kernel binary for {target}\n".encode())
+
+    def test_release_staging_requires_the_kernel_manifest_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            next(root.rglob(sidecar.KERNEL_MANIFEST_BUNDLE_NAME)).unlink()
+            with self.assertRaisesRegex(ValueError, "Kernel aggregate manifest cosign bundle"):
+                sidecar.stage_release(
+                    root,
+                    root / "staged",
+                    pins,
+                    "v0.8.0",
+                    require_cosign=False,
+                    expected_manifest_sha256=manifest_digest(root),
+                )
+
+    def test_release_staging_requires_a_compiled_manifest_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            with self.assertRaisesRegex(ValueError, "requires the expected Console aggregate manifest SHA-256"):
+                sidecar.stage_release(
+                    root,
+                    root / "staged",
+                    pins,
+                    "v0.8.0",
+                    require_cosign=False,
+                    expected_manifest_sha256=None,
+                )
+
+    def test_release_rejects_tampered_or_missing_aggregate_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            manifest = next(root.rglob(sidecar.MANIFEST_NAME))
+            expected = manifest_digest(root)
+            manifest.write_text(manifest.read_text(encoding="utf-8") + " ", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "does not match the expected compiled digest"):
+                sidecar.verify_release(
+                    root,
+                    pins,
+                    "v0.8.0",
+                    require_cosign=False,
+                    expected_manifest_sha256=expected,
+                )
+            manifest.unlink()
+            with self.assertRaisesRegex(ValueError, "exactly one Console aggregate release manifest"):
+                sidecar.verify_release(
+                    root,
+                    pins,
+                    "v0.8.0",
+                    require_cosign=False,
+                    expected_manifest_sha256=expected,
+                )
 
     def test_release_rejects_unpinned_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -172,6 +323,16 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must not claim inner release authority"):
                 sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
 
+    def test_release_rejects_noncanonical_unsigned_inner_signature(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            manifest = next(root.rglob(sidecar.MANIFEST_NAME))
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["targets"][0]["inner_artifact"]["signature"] = "none; unexpected state"
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unexpected unsigned inner artifact signature"):
+                sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
+
     def test_release_rejects_out_of_order_native_targets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, pins = build_release(Path(directory))
@@ -181,6 +342,31 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             manifest.write_text(json.dumps(payload), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "ordered exactly"):
                 sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
+
+    def test_v080_source_pin_matches_the_authenticated_console_main_tuple(self) -> None:
+        pin = sidecar.resolve_pin(
+            REPOSITORY_ROOT / "release/console-local-sidecar-pins.json",
+            "v0.8.0",
+        )
+        self.assertEqual(pin["source_repository"], sidecar.CONSOLE_REPOSITORY)
+        self.assertEqual(pin["source"], RELEASE_SOURCE_PIN)
+
+    def test_manifest_digest_flows_into_normal_and_reproducible_linker_flags(self) -> None:
+        expected_digest = "d" * 64
+        env = os.environ.copy()
+        env.pop("GOROOT", None)
+        env["PATH"] = "/opt/homebrew/bin:/usr/bin:/bin"
+        result = subprocess.run(
+            ["make", "-pn", f"CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256={expected_digest}"],
+            cwd=REPOSITORY_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stdout, rf"(?m)^LDFLAGS := .*main\.consoleLocalSidecarManifestSHA256={expected_digest}$")
+        self.assertRegex(result.stdout, rf"(?m)^REPRO_LDFLAGS := .*main\.consoleLocalSidecarManifestSHA256={expected_digest}$")
 
     def test_kernel_cosign_verifier_preserves_the_console_producer_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -195,10 +381,19 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             fake_bin = Path(directory) / "bin"
             fake_bin.mkdir()
             fake_cosign = fake_bin / "cosign"
-            fake_cosign.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            fake_cosign.write_text(
+                "#!/usr/bin/env bash\n"
+                "case \" $* \" in\n"
+                "  *\" --certificate-identity https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v0.8.0 \"*) exit 0 ;;\n"
+                "  *\" --certificate-identity-regexp \"*) exit 0 ;;\n"
+                "  *) exit 23 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
             fake_cosign.chmod(0o755)
             env = os.environ.copy()
             env["PATH"] = f"{fake_bin}:{env['PATH']}"
+            env["KERNEL_RELEASE_TAG"] = "v0.8.0"
             result = subprocess.run(
                 ["bash", str(REPOSITORY_ROOT / "scripts/release/verify_cosign.sh"), str(artifacts)],
                 check=False,
@@ -209,6 +404,30 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("skipping Console producer bundle", result.stdout)
             self.assertIn("verified=2 failed=0", result.stdout)
+
+    def test_kernel_cosign_verifier_requires_both_manifest_bundles_for_a_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = Path(directory) / "artifacts"
+            artifacts.mkdir()
+            (artifacts / sidecar.MANIFEST_NAME).write_text("manifest", encoding="utf-8")
+            (artifacts / f"{sidecar.MANIFEST_NAME}.kernel.cosign.bundle").write_text("kernel", encoding="utf-8")
+            fake_bin = Path(directory) / "bin"
+            fake_bin.mkdir()
+            fake_cosign = fake_bin / "cosign"
+            fake_cosign.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            fake_cosign.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env['PATH']}"
+            env["KERNEL_RELEASE_TAG"] = "v0.8.0"
+            result = subprocess.run(
+                ["bash", str(REPOSITORY_ROOT / "scripts/release/verify_cosign.sh"), str(artifacts)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("requires the Console manifest plus both producer and Kernel bundles", result.stdout)
 
 
 if __name__ == "__main__":

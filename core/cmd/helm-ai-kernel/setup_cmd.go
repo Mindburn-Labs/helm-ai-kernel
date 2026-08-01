@@ -100,9 +100,10 @@ type setupSummary struct {
 
 func init() {
 	Register(Subcommand{
-		Name:  "setup",
-		Usage: "Install local Claude Code or Codex MCP/hook integration",
-		RunFn: runSetupCmd,
+		Name:   "setup",
+		Usage:  "Install local Claude Code or Codex MCP/hook integration",
+		RunFn:  runSetupCmd,
+		HelpFn: printSetupUsage,
 	})
 }
 
@@ -264,9 +265,10 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		summary.ScanGrade = grade
 	}
 	printSetupSummary(stdout, summary, opts.JSON)
-	// A project-scoped Codex config that Codex will not load until the
-	// project is trusted is not an effective install; do not report success.
-	if summary.MCPInstalled && summary.HookInstalled && !summary.CodexTrustPending {
+	// A missing client cannot load written config. Project-scoped Codex is
+	// intentionally unverified because its native inspection cannot prove that
+	// it loaded a project-local registry.
+	if summary.MCPInstalled && summary.HookInstalled && !summary.CodexTrustPending && summary.ClientState != "configured_client_missing" {
 		return 0
 	}
 	return 1

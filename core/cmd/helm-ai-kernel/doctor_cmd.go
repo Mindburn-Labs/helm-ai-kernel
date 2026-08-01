@@ -20,7 +20,13 @@ func init() {
 		Aliases: []string{"diag"},
 		Usage:   "Diagnose HELM setup (crypto, policies, connectors, config)",
 		RunFn:   runDoctorCmd,
+		HelpFn:  printDoctorUsage,
 	})
+}
+
+func printDoctorUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: helm-ai-kernel doctor [--json] [--verbose]")
+	fmt.Fprintln(w, "Check local cryptography, policy, connector, and configuration readiness.")
 }
 
 // checkStatus represents the outcome of a single diagnostic check.

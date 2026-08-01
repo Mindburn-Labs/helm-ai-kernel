@@ -142,6 +142,23 @@ func TestHelpMatrix(t *testing.T) {
 	t.Logf("verified --help, -h, and help for %d canonical commands", len(canonicalNames))
 }
 
+func TestCommandSpecificHelp(t *testing.T) {
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"setup", "claude-code", "--help"}, want: "Protect an agent:"},
+		{args: []string{"quickstart", "--help"}, want: "--console"},
+		{args: []string{"watch", "--help"}, want: "--api-key-file"},
+		{args: []string{"doctor", "--help"}, want: "--verbose"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := Run(append([]string{"helm-ai-kernel"}, test.args...), &stdout, &stderr); code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), test.want) {
+			t.Fatalf("args=%v code=%d stdout=%q stderr=%q", test.args, code, stdout.String(), stderr.String())
+		}
+	}
+}
+
 func assertSafeHelp(t *testing.T, args []string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer

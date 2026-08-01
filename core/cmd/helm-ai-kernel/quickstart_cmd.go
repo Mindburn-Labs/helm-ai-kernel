@@ -38,9 +38,10 @@ type quickstartOptions struct {
 
 func init() {
 	Register(Subcommand{
-		Name:  "quickstart",
-		Usage: "Start local Kernel onboarding proof path",
-		RunFn: runQuickstartCmd,
+		Name:   "quickstart",
+		Usage:  "Start local Kernel onboarding proof path",
+		RunFn:  runQuickstartCmd,
+		HelpFn: printQuickstartUsage,
 	})
 }
 

@@ -367,8 +367,8 @@ func TestSetupStatusReportsConfiguredClientMissing(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--scope", "project", "--workspace", workspace, "--json", "--data-dir", dataDir}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("status exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	if code != 1 {
+		t.Fatalf("status exit=%d, want 1 stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 	got := decodeSingleSetupSummary(t, &stdout)
 	if !got.MCPInstalled || !got.HookInstalled || got.ClientDetected || got.NativeLoaded || got.ClientState != "configured_client_missing" {

@@ -1664,6 +1664,7 @@ func (c *collector) record(cmd Command) {
 func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, depth int) {
 	switch {
 	case cmd.Name == "rm":
+		c.recordRemoveWriteTargets(cmd.Name, args)
 		recursive, force, dynamicArg, endOptions := false, false, false, false
 		for _, tok := range args[1:] {
 			if tok.dynamic {
@@ -1746,6 +1747,8 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 		c.decide("ssh remote execution requires a decision")
 	case cmd.Name == "cp" || cmd.Name == "mv" || cmd.Name == "install":
 		c.recordCopyWrite(cmd.Name, args)
+	case cmd.Name == "rmdir" || cmd.Name == "unlink":
+		c.recordRemoveWriteTargets(cmd.Name, args)
 	case cmd.Name == "tar":
 		c.matchTar(args, via, depth)
 	}
@@ -1805,6 +1808,25 @@ func (c *collector) recordCopyWrite(name string, args []wordTok) {
 	}
 	if len(operands) >= 2 {
 		c.recordWriteTarget(operands[len(operands)-1], name+" write")
+	}
+}
+
+func (c *collector) recordRemoveWriteTargets(name string, args []wordTok) {
+	endOptions := false
+	for _, tok := range args[1:] {
+		if tok.dynamic {
+			continue // Static targets only; opaque shell remains advisory.
+		}
+		if !endOptions {
+			if tok.text == "--" {
+				endOptions = true
+				continue
+			}
+			if strings.HasPrefix(tok.text, "-") && tok.text != "-" {
+				continue
+			}
+		}
+		c.recordWriteTarget(tok, name+" remove")
 	}
 }
 

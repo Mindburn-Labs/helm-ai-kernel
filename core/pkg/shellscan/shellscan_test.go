@@ -392,6 +392,7 @@ func TestClassifyMarksOnlyStaticallyDiscernibleSensitiveWrites(t *testing.T) {
 	}{
 		{"read protected config", "cat .codex/hooks.json", false, ""},
 		{"copy protected config", "cp replacement .codex/hooks.json", true, ".codex/hooks.json"},
+		{"remove protected config", "rm .codex/hooks.json", true, ".codex/hooks.json"},
 		{"python concatenated write target", `python -c "open('.codex/' + 'hooks.json','w').write('x')"`, true, ".codex/hooks.json"},
 	}
 

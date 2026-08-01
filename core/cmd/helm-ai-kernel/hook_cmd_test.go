@@ -605,7 +605,7 @@ func TestHookPreToolDeniesProtectedShellConfigWriteEvenWithShellGrant(t *testing
 	tmp := t.TempDir()
 	restoreHookClock(t)
 	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
-	payload := `{"tool_name":"Bash","tool_input":{"command":"cp replacement .codex/hooks.json"}}`
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm .codex/hooks.json"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
 	if code != 0 {

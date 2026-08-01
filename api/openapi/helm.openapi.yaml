@@ -373,7 +373,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DecisionRequest'
+              $ref: '#/components/schemas/EvaluateRequest'
       responses:
         '200':
           description: Guardian decision record
@@ -4494,6 +4494,29 @@ components:
         context:
           type: object
           additionalProperties: true
+
+    EvaluateRequest:
+      type: object
+      required: [session_id]
+      properties:
+        tool: { type: string }
+        args:
+          type: object
+          additionalProperties: true
+        agent_id:
+          type: string
+          description: Ignored; the authenticated principal is recorded as the receipt executor.
+        effect_level:
+          type: string
+          description: Policy resource used to evaluate the governed tool call.
+        session_id:
+          type: string
+          minLength: 1
+          description: Non-whitespace signed causal session identifier.
+        context:
+          type: object
+          additionalProperties: true
+          description: Optional input context; authenticated principal and tenant fields are added by the server.
 
     DecisionRecord:
       type: object

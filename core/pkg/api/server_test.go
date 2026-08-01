@@ -192,6 +192,61 @@ func TestEvaluateFailsClosedWithoutProductionReceiptSigner(t *testing.T) {
 	}
 }
 
+func TestEvaluateRejectsBlankSessionIDBeforeReceiptIssuance(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		sessionID string
+	}{
+		{name: "missing", sessionID: ""},
+		{name: "whitespace", sessionID: " \t\n "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newTestServer(t)
+			reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", SessionID: tc.sessionID})
+			if err != nil {
+				t.Fatalf("marshal request: %v", err)
+			}
+
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody)))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("evaluate with blank session_id = %d, want 400: %s", w.Code, w.Body.String())
+			}
+			var response map[string]string
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response["error"] != "session_id is required" {
+				t.Fatalf("error = %q, want session_id is required", response["error"])
+			}
+			if len(srv.receipts) != 0 {
+				t.Fatalf("blank session_id issued receipts: %+v", srv.receipts)
+			}
+		})
+	}
+}
+
+func TestEvaluateRejectsBlankSessionIDBeforeSignerAvailability(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
+	srv := NewServer(ServerConfig{
+		PDP:           pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true}),
+		Authenticator: testAPIAuthenticator,
+	})
+	reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file"})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("evaluate with blank session_id and no signer = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if len(srv.receipts) != 0 {
+		t.Fatalf("blank session_id issued receipts: %+v", srv.receipts)
+	}
+}
+
 func TestEvaluate_Deny(t *testing.T) {
 	// HelmPDP checks rules by Resource (mapped from EffectLevel).
 	// Create a PDP with E4 explicitly denied.

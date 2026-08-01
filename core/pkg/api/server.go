@@ -277,14 +277,19 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.receiptSigner == nil {
-		http.Error(w, "receipt signer unavailable", http.StatusServiceUnavailable)
-		return
-	}
 
 	var req EvaluateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	req.SessionID = strings.TrimSpace(req.SessionID)
+	if req.SessionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id is required"})
+		return
+	}
+	if s.receiptSigner == nil {
+		http.Error(w, "receipt signer unavailable", http.StatusServiceUnavailable)
 		return
 	}
 

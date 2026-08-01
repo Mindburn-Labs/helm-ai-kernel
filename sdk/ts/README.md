@@ -10,8 +10,8 @@ npm ci
 npm run build
 ```
 
-Package metadata declares version `0.7.5` in `package.json`; this README does
-not claim that a registry package has been published.
+Package metadata identifies source target `0.8.0`; this README does not claim
+that a registry package has been published.
 
 ## Local Development
 
@@ -89,6 +89,7 @@ grants, authz snapshots, approvals, budgets, telemetry export, and coexistence
 capabilities. These methods keep external envelopes, MCP quarantine decisions,
 and sandbox grants attached to HELM-native receipts and EvidencePacks.
 
-## Release Notes
+## Source target
 
-`0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the OpenAPI client surface and protobuf message bindings.
+The SDK sends canonical typed evaluation requests and returns receipt-bearing
+V5 responses. Verify registry evidence before relying on a pinned package.

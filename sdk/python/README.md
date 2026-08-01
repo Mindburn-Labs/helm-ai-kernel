@@ -9,8 +9,8 @@ cd sdk/python
 python -m pip install .
 ```
 
-Package metadata declares version `0.7.5` in `pyproject.toml`; this README does
-not claim that a registry package has been published.
+Package metadata identifies source target `0.8.0`; this README does not claim
+that a registry package has been published.
 
 ## Local Development
 
@@ -53,6 +53,7 @@ capabilities.
 External evidence envelopes remain compatibility wrappers; HELM-native
 EvidencePack roots stay authoritative.
 
-## Release Notes
+## Source target
 
-`0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the OpenAPI client surface and local test coverage.
+The SDK requires canonical typed evaluation and returns receipt-bearing V5
+responses. Verify registry evidence before using a pinned package coordinate.

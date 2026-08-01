@@ -4,17 +4,17 @@ Typed Java client for the retained HELM kernel API.
 
 ## Package Status
 
-Package metadata in this source tree targets the future Maven Central
-coordinate `io.github.mindburnlabs:helm-sdk:0.7.5`. This source target does not
-claim that remote artifacts have been published; verify Maven Central or the
-published version-status evidence before using the coordinate. After the
-tag-driven release completes, the dependency declaration is:
+Package metadata in this source tree targets a future Maven Central coordinate.
+The current source target is `0.8.0`.
+This source target does not claim that remote artifacts have been published;
+verify Maven Central or published version-status evidence before using a
+coordinate. After the tag-driven release completes, use the verified version:
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.7.5</version>
+  <version>&lt;version&gt;</version>
 </dependency>
 ```
 
@@ -64,7 +64,7 @@ authoritative.
 `tool`, `effect_level`, and `session_id`; it returns the receipt-bearing
 `TypesGen.EvaluateResponse`.
 
-## Release Notes
+## Source target
 
-`0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the OpenAPI client surface
-and protobuf message bindings.
+The client accepts canonical typed evaluation and receipt-bearing V5 responses.
+Use a published coordinate only after registry evidence verifies it.

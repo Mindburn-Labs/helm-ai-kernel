@@ -6,7 +6,7 @@ const { HelmClient, HelmApiError } = await import(`${process.cwd()}/sdk/ts/dist/
 
 const CANONICAL_VERDICTS = new Set(['ALLOW', 'DENY', 'ESCALATE']);
 
-function requireVerdict(record: SurfaceRecord, expected: string, label: string): string {
+function requireVerdict(record: { verdict?: unknown }, expected: string, label: string): string {
   const verdict = String(record.verdict ?? '');
   if (!CANONICAL_VERDICTS.has(verdict)) {
     throw new Error(`${label}: non-canonical verdict ${verdict}`);
@@ -58,16 +58,16 @@ const helm = new HelmClient({
 });
 
 const allowed = await helm.evaluateDecision({
-  principal: 'sdk-ts-agent',
-  action: 'read-ticket',
-  resource: 'ticket:SDK-200',
-  context: { example: 'ts-sdk' },
+  tool: 'read-ticket',
+  effect_level: 'ticket:SDK-200',
+  session_id: 'ts-sdk-example',
+  args: { example: 'ts-sdk' },
 });
 const denied = await helm.evaluateDecision({
-  principal: 'sdk-ts-agent',
-  action: 'dangerous-shell',
-  resource: 'system:shell',
-  context: { example: 'ts-sdk' },
+  tool: 'dangerous-shell',
+  effect_level: 'system:shell',
+  session_id: 'ts-sdk-example',
+  args: { example: 'ts-sdk' },
 });
 requireVerdict(allowed, 'ALLOW', 'allowed tool call');
 requireVerdict(denied, 'DENY', 'denied dangerous action');

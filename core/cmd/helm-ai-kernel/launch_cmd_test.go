@@ -1,9 +1,12 @@
+// quantum_posture: launch evidence tests exercise classical Ed25519 evidence
+// seals only; they do not make a post-quantum assurance claim.
 package main
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -501,5 +504,82 @@ func TestLaunchDeleteCascadesDigitalOceanResources(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `receipt:digitalocean:launch-cloud-delete:teardown`) {
 		t.Fatalf("delete missing provider teardown receipt: %s", stdout.String())
+	}
+}
+
+func TestLaunchDeleteAndTeardownRejectBeforeStoreOrProviderEffects(t *testing.T) {
+	storeRoot := filepath.Join(t.TempDir(), "launchpad-store")
+	t.Setenv("HELM_LAUNCHPAD_HOME", storeRoot)
+	t.Setenv("DIGITALOCEAN_TOKEN", "do-not-leak")
+	originalDeleteCloudResources := deleteCloudResources
+	providerCalls := 0
+	deleteCloudResources = func(session.LaunchRun) (map[string][]byte, []string, error) {
+		providerCalls++
+		return nil, nil, nil
+	}
+	t.Cleanup(func() { deleteCloudResources = originalDeleteCloudResources })
+
+	for _, test := range []struct {
+		name string
+		run  func([]string, io.Writer, io.Writer) int
+		args []string
+	}{
+		{"launch delete missing cascade", runLaunchDelete, []string{"launch-1"}},
+		{"launch delete unknown flag", runLaunchDelete, []string{"launch-1", "--cascade", "--force"}},
+		{"launch delete extra identifier", runLaunchDelete, []string{"launch-1", "launch-2", "--cascade"}},
+		{"launch delete blank identifier", runLaunchDelete, []string{"", "--cascade"}},
+		{"launch command missing cascade", runLaunchCmd, []string{"delete", "launch-1"}},
+		{"teardown missing cascade", runTeardownCmd, []string{"launch-1"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := test.run(test.args, &stdout, &stderr); code != 2 {
+				t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+			if strings.Contains(stdout.String()+stderr.String(), "do-not-leak") {
+				t.Fatalf("unsafe delete output exposed provider secret")
+			}
+			if _, err := os.Stat(storeRoot); !os.IsNotExist(err) {
+				t.Fatalf("unsafe delete created or changed store root: %v", err)
+			}
+		})
+	}
+	if providerCalls != 0 {
+		t.Fatalf("unsafe delete reached provider %d times", providerCalls)
+	}
+}
+
+func TestLaunchDeleteAndTeardownHelpHaveNoProviderEffects(t *testing.T) {
+	storeRoot := filepath.Join(t.TempDir(), "launchpad-store")
+	t.Setenv("HELM_LAUNCHPAD_HOME", storeRoot)
+	originalDeleteCloudResources := deleteCloudResources
+	providerCalls := 0
+	deleteCloudResources = func(session.LaunchRun) (map[string][]byte, []string, error) {
+		providerCalls++
+		return nil, nil, nil
+	}
+	t.Cleanup(func() { deleteCloudResources = originalDeleteCloudResources })
+
+	for _, test := range []struct {
+		name string
+		run  func([]string, io.Writer, io.Writer) int
+		args []string
+	}{
+		{"launch delete", runLaunchDelete, []string{"--help"}},
+		{"launch nested", runLaunchCmd, []string{"delete", "--help"}},
+		{"teardown", runTeardownCmd, []string{"--help"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := test.run(test.args, &stdout, &stderr); code != 0 || stdout.Len() == 0 || stderr.Len() != 0 {
+				t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+			if _, err := os.Stat(storeRoot); !os.IsNotExist(err) {
+				t.Fatalf("help created or changed store root: %v", err)
+			}
+		})
+	}
+	if providerCalls != 0 {
+		t.Fatalf("help reached provider %d times", providerCalls)
 	}
 }

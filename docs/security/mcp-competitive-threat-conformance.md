@@ -53,6 +53,7 @@ Every scenario must emit `dispatched=false`, a receipt under
 ## Validation
 
 ```bash
-go test ./core/cmd/helm-ai-kernel -run 'TestRunMCPProof|TestRunMCPCmdHelpIncludesProof'
-go test ./core/pkg/launchpad/mcp ./core/pkg/evidence ./core/pkg/verifier ./core/pkg/runtimeadapters/mcp ./core/pkg/launchpad/receipts
+cd core
+go test ./cmd/helm-ai-kernel -run 'TestRunMCPProof|TestRunMCPCmdHelpIncludesProof'
+go test ./pkg/launchpad/mcp ./pkg/evidence ./pkg/verifier ./pkg/runtimeadapters/mcp ./pkg/launchpad/receipts
 ```

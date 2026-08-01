@@ -148,7 +148,7 @@ jobs:
       - name: Independent Go module tests
         run: bash scripts/ci/go_module_tests.sh
       - name: Command tests
-        run: go test ./core/cmd/helm-ai-kernel -count=1
+        run: cd core && go test ./cmd/helm-ai-kernel -count=1
       - name: Launchpad promotion drift
         run: make launchpad-promotion-check
       - name: Fetch main ref for proto compatibility checks

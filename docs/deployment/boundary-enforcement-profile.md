@@ -136,10 +136,15 @@ attest-oneshot dependency and the compiled per-profile drop-in.
 
 ## 3. First boot, governance side
 
-The boundary profile seals the box; governance still starts explicitly:
+The boundary profile seals the box; governance still starts explicitly. Start
+Quickstart in one terminal and leave it running; run the governance sequence
+from a second terminal:
 
 ```bash
+# Terminal 1: guided store + keys + config; this foreground server stays running.
 helm-ai-kernel setup --quickstart --profile mcp --yes  # guided store + keys + config
+
+# Terminal 2: run these while Quickstart is still running.
 helm-ai-kernel autoconfigure scan           # deterministic agent-surface inventory
 helm-ai-kernel autoconfigure draft-policy   # default-deny policy draft
 helm-ai-kernel autoconfigure simulate       # blast-radius preview

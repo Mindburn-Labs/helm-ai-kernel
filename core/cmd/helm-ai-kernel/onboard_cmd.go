@@ -50,6 +50,10 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "onboard: unexpected argument %q\n", fs.Arg(0))
 		return 2
 	}
+	consolePortSet := false
+	fs.Visit(func(f *flag.Flag) {
+		consolePortSet = consolePortSet || f.Name == "console-port"
+	})
 	if !*jsonOut {
 		fmt.Fprintln(stderr, "onboard is deprecated; forwarding to `helm-ai-kernel setup --quickstart`. Existing --yes scripts remain supported.")
 	}
@@ -69,6 +73,10 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if *console {
 		forwarded = append(forwarded, "--console", "--console-port", fmt.Sprint(*consolePort))
+	} else if consolePortSet {
+		// Preserve an explicitly supplied port so setup remains the single
+		// validation owner for the Console option contract.
+		forwarded = append(forwarded, "--console-port", fmt.Sprint(*consolePort))
 	}
 	if *noOpen {
 		forwarded = append(forwarded, "--no-open")

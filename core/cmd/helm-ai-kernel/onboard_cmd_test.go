@@ -99,6 +99,21 @@ func TestOnboardDeprecationKeepsUngatedFirstRunReadOnly(t *testing.T) {
 	}
 }
 
+func TestOnboardRejectsConsolePortWithoutConsole(t *testing.T) {
+	for _, args := range [][]string{
+		{"--console-port", "0"},
+		{"--console-port=0", "--yes"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := runOnboardCmd(args, &stdout, &stderr); code != 2 {
+			t.Fatalf("onboard %v exit=%d stdout=%s stderr=%s", args, code, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "setup: --console-port and --no-open require --console") {
+			t.Fatalf("onboard %v did not preserve setup Console validation: %s", args, stderr.String())
+		}
+	}
+}
+
 func TestOnboardHelpIsSideEffectFree(t *testing.T) {
 	original := runOnboardSetup
 	t.Cleanup(func() { runOnboardSetup = original })

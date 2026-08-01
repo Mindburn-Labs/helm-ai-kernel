@@ -242,14 +242,25 @@ func runSetupQuickstart(request setupQuickstartRequest, stdout, stderr io.Writer
 		request.Yes,
 	)
 	if request.DryRun {
-		return setupRunFirstRun(append(args, "--dry-run"), stdout, stderr)
+		previewArgs := append([]string(nil), args...)
+		if request.Reset && !request.Yes {
+			previewArgs = append(previewArgs, "--yes")
+		}
+		return setupRunFirstRun(append(previewArgs, "--dry-run"), stdout, stderr)
 	}
 	if !request.Yes {
-		previewArgs := append(args, "--dry-run")
+		previewArgs := append([]string(nil), args...)
+		// Quickstart requires --yes before it will inspect a reset target. The
+		// paired --dry-run still makes this authorization read-only, while
+		// letting the preview exercise the same ownership guards as apply.
+		if request.Reset {
+			previewArgs = append(previewArgs, "--yes")
+		}
+		previewArgs = append(previewArgs, "--dry-run")
 		if code := setupRunFirstRun(previewArgs, stdout, stderr); code != 0 {
 			return code
 		}
-		fmt.Fprintf(stderr, "setup: no changes made; rerun `helm-ai-kernel setup --quickstart --profile %s --yes` to apply this preview\n", shellQuote(normalizeSetupQuickstartProfile(request.Profile)))
+		fmt.Fprintf(stderr, "setup: no changes made; rerun `%s` to apply this preview\n", setupQuickstartRerunCommand(request))
 		return 2
 	}
 	if request.JSON {
@@ -283,6 +294,30 @@ func setupQuickstartArgs(profile, dataDir string, console bool, consolePort int,
 		args = append(args, "--yes")
 	}
 	return args
+}
+
+func setupQuickstartRerunCommand(request setupQuickstartRequest) string {
+	args := []string{"helm-ai-kernel", "setup", "--quickstart"}
+	args = append(args, setupQuickstartArgs(
+		normalizeSetupQuickstartProfile(request.Profile),
+		request.DataDir,
+		request.Console,
+		request.ConsolePort,
+		request.NoOpen,
+		request.Offline,
+		request.Reset,
+		true,
+	)...)
+	if request.JSON {
+		args = append(args, "--json")
+	}
+	for index, arg := range args {
+		if index < 3 || strings.HasPrefix(arg, "--") {
+			continue
+		}
+		args[index] = shellQuote(arg)
+	}
+	return strings.Join(args, " ")
 }
 
 func setupConfirmationCapabilities(chrome io.Writer) ui.Capabilities {

@@ -128,6 +128,70 @@ func TestSetupQuickstartFrontDoorPreviewsBeforeYesAndForwardsConsole(t *testing.
 	}
 }
 
+func TestSetupQuickstartResetPreviewIsAuthorizedAndRerunPreservesOptions(t *testing.T) {
+	original := setupRunFirstRun
+	t.Cleanup(func() { setupRunFirstRun = original })
+	var calls [][]string
+	setupRunFirstRun = func(args []string, _, _ io.Writer) int {
+		calls = append(calls, append([]string(nil), args...))
+		return 0
+	}
+
+	dataDir := filepath.Join(t.TempDir(), "helm state")
+	args := []string{
+		"helm-ai-kernel", "setup", "--quickstart", "--profile", "claude-code", "--data-dir", dataDir,
+		"--console", "--console-port", "0", "--no-open", "--offline", "--reset", "--json",
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run(args, &stdout, &stderr); code != 2 {
+		t.Fatalf("unconfirmed reset preview exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	wantPreview := []string{
+		"--profile", "claude", "--data-dir", dataDir,
+		"--console", "--console-port", "0", "--no-open", "--offline", "--reset", "--yes", "--dry-run",
+	}
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], wantPreview) {
+		t.Fatalf("reset preview calls=%#v, want %#v", calls, wantPreview)
+	}
+	wantRerun := "helm-ai-kernel setup --quickstart --profile 'claude' --data-dir " + shellQuote(dataDir) + " --console --console-port '0' --no-open --offline --reset --yes --json"
+	if !strings.Contains(stderr.String(), wantRerun) {
+		t.Fatalf("rerun guidance=%q, want command %q", stderr.String(), wantRerun)
+	}
+
+	calls = nil
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run(append(args, "--dry-run"), &stdout, &stderr); code != 0 {
+		t.Fatalf("explicit reset preview exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], wantPreview) {
+		t.Fatalf("explicit reset preview calls=%#v, want %#v", calls, wantPreview)
+	}
+}
+
+func TestSetupQuickstartResetPreviewReachesQuickstartWithoutMutation(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeQuickstartOwnershipMarker(dataDir); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(dataDir, "keep")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "--quickstart", "--reset", "--offline", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stdout.String(), `"operation":"preview"`) || !strings.Contains(stderr.String(), "no changes made") {
+		t.Fatalf("reset preview exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("reset preview mutated state: %v", err)
+	}
+}
+
 func TestSetupInstallQuickstartForwardsConsoleIntent(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "workspace")

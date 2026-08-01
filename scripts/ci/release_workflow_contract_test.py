@@ -57,7 +57,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("CLOSED)", homebrew)
         self.assertIn("Timed out waiting for Homebrew PR", homebrew)
 
-    def test_release_creation_requires_verified_console_sidecar(self) -> None:
+    def test_release_creation_requires_prebuilt_console_assets(self) -> None:
         binaries = self.job("binaries")
         self.assertIn("needs: [validate, deployment-smoke, kind-smoke, release-smoke]", binaries)
         self.assertNotIn("console-local-sidecar", binaries)
@@ -68,20 +68,24 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("console-local-sidecar", reproducibility)
 
         github_release = self.job("github-release")
-        self.assertIn("console-local-sidecar", github_release)
-        self.assertNotIn("Require retained Console manifest bundles", github_release)
+        self.assertIn("console-release-assets", github_release)
+        self.assertNotIn("console-local-sidecar", github_release)
+        self.assertIn("name: console-release-assets", github_release)
+        self.assertIn("console-release-assets/*", github_release)
 
-    def test_console_attachment_is_required_and_checks_the_v08_asset_contract(self) -> None:
+    def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
-        self.assertIn("needs: [console-local-sidecar, github-release]", console_assets)
+        self.assertIn("needs: console-local-sidecar", console_assets)
+        self.assertNotIn("github-release", console_assets)
         self.assertNotIn("always()", console_assets)
         self.assertIn("make release-binaries-reproducible", console_assets)
         self.assertIn("console_local_sidecar.py stage", console_assets)
         self.assertIn("console_local_sidecar.py layout", console_assets)
         self.assertIn("CONSOLE-SHA256SUMS.txt", console_assets)
         self.assertIn("cosign sign-blob", console_assets)
-        self.assertIn("gh release upload", console_assets)
-        self.assertIn("--only github-release-console-local-sidecar", console_assets)
+        self.assertIn("actions/upload-artifact", console_assets)
+        self.assertNotIn("gh release upload", console_assets)
+        self.assertNotIn("published", console_assets)
         self.assertIn("-name 'helm-console-local-sidecar-*'", console_assets)
         self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz'", console_assets)
         self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz.cosign.bundle'", console_assets)

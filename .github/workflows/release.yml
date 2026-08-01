@@ -1114,7 +1114,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-local-sidecar]
+    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets]
     permissions:
       actions: read
       contents: write
@@ -1135,6 +1135,10 @@ jobs:
         with:
           name: version-status
           path: version-status/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: console-release-assets
+          path: console-release-assets/
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -1144,15 +1148,16 @@ jobs:
             cosign/**/*.cosign.bundle
             benchmarks-release/*.json
             version-status/version-status.json
+            console-release-assets/*
 
   console-release-assets:
-    # v0.8.0 includes the local Console, so release creation is gated on the
-    # verified, tag-bound sidecar closure rather than attaching it best-effort.
+    # v0.8.0 includes the local Console. Build and verify every Console asset
+    # before the one public GitHub release step consumes this artifact.
     runs-on: ubuntu-latest
-    needs: [console-local-sidecar, github-release]
+    needs: console-local-sidecar
     permissions:
       actions: read
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -1166,7 +1171,7 @@ jobs:
           path: console-local-sidecar/
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-      - name: Re-verify Console input before optional packaging
+      - name: Re-verify Console input before packaging
         env:
           CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
         run: |
@@ -1247,26 +1252,13 @@ jobs:
           cosign sign-blob --yes \
             --bundle CONSOLE-SHA256SUMS.txt.cosign.bundle \
             CONSOLE-SHA256SUMS.txt
-      - name: Verify optional Console assets before publication
+      - name: Verify staged Console assets before publication
         run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh console-release-assets
-      - name: Attach verified Console assets to the existing Kernel release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release upload "${GITHUB_REF_NAME}" \
-            console-release-assets/helm-console-local-sidecar-* \
-            console-release-assets/helm-ai-kernel-*-console.tar.gz \
-            console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle \
-            console-release-assets/CONSOLE-SHA256SUMS.txt \
-            console-release-assets/CONSOLE-SHA256SUMS.txt.cosign.bundle \
-            --clobber
-      - name: Require the v0.8 Console asset contract after attachment
-        run: |
-          python3 scripts/release/check_version_drift.py \
-            --expected-version "${GITHUB_REF_NAME#v}" \
-            published \
-            --only github-release-console-local-sidecar
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: console-release-assets
+          path: console-release-assets/
+          if-no-files-found: error
 
   slsa-provenance:
     needs: [binaries, github-release]

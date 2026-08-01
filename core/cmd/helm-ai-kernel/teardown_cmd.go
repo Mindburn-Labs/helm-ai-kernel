@@ -10,6 +10,10 @@ func init() {
 }
 
 func runTeardownCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel teardown <run_id> --cascade")
+		return 0
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel teardown <run_id> --cascade")
 		return 2

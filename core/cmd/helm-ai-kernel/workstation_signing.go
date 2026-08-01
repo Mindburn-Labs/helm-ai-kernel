@@ -39,6 +39,61 @@ func resolveWorkstationSigningSeed(dataDir, seedHex, seedFile string) ([]byte, e
 	return ensureLocalWorkstationSigningSeed(dataDir)
 }
 
+// preflightWorkstationSigningSeed validates existing signer state without
+// creating or repairing anything. Callers use it before creating local state.
+func preflightWorkstationSigningSeed(dataDir, seedHex, seedFile string) error {
+	seed, err := loadSigningSeed(seedHex, seedFile)
+	if err != nil {
+		return err
+	}
+	if len(seed) != 0 {
+		return nil
+	}
+	if envBool("HELM_PRODUCTION") {
+		return errors.New("production mode requires --signing-seed-file")
+	}
+
+	dataDir, err = normalizedWorkstationDataDir(dataDir)
+	if err != nil {
+		return err
+	}
+	keyDir := filepath.Join(dataDir, workstationSigningKeyDirectory)
+	if info, err := os.Lstat(keyDir); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return errors.New("workstation signing key directory must be a directory, not a symlink or special file")
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("inspect workstation signing key directory: %w", err)
+	}
+
+	seed, err = loadSigningSeed("", workstationSigningSeedPath(dataDir))
+	if errors.Is(err, fs.ErrNotExist) {
+		if _, publicErr := os.Lstat(workstationSigningPublicKeyPath(dataDir)); publicErr == nil {
+			return errors.New("workstation trusted public key exists without signing seed")
+		} else if !errors.Is(publicErr, fs.ErrNotExist) {
+			return fmt.Errorf("inspect workstation trusted public key: %w", publicErr)
+		}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	publicPath := workstationSigningPublicKeyPath(dataDir)
+	publicData, err := readRegularFile(publicPath, "workstation trusted public key")
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	expected := hex.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
+	if strings.TrimSpace(string(publicData)) != expected {
+		return errors.New("workstation trusted public key does not match signing seed")
+	}
+	return nil
+}
+
 func ensureLocalWorkstationSigningSeed(dataDir string) ([]byte, error) {
 	if envBool("HELM_PRODUCTION") {
 		return nil, errors.New("production mode requires --signing-seed-file")

@@ -366,6 +366,15 @@
               "type": "string",
               "default": "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS",
               "description": "Key inside existingSecret that contains the command verification keyring."
+            },
+            "commandReplayKeyring": {
+              "type": "string",
+              "description": "Optional strict JSON replay-authority keyring for FENCE commands signed before a key or audience rotation. Supply directly or from existingSecret via commandReplayKeyringSecretKey, never both."
+            },
+            "commandReplayKeyringSecretKey": {
+              "type": "string",
+              "default": "",
+              "description": "Optional key inside existingSecret that contains HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING. Requires existingSecret and conflicts with a direct commandReplayKeyring value."
             }
           }
         },

@@ -28,12 +28,13 @@ const (
 )
 
 type quickstartRuntime struct {
-	BootstrapToken string
-	SessionToken   string
-	TenantID       string
-	PrincipalID    string
-	Profile        string
-	ExpiresAt      time.Time
+	BootstrapToken          string
+	BootstrapCredentialPath string
+	SessionToken            string
+	TenantID                string
+	PrincipalID             string
+	Profile                 string
+	ExpiresAt               time.Time
 
 	mu   sync.Mutex
 	used bool
@@ -77,6 +78,10 @@ func (q *quickstartRuntime) exchange(token string) (map[string]any, int, string)
 		return nil, http.StatusUnauthorized, "invalid local quickstart token"
 	}
 	q.used = true
+	if q.BootstrapCredentialPath != "" {
+		_ = os.Remove(q.BootstrapCredentialPath)
+		q.BootstrapCredentialPath = ""
+	}
 	return q.sessionDocument(), http.StatusOK, ""
 }
 
@@ -102,58 +107,63 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 	if opts.Quickstart == nil {
 		return
 	}
-	mux.HandleFunc("/__helm/config.json", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		payload := map[string]any{
-			"api_base_url":     fmt.Sprintf("http://%s:%d", firstNonEmpty(opts.BindAddr, "127.0.0.1"), opts.Port),
-			"local_mode":       true,
-			"start_onboarding": true,
-			"profile":          opts.Quickstart.Profile,
-			"entitlements":     []string{"OSS_CORE"},
-		}
+	if opts.ConsoleMode {
+		registerLocalConsolePeerProofRoute(mux, opts.ConsolePeerProof)
+	}
+	if !opts.ConsoleMode {
+		mux.HandleFunc("/__helm/config.json", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			payload := map[string]any{
+				"api_base_url":     fmt.Sprintf("http://%s:%d", firstNonEmpty(opts.BindAddr, "127.0.0.1"), opts.Port),
+				"local_mode":       true,
+				"start_onboarding": true,
+				"profile":          opts.Quickstart.Profile,
+				"entitlements":     []string{"OSS_CORE"},
+			}
 
-		// tenant_id and principal_id are exactly the values the tenant-scoped
-		// routes expect in X-Helm-Tenant-ID / X-Helm-Principal-ID. Publishing
-		// them on an unauthenticated endpoint reduced that gate to "obtain the
-		// admin key" (F-13). They are only disclosed to a loopback caller — the
-		// local-first onboarding case this endpoint exists for — and the check
-		// uses the real peer address, not a spoofable forwarding header.
-		if requestFromLoopback(r) {
-			payload["tenant_id"] = opts.Quickstart.TenantID
-			payload["principal_id"] = opts.Quickstart.PrincipalID
-		}
+			// tenant_id and principal_id are exactly the values the tenant-scoped
+			// routes expect in X-Helm-Tenant-ID / X-Helm-Principal-ID. Publishing
+			// them on an unauthenticated endpoint reduced that gate to "obtain the
+			// admin key" (F-13). They are only disclosed to a loopback caller — the
+			// local-first onboarding case this endpoint exists for — and the check
+			// uses the real peer address, not a spoofable forwarding header.
+			if requestFromLoopback(r) {
+				payload["tenant_id"] = opts.Quickstart.TenantID
+				payload["principal_id"] = opts.Quickstart.PrincipalID
+			}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(payload)
-	})
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(payload)
+		})
 
-	mux.HandleFunc("/api/v1/local-session/exchange", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		if !requestFromLoopback(r) {
-			api.WriteForbidden(w, "Local quickstart session exchange is loopback-only")
-			return
-		}
-		var body struct {
-			Token string `json:"token"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			api.WriteBadRequest(w, "Invalid JSON body")
-			return
-		}
-		doc, status, detail := opts.Quickstart.exchange(strings.TrimSpace(body.Token))
-		if status != http.StatusOK {
-			api.WriteError(w, status, "Local quickstart exchange failed", detail)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(doc)
-	})
+		mux.HandleFunc("/api/v1/local-session/exchange", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			if !requestFromLoopback(r) {
+				api.WriteForbidden(w, "Local quickstart session exchange is loopback-only")
+				return
+			}
+			var body struct {
+				Token string `json:"token"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				api.WriteBadRequest(w, "Invalid JSON body")
+				return
+			}
+			doc, status, detail := opts.Quickstart.exchange(strings.TrimSpace(body.Token))
+			if status != http.StatusOK {
+				api.WriteError(w, status, "Local quickstart exchange failed", detail)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(doc)
+		})
+	}
 
 	mux.HandleFunc("/api/v1/onboarding/state", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -199,6 +209,37 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(export)
 	}))
+}
+
+func registerLocalConsolePeerProofRoute(mux *http.ServeMux, peerProof *localConsolePeerProof) {
+	if peerProof == nil {
+		return
+	}
+	mux.HandleFunc(localConsolePeerProofPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", http.MethodGet+", "+http.MethodHead)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if !requestFromLoopback(r) || len(r.Header.Values("Authorization")) != 0 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		nonces := r.Header.Values(localConsolePeerNonceHeader)
+		if len(nonces) != 1 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		proof, ok := peerProof.prove(nonces[0])
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set(localConsolePeerContractHeader, localConsolePeerContract)
+		w.Header().Set(localConsolePeerProofHeader, proof)
+		w.WriteHeader(http.StatusOK)
+	})
 }
 
 type onboardingStep struct {

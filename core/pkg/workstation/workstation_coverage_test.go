@@ -556,6 +556,23 @@ func TestWorkstationCertificationBranchesAndPolicyLoadErrors(t *testing.T) {
 	}
 }
 
+func TestSensitiveFileWriteDefaultsToOperate(t *testing.T) {
+	effectType, effectMode, action, toolID := EffectDefaults("sensitive-file-write")
+	if effectType != contracts.EffectTypeWorkstationFileWrite || effectMode != contracts.WorkstationEffectModeOperate || action != "file_write" || toolID != "workspace.write" {
+		t.Fatalf("sensitive-file-write defaults = %q/%q/%q/%q", effectType, effectMode, action, toolID)
+	}
+}
+
+func TestLoadPolicyProfileFileWithDigestRejectsUnexpectedProfileID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unexpected-profile.json")
+	if err := os.WriteFile(path, []byte(`{"id":"workstation.other.v1"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LoadPolicyProfileFileWithDigest(path); err == nil {
+		t.Fatal("expected unexpected policy profile id error")
+	}
+}
+
 func TestWorkstationSmallHelperBranches(t *testing.T) {
 	outFile := filepath.Join(t.TempDir(), "capture-file")
 	if err := os.WriteFile(outFile, []byte("x"), 0o600); err != nil {

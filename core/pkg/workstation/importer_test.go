@@ -201,6 +201,28 @@ func TestDefaultProfileFailsClosedForOperateAndEgress(t *testing.T) {
 	}
 }
 
+func TestOperateFileWritesRequireExplicitPermission(t *testing.T) {
+	profile := DefaultObserveDraftProfile()
+	profile.Operate.Permissions = []string{contracts.WorkstationPermissionSecretRead}
+
+	for _, effectType := range []string{
+		contracts.EffectTypeWorkstationFileWrite,
+		contracts.EffectTypeWorkstationFileDraft,
+	} {
+		t.Run(effectType, func(t *testing.T) {
+			verdict, reasonCode, _ := EvaluateEvent(profile, ToolEvent{
+				Type:       "file_write",
+				EffectType: effectType,
+				EffectMode: contracts.WorkstationEffectModeOperate,
+				Target:     "docs/allowed.md",
+			})
+			if verdict != contracts.WorkstationVerdictDeny || reasonCode != "OPERATE_PERMISSION_NOT_GRANTED" {
+				t.Fatalf("operate file write = %s/%s, want DENY/OPERATE_PERMISSION_NOT_GRANTED", verdict, reasonCode)
+			}
+		})
+	}
+}
+
 func TestExpandedOperatePolicyReasons(t *testing.T) {
 	root := repoRoot(t)
 	permissive, err := LoadPolicyProfileFile(filepath.Join(root, "fixtures", "workstation", "policies", "observe_draft.v1.permissive.json"))

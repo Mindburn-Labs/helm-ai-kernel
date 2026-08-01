@@ -4,7 +4,7 @@ $ helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel
 {"operation":"preview","target":"codex","workspace":"<repo>","binary_path":"<repo>/bin/helm-ai-kernel","client_config_path":"~/.codex/config.toml","hook_config_path":"~/.codex/hooks.json","data_dir":"~/.helm-ai-kernel","kernel_url":"http://127.0.0.1:7714","scan_grade":"not_run","draft_policy_path":"~/.helm-ai-kernel/autoconfigure/policy.draft.json","uninstall_command":"helm-ai-kernel setup remove codex --scope user --yes --data-dir '~/.helm-ai-kernel'","scope":"user","quickstart_started":false,"planned_actions":["scan selected workspace and write draft-only inventory artifacts","configure the HELM MCP server with the selected local data directory","configure the HELM PreToolUse hook for the selected client","start the local Quickstart proof path"]}
 
 $ printf <codex PreToolUse payload> | helm-ai-kernel hook pre-tool --client codex --data-dir ~/.helm-ai-kernel
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"HELM denied shell operation: OPERATE_PERMISSIONS_EMPTY (receipt: ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json)"}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"HELM denied shell operation: legacy needle \"rm -rf \"; recursive rm delete (forced): OPERATE_PERMISSIONS_EMPTY (receipt: ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json)"}}
 
 $ helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
 Workstation Policy Decision Verification

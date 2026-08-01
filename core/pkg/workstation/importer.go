@@ -400,6 +400,11 @@ func EvaluateEvent(profile contracts.WorkstationPolicyProfile, event ToolEvent) 
 		return contracts.WorkstationVerdictDeny, "TAINTED_CONTEXT_REQUIRES_DENY", "tainted context cannot authorize operate-class effects"
 	}
 	if event.EffectType == contracts.EffectTypeWorkstationFileWrite || event.EffectType == contracts.EffectTypeWorkstationFileDraft || event.Type == "file_write" || event.Type == "draft_edit" {
+		if event.EffectMode == contracts.WorkstationEffectModeOperate {
+			if verdict, reasonCode, reason := evaluateOperatePermission(profile, event); verdict != contracts.WorkstationVerdictAllow {
+				return verdict, reasonCode, reason
+			}
+		}
 		if !draftTargetAllowed(profile.Draft.WorkspaceRoots, event.Target) {
 			return contracts.WorkstationVerdictDeny, "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE", "draft target is outside the configured workspace scope"
 		}

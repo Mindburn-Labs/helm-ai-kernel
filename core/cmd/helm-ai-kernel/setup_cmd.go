@@ -8,6 +8,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 const setupMCPServerName = "helm-ai-kernel-governance"
@@ -66,6 +68,7 @@ type setupOptions struct {
 	DataDir             string
 	SigningSeedFile     string
 	PolicyProfile       string
+	PolicyProfileSet    bool
 	PolicyProfileSHA256 string
 }
 
@@ -258,14 +261,20 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
-		fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
-		return 2
-	}
 	opts.Operation = "status"
 	summary, err := buildSetupSummary(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "setup status: %v\n", err)
+		return 2
+	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
 		return 2
 	}
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
@@ -458,8 +467,11 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 		return opts, 2
 	}
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "workspace" {
+		switch f.Name {
+		case "workspace":
 			opts.WorkspaceSet = true
+		case "policy-profile":
+			opts.PolicyProfileSet = true
 		}
 	})
 	if fs.NArg() != 0 {
@@ -554,6 +566,152 @@ func populateSetupPolicyProfileDigest(opts *setupOptions) error {
 	}
 	opts.PolicyProfileSHA256 = digest
 	return nil
+}
+
+// discoverSetupStatusPolicyProfile recovers a custom profile only from one
+// matching, statically parseable installed hook. The later status comparison
+// still uses the full current command, including the recomputed digest.
+func discoverSetupStatusPolicyProfile(opts *setupOptions, path, bin string) error {
+	root, err := readJSONObject(path)
+	if err != nil {
+		return fmt.Errorf("read hook config: %w", err)
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	expectedKey := hookCommandKey(setupHookCommand(*opts, bin))
+	var profilePath string
+	matched := false
+	for _, item := range arrayValue(hooks, "PreToolUse") {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range arrayValue(obj, "hooks") {
+			command := hookCommandFromAny(hook)
+			if command == "" {
+				continue
+			}
+			if hookCommandKey(command) != expectedKey {
+				continue
+			}
+			if matched {
+				return fmt.Errorf("ambiguous matching installed hook commands")
+			}
+			profile, _, custom, err := installedHookPolicyProfile(command)
+			if err != nil {
+				return fmt.Errorf("parse matching installed hook command: %w", err)
+			}
+			matched = true
+			if custom {
+				profilePath = profile
+			}
+		}
+	}
+	if profilePath != "" {
+		opts.PolicyProfile = profilePath
+	}
+	return nil
+}
+
+func installedHookPolicyProfile(command string) (profile, digest string, custom bool, err error) {
+	words, err := staticSetupHookWords(command)
+	if err != nil {
+		return "", "", false, err
+	}
+	seenProfile, seenDigest := false, false
+	for i := 0; i < len(words); i++ {
+		if words[i] != "--policy-profile" && words[i] != "--policy-profile-sha256" {
+			continue
+		}
+		if i+1 == len(words) || words[i+1] == "--policy-profile" || words[i+1] == "--policy-profile-sha256" {
+			return "", "", false, fmt.Errorf("%s requires one static argument", words[i])
+		}
+		i++
+		if words[i-1] == "--policy-profile" {
+			if seenProfile {
+				return "", "", false, errors.New("duplicate --policy-profile")
+			}
+			profile, seenProfile = words[i], true
+		} else {
+			if seenDigest {
+				return "", "", false, errors.New("duplicate --policy-profile-sha256")
+			}
+			digest, seenDigest = words[i], true
+		}
+	}
+	if seenProfile != seenDigest || (seenProfile && (profile == "" || digest == "")) {
+		return "", "", false, errors.New("matching installed hook has unpaired --policy-profile arguments")
+	}
+	return profile, digest, seenProfile, nil
+}
+
+func staticSetupHookWords(command string) ([]string, error) {
+	file, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil, err
+	}
+	if len(file.Stmts) != 1 {
+		return nil, fmt.Errorf("must contain one command")
+	}
+	stmt := file.Stmts[0]
+	if stmt.Negated || stmt.Background || stmt.Coprocess || len(stmt.Redirs) != 0 {
+		return nil, fmt.Errorf("must be a direct command without shell operators")
+	}
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) != 0 {
+		return nil, fmt.Errorf("must be a direct static command")
+	}
+	words := make([]string, 0, len(call.Args))
+	for _, word := range call.Args {
+		value, ok := staticSetupHookWord(word)
+		if !ok {
+			return nil, fmt.Errorf("contains a non-static argument")
+		}
+		words = append(words, value)
+	}
+	return words, nil
+}
+
+func staticSetupHookWord(word *syntax.Word) (string, bool) {
+	var value strings.Builder
+	for _, part := range word.Parts {
+		switch part := part.(type) {
+		case *syntax.Lit:
+			value.WriteString(unescapeSetupHookLiteral(part.Value))
+		case *syntax.SglQuoted:
+			if part.Dollar {
+				return "", false
+			}
+			value.WriteString(part.Value)
+		case *syntax.DblQuoted:
+			if part.Dollar {
+				return "", false
+			}
+			for _, inner := range part.Parts {
+				literal, ok := inner.(*syntax.Lit)
+				if !ok {
+					return "", false
+				}
+				value.WriteString(literal.Value)
+			}
+		default:
+			return "", false
+		}
+	}
+	return value.String(), true
+}
+
+func unescapeSetupHookLiteral(value string) string {
+	var out strings.Builder
+	for i := 0; i < len(value); i++ {
+		if value[i] == '\\' && i+1 < len(value) {
+			i++
+		}
+		out.WriteByte(value[i])
+	}
+	return out.String()
 }
 
 func normalizeSetupTarget(target string) (string, error) {

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
@@ -230,7 +231,7 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 		if isSensitiveWriteTarget(target) {
 			return hookClassification{
 				ShouldDecide: true,
-				Class:        "secret",
+				Class:        "sensitive-file-write",
 				Target:       target,
 				Action:       "file_write",
 				ToolID:       tool,
@@ -292,6 +293,14 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 	}
 	if profileDigest != "" {
 		persistedMetadata["policy_profile_sha256"] = profileDigest
+	}
+	if effectType == contracts.EffectTypeWorkstationMCPToolCall {
+		canonicalInput, err := canonicalize.JCS(payload.ToolInput)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalize MCP tool input: %w", err)
+		}
+		persistedMetadata["mcp_input_binding"] = "jcs-sha256"
+		persistedMetadata["mcp_input_sha256"] = canonicalize.ComputeArtifactHash(canonicalInput)
 	}
 	return workstation.Decide(profile, req, workstation.DecisionOptions{
 		SigningSeed:       seed,

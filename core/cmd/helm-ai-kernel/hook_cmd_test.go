@@ -284,6 +284,64 @@ func TestBuildHookDecisionReceiptEvaluatesRawTargetBeforePersistingFingerprint(t
 	}
 }
 
+func TestBuildHookDecisionReceiptBindsMCPInputWithoutPersistingIt(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	opts := hookOptions{Client: "codex", DataDir: tmp, PolicyProfile: profile, PolicyProfileSHA256: hookPolicyProfileDigest(t, profile)}
+	build := func(input map[string]any) *contracts.WorkstationPolicyDecisionReceipt {
+		t.Helper()
+		receipt, err := buildHookDecisionReceipt(
+			opts,
+			preToolPayload{ToolName: "mcp__filesystem__write_file", ToolInput: input, SessionID: "mcp-bind", CWD: "/repo"},
+			hookClassification{ShouldDecide: true, Class: "mcp", Target: "mcp__filesystem__write_file", Action: "mcp_tool_call", ToolID: "mcp__filesystem__write_file"},
+		)
+		if err != nil {
+			t.Fatalf("build receipt: %v", err)
+		}
+		if receipt.Verdict != contracts.WorkstationVerdictAllow {
+			t.Fatalf("verdict = %s/%s, want ALLOW", receipt.Verdict, receipt.ReasonCode)
+		}
+		return receipt
+	}
+
+	first := build(map[string]any{"path": "/private/credentials.json", "contents": "not-for-receipt"})
+	second := build(map[string]any{"contents": "not-for-receipt", "path": "/private/credentials.json"})
+	changed := build(map[string]any{"path": "/private/credentials.json", "contents": "changed"})
+	if got := first.Request.Metadata["mcp_input_binding"]; got != "jcs-sha256" {
+		t.Fatalf("MCP input binding = %q, want jcs-sha256", got)
+	}
+	if first.Request.Metadata["mcp_input_sha256"] == "" {
+		t.Fatal("MCP input digest is empty")
+	}
+	if first.Request.Metadata["mcp_input_sha256"] != second.Request.Metadata["mcp_input_sha256"] {
+		t.Fatalf("key-order equivalent MCP input changed digest: %q / %q", first.Request.Metadata["mcp_input_sha256"], second.Request.Metadata["mcp_input_sha256"])
+	}
+	if first.Request.Metadata["mcp_input_sha256"] == changed.Request.Metadata["mcp_input_sha256"] {
+		t.Fatal("different MCP input reused digest")
+	}
+	path, err := writeDecisionReceipt(filepath.Join(tmp, "mcp-input.json"), "", first)
+	if err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read receipt: %v", err)
+	}
+	if strings.Contains(string(raw), "/private/credentials.json") || strings.Contains(string(raw), "not-for-receipt") {
+		t.Fatalf("receipt leaked MCP input: %s", raw)
+	}
+	tampered := *first
+	tampered.Request.Metadata = make(map[string]string, len(first.Request.Metadata))
+	for key, value := range first.Request.Metadata {
+		tampered.Request.Metadata[key] = value
+	}
+	tampered.Request.Metadata["mcp_input_sha256"] = "sha256:tampered"
+	if ok, err := workstation.VerifyDecisionReceiptSignature(&tampered); err != nil || ok {
+		t.Fatalf("tampered MCP binding verification ok=%v err=%v", ok, err)
+	}
+}
+
 func TestHookPreToolAllowsSafeBashWithoutApprovalOutput(t *testing.T) {
 	tmp := t.TempDir()
 	payload := `{"tool_name":"Bash","tool_input":{"command":"git status --short"}}`
@@ -491,13 +549,25 @@ func TestHookPreToolDeniesSensitiveWrite(t *testing.T) {
 	tmp := t.TempDir()
 	restoreHookClock(t)
 	payload := `{"tool_name":"Write","tool_input":{"file_path":".env"}}`
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
 	var stdout, stderr bytes.Buffer
-	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
 		t.Fatalf("sensitive write should be denied, output = %s", stdout.String())
+	}
+	receipts := globReceipts(t, tmp)
+	if len(receipts) != 1 {
+		t.Fatalf("receipts = %v, want one", receipts)
+	}
+	receipt, err := workstation.LoadDecisionReceipt(receipts[0])
+	if err != nil {
+		t.Fatalf("load receipt: %v", err)
+	}
+	if receipt.Request.EffectType != contracts.EffectTypeWorkstationFileWrite || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate || receipt.Verdict != contracts.WorkstationVerdictDeny {
+		t.Fatalf("sensitive write receipt = %s/%s/%s, want FILE_WRITE/operate/DENY", receipt.Request.EffectType, receipt.Request.EffectMode, receipt.Verdict)
 	}
 }
 
@@ -505,8 +575,9 @@ func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 	tmp := t.TempDir()
 	restoreHookClock(t)
 	payload := `{"toolName":"apply_patch","toolInput":{"command":"*** Begin Patch\n*** Update File: .env\n+SECRET=value\n*** End Patch\n"}}`
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
 	var stdout, stderr bytes.Buffer
-	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
@@ -523,6 +594,9 @@ func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 	}
 	if receipt.Request.Target != fingerprintHookTarget(".env") {
 		t.Fatalf("receipt target = %q, want fingerprint", receipt.Request.Target)
+	}
+	if receipt.Request.EffectType != contracts.EffectTypeWorkstationFileWrite || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate || receipt.Verdict != contracts.WorkstationVerdictDeny {
+		t.Fatalf("apply_patch sensitive write receipt = %s/%s/%s, want FILE_WRITE/operate/DENY", receipt.Request.EffectType, receipt.Request.EffectMode, receipt.Verdict)
 	}
 }
 

@@ -43,8 +43,8 @@ func LoadPolicyProfileFileWithDigest(path string) (contracts.WorkstationPolicyPr
 	if err := json.Unmarshal(data, &profile); err != nil {
 		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("parse policy profile: %w", err)
 	}
-	if profile.ID == "" {
-		return contracts.WorkstationPolicyProfile{}, "", errors.New("policy profile id is required")
+	if profile.ID != contracts.PolicyProfileWorkstationObserveDraftV1 {
+		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("policy profile id must be %q", contracts.PolicyProfileWorkstationObserveDraftV1)
 	}
 	sum := sha256.Sum256(data)
 	return profile, "sha256:" + hex.EncodeToString(sum[:]), nil
@@ -206,6 +206,8 @@ func EffectDefaults(effectClass string) (effectType, effectMode, action, toolID 
 		return contracts.EffectTypeWorkstationPaymentInitiate, contracts.WorkstationEffectModeOperate, "payment_initiate", "payment.initiate"
 	case "shell-operate", "shell_operate":
 		return contracts.EffectTypeWorkstationShellCommand, contracts.WorkstationEffectModeOperate, "shell_operate", "shell"
+	case "sensitive-file-write":
+		return contracts.EffectTypeWorkstationFileWrite, contracts.WorkstationEffectModeOperate, "file_write", "workspace.write"
 	case "file", "draft", "write":
 		return contracts.EffectTypeWorkstationFileWrite, contracts.WorkstationEffectModeDraft, "file_write", "workspace.write"
 	default:

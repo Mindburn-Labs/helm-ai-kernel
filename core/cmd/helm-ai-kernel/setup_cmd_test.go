@@ -88,11 +88,42 @@ func TestSetupRejectsInvalidCustomPolicyBeforeWritingConfig(t *testing.T) {
 	}
 }
 
+func TestSetupRejectsUnexpectedCustomPolicyBeforeWritingConfig(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+	policy := filepath.Join(tmp, "unexpected-policy.json")
+	if err := os.WriteFile(policy, []byte(`{"id":"workstation.other.v1"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dataDir := filepath.Join(tmp, "helm")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--yes", "--no-quickstart", "--data-dir", dataDir, "--policy-profile", policy}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "policy profile") {
+		t.Fatalf("unexpected custom policy setup exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("unexpected custom policy created data state: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected custom policy wrote config: %v", err)
+	}
+}
+
 func TestSetupStatusRequiresExactCustomPolicyDigest(t *testing.T) {
 	tmp := t.TempDir()
 	home := filepath.Join(tmp, "home")
 	t.Setenv("HOME", home)
-	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	fixture := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	profileBytes, err := os.ReadFile(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(tmp, "observe_draft.v1.allow.json")
+	if err := os.WriteFile(profile, profileBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	_, approvedDigest, err := workstation.LoadPolicyProfileFileWithDigest(profile)
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +146,7 @@ func TestSetupStatusRequiresExactCustomPolicyDigest(t *testing.T) {
 		t.Fatalf("write stale hook config: %v", err)
 	}
 
-	statusArgs := []string{"helm-ai-kernel", "setup", "status", "codex", "--no-quickstart", "--json", "--data-dir", opts.DataDir, "--policy-profile", profile}
+	statusArgs := []string{"helm-ai-kernel", "setup", "status", "codex", "--no-quickstart", "--json", "--data-dir", opts.DataDir}
 	assertHookInstalled := func(want bool) {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
@@ -134,6 +165,48 @@ func TestSetupStatusRequiresExactCustomPolicyDigest(t *testing.T) {
 		t.Fatalf("reapprove hook config: %v", err)
 	}
 	assertHookInstalled(true)
+
+	if err := os.WriteFile(profile, append(profileBytes, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	assertHookInstalled(false)
+}
+
+func TestSetupStatusCustomPolicyDiscoveryFailsClosed(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", filepath.Join(tmp, "home"))
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	opts := setupOptions{Target: "codex", Scope: "user", DataDir: filepath.Join(tmp, "helm")}
+	summary, err := buildSetupSummary(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := setupHookCommand(opts, summary.BinaryPath)
+	validProfile := base + " --policy-profile " + shellQuote(profile) + " --policy-profile-sha256 sha256:approved"
+
+	for _, test := range []struct {
+		name    string
+		command string
+	}{
+		{name: "missing digest", command: base + " --policy-profile " + shellQuote(profile)},
+		{name: "missing profile", command: base + " --policy-profile-sha256 sha256:approved"},
+		{name: "dynamic profile", command: base + " --policy-profile \"$PROFILE\" --policy-profile-sha256 sha256:approved"},
+		{name: "ambiguous profile", command: validProfile + " --policy-profile " + shellQuote(profile)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := os.Remove(summary.HookConfigPath); err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			if err := upsertHookConfig(summary.HookConfigPath, setupHookMatcher(opts.Target), test.command, ""); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			code := Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--no-quickstart", "--json", "--data-dir", opts.DataDir}, &stdout, &stderr)
+			if code != 2 || !strings.Contains(stderr.String(), "policy profile") {
+				t.Fatalf("status code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+		})
+	}
 }
 
 func TestSetupJSONSupportMatrix(t *testing.T) {

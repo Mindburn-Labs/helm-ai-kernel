@@ -43,6 +43,10 @@ func TestOnboardLegacyYesPreservesStoreTrustRootAndConfig(t *testing.T) {
 	if !strings.Contains(string(config), `root_public_key: "`+strings.TrimSpace(string(pubKey))+`"`) {
 		t.Fatal("helm.yaml trust root did not match custom data dir public key")
 	}
+	quickstartDataDir := filepath.Join(dataDir, "quickstart")
+	if !strings.Contains(stdout.String(), "setup --quickstart --profile mcp --data-dir "+shellQuote(quickstartDataDir)+" --yes") {
+		t.Fatalf("legacy next step did not target a fresh Quickstart directory: %s", stdout.String())
+	}
 	if _, err := os.Stat(filepath.Join(cwd, "data", "root.key")); !os.IsNotExist(err) {
 		t.Fatalf("onboard wrote root.key outside custom data dir: %v", err)
 	}

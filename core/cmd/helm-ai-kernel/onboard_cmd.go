@@ -192,7 +192,8 @@ trust:
 	fmt.Fprintf(stdout, "%s✅ HELM is ready.%s\n\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "%sNext steps:%s\n\n", ColorBold, ColorReset)
 	fmt.Fprintf(stdout, "  %s1.%s Continue with the guided local proof:\n", ColorBold+ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "     %shelm-ai-kernel setup --quickstart --profile mcp --yes%s\n\n", ColorBold, ColorReset)
+	quickstartDataDir := filepath.Join(dataDir, "quickstart")
+	fmt.Fprintf(stdout, "     %shelm-ai-kernel setup --quickstart --profile mcp --data-dir %s --yes%s\n\n", ColorBold, shellQuote(quickstartDataDir), ColorReset)
 	fmt.Fprintf(stdout, "%sDocs:%s https://github.com/Mindburn-Labs/helm-ai-kernel\n\n", ColorGray, ColorReset)
 
 	return 0

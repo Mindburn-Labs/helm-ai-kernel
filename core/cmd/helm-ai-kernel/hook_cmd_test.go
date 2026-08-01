@@ -571,6 +571,62 @@ func TestHookPreToolDeniesSensitiveWrite(t *testing.T) {
 	}
 }
 
+func TestHookPreToolDeniesProtectedHookConfigWrites(t *testing.T) {
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	for _, target := range []string{".claude/settings.json", ".codex/hooks.json"} {
+		t.Run(target, func(t *testing.T) {
+			tmp := t.TempDir()
+			restoreHookClock(t)
+			payload := `{"tool_name":"Write","tool_input":{"file_path":"` + target + `"}}`
+			var stdout, stderr bytes.Buffer
+			code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+				t.Fatalf("protected hook config write should be denied, output = %s", stdout.String())
+			}
+			receipts := globReceipts(t, tmp)
+			if len(receipts) != 1 {
+				t.Fatalf("receipts = %v, want one", receipts)
+			}
+			receipt, err := workstation.LoadDecisionReceipt(receipts[0])
+			if err != nil {
+				t.Fatalf("load receipt: %v", err)
+			}
+			if receipt.Request.Target != fingerprintHookTarget(target) || receipt.Request.EffectType != contracts.EffectTypeWorkstationFileWrite || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate || receipt.Verdict != contracts.WorkstationVerdictDeny {
+				t.Fatalf("protected hook config receipt = %+v, want fingerprinted FILE_WRITE/operate/DENY", receipt)
+			}
+		})
+	}
+}
+
+func TestHookPreToolDeniesProtectedShellConfigWriteEvenWithShellGrant(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	payload := `{"tool_name":"Bash","tool_input":{"command":"cp replacement .codex/hooks.json"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+		t.Fatalf("protected shell config operation should be denied, output = %s", stdout.String())
+	}
+	receipts := globReceipts(t, tmp)
+	if len(receipts) != 1 {
+		t.Fatalf("receipts = %v, want one", receipts)
+	}
+	receipt, err := workstation.LoadDecisionReceipt(receipts[0])
+	if err != nil {
+		t.Fatalf("load receipt: %v", err)
+	}
+	if receipt.Request.Target != fingerprintHookTarget(".codex/hooks.json") || receipt.Request.EffectType != contracts.EffectTypeWorkstationFileWrite || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate || receipt.Verdict != contracts.WorkstationVerdictDeny {
+		t.Fatalf("protected shell config receipt = %+v, want fingerprinted FILE_WRITE/operate/DENY", receipt)
+	}
+}
+
 func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 	tmp := t.TempDir()
 	restoreHookClock(t)

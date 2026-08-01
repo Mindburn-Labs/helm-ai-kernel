@@ -121,6 +121,7 @@ var decideCases = []struct {
 	{"evasion-redirect-windows-git", `echo x > 'repo/.git\config'`, "sensitive target"},
 	{"evasion-redirect-all-env", "echo SECRET=x &> .env", "sensitive target"},
 	{"evasion-append-all-key", "cat pub &>> /home/u/.ssh/id_ed25519", "sensitive target"},
+	{"protected-config-copy", "cp replacement .codex/hooks.json", "sensitive target"},
 
 	// Fail-closed: unparseable input must not pass silently.
 	{"failclosed-unparseable", "rm -rf /tmp/x '", "unparseable"},

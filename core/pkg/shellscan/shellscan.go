@@ -23,6 +23,7 @@ const (
 	SignalShellInvocation       = "shell-invocation"
 	SignalInterpreterInvocation = "interpreter-invocation"
 	SignalSensitiveRedirect     = "sensitive-redirect"
+	SignalSensitiveTarget       = "sensitive-target"
 )
 
 // maxWrapperDepth bounds recursive unwrapping of eval / sh -c payloads so
@@ -47,6 +48,9 @@ type Result struct {
 	ParseOK  bool
 	Commands []Command
 	Signals  []string
+	// SensitiveTarget is the static sensitive target that caused routing to
+	// the signed decision path. Callers must avoid persisting it verbatim.
+	SensitiveTarget string
 }
 
 // legacyNeedles is the pre-AST substring list from hook_cmd.go, kept verbatim
@@ -67,15 +71,19 @@ var legacyNeedles = []string{
 	"truncate table",
 }
 
-// sensitiveRedirectTargets mirrors the sensitive-write list in the hook so a
-// shell redirect cannot bypass the Write-tool path protection.
-var sensitiveRedirectTargets = []string{
+// sensitiveTargetNeedles mirrors the sensitive-write list in the hook so a
+// shell operation cannot bypass the Write-tool path protection.
+var sensitiveTargetNeedles = []string{
 	".env",
 	".pem",
 	".key",
 	"id_rsa",
 	"id_ed25519",
 	".git/",
+	".claude/settings.json",
+	".codex/hooks.json",
+	".claude\\settings.json",
+	".codex\\hooks.json",
 	`.git\`,
 }
 
@@ -112,6 +120,7 @@ func ClassifyAt(raw, cwd string) Result {
 	res.Commands = c.commands
 	res.Signals = c.signalList()
 	res.ParseOK = c.parseOK
+	res.SensitiveTarget = c.sensitiveTarget
 	return res
 }
 
@@ -122,8 +131,9 @@ type collector struct {
 	signals    map[string]bool
 	parseOK    bool
 
-	writtenPaths map[string]bool
-	cwd          string
+	writtenPaths    map[string]bool
+	cwd             string
+	sensitiveTarget string
 }
 
 func (c *collector) decide(reason string) {
@@ -312,12 +322,34 @@ func (c *collector) recordWriteTarget(tok wordTok, source string) {
 		c.writtenPaths = map[string]bool{}
 	}
 	c.writtenPaths[c.normalizedPath(tok.text)] = true
-	for _, needle := range sensitiveRedirectTargets {
-		if strings.Contains(target, needle) {
-			c.signal(SignalSensitiveRedirect)
-			c.decide(fmt.Sprintf("write redirect to sensitive target %q", tok.text))
-			return
+	c.recordSensitiveTarget(tok, "write redirect", SignalSensitiveRedirect)
+}
+
+func (c *collector) recordSensitiveTarget(tok wordTok, operation, signal string) {
+	target := strings.ToLower(tok.text)
+	for _, needle := range sensitiveTargetNeedles {
+		if !strings.Contains(target, needle) {
+			continue
 		}
+		if c.sensitiveTarget == "" {
+			c.sensitiveTarget = tok.text
+		}
+		c.signal(signal)
+		c.decide(fmt.Sprintf("%s to sensitive target %q", operation, tok.text))
+		return
+	}
+}
+
+// classifySensitiveTargetArguments treats access to a sensitive path as a
+// protected operation. That closes shell copy/move/editor bypasses around the
+// hook configuration, whose policy digest otherwise lives in an agent-visible
+// file. The hook maps this result to the narrower file.write capability.
+func (c *collector) classifySensitiveTargetArguments(args []wordTok) {
+	for _, tok := range args[1:] {
+		if tok.dynamic {
+			continue
+		}
+		c.recordSensitiveTarget(tok, "protected operation", SignalSensitiveTarget)
 	}
 }
 
@@ -1096,6 +1128,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 		return
 	}
 	for len(args) > 0 {
+		c.classifySensitiveTargetArguments(args)
 		head := args[0]
 		if head.dynamic {
 			c.decide("dynamic command word cannot be classified statically")

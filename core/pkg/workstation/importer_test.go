@@ -221,6 +221,17 @@ func TestOperateFileWritesRequireExplicitPermission(t *testing.T) {
 			}
 		})
 	}
+
+	profile.Operate.Permissions = []string{contracts.WorkstationPermissionFileWrite}
+	verdict, reasonCode, _ := EvaluateEvent(profile, ToolEvent{
+		Type:       "file_write",
+		EffectType: contracts.EffectTypeWorkstationFileWrite,
+		EffectMode: contracts.WorkstationEffectModeOperate,
+		Target:     "docs/allowed.md",
+	})
+	if verdict != contracts.WorkstationVerdictAllow || reasonCode != "" {
+		t.Fatalf("file.write capability = %s/%s, want ALLOW/empty", verdict, reasonCode)
+	}
 }
 
 func TestExpandedOperatePolicyReasons(t *testing.T) {

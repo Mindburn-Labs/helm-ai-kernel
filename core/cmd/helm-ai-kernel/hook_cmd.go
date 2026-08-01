@@ -198,13 +198,23 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 		// existing signed decision path; the permit/receipt verdict is still
 		// produced by workstation.Decide, fail-closed as before.
 		if scan := shellscan.ClassifyAt(command, payload.CWD); scan.Decide {
+			class := "shell-operate"
+			target := command
+			action := "shell_operate"
+			reason := "shell operation: " + scan.Reason
+			if scan.SensitiveTarget != "" {
+				class = "sensitive-file-write"
+				target = scan.SensitiveTarget
+				action = "file_write"
+				reason = "sensitive file operation"
+			}
 			return hookClassification{
 				ShouldDecide: true,
-				Class:        "shell-operate",
-				Target:       command,
-				Action:       "shell_operate",
+				Class:        class,
+				Target:       target,
+				Action:       action,
 				ToolID:       "shell",
-				Reason:       "shell operation: " + scan.Reason,
+				Reason:       reason,
 				Metadata:     shellscanReceiptMetadata(scan),
 			}
 		}
@@ -382,6 +392,10 @@ func isSensitiveWriteTarget(path string) bool {
 		"id_ed25519",
 		".git/",
 		".git\\",
+		".claude/settings.json",
+		".codex/hooks.json",
+		".claude\\settings.json",
+		".codex\\hooks.json",
 	}
 	for _, needle := range sensitive {
 		if strings.Contains(p, needle) {

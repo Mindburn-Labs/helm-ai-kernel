@@ -3,6 +3,7 @@
 package workstation
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -39,15 +40,179 @@ func LoadPolicyProfileFileWithDigest(path string) (contracts.WorkstationPolicyPr
 	if err != nil {
 		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("read policy profile: %w", err)
 	}
-	var profile contracts.WorkstationPolicyProfile
-	if err := json.Unmarshal(data, &profile); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("parse policy profile: %w", err)
 	}
-	if profile.ID != contracts.PolicyProfileWorkstationObserveDraftV1 {
-		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("policy profile id must be %q", contracts.PolicyProfileWorkstationObserveDraftV1)
+	if raw == nil {
+		return contracts.WorkstationPolicyProfile{}, "", errors.New("policy profile must be an object")
+	}
+	var profile contracts.WorkstationPolicyProfile
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&profile); err != nil {
+		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("parse policy profile: %w", err)
+	}
+	if err := validateWorkstationPolicyProfile(raw, profile); err != nil {
+		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("validate policy profile: %w", err)
 	}
 	sum := sha256.Sum256(data)
 	return profile, "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func validateWorkstationPolicyProfile(raw map[string]json.RawMessage, profile contracts.WorkstationPolicyProfile) error {
+	for _, field := range []string{"id", "mode", "observe", "draft", "operate", "egress", "memory", "recurring_loops"} {
+		if _, ok := raw[field]; !ok {
+			return fmt.Errorf("%s is required", field)
+		}
+	}
+	if profile.ID != contracts.PolicyProfileWorkstationObserveDraftV1 {
+		return fmt.Errorf("policy profile id must be %q", contracts.PolicyProfileWorkstationObserveDraftV1)
+	}
+	if profile.Mode != "observe_only" && profile.Mode != "enforceable" && profile.Mode != "high_risk_effect_capable" {
+		return fmt.Errorf("policy profile mode %q is not supported", profile.Mode)
+	}
+
+	if _, err := requiredPolicyObject(raw, "observe", "allowed_actions"); err != nil {
+		return err
+	}
+	draft, err := requiredPolicyObject(raw, "draft", "workspace_roots", "allow_generated_artifacts")
+	if err != nil {
+		return err
+	}
+	if _, err := requiredPolicyObject(raw, "operate", "permissions"); err != nil {
+		return err
+	}
+	egress, err := requiredPolicyObject(raw, "egress", "allowlist")
+	if err != nil {
+		return err
+	}
+	memory, err := requiredPolicyObject(raw, "memory", "default_ttl_days", "allowed_classes")
+	if err != nil {
+		return err
+	}
+	loops, err := requiredPolicyObject(raw, "recurring_loops", "require_schedule", "require_max_runtime", "require_tool_scope", "require_expiration")
+	if err != nil {
+		return err
+	}
+	if err := requirePolicyBoolean(draft, "allow_generated_artifacts"); err != nil {
+		return err
+	}
+	for _, field := range []string{"require_schedule", "require_max_runtime", "require_tool_scope", "require_expiration"} {
+		if err := requirePolicyBoolean(loops, field); err != nil {
+			return err
+		}
+	}
+	if err := requirePolicyStrings("observe.allowed_actions", profile.Observe.AllowedActions); err != nil {
+		return err
+	}
+	if err := requirePolicyStrings("draft.workspace_roots", profile.Draft.WorkspaceRoots); err != nil {
+		return err
+	}
+	if err := requirePolicyStrings("operate.permissions", profile.Operate.Permissions); err != nil {
+		return err
+	}
+	if err := requirePolicyStrings("memory.allowed_classes", profile.Memory.AllowedClasses); err != nil {
+		return err
+	}
+	if profile.Memory.DefaultTTLDays == 0 {
+		return errors.New("memory.default_ttl_days must be positive")
+	}
+	if _, ok := memory["max_ttl_days"]; ok && profile.Memory.MaxTTLDays == 0 {
+		return errors.New("memory.max_ttl_days must be positive when provided")
+	}
+	if err := validatePolicyEgress(egress, profile.Egress); err != nil {
+		return err
+	}
+	if _, ok := raw["learning"]; ok {
+		learning, err := requiredPolicyObject(raw, "learning")
+		if err != nil {
+			return err
+		}
+		if profile.Learning == nil {
+			return errors.New("learning must be an object")
+		}
+		for _, field := range []string{"emit_finality", "emit_counterfactual"} {
+			if err := optionalPolicyBoolean(learning, field); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func requiredPolicyObject(raw map[string]json.RawMessage, field string, required ...string) (map[string]json.RawMessage, error) {
+	encoded, ok := raw[field]
+	if !ok {
+		return nil, fmt.Errorf("%s is required", field)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &object); err != nil || object == nil {
+		return nil, fmt.Errorf("%s must be an object", field)
+	}
+	for _, nested := range required {
+		if _, ok := object[nested]; !ok {
+			return nil, fmt.Errorf("%s.%s is required", field, nested)
+		}
+	}
+	return object, nil
+}
+
+func requirePolicyBoolean(raw map[string]json.RawMessage, field string) error {
+	encoded, ok := raw[field]
+	if !ok || jsonValueIsNull(encoded) {
+		return fmt.Errorf("%s must be a boolean", field)
+	}
+	return nil
+}
+
+func optionalPolicyBoolean(raw map[string]json.RawMessage, field string) error {
+	if encoded, ok := raw[field]; ok && jsonValueIsNull(encoded) {
+		return fmt.Errorf("%s must be a boolean", field)
+	}
+	return nil
+}
+
+func requirePolicyStrings(field string, values []string) error {
+	if values == nil {
+		return fmt.Errorf("%s must be an array", field)
+	}
+	for _, value := range values {
+		if value == "" {
+			return fmt.Errorf("%s must contain only nonempty strings", field)
+		}
+	}
+	return nil
+}
+
+func validatePolicyEgress(raw map[string]json.RawMessage, egress contracts.WorkstationEgressPolicy) error {
+	if egress.Allowlist == nil {
+		return errors.New("egress.allowlist must be an array")
+	}
+	var destinations []map[string]json.RawMessage
+	if err := json.Unmarshal(raw["allowlist"], &destinations); err != nil || destinations == nil {
+		return errors.New("egress.allowlist must be an array")
+	}
+	if len(destinations) != len(egress.Allowlist) {
+		return errors.New("egress.allowlist is invalid")
+	}
+	for index, destination := range destinations {
+		if destination == nil {
+			return fmt.Errorf("egress.allowlist[%d] must be an object", index)
+		}
+		host, ok := destination["host"]
+		if !ok || jsonValueIsNull(host) || egress.Allowlist[index].Host == "" {
+			return fmt.Errorf("egress.allowlist[%d].host must be a nonempty string", index)
+		}
+		if protocol, ok := destination["protocol"]; ok && jsonValueIsNull(protocol) {
+			return fmt.Errorf("egress.allowlist[%d].protocol must be a string", index)
+		}
+	}
+	return nil
+}
+
+func jsonValueIsNull(value json.RawMessage) bool {
+	return bytes.Equal(bytes.TrimSpace(value), []byte("null"))
 }
 
 func Decide(

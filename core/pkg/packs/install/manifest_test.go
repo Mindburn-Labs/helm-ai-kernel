@@ -1,3 +1,6 @@
+// quantum_posture: these manifest tests use an Ed25519 algorithm label only to
+// exercise verification metadata; they do not implement or claim a signature
+// strength or post-quantum security property.
 package install
 
 import (
@@ -167,6 +170,7 @@ func TestChannelClassification(t *testing.T) {
 		oss   bool
 	}{
 		{contracts.PackChannelCore, true, true},
+		{contracts.PackChannelIndividual, true, false},
 		{contracts.PackChannelCommunity, true, true},
 		{contracts.PackChannelTeams, true, false},
 		{contracts.PackChannelEnterprise, true, false},

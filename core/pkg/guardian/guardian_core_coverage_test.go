@@ -881,7 +881,7 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 		t.Fatalf("expected genesis previous-hash verification failure, ok=%v err=%v", ok, err)
 	}
 
-	zeroIDFail := NewZeroIDInterceptor(NewGuardian(&testSigner{fail: true}, nil, nil, WithClock(clock)), nil)
+	zeroIDFail := NewZeroIDInterceptor(NewGuardian(&testSigner{fail: true}, nil, nil, WithClock(clock)))
 	if _, err := zeroIDFail.Evaluate(ctx, &EvaluationContext{
 		Request: DecisionRequest{Context: map[string]interface{}{"spiffe_uri": "not-spiffe"}},
 	}, func(context.Context, *EvaluationContext) (*contracts.DecisionRecord, error) {
@@ -891,7 +891,7 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 		t.Fatalf("expected ZeroID signing error, got %v", err)
 	}
 	zeroIDAuditLog := NewAuditLog(clock)
-	zeroIDAudit := NewZeroIDInterceptor(NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithAuditLog(zeroIDAuditLog)), nil)
+	zeroIDAudit := NewZeroIDInterceptor(NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithAuditLog(zeroIDAuditLog)))
 	decision, err := zeroIDAudit.Evaluate(ctx, &EvaluationContext{
 		Request: DecisionRequest{Context: map[string]interface{}{"spiffe_uri": "not-spiffe"}},
 	}, func(context.Context, *EvaluationContext) (*contracts.DecisionRecord, error) {
@@ -1036,6 +1036,9 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 	}
 	if badCELDecision.ReasonCode != string(contracts.ReasonPRGEvalError) {
 		t.Fatalf("expected PRG eval error, got %+v", badCELDecision)
+	}
+	if strings.Contains(badCELDecision.Reason, "not valid cel") {
+		t.Fatalf("PRG eval deny exposed policy source: %q", badCELDecision.Reason)
 	}
 
 	inactiveStore := &guardianCoverageSnapshotStore{}

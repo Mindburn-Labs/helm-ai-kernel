@@ -180,31 +180,48 @@ func TestSafeExecutorChainsReceiptsBySignedSessionID(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := NewMemoryReceiptStore()
-	executor := NewSafeExecutor(nil, signer, &MockDriver{}, store, nil, nil, "", nil, nil, nil, func() time.Time {
+	executor := NewSafeExecutor(signer, signer, &MockDriver{}, store, nil, nil, "", nil, nil, nil, func() time.Time {
 		return time.Unix(1700000000, 0).UTC()
 	})
 	const sessionID = "signed-session"
 
-	first, err := executor.createReceipt(context.Background(), &contracts.DecisionRecord{
-		ID:                "decision-1",
-		Verdict:           string(contracts.VerdictAllow),
-		ReasonCode:        "ALLOW_BY_POLICY",
-		PolicyContentHash: "sha256:policy",
-		InputContext:      map[string]any{"session_id": sessionID},
-	}, nil, &contracts.Effect{EffectID: "effect-1", ArgsHash: "sha256:args-1"}, "", "sha256:output-1", nil)
-	if err != nil {
-		t.Fatalf("create first receipt: %v", err)
+	execute := func(decisionID, effectID, argsHash string) *contracts.Receipt {
+		t.Helper()
+		effect := &contracts.Effect{
+			EffectID:   effectID,
+			EffectType: "EXECUTE_TOOL",
+			ArgsHash:   argsHash,
+			Params:     map[string]any{"tool_name": "ls"},
+		}
+		decision := &contracts.DecisionRecord{
+			ID:                decisionID,
+			Verdict:           string(contracts.VerdictAllow),
+			ReasonCode:        "ALLOW_BY_POLICY",
+			PolicyContentHash: "sha256:policy",
+			InputContext:      map[string]any{"session_id": sessionID},
+			EffectDigest:      testEffectDigest(t, effect),
+		}
+		if err := signer.SignDecision(decision); err != nil {
+			t.Fatalf("sign decision %s: %v", decisionID, err)
+		}
+		intent := &contracts.AuthorizedExecutionIntent{
+			DecisionID:       decisionID,
+			EffectDigestHash: decision.EffectDigest,
+			AllowedTool:      "ls",
+			ExpiresAt:        time.Unix(1700003600, 0).UTC(),
+		}
+		if err := signer.SignIntent(intent); err != nil {
+			t.Fatalf("sign intent %s: %v", decisionID, err)
+		}
+		receipt, _, err := executor.Execute(context.Background(), effect, decision, intent)
+		if err != nil {
+			t.Fatalf("execute %s: %v", decisionID, err)
+		}
+		return receipt
 	}
-	second, err := executor.createReceipt(context.Background(), &contracts.DecisionRecord{
-		ID:                "decision-2",
-		Verdict:           string(contracts.VerdictAllow),
-		ReasonCode:        "ALLOW_BY_POLICY",
-		PolicyContentHash: "sha256:policy",
-		InputContext:      map[string]any{"session_id": sessionID},
-	}, nil, &contracts.Effect{EffectID: "effect-2", ArgsHash: "sha256:args-2"}, "", "sha256:output-2", nil)
-	if err != nil {
-		t.Fatalf("create second receipt: %v", err)
-	}
+
+	first := execute("decision-1", "effect-1", "sha256:args-1")
+	second := execute("decision-2", "effect-2", "sha256:args-2")
 
 	if first.ExecutorID != "" || second.ExecutorID != "" {
 		t.Fatalf("SafeExecutor must chain on signed session_id, not an executor fallback: first=%+v second=%+v", first, second)
@@ -212,8 +229,15 @@ func TestSafeExecutorChainsReceiptsBySignedSessionID(t *testing.T) {
 	if first.SessionID != sessionID || second.SessionID != sessionID {
 		t.Fatalf("receipts did not preserve signed session_id: first=%q second=%q", first.SessionID, second.SessionID)
 	}
-	if first.LamportClock != 1 || second.LamportClock != 2 || second.PrevHash != first.Signature {
-		t.Fatalf("session chain = first(lamport=%d) second(lamport=%d prev=%q), want 1, 2, %q", first.LamportClock, second.LamportClock, second.PrevHash, first.Signature)
+	if first.PrevHash != "" {
+		t.Fatalf("genesis prev_hash = %q, want empty", first.PrevHash)
+	}
+	firstHash, err := contracts.ReceiptChainHash(first)
+	if err != nil {
+		t.Fatalf("hash first receipt: %v", err)
+	}
+	if first.LamportClock != 1 || second.LamportClock != 2 || second.PrevHash != firstHash {
+		t.Fatalf("session chain = first(lamport=%d) second(lamport=%d prev=%q), want 1, 2, %q", first.LamportClock, second.LamportClock, second.PrevHash, firstHash)
 	}
 	for _, receipt := range []*contracts.Receipt{first, second} {
 		if valid, verifyErr := signer.VerifyReceipt(receipt); verifyErr != nil || !valid {

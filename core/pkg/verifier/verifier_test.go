@@ -510,6 +510,33 @@ func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
 	if !verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
 		t.Fatal("structured V5 receipt must verify")
 	}
+	signedDocument, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal signed V5 receipt: %v", err)
+	}
+	for _, signedField := range []string{
+		"signature_version", "receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash",
+		"lamport_clock", "args_hash", "verdict", "reason_code", "policy_hash", "session_id",
+	} {
+		t.Run("missing_"+signedField, func(t *testing.T) {
+			var tampered map[string]any
+			if err := json.Unmarshal(signedDocument, &tampered); err != nil {
+				t.Fatalf("decode tampered V5 receipt: %v", err)
+			}
+			delete(tampered, signedField)
+			tamperedDocument, err := json.Marshal(tampered)
+			if err != nil {
+				t.Fatalf("marshal tampered V5 receipt: %v", err)
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal(tamperedDocument, &decoded); err != nil {
+				t.Fatalf("decode tampered V5 JSON: %v", err)
+			}
+			if verifyEd25519CanonicalReceipt(decoded, decoded["signature"].(string), hex.EncodeToString(pub)) {
+				t.Fatalf("V5 receipt with omitted signed field %q verified", signedField)
+			}
+		})
+	}
 	document["policy_hash"] = "sha256:tampered"
 	if verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
 		t.Fatal("tampered V5 governance field must not verify")

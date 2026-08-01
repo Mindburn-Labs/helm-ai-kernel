@@ -711,7 +711,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         jurisdiction_ = s;
@@ -727,7 +727,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getJurisdictionBytes() {
       java.lang.Object ref = jurisdiction_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         jurisdiction_ = b;
@@ -1411,7 +1411,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getJurisdictionBytes() {
         java.lang.Object ref = jurisdiction_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           jurisdiction_ = b;
@@ -1620,7 +1620,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         optionId_ = s;
@@ -1636,7 +1636,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getOptionIdBytes() {
       java.lang.Object ref = optionId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         optionId_ = b;
@@ -1659,7 +1659,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         label_ = s;
@@ -1675,7 +1675,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getLabelBytes() {
       java.lang.Object ref = label_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         label_ = b;
@@ -1698,7 +1698,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         description_ = s;
@@ -1714,7 +1714,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getDescriptionBytes() {
       java.lang.Object ref = description_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         description_ = b;
@@ -1737,7 +1737,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         type_ = s;
@@ -1753,7 +1753,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getTypeBytes() {
       java.lang.Object ref = type_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         type_ = b;
@@ -2154,7 +2154,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getOptionIdBytes() {
         java.lang.Object ref = optionId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           optionId_ = b;
@@ -2226,7 +2226,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getLabelBytes() {
         java.lang.Object ref = label_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           label_ = b;
@@ -2298,7 +2298,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getDescriptionBytes() {
         java.lang.Object ref = description_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           description_ = b;
@@ -2370,7 +2370,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getTypeBytes() {
         java.lang.Object ref = type_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           type_ = b;
@@ -2597,7 +2597,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
     /**
      * <code>repeated .helm.intervention.v1.InterventionOption options = 10;</code>
      */
-    java.util.List<helm.intervention.v1.Intervention.InterventionOption> 
+    java.util.List<helm.intervention.v1.Intervention.InterventionOption>
         getOptionsList();
     /**
      * <code>repeated .helm.intervention.v1.InterventionOption options = 10;</code>
@@ -2610,7 +2610,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
     /**
      * <code>repeated .helm.intervention.v1.InterventionOption options = 10;</code>
      */
-    java.util.List<? extends helm.intervention.v1.Intervention.InterventionOptionOrBuilder> 
+    java.util.List<? extends helm.intervention.v1.Intervention.InterventionOptionOrBuilder>
         getOptionsOrBuilderList();
     /**
      * <code>repeated .helm.intervention.v1.InterventionOption options = 10;</code>
@@ -2727,7 +2727,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         interventionId_ = s;
@@ -2743,7 +2743,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getInterventionIdBytes() {
       java.lang.Object ref = interventionId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         interventionId_ = b;
@@ -2766,7 +2766,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         executionId_ = s;
@@ -2782,7 +2782,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getExecutionIdBytes() {
       java.lang.Object ref = executionId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         executionId_ = b;
@@ -2805,7 +2805,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         principalId_ = s;
@@ -2821,7 +2821,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getPrincipalIdBytes() {
       java.lang.Object ref = principalId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         principalId_ = b;
@@ -2880,7 +2880,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         description_ = s;
@@ -2896,7 +2896,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getDescriptionBytes() {
       java.lang.Object ref = description_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         description_ = b;
@@ -2956,7 +2956,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyEpoch_ = s;
@@ -2972,7 +2972,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getPolicyEpochBytes() {
       java.lang.Object ref = policyEpoch_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyEpoch_ = b;
@@ -3022,7 +3022,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
      * <code>repeated .helm.intervention.v1.InterventionOption options = 10;</code>
      */
     @java.lang.Override
-    public java.util.List<? extends helm.intervention.v1.Intervention.InterventionOptionOrBuilder> 
+    public java.util.List<? extends helm.intervention.v1.Intervention.InterventionOptionOrBuilder>
         getOptionsOrBuilderList() {
       return options_;
     }
@@ -3114,7 +3114,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         contentHash_ = s;
@@ -3130,7 +3130,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getContentHashBytes() {
       java.lang.Object ref = contentHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         contentHash_ = b;
@@ -3694,7 +3694,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
               optionsBuilder_ = null;
               options_ = other.options_;
               bitField0_ = (bitField0_ & ~0x00000200);
-              optionsBuilder_ = 
+              optionsBuilder_ =
                 com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
                    internalGetOptionsFieldBuilder() : null;
             } else {
@@ -3860,7 +3860,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getInterventionIdBytes() {
         java.lang.Object ref = interventionId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           interventionId_ = b;
@@ -3932,7 +3932,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getExecutionIdBytes() {
         java.lang.Object ref = executionId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           executionId_ = b;
@@ -4004,7 +4004,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getPrincipalIdBytes() {
         java.lang.Object ref = principalId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           principalId_ = b;
@@ -4180,7 +4180,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getDescriptionBytes() {
         java.lang.Object ref = description_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           description_ = b;
@@ -4363,7 +4363,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getPolicyEpochBytes() {
         java.lang.Object ref = policyEpoch_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyEpoch_ = b;
@@ -4518,7 +4518,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
        * <code>.helm.intervention.v1.InterventionScope scope = 9;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.intervention.v1.Intervention.InterventionScope, helm.intervention.v1.Intervention.InterventionScope.Builder, helm.intervention.v1.Intervention.InterventionScopeOrBuilder> 
+          helm.intervention.v1.Intervention.InterventionScope, helm.intervention.v1.Intervention.InterventionScope.Builder, helm.intervention.v1.Intervention.InterventionScopeOrBuilder>
           internalGetScopeFieldBuilder() {
         if (scopeBuilder_ == null) {
           scopeBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -4726,7 +4726,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       /**
        * <code>repeated .helm.intervention.v1.InterventionOption options = 10;</code>
        */
-      public java.util.List<? extends helm.intervention.v1.Intervention.InterventionOptionOrBuilder> 
+      public java.util.List<? extends helm.intervention.v1.Intervention.InterventionOptionOrBuilder>
            getOptionsOrBuilderList() {
         if (optionsBuilder_ != null) {
           return optionsBuilder_.getMessageOrBuilderList();
@@ -4752,12 +4752,12 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       /**
        * <code>repeated .helm.intervention.v1.InterventionOption options = 10;</code>
        */
-      public java.util.List<helm.intervention.v1.Intervention.InterventionOption.Builder> 
+      public java.util.List<helm.intervention.v1.Intervention.InterventionOption.Builder>
            getOptionsBuilderList() {
         return internalGetOptionsFieldBuilder().getBuilderList();
       }
       private com.google.protobuf.RepeatedFieldBuilder<
-          helm.intervention.v1.Intervention.InterventionOption, helm.intervention.v1.Intervention.InterventionOption.Builder, helm.intervention.v1.Intervention.InterventionOptionOrBuilder> 
+          helm.intervention.v1.Intervention.InterventionOption, helm.intervention.v1.Intervention.InterventionOption.Builder, helm.intervention.v1.Intervention.InterventionOptionOrBuilder>
           internalGetOptionsFieldBuilder() {
         if (optionsBuilder_ == null) {
           optionsBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
@@ -4879,7 +4879,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp created_at = 11;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetCreatedAtFieldBuilder() {
         if (createdAtBuilder_ == null) {
           createdAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -5000,7 +5000,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp expires_at = 12;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetExpiresAtFieldBuilder() {
         if (expiresAtBuilder_ == null) {
           expiresAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -5038,7 +5038,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getContentHashBytes() {
         java.lang.Object ref = contentHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           contentHash_ = b;
@@ -5380,7 +5380,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         receiptId_ = s;
@@ -5396,7 +5396,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getReceiptIdBytes() {
       java.lang.Object ref = receiptId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         receiptId_ = b;
@@ -5419,7 +5419,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         interventionId_ = s;
@@ -5435,7 +5435,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getInterventionIdBytes() {
       java.lang.Object ref = interventionId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         interventionId_ = b;
@@ -5458,7 +5458,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         deciderId_ = s;
@@ -5474,7 +5474,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getDeciderIdBytes() {
       java.lang.Object ref = deciderId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         deciderId_ = b;
@@ -5497,7 +5497,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         deciderType_ = s;
@@ -5513,7 +5513,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getDeciderTypeBytes() {
       java.lang.Object ref = deciderType_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         deciderType_ = b;
@@ -5554,7 +5554,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         selectedOption_ = s;
@@ -5570,7 +5570,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getSelectedOptionBytes() {
       java.lang.Object ref = selectedOption_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         selectedOption_ = b;
@@ -5593,7 +5593,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         rationale_ = s;
@@ -5609,7 +5609,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getRationaleBytes() {
       java.lang.Object ref = rationale_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         rationale_ = b;
@@ -5669,7 +5669,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyEpoch_ = s;
@@ -5685,7 +5685,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getPolicyEpochBytes() {
       java.lang.Object ref = policyEpoch_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyEpoch_ = b;
@@ -5734,7 +5734,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signature_ = s;
@@ -5750,7 +5750,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getSignatureBytes() {
       java.lang.Object ref = signature_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signature_ = b;
@@ -5773,7 +5773,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signerPublicKey_ = s;
@@ -5789,7 +5789,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getSignerPublicKeyBytes() {
       java.lang.Object ref = signerPublicKey_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signerPublicKey_ = b;
@@ -5812,7 +5812,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         contentHash_ = s;
@@ -5828,7 +5828,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
         getContentHashBytes() {
       java.lang.Object ref = contentHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         contentHash_ = b;
@@ -6478,7 +6478,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getReceiptIdBytes() {
         java.lang.Object ref = receiptId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           receiptId_ = b;
@@ -6550,7 +6550,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getInterventionIdBytes() {
         java.lang.Object ref = interventionId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           interventionId_ = b;
@@ -6622,7 +6622,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getDeciderIdBytes() {
         java.lang.Object ref = deciderId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           deciderId_ = b;
@@ -6694,7 +6694,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getDeciderTypeBytes() {
         java.lang.Object ref = deciderType_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           deciderType_ = b;
@@ -6818,7 +6818,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getSelectedOptionBytes() {
         java.lang.Object ref = selectedOption_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           selectedOption_ = b;
@@ -6890,7 +6890,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getRationaleBytes() {
         java.lang.Object ref = rationale_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           rationale_ = b;
@@ -7073,7 +7073,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getPolicyEpochBytes() {
         java.lang.Object ref = policyEpoch_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyEpoch_ = b;
@@ -7228,7 +7228,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp issued_at = 10;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetIssuedAtFieldBuilder() {
         if (issuedAtBuilder_ == null) {
           issuedAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -7266,7 +7266,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getSignatureBytes() {
         java.lang.Object ref = signature_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signature_ = b;
@@ -7338,7 +7338,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getSignerPublicKeyBytes() {
         java.lang.Object ref = signerPublicKey_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signerPublicKey_ = b;
@@ -7410,7 +7410,7 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
           getContentHashBytes() {
         java.lang.Object ref = contentHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           contentHash_ = b;
@@ -7510,22 +7510,22 @@ public final class Intervention extends com.google.protobuf.GeneratedFile {
 
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_intervention_v1_InterventionScope_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_intervention_v1_InterventionScope_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_intervention_v1_InterventionOption_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_intervention_v1_InterventionOption_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_intervention_v1_InterventionObject_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_intervention_v1_InterventionObject_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_intervention_v1_InterventionReceipt_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_intervention_v1_InterventionReceipt_fieldAccessorTable;
 

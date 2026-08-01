@@ -389,7 +389,7 @@ func (e *SafeExecutor) verifySnapshot(ctx context.Context, decision *contracts.D
 
 func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect, blobHash string, outputHash string, safeDepResult *safedep.GateResult) (*contracts.Receipt, error) {
 	// ProofGraph DAG: query previous receipt to build causal chain
-	prevHash := "GENESIS"
+	prevHash := ""
 	lamportClock := uint64(1)
 	sessionID := ""
 	if decision.InputContext != nil {
@@ -400,8 +400,15 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 
 	if e.receiptStore != nil {
 		if sessionID != "" {
-			if prev, err := e.receiptStore.GetLastForSession(ctx, sessionID); err == nil && prev != nil {
-				prevHash = prev.Signature // Causal link: hash of previous receipt's cryptographic signature
+			prev, err := e.receiptStore.GetLastForSession(ctx, sessionID)
+			if err != nil {
+				return nil, fmt.Errorf("load previous receipt for session %q: %w", sessionID, err)
+			}
+			if prev != nil {
+				prevHash, err = contracts.ReceiptChainHash(prev)
+				if err != nil {
+					return nil, fmt.Errorf("hash previous receipt for session %q: %w", sessionID, err)
+				}
 				lamportClock = prev.LamportClock + 1
 			}
 		}

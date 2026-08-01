@@ -539,6 +539,22 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 	case "":
 		// legacy V4 — payload as built
 	case "receipt.v5":
+		// V5 has a fixed signed schema. firstString deliberately treats a
+		// missing legacy alias and an explicit empty value alike, but doing so
+		// here would let an attacker remove an explicitly empty genesis
+		// prev_hash without changing the reconstructed payload.
+		for _, field := range []string{
+			"signature_version", "receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash",
+			"args_hash", "verdict", "reason_code", "policy_hash", "session_id",
+		} {
+			if _, ok := document[field].(string); !ok {
+				return false
+			}
+		}
+		lamportValue := firstUint(document, "lamport_clock")
+		if lamportValue == nil {
+			return false
+		}
 		var err error
 		payload, err = canonicalize.JCS(receiptV5DocumentEnvelope{
 			SignatureVersion: sigVersion,
@@ -548,7 +564,7 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 			Status:           firstString(document, "status"),
 			OutputHash:       firstString(document, "output_hash"),
 			PrevHash:         firstString(document, "prev_hash"),
-			LamportClock:     lamport,
+			LamportClock:     *lamportValue,
 			ArgsHash:         firstString(document, "args_hash"),
 			Verdict:          firstString(document, "verdict"),
 			ReasonCode:       firstString(document, "reason_code"),

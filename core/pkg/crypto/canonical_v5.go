@@ -23,7 +23,17 @@ import (
 // object has no such ambiguity: every field is separately keyed and every string
 // is escaped.
 //
-// STATUS: NOT YET ACTIVE. SignReceipt still emits v4.
+// STATUS: NOT THE ACTIVE PREIMAGE, and not what the "receipt.v5" wire version
+// means. HELM-303 shipped a narrower V5 — CanonicalizeReceiptV5 in canonical.go,
+// which extends the V4 field list with verdict, reason_code, policy_hash and
+// session_id. That is what ReceiptSigningPayload emits, what ReceiptVerifyPayload
+// checks, and what every signer/verifier in this package calls; it stays inside
+// the columns the receipt store round-trips.
+//
+// This file is the wider, still-unshipped ambition: whole-envelope JCS. It has
+// no non-test callers — including VerifyReceiptSignature below, which would
+// compute a DIFFERENT preimage for the same "receipt.v5" tag. Do not wire it
+// without giving it its own version constant.
 //
 // Switching the signer over is blocked on the receipt store, which cannot
 // round-trip a full receipt: receiptColumns in core/pkg/store/receipt_store.go

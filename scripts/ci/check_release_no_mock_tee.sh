@@ -23,13 +23,24 @@ for p in "${scan_paths[@]}"; do
     echo "scan path has no tracked files: ${p}" >&2
     exit 2
   fi
-  # Tracked symlinks under a scan surface evade the scan the same way: git grep
-  # reads the link blob while execution follows the link target.
-  if [[ -n "$(git ls-files -s -- "${p}" | awk '$1 == "120000"')" ]]; then
-    echo "tracked symlink under scan path: ${p}" >&2
+  # Every tracked entry under a scan surface must be a regular file. Symlinks
+  # (120000) scan as their target string, and gitlinks/submodules (160000) are
+  # not descended into by git grep — either evades the scan. Whitelisting the
+  # two regular-blob modes closes the entry-mode taxonomy outright.
+  irregular="$(git ls-files -s -- "${p}" | awk '$1 != "100644" && $1 != "100755"')"
+  if [[ -n "${irregular}" ]]; then
+    echo "non-regular tracked entries under scan path ${p}:" >&2
+    echo "${irregular}" >&2
     exit 2
   fi
 done
+
+# Self-test: the engine must find a known literal (this file's own pattern
+# text) before an empty scan below can be trusted.
+git grep -qE 'HELM_TEE_ALLOW_MOCK' -- scripts/ci/check_release_no_mock_tee.sh || {
+  echo "self-test failed: scanner cannot find a known literal; scanner is inert" >&2
+  exit 2
+}
 
 matches="$(git grep -nE 'AllowMock[[:space:]]*[:=][[:space:]]*true|HELM_TEE_ALLOW_MOCK[[:space:]]*[:=][[:space:]]*(1|true|yes)' -- "${scan_paths[@]}")" && rc=0 || rc=$?
 if (( rc > 1 )); then

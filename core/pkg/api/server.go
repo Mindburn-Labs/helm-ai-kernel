@@ -320,11 +320,21 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	// Generate receipt.
 	s.mu.Lock()
 	lamport := s.lamport + 1
-	prevHash := "sha256:genesis"
+	prevHash := ""
 	if sessionReceipts, ok := s.sessions[req.SessionID]; ok && len(sessionReceipts) > 0 {
 		lastID := sessionReceipts[len(sessionReceipts)-1]
-		if lastReceipt, ok := s.receipts[lastID]; ok && len(lastReceipt.Signature) >= 64 {
-			prevHash = "sha256:" + lastReceipt.Signature[:64]
+		lastReceipt, ok := s.receipts[lastID]
+		if !ok {
+			s.mu.Unlock()
+			http.Error(w, "previous receipt unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		var err error
+		prevHash, err = contracts.ReceiptChainHash(lastReceipt)
+		if err != nil {
+			s.mu.Unlock()
+			http.Error(w, "previous receipt hash unavailable", http.StatusServiceUnavailable)
+			return
 		}
 	}
 
@@ -480,13 +490,13 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var receipts []*ReceiptDTO
+	var receipts []*contracts.Receipt
 	for _, id := range receiptIDs {
 		if r, ok := s.receipts[id]; ok {
 			if !receiptVisibleToPrincipal(r, principal) {
 				continue
 			}
-			receipts = append(receipts, FromCanonical(r))
+			receipts = append(receipts, r)
 		}
 	}
 	s.mu.RUnlock()
@@ -501,10 +511,24 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify chain: Lamport monotonicity
+	// Verify the shared receipt-chain contract: genesis has an empty prev_hash,
+	// each successor carries the canonical hash of its predecessor, and Lamport
+	// clocks are strictly monotonic in session order.
 	valid := true
-	for i := 1; i < len(receipts); i++ {
-		if receipts[i].LamportClock <= receipts[i-1].LamportClock {
+	for i, receipt := range receipts {
+		if i == 0 {
+			if receipt.PrevHash != "" {
+				valid = false
+			}
+			continue
+		}
+		previous := receipts[i-1]
+		if receipt.LamportClock <= previous.LamportClock {
+			valid = false
+			break
+		}
+		expectedPrevHash, err := contracts.ReceiptChainHash(previous)
+		if err != nil || receipt.PrevHash != expectedPrevHash {
 			valid = false
 			break
 		}

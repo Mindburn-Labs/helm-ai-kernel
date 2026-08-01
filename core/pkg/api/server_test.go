@@ -315,30 +315,96 @@ func TestGetReceipt_NotFound(t *testing.T) {
 	}
 }
 
-func TestVerifyChain(t *testing.T) {
-	srv := newTestServer(t)
+func TestEvaluateBuildsCanonicalReceiptChain(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x23}, ed25519.SeedSize), "api-chain-test")
+	if err != nil {
+		t.Fatalf("new receipt signer: %v", err)
+	}
+	srv := NewServer(ServerConfig{
+		PDP:           pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true}),
+		Authenticator: testAPIAuthenticator,
+		ReceiptSigner: signer,
+	})
 
-	// Create 3 receipts in same session
-	for i := 0; i < 3; i++ {
-		body := EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: "test-session"}
-		reqBody, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody))
+	const sessionID = "canonical-chain-session"
+	receiptIDs := make([]string, 0, 2)
+	for i := 0; i < 2; i++ {
+		reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", AgentID: "a", SessionID: sessionID})
+		if err != nil {
+			t.Fatalf("marshal evaluate request %d: %v", i, err)
+		}
 		w := httptest.NewRecorder()
-		srv.ServeHTTP(w, req)
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody)))
+		if w.Code != http.StatusOK {
+			t.Fatalf("evaluate %d status = %d: %s", i, w.Code, w.Body.String())
+		}
+		var response EvaluateResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("decode evaluate response %d: %v", i, err)
+		}
+		receiptIDs = append(receiptIDs, response.ReceiptID)
 	}
 
-	// Verify chain
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/verify/test-session", nil)
+	srv.mu.RLock()
+	first := srv.receipts[receiptIDs[0]]
+	second := srv.receipts[receiptIDs[1]]
+	srv.mu.RUnlock()
+	if first == nil || second == nil {
+		t.Fatalf("stored chain receipts missing: first=%+v second=%+v", first, second)
+	}
+	if first.PrevHash != "" {
+		t.Fatalf("genesis prev_hash = %q, want empty", first.PrevHash)
+	}
+	wantPrevHash, err := contracts.ReceiptChainHash(first)
+	if err != nil {
+		t.Fatalf("hash first receipt: %v", err)
+	}
+	if second.PrevHash != wantPrevHash {
+		t.Fatalf("successor prev_hash = %q, want canonical receipt hash %q", second.PrevHash, wantPrevHash)
+	}
+
+	for i, wantPrevHash := range []string{"", wantPrevHash} {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+receiptIDs[i], nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET receipt %d status = %d: %s", i, w.Code, w.Body.String())
+		}
+		var receipt ReceiptDTO
+		if err := json.NewDecoder(w.Body).Decode(&receipt); err != nil {
+			t.Fatalf("decode GET receipt %d: %v", i, err)
+		}
+		if receipt.PrevHash != wantPrevHash {
+			t.Fatalf("GET receipt %d prev_hash = %q, want %q", i, receipt.PrevHash, wantPrevHash)
+		}
+	}
+
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-
-	var result map[string]any
-	json.NewDecoder(w.Body).Decode(&result)
-	if result["valid"] != true {
-		t.Error("chain should be valid")
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/verify/"+sessionID, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("verify chain status = %d: %s", w.Code, w.Body.String())
 	}
-	if result["receipts"].(float64) != 3 {
-		t.Errorf("expected 3 receipts, got %v", result["receipts"])
+	var result map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode chain verification: %v", err)
+	}
+	if result["valid"] != true || result["receipts"] != float64(2) {
+		t.Fatalf("canonical API chain did not verify: %+v", result)
+	}
+
+	srv.mu.Lock()
+	second.PrevHash = "sha256:tampered"
+	srv.mu.Unlock()
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/verify/"+sessionID, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("verify tampered chain status = %d: %s", w.Code, w.Body.String())
+	}
+	var tamperedResult map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&tamperedResult); err != nil {
+		t.Fatalf("decode tampered chain verification: %v", err)
+	}
+	if tamperedResult["valid"] != false {
+		t.Fatalf("tampered API chain verified: %+v", tamperedResult)
 	}
 }
 

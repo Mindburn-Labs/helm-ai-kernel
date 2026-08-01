@@ -53,6 +53,8 @@ BUILD_CONTRACT = {
     "source_snapshot": "fresh git archive of recorded commit; npm ci and next build ran only inside the ephemeral snapshot",
     "environment": "strict platform allowlist plus fixed kernel build flags; dotenv inputs rejected",
 }
+INVENTORY_MAX_BYTES = 16 * 1024 * 1024
+BUNDLE_MAX_BYTES = 512 * 1024 * 1024
 
 
 def reject(message: str) -> None:
@@ -101,9 +103,13 @@ def require_nonempty_string(value: Any, label: str) -> str:
 
 def require_runtime_value(value: Any, label: str) -> str:
     value = require_nonempty_string(value, label)
-    if value != value.strip() or len(value) > 512:
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError:
         reject(f"{label} must be a trimmed string no longer than 512 bytes")
-    if any(unicodedata.category(character).startswith("C") for character in value):
+    if value != value.strip() or len(encoded) > 512:
+        reject(f"{label} must be a trimmed string no longer than 512 bytes")
+    if any(unicodedata.category(character) == "Cc" for character in value):
         reject(f"{label} must not contain control characters")
     return value
 
@@ -115,6 +121,16 @@ def require_regular_file(path: Path, label: str) -> None:
         reject(f"{label} is missing: {path}")
     if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
         reject(f"{label} must be a regular non-symlink file: {path}")
+
+
+def require_file_size_at_most(path: Path, label: str, max_bytes: int) -> None:
+    require_regular_file(path, label)
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        reject(f"cannot inspect {label}: {exc}")
+    if size < 0 or size > max_bytes:
+        reject(f"{label} exceeds the validation limit")
 
 
 def read_json(path: Path, label: str) -> dict[str, Any]:
@@ -335,14 +351,14 @@ def verify_archive(
     inner: dict[str, Any],
 ) -> None:
     expected_root = f"helm-console-local-sidecar-{target['os']}-{target['arch']}"
-    if archive_path.stat().st_size > BUNDLE_MAX_BYTES:
-        reject(f"sidecar archive exceeds the {BUNDLE_MAX_BYTES}-byte release limit")
+    require_file_size_at_most(archive_path, "sidecar archive", BUNDLE_MAX_BYTES)
     try:
         archive = tarfile.open(archive_path, "r:gz")
     except (OSError, tarfile.TarError) as exc:
         reject(f"unable to read sidecar archive {archive_path.name}: {exc}")
 
-    files: dict[str, tuple[str, int, bytes]] = {}
+    files: dict[str, tuple[str, int]] = {}
+    metadata: dict[str, bytes] = {}
     seen_members: set[str] = set()
     total = 0
     try:
@@ -364,41 +380,45 @@ def verify_archive(
             if not relative or relative in files:
                 reject(f"archive contains duplicate or invalid payload path: {member.name}")
             if member.size < 0 or member.size > BUNDLE_MAX_BYTES or total > BUNDLE_MAX_BYTES - member.size:
-                reject("archive payload exceeds the runtime size limit")
+                reject("archive payload exceeds the validation limit")
             total += member.size
-            handle = archive.extractfile(member)
-            if handle is None:
-                reject(f"archive cannot read payload: {member.name}")
             capture = relative in {"INVENTORY.sha256", "PROVENANCE.json"}
             if capture and member.size > INVENTORY_MAX_BYTES:
                 reject("archive metadata exceeds the validation limit")
+            handle = archive.extractfile(member)
+            if handle is None:
+                reject(f"archive cannot read payload: {member.name}")
             digest = hashlib.sha256()
-            captured = bytearray() if capture else None
-            while True:
-                chunk = handle.read(1024 * 1024)
+            contents = bytearray() if capture else None
+            remaining = member.size
+            while remaining:
+                chunk = handle.read(min(1024 * 1024, remaining))
                 if not chunk:
-                    break
+                    reject(f"archive payload is truncated: {member.name}")
                 digest.update(chunk)
-                if captured is not None:
-                    captured.extend(chunk)
-            files[relative] = (digest.hexdigest(), member.mode, bytes(captured or b""))
+                if contents is not None:
+                    contents.extend(chunk)
+                remaining -= len(chunk)
+            files[relative] = (digest.hexdigest(), member.mode)
+            if contents is not None:
+                metadata[relative] = bytes(contents)
     finally:
         archive.close()
 
     for required in {"INVENTORY.sha256", "PROVENANCE.json", "app/helm-local-sidecar.mjs", "runtime/node/bin/node", "runtime/node/LICENSE"}:
         if required not in files:
             reject(f"archive is missing required closure file: {required}")
-    if files["INVENTORY.sha256"][2] != inventory_bytes:
+    if metadata["INVENTORY.sha256"] != inventory_bytes:
         reject("archive inventory differs from the released inventory artifact")
     if files["runtime/node/bin/node"][1] & 0o111 == 0:
         reject("bundled Node runtime is not executable")
 
     inventory = parse_inventory(inventory_bytes)
-    payload = {name: entry for name, entry in files.items() if name not in {"INVENTORY.sha256", "PROVENANCE.json"}}
+    payload = {name: digest for name, (digest, _) in files.items() if name not in {"INVENTORY.sha256", "PROVENANCE.json"}}
     if set(inventory) != set(payload):
         reject("archive payload does not exactly match its closure inventory")
     for name, expected_digest in inventory.items():
-        if payload[name][0] != expected_digest:
+        if payload[name] != expected_digest:
             reject(f"closure inventory digest mismatch: {name}")
 
     bundle_sha256 = hashlib.sha256(inventory_bytes).hexdigest()
@@ -406,7 +426,7 @@ def verify_archive(
         reject("release manifest bundle hash does not match the archive inventory")
     verify_provenance(
         read_json_from_bytes(external_provenance_bytes, "external sidecar provenance"),
-        read_json_from_bytes(files["PROVENANCE.json"][2], "embedded sidecar provenance"),
+        read_json_from_bytes(metadata["PROVENANCE.json"], "embedded sidecar provenance"),
         archive_path.name,
         archive_digest,
         source,
@@ -456,8 +476,15 @@ def verify_target(root: Path, record: Any, source: dict[str, str]) -> tuple[str,
         "provenance": artifact_record(artifacts["provenance"], f"target {target}.artifacts.provenance", f"{archive_name}.provenance.json"),
     }
     paths: dict[str, Path] = {}
+    max_sizes = {
+        "archive": BUNDLE_MAX_BYTES,
+        "archive_checksum": INVENTORY_MAX_BYTES,
+        "inventory": INVENTORY_MAX_BYTES,
+        "provenance": INVENTORY_MAX_BYTES,
+    }
     for kind, item in records.items():
         path = locate_unique(root, item["file"], f"target {target} {kind}")
+        require_file_size_at_most(path, f"target {target} {kind}", max_sizes[kind])
         actual = sha256_path(path)
         if actual != item["sha256"]:
             reject(f"target {target} {kind} hash does not match the release manifest")
@@ -707,6 +734,7 @@ def tar_path(archive: tarfile.TarFile, name: str, source: Path, mode: int | None
 
 def tar_verified_target_tree(archive: tarfile.TarFile, source: Path, target: str, layout_root: str) -> None:
     expected_root = f"helm-console-local-sidecar-{target}"
+    require_file_size_at_most(source, "verified sidecar archive", BUNDLE_MAX_BYTES)
     try:
         input_archive = tarfile.open(source, "r:gz")
     except (OSError, tarfile.TarError) as exc:
@@ -714,6 +742,7 @@ def tar_verified_target_tree(archive: tarfile.TarFile, source: Path, target: str
     try:
         members: list[tuple[str, tarfile.TarInfo]] = []
         seen: set[str] = set()
+        total = 0
         for member in input_archive.getmembers():
             name = safe_archive_path(member.name, directory=member.isdir())
             if name in seen:
@@ -725,6 +754,10 @@ def tar_verified_target_tree(archive: tarfile.TarFile, source: Path, target: str
                 reject(f"archive member must not be a link or device: {member.name}")
             if not member.isdir() and not member.isfile():
                 reject(f"archive member must be a regular file: {member.name}")
+            if member.isfile():
+                if member.size < 0 or member.size > BUNDLE_MAX_BYTES or total > BUNDLE_MAX_BYTES - member.size:
+                    reject("archive payload exceeds the validation limit")
+                total += member.size
             members.append((name, member))
         for name, member in sorted(members, key=lambda item: item[0]):
             destination = f"{layout_root}/console/{name}"

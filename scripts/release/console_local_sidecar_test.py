@@ -14,8 +14,8 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
+from unittest.mock import patch
 
 import console_local_sidecar as sidecar
 
@@ -188,6 +188,85 @@ def write_kernel_binaries(root: Path) -> None:
 
 
 class ConsoleLocalSidecarTests(unittest.TestCase):
+    def test_inventory_rejects_runtime_incompatible_line_endings(self) -> None:
+        inventory = f"{'0' * 64}  app/helm-local-sidecar.mjs\n".encode()
+        for label, value in {
+            "missing-final-lf": inventory[:-1],
+            "crlf": inventory.replace(b"\n", b"\r\n"),
+        }.items():
+            with self.subTest(label=label), self.assertRaisesRegex(ValueError, "closure inventory is invalid"):
+                sidecar.parse_inventory(value)
+
+    def test_runtime_provenance_values_match_launcher_validation(self) -> None:
+        target = {"os": "linux", "arch": "amd64"}
+        runtime = {
+            "node": "v22.16.0",
+            "bundled_node": {"executable": "runtime/node/bin/node", "license_notice": "runtime/node/LICENSE"},
+            "npm": "10.9.2",
+            "next": "15.4.2",
+            "platform": {"os": "linux", "arch": "amd64", "target": "linux-amd64"},
+            "libc": {"family": "glibc", "version": "2.39"},
+        }
+        mutations = {
+            "node": "v22.16.0 ",
+            "npm": "10.9.2\t",
+            "next": "15.4.2\x00",
+            "libc.version": "é" * 257,
+        }
+        for field, invalid in mutations.items():
+            with self.subTest(field=field):
+                candidate = json.loads(json.dumps(runtime))
+                if field == "libc.version":
+                    candidate["libc"]["version"] = invalid
+                else:
+                    candidate[field] = invalid
+                with self.assertRaisesRegex(ValueError, "trimmed string|control characters"):
+                    sidecar.verify_runtime(candidate, target)
+        candidate = json.loads(json.dumps(runtime))
+        candidate["npm"] = "10.9.2\u200d"
+        sidecar.verify_runtime(candidate, target)
+
+    def test_target_rejects_oversized_external_metadata_before_hashing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = build_release(Path(directory))
+            manifest = json.loads(next(root.rglob(sidecar.MANIFEST_NAME)).read_text(encoding="utf-8"))
+            original_sha256_path = sidecar.sha256_path
+
+            def archive_only_hash(path: Path) -> str:
+                if path.name.endswith(".tar.gz"):
+                    return original_sha256_path(path)
+                raise AssertionError(f"metadata was hashed before its size check: {path.name}")
+
+            with patch.object(sidecar, "INVENTORY_MAX_BYTES", 1), patch.object(sidecar, "sha256_path", side_effect=archive_only_hash):
+                with self.assertRaisesRegex(ValueError, "archive_checksum exceeds the validation limit"):
+                    sidecar.verify_target(root, manifest["targets"][0], SOURCE)
+
+    def test_archive_bounds_match_launcher_during_verification_and_assembly(self) -> None:
+        target = "linux-amd64"
+        closure_root = f"helm-console-local-sidecar-{target}"
+        target_value = {"os": "linux", "arch": "amd64"}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            aggregate = root / "aggregate.tar.gz"
+            with tarfile.open(aggregate, "w:gz") as output:
+                write_file(output, f"{closure_root}/app/too-large", b"\0" * 1025)
+            with patch.object(sidecar, "BUNDLE_MAX_BYTES", 1024):
+                self.assertLess(aggregate.stat().st_size, sidecar.BUNDLE_MAX_BYTES)
+                with self.assertRaisesRegex(ValueError, "archive payload exceeds the validation limit"):
+                    sidecar.verify_archive(aggregate, b"", b"{}", "0" * 64, SOURCE, target_value, {})
+                with self.assertRaisesRegex(ValueError, "archive payload exceeds the validation limit"), tarfile.open(root / "aggregate.tar", "w") as output:
+                    sidecar.tar_verified_target_tree(output, aggregate, target, "layout")
+
+            compressed = root / "compressed.tar.gz"
+            with tarfile.open(compressed, "w:gz") as output:
+                write_file(output, f"{closure_root}/app/compressed", bytes(range(128)))
+            with patch.object(sidecar, "BUNDLE_MAX_BYTES", 32):
+                self.assertGreater(compressed.stat().st_size, sidecar.BUNDLE_MAX_BYTES)
+                with self.assertRaisesRegex(ValueError, "sidecar archive exceeds the validation limit"):
+                    sidecar.verify_archive(compressed, b"", b"{}", "0" * 64, SOURCE, target_value, {})
+                with self.assertRaisesRegex(ValueError, "verified sidecar archive exceeds the validation limit"), tarfile.open(root / "compressed.tar", "w") as output:
+                    sidecar.tar_verified_target_tree(output, compressed, target, "layout")
+
     def test_release_accepts_canonical_console_packager_directory_entries(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, pins = build_release(Path(directory))
@@ -371,8 +450,8 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
     def test_release_rejects_console_archives_over_the_runtime_size_limit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, pins = build_release(Path(directory))
-            with mock.patch.object(sidecar, "BUNDLE_MAX_BYTES", 32):
-                with self.assertRaisesRegex(ValueError, "release limit|runtime size limit"):
+            with patch.object(sidecar, "BUNDLE_MAX_BYTES", 32):
+                with self.assertRaisesRegex(ValueError, "validation limit|release limit|runtime size limit"):
                     sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
 
     def test_release_rejects_inner_release_authority_claim(self) -> None:

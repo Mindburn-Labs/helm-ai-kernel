@@ -42,6 +42,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("downstream-fanout:", self.workflow)
         homebrew = self.job("homebrew")
         self.assertNotIn("--admin", homebrew)
+        self.assertIn("--auto", homebrew)
         self.assertIn("--delete-branch", homebrew)
         self.assertIn("for attempt in $(seq 1 120); do", homebrew)
         self.assertIn('state="$(gh pr view "$pr"', homebrew)

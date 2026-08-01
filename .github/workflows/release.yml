@@ -519,6 +519,7 @@ jobs:
           gh pr merge "$pr" \
             --repo Mindburn-Labs/homebrew-tap \
             --squash \
+            --auto \
             --delete-branch
           for attempt in $(seq 1 120); do
             state="$(gh pr view "$pr" \

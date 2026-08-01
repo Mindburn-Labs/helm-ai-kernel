@@ -602,6 +602,7 @@ func (c *collector) classifyInterpreter(name string, args []wordTok, via string,
 		return
 	}
 
+	terminalInfo := false
 	for i := 0; i < len(args); i++ {
 		tok := args[i]
 		if tok.dynamic {
@@ -631,6 +632,9 @@ func (c *collector) classifyInterpreter(name string, args []wordTok, via string,
 				return
 			}
 			if containsString(spec.noValueLong, flag) && !attached {
+				if flag == "--help" || flag == "--version" {
+					terminalInfo = true
+				}
 				continue
 			}
 			if containsString(spec.valueLong, flag) {
@@ -682,6 +686,13 @@ func (c *collector) classifyInterpreter(name string, args []wordTok, via string,
 		return
 	}
 
+	if terminalInfo {
+		tokens := make([]string, 0, len(args)+1)
+		tokens = append(tokens, name)
+		tokens = append(tokens, staticTokens(args)...)
+		c.record(Command{Name: name, Tokens: tokens, Prefix: Prefix(tokens), Via: via})
+		return
+	}
 	c.decide(name + " reads interpreter source from standard input (fail-closed)")
 }
 
@@ -1412,14 +1423,9 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			default:
 				// `bash script.sh`: script contents are opaque but running a
 				// static script file is a normal agent action; record the
-				// signal without routing to the decision path. Any dynamic
-				// word (e.g. bash <(curl ...), bash "$x") is decision-worthy.
-				for _, tok := range rest {
-					if tok.dynamic {
-						c.decide(name + " invocation with a dynamic argument")
-						return
-					}
-				}
+				// signal without routing to the decision path. The script path
+				// itself was already required to be static by scanShellScriptFlag;
+				// later dynamic words are ordinary script arguments, not source.
 				if positional.text != "" && c.writtenPaths[path.Clean(positional.text)] {
 					c.decide(name + " executes a script generated earlier in the command")
 					return

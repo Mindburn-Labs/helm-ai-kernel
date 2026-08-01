@@ -2320,6 +2320,16 @@ pub struct DecisionRecord {
     pub verdict: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(rename = "signature_version", skip_serializing_if = "Option::is_none")]
+    pub signature_version: Option<String>,
+    #[serde(rename = "reason_code", skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    #[serde(rename = "phenotype_hash", skip_serializing_if = "Option::is_none")]
+    pub phenotype_hash: Option<String>,
+    #[serde(rename = "policy_content_hash", skip_serializing_if = "Option::is_none")]
+    pub policy_content_hash: Option<String>,
+    #[serde(rename = "effect_digest", skip_serializing_if = "Option::is_none")]
+    pub effect_digest: Option<String>,
     #[serde(rename = "policy_version", skip_serializing_if = "Option::is_none")]
     pub policy_version: Option<String>,
     #[serde(rename = "policy_decision_hash", skip_serializing_if = "Option::is_none")]
@@ -2336,6 +2346,11 @@ impl DecisionRecord {
             resource: None,
             verdict: None,
             reason: None,
+            signature_version: None,
+            reason_code: None,
+            phenotype_hash: None,
+            policy_content_hash: None,
+            effect_digest: None,
             policy_version: None,
             policy_decision_hash: None,
             signature: None,
@@ -6890,6 +6905,10 @@ pub struct Receipt {
     pub effect_id: Option<String>,
     #[serde(rename = "status", skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    #[serde(rename = "signature_version", skip_serializing_if = "Option::is_none")]
+    pub signature_version: Option<String>,
+    #[serde(rename = "verdict", skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
     #[serde(rename = "reason_code", skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<String>,
     #[serde(rename = "output_hash", skip_serializing_if = "Option::is_none")]
@@ -6922,6 +6941,10 @@ pub struct Receipt {
     pub executor_id: Option<String>,
     #[serde(rename = "args_hash", skip_serializing_if = "Option::is_none")]
     pub args_hash: Option<String>,
+    #[serde(rename = "policy_hash", skip_serializing_if = "Option::is_none")]
+    pub policy_hash: Option<String>,
+    #[serde(rename = "session_id", skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     #[serde(rename = "metadata", skip_serializing_if = "Option::is_none")]
     pub metadata: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
@@ -6933,6 +6956,8 @@ impl Receipt {
             decision_id: None,
             effect_id: None,
             status: None,
+            signature_version: None,
+            verdict: None,
             reason_code: None,
             output_hash: None,
             blob_hash: None,
@@ -6947,6 +6972,8 @@ impl Receipt {
             principal: None,
             executor_id: None,
             args_hash: None,
+            policy_hash: None,
+            session_id: None,
             metadata: None,
         }
     }

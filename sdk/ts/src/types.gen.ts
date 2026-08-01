@@ -5399,6 +5399,36 @@ export interface DecisionRecord {
      * @type {string}
      * @memberof DecisionRecord
      */
+    signature_version?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    reason_code?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    phenotype_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    policy_content_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    effect_digest?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
     policy_version?: string;
     /**
      *
@@ -5436,6 +5466,11 @@ export function DecisionRecordFromJSONTyped(json: any, ignoreDiscriminator: bool
         'resource': json['resource'] == null ? undefined : json['resource'],
         'verdict': json['verdict'] == null ? undefined : json['verdict'],
         'reason': json['reason'] == null ? undefined : json['reason'],
+        'signature_version': json['signature_version'] == null ? undefined : json['signature_version'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
+        'phenotype_hash': json['phenotype_hash'] == null ? undefined : json['phenotype_hash'],
+        'policy_content_hash': json['policy_content_hash'] == null ? undefined : json['policy_content_hash'],
+        'effect_digest': json['effect_digest'] == null ? undefined : json['effect_digest'],
         'policy_version': json['policy_version'] == null ? undefined : json['policy_version'],
         'policy_decision_hash': json['policy_decision_hash'] == null ? undefined : json['policy_decision_hash'],
         'signature': json['signature'] == null ? undefined : json['signature'],
@@ -5453,6 +5488,11 @@ export function DecisionRecordToJSON(value?: DecisionRecord | null): any {
         'resource': value['resource'],
         'verdict': value['verdict'],
         'reason': value['reason'],
+        'signature_version': value['signature_version'],
+        'reason_code': value['reason_code'],
+        'phenotype_hash': value['phenotype_hash'],
+        'policy_content_hash': value['policy_content_hash'],
+        'effect_digest': value['effect_digest'],
         'policy_version': value['policy_version'],
         'policy_decision_hash': value['policy_decision_hash'],
         'signature': value['signature'],
@@ -15845,6 +15885,18 @@ export interface Receipt {
      * @type {string}
      * @memberof Receipt
      */
+    signature_version?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    verdict?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
     reason_code?: string;
     /**
      *
@@ -15926,6 +15978,18 @@ export interface Receipt {
     args_hash?: string;
     /**
      *
+     * @type {string}
+     * @memberof Receipt
+     */
+    policy_hash?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Receipt
+     */
+    session_id?: string;
+    /**
+     *
      * @type {{ [key: string]: any; }}
      * @memberof Receipt
      */
@@ -15965,6 +16029,8 @@ export function ReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolean): R
         'decision_id': json['decision_id'] == null ? undefined : json['decision_id'],
         'effect_id': json['effect_id'] == null ? undefined : json['effect_id'],
         'status': json['status'] == null ? undefined : json['status'],
+        'signature_version': json['signature_version'] == null ? undefined : json['signature_version'],
+        'verdict': json['verdict'] == null ? undefined : json['verdict'],
         'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
         'output_hash': json['output_hash'] == null ? undefined : json['output_hash'],
         'blob_hash': json['blob_hash'] == null ? undefined : json['blob_hash'],
@@ -15979,6 +16045,8 @@ export function ReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolean): R
         'principal': json['principal'] == null ? undefined : json['principal'],
         'executor_id': json['executor_id'] == null ? undefined : json['executor_id'],
         'args_hash': json['args_hash'] == null ? undefined : json['args_hash'],
+        'policy_hash': json['policy_hash'] == null ? undefined : json['policy_hash'],
+        'session_id': json['session_id'] == null ? undefined : json['session_id'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };
 }
@@ -15993,6 +16061,8 @@ export function ReceiptToJSON(value?: Receipt | null): any {
         'decision_id': value['decision_id'],
         'effect_id': value['effect_id'],
         'status': value['status'],
+        'signature_version': value['signature_version'],
+        'verdict': value['verdict'],
         'reason_code': value['reason_code'],
         'output_hash': value['output_hash'],
         'blob_hash': value['blob_hash'],
@@ -16007,6 +16077,8 @@ export function ReceiptToJSON(value?: Receipt | null): any {
         'principal': value['principal'],
         'executor_id': value['executor_id'],
         'args_hash': value['args_hash'],
+        'policy_hash': value['policy_hash'],
+        'session_id': value['session_id'],
         'metadata': value['metadata'],
     };
 }

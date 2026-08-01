@@ -65,19 +65,24 @@ type authenticatedPrincipalContextKey struct{}
 
 // ReceiptDTO stored in-memory / external schema.
 type ReceiptDTO struct {
-	ReceiptID     string         `json:"receipt_id"`
-	DecisionID    string         `json:"decision_id"`
-	CorrelationID string         `json:"correlation_id,omitempty"`
-	EffectID      string         `json:"effect_id"`
-	Status        string         `json:"status"`
-	Timestamp     string         `json:"timestamp"`
-	ExecutorID    string         `json:"executor_id,omitempty"`
-	Signature     string         `json:"signature"`
-	PrevHash      string         `json:"prev_hash"`
-	LamportClock  uint64         `json:"lamport_clock"`
-	DecisionHash  string         `json:"decision_hash"`
-	ArgsHash      string         `json:"args_hash,omitempty"`
-	Metadata      map[string]any `json:"metadata,omitempty"`
+	ReceiptID        string         `json:"receipt_id"`
+	DecisionID       string         `json:"decision_id"`
+	CorrelationID    string         `json:"correlation_id,omitempty"`
+	EffectID         string         `json:"effect_id"`
+	Status           string         `json:"status"`
+	Timestamp        string         `json:"timestamp"`
+	ExecutorID       string         `json:"executor_id,omitempty"`
+	Signature        string         `json:"signature"`
+	PrevHash         string         `json:"prev_hash"`
+	LamportClock     uint64         `json:"lamport_clock"`
+	DecisionHash     string         `json:"decision_hash"`
+	ArgsHash         string         `json:"args_hash,omitempty"`
+	SignatureVersion string         `json:"signature_version,omitempty"`
+	Verdict          string         `json:"verdict,omitempty"`
+	ReasonCode       string         `json:"reason_code,omitempty"`
+	PolicyHash       string         `json:"policy_hash,omitempty"`
+	SessionID        string         `json:"session_id,omitempty"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
 }
 
 func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
@@ -91,19 +96,24 @@ func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
 		}
 	}
 	return &ReceiptDTO{
-		ReceiptID:     r.ReceiptID,
-		DecisionID:    r.DecisionID,
-		CorrelationID: r.CorrelationID,
-		EffectID:      r.EffectID,
-		Status:        r.Status,
-		Timestamp:     r.Timestamp.Format(time.RFC3339),
-		ExecutorID:    r.ExecutorID,
-		Signature:     r.Signature,
-		PrevHash:      r.PrevHash,
-		LamportClock:  r.LamportClock,
-		DecisionHash:  decHash,
-		ArgsHash:      r.ArgsHash,
-		Metadata:      r.Metadata,
+		ReceiptID:        r.ReceiptID,
+		DecisionID:       r.DecisionID,
+		CorrelationID:    r.CorrelationID,
+		EffectID:         r.EffectID,
+		Status:           r.Status,
+		Timestamp:        r.Timestamp.Format(time.RFC3339),
+		ExecutorID:       r.ExecutorID,
+		Signature:        r.Signature,
+		PrevHash:         r.PrevHash,
+		LamportClock:     r.LamportClock,
+		DecisionHash:     decHash,
+		ArgsHash:         r.ArgsHash,
+		SignatureVersion: r.SignatureVersion,
+		Verdict:          r.Verdict,
+		ReasonCode:       r.ReasonCode,
+		PolicyHash:       r.PolicyHash,
+		SessionID:        r.SessionID,
+		Metadata:         r.Metadata,
 	}
 }
 

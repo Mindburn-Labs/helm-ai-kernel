@@ -1129,12 +1129,12 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 			receipt.ReceiptID, _ = raw["receipt_id"].(string)
 		}
 
-		// V5 causal receipts bind their chain scope in signed SessionID and may
-		// intentionally leave ExecutorID empty. Legacy receipts predate that
-		// field and continue to scope chains by ExecutorID.
-		session := receipt.SessionID
-		if session == "" {
-			session = receipt.ExecutorID
+		// Only receipt.v5 binds SessionID in its signing envelope. Legacy
+		// receipts retain their historical ExecutorID chain scope even when a
+		// later storage migration has populated session_id for lookup purposes.
+		session := receipt.ExecutorID
+		if receipt.SignatureVersion == contracts.ReceiptSignatureV5 {
+			session = receipt.SessionID
 		}
 		bySession[session] = append(bySession[session], receiptNode{
 			receipt: &receipt, hashes: hashes, file: entry.Name(),

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
@@ -540,6 +541,52 @@ func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
 	document["policy_hash"] = "sha256:tampered"
 	if verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
 		t.Fatal("tampered V5 governance field must not verify")
+	}
+}
+
+func TestVerifyEd25519CanonicalReceiptV5AcceptsEmptySignedFieldsOnDisk(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := contracts.Receipt{
+		ReceiptID:        "rcpt-empty-v5",
+		DecisionID:       "dec-empty-v5",
+		EffectID:         "effect-empty-v5",
+		Status:           "DENY",
+		PrevHash:         "",
+		LamportClock:     1,
+		SignatureVersion: contracts.ReceiptSignatureV5,
+	}
+	payload, err := canonicalize.JCS(receiptV5DocumentEnvelope{
+		SignatureVersion: receipt.SignatureVersion,
+		ReceiptID:        receipt.ReceiptID,
+		DecisionID:       receipt.DecisionID,
+		EffectID:         receipt.EffectID,
+		Status:           receipt.Status,
+		OutputHash:       receipt.OutputHash,
+		PrevHash:         receipt.PrevHash,
+		LamportClock:     receipt.LamportClock,
+		ArgsHash:         receipt.ArgsHash,
+		Verdict:          receipt.Verdict,
+		ReasonCode:       receipt.ReasonCode,
+		PolicyHash:       receipt.PolicyHash,
+		SessionID:        receipt.SessionID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt.Signature = hex.EncodeToString(ed25519.Sign(priv, payload))
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatalf("marshal V5 receipt: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatalf("decode V5 receipt: %v", err)
+	}
+	if !verifyEd25519CanonicalReceipt(document, receipt.Signature, hex.EncodeToString(pub)) {
+		t.Fatalf("V5 receipt with structurally present empty signed fields did not verify: %s", data)
 	}
 }
 

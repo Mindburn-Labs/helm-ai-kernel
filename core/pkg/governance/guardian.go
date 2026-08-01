@@ -1,3 +1,4 @@
+// quantum_posture: Guardian decision signatures use classical Ed25519 and do not provide post-quantum assurance.
 package governance
 
 import (

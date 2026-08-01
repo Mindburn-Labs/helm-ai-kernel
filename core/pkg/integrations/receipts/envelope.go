@@ -5,6 +5,7 @@
 package receipts
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -33,6 +34,51 @@ type IntegrationReceipt struct {
 
 	// EvidenceRefs links to evidence artifacts produced by this execution.
 	EvidenceRefs []EvidenceRef `json:"evidence_refs,omitempty"`
+}
+
+// MarshalJSON keeps the integration extensions alongside the embedded receipt.
+// contracts.Receipt implements json.Marshaler for receipt.v5 so its signed
+// empty fields survive transport. Without this explicit wrapper, that promoted
+// method would serialize only the embedded receipt and silently drop the
+// integration-specific evidence fields.
+func (r IntegrationReceipt) MarshalJSON() ([]byte, error) {
+	receiptJSON, err := json.Marshal(r.Receipt)
+	if err != nil {
+		return nil, err
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(receiptJSON, &fields); err != nil {
+		return nil, err
+	}
+
+	extensionsJSON, err := json.Marshal(struct {
+		PolicyDecision PolicyDecision `json:"policy_decision"`
+		CapabilityRef  CapabilityRef  `json:"capability_ref"`
+		AuthContext    AuthContext    `json:"auth_context"`
+		Provenance     ZTProvenance   `json:"zt_provenance"`
+		Cost           CostImpact     `json:"cost"`
+		EvidenceRefs   []EvidenceRef  `json:"evidence_refs,omitempty"`
+	}{
+		PolicyDecision: r.PolicyDecision,
+		CapabilityRef:  r.CapabilityRef,
+		AuthContext:    r.AuthContext,
+		Provenance:     r.Provenance,
+		Cost:           r.Cost,
+		EvidenceRefs:   r.EvidenceRefs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var extensions map[string]json.RawMessage
+	if err := json.Unmarshal(extensionsJSON, &extensions); err != nil {
+		return nil, err
+	}
+	for name, value := range extensions {
+		fields[name] = value
+	}
+	return json.Marshal(fields)
 }
 
 // PolicyDecision records the gateway's policy evaluation result.

@@ -73,6 +73,7 @@ func (s *SQLiteReceiptStore) migrate() error {
 		reason_code TEXT NOT NULL DEFAULT '',
 		policy_hash TEXT NOT NULL DEFAULT '',
 		session_id TEXT NOT NULL DEFAULT '',
+		causal_session_id TEXT NOT NULL DEFAULT '',
 		log_id TEXT NOT NULL DEFAULT '',
 		leaf_index INTEGER NOT NULL DEFAULT 0,
 		transparency TEXT,
@@ -103,6 +104,9 @@ func (s *SQLiteReceiptStore) migrate() error {
 	if err := s.ensureColumn("session_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn("causal_session_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	if err := s.ensureColumn("log_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
@@ -127,13 +131,18 @@ func (s *SQLiteReceiptStore) migrate() error {
 	if err := s.ensureColumn("transparency", "TEXT"); err != nil {
 		return err
 	}
+	if _, err := s.db.ExecContext(context.Background(), backfillCausalReceiptSessionsSQL); err != nil {
+		return err
+	}
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_receipts_executor_id ON receipts(executor_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_decision_id ON receipts(decision_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport ON receipts(executor_id, lamport_clock)`,
 		`DROP INDEX IF EXISTS idx_receipts_executor_lamport_unique`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_session_lamport_unique ON receipts(session_id, lamport_clock) WHERE session_id IS NOT NULL AND session_id <> '' AND lamport_clock > 0`,
-		`CREATE INDEX IF NOT EXISTS idx_receipts_session_lamport_desc ON receipts(session_id, lamport_clock DESC)`,
+		`DROP INDEX IF EXISTS idx_receipts_session_lamport_unique`,
+		`DROP INDEX IF EXISTS idx_receipts_session_lamport_desc`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_causal_session_lamport_unique ON receipts(causal_session_id, lamport_clock) WHERE causal_session_id IS NOT NULL AND causal_session_id <> '' AND lamport_clock > 0`,
+		`CREATE INDEX IF NOT EXISTS idx_receipts_causal_session_lamport_desc ON receipts(causal_session_id, lamport_clock DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp)`,
 	}
@@ -290,8 +299,8 @@ func (s *SQLiteReceiptStore) Store(ctx context.Context, r *contracts.Receipt) er
 
 func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Receipt) error {
 	query := `INSERT INTO receipts (
-		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, signature_version, verdict, reason_code, policy_hash, session_id, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
@@ -308,7 +317,7 @@ func insertSQLiteReceipt(ctx context.Context, execer sqlExecer, r *contracts.Rec
 	timestamp := r.Timestamp.UTC().Format(time.RFC3339Nano)
 
 	_, err = execer.ExecContext(ctx, query,
-		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.SignatureVersion, r.Verdict, r.ReasonCode, r.PolicyHash, r.SessionID, r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), r.KeyID, nullableJSON(publicKeySetJSON), r.SignatureProfile, r.SignatureAlgorithm, r.CorrelationID,
+		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.SignatureVersion, r.Verdict, r.ReasonCode, r.PolicyHash, r.SessionID, causalReceiptSessionID(r), r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), r.KeyID, nullableJSON(publicKeySetJSON), r.SignatureProfile, r.SignatureAlgorithm, r.CorrelationID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
@@ -369,7 +378,7 @@ func queryLastSQLiteReceipt(ctx context.Context, queryer sqlQueryer, sessionID s
 	query := `
 		SELECT ` + sqliteReceiptColumns + `
         FROM receipts
-		WHERE session_id = ?
+		WHERE causal_session_id = ?
         ORDER BY lamport_clock DESC
         LIMIT 1
     `

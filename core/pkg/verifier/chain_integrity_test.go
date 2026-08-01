@@ -1,3 +1,4 @@
+// quantum_posture: chain-integrity fixtures use classical Ed25519 only; no post-quantum assurance is claimed.
 package verifier
 
 // F-03 regression: the offline verifier's chain-of-custody checks must detect
@@ -149,6 +150,26 @@ func TestChainIntegritySeparatesSignedV5SessionsWithoutExecutorID(t *testing.T) 
 		if len(chain.ordered) != 2 {
 			t.Fatalf("session %q chain length = %d, want 2", chain.sessionID, len(chain.ordered))
 		}
+	}
+}
+
+func TestChainIntegrityKeepsLegacyReceiptsScopedByExecutor(t *testing.T) {
+	alpha := buildReceiptChain(t, "legacy-alpha", 1)
+	beta := buildReceiptChain(t, "legacy-beta", 1)
+	// session_id was not signed by legacy receipts. A post-upgrade store may
+	// populate it for lookup, but it must not merge independent legacy chains.
+	alpha[0].SessionID = "shared-backfill-value"
+	beta[0].SessionID = "shared-backfill-value"
+	alpha[0].ReceiptID = "legacy-alpha-receipt"
+	beta[0].ReceiptID = "legacy-beta-receipt"
+
+	dir := writeChain(t, append(alpha, beta...))
+	chains, result := loadReceiptChains(dir, "legacy_executor_scope")
+	if result != nil {
+		t.Fatalf("load legacy receipt chains: %s", result.Reason)
+	}
+	if len(chains) != 2 || chains[0].sessionID != "legacy-alpha" || chains[1].sessionID != "legacy-beta" {
+		t.Fatalf("legacy chains must remain executor scoped, got %+v", chains)
 	}
 }
 

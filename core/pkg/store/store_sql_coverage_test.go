@@ -264,7 +264,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.ReceiptID != receipt.ReceiptID || got.Metadata["k"] != "v" || got.SignatureVersion != contracts.ReceiptSignatureV5 || got.Verdict != "ALLOW" || got.ReasonCode != "POLICY_VIOLATION" || got.PolicyHash != "policy-hash" || got.SessionID != "session-1" {
+	if got.ReceiptID != receipt.ReceiptID || got.Metadata["k"] != "v" || got.SignatureVersion != contracts.ReceiptSignatureV5 || got.Verdict != "ALLOW" || got.ReasonCode != "POLICY_VIOLATION" || got.PolicyHash != "policy-hash" || got.SessionID != receipt.SessionID {
 		t.Fatalf("unexpected receipt: %+v", got)
 	}
 	mock.ExpectQuery("FROM receipts WHERE decision_id").WithArgs("missing").WillReturnError(sql.ErrNoRows)
@@ -325,12 +325,12 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 		t.Fatal("expected ListSince rows error")
 	}
 
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent-1").WillReturnRows(storePostgresReceiptRows(receipt, nil))
+	mock.ExpectQuery("FROM receipts WHERE session_id").WithArgs("agent-1").WillReturnRows(storePostgresReceiptRows(receipt, nil))
 	last, err := store.GetLastForSession(ctx, "agent-1")
 	if err != nil || last == nil || last.ReceiptID != receipt.ReceiptID {
 		t.Fatalf("GetLastForSession got %+v err=%v", last, err)
 	}
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("missing").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectQuery("FROM receipts WHERE session_id").WithArgs("missing").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	last, err = store.GetLastForSession(ctx, "missing")
 	if err != nil || last != nil {
 		t.Fatalf("expected missing last receipt to be nil, got %+v err=%v", last, err)
@@ -482,7 +482,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectQuery("FROM receipts WHERE session_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(29)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
@@ -517,7 +517,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnError(errors.New("last failed"))
+	mock.ExpectQuery("FROM receipts WHERE session_id").WithArgs("agent").WillReturnError(errors.New("last failed"))
 	mock.ExpectRollback()
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) { return nil, nil }); err == nil {
 		t.Fatal("expected last receipt error")
@@ -526,7 +526,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectQuery("FROM receipts WHERE session_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectRollback()
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return nil, errors.New("builder failed")
@@ -537,7 +537,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectQuery("FROM receipts WHERE session_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectExec("INSERT INTO receipts").WillReturnError(errors.New("insert failed"))
 	mock.ExpectRollback()
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
@@ -549,7 +549,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE executor_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectQuery("FROM receipts WHERE session_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
 	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(29)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
@@ -571,24 +571,24 @@ func TestCoverageBuildNextCausalReceiptBranches(t *testing.T) {
 	}); err == nil {
 		t.Fatal("expected nil receipt error")
 	}
-	// A builder that omits the executor id is now rejected rather than silently
+	// A builder that omits the signed session id is now rejected rather than silently
 	// defaulted. The builder signs the receipt it returns, so assigning the
 	// session here would mutate an already-signed object and invalidate any
 	// signature covering it.
 	if got, err := buildNextCausalReceipt("agent", nil, func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
-		return storeCoverageReceipt("receipt-empty-executor", "decision", "", 1, now), nil
+		return storeCoverageReceipt("receipt-empty-session", "decision", "", 1, now), nil
 	}); err == nil {
-		t.Fatalf("a receipt with no executor id was accepted and defaulted after signing: %+v", got)
+		t.Fatalf("a receipt with no signed session id was accepted and defaulted after signing: %+v", got)
 	}
 
 	// The ordinary path — the builder binds the session before signing.
 	if got, err := buildNextCausalReceipt("agent", nil, func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
-		return storeCoverageReceipt("receipt-bound-executor", "decision", "agent", 1, now), nil
-	}); err != nil || got.ExecutorID != "agent" {
-		t.Fatalf("builder-bound executor should be accepted, got %+v err=%v", got, err)
+		return storeCoverageReceipt("receipt-bound-session", "decision", "agent", 1, now), nil
+	}); err != nil || got.SessionID != "agent" {
+		t.Fatalf("builder-bound signed session should be accepted, got %+v err=%v", got, err)
 	}
 	for name, build := range map[string]CausalReceiptBuilder{
-		"wrong executor": func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
+		"wrong signed session": func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 			return storeCoverageReceipt("receipt", "decision", "other", 1, now), nil
 		},
 		"wrong lamport": func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
@@ -665,7 +665,7 @@ func storeCoverageReceipt(receiptID, decisionID, executorID string, lamport uint
 		Verdict:             "ALLOW",
 		ReasonCode:          "POLICY_VIOLATION",
 		PolicyHash:          "policy-hash",
-		SessionID:           "session-1",
+		SessionID:           executorID,
 	}
 }
 

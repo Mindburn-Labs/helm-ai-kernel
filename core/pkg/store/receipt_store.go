@@ -107,6 +107,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport_desc ON receipts(executor_id, lamport_clock DESC);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_executor_lamport_unique ON receipts(executor_id, lamport_clock)
 			WHERE executor_id IS NOT NULL AND executor_id <> '' AND lamport_clock > 0;
+		CREATE INDEX IF NOT EXISTS idx_receipts_session_lamport_desc ON receipts(session_id, lamport_clock DESC);
 		CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp);
 	`
@@ -412,7 +413,7 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 	return nil
 }
 
-// GetLastForSession returns the most recent receipt for a session (by executor_id) for causal DAG chaining.
+// GetLastForSession returns the most recent receipt for a signed session_id for causal DAG chaining.
 func (s *PostgresReceiptStore) GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error) {
 	return queryLastPostgresReceipt(ctx, s.db, sessionID)
 }
@@ -424,7 +425,7 @@ func (s *PostgresReceiptStore) cachedLastReceipt(sessionID string) *contracts.Re
 }
 
 func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
-	if r == nil || r.ExecutorID == "" || r.LamportClock == 0 {
+	if r == nil || r.SessionID == "" || r.LamportClock == 0 {
 		return
 	}
 	s.lastMu.Lock()
@@ -432,9 +433,9 @@ func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
 	if s.lastBySession == nil {
 		s.lastBySession = map[string]*contracts.Receipt{}
 	}
-	current := s.lastBySession[r.ExecutorID]
+	current := s.lastBySession[r.SessionID]
 	if current == nil || r.LamportClock >= current.LamportClock {
-		s.lastBySession[r.ExecutorID] = cloneReceipt(r)
+		s.lastBySession[r.SessionID] = cloneReceipt(r)
 	}
 }
 
@@ -477,7 +478,7 @@ type sqlQueryer interface {
 }
 
 func queryLastPostgresReceipt(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, error) {
-	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE executor_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE session_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
 	row := queryer.QueryRowContext(ctx, query, sessionID)
 	r, err := scanReceipt(row)
 	if err != nil {
@@ -509,14 +510,14 @@ func buildNextCausalReceipt(sessionID string, previous *contracts.Receipt, build
 	}
 	// The builder signs the receipt it returns, so assigning a field here would
 	// mutate an already-signed object and invalidate any signature that covers
-	// it. Require the builder to set ExecutorID before signing instead of
+	// it. Require the builder to set SessionID before signing instead of
 	// silently defaulting it afterwards.
-	if receipt.ExecutorID == "" {
-		return nil, fmt.Errorf("causal receipt builder returned a receipt with no executor id for session %q: "+
+	if receipt.SessionID == "" {
+		return nil, fmt.Errorf("causal receipt builder returned a receipt with no signed session id for session %q: "+
 			"the session must be bound before the receipt is signed", sessionID)
 	}
-	if receipt.ExecutorID != sessionID {
-		return nil, fmt.Errorf("receipt executor %q does not match locked session %q", receipt.ExecutorID, sessionID)
+	if receipt.SessionID != sessionID {
+		return nil, fmt.Errorf("receipt signed session %q does not match locked session %q", receipt.SessionID, sessionID)
 	}
 	if receipt.LamportClock != lamport {
 		return nil, fmt.Errorf("receipt lamport %d does not match assigned lamport %d", receipt.LamportClock, lamport)

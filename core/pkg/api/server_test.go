@@ -2,12 +2,14 @@ package api
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 )
 
@@ -74,6 +76,119 @@ func TestFromCanonicalPreservesReceiptV5Fields(t *testing.T) {
 	dto := FromCanonical(receipt)
 	if dto.SignatureVersion != contracts.ReceiptSignatureV5 || dto.Verdict != receipt.Verdict || dto.ReasonCode != receipt.ReasonCode || dto.PolicyHash != receipt.PolicyHash || dto.SessionID != receipt.SessionID {
 		t.Fatalf("V5 receipt fields not preserved by API DTO: %+v", dto)
+	}
+}
+
+func TestEvaluateStoresAndReturnsVerifiableV5Receipt(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x42}, ed25519.SeedSize), "api-v5-test")
+	if err != nil {
+		t.Fatalf("new receipt signer: %v", err)
+	}
+	helmPDP := pdp.NewHelmPDP("api-v5-policy", map[string]bool{"E4": false})
+	srv := NewServer(ServerConfig{
+		PDP:           helmPDP,
+		Authenticator: testAPIAuthenticator,
+		ReceiptSigner: signer,
+	})
+	body := EvaluateRequest{
+		Tool:        "delete_file",
+		Args:        map[string]any{"path": "/tmp/example"},
+		EffectLevel: "E4",
+		SessionID:   "api-v5-session",
+	}
+	reqBody, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("evaluate status = %d: %s", w.Code, w.Body.String())
+	}
+	var evaluated EvaluateResponse
+	if err := json.NewDecoder(w.Body).Decode(&evaluated); err != nil {
+		t.Fatalf("decode evaluate: %v", err)
+	}
+	if evaluated.Allow {
+		t.Fatal("expected denied decision")
+	}
+
+	srv.mu.RLock()
+	stored := srv.receipts[evaluated.ReceiptID]
+	srv.mu.RUnlock()
+	if stored == nil {
+		t.Fatal("evaluate did not retain a receipt")
+	}
+	valid, version, err := helmcrypto.VerifyReceiptSignature(signer.PublicKey(), stored)
+	if err != nil || !valid || version != helmcrypto.ReceiptPreimageSignedFieldsV5 {
+		t.Fatalf("stored receipt must use the shared V5 signing path: valid=%v version=%q err=%v receipt=%+v", valid, version, err, stored)
+	}
+
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+evaluated.ReceiptID, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("get receipt status = %d: %s", w.Code, w.Body.String())
+	}
+	raw := map[string]json.RawMessage{}
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode receipt JSON fields: %v", err)
+	}
+	for _, field := range []string{
+		"signature_version", "verdict", "reason_code", "output_hash", "prev_hash", "lamport_clock", "args_hash", "policy_hash", "session_id",
+		"signature", "signature_profile", "signature_algorithm", "key_id", "public_key_set",
+	} {
+		if _, ok := raw[field]; !ok {
+			t.Fatalf("GET receipt omitted advertised V5 field %q: %s", field, w.Body.String())
+		}
+	}
+	var received ReceiptDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &received); err != nil {
+		t.Fatalf("decode receipt DTO: %v", err)
+	}
+	if received.SignatureVersion != contracts.ReceiptSignatureV5 || received.Verdict != string(contracts.VerdictDeny) || received.ReasonCode != string(contracts.ReasonPDPDeny) || received.PolicyHash != helmPDP.PolicyHash() || received.SessionID != body.SessionID {
+		t.Fatalf("GET receipt did not preserve signed governance fields: %+v", received)
+	}
+	if received.SignatureProfile != helmcrypto.ReceiptProfileClassical || received.SignatureAlgorithm != helmcrypto.SigPrefixEd25519 || received.KeyID != "api-v5-test" || received.PublicKeySet[helmcrypto.SigPrefixEd25519] == "" {
+		t.Fatalf("GET receipt did not expose signer verification material: %+v", received)
+	}
+
+	fromGET := &contracts.Receipt{
+		ReceiptID:        received.ReceiptID,
+		DecisionID:       received.DecisionID,
+		EffectID:         received.EffectID,
+		Status:           received.Status,
+		OutputHash:       received.OutputHash,
+		PrevHash:         received.PrevHash,
+		LamportClock:     received.LamportClock,
+		ArgsHash:         received.ArgsHash,
+		SignatureVersion: received.SignatureVersion,
+		Verdict:          received.Verdict,
+		ReasonCode:       received.ReasonCode,
+		PolicyHash:       received.PolicyHash,
+		SessionID:        received.SessionID,
+		Signature:        received.Signature,
+	}
+	valid, version, err = helmcrypto.VerifyReceiptSignature(received.PublicKeySet[helmcrypto.SigPrefixEd25519], fromGET)
+	if err != nil || !valid || version != helmcrypto.ReceiptPreimageSignedFieldsV5 {
+		t.Fatalf("GET receipt is not independently verifiable as V5: valid=%v version=%q err=%v dto=%+v", valid, version, err, received)
+	}
+}
+
+func TestEvaluateFailsClosedWithoutProductionReceiptSigner(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
+	helmPDP := pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true})
+	srv := NewServer(ServerConfig{PDP: helmPDP, Authenticator: testAPIAuthenticator})
+	reqBody, err := json.Marshal(EvaluateRequest{Tool: "read_file", SessionID: "no-signer"})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody)))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("evaluate without a production signer = %d, want 503: %s", w.Code, w.Body.String())
+	}
+	if len(srv.receipts) != 0 {
+		t.Fatalf("fail-closed signer path stored receipts: %+v", srv.receipts)
 	}
 }
 

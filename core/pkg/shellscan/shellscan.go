@@ -310,6 +310,7 @@ func (c *collector) classifyRedirect(r *syntax.Redirect) {
 
 func (c *collector) recordWriteTarget(tok wordTok, source string) {
 	if tok.dynamic {
+		c.recordDynamicSensitiveTarget(tok, source)
 		c.decide(source + " with an unresolvable target (fail-closed)")
 		return
 	}
@@ -323,6 +324,16 @@ func (c *collector) recordWriteTarget(tok wordTok, source string) {
 	}
 	c.writtenPaths[c.normalizedPath(tok.text)] = true
 	c.recordSensitiveTarget(tok, "write redirect", SignalSensitiveRedirect)
+}
+
+func (c *collector) recordDynamicSensitiveTarget(tok wordTok, operation string) {
+	target := strings.ToLower(tok.text)
+	for _, needle := range sensitiveTargetNeedles {
+		if strings.Contains(target, needle) {
+			c.recordSensitiveTarget(wordTok{text: needle}, operation, SignalSensitiveTarget)
+			return
+		}
+	}
 }
 
 func (c *collector) recordSensitiveTarget(tok wordTok, operation, signal string) {
@@ -1768,6 +1779,10 @@ func (c *collector) matchAwk(args []wordTok) {
 }
 
 func (c *collector) recordCopyWrite(name string, args []wordTok) {
+	if len(args) >= 3 && args[len(args)-1].dynamic {
+		c.recordWriteTarget(args[len(args)-1], name+" write")
+		return
+	}
 	var operands []wordTok
 	directoryMode := false
 	for i := 1; i < len(args); i++ {
@@ -1782,18 +1797,23 @@ func (c *collector) recordCopyWrite(name string, args []wordTok) {
 		}
 		switch tok.text {
 		case "-t", "--target-directory":
-			if i+1 >= len(args) || args[i+1].dynamic {
+			if i+1 >= len(args) {
 				c.decide(name + " with an unresolvable target (fail-closed)")
 				return
 			}
-			c.recordWriteTarget(args[i+1], name+" write")
+			for _, source := range args[i+2:] {
+				c.recordCopyIntoDirectory(name, args[i+1], source)
+			}
 			return
 		case "-d", "--directory":
 			directoryMode = true
 			continue
 		}
 		if strings.HasPrefix(tok.text, "--target-directory=") {
-			c.recordWriteTarget(wordTok{text: strings.TrimPrefix(tok.text, "--target-directory=")}, name+" write")
+			directory := wordTok{text: strings.TrimPrefix(tok.text, "--target-directory=")}
+			for _, source := range args[i+1:] {
+				c.recordCopyIntoDirectory(name, directory, source)
+			}
 			return
 		}
 		if !strings.HasPrefix(tok.text, "-") || tok.text == "-" {
@@ -1807,8 +1827,22 @@ func (c *collector) recordCopyWrite(name string, args []wordTok) {
 		return
 	}
 	if len(operands) >= 2 {
-		c.recordWriteTarget(operands[len(operands)-1], name+" write")
+		destination := operands[len(operands)-1]
+		if !destination.dynamic && strings.HasSuffix(destination.text, "/") {
+			for _, source := range operands[:len(operands)-1] {
+				c.recordCopyIntoDirectory(name, destination, source)
+			}
+			return
+		}
+		c.recordWriteTarget(destination, name+" write")
 	}
+}
+
+func (c *collector) recordCopyIntoDirectory(name string, directory, source wordTok) {
+	c.recordWriteTarget(wordTok{
+		text:    path.Join(directory.text, path.Base(source.text)),
+		dynamic: directory.dynamic || source.dynamic,
+	}, name+" write")
 }
 
 func (c *collector) recordRemoveWriteTargets(name string, args []wordTok) {

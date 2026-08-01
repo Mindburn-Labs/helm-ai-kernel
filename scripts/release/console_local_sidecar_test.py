@@ -39,16 +39,27 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def write_file(archive: tarfile.TarFile, name: str, data: bytes, mode: int = 0o644) -> None:
+def write_file(
+    archive: tarfile.TarFile,
+    name: str,
+    data: bytes,
+    mode: int = 0o644,
+    *,
+    member_type: bytes = tarfile.REGTYPE,
+    linkname: str = "",
+) -> None:
     info = tarfile.TarInfo(name)
+    info.type = member_type
+    info.linkname = linkname
     info.size = len(data)
     info.mode = mode
     archive.addfile(info, io.BytesIO(data))
 
 
-def write_directory(archive: tarfile.TarFile, name: str) -> None:
+def write_directory(archive: tarfile.TarFile, name: str, *, linkname: str = "") -> None:
     info = tarfile.TarInfo(f"{name}/")
     info.type = tarfile.DIRTYPE
+    info.linkname = linkname
     info.mode = 0o755
     archive.addfile(info)
 
@@ -266,6 +277,43 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                     sidecar.verify_archive(compressed, b"", b"{}", "0" * 64, SOURCE, target_value, {})
                 with self.assertRaisesRegex(ValueError, "verified sidecar archive exceeds the validation limit"), tarfile.open(root / "compressed.tar", "w") as output:
                     sidecar.tar_verified_target_tree(output, compressed, target, "layout")
+
+    def test_archive_rejects_runtime_unsupported_member_forms(self) -> None:
+        target = "linux-amd64"
+        closure_root = f"helm-console-local-sidecar-{target}"
+        target_value = {"os": "linux", "arch": "amd64"}
+        cases = {
+            "linked-directory": lambda archive: write_directory(archive, closure_root, linkname="elsewhere"),
+            "linked-regular": lambda archive: write_file(archive, f"{closure_root}/app/file", b"payload", linkname="elsewhere"),
+            "contiguous": lambda archive: write_file(archive, f"{closure_root}/app/file", b"payload", member_type=tarfile.CONTTYPE),
+            "gnu-sparse": lambda archive: write_file(archive, f"{closure_root}/app/file", b"payload", member_type=tarfile.GNUTYPE_SPARSE),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for label, add_member in cases.items():
+                source = root / f"{label}.tar.gz"
+                with tarfile.open(source, "w:gz") as input_archive:
+                    add_member(input_archive)
+                with self.subTest(label=label):
+                    with self.assertRaisesRegex(ValueError, "unsupported|link metadata"):
+                        sidecar.verify_archive(source, b"", b"{}", "0" * 64, SOURCE, target_value, {})
+                    with self.assertRaisesRegex(ValueError, "unsupported|link metadata"), tarfile.open(root / f"{label}.tar", "w") as output_archive:
+                        sidecar.tar_verified_target_tree(output_archive, source, target, "layout")
+
+    def test_archive_rejects_invalid_gzip_trailer_before_staging(self) -> None:
+        target = "linux-amd64"
+        closure_root = f"helm-console-local-sidecar-{target}"
+        target_value = {"os": "linux", "arch": "amd64"}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "trailer.tar.gz"
+            with tarfile.open(source, "w:gz") as input_archive:
+                write_file(input_archive, f"{closure_root}/app/file", b"payload")
+            source.write_bytes(source.read_bytes() + b"not-a-gzip-member")
+            with self.assertRaisesRegex(ValueError, "gzip stream is invalid"):
+                sidecar.verify_archive(source, b"", b"{}", "0" * 64, SOURCE, target_value, {})
+            with self.assertRaisesRegex(ValueError, "gzip stream is invalid"), tarfile.open(root / "trailer.tar", "w") as output_archive:
+                sidecar.tar_verified_target_tree(output_archive, source, target, "layout")
 
     def test_release_accepts_canonical_console_packager_directory_entries(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

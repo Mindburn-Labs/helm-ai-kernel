@@ -1234,6 +1234,20 @@ jobs:
               --bundle "${layout}.cosign.bundle" \
               "${layout}"
           done
+      - name: Create a signed Console checksum manifest
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          cd console-release-assets
+          find . -maxdepth 1 -type f \
+            ! -name '*.cosign.bundle' \
+            ! -name 'CONSOLE-SHA256SUMS.txt' \
+            -print0 | sort -z | xargs -0 sha256sum > CONSOLE-SHA256SUMS.txt
+          test -s CONSOLE-SHA256SUMS.txt
+          cosign sign-blob --yes \
+            --bundle CONSOLE-SHA256SUMS.txt.cosign.bundle \
+            CONSOLE-SHA256SUMS.txt
       - name: Verify optional Console assets before publication
         run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh console-release-assets
       - name: Attach verified Console assets to the existing Kernel release
@@ -1245,6 +1259,8 @@ jobs:
             console-release-assets/helm-console-local-sidecar-* \
             console-release-assets/helm-ai-kernel-*-console.tar.gz \
             console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle \
+            console-release-assets/CONSOLE-SHA256SUMS.txt \
+            console-release-assets/CONSOLE-SHA256SUMS.txt.cosign.bundle \
             --clobber
       - name: Require the v0.8 Console asset contract after attachment
         run: |
@@ -1287,6 +1303,7 @@ jobs:
             --write-status version-status.json \
             published
       - name: Replace release version status with full post-release status
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${GITHUB_REF_NAME}" version-status.json --clobber

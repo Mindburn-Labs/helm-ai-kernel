@@ -133,6 +133,27 @@ def require_file_size_at_most(path: Path, label: str, max_bytes: int) -> None:
         reject(f"{label} exceeds the validation limit")
 
 
+def verify_gzip_stream(path: Path, label: str) -> None:
+    """Drain a bounded gzip stream so its trailer and trailing bytes are valid."""
+    try:
+        with path.open("rb") as raw, gzip.GzipFile(fileobj=raw, mode="rb") as compressed:
+            while compressed.read(1024 * 1024):
+                pass
+    except (OSError, EOFError, gzip.BadGzipFile) as exc:
+        reject(f"{label} gzip stream is invalid: {exc}")
+
+
+def archive_member_is_directory(member: tarfile.TarInfo) -> bool:
+    """Accept exactly the tar member forms the local launcher accepts."""
+    if member.type == tarfile.DIRTYPE:
+        if member.linkname:
+            reject("archive directory has unsupported link metadata")
+        return True
+    if member.type not in {tarfile.REGTYPE, tarfile.AREGTYPE} or member.linkname:
+        reject("archive member is unsupported by the runtime")
+    return False
+
+
 def read_json(path: Path, label: str) -> dict[str, Any]:
     require_regular_file(path, label)
     try:
@@ -352,6 +373,7 @@ def verify_archive(
 ) -> None:
     expected_root = f"helm-console-local-sidecar-{target['os']}-{target['arch']}"
     require_file_size_at_most(archive_path, "sidecar archive", BUNDLE_MAX_BYTES)
+    verify_gzip_stream(archive_path, "sidecar archive")
     try:
         archive = tarfile.open(archive_path, "r:gz")
     except (OSError, tarfile.TarError) as exc:
@@ -363,19 +385,16 @@ def verify_archive(
     total = 0
     try:
         for member in archive.getmembers():
-            name = safe_archive_path(member.name, directory=member.isdir())
+            is_directory = archive_member_is_directory(member)
+            name = safe_archive_path(member.name, directory=is_directory)
             if name in seen_members:
                 reject(f"archive contains duplicate member path: {member.name}")
             seen_members.add(name)
             parts = PurePosixPath(name).parts
             if parts[0] != expected_root:
                 reject(f"archive member escapes expected closure root: {member.name}")
-            if member.issym() or member.islnk() or member.isdev():
-                reject(f"archive member must not be a link or device: {member.name}")
-            if member.isdir():
+            if is_directory:
                 continue
-            if not member.isfile():
-                reject(f"archive member must be a regular file: {member.name}")
             relative = str(PurePosixPath(*parts[1:]))
             if not relative or relative in files:
                 reject(f"archive contains duplicate or invalid payload path: {member.name}")
@@ -735,6 +754,7 @@ def tar_path(archive: tarfile.TarFile, name: str, source: Path, mode: int | None
 def tar_verified_target_tree(archive: tarfile.TarFile, source: Path, target: str, layout_root: str) -> None:
     expected_root = f"helm-console-local-sidecar-{target}"
     require_file_size_at_most(source, "verified sidecar archive", BUNDLE_MAX_BYTES)
+    verify_gzip_stream(source, "verified sidecar archive")
     try:
         input_archive = tarfile.open(source, "r:gz")
     except (OSError, tarfile.TarError) as exc:
@@ -744,24 +764,21 @@ def tar_verified_target_tree(archive: tarfile.TarFile, source: Path, target: str
         seen: set[str] = set()
         total = 0
         for member in input_archive.getmembers():
-            name = safe_archive_path(member.name, directory=member.isdir())
+            is_directory = archive_member_is_directory(member)
+            name = safe_archive_path(member.name, directory=is_directory)
             if name in seen:
                 reject(f"archive contains duplicate member path: {member.name}")
             seen.add(name)
             if PurePosixPath(name).parts[0] != expected_root:
                 reject(f"archive member escapes expected closure root: {member.name}")
-            if member.issym() or member.islnk() or member.isdev():
-                reject(f"archive member must not be a link or device: {member.name}")
-            if not member.isdir() and not member.isfile():
-                reject(f"archive member must be a regular file: {member.name}")
-            if member.isfile():
+            if not is_directory:
                 if member.size < 0 or member.size > BUNDLE_MAX_BYTES or total > BUNDLE_MAX_BYTES - member.size:
                     reject("archive payload exceeds the validation limit")
                 total += member.size
             members.append((name, member))
         for name, member in sorted(members, key=lambda item: item[0]):
             destination = f"{layout_root}/console/{name}"
-            if member.isdir():
+            if member.type == tarfile.DIRTYPE:
                 tar_directory(archive, destination)
                 continue
             handle = input_archive.extractfile(member)

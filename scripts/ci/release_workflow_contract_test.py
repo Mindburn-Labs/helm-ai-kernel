@@ -73,6 +73,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("make release-binaries-reproducible", console_assets)
         self.assertIn("console_local_sidecar.py stage", console_assets)
         self.assertIn("console_local_sidecar.py layout", console_assets)
+        self.assertIn("CONSOLE-SHA256SUMS.txt", console_assets)
+        self.assertIn("cosign sign-blob", console_assets)
         self.assertIn("gh release upload", console_assets)
         self.assertIn("--only github-release-console-local-sidecar", console_assets)
 
@@ -82,6 +84,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             post_release,
         )
         self.assertIn("always()", post_release)
+        self.assertRegex(post_release, r"- name: Replace release version status with full post-release status\n\s+if: always\(\)")
 
 
 if __name__ == "__main__":

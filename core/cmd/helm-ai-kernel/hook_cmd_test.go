@@ -370,6 +370,8 @@ func TestHookPreToolStillAllowsBenignBashAfterASTClassifier(t *testing.T) {
 		"git log --oneline | head -5",
 		`echo "today is $(date +%F)"`,
 		"npm run build",
+		"python --version",
+		`bash scripts/deploy.sh "$ARG"`,
 		"kubectl get pods -n prod",
 	}
 	for _, command := range benign {

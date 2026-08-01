@@ -319,10 +319,17 @@ var passCases = []struct {
 	{"safe-docker-rm-force-name", "docker rm -- -f"},
 	{"safe-command-query", "command -v git"},
 	{"safe-builtin-print", "builtin -p"},
+	{"safe-python-version", "python --version"},
+	{"safe-python-help", "python --help"},
+	{"safe-perl-version", "perl --version"},
+	{"safe-ruby-version", "ruby --version"},
+	{"safe-node-version", "node --version"},
 	{"safe-python-static-script", "python scripts/utility.py"},
 	{"safe-node-static-script", "node scripts/build.js"},
 	{"safe-ruby-static-script", "ruby scripts/utility.rb"},
 	{"safe-perl-static-script", "perl scripts/utility.pl"},
+	{"safe-bash-static-script-dynamic-arg", `bash scripts/deploy.sh "$ARG"`},
+	{"safe-sh-static-script-dynamic-arg", `sh build.sh "$ARG"`},
 	{"safe-quoted-command-backslash", `'r\m' --version`},
 }
 

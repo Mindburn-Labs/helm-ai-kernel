@@ -8,6 +8,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +21,8 @@ import (
 	"github.com/BurntSushi/toml"
 	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 const setupMCPServerName = "helm-ai-kernel-governance"
@@ -52,18 +55,21 @@ var (
 )
 
 type setupOptions struct {
-	Target          string
-	Operation       string
-	Scope           string
-	Workspace       string
-	WorkspaceSet    bool
-	Yes             bool
-	DryRun          bool
-	JSON            bool
-	NoQuickstart    bool
-	Quickstart      bool
-	DataDir         string
-	SigningSeedFile string
+	Target              string
+	Operation           string
+	Scope               string
+	Workspace           string
+	WorkspaceSet        bool
+	Yes                 bool
+	DryRun              bool
+	JSON                bool
+	NoQuickstart        bool
+	Quickstart          bool
+	DataDir             string
+	SigningSeedFile     string
+	PolicyProfile       string
+	PolicyProfileSet    bool
+	PolicyProfileSHA256 string
 }
 
 type setupSummary struct {
@@ -161,6 +167,10 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup: policy profile: %v\n", err)
+		return 2
+	}
 	if opts.DryRun {
 		opts.Operation = "preview"
 	} else {
@@ -257,6 +267,16 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup status: %v\n", err)
 		return 2
 	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
+		return 2
+	}
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
 	observeSetupClientState(opts, &summary)
@@ -289,6 +309,16 @@ func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
 	summary, err := buildSetupSummary(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "setup repair: %v\n", err)
+		return 2
+	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup repair: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup repair: policy profile: %v\n", err)
 		return 2
 	}
 	if err := preflightSetup(opts, &summary); err != nil {
@@ -337,6 +367,21 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	summary, err := buildSetupSummary(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup remove: %v\n", err)
+		return 2
+	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup remove: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup remove: policy profile: %v\n", err)
+		return 2
+	}
+	summary, err = buildSetupSummary(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "setup remove: %v\n", err)
 		return 2
@@ -408,6 +453,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.Quickstart, "quickstart", false, "Start the blocking Quickstart server after setup")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path for installed pre-tool hooks")
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
@@ -438,6 +484,7 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Report a headless setup without a Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path for installed pre-tool hooks")
 	if includeYes {
 		fs.BoolVar(&opts.Yes, "yes", false, "Remove without prompting")
 	}
@@ -445,8 +492,11 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 		return opts, 2
 	}
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "workspace" {
+		switch f.Name {
+		case "workspace":
 			opts.WorkspaceSet = true
+		case "policy-profile":
+			opts.PolicyProfileSet = true
 		}
 	})
 	if fs.NArg() != 0 {
@@ -487,12 +537,17 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 	if abs, err := filepath.Abs(opts.DataDir); err == nil {
 		opts.DataDir = abs
 	}
-	// The seed-file path gets baked into the installed hook command, which
-	// later runs from an arbitrary working directory — a relative path would
-	// resolve against that directory and fail the signer.
+	// These file paths get baked into the installed hook command, which later
+	// runs from an arbitrary working directory. Relative paths would resolve
+	// against that directory instead of the operator's intended files.
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		if abs, err := filepath.Abs(opts.SigningSeedFile); err == nil {
 			opts.SigningSeedFile = abs
+		}
+	}
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		if abs, err := filepath.Abs(opts.PolicyProfile); err == nil {
+			opts.PolicyProfile = abs
 		}
 	}
 	if opts.Workspace == "" {
@@ -519,6 +574,169 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 		return opts, 2
 	}
 	return opts, 0
+}
+
+// populateSetupPolicyProfileDigest validates a custom policy before setup
+// writes a hook command, then records the exact raw-file digest that the hook
+// must continue to see on every later decision. Re-running setup is the
+// explicit operator approval path for a changed policy file.
+func populateSetupPolicyProfileDigest(opts *setupOptions) error {
+	opts.PolicyProfileSHA256 = ""
+	if strings.TrimSpace(opts.PolicyProfile) == "" {
+		return nil
+	}
+	_, digest, err := workstation.LoadPolicyProfileFileWithDigest(opts.PolicyProfile)
+	if err != nil {
+		return err
+	}
+	opts.PolicyProfileSHA256 = digest
+	return nil
+}
+
+// discoverSetupStatusPolicyProfile recovers a custom profile only from one
+// matching, statically parseable installed hook. The later status comparison
+// still uses the full current command, including the recomputed digest.
+func discoverSetupStatusPolicyProfile(opts *setupOptions, path, bin string) error {
+	root, err := readJSONObject(path)
+	if err != nil {
+		return fmt.Errorf("read hook config: %w", err)
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	expectedKey := hookCommandKey(setupHookCommand(*opts, bin))
+	var profilePath string
+	matched := false
+	for _, item := range arrayValue(hooks, "PreToolUse") {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range arrayValue(obj, "hooks") {
+			command := hookCommandFromAny(hook)
+			if command == "" {
+				continue
+			}
+			if hookCommandKey(command) != expectedKey {
+				continue
+			}
+			if matched {
+				return fmt.Errorf("ambiguous matching installed hook commands")
+			}
+			profile, _, custom, err := installedHookPolicyProfile(command)
+			if err != nil {
+				return fmt.Errorf("parse matching installed hook command: %w", err)
+			}
+			matched = true
+			if custom {
+				profilePath = profile
+			}
+		}
+	}
+	if profilePath != "" {
+		opts.PolicyProfile = profilePath
+	}
+	return nil
+}
+
+func installedHookPolicyProfile(command string) (profile, digest string, custom bool, err error) {
+	words, err := staticSetupHookWords(command)
+	if err != nil {
+		return "", "", false, err
+	}
+	seenProfile, seenDigest := false, false
+	for i := 0; i < len(words); i++ {
+		if words[i] != "--policy-profile" && words[i] != "--policy-profile-sha256" {
+			continue
+		}
+		if i+1 == len(words) || words[i+1] == "--policy-profile" || words[i+1] == "--policy-profile-sha256" {
+			return "", "", false, fmt.Errorf("%s requires one static argument", words[i])
+		}
+		i++
+		if words[i-1] == "--policy-profile" {
+			if seenProfile {
+				return "", "", false, errors.New("duplicate --policy-profile")
+			}
+			profile, seenProfile = words[i], true
+		} else {
+			if seenDigest {
+				return "", "", false, errors.New("duplicate --policy-profile-sha256")
+			}
+			digest, seenDigest = words[i], true
+		}
+	}
+	if seenProfile != seenDigest || (seenProfile && (profile == "" || digest == "")) {
+		return "", "", false, errors.New("matching installed hook has unpaired --policy-profile arguments")
+	}
+	return profile, digest, seenProfile, nil
+}
+
+func staticSetupHookWords(command string) ([]string, error) {
+	file, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil, err
+	}
+	if len(file.Stmts) != 1 {
+		return nil, fmt.Errorf("must contain one command")
+	}
+	stmt := file.Stmts[0]
+	if stmt.Negated || stmt.Background || stmt.Coprocess || len(stmt.Redirs) != 0 {
+		return nil, fmt.Errorf("must be a direct command without shell operators")
+	}
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) != 0 {
+		return nil, fmt.Errorf("must be a direct static command")
+	}
+	words := make([]string, 0, len(call.Args))
+	for _, word := range call.Args {
+		value, ok := staticSetupHookWord(word)
+		if !ok {
+			return nil, fmt.Errorf("contains a non-static argument")
+		}
+		words = append(words, value)
+	}
+	return words, nil
+}
+
+func staticSetupHookWord(word *syntax.Word) (string, bool) {
+	var value strings.Builder
+	for _, part := range word.Parts {
+		switch part := part.(type) {
+		case *syntax.Lit:
+			value.WriteString(unescapeSetupHookLiteral(part.Value))
+		case *syntax.SglQuoted:
+			if part.Dollar {
+				return "", false
+			}
+			value.WriteString(part.Value)
+		case *syntax.DblQuoted:
+			if part.Dollar {
+				return "", false
+			}
+			for _, inner := range part.Parts {
+				literal, ok := inner.(*syntax.Lit)
+				if !ok {
+					return "", false
+				}
+				value.WriteString(literal.Value)
+			}
+		default:
+			return "", false
+		}
+	}
+	return value.String(), true
+}
+
+func unescapeSetupHookLiteral(value string) string {
+	var out strings.Builder
+	for i := 0; i < len(value); i++ {
+		if value[i] == '\\' && i+1 < len(value) {
+			i++
+		}
+		out.WriteByte(value[i])
+	}
+	return out.String()
 }
 
 func normalizeSetupTarget(target string) (string, error) {
@@ -777,13 +995,18 @@ func setupUninstallCommand(opts setupOptions) string {
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		signingSeedFile = " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
 	}
+	policyProfile := ""
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		policyProfile = " --policy-profile " + shellQuote(opts.PolicyProfile)
+	}
 	return fmt.Sprintf(
-		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s%s",
+		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s%s%s",
 		opts.Target,
 		opts.Scope,
 		workspace,
 		shellQuote(opts.DataDir),
 		signingSeedFile,
+		policyProfile,
 	)
 }
 
@@ -946,7 +1169,7 @@ func setupHookInstalled(opts setupOptions, path, bin string) bool {
 	if !ok {
 		return false
 	}
-	return hookCommandPresent(arrayValue(hooks, "PreToolUse"), setupHookCommand(opts, bin))
+	return hookCommandConfigPresent(arrayValue(hooks, "PreToolUse"), setupHookCommand(opts, bin))
 }
 
 func setupQuickstartProfile(target string) string {
@@ -1001,6 +1224,12 @@ func setupHookCommand(opts setupOptions, bin string) string {
 	command := shellQuote(bin) + " hook pre-tool --client " + opts.Target + " --data-dir " + shellQuote(opts.DataDir)
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		command += " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		command += " --policy-profile " + shellQuote(opts.PolicyProfile)
+		if strings.TrimSpace(opts.PolicyProfileSHA256) != "" {
+			command += " --policy-profile-sha256 " + shellQuote(opts.PolicyProfileSHA256)
+		}
 	}
 	return command
 }
@@ -1143,19 +1372,31 @@ func arrayValue(root map[string]any, key string) []any {
 	return []any{}
 }
 
-// signingSeedFileArgPattern matches the optional --signing-seed-file segment
-// of an installed hook command, with its shell-quoted or bare argument. The
+// hookManagedFileArgPattern matches optional managed arguments of an installed
+// hook command, with their shell-quoted or bare arguments. The
 // argument alternation mirrors shellQuote output: a sequence of
 // single-quoted chunks, escaped quotes (the '\” idiom), and bare
 // non-space characters.
-var signingSeedFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
+var hookManagedFileArgPattern = regexp.MustCompile(` --(?:signing-seed-file|policy-profile|policy-profile-sha256) (?:'[^']*'|\\'|[^\s'])+`)
 
-// hookCommandKey reduces an installed hook command to its identity: the
-// signing-seed-file argument is a deployment detail, so `setup status` and
-// `setup remove` must match the hook whether or not (and with whichever path
-// form) the flag was passed on their own invocation.
+// hookSignerFileArgPattern omits only the signer source. A user may omit a
+// secret seed path when inspecting setup, but policy path and digest must stay
+// part of the status comparison so a stale custom policy is never reported as
+// active.
+var hookSignerFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
+
+// hookCommandKey reduces an installed hook command to its generic identity
+// for reinstall/remove. Managed arguments are deployment details, so `setup
+// remove` must match the hook whether or not (and with whichever path form)
+// they were passed on its own invocation.
 func hookCommandKey(command string) string {
-	return signingSeedFileArgPattern.ReplaceAllString(command, "")
+	return hookManagedFileArgPattern.ReplaceAllString(command, "")
+}
+
+// hookCommandConfigKey preserves the approved policy path and digest for
+// status checks while allowing the signer source to remain private.
+func hookCommandConfigKey(command string) string {
+	return hookSignerFileArgPattern.ReplaceAllString(command, "")
 }
 
 func hookCommandPresent(pre []any, command string) bool {
@@ -1171,6 +1412,26 @@ func hookCommandPresent(pre []any, command string) bool {
 		}
 		for _, h := range hooks {
 			if hookCommandKey(hookCommandFromAny(h)) == key {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hookCommandConfigPresent(pre []any, command string) bool {
+	key := hookCommandConfigKey(command)
+	for _, item := range pre {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooks, ok := obj["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, h := range hooks {
+			if hookCommandConfigKey(hookCommandFromAny(h)) == key {
 				return true
 			}
 		}

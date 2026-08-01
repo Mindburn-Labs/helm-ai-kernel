@@ -264,6 +264,7 @@
               "type": "string",
               "enum": [
                 "network.egress",
+                "file.write",
                 "mcp.mutate",
                 "memory.write",
                 "loop.register",

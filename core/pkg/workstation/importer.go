@@ -400,6 +400,11 @@ func EvaluateEvent(profile contracts.WorkstationPolicyProfile, event ToolEvent) 
 		return contracts.WorkstationVerdictDeny, "TAINTED_CONTEXT_REQUIRES_DENY", "tainted context cannot authorize operate-class effects"
 	}
 	if event.EffectType == contracts.EffectTypeWorkstationFileWrite || event.EffectType == contracts.EffectTypeWorkstationFileDraft || event.Type == "file_write" || event.Type == "draft_edit" {
+		if event.EffectMode == contracts.WorkstationEffectModeOperate {
+			if verdict, reasonCode, reason := evaluateOperatePermission(profile, event); verdict != contracts.WorkstationVerdictAllow {
+				return verdict, reasonCode, reason
+			}
+		}
 		if !draftTargetAllowed(profile.Draft.WorkspaceRoots, event.Target) {
 			return contracts.WorkstationVerdictDeny, "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE", "draft target is outside the configured workspace scope"
 		}
@@ -917,6 +922,8 @@ func workstationPermissionForEffect(effectType, eventType, action string) string
 	switch effectType {
 	case contracts.EffectTypeWorkstationNetworkEgress:
 		return contracts.WorkstationPermissionNetworkEgress
+	case contracts.EffectTypeWorkstationFileDraft, contracts.EffectTypeWorkstationFileWrite:
+		return contracts.WorkstationPermissionFileWrite
 	case contracts.EffectTypeWorkstationMCPToolCall:
 		return contracts.WorkstationPermissionMCPMutate
 	case contracts.EffectTypeWorkstationMemoryWrite:
@@ -937,6 +944,8 @@ func workstationPermissionForEffect(effectType, eventType, action string) string
 	switch eventType {
 	case "network_egress":
 		return contracts.WorkstationPermissionNetworkEgress
+	case "file_write", "draft_edit":
+		return contracts.WorkstationPermissionFileWrite
 	case "mcp_tool_call":
 		return contracts.WorkstationPermissionMCPMutate
 	case "memory_write":

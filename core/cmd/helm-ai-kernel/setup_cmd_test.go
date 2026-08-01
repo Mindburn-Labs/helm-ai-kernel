@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
 func TestSetupNoArgsPrintsChooser(t *testing.T) {
@@ -36,10 +37,11 @@ func TestSetupNoArgsPrintsChooser(t *testing.T) {
 
 func TestSetupHookCommandIncludesExplicitSigningSeedFile(t *testing.T) {
 	opts := setupOptions{
-		Target:          "codex",
-		DataDir:         "/tmp/helm-data",
-		SigningSeedFile: "/private/approved/workstation.seed",
-		PolicyProfile:   "/private/approved/policy.json",
+		Target:              "codex",
+		DataDir:             "/tmp/helm-data",
+		SigningSeedFile:     "/private/approved/workstation.seed",
+		PolicyProfile:       "/private/approved/policy.json",
+		PolicyProfileSHA256: "sha256:approved",
 	}
 	command := setupHookCommand(opts, "/usr/local/bin/helm-ai-kernel")
 	if !strings.Contains(command, "--signing-seed-file '/private/approved/workstation.seed'") {
@@ -48,11 +50,90 @@ func TestSetupHookCommandIncludesExplicitSigningSeedFile(t *testing.T) {
 	if !strings.Contains(command, "--policy-profile '/private/approved/policy.json'") {
 		t.Fatalf("hook command did not preserve policy profile: %s", command)
 	}
+	if !strings.Contains(command, "--policy-profile-sha256 'sha256:approved'") {
+		t.Fatalf("hook command did not preserve approved policy digest: %s", command)
+	}
 	if removal := setupUninstallCommand(opts); !strings.Contains(removal, "--signing-seed-file '/private/approved/workstation.seed'") {
 		t.Fatalf("uninstall command did not preserve explicit signer source: %s", removal)
 	} else if !strings.Contains(removal, "--policy-profile '/private/approved/policy.json'") {
 		t.Fatalf("uninstall command did not preserve policy profile: %s", removal)
 	}
+}
+
+func TestSetupRejectsInvalidCustomPolicyBeforeWritingConfig(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+	policy := filepath.Join(tmp, "invalid-policy.json")
+	if err := os.WriteFile(policy, []byte("not-json\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dataDir := filepath.Join(tmp, "helm")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "codex", "--yes", "--no-quickstart", "--data-dir", dataDir, "--policy-profile", policy}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("invalid custom policy setup exit = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "policy profile") {
+		t.Fatalf("invalid custom policy diagnostic = %s", stderr.String())
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("invalid custom policy created data state: %v", err)
+	}
+	for _, path := range []string{filepath.Join(home, ".codex", "config.toml"), filepath.Join(home, ".codex", "hooks.json")} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("invalid custom policy wrote config %s: %v", path, err)
+		}
+	}
+}
+
+func TestSetupStatusRequiresExactCustomPolicyDigest(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	_, approvedDigest, err := workstation.LoadPolicyProfileFileWithDigest(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := setupOptions{
+		Target:              "codex",
+		Scope:               "user",
+		DataDir:             filepath.Join(tmp, "helm"),
+		PolicyProfile:       profile,
+		PolicyProfileSHA256: "sha256:stale",
+	}
+	summary, err := buildSetupSummary(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(summary.HookConfigPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := upsertHookConfig(summary.HookConfigPath, setupHookMatcher(opts.Target), setupHookCommand(opts, summary.BinaryPath), ""); err != nil {
+		t.Fatalf("write stale hook config: %v", err)
+	}
+
+	statusArgs := []string{"helm-ai-kernel", "setup", "status", "codex", "--no-quickstart", "--json", "--data-dir", opts.DataDir, "--policy-profile", profile}
+	assertHookInstalled := func(want bool) {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		if code := Run(statusArgs, &stdout, &stderr); code != 1 {
+			t.Fatalf("status exit = %d, want 1 because MCP is absent; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+		}
+		status := decodeSingleSetupSummary(t, &stdout)
+		if status.HookInstalled != want {
+			t.Fatalf("status hook installed = %v, want %v; summary=%#v", status.HookInstalled, want, status)
+		}
+	}
+	assertHookInstalled(false)
+
+	opts.PolicyProfileSHA256 = approvedDigest
+	if err := upsertHookConfig(summary.HookConfigPath, setupHookMatcher(opts.Target), setupHookCommand(opts, summary.BinaryPath), ""); err != nil {
+		t.Fatalf("reapprove hook config: %v", err)
+	}
+	assertHookInstalled(true)
 }
 
 func TestSetupJSONSupportMatrix(t *testing.T) {
@@ -1746,7 +1827,8 @@ func TestHookCommandKeyIgnoresSigningSeedFileArgument(t *testing.T) {
 	withSeed := base + " --signing-seed-file '/home/op/keys/seed.hex'"
 	withBareSeed := base + " --signing-seed-file /home/op/keys/seed.hex"
 	withProfile := base + " --policy-profile '/home/op/policies/allow.json'"
-	withBoth := withSeed + " --policy-profile '/home/op/policies/allow.json'"
+	withDigest := withProfile + " --policy-profile-sha256 sha256:approved"
+	withBoth := withSeed + " --policy-profile '/home/op/policies/allow.json' --policy-profile-sha256 sha256:approved"
 
 	if hookCommandKey(withSeed) != hookCommandKey(base) {
 		t.Fatalf("quoted seed-file arg changes hook identity:\n%q\n%q", hookCommandKey(withSeed), hookCommandKey(base))
@@ -1754,8 +1836,14 @@ func TestHookCommandKeyIgnoresSigningSeedFileArgument(t *testing.T) {
 	if hookCommandKey(withBareSeed) != hookCommandKey(base) {
 		t.Fatalf("bare seed-file arg changes hook identity")
 	}
-	if hookCommandKey(withProfile) != hookCommandKey(base) || hookCommandKey(withBoth) != hookCommandKey(base) {
+	if hookCommandKey(withProfile) != hookCommandKey(base) || hookCommandKey(withDigest) != hookCommandKey(base) || hookCommandKey(withBoth) != hookCommandKey(base) {
 		t.Fatalf("policy-profile arg changes hook identity")
+	}
+	if hookCommandConfigKey(withProfile) == hookCommandConfigKey(base) {
+		t.Fatal("policy profile was incorrectly stripped from status configuration")
+	}
+	if hookCommandConfigKey(withDigest) == hookCommandConfigKey(withProfile) {
+		t.Fatal("policy profile digest was incorrectly stripped from status configuration")
 	}
 	if hookCommandKey(base) != base {
 		t.Fatalf("command without the flag must be unchanged, got %q", hookCommandKey(base))
@@ -1810,8 +1898,8 @@ func TestUpsertHookConfigUpdatesPolicyProfileOnReinstall(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "settings.json")
 	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
-	oldCmd := base + " --policy-profile '/policies/old.json'"
-	newCmd := base + " --policy-profile '/policies/new.json'"
+	oldCmd := base + " --policy-profile '/policies/old.json' --policy-profile-sha256 sha256:old"
+	newCmd := base + " --policy-profile '/policies/new.json' --policy-profile-sha256 sha256:new"
 
 	if err := upsertHookConfig(path, "*", oldCmd, tmp); err != nil {
 		t.Fatalf("initial install: %v", err)
@@ -1825,7 +1913,7 @@ func TestUpsertHookConfigUpdatesPolicyProfileOnReinstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(root)
-	if !strings.Contains(string(raw), "/policies/new.json") || strings.Contains(string(raw), "/policies/old.json") {
+	if !strings.Contains(string(raw), "/policies/new.json") || !strings.Contains(string(raw), "sha256:new") || strings.Contains(string(raw), "/policies/old.json") || strings.Contains(string(raw), "sha256:old") {
 		t.Fatalf("reinstall did not replace stored policy profile: %s", raw)
 	}
 }

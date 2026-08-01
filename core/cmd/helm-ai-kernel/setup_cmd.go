@@ -20,6 +20,7 @@ import (
 	"github.com/BurntSushi/toml"
 	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
 const setupMCPServerName = "helm-ai-kernel-governance"
@@ -52,19 +53,20 @@ var (
 )
 
 type setupOptions struct {
-	Target          string
-	Operation       string
-	Scope           string
-	Workspace       string
-	WorkspaceSet    bool
-	Yes             bool
-	DryRun          bool
-	JSON            bool
-	NoQuickstart    bool
-	Quickstart      bool
-	DataDir         string
-	SigningSeedFile string
-	PolicyProfile   string
+	Target              string
+	Operation           string
+	Scope               string
+	Workspace           string
+	WorkspaceSet        bool
+	Yes                 bool
+	DryRun              bool
+	JSON                bool
+	NoQuickstart        bool
+	Quickstart          bool
+	DataDir             string
+	SigningSeedFile     string
+	PolicyProfile       string
+	PolicyProfileSHA256 string
 }
 
 type setupSummary struct {
@@ -162,6 +164,10 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup: policy profile: %v\n", err)
+		return 2
+	}
 	if opts.DryRun {
 		opts.Operation = "preview"
 	} else {
@@ -251,6 +257,10 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	opts, code := parseSetupInspectArgs("setup status", args, stderr, false)
 	if code != 0 {
 		return code
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
+		return 2
 	}
 	opts.Operation = "status"
 	summary, err := buildSetupSummary(opts)
@@ -527,6 +537,23 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 		return opts, 2
 	}
 	return opts, 0
+}
+
+// populateSetupPolicyProfileDigest validates a custom policy before setup
+// writes a hook command, then records the exact raw-file digest that the hook
+// must continue to see on every later decision. Re-running setup is the
+// explicit operator approval path for a changed policy file.
+func populateSetupPolicyProfileDigest(opts *setupOptions) error {
+	opts.PolicyProfileSHA256 = ""
+	if strings.TrimSpace(opts.PolicyProfile) == "" {
+		return nil
+	}
+	_, digest, err := workstation.LoadPolicyProfileFileWithDigest(opts.PolicyProfile)
+	if err != nil {
+		return err
+	}
+	opts.PolicyProfileSHA256 = digest
+	return nil
 }
 
 func normalizeSetupTarget(target string) (string, error) {
@@ -959,7 +986,7 @@ func setupHookInstalled(opts setupOptions, path, bin string) bool {
 	if !ok {
 		return false
 	}
-	return hookCommandPresent(arrayValue(hooks, "PreToolUse"), setupHookCommand(opts, bin))
+	return hookCommandConfigPresent(arrayValue(hooks, "PreToolUse"), setupHookCommand(opts, bin))
 }
 
 func setupQuickstartProfile(target string) string {
@@ -1017,6 +1044,9 @@ func setupHookCommand(opts setupOptions, bin string) string {
 	}
 	if strings.TrimSpace(opts.PolicyProfile) != "" {
 		command += " --policy-profile " + shellQuote(opts.PolicyProfile)
+		if strings.TrimSpace(opts.PolicyProfileSHA256) != "" {
+			command += " --policy-profile-sha256 " + shellQuote(opts.PolicyProfileSHA256)
+		}
 	}
 	return command
 }
@@ -1159,19 +1189,31 @@ func arrayValue(root map[string]any, key string) []any {
 	return []any{}
 }
 
-// hookManagedFileArgPattern matches optional file-path segments of an
-// installed hook command, with their shell-quoted or bare arguments. The
+// hookManagedFileArgPattern matches optional managed arguments of an installed
+// hook command, with their shell-quoted or bare arguments. The
 // argument alternation mirrors shellQuote output: a sequence of
 // single-quoted chunks, escaped quotes (the '\” idiom), and bare
 // non-space characters.
-var hookManagedFileArgPattern = regexp.MustCompile(` --(?:signing-seed-file|policy-profile) (?:'[^']*'|\\'|[^\s'])+`)
+var hookManagedFileArgPattern = regexp.MustCompile(` --(?:signing-seed-file|policy-profile|policy-profile-sha256) (?:'[^']*'|\\'|[^\s'])+`)
 
-// hookCommandKey reduces an installed hook command to its identity: the
-// managed file arguments are deployment details, so `setup status` and
-// `setup remove` must match the hook whether or not (and with whichever path
-// form) they were passed on their own invocation.
+// hookSignerFileArgPattern omits only the signer source. A user may omit a
+// secret seed path when inspecting setup, but policy path and digest must stay
+// part of the status comparison so a stale custom policy is never reported as
+// active.
+var hookSignerFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
+
+// hookCommandKey reduces an installed hook command to its generic identity
+// for reinstall/remove. Managed arguments are deployment details, so `setup
+// remove` must match the hook whether or not (and with whichever path form)
+// they were passed on its own invocation.
 func hookCommandKey(command string) string {
 	return hookManagedFileArgPattern.ReplaceAllString(command, "")
+}
+
+// hookCommandConfigKey preserves the approved policy path and digest for
+// status checks while allowing the signer source to remain private.
+func hookCommandConfigKey(command string) string {
+	return hookSignerFileArgPattern.ReplaceAllString(command, "")
 }
 
 func hookCommandPresent(pre []any, command string) bool {
@@ -1187,6 +1229,26 @@ func hookCommandPresent(pre []any, command string) bool {
 		}
 		for _, h := range hooks {
 			if hookCommandKey(hookCommandFromAny(h)) == key {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hookCommandConfigPresent(pre []any, command string) bool {
+	key := hookCommandConfigKey(command)
+	for _, item := range pre {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooks, ok := obj["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, h := range hooks {
+			if hookCommandConfigKey(hookCommandFromAny(h)) == key {
 				return true
 			}
 		}

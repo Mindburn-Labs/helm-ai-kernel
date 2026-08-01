@@ -31,11 +31,12 @@ var (
 )
 
 type hookOptions struct {
-	Client          string
-	DataDir         string
-	PolicyProfile   string
-	SigningSeedFile string
-	JSON            bool
+	Client              string
+	DataDir             string
+	PolicyProfile       string
+	PolicyProfileSHA256 string
+	SigningSeedFile     string
+	JSON                bool
 }
 
 type preToolPayload struct {
@@ -100,6 +101,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code or codex")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
 	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path")
+	fs.StringVar(&opts.PolicyProfileSHA256, "policy-profile-sha256", "", "Approved SHA-256 digest for the policy profile")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	fs.BoolVar(&opts.JSON, "json", false, "Reserved for structured diagnostics")
 	if err := fs.Parse(args); err != nil {
@@ -163,7 +165,7 @@ func writeHookDeny(stdout io.Writer, reason string) error {
 }
 
 func printHookUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--policy-profile PATH] [--signing-seed-file PATH]")
+	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--policy-profile PATH --policy-profile-sha256 SHA256] [--signing-seed-file PATH]")
 }
 
 func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
@@ -247,6 +249,15 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 	profile, profileDigest, err := workstation.LoadPolicyProfileFileWithDigest(opts.PolicyProfile)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errHookPolicyProfile, err)
+	}
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		approvedDigest := strings.TrimSpace(opts.PolicyProfileSHA256)
+		if approvedDigest == "" {
+			return nil, fmt.Errorf("%w: custom policy profile has no approved digest", errHookPolicyProfile)
+		}
+		if approvedDigest != profileDigest {
+			return nil, fmt.Errorf("%w: custom policy profile digest does not match installed configuration", errHookPolicyProfile)
+		}
 	}
 	requestID, err := newHookRequestID()
 	if err != nil {

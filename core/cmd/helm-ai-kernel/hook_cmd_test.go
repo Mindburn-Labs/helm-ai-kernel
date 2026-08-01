@@ -114,8 +114,9 @@ func TestHookPreToolPersistsAllowReceiptWithCustomPolicyProfile(t *testing.T) {
 	command := "rm -rf /tmp/helm-allow"
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-allow"},"session_id":"allow-session","cwd":"/repo"}`
 	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	profileDigest := hookPolicyProfileDigest(t, profile)
 	var stdout, stderr bytes.Buffer
-	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile}, strings.NewReader(payload), &stdout, &stderr)
+	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", profileDigest}, strings.NewReader(payload), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
@@ -166,14 +167,61 @@ func TestHookPreToolPersistsAllowReceiptWithCustomPolicyProfile(t *testing.T) {
 	}
 }
 
+func TestHookPreToolFailsClosedWhenCustomPolicyChangesAfterApproval(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	sourceProfile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	policyBytes, err := os.ReadFile(sourceProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(tmp, "approved-policy.json")
+	if err := os.WriteFile(profile, policyBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	approvedDigest := hookPolicyProfileDigest(t, profile)
+	payload := "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf /tmp/helm-profile-tamper\"},\"session_id\":\"profile-tamper\",\"cwd\":\"/repo\"}"
+	args := []string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", approvedDigest}
+
+	var stdout, stderr bytes.Buffer
+	if code := runHookPreToolCmd(args, strings.NewReader(payload), &stdout, &stderr); code != 0 {
+		t.Fatalf("approved hook exit = %d stderr=%s", code, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("approved custom policy should allow without hook output: %s", stdout.String())
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 1 {
+		t.Fatalf("approved custom policy receipts = %v, want one", receipts)
+	}
+
+	if err := os.WriteFile(profile, append(policyBytes, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := runHookPreToolCmd(args, strings.NewReader(payload), &stdout, &stderr); code != 0 {
+		t.Fatalf("tampered hook exit = %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "policy profile is unavailable") {
+		t.Fatalf("tampered custom policy did not fail closed: %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "digest does not match installed configuration") {
+		t.Fatalf("tampered custom policy diagnostic = %s", stderr.String())
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 1 {
+		t.Fatalf("tampered custom policy wrote a receipt: %v", receipts)
+	}
+}
+
 func TestHookPreToolPersistsDistinctReceiptsForRepeatedOperation(t *testing.T) {
 	tmp := t.TempDir()
 	restoreHookClock(t)
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/repeated"},"session_id":"same-session","cwd":"/repo"}`
 	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	profileDigest := hookPolicyProfileDigest(t, profile)
 	for range 2 {
 		var stdout, stderr bytes.Buffer
-		if code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile}, strings.NewReader(payload), &stdout, &stderr); code != 0 {
+		if code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", profileDigest}, strings.NewReader(payload), &stdout, &stderr); code != 0 {
 			t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 		}
 	}
@@ -200,7 +248,7 @@ func TestBuildHookDecisionReceiptEvaluatesRawTargetBeforePersistingFingerprint(t
 	target := "https://api.github.com/repos/Mindburn-Labs/helm"
 	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
 	receipt, err := buildHookDecisionReceipt(
-		hookOptions{Client: "codex", DataDir: tmp, PolicyProfile: profile},
+		hookOptions{Client: "codex", DataDir: tmp, PolicyProfile: profile, PolicyProfileSHA256: hookPolicyProfileDigest(t, profile)},
 		preToolPayload{ToolName: "Bash", SessionID: "network-allow", CWD: "/repo"},
 		hookClassification{
 			ShouldDecide: true,
@@ -353,9 +401,10 @@ func TestHookPreToolFailsClosedWhenAllowReceiptCannotPersist(t *testing.T) {
 		t.Fatal(err)
 	}
 	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	profileDigest := hookPolicyProfileDigest(t, profile)
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/allowed-by-profile"}}`
 	var stdout, stderr bytes.Buffer
-	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile}, strings.NewReader(payload), &stdout, &stderr)
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", profileDigest}, strings.NewReader(payload), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
@@ -593,6 +642,15 @@ func restoreHookClock(t *testing.T) {
 	old := hookNow
 	hookNow = func() time.Time { return time.Unix(0, 0).UTC() }
 	t.Cleanup(func() { hookNow = old })
+}
+
+func hookPolicyProfileDigest(t *testing.T, path string) string {
+	t.Helper()
+	_, digest, err := workstation.LoadPolicyProfileFileWithDigest(path)
+	if err != nil {
+		t.Fatalf("load policy profile digest: %v", err)
+	}
+	return digest
 }
 
 func globReceipts(t *testing.T, dataDir string) []string {

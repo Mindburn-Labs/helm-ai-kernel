@@ -10,6 +10,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
@@ -225,6 +226,10 @@ func buildDemoReceipt(svc *Services, decision *contracts.DecisionRecord, body []
 	if svc == nil || svc.ReceiptSigner == nil || decision == nil {
 		return nil, fmt.Errorf("receipt signer unavailable")
 	}
+	decisionHash, err := helmcrypto.DecisionSemanticHash(decision)
+	if err != nil {
+		return nil, fmt.Errorf("derive semantic decision hash: %w", err)
+	}
 	const agentID = "demo.agent@helm-ai-kernel"
 	argsHash := sha256HexBytes(body)
 	receiptID := "rcpt_" + decision.ID
@@ -239,7 +244,8 @@ func buildDemoReceipt(svc *Services, decision *contracts.DecisionRecord, body []
 		EffectID:     effectID,
 		Status:       decision.Verdict,
 		BlobHash:     argsHash,
-		OutputHash:   decision.PolicyDecisionHash,
+		OutputHash:   decisionHash,
+		DecisionHash: decisionHash,
 		Timestamp:    timestamp,
 		ExecutorID:   agentID,
 		Verdict:      decision.Verdict,

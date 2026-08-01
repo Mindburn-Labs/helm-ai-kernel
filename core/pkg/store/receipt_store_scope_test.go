@@ -32,6 +32,7 @@ func TestSQLiteReceiptAppendCausalScopedIsolatesSameExternalSession(t *testing.T
 				Status:           "SUCCESS",
 				Timestamp:        timestamp,
 				OutputHash:       "output-" + suffix,
+				DecisionHash:     "decision-hash-" + suffix,
 				ArgsHash:         "args-" + suffix,
 				SignatureVersion: contracts.ReceiptSignatureV5,
 				SessionID:        externalSessionID,
@@ -111,6 +112,7 @@ func TestSQLiteListByTenantCursorRetainsTiedSessionLamports(t *testing.T) {
 				Status:           "SUCCESS",
 				Timestamp:        timestamp,
 				OutputHash:       "output-" + receiptID,
+				DecisionHash:     "decision-hash-" + receiptID,
 				ArgsHash:         "args-" + receiptID,
 				SignatureVersion: contracts.ReceiptSignatureV5,
 				SessionID:        sessionID,
@@ -166,7 +168,7 @@ func TestPostgresReceiptAppendCausalScopedUsesTenantLookupKey(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(lookupKey).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(lookupKey).WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(30)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	var issued *contracts.Receipt
 	if err := receiptStore.AppendCausalScoped(ctx, tenantID, externalSessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
@@ -176,8 +178,54 @@ func TestPostgresReceiptAppendCausalScopedUsesTenantLookupKey(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("append scoped receipt: %v", err)
 	}
-	if issued.SessionID != externalSessionID || receiptStore.cachedLastReceipt(lookupKey) == nil || receiptStore.cachedLastReceipt(externalSessionID) != nil {
-		t.Fatalf("Postgres scoped append did not separate lookup from signed session: receipt=%+v", issued)
+	if issued.SessionID != externalSessionID {
+		t.Fatalf("Postgres scoped append did not preserve the signed session: receipt=%+v", issued)
+	}
+}
+
+func TestPostgresReceiptAppendCausalScopedReloadsDurablePredecessorAcrossStoreInstances(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+	firstStore := NewPostgresReceiptStore(db)
+	secondStore := NewPostgresReceiptStore(db)
+	const tenantID = "tenant-a"
+	const externalSessionID = "shared-session"
+	lookupKey := causalReceiptScopeKey(tenantID, externalSessionID)
+	timestamp := time.Unix(1700000000, 123456789).UTC()
+	seed := storeCoverageReceipt("durable-seed", "durable-seed-decision", externalSessionID, 1, timestamp)
+
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(lookupKey).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(lookupKey).WillReturnRows(storePostgresReceiptRows(seed, nil))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	var first *contracts.Receipt
+	if err := firstStore.AppendCausalScoped(ctx, tenantID, externalSessionID, func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		if previous == nil || previous.ReceiptID != seed.ReceiptID || lamport != 2 || prevHash == "" {
+			t.Fatalf("first store did not allocate from durable predecessor: previous=%+v lamport=%d prev_hash=%q", previous, lamport, prevHash)
+		}
+		first = storeCoverageReceipt("durable-first", "durable-first-decision", externalSessionID, lamport, timestamp.Add(time.Second))
+		first.PrevHash = prevHash
+		return first, nil
+	}); err != nil {
+		t.Fatalf("first store append: %v", err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(lookupKey).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(lookupKey).WillReturnRows(storePostgresReceiptRows(first, nil))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	if err := secondStore.AppendCausalScoped(ctx, tenantID, externalSessionID, func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		if previous == nil || previous.ReceiptID != first.ReceiptID || lamport != 3 || prevHash == "" {
+			t.Fatalf("second store did not reload first store's durable predecessor: previous=%+v lamport=%d prev_hash=%q", previous, lamport, prevHash)
+		}
+		next := storeCoverageReceipt("durable-second", "durable-second-decision", externalSessionID, lamport, timestamp.Add(2*time.Second))
+		next.PrevHash = prevHash
+		return next, nil
+	}); err != nil {
+		t.Fatalf("second store append: %v", err)
 	}
 }
 

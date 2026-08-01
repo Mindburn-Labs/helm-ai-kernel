@@ -10,7 +10,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-func TestPostgresReceiptTimestampStaysStableAcrossCacheAndReload(t *testing.T) {
+func TestPostgresReceiptTimestampStaysStableAcrossReload(t *testing.T) {
 	ctx := context.Background()
 	db, mock, cleanup := newStoreCoverageSQLMock(t)
 	defer cleanup()
@@ -23,7 +23,7 @@ func TestPostgresReceiptTimestampStaysStableAcrossCacheAndReload(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(sessionID).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(sessionID).WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(30)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	if err := receiptStore.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		first = storeCoverageReceipt("postgres-first", "postgres-decision-first", sessionID, lamport, timestamp)
@@ -33,7 +33,7 @@ func TestPostgresReceiptTimestampStaysStableAcrossCacheAndReload(t *testing.T) {
 		t.Fatalf("append first receipt: %v", err)
 	}
 	if !first.Timestamp.Equal(wantTimestamp) {
-		t.Fatalf("cached receipt timestamp = %s, want PostgreSQL precision %s", first.Timestamp, wantTimestamp)
+		t.Fatalf("stored receipt timestamp = %s, want PostgreSQL precision %s", first.Timestamp, wantTimestamp)
 	}
 	firstHash, err := contracts.ReceiptChainHash(first)
 	if err != nil {
@@ -50,12 +50,10 @@ func TestPostgresReceiptTimestampStaysStableAcrossCacheAndReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	receiptStore.lastBySession = map[string]*contracts.Receipt{}
-
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(sessionID).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(sessionID).WillReturnRows(storePostgresReceiptRows(&reloaded, metadata))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(30)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	if err := receiptStore.AppendCausal(ctx, sessionID, func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous == nil || !previous.Timestamp.Equal(wantTimestamp) || lamport != 2 || prevHash != firstHash {

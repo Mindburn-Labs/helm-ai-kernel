@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -114,21 +113,26 @@ const backfillCausalReceiptSessionsSQL = `
 	WHERE COALESCE(causal_session_id, '') = '';
 `
 
+// backfillReceiptDecisionHashSQL recovers the V5 semantic decision hash from
+// the metadata field that the first V5 API writers already persisted. Rows
+// without that trusted source intentionally remain empty: read paths reject
+// them instead of silently returning an incomplete required V5 field.
+const backfillReceiptDecisionHashSQL = `
+	UPDATE receipts
+	SET decision_hash = metadata->>'decision_hash'
+	WHERE COALESCE(signature_version, '') = 'receipt.v5'
+	  AND COALESCE(decision_hash, '') = ''
+	  AND metadata IS NOT NULL
+	  AND NULLIF(metadata->>'decision_hash', '') IS NOT NULL;
+`
+
 // PostgresReceiptStore is a durable SQL-based implementation.
 type PostgresReceiptStore struct {
-	db            *sql.DB
-	lastMu        sync.Mutex
-	lastBySession map[string]*contracts.Receipt
-	locksMu       sync.Mutex
-	sessionLocks  map[string]*sync.Mutex
+	db *sql.DB
 }
 
 func NewPostgresReceiptStore(db *sql.DB) *PostgresReceiptStore {
-	return &PostgresReceiptStore{
-		db:            db,
-		lastBySession: map[string]*contracts.Receipt{},
-		sessionLocks:  map[string]*sync.Mutex{},
-	}
+	return &PostgresReceiptStore{db: db}
 }
 
 func (s *PostgresReceiptStore) Init(ctx context.Context) error {
@@ -149,6 +153,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			prev_hash TEXT,
 			lamport_clock BIGINT,
 			output_hash TEXT DEFAULT '',
+			decision_hash TEXT DEFAULT '',
 			args_hash TEXT DEFAULT '',
 			signature_version TEXT DEFAULT '',
 			verdict TEXT DEFAULT '',
@@ -172,6 +177,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS merkle_root TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS output_hash TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS decision_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS args_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_version TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS verdict TEXT DEFAULT '';
@@ -190,6 +196,9 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS transparency JSONB;
 	`
 	if _, err := s.db.ExecContext(ctx, schemaQuery); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, backfillReceiptDecisionHashSQL); err != nil {
 		return err
 	}
 	if _, err := s.db.ExecContext(ctx, backfillCausalReceiptSessionsSQL); err != nil {
@@ -214,7 +223,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 }
 
 // receiptColumns is the canonical column list for receipt queries.
-const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(signature_version, '') AS signature_version, COALESCE(verdict, '') AS verdict, COALESCE(reason_code, '') AS reason_code, COALESCE(policy_hash, '') AS policy_hash, COALESCE(session_id, '') AS session_id, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id`
+const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, COALESCE(decision_hash, '') AS decision_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(signature_version, '') AS signature_version, COALESCE(verdict, '') AS verdict, COALESCE(reason_code, '') AS reason_code, COALESCE(policy_hash, '') AS policy_hash, COALESCE(session_id, '') AS session_id, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id`
 
 func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE decision_id = $1`
@@ -412,7 +421,7 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 	var publicKeySet []byte
 	err := s.Scan(
 		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
-		&r.BlobHash, &r.OutputHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
+		&r.BlobHash, &r.OutputHash, &r.DecisionHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
 		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.SignatureVersion, &r.Verdict, &r.ReasonCode, &r.PolicyHash, &r.SessionID, &r.LogID, &r.LeafIndex, &transparency,
 		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID,
 	)
@@ -437,7 +446,33 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 	}
 	r.Signature = signature.String
 	r.MerkleRoot = merkleRoot.String
+	if err := restoreOrRejectV5DecisionHash(&r); err != nil {
+		return nil, err
+	}
 	return &r, nil
+}
+
+// restoreOrRejectV5DecisionHash makes the V5 semantic decision hash durable
+// across the storage gap that predated its dedicated column. The metadata
+// fallback is deliberately limited to the exact value persisted by early V5
+// API writers; output_hash is not a safe general substitute. A V5 row that
+// cannot be recovered is not a complete receipt and must fail closed.
+func restoreOrRejectV5DecisionHash(r *contracts.Receipt) error {
+	if r == nil || r.SignatureVersion != contracts.ReceiptSignatureV5 {
+		return nil
+	}
+	if r.DecisionHash = strings.TrimSpace(r.DecisionHash); r.DecisionHash != "" {
+		return nil
+	}
+	if r.Metadata != nil {
+		if value, ok := r.Metadata["decision_hash"].(string); ok {
+			if value = strings.TrimSpace(value); value != "" {
+				r.DecisionHash = value
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("receipt %q declares %s but has no durable decision_hash; apply 004_add_receipt_decision_hash.sql and restore it from a trusted decision record", r.ReceiptID, contracts.ReceiptSignatureV5)
 }
 
 // decodeTransparencyAnchor deserializes the persisted transparency anchor JSON
@@ -494,7 +529,6 @@ func (s *PostgresReceiptStore) Store(ctx context.Context, r *contracts.Receipt) 
 	if err := insertPostgresReceipt(ctx, s.db, r); err != nil {
 		return err
 	}
-	s.rememberLastReceipt(r)
 	return nil
 }
 
@@ -507,15 +541,18 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 }
 
 func insertPostgresReceiptWithCausalSession(ctx context.Context, execer sqlExecer, r *contracts.Receipt, causalSessionID string) error {
+	if err := restoreOrRejectV5DecisionHash(r); err != nil {
+		return err
+	}
 	query := `
 		INSERT INTO receipts (
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
-			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, args_hash, blob_hash,
+			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, decision_hash, args_hash, blob_hash,
 			signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency,
 			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb,
-			$26, $27::jsonb, $28, $29, $30)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb,
+			$27, $28::jsonb, $29, $30, $31)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
@@ -544,6 +581,7 @@ func insertPostgresReceiptWithCausalSession(ctx context.Context, execer sqlExece
 		r.PrevHash,
 		r.LamportClock,
 		r.OutputHash,
+		r.DecisionHash,
 		r.ArgsHash,
 		r.BlobHash,
 		r.SignatureVersion,
@@ -591,24 +629,10 @@ func (s *PostgresReceiptStore) appendCausal(ctx context.Context, causalSessionID
 	if strings.TrimSpace(externalSessionID) == "" {
 		return fmt.Errorf("session id is required")
 	}
-	localLock := s.sessionLock(causalSessionID)
-	localLock.Lock()
-	defer localLock.Unlock()
-
-	if last := s.cachedLastReceipt(causalSessionID); last != nil {
-		receipt, err := buildNextCausalReceiptScoped(causalSessionID, externalSessionID, last, build)
-		if err != nil {
-			return err
-		}
-		s.normalizeReceiptTimestamp(receipt)
-		if err := insertPostgresReceiptWithCausalSession(ctx, s.db, receipt, causalSessionID); err != nil {
-			s.forgetLastReceipt(causalSessionID)
-			return err
-		}
-		s.rememberLastReceiptForSession(causalSessionID, receipt)
-		return nil
-	}
-
+	// Every append, including a local cache hit from a prior process lifetime,
+	// must allocate its position from PostgreSQL. The xact-scoped advisory lock
+	// serializes writers across store instances before the durable predecessor is
+	// read, built, signed, and inserted.
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin receipt transaction: %w", err)
@@ -638,39 +662,12 @@ func (s *PostgresReceiptStore) appendCausal(ctx context.Context, causalSessionID
 		return fmt.Errorf("commit receipt transaction: %w", err)
 	}
 	committed = true
-	s.rememberLastReceiptForSession(causalSessionID, receipt)
 	return nil
 }
 
 // GetLastForSession returns the most recent receipt for a signed session_id for causal DAG chaining.
 func (s *PostgresReceiptStore) GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error) {
 	return queryLastPostgresReceipt(ctx, s.db, sessionID)
-}
-
-func (s *PostgresReceiptStore) cachedLastReceipt(sessionID string) *contracts.Receipt {
-	s.lastMu.Lock()
-	defer s.lastMu.Unlock()
-	return cloneReceipt(s.lastBySession[sessionID])
-}
-
-func (s *PostgresReceiptStore) rememberLastReceipt(r *contracts.Receipt) {
-	sessionID := causalReceiptSessionID(r)
-	s.rememberLastReceiptForSession(sessionID, r)
-}
-
-func (s *PostgresReceiptStore) rememberLastReceiptForSession(sessionID string, r *contracts.Receipt) {
-	if r == nil || sessionID == "" || r.LamportClock == 0 {
-		return
-	}
-	s.lastMu.Lock()
-	defer s.lastMu.Unlock()
-	if s.lastBySession == nil {
-		s.lastBySession = map[string]*contracts.Receipt{}
-	}
-	current := s.lastBySession[sessionID]
-	if current == nil || r.LamportClock >= current.LamportClock {
-		s.lastBySession[sessionID] = cloneReceipt(r)
-	}
 }
 
 // NormalizeReceiptTimestamp matches PostgreSQL TIMESTAMPTZ microsecond
@@ -684,40 +681,6 @@ func (s *PostgresReceiptStore) normalizeReceiptTimestamp(r *contracts.Receipt) {
 	if r != nil {
 		r.Timestamp = s.NormalizeReceiptTimestamp(r.Timestamp)
 	}
-}
-
-func (s *PostgresReceiptStore) forgetLastReceipt(sessionID string) {
-	s.lastMu.Lock()
-	defer s.lastMu.Unlock()
-	delete(s.lastBySession, sessionID)
-}
-
-func (s *PostgresReceiptStore) sessionLock(sessionID string) *sync.Mutex {
-	s.locksMu.Lock()
-	defer s.locksMu.Unlock()
-	if s.sessionLocks == nil {
-		s.sessionLocks = map[string]*sync.Mutex{}
-	}
-	lock := s.sessionLocks[sessionID]
-	if lock == nil {
-		lock = &sync.Mutex{}
-		s.sessionLocks[sessionID] = lock
-	}
-	return lock
-}
-
-func cloneReceipt(r *contracts.Receipt) *contracts.Receipt {
-	if r == nil {
-		return nil
-	}
-	clone := *r
-	if r.Metadata != nil {
-		clone.Metadata = make(map[string]any, len(r.Metadata))
-		for k, v := range r.Metadata {
-			clone.Metadata[k] = v
-		}
-	}
-	return &clone
 }
 
 type sqlQueryer interface {

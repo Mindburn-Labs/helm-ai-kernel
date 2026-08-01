@@ -16,6 +16,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
@@ -517,6 +518,10 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 	if svc.ReceiptSigner == nil {
 		return fmt.Errorf("receipt signer unavailable")
 	}
+	decisionHash, hashErr := helmcrypto.DecisionSemanticHash(decision)
+	if hashErr != nil {
+		return fmt.Errorf("derive semantic decision hash: %w", hashErr)
+	}
 	sessionID := ""
 	if decision.InputContext != nil {
 		if value, ok := decision.InputContext["session_id"].(string); ok {
@@ -539,8 +544,8 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 			EffectID:     effectID,
 			Status:       decision.Verdict,
 			BlobHash:     argsHash,
-			OutputHash:   decision.PolicyDecisionHash,
-			DecisionHash: decision.PolicyDecisionHash,
+			OutputHash:   decisionHash,
+			DecisionHash: decisionHash,
 			Timestamp:    timestamp,
 			ExecutorID:   agentID,
 			Verdict:      decision.Verdict,

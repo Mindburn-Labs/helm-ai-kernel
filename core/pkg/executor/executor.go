@@ -424,6 +424,10 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 	if err != nil {
 		return nil, err
 	}
+	decisionHash, err := crypto.DecisionSemanticHash(decision)
+	if err != nil {
+		return nil, fmt.Errorf("derive semantic decision hash: %w", err)
+	}
 	tenantID := receiptTenantID(decision)
 	timestamp := e.clock().UTC()
 	if normalizer, ok := e.receiptStore.(receiptTimestampNormalizer); ok {
@@ -439,6 +443,7 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 			Status:        "SUCCESS",
 			BlobHash:      blobHash,
 			OutputHash:    outputHash,
+			DecisionHash:  decisionHash,
 			ArgsHash:      effect.ArgsHash, // PEP boundary hash bound into signed receipt
 			Timestamp:     timestamp,
 			PrevHash:      prevHash,

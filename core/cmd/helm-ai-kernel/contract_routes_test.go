@@ -275,6 +275,52 @@ func TestEvaluateReceiptIsRetrievableAndExportableBySignedSession(t *testing.T) 
 	if response.ReceiptID == "" || response.ID != response.DecisionID || response.Action != "EXECUTE_TOOL" || response.Resource != "local.echo" {
 		t.Fatalf("evaluate did not retain compatibility response fields: %+v", response)
 	}
+	if response.DecisionHash == "" {
+		t.Fatalf("evaluate response did not include decision_hash: %+v", response)
+	}
+	signer, ok := svc.ReceiptSigner.(*helmcrypto.Ed25519Signer)
+	if !ok {
+		t.Fatalf("evaluate receipt signer type = %T, want Ed25519 signer", svc.ReceiptSigner)
+	}
+	persisted, err := receiptStore.GetByReceiptIDForTenant(context.Background(), defaultRuntimeTenantID, response.ReceiptID)
+	if err != nil {
+		t.Fatalf("tenant get persisted evaluate receipt: %v", err)
+	}
+	if persisted.DecisionHash != response.DecisionHash {
+		t.Fatalf("persisted decision_hash = %q, evaluate response = %q", persisted.DecisionHash, response.DecisionHash)
+	}
+	if valid, err := signer.VerifyReceipt(persisted); err != nil || !valid {
+		t.Fatalf("persisted V5 receipt did not verify: valid=%v err=%v", valid, err)
+	}
+	listed, err := receiptStore.ListByTenantCursor(context.Background(), defaultRuntimeTenantID, store.TenantReceiptCursor{}, 10)
+	if err != nil || len(listed) != 1 || listed[0].DecisionHash != response.DecisionHash {
+		t.Fatalf("tenant list decision_hash = %+v err=%v, want %q", listed, err, response.DecisionHash)
+	}
+	if valid, err := signer.VerifyReceipt(listed[0]); err != nil || !valid {
+		t.Fatalf("listed V5 receipt did not verify: valid=%v err=%v", valid, err)
+	}
+
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":`+strconv.Quote(sessionID)+`,"format":"tar.gz"}`))
+	authorizeTestRequest(exportReq)
+	exportRec := httptest.NewRecorder()
+	mux.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("evidence export status=%d body=%s", exportRec.Code, exportRec.Body.String())
+	}
+	bundle, err := readEvidenceBundle(exportRec.Body.Bytes())
+	if err != nil {
+		t.Fatalf("read evidence bundle: %v", err)
+	}
+	var exported contracts.Receipt
+	if err := json.Unmarshal(bundle.Files["receipts/"+response.ReceiptID+".json"], &exported); err != nil {
+		t.Fatalf("decode exported receipt: %v", err)
+	}
+	if exported.DecisionHash != response.DecisionHash {
+		t.Fatalf("exported decision_hash = %q, evaluate response = %q", exported.DecisionHash, response.DecisionHash)
+	}
+	if valid, err := signer.VerifyReceipt(&exported); err != nil || !valid {
+		t.Fatalf("exported V5 receipt did not verify: valid=%v err=%v", valid, err)
+	}
 	assertReceiptSessionRetrievalAndExport(t, mux, sessionID, response.ReceiptID)
 }
 
@@ -334,6 +380,17 @@ func TestStandaloneExecutorReceiptIsRetrievableAndExportableBySignedSession(t *t
 	wantSessionID := "standalone:decision:" + decision.ID
 	if receipt.SessionID != wantSessionID || receipt.SignatureVersion != contracts.ReceiptSignatureV5 {
 		t.Fatalf("standalone receipt identity=%q version=%q", receipt.SessionID, receipt.SignatureVersion)
+	}
+	expectedDecisionHash, err := helmcrypto.DecisionSemanticHash(decision)
+	if err != nil {
+		t.Fatalf("derive decision hash: %v", err)
+	}
+	repeatedDecisionHash, err := helmcrypto.DecisionSemanticHash(decision)
+	if err != nil || repeatedDecisionHash != expectedDecisionHash {
+		t.Fatalf("semantic decision hash must be deterministic: first=%q second=%q err=%v", expectedDecisionHash, repeatedDecisionHash, err)
+	}
+	if receipt.DecisionHash != expectedDecisionHash || receipt.DecisionHash == receipt.OutputHash {
+		t.Fatalf("receipt decision_hash must use the canonical decision preimage, not execution output: receipt=%+v expected=%q", receipt, expectedDecisionHash)
 	}
 	if receipts, err := receiptStore.ListByTenantSession(context.Background(), "other-tenant", wantSessionID, 0, 10); err != nil || len(receipts) != 0 {
 		t.Fatalf("cross-tenant session read receipts=%+v err=%v, want no records", receipts, err)
@@ -815,14 +872,15 @@ func newContractRouteTestServices(t *testing.T) (*Services, func()) {
 		t.Fatal(err)
 	}
 	receipt := &contracts.Receipt{
-		ReceiptID:  "rcpt-test",
-		DecisionID: "dec-test",
-		EffectID:   "EXECUTE_TOOL",
-		Status:     string(contracts.VerdictDeny),
-		Timestamp:  time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
-		ExecutorID: "agent.test",
-		Signature:  "sig-test",
-		ArgsHash:   "args-test",
+		ReceiptID:    "rcpt-test",
+		DecisionID:   "dec-test",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictDeny),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		Signature:    "sig-test",
+		DecisionHash: "sha256:test-decision",
+		ArgsHash:     "args-test",
 	}
 	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-test", receipt)
 	return &Services{ReceiptStore: receiptStore}, func() { _ = db.Close() }
@@ -833,6 +891,9 @@ func appendTenantScopedReceipt(t *testing.T, receiptStore *store.SQLiteReceiptSt
 	if err := receiptStore.AppendCausalScoped(context.Background(), tenantID, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		copy := *receipt
 		copy.SignatureVersion = contracts.ReceiptSignatureV5
+		if strings.TrimSpace(copy.DecisionHash) == "" {
+			copy.DecisionHash = "sha256:test-decision-" + copy.DecisionID
+		}
 		copy.SessionID = sessionID
 		copy.LamportClock = lamport
 		copy.PrevHash = prevHash
@@ -920,6 +981,7 @@ func overflowReceipts(agentID string, since uint64, limit int) []*contracts.Rece
 			Timestamp:        time.Unix(int64(lamport), 0).UTC(),
 			ExecutorID:       agentID,
 			Signature:        "sig-overflow",
+			DecisionHash:     fmt.Sprintf("sha256:overflow-decision-%d", lamport),
 			LamportClock:     lamport,
 			SignatureVersion: contracts.ReceiptSignatureV5,
 			SessionID:        agentID,

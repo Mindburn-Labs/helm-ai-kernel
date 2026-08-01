@@ -4,6 +4,8 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -345,4 +347,31 @@ func DecisionVerifyPayload(d *contracts.DecisionRecord) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("unsupported decision signature version %q", d.SignatureVersion)
 	}
+}
+
+// DecisionContentHash returns the SHA-256 digest of the exact canonical
+// decision-record payload used for verification. It is the deterministic
+// fallback semantic decision hash when a policy decision source did not emit
+// PolicyDecisionHash; callers must prefer the source-provided value when it is
+// available.
+func DecisionContentHash(d *contracts.DecisionRecord) (string, error) {
+	payload, err := DecisionVerifyPayload(d)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
+}
+
+// DecisionSemanticHash prefers the hash emitted by the active policy decision
+// source. When that source is absent, it derives the value from the existing
+// canonical signed-decision payload rather than substituting an execution
+// output hash or inventing a second decision representation.
+func DecisionSemanticHash(d *contracts.DecisionRecord) (string, error) {
+	if d != nil {
+		if hash := strings.TrimSpace(d.PolicyDecisionHash); hash != "" {
+			return hash, nil
+		}
+	}
+	return DecisionContentHash(d)
 }

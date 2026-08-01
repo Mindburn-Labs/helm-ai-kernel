@@ -16,6 +16,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 type storeCoverageVerifier struct {
@@ -40,6 +41,8 @@ func (v storeCoverageVerifier) VerifyReceipt(*contracts.Receipt) (bool, error) {
 }
 
 type storeRoundTripFunc func(*http.Request) (*http.Response, error)
+
+const storePostgresReceiptInsertArgCount = 31
 
 func (f storeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
@@ -240,6 +243,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS receipts").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("UPDATE receipts").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("UPDATE receipts").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_receipts_executor_id").WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := store.Init(ctx); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -249,7 +253,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 		t.Fatal("expected init error")
 	}
 
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(30)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	if err := store.Store(ctx, receipt); err != nil {
 		t.Fatalf("Store: %v", err)
 	}
@@ -266,7 +270,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.ReceiptID != receipt.ReceiptID || got.Metadata["k"] != "v" || got.SignatureVersion != contracts.ReceiptSignatureV5 || got.Verdict != "ALLOW" || got.ReasonCode != "POLICY_VIOLATION" || got.PolicyHash != "policy-hash" || got.SessionID != receipt.SessionID {
+	if got.ReceiptID != receipt.ReceiptID || got.Metadata["k"] != "v" || got.DecisionHash != receipt.DecisionHash || got.SignatureVersion != contracts.ReceiptSignatureV5 || got.Verdict != "ALLOW" || got.ReasonCode != "POLICY_VIOLATION" || got.PolicyHash != "policy-hash" || got.SessionID != receipt.SessionID {
 		t.Fatalf("unexpected receipt: %+v", got)
 	}
 	mock.ExpectQuery("FROM receipts WHERE decision_id").WithArgs("missing").WillReturnError(sql.ErrNoRows)
@@ -280,7 +284,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 
 	mock.ExpectQuery("FROM receipts ORDER BY timestamp DESC").WithArgs(2).
 		WillReturnRows(storePostgresReceiptRows(receipt, []byte(`null`)).
-			AddRow("receipt-2", "decision-2", "effect", "", "OK", "blob", "output", now.Add(time.Second), "agent-2", []byte(`{"x":1}`), nil, nil, "", int64(8), "args", "receipt.v5", "ALLOW", "POLICY_VIOLATION", "policy-hash", "session-2", "", int64(0), nil, "", nil, "", "", ""))
+			AddRow("receipt-2", "decision-2", "effect", "", "OK", "blob", "output", "decision-hash-2", now.Add(time.Second), "agent-2", []byte(`{"x":1}`), nil, nil, "", int64(8), "args", "receipt.v5", "ALLOW", "POLICY_VIOLATION", "policy-hash", "session-2", "", int64(0), nil, "", nil, "", "", ""))
 	list, err := store.List(ctx, 2)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -294,7 +298,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	}
 	mock.ExpectQuery("FROM receipts ORDER BY timestamp DESC").
 		WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()).
-			AddRow("receipt-bad", "decision-bad", "effect", "", "OK", "blob", "output", "not-time", "agent", []byte(`null`), nil, nil, "", int64(1), "args", "receipt.v5", "ALLOW", "POLICY_VIOLATION", "policy-hash", "session-2", "", int64(0), nil, "", nil, "", "", ""))
+			AddRow("receipt-bad", "decision-bad", "effect", "", "OK", "blob", "output", "decision-hash", "not-time", "agent", []byte(`null`), nil, nil, "", int64(1), "args", "receipt.v5", "ALLOW", "POLICY_VIOLATION", "policy-hash", "session-2", "", int64(0), nil, "", nil, "", "", ""))
 	if _, err := store.List(ctx, 1); err == nil {
 		t.Fatal("expected list scan error")
 	}
@@ -336,6 +340,89 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	last, err = store.GetLastForSession(ctx, "missing")
 	if err != nil || last != nil {
 		t.Fatalf("expected missing last receipt to be nil, got %+v err=%v", last, err)
+	}
+}
+
+func TestPostgresReceiptDecisionHashRoundTripsTenantReads(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+	store := NewPostgresReceiptStore(db)
+	signer, err := helmcrypto.NewEd25519Signer("postgres-decision-hash-round-trip")
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+
+	const tenantID = "tenant-a"
+	const sessionID = "signed-session"
+	lookupKey := causalReceiptScopeKey(tenantID, sessionID)
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	timestamp := time.Date(2026, 8, 2, 12, 0, 0, 123456000, time.UTC)
+	var issued *contracts.Receipt
+
+	insertArgs := storeAnySQLArgs(storePostgresReceiptInsertArgCount)
+	insertArgs[14] = "sha256:decision"
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(lookupKey).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(lookupKey).WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(insertArgs...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	if err := store.AppendCausalScoped(ctx, tenantID, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		issued = &contracts.Receipt{
+			ReceiptID:        "receipt-decision-hash",
+			DecisionID:       "decision-decision-hash",
+			EffectID:         "effect-decision-hash",
+			Status:           "ALLOW",
+			OutputHash:       "sha256:execution-output",
+			DecisionHash:     "sha256:decision",
+			ArgsHash:         "sha256:args",
+			Timestamp:        timestamp,
+			ExecutorID:       "agent-a",
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			Verdict:          "ALLOW",
+			ReasonCode:       "ALLOW_BY_POLICY",
+			PolicyHash:       "sha256:policy",
+			SessionID:        sessionID,
+			PrevHash:         prevHash,
+			LamportClock:     lamport,
+		}
+		if err := signer.SignReceipt(issued); err != nil {
+			return nil, err
+		}
+		return issued, nil
+	}); err != nil {
+		t.Fatalf("append receipt: %v", err)
+	}
+	if issued == nil || issued.DecisionHash == "" || issued.DecisionHash == issued.OutputHash {
+		t.Fatalf("issued receipt lost distinct decision hash: %+v", issued)
+	}
+
+	mock.ExpectQuery("FROM receipts[\\s\\S]*WHERE receipt_id").
+		WithArgs(issued.ReceiptID, contracts.ReceiptSignatureV5, len(prefix), prefix).
+		WillReturnRows(storePostgresReceiptRows(issued, nil))
+	got, err := store.GetByReceiptIDForTenant(ctx, tenantID, issued.ReceiptID)
+	if err != nil {
+		t.Fatalf("tenant receipt get: %v", err)
+	}
+	if got.DecisionHash != issued.DecisionHash {
+		t.Fatalf("tenant get decision_hash = %q, want %q", got.DecisionHash, issued.DecisionHash)
+	}
+	if valid, err := signer.VerifyReceipt(got); err != nil || !valid {
+		t.Fatalf("tenant get V5 signature verification: valid=%v err=%v", valid, err)
+	}
+
+	mock.ExpectQuery("FROM receipts[\\s\\S]*ORDER BY lamport_clock ASC, timestamp ASC, receipt_id ASC").
+		WithArgs(contracts.ReceiptSignatureV5, len(prefix), prefix, 10).
+		WillReturnRows(storePostgresReceiptRows(issued, nil))
+	listed, err := store.ListByTenantCursor(ctx, tenantID, TenantReceiptCursor{}, 10)
+	if err != nil {
+		t.Fatalf("tenant receipt list: %v", err)
+	}
+	if len(listed) != 1 || listed[0].DecisionHash != issued.DecisionHash {
+		t.Fatalf("tenant list decision_hash = %+v, want %q", listed, issued.DecisionHash)
+	}
+	if valid, err := signer.VerifyReceipt(listed[0]); err != nil || !valid {
+		t.Fatalf("tenant list V5 signature verification: valid=%v err=%v", valid, err)
 	}
 }
 
@@ -389,7 +476,7 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 	receipt, err := receiptFromSQLiteFields(
 		"receipt", "decision", "effect",
 		sql.NullString{String: "external", Valid: true},
-		"OK", "blob", "output", now.Format(time.RFC3339Nano),
+		"OK", "blob", "output", sql.NullString{String: "decision-hash", Valid: true}, now.Format(time.RFC3339Nano),
 		sql.NullString{String: "agent", Valid: true},
 		sql.NullString{String: `{"a":1}`, Valid: true},
 		sql.NullString{String: "sig", Valid: true},
@@ -410,13 +497,13 @@ func TestCoverageSQLiteReceiptMigrationAndParsingBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("receiptFromSQLiteFields: %v", err)
 	}
-	if receipt.Metadata["a"].(float64) != 1 || receipt.ExternalReferenceID != "external" || receipt.ArgsHash != "args" || receipt.SignatureVersion != contracts.ReceiptSignatureV5 || receipt.Verdict != "ALLOW" || receipt.ReasonCode != "POLICY_VIOLATION" || receipt.PolicyHash != "policy-hash" || receipt.SessionID != "session-1" {
+	if receipt.Metadata["a"].(float64) != 1 || receipt.ExternalReferenceID != "external" || receipt.DecisionHash != "decision-hash" || receipt.ArgsHash != "args" || receipt.SignatureVersion != contracts.ReceiptSignatureV5 || receipt.Verdict != "ALLOW" || receipt.ReasonCode != "POLICY_VIOLATION" || receipt.PolicyHash != "policy-hash" || receipt.SessionID != "session-1" {
 		t.Fatalf("unexpected SQLite receipt: %+v", receipt)
 	}
 	if receipt.LogID != "logid" || receipt.LeafIndex != 11 || receipt.Transparency == nil || !receipt.Transparency.Deferred {
 		t.Fatalf("transparency fields not decoded: %+v", receipt)
 	}
-	if _, err := receiptFromSQLiteFields("r", "d", "e", sql.NullString{}, "OK", "", "", "", sql.NullString{}, sql.NullString{String: `{`, Valid: true}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}); err == nil {
+	if _, err := receiptFromSQLiteFields("r", "d", "e", sql.NullString{}, "OK", "", "", sql.NullString{}, "", sql.NullString{}, sql.NullString{String: `{`, Valid: true}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, 0, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{}); err == nil {
 		t.Fatal("expected SQLite metadata decode error")
 	}
 
@@ -485,18 +572,24 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(30)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
+	var genesis *contracts.Receipt
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous != nil || lamport != 1 || prevHash != "" {
 			t.Fatalf("unexpected genesis inputs previous=%+v lamport=%d prev=%q", previous, lamport, prevHash)
 		}
-		return storeCoverageReceipt("receipt-genesis", "decision-genesis", "agent", lamport, now), nil
+		genesis = storeCoverageReceipt("receipt-genesis", "decision-genesis", "agent", lamport, now)
+		return genesis, nil
 	}); err != nil {
 		t.Fatalf("AppendCausal genesis: %v", err)
 	}
 
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(30)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRows(genesis, nil))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		if previous == nil || previous.ReceiptID != "receipt-genesis" || lamport != 2 || prevHash == "" {
 			t.Fatalf("unexpected chained inputs previous=%+v lamport=%d prev=%q", previous, lamport, prevHash)
@@ -508,7 +601,6 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatalf("AppendCausal chained: %v", err)
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnError(errors.New("lock failed"))
 	mock.ExpectRollback()
@@ -516,7 +608,6 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatal("expected lock error")
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnError(errors.New("last failed"))
@@ -525,7 +616,6 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatal("expected last receipt error")
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
@@ -536,7 +626,6 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatal("expected builder error")
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
@@ -548,11 +637,10 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 		t.Fatal("expected insert error")
 	}
 
-	store.lastBySession = map[string]*contracts.Receipt{}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
-	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(30)...).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
 		return storeCoverageReceipt("receipt-commit-fail", "decision-commit-fail", "agent", 1, now), nil
@@ -668,6 +756,7 @@ func storeCoverageReceipt(receiptID, decisionID, executorID string, lamport uint
 		Status:              "OK",
 		BlobHash:            "blob",
 		OutputHash:          "output",
+		DecisionHash:        "decision-hash",
 		Timestamp:           timestamp,
 		ExecutorID:          executorID,
 		Metadata:            map[string]any{"source": "coverage"},
@@ -693,6 +782,7 @@ func storePostgresReceiptColumns() []string {
 		"status",
 		"blob_hash",
 		"output_hash",
+		"decision_hash",
 		"timestamp",
 		"executor_id",
 		"metadata",
@@ -730,6 +820,7 @@ func storePostgresReceiptRows(receipt *contracts.Receipt, metadata []byte) *sqlm
 			receipt.Status,
 			receipt.BlobHash,
 			receipt.OutputHash,
+			receipt.DecisionHash,
 			receipt.Timestamp,
 			receipt.ExecutorID,
 			metadata,

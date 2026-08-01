@@ -364,13 +364,18 @@ JCS envelope over the durable causal fields (`receipt_id`, `decision_id`,
 envelope and does not downgrade to a legacy preimage; unversioned history keeps
 its legacy verification path.
 
-`003_add_receipt_v5_governance.sql`, the PostgreSQL store, and the SQLite
-additive migration path persist and reload those five V5 columns. Executor,
-HTTP/demo, and MCP-proof producers populate the governance fields before
-signing when their source data is available. The Guardian's basic policy denial
-now emits the machine-readable `POLICY_VIOLATION` reason code, and decisions
-use the versioned `decision_record.v2` preimage to sign `reason_code` instead
-of free-text reason.
+`003_add_receipt_v5_governance.sql` and
+`004_add_receipt_decision_hash.sql`, the PostgreSQL store, and the SQLite
+additive migration path persist and reload the V5 governance columns plus the
+semantic `decision_hash`. Existing V5 rows recover that hash only from an
+already-persisted metadata value; if it cannot be recovered, read paths fail
+closed with an actionable migration/restore error rather than returning an
+empty required decision hash. Executor, HTTP/demo, and MCP-proof producers
+populate the governance fields before signing when their source data is
+available. The Guardian's basic policy denial now emits the machine-readable
+`POLICY_VIOLATION` reason code, and decisions use the versioned
+`decision_record.v2` preimage to sign `reason_code` instead of free-text
+reason.
 
 This is deliberately **not** a claim that the whole receipt is signed: fields
 outside the durable V5 envelope, including post-sign transparency anchoring,

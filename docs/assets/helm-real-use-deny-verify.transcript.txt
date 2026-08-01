@@ -1,10 +1,10 @@
 # quantum_posture: this sanitized capture references a classical Ed25519 local receipt signer; it is not a post-quantum or hybrid cryptographic claim.
 
 $ helm-ai-kernel setup codex --dry-run --json --data-dir ~/.helm-ai-kernel
-{"target":"codex","binary_path":"<repo>/bin/helm-ai-kernel","client_config_path":"~/.codex/config.toml","hook_config_path":"~/.codex/hooks.json","data_dir":"~/.helm-ai-kernel","kernel_url":"http://127.0.0.1:7714","scan_grade":"not_run","draft_policy_path":"~/.helm-ai-kernel/autoconfigure/policy.draft.json","uninstall_command":"helm-ai-kernel setup remove codex --scope user --yes --data-dir '~/.helm-ai-kernel'","scope":"user"}
+{"operation":"preview","target":"codex","workspace":"<repo>","binary_path":"<repo>/bin/helm-ai-kernel","client_binary_path":"/opt/homebrew/bin/codex","client_config_path":"~/.codex/config.toml","hook_config_path":"~/.codex/hooks.json","data_dir":"~/.helm-ai-kernel","kernel_url":"","scan_grade":"not_run","draft_policy_path":"~/.helm-ai-kernel/autoconfigure/policy.draft.json","uninstall_command":"helm-ai-kernel setup remove codex --scope user --yes --data-dir '~/.helm-ai-kernel'","scope":"user","client_detected":true,"native_loaded":false,"client_state":"planned","quickstart_started":false,"planned_actions":["create or reuse the local receipt signing key under ~/.helm-ai-kernel/keys","write draft-only inventory and policy artifacts under ~/.helm-ai-kernel/autoconfigure","configure the HELM MCP server in ~/.codex/config.toml","configure the HELM PreToolUse hook in ~/.codex/hooks.json"]}
 
 $ printf <codex PreToolUse payload> | helm-ai-kernel hook pre-tool --client codex --data-dir ~/.helm-ai-kernel
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"HELM denied shell operation: OPERATE_PERMISSIONS_EMPTY (receipt: ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json)"}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"HELM denied shell operation: legacy needle \"rm -rf \"; recursive rm delete (forced): OPERATE_PERMISSIONS_EMPTY (receipt: ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json)"}}
 
 $ helm-ai-kernel workstation verify-decision --receipt ~/.helm-ai-kernel/receipts/hooks/wpd_<decision>.json
 Workstation Policy Decision Verification
@@ -13,7 +13,7 @@ Workstation Policy Decision Verification
   verdict:   DENY
   reason:    OPERATE_PERMISSIONS_EMPTY
   effect:    WORKSTATION_SHELL_COMMAND
-  target:    rm -rf /tmp/helm-risky-cleanup
+  target:    sha256:<sha256>
   hash:      <sha256>
   integrity: true
   trusted:   true

@@ -84,6 +84,11 @@ if ! grep -q "integrity: true" "$TRANSCRIPT" || ! grep -q "trusted:   true" "$TR
   exit 1
 fi
 
+if grep -q "target:    rm -rf /tmp/helm-risky-cleanup" "$TRANSCRIPT" || ! grep -q "target:    sha256:<sha256>" "$TRANSCRIPT"; then
+  echo "record-real-use-assets: verifier target was not redacted to its fingerprint" >&2
+  exit 1
+fi
+
 cat >"$PROVENANCE" <<JSON
 {
   "asset": "docs/assets/helm-real-use-deny-verify.transcript.txt",
@@ -161,7 +166,7 @@ Workstation Policy Decision Verification
   verdict:   DENY
   reason:    OPERATE_PERMISSIONS_EMPTY
   effect:    WORKSTATION_SHELL_COMMAND
-  target:    rm -rf /tmp/helm-risky-cleanup
+  target:    sha256:<sha256>
   hash:      <sha256>
   integrity: true
   trusted:   true

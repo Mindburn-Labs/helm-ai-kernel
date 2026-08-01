@@ -5,6 +5,7 @@ package workstation
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -554,6 +555,162 @@ func TestWorkstationCertificationBranchesAndPolicyLoadErrors(t *testing.T) {
 	if ok, msg := certifyHighRiskFixtures(t.TempDir(), workstationTestSigningSeed()); ok || msg == "" {
 		t.Fatalf("expected high-risk certification failure, got ok=%v msg=%q", ok, msg)
 	}
+}
+
+func TestSensitiveFileWriteDefaultsToOperate(t *testing.T) {
+	effectType, effectMode, action, toolID := EffectDefaults("sensitive-file-write")
+	if effectType != contracts.EffectTypeWorkstationFileWrite || effectMode != contracts.WorkstationEffectModeOperate || action != "file_write" || toolID != "workspace.write" {
+		t.Fatalf("sensitive-file-write defaults = %q/%q/%q/%q", effectType, effectMode, action, toolID)
+	}
+}
+
+func TestLoadPolicyProfileFileWithDigestRejectsUnexpectedProfileID(t *testing.T) {
+	profile := DefaultObserveDraftProfile()
+	profile.ID = "workstation.other.v1"
+	data, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "unexpected-profile.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LoadPolicyProfileFileWithDigest(path); err == nil {
+		t.Fatal("expected unexpected policy profile id error")
+	}
+}
+
+func TestLoadPolicyProfileFileWithDigestValidatesBeforePinning(t *testing.T) {
+	valid := workstationPolicyProfileJSON(t, nil)
+	validPath := filepath.Join(t.TempDir(), "valid-profile.json")
+	if err := os.WriteFile(validPath, valid, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profile, digest, err := LoadPolicyProfileFileWithDigest(validPath)
+	if err != nil {
+		t.Fatalf("load valid policy profile: %v", err)
+	}
+	sum := sha256.Sum256(valid)
+	if digest != "sha256:"+hex.EncodeToString(sum[:]) {
+		t.Fatalf("digest = %q", digest)
+	}
+	if profile.ID != contracts.PolicyProfileWorkstationObserveDraftV1 {
+		t.Fatalf("profile ID = %q", profile.ID)
+	}
+
+	cases := []struct {
+		name string
+		data func(t *testing.T) []byte
+	}{
+		{
+			name: "unknown field",
+			data: func(t *testing.T) []byte {
+				return workstationPolicyProfileJSON(t, func(profile map[string]any) {
+					profile["unexpected"] = true
+				})
+			},
+		},
+		{
+			name: "trailing JSON value",
+			data: func(t *testing.T) []byte {
+				return append(workstationPolicyProfileJSON(t, nil), []byte("\n{}")...)
+			},
+		},
+		{
+			name: "unsupported mode",
+			data: func(t *testing.T) []byte {
+				return workstationPolicyProfileJSON(t, func(profile map[string]any) {
+					profile["mode"] = "unsafe"
+				})
+			},
+		},
+		{
+			name: "missing required nested boolean",
+			data: func(t *testing.T) []byte {
+				return workstationPolicyProfileJSON(t, func(profile map[string]any) {
+					delete(profile["draft"].(map[string]any), "allow_generated_artifacts")
+				})
+			},
+		},
+		{
+			name: "null required nested boolean",
+			data: func(t *testing.T) []byte {
+				return workstationPolicyProfileJSON(t, func(profile map[string]any) {
+					profile["recurring_loops"].(map[string]any)["require_schedule"] = nil
+				})
+			},
+		},
+		{
+			name: "empty string array item",
+			data: func(t *testing.T) []byte {
+				return workstationPolicyProfileJSON(t, func(profile map[string]any) {
+					profile["observe"].(map[string]any)["allowed_actions"] = []any{""}
+				})
+			},
+		},
+		{
+			name: "nonpositive default TTL",
+			data: func(t *testing.T) []byte {
+				return workstationPolicyProfileJSON(t, func(profile map[string]any) {
+					profile["memory"].(map[string]any)["default_ttl_days"] = 0
+				})
+			},
+		},
+		{
+			name: "nonpositive max TTL when provided",
+			data: func(t *testing.T) []byte {
+				return workstationPolicyProfileJSON(t, func(profile map[string]any) {
+					profile["memory"].(map[string]any)["max_ttl_days"] = 0
+				})
+			},
+		},
+		{
+			name: "empty egress host",
+			data: func(t *testing.T) []byte {
+				return workstationPolicyProfileJSON(t, func(profile map[string]any) {
+					profile["egress"].(map[string]any)["allowlist"] = []any{map[string]any{"host": ""}}
+				})
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "invalid-profile.json")
+			if err := os.WriteFile(path, tc.data(t), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			profile, digest, err := LoadPolicyProfileFileWithDigest(path)
+			if err == nil {
+				t.Fatal("expected policy profile validation error")
+			}
+			if digest != "" {
+				t.Fatalf("invalid profile received digest %q", digest)
+			}
+			if profile.ID != "" {
+				t.Fatalf("invalid profile returned %+v", profile)
+			}
+		})
+	}
+}
+
+func workstationPolicyProfileJSON(t *testing.T, mutate func(map[string]any)) []byte {
+	t.Helper()
+	data, err := json.Marshal(DefaultObserveDraftProfile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var profile map[string]any
+	if err := json.Unmarshal(data, &profile); err != nil {
+		t.Fatal(err)
+	}
+	if mutate != nil {
+		mutate(profile)
+	}
+	data, err = json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 
 func TestWorkstationSmallHelperBranches(t *testing.T) {

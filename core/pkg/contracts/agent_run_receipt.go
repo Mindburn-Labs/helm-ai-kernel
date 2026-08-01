@@ -29,6 +29,7 @@ const (
 	EffectTypeWorkstationTaintedContext  = "WORKSTATION_TAINTED_CONTEXT"
 
 	WorkstationPermissionNetworkEgress   = "network.egress"
+	WorkstationPermissionFileWrite       = "file.write"
 	WorkstationPermissionMCPMutate       = "mcp.mutate"
 	WorkstationPermissionMemoryWrite     = "memory.write"
 	WorkstationPermissionLoopRegister    = "loop.register"
@@ -315,6 +316,7 @@ func (c *DenialCounterfactual) UnmarshalJSON(data []byte) error {
 func IsWorkstationPermission(name string) bool {
 	switch name {
 	case WorkstationPermissionNetworkEgress,
+		WorkstationPermissionFileWrite,
 		WorkstationPermissionMCPMutate,
 		WorkstationPermissionMemoryWrite,
 		WorkstationPermissionLoopRegister,

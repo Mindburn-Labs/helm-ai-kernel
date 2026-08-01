@@ -1129,9 +1129,13 @@ func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResu
 			receipt.ReceiptID, _ = raw["receipt_id"].(string)
 		}
 
-		// ExecutorID is the session key the typed producer chains on; receipts
-		// without one form a single implicit chain.
-		session := receipt.ExecutorID
+		// V5 causal receipts bind their chain scope in signed SessionID and may
+		// intentionally leave ExecutorID empty. Legacy receipts predate that
+		// field and continue to scope chains by ExecutorID.
+		session := receipt.SessionID
+		if session == "" {
+			session = receipt.ExecutorID
+		}
 		bySession[session] = append(bySession[session], receiptNode{
 			receipt: &receipt, hashes: hashes, file: entry.Name(),
 		})

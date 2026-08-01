@@ -182,7 +182,7 @@ func TestPersistDecisionReceiptUsesTenantScopedCausalStorageAndNormalizesBeforeS
 		Timestamp: timestamp,
 	}
 
-	if err := persistDecisionReceipt(context.Background(), svc, decision, "agent.test", []byte("body"), map[string]any{"source": "test"}); err != nil {
+	if err := persistDecisionReceiptForTenant(context.Background(), svc, decision, "agent.test", "tenant-trusted", []byte("body"), map[string]any{"source": "test"}); err != nil {
 		t.Fatalf("persist scoped receipt: %v", err)
 	}
 	if !receiptStore.scopedAppended || receiptStore.tenantID != "tenant-trusted" || receiptStore.externalID != "external-session" {

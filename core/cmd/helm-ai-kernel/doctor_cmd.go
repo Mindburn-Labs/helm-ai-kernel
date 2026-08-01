@@ -1,3 +1,5 @@
+// quantum_posture: diagnostics report existing classical and optional hybrid
+// cryptographic readiness; this command makes no post-quantum assurance claim.
 package main
 
 import (

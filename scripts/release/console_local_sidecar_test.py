@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Contract tests for Console local-sidecar release imports."""
+"""Contract tests for Console local-sidecar release imports.
+
+quantum_posture: tests classical SHA-256 and Cosign release evidence only; they
+make no post-quantum assurance claim.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -247,6 +251,27 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                     self.assertIsNotNone(kernel)
                     self.assertEqual(kernel.read(), f"kernel binary for {target}\n".encode())
 
+    def test_release_layout_packager_rejects_traversal_and_duplicate_archive_members(self) -> None:
+        target = "linux-amd64"
+        closure_root = f"helm-console-local-sidecar-{target}"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cases = {
+                "traversal": [("../outside", b"escape")],
+                "duplicate": [
+                    (f"{closure_root}/app/helm-local-sidecar.mjs", b"one"),
+                    (f"{closure_root}/app/helm-local-sidecar.mjs", b"two"),
+                ],
+            }
+            for label, members in cases.items():
+                source = root / f"{label}.tar.gz"
+                with tarfile.open(source, "w:gz") as input_archive:
+                    for name, payload in members:
+                        write_file(input_archive, name, payload)
+                with self.subTest(label=label), tarfile.open(root / f"{label}.tar", "w") as output_archive:
+                    with self.assertRaisesRegex(ValueError, "unsafe path|duplicate member path"):
+                        sidecar.tar_verified_target_tree(output_archive, source, target, "layout")
+
     def test_release_staging_requires_the_kernel_manifest_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, pins = build_release(Path(directory))
@@ -368,7 +393,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
         self.assertRegex(result.stdout, rf"(?m)^LDFLAGS := .*main\.consoleLocalSidecarManifestSHA256={expected_digest}$")
         self.assertRegex(result.stdout, rf"(?m)^REPRO_LDFLAGS := .*main\.consoleLocalSidecarManifestSHA256={expected_digest}$")
 
-    def test_kernel_cosign_verifier_preserves_the_console_producer_bundle(self) -> None:
+    def test_kernel_cosign_verifier_requires_exact_tag_and_checks_both_console_bundles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             artifacts = Path(directory) / "artifacts"
             artifacts.mkdir()
@@ -385,7 +410,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                 "#!/usr/bin/env bash\n"
                 "case \" $* \" in\n"
                 "  *\" --certificate-identity https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v0.8.0 \"*) exit 0 ;;\n"
-                "  *\" --certificate-identity-regexp \"*) exit 0 ;;\n"
+                "  *\" --certificate-identity https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@refs/heads/main \"*) exit 0 ;;\n"
                 "  *) exit 23 ;;\n"
                 "esac\n",
                 encoding="utf-8",
@@ -402,8 +427,34 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                 env=env,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("skipping Console producer bundle", result.stdout)
-            self.assertIn("verified=2 failed=0", result.stdout)
+            self.assertIn("verified=3 failed=0", result.stdout)
+
+    def test_kernel_cosign_verifier_rejects_console_contract_without_exact_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = Path(directory) / "artifacts"
+            artifacts.mkdir()
+            console_assets = artifacts / "nested-release-assets"
+            console_assets.mkdir()
+            (console_assets / sidecar.MANIFEST_NAME).write_text("manifest", encoding="utf-8")
+            (console_assets / sidecar.MANIFEST_BUNDLE_NAME).write_text("producer", encoding="utf-8")
+            (console_assets / sidecar.KERNEL_MANIFEST_BUNDLE_NAME).write_text("kernel", encoding="utf-8")
+            fake_bin = Path(directory) / "bin"
+            fake_bin.mkdir()
+            fake_cosign = fake_bin / "cosign"
+            fake_cosign.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            fake_cosign.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env['PATH']}"
+            env.pop("KERNEL_RELEASE_TAG", None)
+            result = subprocess.run(
+                ["bash", str(REPOSITORY_ROOT / "scripts/release/verify_cosign.sh"), str(artifacts)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("requires KERNEL_RELEASE_TAG", result.stdout)
 
     def test_kernel_cosign_verifier_requires_both_manifest_bundles_for_a_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -427,7 +478,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                 env=env,
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("requires the Console manifest plus both producer and Kernel bundles", result.stdout)
+            self.assertIn("requires exactly one Console manifest plus both producer and Kernel bundles", result.stdout)
 
 
 if __name__ == "__main__":

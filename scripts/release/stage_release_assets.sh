@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Stage the complete GitHub Release asset set under dist/release-assets/.
+# quantum_posture: stages classical SHA-256 and Cosign evidence only; it makes
+# no post-quantum assurance claim.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

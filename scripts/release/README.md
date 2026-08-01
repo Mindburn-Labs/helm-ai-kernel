@@ -29,7 +29,7 @@ make quality-merge
 make quality-release
 make release-readiness
 make release-assets
-bash scripts/release/verify_cosign.sh ./downloaded-release
+KERNEL_RELEASE_TAG=v<version> bash scripts/release/verify_cosign.sh ./downloaded-release
 python3 scripts/release/check_version_drift_test.py
 make docs-coverage docs-truth
 make version-drift-published
@@ -44,13 +44,19 @@ non-seeded release EvidencePack from release build inputs, verifies
 
 The local Console browser sidecar is a standalone-release asset, never a
 Homebrew resource. A tag release first dispatches the Console's native closure
-builder from a checked-in exact source pin. `console_local_sidecar.py` requires
+builder from a checked-in exact source pin. The immutable source tuple is
+separate from the Console producer workflow identity: that signature is trusted
+at `refs/heads/main` under the Console repository's protected-branch controls;
+it does not claim an immutable workflow revision. `console_local_sidecar.py` requires
 the Console keyless manifest signature, all four native targets, archive and
 inventory integrity, and source/provenance agreement before the files enter
-`dist/release-assets/`. The Kernel release signs that manifest for its exact
-tag before staging the closure and adds a separate Kernel signature without
-rewriting the producer bundle. The Console producer bundle remains alongside a separate
-`*.kernel.cosign.bundle` so neither signature overwrites the other.
+`dist/release-assets/`. The Kernel release signs that manifest once for its
+exact tag before staging the closure; the same `.kernel.cosign.bundle` is kept
+in `release-assets`, its standalone layouts, `SHA256SUMS.txt`, and the GitHub
+release. The later generic signing job verifies rather than rewrites it. The
+Console producer bundle remains alongside the separate Kernel bundle, so public
+verification must supply `KERNEL_RELEASE_TAG=v<version>` and cannot fall back
+to a Kernel `main` workflow identity.
 
 Before building any v0.8.0 release binary, the workflow re-verifies the signed
 Console input and passes the aggregate manifest SHA-256 through

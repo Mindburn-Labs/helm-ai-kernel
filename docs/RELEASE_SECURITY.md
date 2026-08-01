@@ -66,8 +66,13 @@ declares the loopback Console local-sidecar, it is a verified standalone native
 closure—not a Homebrew resource or a hosted UI.
 
 For the v0.8.0 local Console closure, release assembly verifies the producer
-bundle and exact Console source pin, signs the aggregate manifest for the exact
-Kernel tag, and compiles its SHA-256 into the Kernel binary. Each matching
+bundle and exact Console source pin, signs the aggregate manifest once for the
+exact Kernel tag, and compiles its SHA-256 into the Kernel binary. The Console
+source tuple is immutable, while the producer workflow identity is a declared
+protected-branch `main` trust assumption rather than an immutable workflow
+revision. The separate Kernel bundle is retained in the staged assets, checksum
+set, standalone layout, and GitHub release; public verification supplies the
+exact tag and does not accept a Kernel `main` identity. Each matching
 `helm-ai-kernel-<os>-<arch>-console.tar.gz` artifact contains the executable
 beside the raw Console material and the host closure it will execute. Runtime
 trusts that authenticated binary digest, then rechecks the installed manifest
@@ -94,7 +99,7 @@ nor network access.
 make release-binaries-reproducible
 make release-smoke
 make release-assets
-make verify-cosign
+KERNEL_RELEASE_TAG=v<version> make verify-cosign
 make verify-fixtures
 make docs-coverage docs-truth
 ```

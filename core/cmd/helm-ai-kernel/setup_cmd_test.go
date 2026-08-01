@@ -686,6 +686,47 @@ func TestSetupRepairPreservesDiscoveredCustomPolicyProfile(t *testing.T) {
 	}
 }
 
+func TestSetupRemoveDiscoversCustomPolicyProfile(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	dataDir := filepath.Join(tmp, "helm")
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	installed := setupOptions{
+		Target:              "codex",
+		Scope:               "project",
+		Workspace:           workspace,
+		DataDir:             dataDir,
+		PolicyProfile:       profile,
+		PolicyProfileSHA256: hookPolicyProfileDigest(t, profile),
+	}
+	summary, err := buildSetupSummary(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(summary.HookConfigPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := upsertHookConfig(summary.HookConfigPath, setupHookMatcher(installed.Target), setupHookCommand(installed, summary.BinaryPath), setupPrivateFileRoot(installed)); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	args := []string{"helm-ai-kernel", "setup", "remove", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--json", "--data-dir", dataDir}
+	if code := Run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("remove exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	raw, err := os.ReadFile(summary.HookConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "hook pre-tool --client codex") {
+		t.Fatalf("plain remove retained custom policy hook:\n%s", raw)
+	}
+}
+
 func TestSetupJSONSummaryMatchesOperation(t *testing.T) {
 	tests := []struct {
 		name            string

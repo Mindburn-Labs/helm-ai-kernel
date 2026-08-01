@@ -371,6 +371,21 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup remove: %v\n", err)
 		return 2
 	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup remove: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup remove: policy profile: %v\n", err)
+		return 2
+	}
+	summary, err = buildSetupSummary(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup remove: %v\n", err)
+		return 2
+	}
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
 	summary.PlannedActions = setupRemoveActions(summary)

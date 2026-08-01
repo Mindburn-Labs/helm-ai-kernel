@@ -635,6 +635,8 @@
         "helm-console-local-sidecar-release-manifest.json",
         "helm-console-local-sidecar-release-manifest.json.cosign.bundle",
         "helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle",
+        "CONSOLE-SHA256SUMS.txt",
+        "CONSOLE-SHA256SUMS.txt.cosign.bundle",
         "helm-console-local-sidecar-linux-amd64.tar.gz",
         "helm-console-local-sidecar-linux-amd64.tar.gz.sha256",
         "helm-console-local-sidecar-linux-amd64.tar.gz.inventory.sha256",

@@ -12,7 +12,9 @@ import unittest
 from pathlib import Path
 
 
-WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
+VERSION_SURFACES = ROOT / "release" / "version-surfaces.yaml"
 
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
@@ -82,6 +84,13 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("cosign sign-blob", console_assets)
         self.assertIn("gh release upload", console_assets)
         self.assertIn("--only github-release-console-local-sidecar", console_assets)
+        self.assertIn("-name 'helm-console-local-sidecar-*'", console_assets)
+        self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz'", console_assets)
+        self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz.cosign.bundle'", console_assets)
+
+        required_assets = VERSION_SURFACES.read_text()
+        self.assertIn('"CONSOLE-SHA256SUMS.txt"', required_assets)
+        self.assertIn('"CONSOLE-SHA256SUMS.txt.cosign.bundle"', required_assets)
 
         post_release = self.job("post-release-version-drift")
         self.assertIn(

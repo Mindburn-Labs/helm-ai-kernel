@@ -63,13 +63,20 @@ type DecisionRecord struct {
 	// of leaving that to code review. An uninjected gate is skipped rather
 	// than refused, so two kernels can return the same verdict from different
 	// enforcement: without this the difference is invisible downstream.
-	// NOTE: outside the decision signature — folding it into the signing
-	// preimage is a preimage-version migration (crypto.ReceiptPreimageV5).
-	// It is still tamper-evident via the receipt envelope chain hash.
-	GateRosterHash string    `json:"gate_roster_hash,omitempty"`
-	Signature      string    `json:"signature"`
-	SignatureType  string    `json:"signature_type"`
-	Timestamp      time.Time `json:"timestamp"`
+	// NOTE: still outside the decision signature — DecisionRecordSignatureV2
+	// (HELM-303) swapped free-text Reason for ReasonCode but did not widen the
+	// preimage, so binding this needs a further version. It remains
+	// tamper-evident via the receipt envelope chain hash.
+	GateRosterHash string `json:"gate_roster_hash,omitempty"`
+	Signature      string `json:"signature"`
+	SignatureType  string `json:"signature_type"`
+	// SignatureVersion names the signing-preimage revision (HELM-303). Empty =
+	// legacy (free-text Reason in the preimage, ReasonCode absent).
+	// DecisionRecordSignatureV2 signs the machine-readable ReasonCode instead
+	// of prose: the field every downstream consumer keys on is the one the
+	// signature attests.
+	SignatureVersion string    `json:"signature_version,omitempty"`
+	Timestamp        time.Time `json:"timestamp"`
 
 	// Intervention Metadata (Temporal Guardian)
 	Intervention *InterventionMetadata `json:"intervention,omitempty"`
@@ -142,6 +149,10 @@ const VerdictPending = "PENDING"
 // AuthorizedExecutionIntentSignatureV2 binds the full authority window and
 // portable effect semantics. Unversioned legacy intents are never executable.
 const AuthorizedExecutionIntentSignatureV2 = "authorized_execution_intent.v2"
+
+// DecisionRecordSignatureV2 marks the HELM-303 decision preimage: ReasonCode
+// replaces free-text Reason in the signed payload.
+const DecisionRecordSignatureV2 = "decision_record.v2"
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)

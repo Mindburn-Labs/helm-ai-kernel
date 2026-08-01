@@ -153,3 +153,140 @@ type authorizedExecutionIntentSigningEnvelope struct {
 func CanonicalizeReceipt(receiptID, decisionID, effectID, status, outputHash, prevHash string, lamportClock uint64, argsHash string) string {
 	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s%s%d%s%s", receiptID, SigSeparator, decisionID, SigSeparator, effectID, SigSeparator, status, SigSeparator, outputHash, SigSeparator, prevHash, SigSeparator, lamportClock, SigSeparator, argsHash)
 }
+
+// --- HELM-303: V5 receipt / V2 decision signing preimages -----------------
+
+// receiptV5SigningEnvelope is intentionally limited to the receipt fields the
+// durable stores round-trip. It is not the wider experimental envelope in
+// canonical_v5.go: signing fields the store cannot reload would make a signed
+// receipt unverifiable immediately after persistence.
+//
+// No field uses omitempty. An explicitly empty field is part of the signed
+// schema and cannot be confused with a field that was silently omitted by a
+// transport or store.
+type receiptV5SigningEnvelope struct {
+	SignatureVersion string `json:"signature_version"`
+	ReceiptID        string `json:"receipt_id"`
+	DecisionID       string `json:"decision_id"`
+	EffectID         string `json:"effect_id"`
+	Status           string `json:"status"`
+	OutputHash       string `json:"output_hash"`
+	PrevHash         string `json:"prev_hash"`
+	LamportClock     uint64 `json:"lamport_clock"`
+	ArgsHash         string `json:"args_hash"`
+	Verdict          string `json:"verdict"`
+	ReasonCode       string `json:"reason_code"`
+	PolicyHash       string `json:"policy_hash"`
+	SessionID        string `json:"session_id"`
+}
+
+// CanonicalizeReceiptV5 extends the V4 preimage with the receipt's
+// governance-meaning fields: verdict, reason_code, policy_hash, session_id.
+// It uses a JCS envelope rather than a colon-delimited string so a colon in a
+// field cannot shift its boundary and make two different receipts share one
+// signature.
+func CanonicalizeReceiptV5(r *contracts.Receipt) ([]byte, error) {
+	if r == nil {
+		return nil, fmt.Errorf("receipt is nil")
+	}
+	return canonicalize.JCS(receiptV5SigningEnvelope{
+		SignatureVersion: contracts.ReceiptSignatureV5,
+		ReceiptID:        r.ReceiptID,
+		DecisionID:       r.DecisionID,
+		EffectID:         r.EffectID,
+		Status:           r.Status,
+		OutputHash:       r.OutputHash,
+		PrevHash:         r.PrevHash,
+		LamportClock:     r.LamportClock,
+		ArgsHash:         r.ArgsHash,
+		Verdict:          r.Verdict,
+		ReasonCode:       r.ReasonCode,
+		PolicyHash:       r.PolicyHash,
+		SessionID:        r.SessionID,
+	})
+}
+
+// ReceiptSigningPayload stamps the receipt with the current preimage version
+// and returns the payload to sign. All signers must use this instead of
+// calling a Canonicalize* function directly, so a new preimage revision is a
+// one-line change here rather than an eight-site hunt.
+func ReceiptSigningPayload(r *contracts.Receipt) ([]byte, error) {
+	if r == nil {
+		return nil, fmt.Errorf("receipt is nil")
+	}
+	r.SignatureVersion = contracts.ReceiptSignatureV5
+	return CanonicalizeReceiptV5(r)
+}
+
+// ReceiptVerifyPayload reconstructs the signed payload according to the
+// receipt's declared preimage version. Empty = legacy V4 (receipts signed
+// before HELM-303 stay verifiable under the preimage they were signed over);
+// unknown versions are rejected rather than guessed.
+func ReceiptVerifyPayload(r *contracts.Receipt) ([]byte, error) {
+	if r == nil {
+		return nil, fmt.Errorf("receipt is nil")
+	}
+	switch r.SignatureVersion {
+	case "":
+		return []byte(CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)), nil
+	case contracts.ReceiptSignatureV5:
+		return CanonicalizeReceiptV5(r)
+	default:
+		return nil, fmt.Errorf("unsupported receipt signature version %q", r.SignatureVersion)
+	}
+}
+
+// CanonicalizeDecisionV2 signs the machine-readable ReasonCode in place of
+// free-text Reason: the exported, keyed-on field is the attested one, and
+// prose (which the telemetry contract prohibits from export) leaves the
+// preimage entirely.
+// decisionV2SigningEnvelope is a fixed, narrow signed view of a decision.
+// Unlike the legacy colon payload, its JCS representation has unambiguous
+// field boundaries even when hashes use a prefix such as "sha256:".
+type decisionV2SigningEnvelope struct {
+	SignatureVersion  string `json:"signature_version"`
+	ID                string `json:"id"`
+	Verdict           string `json:"verdict"`
+	ReasonCode        string `json:"reason_code"`
+	PhenotypeHash     string `json:"phenotype_hash"`
+	PolicyContentHash string `json:"policy_content_hash"`
+	EffectDigest      string `json:"effect_digest"`
+}
+
+func CanonicalizeDecisionV2(id, verdict, reasonCode, phenotypeHash, policyContentHash, effectDigest string) ([]byte, error) {
+	return canonicalize.JCS(decisionV2SigningEnvelope{
+		SignatureVersion:  contracts.DecisionRecordSignatureV2,
+		ID:                id,
+		Verdict:           verdict,
+		ReasonCode:        reasonCode,
+		PhenotypeHash:     phenotypeHash,
+		PolicyContentHash: policyContentHash,
+		EffectDigest:      effectDigest,
+	})
+}
+
+// DecisionSigningPayload stamps the record with the current preimage version
+// and returns the payload to sign.
+func DecisionSigningPayload(d *contracts.DecisionRecord) ([]byte, error) {
+	if d == nil {
+		return nil, fmt.Errorf("decision is nil")
+	}
+	d.SignatureVersion = contracts.DecisionRecordSignatureV2
+	return CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+}
+
+// DecisionVerifyPayload reconstructs the signed payload per the record's
+// declared preimage version; empty = legacy (free-text Reason).
+func DecisionVerifyPayload(d *contracts.DecisionRecord) ([]byte, error) {
+	if d == nil {
+		return nil, fmt.Errorf("decision is nil")
+	}
+	switch d.SignatureVersion {
+	case "":
+		return []byte(CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)), nil
+	case contracts.DecisionRecordSignatureV2:
+		return CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	default:
+		return nil, fmt.Errorf("unsupported decision signature version %q", d.SignatureVersion)
+	}
+}

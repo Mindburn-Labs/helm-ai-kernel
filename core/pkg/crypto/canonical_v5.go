@@ -82,18 +82,24 @@ func ReceiptPreimageV4(r *contracts.Receipt) []byte {
 type ReceiptPreimageVersion string
 
 const (
-	// ReceiptPreimageCurrent is the JCS envelope over the whole receipt.
+	// ReceiptPreimageCurrent is the historical, wider JCS envelope over the
+	// whole receipt. It is retained for callers that issued it before
+	// receipt.v5 was introduced; it is not the active receipt.v5 wire format.
 	ReceiptPreimageCurrent ReceiptPreimageVersion = "v5-jcs"
+	// ReceiptPreimageSignedFieldsV5 is the active HELM-303 receipt.v5 payload:
+	// the durable V4 fields plus governance-meaning fields in a narrow JCS
+	// envelope. It is deliberately distinct from ReceiptPreimageCurrent.
+	ReceiptPreimageSignedFieldsV5 ReceiptPreimageVersion = contracts.ReceiptSignatureV5
 	// ReceiptPreimageLegacy is the eight-field colon-joined string. Deprecated:
 	// it leaves most of the receipt unsigned and its field boundaries collide.
 	ReceiptPreimageLegacy ReceiptPreimageVersion = "v4-fields"
 )
 
-// VerifyReceiptSignature checks r against pubKeyHex under v5, then v4.
+// VerifyReceiptSignature verifies the payload declared by r.SignatureVersion.
 //
-// It returns the version that matched. A v4 match means the receipt predates
-// the envelope change and most of its content is unauthenticated — callers
-// should surface that rather than treat it as equivalent to v5.
+// A declared receipt.v5 must verify under the active narrow signing envelope;
+// it must never be silently retried as a legacy payload. Empty versions retain
+// compatibility for the pre-HELM-303 JCS helper and then V4 history.
 func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt) (bool, ReceiptPreimageVersion, error) {
 	if r == nil {
 		return false, "", fmt.Errorf("receipt is nil")
@@ -102,24 +108,42 @@ func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt) (bool, Recei
 		return false, "", fmt.Errorf("missing signature")
 	}
 
-	payload, err := ReceiptPreimageV5(r)
-	if err != nil {
-		return false, "", err
-	}
-	ok, err := Verify(pubKeyHex, r.Signature, payload)
-	if err != nil {
-		return false, "", err
-	}
-	if ok {
-		return true, ReceiptPreimageCurrent, nil
-	}
+	switch r.SignatureVersion {
+	case contracts.ReceiptSignatureV5:
+		payload, err := ReceiptVerifyPayload(r)
+		if err != nil {
+			return false, "", err
+		}
+		ok, err := Verify(pubKeyHex, r.Signature, payload)
+		if err != nil {
+			return false, "", err
+		}
+		if ok {
+			return true, ReceiptPreimageSignedFieldsV5, nil
+		}
+		return false, "", nil
+	case "":
+		payload, err := ReceiptPreimageV5(r)
+		if err != nil {
+			return false, "", err
+		}
+		ok, err := Verify(pubKeyHex, r.Signature, payload)
+		if err != nil {
+			return false, "", err
+		}
+		if ok {
+			return true, ReceiptPreimageCurrent, nil
+		}
 
-	ok, err = Verify(pubKeyHex, r.Signature, ReceiptPreimageV4(r))
-	if err != nil {
-		return false, "", err
+		ok, err = Verify(pubKeyHex, r.Signature, ReceiptPreimageV4(r))
+		if err != nil {
+			return false, "", err
+		}
+		if ok {
+			return true, ReceiptPreimageLegacy, nil
+		}
+		return false, "", nil
+	default:
+		return false, "", fmt.Errorf("unsupported receipt signature version %q", r.SignatureVersion)
 	}
-	if ok {
-		return true, ReceiptPreimageLegacy, nil
-	}
-	return false, "", nil
 }

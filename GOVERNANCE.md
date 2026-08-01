@@ -56,26 +56,27 @@ authorization.
 
 | Decision Type | Rule | Window |
 | --- | --- | --- |
-| Routine code change | Source-owned deterministic gates plus a distinct-provider exact-head machine interlock | Per gate |
-| Architectural change | Same machine merge rule; maintainer discussion is advisory | 72 hours advisory window |
-| Breaking API change | Same machine merge rule plus CHANGELOG and SDK requirements | 7 days advisory window |
+| Routine code change | Green required deterministic checks on the exact head (repository ruleset) | Per gate |
+| Architectural change | Same merge rule; maintainer discussion is advisory | 72 hours advisory window |
+| Breaking API change | Same merge rule plus CHANGELOG and SDK requirements | 7 days advisory window |
 | Governance change | Super-majority (2/3) | 14 days |
 | Maintainer addition | Lazy consensus | 7 days |
 | Maintainer removal | Super-majority (2/3) | 14 days |
 
 ### Code-Merge Authority
 
-All code merges to `main` must use a pull request and are authorized only by:
-
-1. source-owned deterministic gates for the candidate; and
-2. a distinct-provider machine interlock that approves the exact candidate
-   head (or exact merge tree) after those gates pass.
+All code merges to `main` must use a pull request and are authorized by green
+required deterministic checks (build, test, lint, contract drift) on the exact
+candidate head, enforced by the repository ruleset, with all review threads
+resolved. A maintainer `hold` label or requested-changes review blocks a merge
+until its author releases it.
 
 Human identity, formal approvals, CODEOWNERS, labels, commit signing, and
-commit trailers are advisory metadata only; none has merge-authority weight or
-can replace either machine requirement. Missing, stale, or mismatched evidence
-fails closed. This rule is active for autonomous merges only after the
-source-owned gates and interlock are live-proven.
+commit trailers carry no additional merge-authority weight. No per-PR
+model-review or third-party-billed review checks are part of the merge path.
+A distinct-provider exact-head machine interlock remains an R&D track in
+`contracts-autonomous-release-lab`/`-canary`; it may be adopted here through
+a governance change once live-proven.
 
 This applies to repository code changes. Product-level approval ceremonies and
 effect control remain governed by their runtime policy, connector, receipt, and
@@ -111,9 +112,9 @@ A release is approved when:
 
 1. CI passes on the tagged commit.
 2. The reproducibility job in `release.yml` confirms byte-identical builds.
-3. The distinct-provider exact-head machine interlock approves the tagged
-   release candidate. A maintainer may prepare release notes, but human
-   sign-off and commit trailers have no release-authority weight.
+3. A maintainer approves and publishes the tagged release. Release tags and
+   package publishes always require an explicit maintainer action; commit
+   trailers and automated reviews carry no release authority.
 
 ## Security Policy
 

@@ -249,7 +249,7 @@ func verifyTrustedLocalConsoleRelease(consoleRoot, target string) (localConsoleB
 
 func compiledLocalConsoleManifestDigest() (string, error) {
 	if !validLowerHex(consoleLocalSidecarManifestSHA256, sha256.Size) {
-		return "", fmt.Errorf("local Console requires a valid compiled release manifest digest")
+		return "", fmt.Errorf("local Console requires a valid compiled release manifest digest from a packaged release build; source builds should use plain quickstart/setup or a released HELM bundle")
 	}
 	return consoleLocalSidecarManifestSHA256, nil
 }

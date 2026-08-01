@@ -551,6 +551,9 @@ func TestQuickstartConsoleFailsBeforeMutationForExternalOverrideOrMissingBundle(
 	if !strings.Contains(stderr.String(), "valid compiled release manifest digest") {
 		t.Fatalf("missing compiled digest error = %s", stderr.String())
 	}
+	if !strings.Contains(stderr.String(), "packaged release build") {
+		t.Fatalf("missing packaged release guidance = %s", stderr.String())
+	}
 	if _, statErr := os.Stat(dataDir); !os.IsNotExist(statErr) {
 		t.Fatalf("missing bundle dry-run mutated %q: %v", dataDir, statErr)
 	}
@@ -837,6 +840,9 @@ func TestQuickstartConsoleRejectsMissingDigestBeforeStateMutation(t *testing.T) 
 	}
 	if !strings.Contains(stderr.String(), "valid compiled release manifest digest") {
 		t.Fatalf("quickstart error = %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "packaged release build") {
+		t.Fatalf("quickstart guidance = %s", stderr.String())
 	}
 	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
 		t.Fatalf("missing digest quickstart mutated %q: %v", dataDir, err)

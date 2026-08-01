@@ -81,6 +81,7 @@ func TestRunQuickstartAndConsoleHelpPointToLocalConsole(t *testing.T) {
 				"Usage: helm-ai-kernel quickstart",
 				"helm-ai-kernel quickstart --console",
 				"loopback-only Kernel",
+				"Requires a packaged release build",
 			},
 		},
 		{
@@ -90,6 +91,7 @@ func TestRunQuickstartAndConsoleHelpPointToLocalConsole(t *testing.T) {
 				"The local browser Console is launched by Quickstart",
 				"helm-ai-kernel quickstart --console",
 				"loopback-only Kernel",
+				"Requires a packaged release build",
 			},
 		},
 	} {

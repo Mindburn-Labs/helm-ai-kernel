@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 func init() {
@@ -148,31 +150,35 @@ func renderJSON(out io.Writer, results []CheckResult, summary doctorSummary, hea
 }
 
 func renderText(out io.Writer, results []CheckResult, summary doctorSummary, verbose bool) int {
-	_, _ = fmt.Fprintf(out, "\n%sHELM Doctor%s -- Diagnostic Report\n\n", ColorBold+ColorPurple, ColorReset)
+	return renderTextWithCaps(out, results, summary, verbose, doctorCapabilities(out))
+}
+
+func renderTextWithCaps(out io.Writer, results []CheckResult, summary doctorSummary, verbose bool, caps ui.Capabilities) int {
+	_, _ = fmt.Fprintf(out, "\n%s -- Diagnostic Report\n\n", doctorStyle(caps, "HELM Doctor", ColorBold+ColorPurple))
 
 	for _, r := range results {
 		icon := statusIcon(r.Status)
 		label := padRight(r.Name, 22)
 
-		_, _ = fmt.Fprintf(out, "  %s %s%s%s\n", icon, ColorBold, label, ColorReset)
+		_, _ = fmt.Fprintf(out, "  %s %s\n", icon, doctorStyle(caps, label, ColorBold))
 		_, _ = fmt.Fprintf(out, "     %s\n", r.Message)
 
 		if verbose && r.Detail != "" {
-			_, _ = fmt.Fprintf(out, "     %s%s%s\n", ColorGray, r.Detail, ColorReset)
+			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, r.Detail, ColorGray))
 		}
 		if r.Status == statusFail && r.Suggestion != "" {
-			_, _ = fmt.Fprintf(out, "     %sSuggestion: %s%s\n", ColorYellow, r.Suggestion, ColorReset)
+			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, "Suggestion: "+r.Suggestion, ColorYellow))
 		}
 		if r.Status == statusWarn && r.Suggestion != "" {
-			_, _ = fmt.Fprintf(out, "     %sSuggestion: %s%s\n", ColorYellow, r.Suggestion, ColorReset)
+			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, "Suggestion: "+r.Suggestion, ColorYellow))
 		}
 	}
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintf(out, "Summary: %s%d passed%s, %s%d warning%s, %s%d failed%s\n",
-		ColorGreen, summary.Pass, ColorReset,
-		warnColor(summary.Warn), summary.Warn, ColorReset,
-		failColor(summary.Fail), summary.Fail, ColorReset,
+		doctorANSI(caps, ColorGreen), summary.Pass, doctorReset(caps),
+		doctorANSI(caps, warnColor(summary.Warn)), summary.Warn, doctorReset(caps),
+		doctorANSI(caps, failColor(summary.Fail)), summary.Fail, doctorReset(caps),
 	)
 
 	if summary.Fail > 0 {
@@ -182,8 +188,37 @@ func renderText(out io.Writer, results []CheckResult, summary doctorSummary, ver
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(out, "\n%sAll checks passed. HELM is ready.%s\n", ColorGreen+ColorBold, ColorReset)
+	_, _ = fmt.Fprintf(out, "\n%sAll checks passed. HELM is ready.%s\n", doctorANSI(caps, ColorGreen+ColorBold), doctorReset(caps))
 	return 0
+}
+
+func doctorCapabilities(out io.Writer) ui.Capabilities {
+	file, ok := out.(*os.File)
+	if !ok {
+		return ui.Capabilities{Width: ui.DefaultTerminalWidth}
+	}
+	return ui.DetectCapabilities(os.Stdin, file, ui.TerminalOptions{
+		Format: ui.FormatText,
+		Color:  ui.ColorAuto,
+	})
+}
+
+func doctorStyle(caps ui.Capabilities, value, ansi string) string {
+	return doctorANSI(caps, ansi) + value + doctorReset(caps)
+}
+
+func doctorANSI(caps ui.Capabilities, ansi string) string {
+	if !caps.Color {
+		return ""
+	}
+	return ansi
+}
+
+func doctorReset(caps ui.Capabilities) string {
+	if !caps.Color {
+		return ""
+	}
+	return ColorReset
 }
 
 func statusIcon(s checkStatus) string {

@@ -372,6 +372,7 @@ func printLocalConsoleJourney(w io.Writer) {
 	fmt.Fprintln(w, "  helm-ai-kernel quickstart --console")
 	fmt.Fprintln(w, "  helm-ai-kernel quickstart --console --no-open")
 	fmt.Fprintln(w, "Starts a loopback-only Kernel and verified packaged browser Console for local policy and receipt proof.")
+	fmt.Fprintln(w, "Requires a packaged release build with the compiled Console manifest digest; source builds should use plain quickstart/setup until a release bundle is installed.")
 	fmt.Fprintln(w, "Primary flags: --console, --console-port (0 chooses an ephemeral port), --no-open, --data-dir, --profile, --dry-run, --json.")
 }
 

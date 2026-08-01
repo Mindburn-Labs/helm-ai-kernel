@@ -3,12 +3,52 @@ package main
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
 
-func TestOnboardForwardsExistingScriptFlagsToSetupQuickstart(t *testing.T) {
+func TestOnboardLegacyYesPreservesStoreTrustRootAndConfig(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	dataDir := filepath.Join(cwd, "custom-data")
+	original := runOnboardSetup
+	t.Cleanup(func() { runOnboardSetup = original })
+	called := false
+	runOnboardSetup = func([]string, io.Writer, io.Writer) int {
+		called = true
+		return 1
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := runOnboardCmd([]string{"--data-dir", dataDir, "--yes"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("onboard code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if called {
+		t.Fatal("legacy --yes script unexpectedly entered Quickstart")
+	}
+	pubKey, err := os.ReadFile(filepath.Join(dataDir, "root.pub"))
+	if err != nil {
+		t.Fatalf("custom data dir root.pub missing: %v", err)
+	}
+	config, err := os.ReadFile(filepath.Join(cwd, "helm.yaml"))
+	if err != nil {
+		t.Fatalf("helm.yaml missing: %v", err)
+	}
+	if !strings.Contains(string(config), `data_dir: "`+dataDir+`"`) {
+		t.Fatalf("helm.yaml did not reference custom data dir: %s", string(config))
+	}
+	if !strings.Contains(string(config), `root_public_key: "`+strings.TrimSpace(string(pubKey))+`"`) {
+		t.Fatal("helm.yaml trust root did not match custom data dir public key")
+	}
+	if _, err := os.Stat(filepath.Join(cwd, "data", "root.key")); !os.IsNotExist(err) {
+		t.Fatalf("onboard wrote root.key outside custom data dir: %v", err)
+	}
+}
+
+func TestOnboardForwardsGuidedFlagsToSetupQuickstart(t *testing.T) {
 	original := runOnboardSetup
 	t.Cleanup(func() { runOnboardSetup = original })
 	var got []string

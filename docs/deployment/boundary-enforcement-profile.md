@@ -139,7 +139,7 @@ attest-oneshot dependency and the compiled per-profile drop-in.
 The boundary profile seals the box; governance still starts explicitly:
 
 ```bash
-helm-ai-kernel onboard                      # store + keys + config
+helm-ai-kernel setup --quickstart --profile mcp --yes  # guided store + keys + config
 helm-ai-kernel autoconfigure scan           # deterministic agent-surface inventory
 helm-ai-kernel autoconfigure draft-policy   # default-deny policy draft
 helm-ai-kernel autoconfigure simulate       # blast-radius preview

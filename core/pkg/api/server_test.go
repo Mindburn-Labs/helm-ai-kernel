@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -68,15 +69,24 @@ func TestFromCanonicalPreservesReceiptV5Fields(t *testing.T) {
 	receipt := &contracts.Receipt{
 		ReceiptID:        "receipt-v5",
 		DecisionID:       "decision-v5",
+		OutputHash:       "sha256:output",
+		Timestamp:        time.Date(2026, time.August, 1, 12, 34, 56, 123456789, time.FixedZone("test", 2*60*60)),
 		SignatureVersion: contracts.ReceiptSignatureV5,
 		Verdict:          "DENY",
 		ReasonCode:       "POLICY_VIOLATION",
 		PolicyHash:       "sha256:policy",
 		SessionID:        "session-v5",
+		DecisionHash:     "sha256:decision",
 	}
 	dto := FromCanonical(receipt)
-	if dto.SignatureVersion != contracts.ReceiptSignatureV5 || dto.Verdict != receipt.Verdict || dto.ReasonCode != receipt.ReasonCode || dto.PolicyHash != receipt.PolicyHash || dto.SessionID != receipt.SessionID {
+	if dto.SignatureVersion != contracts.ReceiptSignatureV5 || dto.Verdict != receipt.Verdict || dto.ReasonCode != receipt.ReasonCode || dto.PolicyHash != receipt.PolicyHash || dto.SessionID != receipt.SessionID || dto.DecisionHash != receipt.DecisionHash {
 		t.Fatalf("V5 receipt fields not preserved by API DTO: %+v", dto)
+	}
+	if dto.DecisionHash == receipt.OutputHash {
+		t.Fatalf("API DTO must preserve canonical decision_hash when it differs from output_hash: %+v", dto)
+	}
+	if want := receipt.Timestamp.UTC().Format(time.RFC3339Nano); dto.Timestamp != want {
+		t.Fatalf("API DTO timestamp = %q, want RFC3339Nano %q", dto.Timestamp, want)
 	}
 }
 
@@ -124,6 +134,9 @@ func TestEvaluateStoresAndReturnsVerifiableV5Receipt(t *testing.T) {
 	if err != nil || !valid || version != helmcrypto.ReceiptPreimageSignedFieldsV5 {
 		t.Fatalf("stored receipt must use the shared V5 signing path: valid=%v version=%q err=%v receipt=%+v", valid, version, err, stored)
 	}
+	if stored.OutputHash != evaluated.DecisionHash || stored.DecisionHash != evaluated.DecisionHash {
+		t.Fatalf("PDP decision hash must be bound by the V5 receipt: output_hash=%q decision_hash=%q response=%q", stored.OutputHash, stored.DecisionHash, evaluated.DecisionHash)
+	}
 
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/receipts/"+evaluated.ReceiptID, nil))
@@ -135,7 +148,7 @@ func TestEvaluateStoresAndReturnsVerifiableV5Receipt(t *testing.T) {
 		t.Fatalf("decode receipt JSON fields: %v", err)
 	}
 	for _, field := range []string{
-		"signature_version", "verdict", "reason_code", "output_hash", "prev_hash", "lamport_clock", "args_hash", "policy_hash", "session_id",
+		"signature_version", "verdict", "reason_code", "decision_hash", "output_hash", "prev_hash", "lamport_clock", "args_hash", "policy_hash", "session_id",
 		"signature", "signature_profile", "signature_algorithm", "key_id", "public_key_set",
 	} {
 		if _, ok := raw[field]; !ok {
@@ -152,26 +165,55 @@ func TestEvaluateStoresAndReturnsVerifiableV5Receipt(t *testing.T) {
 	if received.SignatureProfile != helmcrypto.ReceiptProfileClassical || received.SignatureAlgorithm != helmcrypto.SigPrefixEd25519 || received.KeyID != "api-v5-test" || received.PublicKeySet[helmcrypto.SigPrefixEd25519] == "" {
 		t.Fatalf("GET receipt did not expose signer verification material: %+v", received)
 	}
+	if received.DecisionHash != evaluated.DecisionHash || received.OutputHash != evaluated.DecisionHash {
+		t.Fatalf("GET receipt did not preserve signed decision hash: %+v", received)
+	}
+	timestamp, err := time.Parse(time.RFC3339Nano, received.Timestamp)
+	if err != nil {
+		t.Fatalf("GET receipt timestamp must be RFC3339Nano: %q: %v", received.Timestamp, err)
+	}
 
 	fromGET := &contracts.Receipt{
-		ReceiptID:        received.ReceiptID,
-		DecisionID:       received.DecisionID,
-		EffectID:         received.EffectID,
-		Status:           received.Status,
-		OutputHash:       received.OutputHash,
-		PrevHash:         received.PrevHash,
-		LamportClock:     received.LamportClock,
-		ArgsHash:         received.ArgsHash,
-		SignatureVersion: received.SignatureVersion,
-		Verdict:          received.Verdict,
-		ReasonCode:       received.ReasonCode,
-		PolicyHash:       received.PolicyHash,
-		SessionID:        received.SessionID,
-		Signature:        received.Signature,
+		ReceiptID:           received.ReceiptID,
+		DecisionID:          received.DecisionID,
+		CorrelationID:       received.CorrelationID,
+		EffectID:            received.EffectID,
+		ExternalReferenceID: received.ExternalReferenceID,
+		Status:              received.Status,
+		OutputHash:          received.OutputHash,
+		BlobHash:            received.BlobHash,
+		Timestamp:           timestamp,
+		ExecutorID:          received.ExecutorID,
+		Metadata:            received.Metadata,
+		Signature:           received.Signature,
+		SignatureProfile:    received.SignatureProfile,
+		SignatureAlgorithm:  received.SignatureAlgorithm,
+		KeyID:               received.KeyID,
+		PublicKeySet:        received.PublicKeySet,
+		PrevHash:            received.PrevHash,
+		LamportClock:        received.LamportClock,
+		ArgsHash:            received.ArgsHash,
+		SignatureVersion:    received.SignatureVersion,
+		DecisionHash:        received.DecisionHash,
+		Verdict:             received.Verdict,
+		ReasonCode:          received.ReasonCode,
+		PolicyHash:          received.PolicyHash,
+		SessionID:           received.SessionID,
 	}
 	valid, version, err = helmcrypto.VerifyReceiptSignature(received.PublicKeySet[helmcrypto.SigPrefixEd25519], fromGET)
 	if err != nil || !valid || version != helmcrypto.ReceiptPreimageSignedFieldsV5 {
 		t.Fatalf("GET receipt is not independently verifiable as V5: valid=%v version=%q err=%v dto=%+v", valid, version, err, received)
+	}
+	storedHash, err := contracts.ReceiptChainHash(stored)
+	if err != nil {
+		t.Fatalf("hash stored receipt: %v", err)
+	}
+	returnedHash, err := contracts.ReceiptChainHash(fromGET)
+	if err != nil {
+		t.Fatalf("hash GET receipt: %v", err)
+	}
+	if returnedHash != storedHash {
+		t.Fatalf("GET receipt must reproduce canonical chain hash: got %q want %q", returnedHash, storedHash)
 	}
 }
 
@@ -525,6 +567,129 @@ func TestEvaluateBuildsCanonicalReceiptChain(t *testing.T) {
 	}
 	if tamperedResult["valid"] != false {
 		t.Fatalf("tampered API chain verified: %+v", tamperedResult)
+	}
+}
+
+func TestVerifyRejectsTamperedSignedReceipts(t *testing.T) {
+	srv := newTestServer(t)
+	issue := func(sessionID string) EvaluateResponse {
+		t.Helper()
+		body, err := json.Marshal(EvaluateRequest{Tool: "read_file", SessionID: sessionID})
+		if err != nil {
+			t.Fatalf("marshal evaluate request: %v", err)
+		}
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body)))
+		if w.Code != http.StatusOK {
+			t.Fatalf("evaluate %q = %d: %s", sessionID, w.Code, w.Body.String())
+		}
+		var response EvaluateResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("decode evaluate response: %v", err)
+		}
+		return response
+	}
+	verify := func(sessionID string) map[string]any {
+		t.Helper()
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/verify/"+sessionID, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("verify %q = %d: %s", sessionID, w.Code, w.Body.String())
+		}
+		var result map[string]any
+		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+			t.Fatalf("decode verify response: %v", err)
+		}
+		return result
+	}
+
+	// A singleton has no successor whose prev_hash could expose a mutation.
+	single := issue("signed-singleton")
+	srv.mu.Lock()
+	srv.receipts[single.ReceiptID].OutputHash = "sha256:tampered-singleton"
+	srv.mu.Unlock()
+	if got := verify("signed-singleton")["valid"]; got != false {
+		t.Fatalf("tampered signed singleton verified: %+v", got)
+	}
+
+	// A tampered tip also has no successor, so this relies on signature
+	// verification rather than chain-link verification.
+	_ = issue("signed-tip")
+	tip := issue("signed-tip")
+	srv.mu.Lock()
+	srv.receipts[tip.ReceiptID].OutputHash = "sha256:tampered-tip"
+	srv.mu.Unlock()
+	if got := verify("signed-tip")["valid"]; got != false {
+		t.Fatalf("tampered signed chain tip verified: %+v", got)
+	}
+}
+
+func TestEvaluateScopesCausalSessionsByTenant(t *testing.T) {
+	srv := NewServer(ServerConfig{
+		PDP: pdp.NewHelmPDP("test-v1", map[string]bool{"read_file": true}),
+		Authenticator: func(r *http.Request) (AuthenticatedPrincipal, error) {
+			return AuthenticatedPrincipal{ID: "operator-" + r.Header.Get("X-Test-Tenant"), TenantID: r.Header.Get("X-Test-Tenant")}, nil
+		},
+	})
+	const sessionID = "shared-caller-session"
+	issue := func(tenantID string) EvaluateResponse {
+		t.Helper()
+		body, err := json.Marshal(EvaluateRequest{Tool: "read_file", SessionID: sessionID})
+		if err != nil {
+			t.Fatalf("marshal evaluate request: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+		req.Header.Set("X-Test-Tenant", tenantID)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("evaluate tenant %q = %d: %s", tenantID, w.Code, w.Body.String())
+		}
+		var response EvaluateResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("decode evaluate response: %v", err)
+		}
+		return response
+	}
+	verify := func(tenantID string) map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/verify/"+sessionID, nil)
+		req.Header.Set("X-Test-Tenant", tenantID)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("verify tenant %q = %d: %s", tenantID, w.Code, w.Body.String())
+		}
+		var result map[string]any
+		if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+			t.Fatalf("decode verify response: %v", err)
+		}
+		return result
+	}
+
+	a := issue("tenant-a")
+	b := issue("tenant-b")
+	if a.LamportClock != 1 || b.LamportClock != 1 {
+		t.Fatalf("same external session must start separate tenant chains at Lamport 1: a=%+v b=%+v", a, b)
+	}
+	srv.mu.RLock()
+	for _, response := range []EvaluateResponse{a, b} {
+		receipt := srv.receipts[response.ReceiptID]
+		if receipt == nil || receipt.SessionID != sessionID || receipt.PrevHash != "" {
+			srv.mu.RUnlock()
+			t.Fatalf("tenant-scoped genesis receipt malformed: %+v", receipt)
+		}
+	}
+	if len(srv.sessions) != 2 {
+		srv.mu.RUnlock()
+		t.Fatalf("tenant-qualified session map length = %d, want 2", len(srv.sessions))
+	}
+	srv.mu.RUnlock()
+	for _, tenantID := range []string{"tenant-a", "tenant-b"} {
+		result := verify(tenantID)
+		if result["valid"] != true || result["receipts"] != float64(1) {
+			t.Fatalf("tenant %q did not see its isolated valid chain: %+v", tenantID, result)
+		}
 	}
 }
 

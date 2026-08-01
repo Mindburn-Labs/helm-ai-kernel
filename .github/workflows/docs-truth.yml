@@ -17,6 +17,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: Mindburn-Labs/.github/.github/workflows/docs-truth-public.yml@3ce0af631a00853274a42a016977083ff06b619f
+    uses: Mindburn-Labs/.github/.github/workflows/docs-truth-public.yml@b9040b9d9585bf035dd5178d7a4dcadbe9e2666e
     secrets:
       MINDBURN_ORG_READ_TOKEN: ${{ secrets.MINDBURN_ORG_READ_TOKEN }}

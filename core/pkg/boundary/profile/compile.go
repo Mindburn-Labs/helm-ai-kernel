@@ -232,9 +232,18 @@ func emitWorkloadDropin(in ProfileInput, unit string) []byte {
 // established flows only) — the same fail-closed semantics the gateway's
 // EgressChecker already enforces at L7, expressed as OS rules.
 //
+// Both netfilter egress paths are governed. The output hook sees only
+// locally-generated traffic: a workload in its own network namespace (any
+// container on a bridge) egresses as FORWARDED traffic and never traverses
+// output, so an output-only table silently fails open for it. The forward
+// chain closes that path. A drop in any base chain at a hook is final, so
+// this stays authoritative even where a container runtime installs its own
+// accepting FORWARD rules.
+//
 // The chain priority is written as the named "filter" priority so the file
 // form and the `nft list` rendering normalize identically.
 func emitNftRuleset(in ProfileInput) []byte {
+	allow := buildNftRules(in.Egress.AllowedCIDRs, in.Egress.AllowedProtocols)
 	lines := append(artifactHeader(in), "")
 	lines = append(lines,
 		"table "+NftTableName,
@@ -245,7 +254,17 @@ func emitNftRuleset(in ProfileInput) []byte {
 		"\t\toifname \"lo\" accept",
 		"\t\tct state established,related accept",
 	)
-	for _, rule := range buildNftRules(in.Egress.AllowedCIDRs, in.Egress.AllowedProtocols) {
+	for _, rule := range allow {
+		lines = append(lines, "\t\t"+rule)
+	}
+	lines = append(lines, "\t}")
+	// No loopback exemption here: loopback traffic is never forwarded.
+	lines = append(lines,
+		"\tchain forward {",
+		"\t\ttype filter hook forward priority filter; policy drop;",
+		"\t\tct state established,related accept",
+	)
+	for _, rule := range allow {
 		lines = append(lines, "\t\t"+rule)
 	}
 	lines = append(lines, "\t}", "}")

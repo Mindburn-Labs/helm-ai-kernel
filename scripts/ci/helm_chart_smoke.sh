@@ -53,10 +53,14 @@ helm_runner() {
     docker run --rm -v "$ROOT:/work" -w /work "$KUBE_HELM_IMAGE" "$@"
 }
 
+# Every assertion below is a literal string from the rendered chart, so both
+# helpers match fixed strings. Without -F, grep reads the pattern as a BRE and
+# `.` matches any character: `helm.sh/hook-delete-policy` would also accept
+# `helmXsh/...`, which is a test that can pass on the wrong output.
 assert_contains() {
     file="$1"
     pattern="$2"
-    if ! grep -q -- "$pattern" "$file"; then
+    if ! grep -qF -- "$pattern" "$file"; then
         echo "::error::rendered chart missing pattern: $pattern"
         exit 1
     fi
@@ -65,7 +69,7 @@ assert_contains() {
 assert_not_contains() {
     file="$1"
     pattern="$2"
-    if grep -q -- "$pattern" "$file"; then
+    if grep -qF -- "$pattern" "$file"; then
         echo "::error::rendered chart unexpectedly contained pattern: $pattern"
         exit 1
     fi
@@ -131,6 +135,13 @@ helm_runner template "$RELEASE" "$CHART" \
     --set-string launchpadApps.hermes.query="chart smoke" >"$hermes_job_rendered"
 assert_contains "$hermes_job_rendered" "kind: Job"
 assert_contains "$hermes_job_rendered" "helm-ai-kernel-hermes"
+assert_contains "$hermes_job_rendered" "helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded"
+# Match any argument order or added redirection, not one exact spelling. Uses a
+# literal space class rather than \b, which is not portable in POSIX ERE.
+if grep -Eq 'kube_helm[[:space:]]+test[[:space:]][^#]*--logs' "$ROOT/scripts/ci/launchpad_k8s_smoke.sh"; then
+    echo "::error::launchpad smoke requests Helm test logs after successful hooks are deleted"
+    exit 1
+fi
 assert_contains "$hermes_job_rendered" "anthropic/claude-3-5-haiku"
 assert_contains "$hermes_job_rendered" "chart smoke"
 assert_contains "$hermes_job_rendered" "--provider"

@@ -611,6 +611,36 @@ func TestSetupRepairAndRemoveAreIdempotent(t *testing.T) {
 	}
 }
 
+func TestSetupRepairPinsCustomPolicyProfileDigest(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	stubSetupSideEffects(t)
+	dataDir := filepath.Join(tmp, "helm")
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	args := []string{"helm-ai-kernel", "setup", "repair", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--json", "--data-dir", dataDir, "--policy-profile", profile}
+	var stdout, stderr bytes.Buffer
+	if code := Run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("repair exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	summary, err := buildSetupSummary(setupOptions{Target: "codex", Scope: "project", Workspace: workspace, DataDir: dataDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook, err := os.ReadFile(summary.HookConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := hookPolicyProfileDigest(t, profile)
+	for _, want := range []string{"--policy-profile " + shellQuote(profile), "--policy-profile-sha256 " + shellQuote(digest)} {
+		if !strings.Contains(string(hook), want) {
+			t.Fatalf("repaired hook is missing %q:\n%s", want, hook)
+		}
+	}
+}
+
 func TestSetupJSONSummaryMatchesOperation(t *testing.T) {
 	tests := []struct {
 		name            string

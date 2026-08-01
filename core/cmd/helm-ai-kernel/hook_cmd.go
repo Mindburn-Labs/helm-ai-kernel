@@ -60,13 +60,14 @@ type hookSpecificOutput struct {
 }
 
 type hookClassification struct {
-	ShouldDecide bool
-	Class        string
-	Target       string
-	Action       string
-	ToolID       string
-	Reason       string
-	Metadata     map[string]string
+	ShouldDecide            bool
+	Class                   string
+	Target                  string
+	Action                  string
+	ToolID                  string
+	Reason                  string
+	Metadata                map[string]string
+	RequiresShellPermission bool
 }
 
 func init() {
@@ -128,24 +129,38 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	if !classification.ShouldDecide {
 		return 0
 	}
-	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
-	if err != nil {
-		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-		reason := "HELM denied operation: local receipt signer is unavailable"
-		if errors.Is(err, errHookPolicyProfile) {
-			reason = "HELM denied operation: policy profile is unavailable"
+	classifications := []hookClassification{classification}
+	if classification.RequiresShellPermission {
+		classifications = append(classifications, hookClassification{
+			ShouldDecide: true,
+			Class:        "shell-operate",
+			Target:       inputString(payload.ToolInput, "command", "cmd"),
+			Action:       "shell_operate",
+			ToolID:       "shell",
+			Reason:       "compound shell operation",
+			Metadata:     classification.Metadata,
+		})
+	}
+	for _, decision := range classifications {
+		receipt, err := buildHookDecisionReceipt(opts, payload, decision)
+		if err != nil {
+			fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
+			reason := "HELM denied operation: local receipt signer is unavailable"
+			if errors.Is(err, errHookPolicyProfile) {
+				reason = "HELM denied operation: policy profile is unavailable"
+			}
+			return emitHookDenyOrFail(stdout, stderr, reason)
 		}
-		return emitHookDenyOrFail(stdout, stderr, reason)
+		receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
+		if err != nil {
+			fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
+			return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: receipt persistence is unavailable")
+		}
+		if receipt.Verdict == contracts.WorkstationVerdictDeny {
+			return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s)", decision.Reason, receipt.ReasonCode, receiptPath))
+		}
 	}
-	receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
-	if err != nil {
-		fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
-		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: receipt persistence is unavailable")
-	}
-	if receipt.Verdict != contracts.WorkstationVerdictDeny {
-		return 0
-	}
-	return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s)", classification.Reason, receipt.ReasonCode, receiptPath))
+	return 0
 }
 
 func emitHookDenyOrFail(stdout, stderr io.Writer, reason string) int {
@@ -209,13 +224,14 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 				reason = "sensitive file operation"
 			}
 			return hookClassification{
-				ShouldDecide: true,
-				Class:        class,
-				Target:       target,
-				Action:       action,
-				ToolID:       "shell",
-				Reason:       reason,
-				Metadata:     shellscanReceiptMetadata(scan),
+				ShouldDecide:            true,
+				Class:                   class,
+				Target:                  target,
+				Action:                  action,
+				ToolID:                  "shell",
+				Reason:                  reason,
+				Metadata:                shellscanReceiptMetadata(scan),
+				RequiresShellPermission: scan.SensitiveTarget != "" && len(scan.Commands) > 1,
 			}
 		}
 	case strings.HasPrefix(tool, "mcp__"):

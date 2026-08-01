@@ -703,6 +703,120 @@ func TestTrustedLocalConsoleReleaseRequiresExplicitInnerReleaseAuthority(t *test
 	}
 }
 
+func TestTrustedLocalConsoleReleaseRejectsAdversarialRawArchiveEntries(t *testing.T) {
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		mutate func(t *testing.T, target string, entries []localConsoleTarFixtureEntry) []localConsoleTarFixtureEntry
+		want   string
+	}{
+		{
+			name: "traversal path",
+			mutate: func(t *testing.T, target string, entries []localConsoleTarFixtureEntry) []localConsoleTarFixtureEntry {
+				t.Helper()
+				rootName := localConsoleBundlePrefix + target
+				for index := range entries {
+					if entries[index].Name == rootName+"/"+localConsoleServerFile {
+						entries[index].Name = rootName + "/../outside"
+						return entries
+					}
+				}
+				t.Fatal("server entry missing")
+				return nil
+			},
+			want: "local Console release archive path is invalid",
+		},
+		{
+			name: "absolute path",
+			mutate: func(t *testing.T, target string, entries []localConsoleTarFixtureEntry) []localConsoleTarFixtureEntry {
+				t.Helper()
+				for index := range entries {
+					if entries[index].Name == localConsoleBundlePrefix+target+"/"+localConsoleServerFile {
+						entries[index].Name = "/" + entries[index].Name
+						return entries
+					}
+				}
+				t.Fatal("server entry missing")
+				return nil
+			},
+			want: "local Console release archive path is invalid",
+		},
+		{
+			name: "wrong root",
+			mutate: func(t *testing.T, _ string, entries []localConsoleTarFixtureEntry) []localConsoleTarFixtureEntry {
+				t.Helper()
+				for index := range entries {
+					if strings.HasSuffix(entries[index].Name, "/"+localConsoleServerFile) {
+						entries[index].Name = "unexpected-root/" + localConsoleServerFile
+						return entries
+					}
+				}
+				t.Fatal("server entry missing")
+				return nil
+			},
+			want: "local Console release archive escapes the expected bundle root",
+		},
+		{
+			name: "duplicate payload",
+			mutate: func(t *testing.T, target string, entries []localConsoleTarFixtureEntry) []localConsoleTarFixtureEntry {
+				t.Helper()
+				for _, entry := range entries {
+					if entry.Name == localConsoleBundlePrefix+target+"/"+localConsoleServerFile {
+						entries = append(entries, entry)
+						return entries
+					}
+				}
+				t.Fatal("server entry missing")
+				return nil
+			},
+			want: "local Console release archive contains a duplicate payload",
+		},
+		{
+			name: "non regular entry",
+			mutate: func(t *testing.T, target string, entries []localConsoleTarFixtureEntry) []localConsoleTarFixtureEntry {
+				t.Helper()
+				entries = append(entries, localConsoleTarFixtureEntry{
+					Name:     localConsoleBundlePrefix + target + "/runtime/node-link",
+					Typeflag: tar.TypeSymlink,
+					Mode:     0755,
+					Linkname: localConsoleNodeFile,
+				})
+				return entries
+			},
+			want: "local Console release archive contains an unsupported entry",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+			if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+			_, manifestDigest := writeTrustedLocalConsoleRelease(t, executable, target)
+			consoleRoot := filepath.Join(filepath.Dir(executable), localConsoleDirectory)
+			consoleLocalSidecarManifestSHA256 = rewriteTrustedLocalConsoleReleaseArchive(t, consoleRoot, target, func(entries []localConsoleTarFixtureEntry) []localConsoleTarFixtureEntry {
+				return tc.mutate(t, target, entries)
+			})
+			originalExecutable := localConsoleExecutable
+			localConsoleExecutable = func() (string, error) { return executable, nil }
+			t.Cleanup(func() { localConsoleExecutable = originalExecutable })
+			if manifestDigest == consoleLocalSidecarManifestSHA256 {
+				t.Fatal("adversarial archive did not change manifest digest")
+			}
+			if _, err := discoverLocalConsoleBundle(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestQuickstartConsoleRejectsMissingDigestBeforeStateMutation(t *testing.T) {
 	dir := t.TempDir()
 	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
@@ -1151,6 +1265,154 @@ func writeLocalConsoleReleaseTarget(t *testing.T, consoleRoot, bundleRoot, targe
 
 func localConsoleBool(value bool) *bool {
 	return &value
+}
+
+type localConsoleTarFixtureEntry struct {
+	Name     string
+	Typeflag byte
+	Mode     int64
+	Linkname string
+	Data     []byte
+}
+
+func rewriteTrustedLocalConsoleReleaseArchive(t *testing.T, consoleRoot, target string, mutate func([]localConsoleTarFixtureEntry) []localConsoleTarFixtureEntry) string {
+	t.Helper()
+	archiveName := localConsoleBundlePrefix + target + ".tar.gz"
+	archivePath := filepath.Join(consoleRoot, archiveName)
+	entries := trustedLocalConsoleReleaseArchiveEntries(t, filepath.Join(consoleRoot, localConsoleBundlePrefix+target), target)
+	if mutate != nil {
+		entries = mutate(entries)
+	}
+	writeLocalConsoleTarArchive(t, archivePath, entries)
+	archiveDigest, err := sha256LocalConsoleFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checksumBytes := []byte(archiveDigest + "  " + archiveName + "\n")
+	if err := os.WriteFile(filepath.Join(consoleRoot, archiveName+".sha256"), checksumBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	provenancePath := filepath.Join(consoleRoot, archiveName+".provenance.json")
+	provenanceBytes, err := os.ReadFile(provenancePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var external map[string]any
+	if err := json.Unmarshal(provenanceBytes, &external); err != nil {
+		t.Fatal(err)
+	}
+	external["archive"] = map[string]string{"file": archiveName, "sha256": archiveDigest}
+	provenanceBytes, err = json.Marshal(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(provenancePath, provenanceBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	manifestPath := filepath.Join(consoleRoot, localConsoleReleaseManifestFile)
+	manifestBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest localConsoleReleaseManifest
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	for index := range manifest.Targets {
+		record := &manifest.Targets[index]
+		if localConsoleTargetName(record.Target) != target {
+			continue
+		}
+		record.Artifacts.Archive.SHA256 = archiveDigest
+		record.Artifacts.ArchiveChecksum.SHA256 = sha256Hex(checksumBytes)
+		record.Artifacts.Provenance.SHA256 = sha256Hex(provenanceBytes)
+		manifestBytes, err = json.Marshal(manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(manifestPath, manifestBytes, 0600); err != nil {
+			t.Fatal(err)
+		}
+		return sha256Hex(manifestBytes)
+	}
+	t.Fatalf("target %q missing from trusted release manifest", target)
+	return ""
+}
+
+func trustedLocalConsoleReleaseArchiveEntries(t *testing.T, bundleRoot, target string) []localConsoleTarFixtureEntry {
+	t.Helper()
+	rootName := localConsoleBundlePrefix + target
+	entries := []localConsoleTarFixtureEntry{
+		{Name: rootName + "/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: rootName + "/app/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: rootName + "/runtime/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: rootName + "/runtime/node/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: rootName + "/runtime/node/bin/", Typeflag: tar.TypeDir, Mode: 0755},
+	}
+	for _, relativePath := range []string{localConsoleInventoryFile, localConsoleProvenanceFile, localConsoleServerFile, localConsoleNodeFile, localConsoleNodeLicenseFile} {
+		contents, err := os.ReadFile(filepath.Join(bundleRoot, filepath.FromSlash(relativePath)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		mode := int64(0644)
+		if relativePath == localConsoleNodeFile {
+			mode = 0755
+		}
+		entries = append(entries, localConsoleTarFixtureEntry{
+			Name:     rootName + "/" + relativePath,
+			Typeflag: tar.TypeReg,
+			Mode:     mode,
+			Data:     contents,
+		})
+	}
+	return entries
+}
+
+func writeLocalConsoleTarArchive(t *testing.T, archivePath string, entries []localConsoleTarFixtureEntry) {
+	t.Helper()
+	archive, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := gzip.NewWriter(archive)
+	writer := tar.NewWriter(compressed)
+	for _, entry := range entries {
+		writeLocalConsoleTarEntry(t, writer, entry)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeLocalConsoleTarEntry(t *testing.T, writer *tar.Writer, entry localConsoleTarFixtureEntry) {
+	t.Helper()
+	size := int64(len(entry.Data))
+	if entry.Typeflag == tar.TypeDir || entry.Typeflag == tar.TypeSymlink || entry.Typeflag == tar.TypeLink {
+		size = 0
+	}
+	if err := writer.WriteHeader(&tar.Header{
+		Name:     entry.Name,
+		Mode:     entry.Mode,
+		Size:     size,
+		Typeflag: entry.Typeflag,
+		Linkname: entry.Linkname,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if size == 0 {
+		return
+	}
+	if _, err := writer.Write(entry.Data); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeLocalConsoleTarDirectory(t *testing.T, writer *tar.Writer, name string) {

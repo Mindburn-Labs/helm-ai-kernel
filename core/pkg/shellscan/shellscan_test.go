@@ -383,6 +383,31 @@ func TestClassifyPassesBenign(t *testing.T) {
 	}
 }
 
+func TestClassifyMarksOnlyStaticallyDiscernibleSensitiveWrites(t *testing.T) {
+	cases := []struct {
+		name    string
+		command string
+		decide  bool
+		target  string
+	}{
+		{"read protected config", "cat .codex/hooks.json", false, ""},
+		{"copy protected config", "cp replacement .codex/hooks.json", true, ".codex/hooks.json"},
+		{"python concatenated write target", `python -c "open('.codex/' + 'hooks.json','w').write('x')"`, true, ".codex/hooks.json"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Classify(tc.command)
+			if res.Decide != tc.decide {
+				t.Fatalf("Classify(%q).Decide = %t (%s), want %t", tc.command, res.Decide, res.Reason, tc.decide)
+			}
+			if res.SensitiveTarget != tc.target {
+				t.Fatalf("Classify(%q).SensitiveTarget = %q, want %q", tc.command, res.SensitiveTarget, tc.target)
+			}
+		})
+	}
+}
+
 func TestClassifyAtResolvesGeneratedScriptsAgainstCWD(t *testing.T) {
 	res := ClassifyAt("printf 'rm --recursive --force /tmp/x\\n' > run.sh; bash /repo/run.sh", "/repo")
 	if !res.Decide || !strings.Contains(res.Reason, "generated earlier") {

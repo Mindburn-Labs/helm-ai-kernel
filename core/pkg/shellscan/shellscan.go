@@ -340,19 +340,6 @@ func (c *collector) recordSensitiveTarget(tok wordTok, operation, signal string)
 	}
 }
 
-// classifySensitiveTargetArguments treats access to a sensitive path as a
-// protected operation. That closes shell copy/move/editor bypasses around the
-// hook configuration, whose policy digest otherwise lives in an agent-visible
-// file. The hook maps this result to the narrower file.write capability.
-func (c *collector) classifySensitiveTargetArguments(args []wordTok) {
-	for _, tok := range args[1:] {
-		if tok.dynamic {
-			continue
-		}
-		c.recordSensitiveTarget(tok, "protected operation", SignalSensitiveTarget)
-	}
-}
-
 func (c *collector) recordTeeWrites(args []wordTok) {
 	endOptions := false
 	targets := make([]wordTok, 0, len(args)-1)
@@ -674,6 +661,44 @@ func isInterpreterVersion(s string) bool {
 	return true
 }
 
+// recordInlineInterpreterSensitiveWrite recognizes literal Python
+// open(path, mode) calls without trying to interpret arbitrary source.
+func (c *collector) recordInlineInterpreterSensitiveWrite(name string, source wordTok) {
+	if source.dynamic || !strings.HasPrefix(name, "python") {
+		return
+	}
+	compact := strings.NewReplacer("'", "", `"`, "", " ", "", "\t", "", "\r", "", "\n", "", "+", "").Replace(source.text)
+	for {
+		start := strings.Index(compact, "open(")
+		if start < 0 {
+			return
+		}
+		if start > 0 && (pythonIdentByte(compact[start-1]) || compact[start-1] == '.') {
+			compact = compact[start+4:]
+			continue
+		}
+		compact = compact[start+len("open("):]
+		comma := strings.IndexByte(compact, ',')
+		if comma < 0 {
+			return
+		}
+		target, mode := compact[:comma], strings.TrimPrefix(compact[comma+1:], "mode=")
+		if pythonOpenWriteMode(mode) {
+			c.recordSensitiveTarget(wordTok{text: target}, "inline interpreter write", SignalSensitiveTarget)
+			return
+		}
+	}
+}
+
+func pythonOpenWriteMode(mode string) bool {
+	return strings.HasPrefix(mode, "w") || strings.HasPrefix(mode, "a") || strings.HasPrefix(mode, "x") ||
+		strings.HasPrefix(mode, "r+") || strings.HasPrefix(mode, "rb+")
+}
+
+func pythonIdentByte(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
+
 func (c *collector) classifyInterpreter(name string, args []wordTok, via string, spec interpreterSpec) {
 	c.signal(SignalInterpreterInvocation)
 	if len(args) == 0 {
@@ -707,6 +732,13 @@ func (c *collector) classifyInterpreter(name string, args []wordTok, via string,
 				flag, attached = flag[:idx], true
 			}
 			if containsString(spec.codeLong, flag) {
+				source := wordTok{dynamic: true}
+				if attached {
+					source = wordTok{text: strings.TrimPrefix(tok.text, flag+"=")}
+				} else if i+1 < len(args) {
+					source = args[i+1]
+				}
+				c.recordInlineInterpreterSensitiveWrite(name, source)
 				c.decide(name + " executes interpreter source via " + flag + " (fail-closed)")
 				return
 			}
@@ -746,6 +778,13 @@ func (c *collector) classifyInterpreter(name string, args []wordTok, via string,
 			for j := 0; j < len(cluster); j++ {
 				flag := cluster[j]
 				if strings.IndexByte(spec.codeShort, flag) >= 0 {
+					source := wordTok{dynamic: true}
+					if j+1 < len(cluster) {
+						source = wordTok{text: cluster[j+1:]}
+					} else if i+1 < len(args) {
+						source = args[i+1]
+					}
+					c.recordInlineInterpreterSensitiveWrite(name, source)
 					c.decide(name + " executes interpreter source via -" + string(flag) + " (fail-closed)")
 					return
 				}
@@ -1128,7 +1167,6 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 		return
 	}
 	for len(args) > 0 {
-		c.classifySensitiveTargetArguments(args)
 		head := args[0]
 		if head.dynamic {
 			c.decide("dynamic command word cannot be classified statically")

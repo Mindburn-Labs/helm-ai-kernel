@@ -641,6 +641,51 @@ func TestSetupRepairPinsCustomPolicyProfileDigest(t *testing.T) {
 	}
 }
 
+func TestSetupRepairPreservesDiscoveredCustomPolicyProfile(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	stubSetupSideEffects(t)
+	dataDir := filepath.Join(tmp, "helm")
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	installed := setupOptions{
+		Target:              "codex",
+		Scope:               "project",
+		Workspace:           workspace,
+		DataDir:             dataDir,
+		PolicyProfile:       profile,
+		PolicyProfileSHA256: hookPolicyProfileDigest(t, profile),
+	}
+	summary, err := buildSetupSummary(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(summary.HookConfigPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := upsertHookConfig(summary.HookConfigPath, setupHookMatcher(installed.Target), setupHookCommand(installed, summary.BinaryPath), ""); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(summary.HookConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"helm-ai-kernel", "setup", "repair", "codex", "--scope", "project", "--workspace", workspace, "--yes", "--json", "--data-dir", dataDir}
+	var stdout, stderr bytes.Buffer
+	if code := Run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("repair exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	after, err := os.ReadFile(summary.HookConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) || !strings.Contains(string(after), "--policy-profile "+shellQuote(profile)) || !strings.Contains(string(after), "--policy-profile-sha256 "+shellQuote(installed.PolicyProfileSHA256)) {
+		t.Fatalf("plain repair rewrote installed custom policy:\n%s", after)
+	}
+}
+
 func TestSetupJSONSummaryMatchesOperation(t *testing.T) {
 	tests := []struct {
 		name            string

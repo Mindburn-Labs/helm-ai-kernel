@@ -297,10 +297,6 @@ func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
-		fmt.Fprintf(stderr, "setup repair: policy profile: %v\n", err)
-		return 2
-	}
 	if opts.DryRun {
 		opts.Operation = "preview_repair"
 	} else {
@@ -313,6 +309,16 @@ func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
 	summary, err := buildSetupSummary(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "setup repair: %v\n", err)
+		return 2
+	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup repair: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup repair: policy profile: %v\n", err)
 		return 2
 	}
 	if err := preflightSetup(opts, &summary); err != nil {

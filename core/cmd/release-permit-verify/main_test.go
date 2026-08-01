@@ -119,6 +119,28 @@ func TestVerifyPermitFileAcceptsSHAWorkflowRefAgainstTrustedContext(t *testing.T
 	}
 }
 
+func TestVerifyPermitFileRejectsSelfAttestedSHAWorkflowRef(t *testing.T) {
+	var permit releasepermit.Permit
+	if err := json.Unmarshal([]byte(validPermitJSON()), &permit); err != nil {
+		t.Fatalf("decode permit fixture: %v", err)
+	}
+	// Self-consistent forged pair: the ref names the permit's own workflow_sha,
+	// which differs from the trusted context's workflow SHA.
+	forgedSHA := "9999999999999999999999999999999999999999"
+	permit.WorkflowRef = permit.WorkflowRepository + "/" + permit.WorkflowPath + "@" + forgedSHA
+	permit.WorkflowSHA = forgedSHA
+	content, err := json.Marshal(permit)
+	if err != nil {
+		t.Fatalf("encode permit: %v", err)
+	}
+	permitPath := writeJSONFixture(t, string(content))
+	contextPath := writeJSONFixture(t, validContextJSON())
+	if _, err := verifyPermitFile(permitPath, contextPath); err == nil ||
+		!strings.Contains(err.Error(), "workflow_ref must be a branch or tag ref or match the trusted workflow_sha") {
+		t.Fatalf("verifyPermitFile() error = %v, want trusted workflow_sha ref rejection", err)
+	}
+}
+
 func TestDecodeStrictContextRequiresExactAuthorityShape(t *testing.T) {
 	valid := validContextJSON()
 	for _, test := range []struct {

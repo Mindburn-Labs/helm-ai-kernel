@@ -83,6 +83,25 @@ var decideCases = []struct {
 	{"regression-generated-script-tee-long-option", `printf 'rm -rf /tmp/x\n' | tee --output-error=warn /tmp/run.sh; bash /tmp/run.sh`, "generated earlier"},
 	{"regression-tee-dynamic-target", `printf x | tee "$TARGET"`, "unresolvable target"},
 
+	// Regression: P1 INTERPRETER_SOURCE_BYPASS — common language
+	// interpreters may execute code supplied through stdin, a heredoc, process
+	// substitution, or a script written earlier in this compound command. The
+	// shell parser must route those opaque sources through the signed decision
+	// path without attempting to interpret the source language.
+	{"regression-python-heredoc", "python <<'PY'\nimport shutil\nshutil.rmtree('/tmp/x')\nPY", "interpreter source"},
+	{"regression-python-dash-heredoc", "python - <<'PY'\nimport shutil\nshutil.rmtree('/tmp/x')\nPY", "interpreter source"},
+	{"regression-perl-heredoc", "perl <<'PL'\nunlink '/tmp/x'\nPL", "interpreter source"},
+	{"regression-ruby-heredoc", "ruby <<'RB'\nFile.delete('/tmp/x')\nRB", "interpreter source"},
+	{"regression-node-heredoc", "node <<'JS'\nrequire('fs').rmSync('/tmp/x')\nJS", "interpreter source"},
+	{"regression-python-inline", `python -c 'import shutil; shutil.rmtree("/tmp/x")'`, "interpreter source"},
+	{"regression-perl-inline", `perl -e 'unlink "/tmp/x"'`, "interpreter source"},
+	{"regression-ruby-inline", `ruby -e 'File.delete("/tmp/x")'`, "interpreter source"},
+	{"regression-node-inline", `node --eval 'require("fs").rmSync("/tmp/x")'`, "interpreter source"},
+	{"regression-python-process-substitution", "python <(printf 'import shutil\\nshutil.rmtree(\\\"/tmp/x\\\")\\n')", "dynamic argument"},
+	{"regression-python-heredoc-written-script", "cat <<'PY' >/tmp/run.py\nimport shutil\nshutil.rmtree('/tmp/x')\nPY\npython /tmp/run.py", "generated earlier"},
+	{"regression-python-printf-written-script", "printf 'import shutil\\nshutil.rmtree(\\\"/tmp/x\\\")\\n' >/tmp/run.py; python /tmp/run.py", "generated earlier"},
+	{"regression-direct-written-script", "printf '#!/bin/sh\\nrm -rf /tmp/x\\n' >/tmp/run; /tmp/run", "generated earlier"},
+
 	// Evasion: path obfuscation.
 	{"evasion-path-dots", "/bin/./rm -rf /tmp/x", "recursive rm"},
 	{"evasion-path-relative", "./../../bin/rm -rf /tmp/x", "recursive rm"},
@@ -300,6 +319,10 @@ var passCases = []struct {
 	{"safe-docker-rm-force-name", "docker rm -- -f"},
 	{"safe-command-query", "command -v git"},
 	{"safe-builtin-print", "builtin -p"},
+	{"safe-python-static-script", "python scripts/utility.py"},
+	{"safe-node-static-script", "node scripts/build.js"},
+	{"safe-ruby-static-script", "ruby scripts/utility.rb"},
+	{"safe-perl-static-script", "perl scripts/utility.pl"},
 	{"safe-quoted-command-backslash", `'r\m' --version`},
 }
 

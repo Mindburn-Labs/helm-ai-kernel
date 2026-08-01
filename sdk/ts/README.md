@@ -44,11 +44,10 @@ const decision = await client.evaluateDecision({
 console.log(decision.verdict); // ALLOW or DENY
 ```
 
-`session_id` is trimmed and bound into the V5 receipt chain. For compatibility,
-legacy `{ action, resource, context }` callers remain supported when
-`context.session_id` is non-blank; a non-blank top-level `session_id` takes
-precedence when both are present. The authenticated principal, not a body
-`principal`, is recorded on the receipt.
+`tool`, `effect_level`, and `session_id` must all be non-blank. The SDK sends
+only this canonical V5 request shape; legacy direct-daemon callers are not an
+SDK contract. The authenticated principal, not a body `principal`, is recorded
+on the receipt.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.

@@ -16,6 +16,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
@@ -336,15 +337,25 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 		return fmt.Errorf("receipt signer unavailable")
 	}
 	sessionID := ""
+	tenantID := ""
 	if decision.InputContext != nil {
 		if value, ok := decision.InputContext["session_id"].(string); ok {
 			sessionID = strings.TrimSpace(value)
+		}
+		if value, ok := decision.InputContext["tenant_id"].(string); ok {
+			tenantID = strings.TrimSpace(value)
 		}
 	}
 	if sessionID == "" {
 		sessionID = agentID
 	}
-	err := svc.ReceiptStore.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+	if normalizer, ok := svc.ReceiptStore.(store.ReceiptTimestampNormalizer); ok {
+		// The timestamp is part of the signed V5 receipt. Normalize it before
+		// signing and transparency anchoring so a durable reload retains the
+		// same chain hash.
+		timestamp = normalizer.NormalizeReceiptTimestamp(timestamp)
+	}
+	build := func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		receipt := &contracts.Receipt{
 			ReceiptID:    receiptID,
 			DecisionID:   decision.ID,
@@ -375,7 +386,13 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 			return nil, err
 		}
 		return receipt, nil
-	})
+	}
+	var err error
+	if scoped, ok := svc.ReceiptStore.(store.TenantScopedCausalReceiptAppender); ok && tenantID != "" {
+		err = scoped.AppendCausalScoped(ctx, tenantID, sessionID, build)
+	} else {
+		err = svc.ReceiptStore.AppendCausal(ctx, sessionID, build)
+	}
 	if err != nil {
 		return fmt.Errorf("store receipt %s: %w", receiptID, err)
 	}

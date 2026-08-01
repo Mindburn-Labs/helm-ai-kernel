@@ -18,7 +18,8 @@ from .types_gen import (
     ChatCompletionResponse,
     ConformanceRequest,
     ConformanceResult,
-    DecisionRequest,
+    EvaluateRequest,
+    EvaluateResponse,
     Receipt,
     Session,
     VerificationResult,
@@ -219,10 +220,18 @@ class HelmClient:
         return result
 
     # ── Decision Evaluation ─────────────────────────
-    def evaluate_decision(self, req: Union[DecisionRequest, dict[str, Any]]) -> dict[str, Any]:
+    def evaluate_decision(self, req: EvaluateRequest) -> EvaluateResponse:
+        if not isinstance(req, EvaluateRequest):
+            raise TypeError("evaluate_decision requires an EvaluateRequest")
+        for field in ("tool", "effect_level", "session_id"):
+            value = getattr(req, field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"evaluate_decision requires a non-blank {field}")
         resp = self._client.post("/api/v1/evaluate", json=_json_body(req))
         self._check(resp)
-        return resp.json()
+        result = EvaluateResponse.from_dict(resp.json())
+        assert result is not None
+        return result
 
     def run_public_demo(self, action_id: str, args: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         resp = self._client.post(

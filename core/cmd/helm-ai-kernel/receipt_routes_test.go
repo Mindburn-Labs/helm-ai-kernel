@@ -27,6 +27,24 @@ type captureReceiptStore struct {
 	sessionID string
 }
 
+type scopedCaptureReceiptStore struct {
+	*captureReceiptStore
+	tenantID       string
+	externalID     string
+	scopedAppended bool
+}
+
+func (s *scopedCaptureReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build store.CausalReceiptBuilder) error {
+	s.tenantID = tenantID
+	s.externalID = sessionID
+	s.scopedAppended = true
+	return s.captureReceiptStore.AppendCausal(ctx, sessionID, build)
+}
+
+func (s *scopedCaptureReceiptStore) NormalizeReceiptTimestamp(timestamp time.Time) time.Time {
+	return timestamp.UTC().Truncate(time.Microsecond)
+}
+
 type recordingScopedStopReader struct {
 	inner  kernel.ScopedStopReader
 	calls  int
@@ -140,6 +158,46 @@ func TestPersistDecisionReceiptSignsAndStoresReceipt(t *testing.T) {
 	}
 	if store.stored.Timestamp != decision.Timestamp {
 		t.Fatalf("timestamp = %s, want %s", store.stored.Timestamp, decision.Timestamp)
+	}
+}
+
+func TestPersistDecisionReceiptUsesTenantScopedCausalStorageAndNormalizesBeforeSigning(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := &captureReceiptStore{}
+	receiptStore := &scopedCaptureReceiptStore{captureReceiptStore: base}
+	svc := &Services{ReceiptStore: receiptStore, ReceiptSigner: signer}
+	timestamp := time.Date(2026, 8, 1, 12, 0, 0, 123456789, time.UTC)
+	decision := &contracts.DecisionRecord{
+		ID:                 "dec-scoped",
+		Action:             "EXECUTE_TOOL",
+		Verdict:            string(contracts.VerdictAllow),
+		PolicyDecisionHash: "sha256:pdp",
+		InputContext: map[string]any{
+			"tenant_id":  "tenant-trusted",
+			"session_id": "external-session",
+		},
+		Timestamp: timestamp,
+	}
+
+	if err := persistDecisionReceipt(context.Background(), svc, decision, "agent.test", []byte("body"), map[string]any{"source": "test"}); err != nil {
+		t.Fatalf("persist scoped receipt: %v", err)
+	}
+	if !receiptStore.scopedAppended || receiptStore.tenantID != "tenant-trusted" || receiptStore.externalID != "external-session" {
+		t.Fatalf("scoped append = %t tenant=%q external_session=%q", receiptStore.scopedAppended, receiptStore.tenantID, receiptStore.externalID)
+	}
+	if base.stored == nil || base.stored.SessionID != "external-session" {
+		t.Fatalf("scoped append changed signed external session: %+v", base.stored)
+	}
+	wantTimestamp := timestamp.Truncate(time.Microsecond)
+	if !base.stored.Timestamp.Equal(wantTimestamp) {
+		t.Fatalf("signed timestamp = %s, want normalized %s", base.stored.Timestamp, wantTimestamp)
+	}
+	valid, err := signer.VerifyReceipt(base.stored)
+	if err != nil || !valid {
+		t.Fatalf("normalized receipt signature invalid: valid=%t err=%v", valid, err)
 	}
 }
 

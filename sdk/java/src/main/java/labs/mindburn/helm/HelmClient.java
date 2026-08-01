@@ -1,6 +1,7 @@
 package labs.mindburn.helm;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.reflect.TypeToken;
 import labs.mindburn.helm.TypesGen.*;
@@ -33,7 +34,9 @@ public class HelmClient {
     public HelmClient(String baseUrl, String apiKey) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.apiKey = apiKey;
-        this.gson = new Gson();
+        this.gson = new GsonBuilder()
+                .setFieldNamingPolicy(com.google.gson.FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+                .create();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
@@ -240,12 +243,21 @@ public class HelmClient {
         return send(r, ChatCompletionResponse.class);
     }
 
-    /** POST /api/v1/evaluate */
-    public JsonElement evaluateDecision(Object req) {
+    /** POST /api/v1/evaluate using the canonical V5 request and response. */
+    public EvaluateResponse evaluateDecision(EvaluateRequest req) {
+        if (req == null || req.getTool() == null || req.getTool().isBlank()) {
+            throw new IllegalArgumentException("evaluateDecision requires a non-blank tool");
+        }
+        if (req.getEffectLevel() == null || req.getEffectLevel().isBlank()) {
+            throw new IllegalArgumentException("evaluateDecision requires a non-blank effect_level");
+        }
+        if (req.getSessionId() == null || req.getSessionId().isBlank()) {
+            throw new IllegalArgumentException("evaluateDecision requires a non-blank session_id");
+        }
         HttpRequest r = this.req("POST", "/api/v1/evaluate")
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
                 .build();
-        return sendJson(r);
+        return send(r, EvaluateResponse.class);
     }
 
     /** POST /api/v1/kernel/approve */

@@ -10,10 +10,10 @@
 //
 // This server backs Python, TypeScript, and Rust SDKs.
 //
-// quantum_posture: receipts minted here carry a SHA-256 digest in the
-// signature field (hash chaining, not a signature scheme); authentication is
-// delegated to an injected Authenticator. No public-key and no post-quantum
-// primitives live in this file.
+// quantum_posture: receipts minted here use the shared receipt signer. Under
+// HELM_PRODUCTION a missing signer fails closed; production callers must
+// supply a persistent signer. Local-only servers may use an ephemeral signer
+// and never claim a durable trust root.
 package api
 
 import (
@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
@@ -40,6 +41,7 @@ import (
 type Server struct {
 	mu             sync.RWMutex
 	pdp            pdp.PolicyDecisionPoint
+	receiptSigner  helmcrypto.Signer
 	receipts       map[string]*contracts.Receipt
 	sessions       map[string][]string // sessionID → []receiptID
 	lamport        uint64
@@ -65,24 +67,30 @@ type authenticatedPrincipalContextKey struct{}
 
 // ReceiptDTO stored in-memory / external schema.
 type ReceiptDTO struct {
-	ReceiptID        string         `json:"receipt_id"`
-	DecisionID       string         `json:"decision_id"`
-	CorrelationID    string         `json:"correlation_id,omitempty"`
-	EffectID         string         `json:"effect_id"`
-	Status           string         `json:"status"`
-	Timestamp        string         `json:"timestamp"`
-	ExecutorID       string         `json:"executor_id,omitempty"`
-	Signature        string         `json:"signature"`
-	PrevHash         string         `json:"prev_hash"`
-	LamportClock     uint64         `json:"lamport_clock"`
-	DecisionHash     string         `json:"decision_hash"`
-	ArgsHash         string         `json:"args_hash,omitempty"`
-	SignatureVersion string         `json:"signature_version,omitempty"`
-	Verdict          string         `json:"verdict,omitempty"`
-	ReasonCode       string         `json:"reason_code,omitempty"`
-	PolicyHash       string         `json:"policy_hash,omitempty"`
-	SessionID        string         `json:"session_id,omitempty"`
-	Metadata         map[string]any `json:"metadata,omitempty"`
+	ReceiptID          string            `json:"receipt_id"`
+	DecisionID         string            `json:"decision_id"`
+	CorrelationID      string            `json:"correlation_id,omitempty"`
+	EffectID           string            `json:"effect_id"`
+	Status             string            `json:"status"`
+	OutputHash         string            `json:"output_hash"`
+	BlobHash           string            `json:"blob_hash,omitempty"`
+	Timestamp          string            `json:"timestamp"`
+	ExecutorID         string            `json:"executor_id,omitempty"`
+	Signature          string            `json:"signature"`
+	SignatureProfile   string            `json:"signature_profile,omitempty"`
+	SignatureAlgorithm string            `json:"signature_algorithm,omitempty"`
+	KeyID              string            `json:"key_id,omitempty"`
+	PublicKeySet       map[string]string `json:"public_key_set,omitempty"`
+	PrevHash           string            `json:"prev_hash"`
+	LamportClock       uint64            `json:"lamport_clock"`
+	DecisionHash       string            `json:"decision_hash"`
+	ArgsHash           string            `json:"args_hash,omitempty"`
+	SignatureVersion   string            `json:"signature_version"`
+	Verdict            string            `json:"verdict"`
+	ReasonCode         string            `json:"reason_code"`
+	PolicyHash         string            `json:"policy_hash"`
+	SessionID          string            `json:"session_id"`
+	Metadata           map[string]any    `json:"metadata,omitempty"`
 }
 
 func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
@@ -96,24 +104,30 @@ func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
 		}
 	}
 	return &ReceiptDTO{
-		ReceiptID:        r.ReceiptID,
-		DecisionID:       r.DecisionID,
-		CorrelationID:    r.CorrelationID,
-		EffectID:         r.EffectID,
-		Status:           r.Status,
-		Timestamp:        r.Timestamp.Format(time.RFC3339),
-		ExecutorID:       r.ExecutorID,
-		Signature:        r.Signature,
-		PrevHash:         r.PrevHash,
-		LamportClock:     r.LamportClock,
-		DecisionHash:     decHash,
-		ArgsHash:         r.ArgsHash,
-		SignatureVersion: r.SignatureVersion,
-		Verdict:          r.Verdict,
-		ReasonCode:       r.ReasonCode,
-		PolicyHash:       r.PolicyHash,
-		SessionID:        r.SessionID,
-		Metadata:         r.Metadata,
+		ReceiptID:          r.ReceiptID,
+		DecisionID:         r.DecisionID,
+		CorrelationID:      r.CorrelationID,
+		EffectID:           r.EffectID,
+		Status:             r.Status,
+		OutputHash:         r.OutputHash,
+		BlobHash:           r.BlobHash,
+		Timestamp:          r.Timestamp.Format(time.RFC3339),
+		ExecutorID:         r.ExecutorID,
+		Signature:          r.Signature,
+		SignatureProfile:   r.SignatureProfile,
+		SignatureAlgorithm: r.SignatureAlgorithm,
+		KeyID:              r.KeyID,
+		PublicKeySet:       r.PublicKeySet,
+		PrevHash:           r.PrevHash,
+		LamportClock:       r.LamportClock,
+		DecisionHash:       decHash,
+		ArgsHash:           r.ArgsHash,
+		SignatureVersion:   r.SignatureVersion,
+		Verdict:            r.Verdict,
+		ReasonCode:         r.ReasonCode,
+		PolicyHash:         r.PolicyHash,
+		SessionID:          r.SessionID,
+		Metadata:           r.Metadata,
 	}
 }
 
@@ -145,12 +159,25 @@ type ServerConfig struct {
 	Addr           string   // e.g., ":8443"
 	AllowedOrigins []string // CORS allowed origins (nil = no CORS headers emitted)
 	Authenticator  Authenticator
+	// ReceiptSigner signs V5 evaluation receipts. Production callers must
+	// provide a persistent signer; otherwise evaluate fails closed.
+	ReceiptSigner helmcrypto.Signer
 }
 
 // NewServer creates a new HELM API server.
 func NewServer(cfg ServerConfig) *Server {
+	receiptSigner := cfg.ReceiptSigner
+	if receiptSigner == nil {
+		// NewEd25519Signer deliberately refuses HELM_PRODUCTION, leaving this
+		// nil so handleEvaluate can fail closed rather than minting a receipt
+		// against an unstable trust root.
+		if signer, err := helmcrypto.NewEd25519Signer("api-local"); err == nil {
+			receiptSigner = signer
+		}
+	}
 	s := &Server{
 		pdp:            cfg.PDP,
+		receiptSigner:  receiptSigner,
 		receipts:       make(map[string]*contracts.Receipt),
 		sessions:       make(map[string][]string),
 		mux:            http.NewServeMux(),
@@ -249,6 +276,10 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if s.receiptSigner == nil {
+		http.Error(w, "receipt signer unavailable", http.StatusServiceUnavailable)
+		return
+	}
 
 	var req EvaluateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -280,11 +311,15 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	policyHash := strings.TrimSpace(s.pdp.PolicyHash())
+	if policyHash == "" {
+		http.Error(w, "policy hash unavailable", http.StatusServiceUnavailable)
+		return
+	}
 
 	// Generate receipt.
 	s.mu.Lock()
-	s.lamport++
-	lamport := s.lamport
+	lamport := s.lamport + 1
 	prevHash := "sha256:genesis"
 	if sessionReceipts, ok := s.sessions[req.SessionID]; ok && len(sessionReceipts) > 0 {
 		lastID := sessionReceipts[len(sessionReceipts)-1]
@@ -307,8 +342,6 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		policyRef = "default"
 	}
 
-	sig := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s:%d", receiptID, status, prevHash, lamport)))
-
 	correlationID := ""
 	if corr, ok := tracing.GetCorrelationID(r.Context()); ok {
 		correlationID = string(corr)
@@ -322,17 +355,26 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		Status:        status,
 		Timestamp:     time.Now().UTC(),
 		ExecutorID:    req.AgentID,
-		Signature:     hex.EncodeToString(sig[:]),
 		PrevHash:      prevHash,
 		LamportClock:  lamport,
 		ArgsHash:      "sha256:" + hex.EncodeToString(argsHash[:]),
+		Verdict:       status,
+		ReasonCode:    decResp.ReasonCode,
+		PolicyHash:    policyHash,
+		SessionID:     req.SessionID,
 		Metadata: map[string]any{
 			"decision_hash": decResp.DecisionHash,
 			"principal_id":  principal.ID,
 			"tenant_id":     principal.TenantID,
 		},
 	}
+	if err := s.receiptSigner.SignReceipt(receipt); err != nil {
+		s.mu.Unlock()
+		http.Error(w, "receipt signing failed", http.StatusServiceUnavailable)
+		return
+	}
 
+	s.lamport = lamport
 	s.receipts[receiptID] = receipt
 	s.sessions[req.SessionID] = append(s.sessions[req.SessionID], receiptID)
 	s.mu.Unlock()

@@ -47,7 +47,16 @@ func (s *MemoryReceiptStore) Store(ctx context.Context, r *contracts.Receipt) er
 }
 
 func (s *MemoryReceiptStore) GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error) {
-	return nil, nil // Test mock: no causal chain
+	var last *contracts.Receipt
+	for _, receipt := range s.receipts {
+		if receipt.SessionID != sessionID {
+			continue
+		}
+		if last == nil || receipt.LamportClock > last.LamportClock {
+			last = receipt
+		}
+	}
+	return last, nil
 }
 
 type safeDepGateFunc func(context.Context, safedep.GateRequest) (safedep.GateResult, error)
@@ -162,6 +171,54 @@ func TestSafeExecutor_Gating(t *testing.T) {
 	}
 	if mockDriver.Called {
 		t.Error("Driver called despite mismatch")
+	}
+}
+
+func TestSafeExecutorChainsReceiptsBySignedSessionID(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("receipt-chain-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewMemoryReceiptStore()
+	executor := NewSafeExecutor(nil, signer, &MockDriver{}, store, nil, nil, "", nil, nil, nil, func() time.Time {
+		return time.Unix(1700000000, 0).UTC()
+	})
+	const sessionID = "signed-session"
+
+	first, err := executor.createReceipt(context.Background(), &contracts.DecisionRecord{
+		ID:                "decision-1",
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "sha256:policy",
+		InputContext:      map[string]any{"session_id": sessionID},
+	}, nil, &contracts.Effect{EffectID: "effect-1", ArgsHash: "sha256:args-1"}, "", "sha256:output-1", nil)
+	if err != nil {
+		t.Fatalf("create first receipt: %v", err)
+	}
+	second, err := executor.createReceipt(context.Background(), &contracts.DecisionRecord{
+		ID:                "decision-2",
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "sha256:policy",
+		InputContext:      map[string]any{"session_id": sessionID},
+	}, nil, &contracts.Effect{EffectID: "effect-2", ArgsHash: "sha256:args-2"}, "", "sha256:output-2", nil)
+	if err != nil {
+		t.Fatalf("create second receipt: %v", err)
+	}
+
+	if first.ExecutorID != "" || second.ExecutorID != "" {
+		t.Fatalf("SafeExecutor must chain on signed session_id, not an executor fallback: first=%+v second=%+v", first, second)
+	}
+	if first.SessionID != sessionID || second.SessionID != sessionID {
+		t.Fatalf("receipts did not preserve signed session_id: first=%q second=%q", first.SessionID, second.SessionID)
+	}
+	if first.LamportClock != 1 || second.LamportClock != 2 || second.PrevHash != first.Signature {
+		t.Fatalf("session chain = first(lamport=%d) second(lamport=%d prev=%q), want 1, 2, %q", first.LamportClock, second.LamportClock, second.PrevHash, first.Signature)
+	}
+	for _, receipt := range []*contracts.Receipt{first, second} {
+		if valid, verifyErr := signer.VerifyReceipt(receipt); verifyErr != nil || !valid {
+			t.Fatalf("signed session-chain receipt did not verify: valid=%v err=%v receipt=%+v", valid, verifyErr, receipt)
+		}
 	}
 }
 

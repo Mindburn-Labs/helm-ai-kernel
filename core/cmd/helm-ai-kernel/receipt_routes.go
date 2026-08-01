@@ -271,7 +271,10 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 			sessionID = strings.TrimSpace(value)
 		}
 	}
-	err := svc.ReceiptStore.AppendCausal(ctx, agentID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+	if sessionID == "" {
+		sessionID = agentID
+	}
+	err := svc.ReceiptStore.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		receipt := &contracts.Receipt{
 			ReceiptID:    receiptID,
 			DecisionID:   decision.ID,

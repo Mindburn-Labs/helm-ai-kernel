@@ -311,6 +311,7 @@ func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
 	store, cleanup := newTestSQLiteStore(t)
 	defer cleanup()
 	ctx := context.Background()
+	const sessionID = "agent.causal"
 	first := func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		return &contracts.Receipt{
 			ReceiptID:    "r-causal-1",
@@ -319,12 +320,13 @@ func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
 			Status:       "OK",
 			Timestamp:    time.Unix(1700000000, 0).UTC(),
 			ExecutorID:   "agent.causal",
+			SessionID:    sessionID,
 			PrevHash:     prevHash,
 			LamportClock: lamport,
 			Signature:    "sig-1",
 		}, nil
 	}
-	if err := store.AppendCausal(ctx, "agent.causal", first); err != nil {
+	if err := store.AppendCausal(ctx, sessionID, first); err != nil {
 		t.Fatal(err)
 	}
 
@@ -338,12 +340,13 @@ func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
 			Status:       "OK",
 			Timestamp:    time.Unix(1700000001, 0).UTC(),
 			ExecutorID:   "agent.causal",
+			SessionID:    sessionID,
 			PrevHash:     prevHash,
 			LamportClock: lamport,
 			Signature:    "sig-2",
 		}, nil
 	}
-	if err := store.AppendCausal(ctx, "agent.causal", second); err != nil {
+	if err := store.AppendCausal(ctx, sessionID, second); err != nil {
 		t.Fatal(err)
 	}
 	if seenPrevious == nil || seenPrevious.ReceiptID != "r-causal-1" {
@@ -359,6 +362,54 @@ func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
 	}
 	if got.LamportClock != 2 || got.PrevHash != expectedPrevHash {
 		t.Fatalf("causal fields = lamport %d prev %q, want 2 %q", got.LamportClock, got.PrevHash, expectedPrevHash)
+	}
+}
+
+func TestSQLiteReceiptGetLastForSignedSessionWithoutExecutorID(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	for _, receipt := range []*contracts.Receipt{
+		{
+			ReceiptID:    "r-session-1",
+			DecisionID:   "d-session-1",
+			EffectID:     "effect",
+			Status:       "OK",
+			Timestamp:    time.Unix(1700000000, 0).UTC(),
+			SessionID:    "signed-session",
+			LamportClock: 1,
+		},
+		{
+			ReceiptID:    "r-other-session",
+			DecisionID:   "d-other-session",
+			EffectID:     "effect",
+			Status:       "OK",
+			Timestamp:    time.Unix(1700000001, 0).UTC(),
+			SessionID:    "other-session",
+			LamportClock: 99,
+		},
+		{
+			ReceiptID:    "r-session-2",
+			DecisionID:   "d-session-2",
+			EffectID:     "effect",
+			Status:       "OK",
+			Timestamp:    time.Unix(1700000002, 0).UTC(),
+			SessionID:    "signed-session",
+			LamportClock: 2,
+		},
+	} {
+		if err := store.Store(ctx, receipt); err != nil {
+			t.Fatalf("store %s: %v", receipt.ReceiptID, err)
+		}
+	}
+
+	got, err := store.GetLastForSession(ctx, "signed-session")
+	if err != nil {
+		t.Fatalf("get last signed session: %v", err)
+	}
+	if got == nil || got.ReceiptID != "r-session-2" || got.ExecutorID != "" || got.SessionID != "signed-session" || got.LamportClock != 2 {
+		t.Fatalf("last receipt should be selected by signed session_id, got %+v", got)
 	}
 }
 
@@ -446,6 +497,7 @@ func runReceiptAppendCausalLoad(t *testing.T, ctx context.Context, store Receipt
 						Status:       "OK",
 						Timestamp:    time.Unix(1700000000+int64(appendIndex), 0).UTC(),
 						ExecutorID:   sessionID,
+						SessionID:    sessionID,
 						PrevHash:     prevHash,
 						LamportClock: lamport,
 						Signature:    "sig",

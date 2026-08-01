@@ -20,10 +20,10 @@ import (
 )
 
 type captureReceiptStore struct {
-	last     *contracts.Receipt
-	stored   *contracts.Receipt
-	storeErr error
-	agentID  string
+	last      *contracts.Receipt
+	stored    *contracts.Receipt
+	storeErr  error
+	sessionID string
 }
 
 type recordingScopedStopReader struct {
@@ -76,8 +76,8 @@ func (s *captureReceiptStore) Store(_ context.Context, receipt *contracts.Receip
 	return nil
 }
 
-func (s *captureReceiptStore) AppendCausal(ctx context.Context, agentID string, build store.CausalReceiptBuilder) error {
-	s.agentID = agentID
+func (s *captureReceiptStore) AppendCausal(ctx context.Context, sessionID string, build store.CausalReceiptBuilder) error {
+	s.sessionID = sessionID
 	lamport := uint64(1)
 	prevHash := ""
 	if s.last != nil {
@@ -339,8 +339,8 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("authenticated evaluate status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if receipts.agentID != "principal-trusted" {
-		t.Fatalf("causal chain agent = %q, want trusted principal", receipts.agentID)
+	if receipts.sessionID != "session-1" {
+		t.Fatalf("causal chain session = %q, want signed session", receipts.sessionID)
 	}
 	if receipts.stored == nil {
 		t.Fatal("authenticated evaluate did not persist receipt")

@@ -40,6 +40,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.48.2
+	mvdan.cc/sh/v3 v3.11.0
 )
 
 require (

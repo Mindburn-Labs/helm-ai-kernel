@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
@@ -294,6 +295,117 @@ func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 	}
 	if receipt.Request.Target != ".env" {
 		t.Fatalf("receipt target = %q, want .env", receipt.Request.Target)
+	}
+}
+
+func TestHookPreToolDeniesEvasiveBashViaASTClassifier(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	// This matrix covers both legacy-needle parity and AST-only evasions; all
+	// must route through the signed decision path and deny by default.
+	evasive := []string{
+		"rm -r -f /tmp/helm-evasion",                                             // split flags
+		"sudo rm -rf /var/lib/helm-evasion",                                      // privilege wrapper
+		`bash -c "rm -rf /tmp/helm-evasion"`,                                     // shell -c wrapper
+		"cat targets.txt | xargs rm -rf",                                         // pipe into xargs
+		"echo ok && rm -rf /tmp/helm-evasion",                                    // chaining
+		"find /tmp/helm-evasion -delete",                                         // find -delete
+		"echo cm0gLXJmIC8= | base64 -d | sh",                                     // decode into shell
+		"echo SECRET=x >> .env",                                                  // sensitive redirect
+		"rm --recursive --force /tmp/helm-evasion",                               // long flags
+		"/bin/./rm -rf /tmp/helm-evasion",                                        // path obfuscation
+		"/tmp/rm -rf dist",                                                       // executable basename must still classify as rm
+		"python <<'PY'\nimport shutil\nshutil.rmtree('/tmp/helm-evasion')\nPY",   // interpreter heredoc
+		"python - <<'PY'\nimport shutil\nshutil.rmtree('/tmp/helm-evasion')\nPY", // stdin marker + heredoc
+		"perl <<'PL'\nunlink '/tmp/helm-evasion'\nPL",                            // interpreter heredoc
+		"ruby <<'RB'\nFile.delete('/tmp/helm-evasion')\nRB",                      // interpreter heredoc
+		"node <<'JS'\nrequire('fs').rmSync('/tmp/helm-evasion')\nJS",             // interpreter heredoc
+		"cat <<'PY' >/tmp/run.py\nimport shutil\nshutil.rmtree('/tmp/helm-evasion')\nPY\npython /tmp/run.py",    // generated script
+		"printf 'import shutil\\nshutil.rmtree(\\\"/tmp/helm-evasion\\\")\\n' >/tmp/run.py; python /tmp/run.py", // generated script
+		"python <(printf 'import shutil\\nshutil.rmtree(\\\"/tmp/helm-evasion\\\")\\n')",                        // process substitution
+	}
+	for _, command := range evasive {
+		t.Run(command, func(t *testing.T) {
+			payload, err := json.Marshal(map[string]any{
+				"tool_name":  "Bash",
+				"tool_input": map[string]any{"command": command},
+				"session_id": "evasion",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, bytes.NewReader(payload), &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+				t.Fatalf("evasive command %q not denied, output = %s", command, stdout.String())
+			}
+		})
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != len(evasive) {
+		t.Fatalf("receipts = %d, want %d (one signed receipt per denied evasion)", len(receipts), len(evasive))
+	}
+}
+
+func TestHookPreToolResolvesGeneratedScriptsAgainstCWD(t *testing.T) {
+	tmp := t.TempDir()
+	payload := `{"tool_name":"Bash","tool_input":{"command":"printf 'rm --recursive --force /tmp/x\\n' > run.sh; bash /repo/run.sh"},"cwd":"/repo"}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+		t.Fatalf("relative generated script = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestShellscanReceiptMetadataPreservesAuditSignals(t *testing.T) {
+	scan := shellscan.Classify("sudo rm -r -f /tmp/x")
+	metadata := shellscanReceiptMetadata(scan)
+	if metadata["shellscan.parse_ok"] != "true" {
+		t.Fatalf("parse metadata = %q", metadata["shellscan.parse_ok"])
+	}
+	if metadata["shellscan.signals"] == "" {
+		t.Fatal("signals metadata missing")
+	}
+	if !strings.Contains(metadata["shellscan.commands"], "rm via sudo") {
+		t.Fatalf("wrapper chain missing from %q", metadata["shellscan.commands"])
+	}
+}
+
+func TestHookPreToolStillAllowsBenignBashAfterASTClassifier(t *testing.T) {
+	tmp := t.TempDir()
+	benign := []string{
+		"git status --short",
+		"go build ./... && go vet ./...",
+		"git log --oneline | head -5",
+		`echo "today is $(date +%F)"`,
+		"npm run build",
+		"python --version",
+		`bash scripts/deploy.sh "$ARG"`,
+		"kubectl get pods -n prod",
+	}
+	for _, command := range benign {
+		t.Run(command, func(t *testing.T) {
+			payload, err := json.Marshal(map[string]any{
+				"tool_name":  "Bash",
+				"tool_input": map[string]any{"command": command},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp}, bytes.NewReader(payload), &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("benign command %q emitted approval output: %s", command, stdout.String())
+			}
+		})
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 0 {
+		t.Fatalf("benign commands wrote receipts: %v", receipts)
 	}
 }
 

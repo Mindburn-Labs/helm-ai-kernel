@@ -105,8 +105,9 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_receipts_decision_id ON receipts(decision_id);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport ON receipts(executor_id, lamport_clock);
 		CREATE INDEX IF NOT EXISTS idx_receipts_executor_lamport_desc ON receipts(executor_id, lamport_clock DESC);
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_executor_lamport_unique ON receipts(executor_id, lamport_clock)
-			WHERE executor_id IS NOT NULL AND executor_id <> '' AND lamport_clock > 0;
+		DROP INDEX IF EXISTS idx_receipts_executor_lamport_unique;
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_session_lamport_unique ON receipts(session_id, lamport_clock)
+			WHERE session_id IS NOT NULL AND session_id <> '' AND lamport_clock > 0;
 		CREATE INDEX IF NOT EXISTS idx_receipts_session_lamport_desc ON receipts(session_id, lamport_clock DESC);
 		CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp);

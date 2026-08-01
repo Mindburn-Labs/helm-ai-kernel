@@ -21795,6 +21795,346 @@ public static class EnvExposurePolicy {
 
 
 /**
+ * EvaluateRequest
+ */
+@JsonPropertyOrder({
+  EvaluateRequest.JSON_PROPERTY_TOOL,
+  EvaluateRequest.JSON_PROPERTY_ARGS,
+  EvaluateRequest.JSON_PROPERTY_AGENT_ID,
+  EvaluateRequest.JSON_PROPERTY_EFFECT_LEVEL,
+  EvaluateRequest.JSON_PROPERTY_SESSION_ID,
+  EvaluateRequest.JSON_PROPERTY_CONTEXT
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class EvaluateRequest {
+  public static final String JSON_PROPERTY_TOOL = "tool";
+  private String tool;
+
+  public static final String JSON_PROPERTY_ARGS = "args";
+  private Map<String, Object> args = new HashMap<>();
+
+  public static final String JSON_PROPERTY_AGENT_ID = "agent_id";
+  private String agentId;
+
+  public static final String JSON_PROPERTY_EFFECT_LEVEL = "effect_level";
+  private String effectLevel;
+
+  public static final String JSON_PROPERTY_SESSION_ID = "session_id";
+  private String sessionId;
+
+  public static final String JSON_PROPERTY_CONTEXT = "context";
+  private Map<String, Object> context = new HashMap<>();
+
+  public EvaluateRequest() {
+  }
+
+  public EvaluateRequest tool(String tool) {
+    this.tool = tool;
+    return this;
+  }
+
+   /**
+   * Get tool
+   * @return tool
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOOL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTool() {
+    return tool;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOOL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTool(String tool) {
+    this.tool = tool;
+  }
+
+
+  public EvaluateRequest args(Map<String, Object> args) {
+    this.args = args;
+    return this;
+  }
+
+  public EvaluateRequest putArgsItem(String key, Object argsItem) {
+    if (this.args == null) {
+      this.args = new HashMap<>();
+    }
+    this.args.put(key, argsItem);
+    return this;
+  }
+
+   /**
+   * Get args
+   * @return args
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ARGS)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getArgs() {
+    return args;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ARGS)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setArgs(Map<String, Object> args) {
+    this.args = args;
+  }
+
+
+  public EvaluateRequest agentId(String agentId) {
+    this.agentId = agentId;
+    return this;
+  }
+
+   /**
+   * Ignored; the authenticated principal is recorded as the receipt executor.
+   * @return agentId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_AGENT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAgentId() {
+    return agentId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_AGENT_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAgentId(String agentId) {
+    this.agentId = agentId;
+  }
+
+
+  public EvaluateRequest effectLevel(String effectLevel) {
+    this.effectLevel = effectLevel;
+    return this;
+  }
+
+   /**
+   * Policy resource used to evaluate the governed tool call.
+   * @return effectLevel
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_EFFECT_LEVEL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getEffectLevel() {
+    return effectLevel;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EFFECT_LEVEL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setEffectLevel(String effectLevel) {
+    this.effectLevel = effectLevel;
+  }
+
+
+  public EvaluateRequest sessionId(String sessionId) {
+    this.sessionId = sessionId;
+    return this;
+  }
+
+   /**
+   * Non-whitespace signed causal session identifier.
+   * @return sessionId
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getSessionId() {
+    return sessionId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SESSION_ID)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setSessionId(String sessionId) {
+    this.sessionId = sessionId;
+  }
+
+
+  public EvaluateRequest context(Map<String, Object> context) {
+    this.context = context;
+    return this;
+  }
+
+  public EvaluateRequest putContextItem(String key, Object contextItem) {
+    if (this.context == null) {
+      this.context = new HashMap<>();
+    }
+    this.context.put(key, contextItem);
+    return this;
+  }
+
+   /**
+   * Optional input context; authenticated principal and tenant fields are added by the server.
+   * @return context
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CONTEXT)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getContext() {
+    return context;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CONTEXT)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setContext(Map<String, Object> context) {
+    this.context = context;
+  }
+
+
+  /**
+   * Return true if this EvaluateRequest object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    EvaluateRequest evaluateRequest = (EvaluateRequest) o;
+    return Objects.equals(this.tool, evaluateRequest.tool) &&
+        Objects.equals(this.args, evaluateRequest.args) &&
+        Objects.equals(this.agentId, evaluateRequest.agentId) &&
+        Objects.equals(this.effectLevel, evaluateRequest.effectLevel) &&
+        Objects.equals(this.sessionId, evaluateRequest.sessionId) &&
+        Objects.equals(this.context, evaluateRequest.context);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(tool, args, agentId, effectLevel, sessionId, context);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class EvaluateRequest {\n");
+    sb.append("    tool: ").append(toIndentedString(tool)).append("\n");
+    sb.append("    args: ").append(toIndentedString(args)).append("\n");
+    sb.append("    agentId: ").append(toIndentedString(agentId)).append("\n");
+    sb.append("    effectLevel: ").append(toIndentedString(effectLevel)).append("\n");
+    sb.append("    sessionId: ").append(toIndentedString(sessionId)).append("\n");
+    sb.append("    context: ").append(toIndentedString(context)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `tool` to the URL query string
+    if (getTool() != null) {
+      joiner.add(String.format("%stool%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTool()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `args` to the URL query string
+    if (getArgs() != null) {
+      for (String _key : getArgs().keySet()) {
+        joiner.add(String.format("%sargs%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getArgs().get(_key), URLEncoder.encode(String.valueOf(getArgs().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `agent_id` to the URL query string
+    if (getAgentId() != null) {
+      joiner.add(String.format("%sagent_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAgentId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `effect_level` to the URL query string
+    if (getEffectLevel() != null) {
+      joiner.add(String.format("%seffect_level%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEffectLevel()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `session_id` to the URL query string
+    if (getSessionId() != null) {
+      joiner.add(String.format("%ssession_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSessionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `context` to the URL query string
+    if (getContext() != null) {
+      for (String _key : getContext().keySet()) {
+        joiner.add(String.format("%scontext%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, _key, containerSuffix),
+            getContext().get(_key), URLEncoder.encode(String.valueOf(getContext().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.7.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
  * EvidenceEnvelopeExportRequest
  */
 @JsonPropertyOrder({

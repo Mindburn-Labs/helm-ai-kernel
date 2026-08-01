@@ -4939,10 +4939,15 @@ class DecisionRecord(BaseModel):
     resource: Optional[StrictStr] = None
     verdict: Optional[StrictStr] = None
     reason: Optional[StrictStr] = None
+    signature_version: Optional[StrictStr] = None
+    reason_code: Optional[StrictStr] = None
+    phenotype_hash: Optional[StrictStr] = None
+    policy_content_hash: Optional[StrictStr] = None
+    effect_digest: Optional[StrictStr] = None
     policy_version: Optional[StrictStr] = None
     policy_decision_hash: Optional[StrictStr] = None
     signature: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["id", "action", "resource", "verdict", "reason", "policy_version", "policy_decision_hash", "signature"]
+    __properties: ClassVar[List[str]] = ["id", "action", "resource", "verdict", "reason", "signature_version", "reason_code", "phenotype_hash", "policy_content_hash", "effect_digest", "policy_version", "policy_decision_hash", "signature"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -5000,6 +5005,11 @@ class DecisionRecord(BaseModel):
             "resource": obj.get("resource"),
             "verdict": obj.get("verdict"),
             "reason": obj.get("reason"),
+            "signature_version": obj.get("signature_version"),
+            "reason_code": obj.get("reason_code"),
+            "phenotype_hash": obj.get("phenotype_hash"),
+            "policy_content_hash": obj.get("policy_content_hash"),
+            "effect_digest": obj.get("effect_digest"),
             "policy_version": obj.get("policy_version"),
             "policy_decision_hash": obj.get("policy_decision_hash"),
             "signature": obj.get("signature")
@@ -14494,6 +14504,8 @@ class Receipt(BaseModel):
     decision_id: Optional[StrictStr] = None
     effect_id: Optional[StrictStr] = None
     status: Optional[StrictStr] = None
+    signature_version: Optional[StrictStr] = None
+    verdict: Optional[StrictStr] = None
     reason_code: Optional[StrictStr] = None
     output_hash: Optional[StrictStr] = None
     blob_hash: Optional[StrictStr] = None
@@ -14508,8 +14520,10 @@ class Receipt(BaseModel):
     principal: Optional[StrictStr] = None
     executor_id: Optional[StrictStr] = None
     args_hash: Optional[StrictStr] = None
+    policy_hash: Optional[StrictStr] = None
+    session_id: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["receipt_id", "decision_id", "effect_id", "status", "reason_code", "output_hash", "blob_hash", "prev_hash", "lamport_clock", "signature", "signature_profile", "signature_algorithm", "key_id", "public_key_set", "timestamp", "principal", "executor_id", "args_hash", "metadata"]
+    __properties: ClassVar[List[str]] = ["receipt_id", "decision_id", "effect_id", "status", "signature_version", "verdict", "reason_code", "output_hash", "blob_hash", "prev_hash", "lamport_clock", "signature", "signature_profile", "signature_algorithm", "key_id", "public_key_set", "timestamp", "principal", "executor_id", "args_hash", "policy_hash", "session_id", "metadata"]
 
     @field_validator('signature_profile')
     @classmethod
@@ -14577,6 +14591,8 @@ class Receipt(BaseModel):
             "decision_id": obj.get("decision_id"),
             "effect_id": obj.get("effect_id"),
             "status": obj.get("status"),
+            "signature_version": obj.get("signature_version"),
+            "verdict": obj.get("verdict"),
             "reason_code": obj.get("reason_code"),
             "output_hash": obj.get("output_hash"),
             "blob_hash": obj.get("blob_hash"),
@@ -14591,6 +14607,8 @@ class Receipt(BaseModel):
             "principal": obj.get("principal"),
             "executor_id": obj.get("executor_id"),
             "args_hash": obj.get("args_hash"),
+            "policy_hash": obj.get("policy_hash"),
+            "session_id": obj.get("session_id"),
             "metadata": obj.get("metadata")
         })
         return _obj

@@ -11428,6 +11428,11 @@ type DecisionRecord struct {
 	Resource           *string `json:"resource,omitempty"`
 	Verdict            *string `json:"verdict,omitempty"`
 	Reason             *string `json:"reason,omitempty"`
+	SignatureVersion   *string `json:"signature_version,omitempty"`
+	ReasonCode         *string `json:"reason_code,omitempty"`
+	PhenotypeHash      *string `json:"phenotype_hash,omitempty"`
+	PolicyContentHash  *string `json:"policy_content_hash,omitempty"`
+	EffectDigest       *string `json:"effect_digest,omitempty"`
 	PolicyVersion      *string `json:"policy_version,omitempty"`
 	PolicyDecisionHash *string `json:"policy_decision_hash,omitempty"`
 	Signature          *string `json:"signature,omitempty"`
@@ -11610,6 +11615,166 @@ func (o *DecisionRecord) SetReason(v string) {
 	o.Reason = &v
 }
 
+// GetSignatureVersion returns the SignatureVersion field value if set, zero value otherwise.
+func (o *DecisionRecord) GetSignatureVersion() string {
+	if o == nil || IsNil(o.SignatureVersion) {
+		var ret string
+		return ret
+	}
+	return *o.SignatureVersion
+}
+
+// GetSignatureVersionOk returns a tuple with the SignatureVersion field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DecisionRecord) GetSignatureVersionOk() (*string, bool) {
+	if o == nil || IsNil(o.SignatureVersion) {
+		return nil, false
+	}
+	return o.SignatureVersion, true
+}
+
+// HasSignatureVersion returns a boolean if a field has been set.
+func (o *DecisionRecord) HasSignatureVersion() bool {
+	if o != nil && !IsNil(o.SignatureVersion) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignatureVersion gets a reference to the given string and assigns it to the SignatureVersion field.
+func (o *DecisionRecord) SetSignatureVersion(v string) {
+	o.SignatureVersion = &v
+}
+
+// GetReasonCode returns the ReasonCode field value if set, zero value otherwise.
+func (o *DecisionRecord) GetReasonCode() string {
+	if o == nil || IsNil(o.ReasonCode) {
+		var ret string
+		return ret
+	}
+	return *o.ReasonCode
+}
+
+// GetReasonCodeOk returns a tuple with the ReasonCode field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DecisionRecord) GetReasonCodeOk() (*string, bool) {
+	if o == nil || IsNil(o.ReasonCode) {
+		return nil, false
+	}
+	return o.ReasonCode, true
+}
+
+// HasReasonCode returns a boolean if a field has been set.
+func (o *DecisionRecord) HasReasonCode() bool {
+	if o != nil && !IsNil(o.ReasonCode) {
+		return true
+	}
+
+	return false
+}
+
+// SetReasonCode gets a reference to the given string and assigns it to the ReasonCode field.
+func (o *DecisionRecord) SetReasonCode(v string) {
+	o.ReasonCode = &v
+}
+
+// GetPhenotypeHash returns the PhenotypeHash field value if set, zero value otherwise.
+func (o *DecisionRecord) GetPhenotypeHash() string {
+	if o == nil || IsNil(o.PhenotypeHash) {
+		var ret string
+		return ret
+	}
+	return *o.PhenotypeHash
+}
+
+// GetPhenotypeHashOk returns a tuple with the PhenotypeHash field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DecisionRecord) GetPhenotypeHashOk() (*string, bool) {
+	if o == nil || IsNil(o.PhenotypeHash) {
+		return nil, false
+	}
+	return o.PhenotypeHash, true
+}
+
+// HasPhenotypeHash returns a boolean if a field has been set.
+func (o *DecisionRecord) HasPhenotypeHash() bool {
+	if o != nil && !IsNil(o.PhenotypeHash) {
+		return true
+	}
+
+	return false
+}
+
+// SetPhenotypeHash gets a reference to the given string and assigns it to the PhenotypeHash field.
+func (o *DecisionRecord) SetPhenotypeHash(v string) {
+	o.PhenotypeHash = &v
+}
+
+// GetPolicyContentHash returns the PolicyContentHash field value if set, zero value otherwise.
+func (o *DecisionRecord) GetPolicyContentHash() string {
+	if o == nil || IsNil(o.PolicyContentHash) {
+		var ret string
+		return ret
+	}
+	return *o.PolicyContentHash
+}
+
+// GetPolicyContentHashOk returns a tuple with the PolicyContentHash field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DecisionRecord) GetPolicyContentHashOk() (*string, bool) {
+	if o == nil || IsNil(o.PolicyContentHash) {
+		return nil, false
+	}
+	return o.PolicyContentHash, true
+}
+
+// HasPolicyContentHash returns a boolean if a field has been set.
+func (o *DecisionRecord) HasPolicyContentHash() bool {
+	if o != nil && !IsNil(o.PolicyContentHash) {
+		return true
+	}
+
+	return false
+}
+
+// SetPolicyContentHash gets a reference to the given string and assigns it to the PolicyContentHash field.
+func (o *DecisionRecord) SetPolicyContentHash(v string) {
+	o.PolicyContentHash = &v
+}
+
+// GetEffectDigest returns the EffectDigest field value if set, zero value otherwise.
+func (o *DecisionRecord) GetEffectDigest() string {
+	if o == nil || IsNil(o.EffectDigest) {
+		var ret string
+		return ret
+	}
+	return *o.EffectDigest
+}
+
+// GetEffectDigestOk returns a tuple with the EffectDigest field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DecisionRecord) GetEffectDigestOk() (*string, bool) {
+	if o == nil || IsNil(o.EffectDigest) {
+		return nil, false
+	}
+	return o.EffectDigest, true
+}
+
+// HasEffectDigest returns a boolean if a field has been set.
+func (o *DecisionRecord) HasEffectDigest() bool {
+	if o != nil && !IsNil(o.EffectDigest) {
+		return true
+	}
+
+	return false
+}
+
+// SetEffectDigest gets a reference to the given string and assigns it to the EffectDigest field.
+func (o *DecisionRecord) SetEffectDigest(v string) {
+	o.EffectDigest = &v
+}
+
 // GetPolicyVersion returns the PolicyVersion field value if set, zero value otherwise.
 func (o *DecisionRecord) GetPolicyVersion() string {
 	if o == nil || IsNil(o.PolicyVersion) {
@@ -11730,6 +11895,21 @@ func (o DecisionRecord) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Reason) {
 		toSerialize["reason"] = o.Reason
+	}
+	if !IsNil(o.SignatureVersion) {
+		toSerialize["signature_version"] = o.SignatureVersion
+	}
+	if !IsNil(o.ReasonCode) {
+		toSerialize["reason_code"] = o.ReasonCode
+	}
+	if !IsNil(o.PhenotypeHash) {
+		toSerialize["phenotype_hash"] = o.PhenotypeHash
+	}
+	if !IsNil(o.PolicyContentHash) {
+		toSerialize["policy_content_hash"] = o.PolicyContentHash
+	}
+	if !IsNil(o.EffectDigest) {
+		toSerialize["effect_digest"] = o.EffectDigest
 	}
 	if !IsNil(o.PolicyVersion) {
 		toSerialize["policy_version"] = o.PolicyVersion
@@ -38230,16 +38410,18 @@ var _ MappedNullable = &Receipt{}
 
 // Receipt struct for Receipt
 type Receipt struct {
-	ReceiptId    *string `json:"receipt_id,omitempty"`
-	DecisionId   *string `json:"decision_id,omitempty"`
-	EffectId     *string `json:"effect_id,omitempty"`
-	Status       *string `json:"status,omitempty"`
-	ReasonCode   *string `json:"reason_code,omitempty"`
-	OutputHash   *string `json:"output_hash,omitempty"`
-	BlobHash     *string `json:"blob_hash,omitempty"`
-	PrevHash     *string `json:"prev_hash,omitempty"`
-	LamportClock *int32  `json:"lamport_clock,omitempty"`
-	Signature    *string `json:"signature,omitempty"`
+	ReceiptId        *string `json:"receipt_id,omitempty"`
+	DecisionId       *string `json:"decision_id,omitempty"`
+	EffectId         *string `json:"effect_id,omitempty"`
+	Status           *string `json:"status,omitempty"`
+	SignatureVersion *string `json:"signature_version,omitempty"`
+	Verdict          *string `json:"verdict,omitempty"`
+	ReasonCode       *string `json:"reason_code,omitempty"`
+	OutputHash       *string `json:"output_hash,omitempty"`
+	BlobHash         *string `json:"blob_hash,omitempty"`
+	PrevHash         *string `json:"prev_hash,omitempty"`
+	LamportClock     *int32  `json:"lamport_clock,omitempty"`
+	Signature        *string `json:"signature,omitempty"`
 	// Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
 	SignatureProfile *string `json:"signature_profile,omitempty"`
 	// Signature algorithm or composite algorithm used for this receipt, such as ed25519, Hybrid-Ed25519-MLDSA65, or ml-dsa-65.
@@ -38252,6 +38434,8 @@ type Receipt struct {
 	Principal    *string                `json:"principal,omitempty"`
 	ExecutorId   *string                `json:"executor_id,omitempty"`
 	ArgsHash     *string                `json:"args_hash,omitempty"`
+	PolicyHash   *string                `json:"policy_hash,omitempty"`
+	SessionId    *string                `json:"session_id,omitempty"`
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -38398,6 +38582,70 @@ func (o *Receipt) HasStatus() bool {
 // SetStatus gets a reference to the given string and assigns it to the Status field.
 func (o *Receipt) SetStatus(v string) {
 	o.Status = &v
+}
+
+// GetSignatureVersion returns the SignatureVersion field value if set, zero value otherwise.
+func (o *Receipt) GetSignatureVersion() string {
+	if o == nil || IsNil(o.SignatureVersion) {
+		var ret string
+		return ret
+	}
+	return *o.SignatureVersion
+}
+
+// GetSignatureVersionOk returns a tuple with the SignatureVersion field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetSignatureVersionOk() (*string, bool) {
+	if o == nil || IsNil(o.SignatureVersion) {
+		return nil, false
+	}
+	return o.SignatureVersion, true
+}
+
+// HasSignatureVersion returns a boolean if a field has been set.
+func (o *Receipt) HasSignatureVersion() bool {
+	if o != nil && !IsNil(o.SignatureVersion) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignatureVersion gets a reference to the given string and assigns it to the SignatureVersion field.
+func (o *Receipt) SetSignatureVersion(v string) {
+	o.SignatureVersion = &v
+}
+
+// GetVerdict returns the Verdict field value if set, zero value otherwise.
+func (o *Receipt) GetVerdict() string {
+	if o == nil || IsNil(o.Verdict) {
+		var ret string
+		return ret
+	}
+	return *o.Verdict
+}
+
+// GetVerdictOk returns a tuple with the Verdict field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetVerdictOk() (*string, bool) {
+	if o == nil || IsNil(o.Verdict) {
+		return nil, false
+	}
+	return o.Verdict, true
+}
+
+// HasVerdict returns a boolean if a field has been set.
+func (o *Receipt) HasVerdict() bool {
+	if o != nil && !IsNil(o.Verdict) {
+		return true
+	}
+
+	return false
+}
+
+// SetVerdict gets a reference to the given string and assigns it to the Verdict field.
+func (o *Receipt) SetVerdict(v string) {
+	o.Verdict = &v
 }
 
 // GetReasonCode returns the ReasonCode field value if set, zero value otherwise.
@@ -38848,6 +39096,70 @@ func (o *Receipt) SetArgsHash(v string) {
 	o.ArgsHash = &v
 }
 
+// GetPolicyHash returns the PolicyHash field value if set, zero value otherwise.
+func (o *Receipt) GetPolicyHash() string {
+	if o == nil || IsNil(o.PolicyHash) {
+		var ret string
+		return ret
+	}
+	return *o.PolicyHash
+}
+
+// GetPolicyHashOk returns a tuple with the PolicyHash field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetPolicyHashOk() (*string, bool) {
+	if o == nil || IsNil(o.PolicyHash) {
+		return nil, false
+	}
+	return o.PolicyHash, true
+}
+
+// HasPolicyHash returns a boolean if a field has been set.
+func (o *Receipt) HasPolicyHash() bool {
+	if o != nil && !IsNil(o.PolicyHash) {
+		return true
+	}
+
+	return false
+}
+
+// SetPolicyHash gets a reference to the given string and assigns it to the PolicyHash field.
+func (o *Receipt) SetPolicyHash(v string) {
+	o.PolicyHash = &v
+}
+
+// GetSessionId returns the SessionId field value if set, zero value otherwise.
+func (o *Receipt) GetSessionId() string {
+	if o == nil || IsNil(o.SessionId) {
+		var ret string
+		return ret
+	}
+	return *o.SessionId
+}
+
+// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetSessionIdOk() (*string, bool) {
+	if o == nil || IsNil(o.SessionId) {
+		return nil, false
+	}
+	return o.SessionId, true
+}
+
+// HasSessionId returns a boolean if a field has been set.
+func (o *Receipt) HasSessionId() bool {
+	if o != nil && !IsNil(o.SessionId) {
+		return true
+	}
+
+	return false
+}
+
+// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
+func (o *Receipt) SetSessionId(v string) {
+	o.SessionId = &v
+}
+
 // GetMetadata returns the Metadata field value if set, zero value otherwise.
 func (o *Receipt) GetMetadata() map[string]interface{} {
 	if o == nil || IsNil(o.Metadata) {
@@ -38902,6 +39214,12 @@ func (o Receipt) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Status) {
 		toSerialize["status"] = o.Status
 	}
+	if !IsNil(o.SignatureVersion) {
+		toSerialize["signature_version"] = o.SignatureVersion
+	}
+	if !IsNil(o.Verdict) {
+		toSerialize["verdict"] = o.Verdict
+	}
 	if !IsNil(o.ReasonCode) {
 		toSerialize["reason_code"] = o.ReasonCode
 	}
@@ -38943,6 +39261,12 @@ func (o Receipt) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.ArgsHash) {
 		toSerialize["args_hash"] = o.ArgsHash
+	}
+	if !IsNil(o.PolicyHash) {
+		toSerialize["policy_hash"] = o.PolicyHash
+	}
+	if !IsNil(o.SessionId) {
+		toSerialize["session_id"] = o.SessionId
 	}
 	if !IsNil(o.Metadata) {
 		toSerialize["metadata"] = o.Metadata

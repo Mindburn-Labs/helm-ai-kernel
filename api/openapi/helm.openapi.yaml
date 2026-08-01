@@ -4147,6 +4147,10 @@ components:
         decision_id: { type: string }
         effect_id: { type: string }
         status: { type: string }
+        # HELM-303 receipt.v5 signing envelope fields. These are transported
+        # independently so a verifier can reconstruct the signed governance view.
+        signature_version: { type: string }
+        verdict: { type: string }
         reason_code: { type: string }
         output_hash: { type: string }
         blob_hash: { type: string }
@@ -4172,6 +4176,8 @@ components:
         principal: { type: string }
         executor_id: { type: string }
         args_hash: { type: string }
+        policy_hash: { type: string }
+        session_id: { type: string }
         metadata:
           type: object
           additionalProperties: true
@@ -4497,6 +4503,12 @@ components:
         resource: { type: string }
         verdict: { type: string }
         reason: { type: string }
+        # HELM-303 decision.v2 signing envelope fields.
+        signature_version: { type: string }
+        reason_code: { type: string }
+        phenotype_hash: { type: string }
+        policy_content_hash: { type: string }
+        effect_digest: { type: string }
         policy_version: { type: string }
         policy_decision_hash: { type: string }
         signature: { type: string }

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 )
 
@@ -57,6 +58,22 @@ func TestEvaluate_Allow(t *testing.T) {
 	}
 	if resp.DecisionHash == "" {
 		t.Error("DecisionHash should be set")
+	}
+}
+
+func TestFromCanonicalPreservesReceiptV5Fields(t *testing.T) {
+	receipt := &contracts.Receipt{
+		ReceiptID:        "receipt-v5",
+		DecisionID:       "decision-v5",
+		SignatureVersion: contracts.ReceiptSignatureV5,
+		Verdict:          "DENY",
+		ReasonCode:       "POLICY_VIOLATION",
+		PolicyHash:       "sha256:policy",
+		SessionID:        "session-v5",
+	}
+	dto := FromCanonical(receipt)
+	if dto.SignatureVersion != contracts.ReceiptSignatureV5 || dto.Verdict != receipt.Verdict || dto.ReasonCode != receipt.ReasonCode || dto.PolicyHash != receipt.PolicyHash || dto.SessionID != receipt.SessionID {
+		t.Fatalf("V5 receipt fields not preserved by API DTO: %+v", dto)
 	}
 }
 

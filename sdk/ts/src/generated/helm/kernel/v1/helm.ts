@@ -233,6 +233,10 @@ export interface DecisionRecord {
    * evidence. Optional; outside the decision signature until HELM-303.
    */
   correlationId: string;
+  /** HELM-303 decision.v2 signing envelope fields. */
+  signatureVersion: string;
+  phenotypeHash: string;
+  policyContentHash: string;
 }
 
 export interface AuthorizedExecutionIntent {
@@ -268,6 +272,17 @@ export interface Receipt {
    * to. Optional; outside the receipt signature until HELM-303.
    */
   correlationId: string;
+  /**
+   * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+   * reason_code fields are also signed by receipt.v5.
+   */
+  signatureVersion: string;
+  status: string;
+  outputHash: string;
+  prevHash: string;
+  argsHash: string;
+  policyHash: string;
+  sessionId: string;
 }
 
 export interface Receipt_MetadataEntry {
@@ -476,6 +491,9 @@ function createBaseDecisionRecord(): DecisionRecord {
     policyDecisionHash: "",
     inputContext: new Uint8Array(0),
     correlationId: "",
+    signatureVersion: "",
+    phenotypeHash: "",
+    policyContentHash: "",
   };
 }
 
@@ -519,6 +537,15 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     }
     if (message.correlationId !== "") {
       writer.uint32(106).string(message.correlationId);
+    }
+    if (message.signatureVersion !== "") {
+      writer.uint32(114).string(message.signatureVersion);
+    }
+    if (message.phenotypeHash !== "") {
+      writer.uint32(122).string(message.phenotypeHash);
+    }
+    if (message.policyContentHash !== "") {
+      writer.uint32(130).string(message.policyContentHash);
     }
     return writer;
   },
@@ -634,6 +661,30 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
           message.correlationId = reader.string();
           continue;
         }
+        case 14: {
+          if (tag !== 114) {
+            break;
+          }
+
+          message.signatureVersion = reader.string();
+          continue;
+        }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.phenotypeHash = reader.string();
+          continue;
+        }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.policyContentHash = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -690,6 +741,21 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
         : isSet(object.correlation_id)
         ? globalThis.String(object.correlation_id)
         : "",
+      signatureVersion: isSet(object.signatureVersion)
+        ? globalThis.String(object.signatureVersion)
+        : isSet(object.signature_version)
+        ? globalThis.String(object.signature_version)
+        : "",
+      phenotypeHash: isSet(object.phenotypeHash)
+        ? globalThis.String(object.phenotypeHash)
+        : isSet(object.phenotype_hash)
+        ? globalThis.String(object.phenotype_hash)
+        : "",
+      policyContentHash: isSet(object.policyContentHash)
+        ? globalThis.String(object.policyContentHash)
+        : isSet(object.policy_content_hash)
+        ? globalThis.String(object.policy_content_hash)
+        : "",
     };
   },
 
@@ -734,6 +800,15 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.correlationId !== "") {
       obj.correlationId = message.correlationId;
     }
+    if (message.signatureVersion !== "") {
+      obj.signatureVersion = message.signatureVersion;
+    }
+    if (message.phenotypeHash !== "") {
+      obj.phenotypeHash = message.phenotypeHash;
+    }
+    if (message.policyContentHash !== "") {
+      obj.policyContentHash = message.policyContentHash;
+    }
     return obj;
   },
 
@@ -755,6 +830,9 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     message.policyDecisionHash = object.policyDecisionHash ?? "";
     message.inputContext = object.inputContext ?? new Uint8Array(0);
     message.correlationId = object.correlationId ?? "";
+    message.signatureVersion = object.signatureVersion ?? "";
+    message.phenotypeHash = object.phenotypeHash ?? "";
+    message.policyContentHash = object.policyContentHash ?? "";
     return message;
   },
 };
@@ -983,6 +1061,13 @@ function createBaseReceipt(): Receipt {
     reasonCode: 0,
     metadata: {},
     correlationId: "",
+    signatureVersion: "",
+    status: "",
+    outputHash: "",
+    prevHash: "",
+    argsHash: "",
+    policyHash: "",
+    sessionId: "",
   };
 }
 
@@ -1038,6 +1123,27 @@ export const Receipt: MessageFns<Receipt> = {
     });
     if (message.correlationId !== "") {
       writer.uint32(138).string(message.correlationId);
+    }
+    if (message.signatureVersion !== "") {
+      writer.uint32(146).string(message.signatureVersion);
+    }
+    if (message.status !== "") {
+      writer.uint32(154).string(message.status);
+    }
+    if (message.outputHash !== "") {
+      writer.uint32(162).string(message.outputHash);
+    }
+    if (message.prevHash !== "") {
+      writer.uint32(170).string(message.prevHash);
+    }
+    if (message.argsHash !== "") {
+      writer.uint32(178).string(message.argsHash);
+    }
+    if (message.policyHash !== "") {
+      writer.uint32(186).string(message.policyHash);
+    }
+    if (message.sessionId !== "") {
+      writer.uint32(194).string(message.sessionId);
     }
     return writer;
   },
@@ -1188,6 +1294,62 @@ export const Receipt: MessageFns<Receipt> = {
           message.correlationId = reader.string();
           continue;
         }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.signatureVersion = reader.string();
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.status = reader.string();
+          continue;
+        }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.outputHash = reader.string();
+          continue;
+        }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          message.prevHash = reader.string();
+          continue;
+        }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.argsHash = reader.string();
+          continue;
+        }
+        case 23: {
+          if (tag !== 186) {
+            break;
+          }
+
+          message.policyHash = reader.string();
+          continue;
+        }
+        case 24: {
+          if (tag !== 194) {
+            break;
+          }
+
+          message.sessionId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1260,6 +1422,37 @@ export const Receipt: MessageFns<Receipt> = {
         : isSet(object.correlation_id)
         ? globalThis.String(object.correlation_id)
         : "",
+      signatureVersion: isSet(object.signatureVersion)
+        ? globalThis.String(object.signatureVersion)
+        : isSet(object.signature_version)
+        ? globalThis.String(object.signature_version)
+        : "",
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      outputHash: isSet(object.outputHash)
+        ? globalThis.String(object.outputHash)
+        : isSet(object.output_hash)
+        ? globalThis.String(object.output_hash)
+        : "",
+      prevHash: isSet(object.prevHash)
+        ? globalThis.String(object.prevHash)
+        : isSet(object.prev_hash)
+        ? globalThis.String(object.prev_hash)
+        : "",
+      argsHash: isSet(object.argsHash)
+        ? globalThis.String(object.argsHash)
+        : isSet(object.args_hash)
+        ? globalThis.String(object.args_hash)
+        : "",
+      policyHash: isSet(object.policyHash)
+        ? globalThis.String(object.policyHash)
+        : isSet(object.policy_hash)
+        ? globalThis.String(object.policy_hash)
+        : "",
+      sessionId: isSet(object.sessionId)
+        ? globalThis.String(object.sessionId)
+        : isSet(object.session_id)
+        ? globalThis.String(object.session_id)
+        : "",
     };
   },
 
@@ -1322,6 +1515,27 @@ export const Receipt: MessageFns<Receipt> = {
     if (message.correlationId !== "") {
       obj.correlationId = message.correlationId;
     }
+    if (message.signatureVersion !== "") {
+      obj.signatureVersion = message.signatureVersion;
+    }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.outputHash !== "") {
+      obj.outputHash = message.outputHash;
+    }
+    if (message.prevHash !== "") {
+      obj.prevHash = message.prevHash;
+    }
+    if (message.argsHash !== "") {
+      obj.argsHash = message.argsHash;
+    }
+    if (message.policyHash !== "") {
+      obj.policyHash = message.policyHash;
+    }
+    if (message.sessionId !== "") {
+      obj.sessionId = message.sessionId;
+    }
     return obj;
   },
 
@@ -1355,6 +1569,13 @@ export const Receipt: MessageFns<Receipt> = {
       {},
     );
     message.correlationId = object.correlationId ?? "";
+    message.signatureVersion = object.signatureVersion ?? "";
+    message.status = object.status ?? "";
+    message.outputHash = object.outputHash ?? "";
+    message.prevHash = object.prevHash ?? "";
+    message.argsHash = object.argsHash ?? "";
+    message.policyHash = object.policyHash ?? "";
+    message.sessionId = object.sessionId ?? "";
     return message;
   },
 };

@@ -64,6 +64,7 @@ type setupOptions struct {
 	Quickstart      bool
 	DataDir         string
 	SigningSeedFile string
+	PolicyProfile   string
 }
 
 type setupSummary struct {
@@ -408,6 +409,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.Quickstart, "quickstart", false, "Start the blocking Quickstart server after setup")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path for installed pre-tool hooks")
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
@@ -438,6 +440,7 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Report a headless setup without a Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path for installed pre-tool hooks")
 	if includeYes {
 		fs.BoolVar(&opts.Yes, "yes", false, "Remove without prompting")
 	}
@@ -487,12 +490,17 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 	if abs, err := filepath.Abs(opts.DataDir); err == nil {
 		opts.DataDir = abs
 	}
-	// The seed-file path gets baked into the installed hook command, which
-	// later runs from an arbitrary working directory — a relative path would
-	// resolve against that directory and fail the signer.
+	// These file paths get baked into the installed hook command, which later
+	// runs from an arbitrary working directory. Relative paths would resolve
+	// against that directory instead of the operator's intended files.
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		if abs, err := filepath.Abs(opts.SigningSeedFile); err == nil {
 			opts.SigningSeedFile = abs
+		}
+	}
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		if abs, err := filepath.Abs(opts.PolicyProfile); err == nil {
+			opts.PolicyProfile = abs
 		}
 	}
 	if opts.Workspace == "" {
@@ -777,13 +785,18 @@ func setupUninstallCommand(opts setupOptions) string {
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		signingSeedFile = " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
 	}
+	policyProfile := ""
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		policyProfile = " --policy-profile " + shellQuote(opts.PolicyProfile)
+	}
 	return fmt.Sprintf(
-		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s%s",
+		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s%s%s",
 		opts.Target,
 		opts.Scope,
 		workspace,
 		shellQuote(opts.DataDir),
 		signingSeedFile,
+		policyProfile,
 	)
 }
 
@@ -1002,6 +1015,9 @@ func setupHookCommand(opts setupOptions, bin string) string {
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		command += " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
 	}
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		command += " --policy-profile " + shellQuote(opts.PolicyProfile)
+	}
 	return command
 }
 
@@ -1143,19 +1159,19 @@ func arrayValue(root map[string]any, key string) []any {
 	return []any{}
 }
 
-// signingSeedFileArgPattern matches the optional --signing-seed-file segment
-// of an installed hook command, with its shell-quoted or bare argument. The
+// hookManagedFileArgPattern matches optional file-path segments of an
+// installed hook command, with their shell-quoted or bare arguments. The
 // argument alternation mirrors shellQuote output: a sequence of
 // single-quoted chunks, escaped quotes (the '\” idiom), and bare
 // non-space characters.
-var signingSeedFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
+var hookManagedFileArgPattern = regexp.MustCompile(` --(?:signing-seed-file|policy-profile) (?:'[^']*'|\\'|[^\s'])+`)
 
 // hookCommandKey reduces an installed hook command to its identity: the
-// signing-seed-file argument is a deployment detail, so `setup status` and
+// managed file arguments are deployment details, so `setup status` and
 // `setup remove` must match the hook whether or not (and with whichever path
-// form) the flag was passed on their own invocation.
+// form) they were passed on their own invocation.
 func hookCommandKey(command string) string {
-	return signingSeedFileArgPattern.ReplaceAllString(command, "")
+	return hookManagedFileArgPattern.ReplaceAllString(command, "")
 }
 
 func hookCommandPresent(pre []any, command string) bool {

@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -134,8 +136,26 @@ func TestHookPreToolPersistsAllowReceiptWithCustomPolicyProfile(t *testing.T) {
 	if receipt.Request.Target != fingerprintHookTarget(command) {
 		t.Fatalf("receipt target = %q, want fingerprint", receipt.Request.Target)
 	}
+	profileBytes, err := os.ReadFile(profile)
+	if err != nil {
+		t.Fatalf("read custom profile: %v", err)
+	}
+	profileSum := sha256.Sum256(profileBytes)
+	wantProfileDigest := "sha256:" + hex.EncodeToString(profileSum[:])
+	if got := receipt.Request.Metadata["policy_profile_sha256"]; got != wantProfileDigest {
+		t.Fatalf("policy profile digest = %q, want %q", got, wantProfileDigest)
+	}
 	if ok, err := workstation.VerifyDecisionReceiptSignature(receipt); err != nil || !ok {
 		t.Fatalf("receipt signature ok=%v err=%v", ok, err)
+	}
+	tampered := *receipt
+	tampered.Request.Metadata = make(map[string]string, len(receipt.Request.Metadata))
+	for key, value := range receipt.Request.Metadata {
+		tampered.Request.Metadata[key] = value
+	}
+	tampered.Request.Metadata["policy_profile_sha256"] = "sha256:tampered"
+	if ok, err := workstation.VerifyDecisionReceiptSignature(&tampered); err != nil || ok {
+		t.Fatalf("tampered profile digest verification ok=%v err=%v", ok, err)
 	}
 	trustedKey, err := loadTrustedPublicKeyFile(workstationSigningPublicKeyPath(tmp))
 	if err != nil {
@@ -143,6 +163,34 @@ func TestHookPreToolPersistsAllowReceiptWithCustomPolicyProfile(t *testing.T) {
 	}
 	if ok, err := workstation.VerifyDecisionReceiptWithTrustedKey(receipt, trustedKey); err != nil || !ok {
 		t.Fatalf("trusted receipt verification ok=%v err=%v", ok, err)
+	}
+}
+
+func TestHookPreToolPersistsDistinctReceiptsForRepeatedOperation(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/repeated"},"session_id":"same-session","cwd":"/repo"}`
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	for range 2 {
+		var stdout, stderr bytes.Buffer
+		if code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile}, strings.NewReader(payload), &stdout, &stderr); code != 0 {
+			t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+		}
+	}
+	receipts := globReceipts(t, tmp)
+	if len(receipts) != 2 {
+		t.Fatalf("receipts = %v, want two", receipts)
+	}
+	first, err := workstation.LoadDecisionReceipt(receipts[0])
+	if err != nil {
+		t.Fatalf("load first receipt: %v", err)
+	}
+	second, err := workstation.LoadDecisionReceipt(receipts[1])
+	if err != nil {
+		t.Fatalf("load second receipt: %v", err)
+	}
+	if first.DecisionID == second.DecisionID || first.Request.RequestID == second.Request.RequestID {
+		t.Fatalf("repeated hook invocation reused receipt identity: %+v / %+v", first, second)
 	}
 }
 
@@ -224,6 +272,25 @@ func TestHookPreToolFailsClosedWhenLocalSigningKeyIsInsecure(t *testing.T) {
 	}
 	if receipts := globReceipts(t, tmp); len(receipts) != 0 {
 		t.Fatalf("signer failure must not write a fake receipt: %v", receipts)
+	}
+}
+
+func TestHookPreToolReportsPolicyProfileErrorSeparately(t *testing.T) {
+	tmp := t.TempDir()
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", filepath.Join(tmp, "missing.json")}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "policy profile is unavailable") || strings.Contains(stdout.String(), "signer is unavailable") {
+		t.Fatalf("policy profile failure was not distinguished: %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "read policy profile") {
+		t.Fatalf("missing policy diagnostic: %s", stderr.String())
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 0 {
+		t.Fatalf("policy profile failure wrote receipts: %v", receipts)
 	}
 }
 

@@ -5,9 +5,11 @@
 package main
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -23,8 +25,9 @@ import (
 )
 
 var (
-	hookStdin = io.Reader(os.Stdin)
-	hookNow   = func() time.Time { return time.Now().UTC() }
+	hookStdin            = io.Reader(os.Stdin)
+	hookNow              = func() time.Time { return time.Now().UTC() }
+	errHookPolicyProfile = errors.New("hook policy profile unavailable")
 )
 
 type hookOptions struct {
@@ -125,7 +128,11 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: local receipt signer is unavailable")
+		reason := "HELM denied operation: local receipt signer is unavailable"
+		if errors.Is(err, errHookPolicyProfile) {
+			reason = "HELM denied operation: policy profile is unavailable"
+		}
+		return emitHookDenyOrFail(stdout, stderr, reason)
 	}
 	receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
 	if err != nil {
@@ -237,11 +244,16 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 	action := firstNonEmptyString(classification.Action, defaultAction)
 	toolID := firstNonEmptyString(classification.ToolID, payload.ToolName, defaultTool)
 	targetFingerprint := fingerprintHookTarget(classification.Target)
-	profile, err := workstation.LoadPolicyProfileFile(opts.PolicyProfile)
+	profile, profileDigest, err := workstation.LoadPolicyProfileFileWithDigest(opts.PolicyProfile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", errHookPolicyProfile, err)
+	}
+	requestID, err := newHookRequestID()
+	if err != nil {
+		return nil, fmt.Errorf("generate hook request ID: %w", err)
 	}
 	req := contracts.WorkstationDecisionRequest{
+		RequestID:    requestID,
 		RunID:        firstNonEmptyString(payload.SessionID, "hook-pre-tool"),
 		ActorID:      "agent.local",
 		WorkspaceID:  firstNonEmptyString(payload.CWD, "local-workstation"),
@@ -264,13 +276,25 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 	if err != nil {
 		return nil, fmt.Errorf("load workstation signing key: %w", err)
 	}
+	persistedMetadata := map[string]string{
+		"target_binding": "sha256:utf-8",
+	}
+	if profileDigest != "" {
+		persistedMetadata["policy_profile_sha256"] = profileDigest
+	}
 	return workstation.Decide(profile, req, workstation.DecisionOptions{
-		SigningSeed:     seed,
-		PersistedTarget: targetFingerprint,
-		PersistedMetadata: map[string]string{
-			"target_binding": "sha256:utf-8",
-		},
+		SigningSeed:       seed,
+		PersistedTarget:   targetFingerprint,
+		PersistedMetadata: persistedMetadata,
 	})
+}
+
+func newHookRequestID() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", err
+	}
+	return "hook_" + hex.EncodeToString(value[:]), nil
 }
 
 func fingerprintHookTarget(target string) string {

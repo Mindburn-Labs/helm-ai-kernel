@@ -39,13 +39,19 @@ func TestSetupHookCommandIncludesExplicitSigningSeedFile(t *testing.T) {
 		Target:          "codex",
 		DataDir:         "/tmp/helm-data",
 		SigningSeedFile: "/private/approved/workstation.seed",
+		PolicyProfile:   "/private/approved/policy.json",
 	}
 	command := setupHookCommand(opts, "/usr/local/bin/helm-ai-kernel")
 	if !strings.Contains(command, "--signing-seed-file '/private/approved/workstation.seed'") {
 		t.Fatalf("hook command did not preserve explicit signer source: %s", command)
 	}
+	if !strings.Contains(command, "--policy-profile '/private/approved/policy.json'") {
+		t.Fatalf("hook command did not preserve policy profile: %s", command)
+	}
 	if removal := setupUninstallCommand(opts); !strings.Contains(removal, "--signing-seed-file '/private/approved/workstation.seed'") {
 		t.Fatalf("uninstall command did not preserve explicit signer source: %s", removal)
+	} else if !strings.Contains(removal, "--policy-profile '/private/approved/policy.json'") {
+		t.Fatalf("uninstall command did not preserve policy profile: %s", removal)
 	}
 }
 
@@ -1721,14 +1727,17 @@ func markCodexProjectTrusted(t *testing.T, home, workspace string) {
 	}
 }
 
-func TestSetupNormalizesRelativeSigningSeedFile(t *testing.T) {
+func TestSetupNormalizesRelativeHookFilePaths(t *testing.T) {
 	var stderr bytes.Buffer
-	opts, code := parseSetupInstallArgs([]string{"claude-code", "--yes", "--data-dir", t.TempDir(), "--signing-seed-file", "rel/seed.hex"}, &stderr)
+	opts, code := parseSetupInstallArgs([]string{"claude-code", "--yes", "--data-dir", t.TempDir(), "--signing-seed-file", "rel/seed.hex", "--policy-profile", "rel/policy.json"}, &stderr)
 	if code != 0 {
 		t.Fatalf("parse exit = %d stderr=%s", code, stderr.String())
 	}
 	if !filepath.IsAbs(opts.SigningSeedFile) {
 		t.Fatalf("SigningSeedFile = %q, want absolute (relative paths bake a cwd-dependent hook command)", opts.SigningSeedFile)
+	}
+	if !filepath.IsAbs(opts.PolicyProfile) {
+		t.Fatalf("PolicyProfile = %q, want absolute (relative paths bake a cwd-dependent hook command)", opts.PolicyProfile)
 	}
 }
 
@@ -1736,12 +1745,17 @@ func TestHookCommandKeyIgnoresSigningSeedFileArgument(t *testing.T) {
 	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
 	withSeed := base + " --signing-seed-file '/home/op/keys/seed.hex'"
 	withBareSeed := base + " --signing-seed-file /home/op/keys/seed.hex"
+	withProfile := base + " --policy-profile '/home/op/policies/allow.json'"
+	withBoth := withSeed + " --policy-profile '/home/op/policies/allow.json'"
 
 	if hookCommandKey(withSeed) != hookCommandKey(base) {
 		t.Fatalf("quoted seed-file arg changes hook identity:\n%q\n%q", hookCommandKey(withSeed), hookCommandKey(base))
 	}
 	if hookCommandKey(withBareSeed) != hookCommandKey(base) {
 		t.Fatalf("bare seed-file arg changes hook identity")
+	}
+	if hookCommandKey(withProfile) != hookCommandKey(base) || hookCommandKey(withBoth) != hookCommandKey(base) {
+		t.Fatalf("policy-profile arg changes hook identity")
 	}
 	if hookCommandKey(base) != base {
 		t.Fatalf("command without the flag must be unchanged, got %q", hookCommandKey(base))
@@ -1789,5 +1803,29 @@ func TestUpsertHookConfigUpdatesSeedFileOnReinstall(t *testing.T) {
 	}
 	if strings.Contains(string(raw), "/keys/old.hex") {
 		t.Fatalf("stale seed path survived reinstall: %s", raw)
+	}
+}
+
+func TestUpsertHookConfigUpdatesPolicyProfileOnReinstall(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "settings.json")
+	base := "'/usr/local/bin/helm-ai-kernel' hook pre-tool --client claude-code --data-dir '/home/op/.helm'"
+	oldCmd := base + " --policy-profile '/policies/old.json'"
+	newCmd := base + " --policy-profile '/policies/new.json'"
+
+	if err := upsertHookConfig(path, "*", oldCmd, tmp); err != nil {
+		t.Fatalf("initial install: %v", err)
+	}
+	if err := upsertHookConfig(path, "*", newCmd, tmp); err != nil {
+		t.Fatalf("reinstall with changed policy: %v", err)
+	}
+
+	root, err := readJSONObject(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(root)
+	if !strings.Contains(string(raw), "/policies/new.json") || strings.Contains(string(raw), "/policies/old.json") {
+		t.Fatalf("reinstall did not replace stored policy profile: %s", raw)
 	}
 }

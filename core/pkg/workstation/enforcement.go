@@ -24,21 +24,30 @@ type DecisionOptions struct {
 }
 
 func LoadPolicyProfileFile(path string) (contracts.WorkstationPolicyProfile, error) {
+	profile, _, err := LoadPolicyProfileFileWithDigest(path)
+	return profile, err
+}
+
+// LoadPolicyProfileFileWithDigest returns the validated profile and, for a
+// caller-provided file, a digest binding the exact policy bytes that were read.
+// The built-in default has no external file to bind, so its digest is empty.
+func LoadPolicyProfileFileWithDigest(path string) (contracts.WorkstationPolicyProfile, string, error) {
 	if strings.TrimSpace(path) == "" {
-		return DefaultObserveDraftProfile(), nil
+		return DefaultObserveDraftProfile(), "", nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return contracts.WorkstationPolicyProfile{}, fmt.Errorf("read policy profile: %w", err)
+		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("read policy profile: %w", err)
 	}
 	var profile contracts.WorkstationPolicyProfile
 	if err := json.Unmarshal(data, &profile); err != nil {
-		return contracts.WorkstationPolicyProfile{}, fmt.Errorf("parse policy profile: %w", err)
+		return contracts.WorkstationPolicyProfile{}, "", fmt.Errorf("parse policy profile: %w", err)
 	}
 	if profile.ID == "" {
-		return contracts.WorkstationPolicyProfile{}, errors.New("policy profile id is required")
+		return contracts.WorkstationPolicyProfile{}, "", errors.New("policy profile id is required")
 	}
-	return profile, nil
+	sum := sha256.Sum256(data)
+	return profile, "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 func Decide(

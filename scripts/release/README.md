@@ -29,7 +29,7 @@ make quality-merge
 make quality-release
 make release-readiness
 make release-assets
-KERNEL_RELEASE_TAG=v<version> bash scripts/release/verify_cosign.sh ./downloaded-release
+make verify-cosign COSIGN_ARTIFACT_DIR=./downloaded-release
 python3 scripts/release/check_version_drift_test.py
 make docs-coverage docs-truth
 make version-drift-published
@@ -55,8 +55,8 @@ for its exact tag before staging the closure; the same `.kernel.cosign.bundle`
 is kept in `release-assets`, its standalone layouts, `SHA256SUMS.txt`, and the
 GitHub release. The later generic signing job verifies rather than rewrites it.
 The Console producer bundle remains alongside the separate Kernel bundle, so
-public verification must supply `KERNEL_RELEASE_TAG=v<version>` and cannot fall
-back to a Kernel `main` workflow identity.
+public verification derives the exact tag from the signed Console manifest and
+cannot fall back to a Kernel `main` workflow identity.
 
 Before building any v0.8.0 release binary, the workflow re-verifies the signed
 Console input and passes the aggregate manifest SHA-256 through

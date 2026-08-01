@@ -393,12 +393,12 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
         self.assertRegex(result.stdout, rf"(?m)^LDFLAGS := .*main\.consoleLocalSidecarManifestSHA256={expected_digest}$")
         self.assertRegex(result.stdout, rf"(?m)^REPRO_LDFLAGS := .*main\.consoleLocalSidecarManifestSHA256={expected_digest}$")
 
-    def test_kernel_cosign_verifier_requires_exact_tag_and_checks_both_console_bundles(self) -> None:
+    def test_kernel_cosign_verifier_derives_exact_tag_and_checks_both_console_bundles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             artifacts = Path(directory) / "artifacts"
             artifacts.mkdir()
             manifest = artifacts / sidecar.MANIFEST_NAME
-            manifest.write_text("manifest", encoding="utf-8")
+            manifest.write_text(json.dumps({"kernel_release_version": "v0.8.0"}), encoding="utf-8")
             (artifacts / sidecar.MANIFEST_BUNDLE_NAME).write_text("producer", encoding="utf-8")
             (artifacts / f"{sidecar.MANIFEST_NAME}.kernel.cosign.bundle").write_text("kernel", encoding="utf-8")
             (artifacts / "ordinary-release-asset").write_text("asset", encoding="utf-8")
@@ -418,9 +418,10 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             fake_cosign.chmod(0o755)
             env = os.environ.copy()
             env["PATH"] = f"{fake_bin}:{env['PATH']}"
-            env["KERNEL_RELEASE_TAG"] = "v0.8.0"
+            env["KERNEL_RELEASE_TAG"] = "v9.9.9"
             result = subprocess.run(
-                ["bash", str(REPOSITORY_ROOT / "scripts/release/verify_cosign.sh"), str(artifacts)],
+                ["make", "verify-cosign", f"COSIGN_ARTIFACT_DIR={artifacts}"],
+                cwd=REPOSITORY_ROOT,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -429,13 +430,13 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("verified=3 failed=0", result.stdout)
 
-    def test_kernel_cosign_verifier_rejects_console_contract_without_exact_tag(self) -> None:
+    def test_kernel_cosign_verifier_rejects_console_contract_without_manifest_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             artifacts = Path(directory) / "artifacts"
             artifacts.mkdir()
             console_assets = artifacts / "nested-release-assets"
             console_assets.mkdir()
-            (console_assets / sidecar.MANIFEST_NAME).write_text("manifest", encoding="utf-8")
+            (console_assets / sidecar.MANIFEST_NAME).write_text("{}", encoding="utf-8")
             (console_assets / sidecar.MANIFEST_BUNDLE_NAME).write_text("producer", encoding="utf-8")
             (console_assets / sidecar.KERNEL_MANIFEST_BUNDLE_NAME).write_text("kernel", encoding="utf-8")
             fake_bin = Path(directory) / "bin"
@@ -454,13 +455,13 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                 env=env,
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("requires KERNEL_RELEASE_TAG", result.stdout)
+            self.assertIn("requires an exact Kernel tag in the Console manifest", result.stdout)
 
     def test_kernel_cosign_verifier_requires_both_manifest_bundles_for_a_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             artifacts = Path(directory) / "artifacts"
             artifacts.mkdir()
-            (artifacts / sidecar.MANIFEST_NAME).write_text("manifest", encoding="utf-8")
+            (artifacts / sidecar.MANIFEST_NAME).write_text(json.dumps({"kernel_release_version": "v0.8.0"}), encoding="utf-8")
             (artifacts / f"{sidecar.MANIFEST_NAME}.kernel.cosign.bundle").write_text("kernel", encoding="utf-8")
             fake_bin = Path(directory) / "bin"
             fake_bin.mkdir()
@@ -469,7 +470,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             fake_cosign.chmod(0o755)
             env = os.environ.copy()
             env["PATH"] = f"{fake_bin}:{env['PATH']}"
-            env["KERNEL_RELEASE_TAG"] = "v0.8.0"
+            env.pop("KERNEL_RELEASE_TAG", None)
             result = subprocess.run(
                 ["bash", str(REPOSITORY_ROOT / "scripts/release/verify_cosign.sh"), str(artifacts)],
                 check=False,

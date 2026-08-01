@@ -62,7 +62,7 @@ func TestDiscoverLocalConsoleBundleUsesOnlyExecutableRelativeBundle(t *testing.T
 	if err := os.RemoveAll(filepath.Join(filepath.Dir(executable), localConsoleDirectory)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := discoverLocalConsoleBundle(); err == nil || !strings.Contains(err.Error(), "read local Console release manifest") {
+	if _, err := discoverLocalConsoleBundle(); err == nil || !strings.Contains(err.Error(), "Console-including packaged layout") {
 		t.Fatalf("missing bundle error = %v", err)
 	}
 }
@@ -551,8 +551,8 @@ func TestQuickstartConsoleFailsBeforeMutationForExternalOverrideOrMissingBundle(
 	if !strings.Contains(stderr.String(), "valid compiled release manifest digest") {
 		t.Fatalf("missing compiled digest error = %s", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "packaged release build") {
-		t.Fatalf("missing packaged release guidance = %s", stderr.String())
+	if !strings.Contains(stderr.String(), "Console-including packaged layout") {
+		t.Fatalf("missing Console layout guidance = %s", stderr.String())
 	}
 	if _, statErr := os.Stat(dataDir); !os.IsNotExist(statErr) {
 		t.Fatalf("missing bundle dry-run mutated %q: %v", dataDir, statErr)
@@ -841,11 +841,37 @@ func TestQuickstartConsoleRejectsMissingDigestBeforeStateMutation(t *testing.T) 
 	if !strings.Contains(stderr.String(), "valid compiled release manifest digest") {
 		t.Fatalf("quickstart error = %s", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "packaged release build") {
+	if !strings.Contains(stderr.String(), "Console-including packaged layout") {
 		t.Fatalf("quickstart guidance = %s", stderr.String())
 	}
 	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
 		t.Fatalf("missing digest quickstart mutated %q: %v", dataDir, err)
+	}
+}
+
+func TestQuickstartConsoleRejectsHeadlessReleaseLayoutBeforeStateMutation(t *testing.T) {
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+	if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", strings.Repeat("a", 64))
+	originalExecutable := localConsoleExecutable
+	localConsoleExecutable = func() (string, error) { return executable, nil }
+	t.Cleanup(func() { localConsoleExecutable = originalExecutable })
+	dataDir := filepath.Join(dir, "quickstart-data")
+	var stdout, stderr bytes.Buffer
+	if code := runQuickstartCmdWithReady([]string{"--console", "--no-open", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 1 {
+		t.Fatalf("quickstart exit code = %d, stderr = %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Console-including packaged layout") || !strings.Contains(stderr.String(), "Homebrew and raw release binaries are headless") {
+		t.Fatalf("headless release guidance = %s", stderr.String())
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("headless release quickstart mutated %q: %v", dataDir, err)
 	}
 }
 

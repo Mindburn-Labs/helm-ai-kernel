@@ -68,8 +68,8 @@ The source tuple is immutable; the Console producer signature remains a
 protected-branch `main` workflow trust assumption rather than an immutable
 workflow revision. A separate Kernel bundle binds that exact manifest to the
 public Kernel tag, is generated once before staging, and remains in the
-standalone layout, checksum set, and GitHub release. Verify a downloaded
-Console release with `KERNEL_RELEASE_TAG=v<version> bash scripts/release/verify_cosign.sh ./downloaded-release`.
+standalone layout, checksum set, and GitHub release. Verification derives that
+exact tag from the Console manifest: `make verify-cosign COSIGN_ARTIFACT_DIR=./downloaded-release`.
 
 ## Validation
 
@@ -78,7 +78,7 @@ make quality-merge
 make quality-release
 make release-readiness
 make release-assets
-KERNEL_RELEASE_TAG=v<version> bash scripts/release/verify_cosign.sh ./downloaded-release
+make verify-cosign COSIGN_ARTIFACT_DIR=./downloaded-release
 make docs-coverage docs-truth
 make version-drift-published
 ```

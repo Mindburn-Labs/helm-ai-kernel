@@ -5,10 +5,10 @@
 # given directory tree. Used as a smoke check post-release and as the
 # canonical verification recipe documented in docs/VERIFICATION.md.
 #
-# Usage: KERNEL_RELEASE_TAG=vX.Y.Z verify_cosign.sh [dir]   # default: ./dist
-# A directory containing the Console local-sidecar contract is a public
-# release surface and therefore requires its exact Kernel tag. Untagged
-# local artifact checks may still use the generic workflow identity below.
+# Usage: verify_cosign.sh [dir]   # default: ./dist
+# A directory containing the Console local-sidecar contract derives its exact
+# Kernel tag from the signed Console manifest; other local artifact checks use
+# the generic workflow identity below.
 #
 # Caller: Makefile target `verify-cosign`. Documented in docs/VERIFICATION.md.
 set -euo pipefail
@@ -17,7 +17,6 @@ DIR="${1:-dist}"
 DEFAULT_IDENTITY_REGEX='^https://github\.com/Mindburn-Labs/helm-ai-kernel/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+.*)$'
 IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-$DEFAULT_IDENTITY_REGEX}"
 ISSUER="${COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
-KERNEL_RELEASE_TAG="${KERNEL_RELEASE_TAG:-}"
 CONSOLE_MANIFEST="helm-console-local-sidecar-release-manifest.json"
 CONSOLE_PRODUCER_BUNDLE="${CONSOLE_MANIFEST}.cosign.bundle"
 KERNEL_MANIFEST_BUNDLE="helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle"
@@ -44,32 +43,37 @@ if find "$DIR" -type f \( -name "$CONSOLE_MANIFEST" -o -name "$CONSOLE_PRODUCER_
     console_contract=1
 fi
 
-if [ "$console_contract" = "1" ] && [ -z "$KERNEL_RELEASE_TAG" ]; then
-    echo "::error::Console release verification requires KERNEL_RELEASE_TAG for exact Kernel tag binding"
-    exit 1
-fi
-
-if [ -n "$KERNEL_RELEASE_TAG" ]; then
-    if ! [[ "$KERNEL_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "::error::KERNEL_RELEASE_TAG must be an exact semantic release tag"
+if [ "$console_contract" = "1" ]; then
+    console_manifest_path="$(find "$DIR" -type f -name "$CONSOLE_MANIFEST" -print -quit)"
+    console_manifest_count="$(find "$DIR" -type f -name "$CONSOLE_MANIFEST" -print | wc -l | tr -d ' ')"
+    console_producer_count="$(find "$DIR" -type f -name "$CONSOLE_PRODUCER_BUNDLE" -print | wc -l | tr -d ' ')"
+    console_kernel_count="$(find "$DIR" -type f -name "$KERNEL_MANIFEST_BUNDLE" -print | wc -l | tr -d ' ')"
+    if [ "$console_manifest_count" != "1" ] || [ "$console_producer_count" != "1" ] || [ "$console_kernel_count" != "1" ]; then
+        echo "::error::Kernel release verification requires exactly one Console manifest plus both producer and Kernel bundles"
         exit 1
     fi
-    KERNEL_RELEASE_IDENTITY="https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${KERNEL_RELEASE_TAG}"
-    if [ "$console_contract" = "1" ]; then
-        console_manifest_path="$(find "$DIR" -type f -name "$CONSOLE_MANIFEST" -print -quit)"
-        console_manifest_count="$(find "$DIR" -type f -name "$CONSOLE_MANIFEST" -print | wc -l | tr -d ' ')"
-        console_producer_count="$(find "$DIR" -type f -name "$CONSOLE_PRODUCER_BUNDLE" -print | wc -l | tr -d ' ')"
-        console_kernel_count="$(find "$DIR" -type f -name "$KERNEL_MANIFEST_BUNDLE" -print | wc -l | tr -d ' ')"
-        if [ "$console_manifest_count" != "1" ] || [ "$console_producer_count" != "1" ] || [ "$console_kernel_count" != "1" ]; then
-            echo "::error::Kernel release verification requires exactly one Console manifest plus both producer and Kernel bundles"
-            exit 1
-        fi
-        console_dir="$(dirname "$console_manifest_path")"
-        if [ ! -f "$console_dir/$CONSOLE_PRODUCER_BUNDLE" ] || [ ! -f "$console_dir/$KERNEL_MANIFEST_BUNDLE" ]; then
-            echo "::error::Kernel release verification requires Console manifest bundles beside the manifest"
-            exit 1
-        fi
+    console_dir="$(dirname "$console_manifest_path")"
+    if [ ! -f "$console_dir/$CONSOLE_PRODUCER_BUNDLE" ] || [ ! -f "$console_dir/$KERNEL_MANIFEST_BUNDLE" ]; then
+        echo "::error::Kernel release verification requires Console manifest bundles beside the manifest"
+        exit 1
     fi
+    if ! kernel_release_tag="$(python3 - "$console_manifest_path" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    manifest = json.load(handle)
+tag = manifest.get("kernel_release_version") if isinstance(manifest, dict) else None
+if not isinstance(tag, str) or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag):
+    raise SystemExit("Console manifest kernel_release_version must be an exact semantic release tag")
+print(tag)
+PY
+    )"; then
+        echo "::error::Console release verification requires an exact Kernel tag in the Console manifest"
+        exit 1
+    fi
+    KERNEL_RELEASE_IDENTITY="https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${kernel_release_tag}"
 fi
 
 ok=0
@@ -80,8 +84,8 @@ while IFS= read -r bundle; do
             # The Console source tuple is immutable, while its producer
             # workflow is protected-main trust. The tag-bound Kernel bundle
             # below is the public-release binding for this manifest.
-            if [ -z "$KERNEL_RELEASE_TAG" ]; then
-                echo "::error::Console producer bundle requires an exact Kernel release tag"
+            if [ -z "$KERNEL_RELEASE_IDENTITY" ]; then
+                echo "::error::Console producer bundle requires an exact Kernel release identity"
                 exit 1
             fi
             artifact="${bundle%.cosign.bundle}"

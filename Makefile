@@ -382,8 +382,9 @@ vex:
 	@SOURCE_DATE_EPOCH=$(VEX_SOURCE_DATE_EPOCH) HELM_VERSION=$(VERSION) bash scripts/release/generate_vex.sh
 
 # Verify the cosign signature of a local artifact tree (smoke / docs example).
+COSIGN_ARTIFACT_DIR ?= dist
 verify-cosign:
-	@KERNEL_RELEASE_TAG="$(KERNEL_RELEASE_TAG)" bash scripts/release/verify_cosign.sh
+	@bash scripts/release/verify_cosign.sh "$(COSIGN_ARTIFACT_DIR)"
 
 # Pin the latest benchmark report to a per-release file under benchmarks/results/.
 bench-pin:

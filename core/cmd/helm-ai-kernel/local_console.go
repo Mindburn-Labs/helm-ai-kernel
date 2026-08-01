@@ -226,6 +226,9 @@ func verifyTrustedLocalConsoleRelease(consoleRoot, target string) (localConsoleB
 	if err != nil {
 		return localConsoleBundle{}, err
 	}
+	if _, err := os.Lstat(consoleRoot); os.IsNotExist(err) {
+		return localConsoleBundle{}, fmt.Errorf("local Console starts only from a Console-including packaged layout (helm-ai-kernel-<os>-<arch>-console.tar.gz or equivalent); Homebrew and raw release binaries are headless")
+	}
 	manifestBytes, err := readLocalConsoleReleaseFile(consoleRoot, localConsoleReleaseManifestFile, localConsoleInventoryMaxBytes)
 	if err != nil {
 		return localConsoleBundle{}, fmt.Errorf("read local Console release manifest: %w", err)
@@ -249,7 +252,7 @@ func verifyTrustedLocalConsoleRelease(consoleRoot, target string) (localConsoleB
 
 func compiledLocalConsoleManifestDigest() (string, error) {
 	if !validLowerHex(consoleLocalSidecarManifestSHA256, sha256.Size) {
-		return "", fmt.Errorf("local Console requires a valid compiled release manifest digest from a packaged release build; source builds should use plain quickstart/setup or a released HELM bundle")
+		return "", fmt.Errorf("local Console requires a valid compiled release manifest digest from a Console-including packaged layout (helm-ai-kernel-<os>-<arch>-console.tar.gz or equivalent); source builds, Homebrew, and raw release binaries are headless")
 	}
 	return consoleLocalSidecarManifestSHA256, nil
 }

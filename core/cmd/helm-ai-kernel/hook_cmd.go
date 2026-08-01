@@ -11,10 +11,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
@@ -56,6 +58,7 @@ type hookClassification struct {
 	Action       string
 	ToolID       string
 	Reason       string
+	Metadata     map[string]string
 }
 
 func init() {
@@ -176,14 +179,19 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 	switch {
 	case strings.EqualFold(tool, "Bash"):
 		command := inputString(payload.ToolInput, "command", "cmd")
-		if isDestructiveShellCommand(command) {
+		// Structural (AST-based) pre-flight classification. The classifier is
+		// advisory input only: it decides whether the command reaches the
+		// existing signed decision path; the permit/receipt verdict is still
+		// produced by workstation.Decide, fail-closed as before.
+		if scan := shellscan.ClassifyAt(command, payload.CWD); scan.Decide {
 			return hookClassification{
 				ShouldDecide: true,
 				Class:        "shell-operate",
 				Target:       command,
 				Action:       "shell_operate",
 				ToolID:       "shell",
-				Reason:       "shell operation",
+				Reason:       "shell operation: " + scan.Reason,
+				Metadata:     shellscanReceiptMetadata(scan),
 			}
 		}
 	case strings.HasPrefix(tool, "mcp__"):
@@ -244,11 +252,30 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 			"tool":   payload.ToolName,
 		},
 	}
+	for key, value := range classification.Metadata {
+		req.Metadata[key] = value
+	}
 	seed, err := resolveWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile)
 	if err != nil {
 		return nil, fmt.Errorf("load workstation signing key: %w", err)
 	}
 	return workstation.Decide(profile, req, workstation.DecisionOptions{SigningSeed: seed})
+}
+
+func shellscanReceiptMetadata(scan shellscan.Result) map[string]string {
+	commands := make([]string, 0, len(scan.Commands))
+	for _, command := range scan.Commands {
+		entry := command.Name
+		if command.Via != "" {
+			entry += " via " + command.Via
+		}
+		commands = append(commands, entry)
+	}
+	return map[string]string{
+		"shellscan.parse_ok": strconv.FormatBool(scan.ParseOK),
+		"shellscan.signals":  strings.Join(scan.Signals, ","),
+		"shellscan.commands": strings.Join(commands, ","),
+	}
 }
 
 func inputString(input map[string]any, keys ...string) string {
@@ -260,33 +287,6 @@ func inputString(input map[string]any, keys ...string) string {
 		}
 	}
 	return ""
-}
-
-func isDestructiveShellCommand(command string) bool {
-	c := strings.ToLower(strings.TrimSpace(command))
-	if c == "" {
-		return false
-	}
-	needles := []string{
-		"rm -rf ",
-		"rm -fr ",
-		"rm -r ",
-		"git reset --hard",
-		"git clean -fd",
-		"git clean -xdf",
-		"mkfs",
-		"dd if=",
-		"kubectl delete",
-		"docker rm -f",
-		"drop table",
-		"truncate table",
-	}
-	for _, needle := range needles {
-		if strings.Contains(c, needle) || strings.HasPrefix(c, strings.TrimSpace(needle)) {
-			return true
-		}
-	}
-	return false
 }
 
 func sensitiveApplyPatchTarget(command string) string {

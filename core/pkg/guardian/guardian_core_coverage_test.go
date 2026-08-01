@@ -1037,6 +1037,9 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 	if badCELDecision.ReasonCode != string(contracts.ReasonPRGEvalError) {
 		t.Fatalf("expected PRG eval error, got %+v", badCELDecision)
 	}
+	if strings.Contains(badCELDecision.Reason, "not valid cel") {
+		t.Fatalf("PRG eval deny exposed policy source: %q", badCELDecision.Reason)
+	}
 
 	inactiveStore := &guardianCoverageSnapshotStore{}
 	if err := inactiveStore.Swap(scope, &policyreconcile.EffectivePolicySnapshot{PolicyHash: "sha256:inactive", PolicyEpoch: 7, Validation: policyreconcile.ValidationStatus{Status: policyreconcile.StatusInvalid}, Graph: allowGraphFor("READ")}); err != nil {

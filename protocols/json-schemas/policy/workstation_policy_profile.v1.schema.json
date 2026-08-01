@@ -84,6 +84,15 @@
         "require_tool_scope": { "type": "boolean" },
         "require_expiration": { "type": "boolean" }
       }
+    },
+    "learning": {
+      "type": "object",
+      "description": "Opts denials into the fields a consuming agent can learn from. Both default off; when off the fields are absent from receipts rather than empty.",
+      "additionalProperties": false,
+      "properties": {
+        "emit_finality": { "type": "boolean" },
+        "emit_counterfactual": { "type": "boolean" }
+      }
     }
   }
 }

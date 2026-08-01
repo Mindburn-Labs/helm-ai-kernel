@@ -242,7 +242,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 			Requirements: []prg.Requirement{
 				{
 					ID:         "check-budget",
-					Expression: `input.effect.params.budget_id != ""`,
+					Expression: `input.effect.params.budget_id == "secret-policy-tier"`,
 				},
 			},
 		}
@@ -254,7 +254,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 			EffectID:   "eff-cel-1",
 			Params: map[string]any{
 				"tool_name": "cel_tool",
-				"budget_id": "test-budget",
+				"budget_id": "secret-policy-tier",
 			},
 		}
 
@@ -277,7 +277,15 @@ func TestGuardian_SignDecision(t *testing.T) {
 		err := subject.SignDecision(ctx, decision, effect, nil, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "DENY", decision.Verdict)
-		assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.Reason)
+		assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.ReasonCode)
+		// The deny reason names the blocking requirement and available input
+		// shape without exposing policy source.
+		assert.Contains(t, decision.Reason, string(contracts.ReasonMissingRequirement))
+		assert.Contains(t, decision.Reason, "check-budget")
+		assert.NotContains(t, decision.Reason, `input.effect.params.budget_id`)
+		assert.NotContains(t, decision.Reason, "secret-policy-tier")
+		assert.Contains(t, decision.Reason, "available input.* fields:")
+		assert.Contains(t, decision.Reason, "effect (object)")
 	})
 
 	t.Run("Fail: Signer Error", func(t *testing.T) {

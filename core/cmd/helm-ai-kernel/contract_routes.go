@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -1230,11 +1231,18 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		var req struct {
-			Actor     string `json:"actor"`
-			ReceiptID string `json:"receipt_id"`
-			Reason    string `json:"reason"`
+			ReceiptID            string `json:"receipt_id"`
+			Reason               string `json:"reason"`
+			ExpectedCeremonyHash string `json:"expected_ceremony_hash"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			api.WriteBadRequest(w, "Invalid approval transition request")
+			return
+		}
+		if strings.TrimSpace(req.ExpectedCeremonyHash) == "" {
+			api.WriteBadRequest(w, "expected_ceremony_hash is required; refresh and review the approval before transitioning it")
+			return
+		}
 		state := contracts.ApprovalCeremonyPending
 		switch action {
 		case "approve":
@@ -1247,8 +1255,17 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteNotFound(w, "approval action not found")
 			return
 		}
-		approval, err := surfaces.TransitionApproval(approvalID, state, req.Actor, req.ReceiptID, req.Reason)
+		principal, err := helmauth.GetPrincipal(r.Context())
+		if err != nil || principal == nil || strings.TrimSpace(principal.GetID()) == "" {
+			api.WriteUnauthorized(w, "Authenticated principal is required for approval transition")
+			return
+		}
+		approval, err := surfaces.TransitionApprovalIfCurrent(approvalID, state, principal.GetID(), req.ReceiptID, req.Reason, req.ExpectedCeremonyHash)
 		if err != nil {
+			if errors.Is(err, boundarypkg.ErrApprovalTransitionConflict) {
+				api.WriteConflict(w, "Approval changed; refresh and review again")
+				return
+			}
 			api.WriteBadRequest(w, err.Error())
 			return
 		}

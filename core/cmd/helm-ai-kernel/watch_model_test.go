@@ -12,31 +12,33 @@ import (
 )
 
 type watchTransition struct {
-	approvalID string
-	action     string
-	actor      string
-	reason     string
+	approvalID           string
+	action               string
+	expectedCeremonyHash string
+	reason               string
 }
 
 type watchFakeClient struct {
 	items         []contracts.ApprovalCeremony
 	listErr       error
+	listCalls     int
 	transitions   []watchTransition
 	transitionErr error
 }
 
 func (f *watchFakeClient) ListApprovals(context.Context) ([]contracts.ApprovalCeremony, error) {
+	f.listCalls++
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	return append([]contracts.ApprovalCeremony(nil), f.items...), nil
 }
 
-func (f *watchFakeClient) TransitionApproval(_ context.Context, approvalID, action, actor, reason string) (contracts.ApprovalCeremony, error) {
+func (f *watchFakeClient) TransitionApproval(_ context.Context, approvalID, action, expectedCeremonyHash, reason string) (contracts.ApprovalCeremony, error) {
 	if f.transitionErr != nil {
 		return contracts.ApprovalCeremony{}, f.transitionErr
 	}
-	f.transitions = append(f.transitions, watchTransition{approvalID: approvalID, action: action, actor: actor, reason: reason})
+	f.transitions = append(f.transitions, watchTransition{approvalID: approvalID, action: action, expectedCeremonyHash: expectedCeremonyHash, reason: reason})
 	state := contracts.ApprovalCeremonyAllowed
 	if action == "deny" {
 		state = contracts.ApprovalCeremonyDenied
@@ -64,7 +66,7 @@ func watchTestCeremony(id string, createdAt time.Time) contracts.ApprovalCeremon
 
 func TestWatchModelRefreshFailureClearsAndDisablesActions(t *testing.T) {
 	client := &watchFakeClient{}
-	model := newWatchModel(client, "operator.cli")
+	model := newWatchModel(client)
 	first, ok := model.beginRefresh()
 	if !ok {
 		t.Fatal("first refresh was not started")
@@ -87,7 +89,7 @@ func TestWatchModelRefreshFailureClearsAndDisablesActions(t *testing.T) {
 }
 
 func TestWatchModelDiscardsStaleRefresh(t *testing.T) {
-	model := newWatchModel(&watchFakeClient{}, "operator.cli")
+	model := newWatchModel(&watchFakeClient{})
 	model.generation = 2
 	model.inFlight = true
 	model.pending = []contracts.ApprovalCeremony{watchTestCeremony("current", time.Unix(1, 0))}

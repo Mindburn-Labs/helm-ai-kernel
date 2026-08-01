@@ -3,6 +3,7 @@ package boundary
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -65,6 +66,71 @@ func TestApprovalTransitionSealsCeremony(t *testing.T) {
 	}
 	if approval.State != contracts.ApprovalCeremonyAllowed || approval.CeremonyHash == "" {
 		t.Fatalf("unexpected approval: %+v", approval)
+	}
+}
+
+func TestApprovalTransitionIfCurrentRejectsStaleAndConcurrentSnapshots(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry := NewSurfaceRegistry(func() time.Time { return now })
+	approval, err := registry.PutApproval(contracts.ApprovalCeremony{
+		ApprovalID:  "approval-cas",
+		Subject:     "mcp:cas",
+		Action:      "mcp.approve",
+		State:       contracts.ApprovalCeremonyPending,
+		RequestedBy: "agent:test",
+		Quorum:      1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.TransitionApprovalIfCurrent(approval.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "receipt", "reviewed", "sha256:stale"); !errors.Is(err, ErrApprovalTransitionConflict) {
+		t.Fatalf("stale transition error = %v, want conflict", err)
+	}
+	for _, item := range registry.ListApprovals() {
+		if item.ApprovalID == approval.ApprovalID && (item.State != contracts.ApprovalCeremonyPending || item.CeremonyHash != approval.CeremonyHash) {
+			t.Fatalf("stale transition mutated approval: %+v", item)
+		}
+	}
+
+	type result struct {
+		state    contracts.ApprovalCeremonyState
+		approval contracts.ApprovalCeremony
+		err      error
+	}
+	results := make(chan result, 2)
+	start := make(chan struct{})
+	for _, state := range []contracts.ApprovalCeremonyState{contracts.ApprovalCeremonyAllowed, contracts.ApprovalCeremonyDenied} {
+		go func(state contracts.ApprovalCeremonyState) {
+			<-start
+			transitioned, err := registry.TransitionApprovalIfCurrent(approval.ApprovalID, state, "user:alice", "receipt", "reviewed", approval.CeremonyHash)
+			results <- result{state: state, approval: transitioned, err: err}
+		}(state)
+	}
+	close(start)
+
+	winners, conflicts := 0, 0
+	var winner result
+	for range 2 {
+		result := <-results
+		switch {
+		case result.err == nil:
+			winners++
+			winner = result
+		case errors.Is(result.err, ErrApprovalTransitionConflict):
+			conflicts++
+		default:
+			t.Fatalf("concurrent transition error = %v", result.err)
+		}
+	}
+	if winners != 1 || conflicts != 1 {
+		t.Fatalf("concurrent transition winners=%d conflicts=%d", winners, conflicts)
+	}
+	for _, item := range registry.ListApprovals() {
+		if item.ApprovalID == approval.ApprovalID && item.State != winner.approval.State {
+			t.Fatalf("winning transition %s was overwritten by %s", winner.state, item.State)
+		}
 	}
 }
 

@@ -192,6 +192,87 @@ func TestSetupQuickstartResetPreviewReachesQuickstartWithoutMutation(t *testing.
 	}
 }
 
+func TestQuickstartPreviewPreflightsExistingDirectoryAcrossEntryPoints(t *testing.T) {
+	original := setupRunFirstRun
+	setupRunFirstRun = runQuickstartCmd
+	t.Cleanup(func() { setupRunFirstRun = original })
+
+	dataDir := filepath.Join(t.TempDir(), "foreign-state")
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(dataDir, "keep")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var directStdout, directStderr bytes.Buffer
+	directCode := runQuickstartCmd([]string{"--dry-run", "--offline", "--data-dir", dataDir}, &directStdout, &directStderr)
+	var setupStdout, setupStderr bytes.Buffer
+	setupCode := Run([]string{"helm-ai-kernel", "setup", "--quickstart", "--dry-run", "--offline", "--data-dir", dataDir}, &setupStdout, &setupStderr)
+
+	if directCode != 1 || setupCode != directCode {
+		t.Fatalf("preview codes direct=%d setup=%d direct stderr=%q setup stderr=%q", directCode, setupCode, directStderr.String(), setupStderr.String())
+	}
+	if directStdout.Len() != 0 || setupStdout.Len() != 0 || directStderr.String() != setupStderr.String() || !strings.Contains(directStderr.String(), "without a valid HELM quickstart ownership marker") {
+		t.Fatalf("preview mismatch direct stdout=%q stderr=%q setup stdout=%q stderr=%q", directStdout.String(), directStderr.String(), setupStdout.String(), setupStderr.String())
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("foreign preview mutated state: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dataDir, quickstartOwnershipMarker)); !os.IsNotExist(err) {
+		t.Fatalf("foreign preview created ownership marker: %v", err)
+	}
+}
+
+func TestSetupFrontDoorRejectsExplicitCrossModeFlags(t *testing.T) {
+	original := setupRunFirstRun
+	t.Cleanup(func() { setupRunFirstRun = original })
+	calls := 0
+	setupRunFirstRun = func([]string, io.Writer, io.Writer) int {
+		calls++
+		return 0
+	}
+
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "quickstart profile in support matrix mode",
+			args: []string{"--profile", "codex", "--yes"},
+			want: "--profile requires --quickstart",
+		},
+		{
+			name: "support matrix client in quickstart mode",
+			args: []string{"--quickstart", "--client", "cursor", "--yes"},
+			want: "--client is not valid with --quickstart",
+		},
+		{
+			name: "config print in quickstart mode",
+			args: []string{"--quickstart", "--print-config", "--yes"},
+			want: "--print-config is not valid with --quickstart",
+		},
+		{
+			name: "client in json support matrix mode",
+			args: []string{"--json", "--client", "cursor"},
+			want: "--client is not valid with the support-matrix mode",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Run(append([]string{"helm-ai-kernel", "setup"}, test.args...), &stdout, &stderr)
+			if code != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), test.want) {
+				t.Fatalf("setup %v code=%d stdout=%q stderr=%q", test.args, code, stdout.String(), stderr.String())
+			}
+		})
+	}
+	if calls != 0 {
+		t.Fatalf("invalid front-door flags delegated to Quickstart %d times", calls)
+	}
+}
+
 func TestSetupInstallQuickstartForwardsConsoleIntent(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "workspace")

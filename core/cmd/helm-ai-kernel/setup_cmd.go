@@ -169,15 +169,16 @@ func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup: unexpected argument %q\n", fs.Arg(0))
 		return 2
 	}
+	supplied := make(map[string]bool)
 	consolePortSet := false
 	fs.Visit(func(f *flag.Flag) {
+		supplied[f.Name] = true
 		consolePortSet = consolePortSet || f.Name == "console-port"
 	})
+	if rejectSetupFrontDoorModeFlags(stderr, supplied, *quickstart, *printConfig, *jsonOut) {
+		return 2
+	}
 	if *quickstart {
-		if *printConfig {
-			fmt.Fprintln(stderr, "setup: --quickstart cannot be combined with --print-config")
-			return 2
-		}
 		if (*noOpen || consolePortSet) && !*console {
 			fmt.Fprintln(stderr, "setup: --console-port and --no-open require --console")
 			return 2
@@ -207,6 +208,50 @@ func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
 	}
 	printSetupUsage(stdout)
 	return 0
+}
+
+// rejectSetupFrontDoorModeFlags prevents a parsed option from being silently
+// ignored by a different front-door mode. supplied is built with FlagSet.Visit
+// so default values do not become errors merely because they exist.
+func rejectSetupFrontDoorModeFlags(stderr io.Writer, supplied map[string]bool, quickstart, printConfig, jsonOut bool) bool {
+	quickstartOnly := []string{"profile", "yes", "dry-run", "data-dir", "console", "console-port", "no-open", "offline", "reset"}
+	if quickstart {
+		return rejectSetupFrontDoorFlags(stderr, supplied, "--quickstart", "client", "print-config")
+	}
+	if jsonOut {
+		if rejectSetupFrontDoorFlags(stderr, supplied, "the support-matrix mode", "client", "print-config") {
+			return true
+		}
+		return rejectSetupQuickstartOnlyFlags(stderr, supplied, quickstartOnly)
+	}
+	if printConfig {
+		return rejectSetupQuickstartOnlyFlags(stderr, supplied, quickstartOnly)
+	}
+	if supplied["client"] {
+		fmt.Fprintln(stderr, "setup: --client requires --print-config")
+		return true
+	}
+	return rejectSetupQuickstartOnlyFlags(stderr, supplied, quickstartOnly)
+}
+
+func rejectSetupQuickstartOnlyFlags(stderr io.Writer, supplied map[string]bool, names []string) bool {
+	for _, name := range names {
+		if supplied[name] {
+			fmt.Fprintf(stderr, "setup: --%s requires --quickstart\n", name)
+			return true
+		}
+	}
+	return false
+}
+
+func rejectSetupFrontDoorFlags(stderr io.Writer, supplied map[string]bool, mode string, names ...string) bool {
+	for _, name := range names {
+		if supplied[name] {
+			fmt.Fprintf(stderr, "setup: --%s is not valid with %s\n", name, mode)
+			return true
+		}
+	}
+	return false
 }
 
 type setupQuickstartRequest struct {

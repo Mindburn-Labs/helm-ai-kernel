@@ -395,6 +395,58 @@ func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
 	}
 }
 
+func TestApprovalRouteDerivesActorAndRejectsStaleCeremony(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(`{"approval_id":"approval-raw-admin","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1}`))
+	authorizeTestRequest(createReq)
+	createRec := httptest.NewRecorder()
+	mux.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create approval status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created contracts.ApprovalCeremony
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	transitionReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-raw-admin/approve", strings.NewReader(fmt.Sprintf(`{"actor":"user:attacker","expected_ceremony_hash":%q,"reason":"reviewed"}`, created.CeremonyHash)))
+	authorizeTestRequest(transitionReq)
+	// The raw admin path must ignore both body and tenant-header identities.
+	transitionReq.Header.Set(principalHeader, "user:attacker")
+	transitionRec := httptest.NewRecorder()
+	mux.ServeHTTP(transitionRec, transitionReq)
+	if transitionRec.Code != http.StatusOK {
+		t.Fatalf("transition approval status=%d body=%s", transitionRec.Code, transitionRec.Body.String())
+	}
+	var approval contracts.ApprovalCeremony
+	if err := json.Unmarshal(transitionRec.Body.Bytes(), &approval); err != nil {
+		t.Fatal(err)
+	}
+	if approval.State != contracts.ApprovalCeremonyAllowed || len(approval.Approvers) != 1 || approval.Approvers[0] != "system-admin" {
+		t.Fatalf("raw shared-admin transition trusted caller identity: %+v", approval)
+	}
+
+	staleReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-raw-admin/revoke", strings.NewReader(fmt.Sprintf(`{"expected_ceremony_hash":%q,"reason":"stale"}`, created.CeremonyHash)))
+	authorizeTestRequest(staleReq)
+	staleRec := httptest.NewRecorder()
+	mux.ServeHTTP(staleRec, staleReq)
+	if staleRec.Code != http.StatusConflict || !strings.Contains(staleRec.Body.String(), "refresh and review again") {
+		t.Fatalf("stale transition status=%d body=%s", staleRec.Code, staleRec.Body.String())
+	}
+
+	missingHashReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-raw-admin/revoke", strings.NewReader(`{"reason":"missing hash"}`))
+	authorizeTestRequest(missingHashReq)
+	missingHashRec := httptest.NewRecorder()
+	mux.ServeHTTP(missingHashRec, missingHashReq)
+	if missingHashRec.Code != http.StatusBadRequest || !strings.Contains(missingHashRec.Body.String(), "expected_ceremony_hash") {
+		t.Fatalf("missing-hash transition status=%d body=%s", missingHashRec.Code, missingHashRec.Body.String())
+	}
+}
+
 func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()

@@ -29,14 +29,14 @@ func TestApprovalHTTPClientListsAndTransitions(t *testing.T) {
 			if r.Method != http.MethodPost {
 				t.Fatalf("transition method = %s", r.Method)
 			}
-			var body struct {
-				Actor  string `json:"actor"`
-				Reason string `json:"reason"`
-			}
+			var body map[string]json.RawMessage
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatalf("decode transition: %v", err)
 			}
-			if body.Actor != "operator.cli" || body.Reason == "" {
+			if _, ok := body["actor"]; ok {
+				t.Fatalf("watch transition sent caller-controlled actor: %s", body["actor"])
+			}
+			if string(body["expected_ceremony_hash"]) != `"sha256:ceremony"` || len(body["reason"]) == 0 {
 				t.Fatalf("transition body = %+v", body)
 			}
 			item := watchTestCeremony("ap-1", time.Unix(1, 0))
@@ -56,7 +56,7 @@ func TestApprovalHTTPClientListsAndTransitions(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].ApprovalID != "ap-1" {
 		t.Fatalf("ListApprovals = %+v, %v", items, err)
 	}
-	transitioned, err := client.TransitionApproval(context.Background(), "ap-1", "approve", "operator.cli", "reviewed")
+	transitioned, err := client.TransitionApproval(context.Background(), "ap-1", "approve", "sha256:ceremony", "reviewed")
 	if err != nil || transitioned.State != contracts.ApprovalCeremonyAllowed {
 		t.Fatalf("TransitionApproval = %+v, %v", transitioned, err)
 	}
@@ -99,8 +99,11 @@ func TestApprovalHTTPClientRejectsUnsafeInputs(t *testing.T) {
 	if err != nil || client == nil {
 		t.Fatalf("loopback HTTP client = %v, %v", client, err)
 	}
-	if _, err := client.TransitionApproval(context.Background(), "ap-1", "revoke", "operator", ""); err == nil {
+	if _, err := client.TransitionApproval(context.Background(), "ap-1", "revoke", "sha256:ceremony", ""); err == nil {
 		t.Fatal("watch client must not expose revoke")
+	}
+	if _, err := client.TransitionApproval(context.Background(), "ap-1", "approve", "", "reviewed"); err == nil {
+		t.Fatal("watch client must require a reviewed ceremony hash")
 	}
 }
 
@@ -116,6 +119,22 @@ func TestApprovalHTTPClientSanitizesRemoteError(t *testing.T) {
 	_, err = client.ListApprovals(context.Background())
 	if err == nil || strings.Contains(err.Error(), "\x1b") || !strings.Contains(err.Error(), "401") {
 		t.Fatalf("ListApprovals error = %q", err)
+	}
+}
+
+func TestApprovalHTTPClientMarksConflictForRefresh(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"detail":"approval changed"}`))
+	}))
+	defer server.Close()
+	client, err := newApprovalHTTPClient(server.URL, "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.TransitionApproval(context.Background(), "ap-1", "approve", "sha256:ceremony", "reviewed"); !errors.Is(err, errWatchApprovalChanged) {
+		t.Fatalf("conflict error = %v, want refresh sentinel", err)
 	}
 }
 

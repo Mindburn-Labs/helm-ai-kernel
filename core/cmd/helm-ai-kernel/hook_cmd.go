@@ -5,7 +5,11 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -15,21 +19,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shellscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
 var (
-	hookStdin = io.Reader(os.Stdin)
-	hookNow   = func() time.Time { return time.Now().UTC() }
+	hookStdin            = io.Reader(os.Stdin)
+	hookNow              = func() time.Time { return time.Now().UTC() }
+	errHookPolicyProfile = errors.New("hook policy profile unavailable")
 )
 
 type hookOptions struct {
-	Client          string
-	DataDir         string
-	SigningSeedFile string
-	JSON            bool
+	Client              string
+	DataDir             string
+	PolicyProfile       string
+	PolicyProfileSHA256 string
+	SigningSeedFile     string
+	JSON                bool
 }
 
 type preToolPayload struct {
@@ -52,13 +60,14 @@ type hookSpecificOutput struct {
 }
 
 type hookClassification struct {
-	ShouldDecide bool
-	Class        string
-	Target       string
-	Action       string
-	ToolID       string
-	Reason       string
-	Metadata     map[string]string
+	ShouldDecide            bool
+	Class                   string
+	Target                  string
+	Action                  string
+	ToolID                  string
+	Reason                  string
+	Metadata                map[string]string
+	RequiresShellPermission bool
 }
 
 func init() {
@@ -93,6 +102,8 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code or codex")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
+	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path")
+	fs.StringVar(&opts.PolicyProfileSHA256, "policy-profile-sha256", "", "Approved SHA-256 digest for the policy profile")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
 	fs.BoolVar(&opts.JSON, "json", false, "Reserved for structured diagnostics")
 	if err := fs.Parse(args); err != nil {
@@ -118,20 +129,38 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	if !classification.ShouldDecide {
 		return 0
 	}
-	receipt, err := buildHookDecisionReceipt(opts, payload, classification)
-	if err != nil {
-		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
-		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: local receipt signer is unavailable")
+	classifications := []hookClassification{classification}
+	if classification.RequiresShellPermission {
+		classifications = append(classifications, hookClassification{
+			ShouldDecide: true,
+			Class:        "shell-operate",
+			Target:       inputString(payload.ToolInput, "command", "cmd"),
+			Action:       "shell_operate",
+			ToolID:       "shell",
+			Reason:       "compound shell operation",
+			Metadata:     classification.Metadata,
+		})
 	}
-	if receipt.Verdict != contracts.WorkstationVerdictDeny {
-		return 0
+	for _, decision := range classifications {
+		receipt, err := buildHookDecisionReceipt(opts, payload, decision)
+		if err != nil {
+			fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
+			reason := "HELM denied operation: local receipt signer is unavailable"
+			if errors.Is(err, errHookPolicyProfile) {
+				reason = "HELM denied operation: policy profile is unavailable"
+			}
+			return emitHookDenyOrFail(stdout, stderr, reason)
+		}
+		receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
+		if err != nil {
+			fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
+			return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: receipt persistence is unavailable")
+		}
+		if receipt.Verdict == contracts.WorkstationVerdictDeny {
+			return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s)", decision.Reason, receipt.ReasonCode, receiptPath))
+		}
 	}
-	receiptPath, err := writeDecisionReceipt("", filepath.Join(opts.DataDir, "receipts", "hooks"), receipt)
-	if err != nil {
-		fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
-		return emitHookDenyOrFail(stdout, stderr, "HELM denied operation: receipt persistence is unavailable")
-	}
-	return emitHookDenyOrFail(stdout, stderr, fmt.Sprintf("HELM denied %s: %s (receipt: %s)", classification.Reason, receipt.ReasonCode, receiptPath))
+	return 0
 }
 
 func emitHookDenyOrFail(stdout, stderr io.Writer, reason string) int {
@@ -152,7 +181,7 @@ func writeHookDeny(stdout io.Writer, reason string) error {
 }
 
 func printHookUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--signing-seed-file PATH]")
+	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--policy-profile PATH --policy-profile-sha256 SHA256] [--signing-seed-file PATH]")
 }
 
 func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
@@ -184,14 +213,25 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 		// existing signed decision path; the permit/receipt verdict is still
 		// produced by workstation.Decide, fail-closed as before.
 		if scan := shellscan.ClassifyAt(command, payload.CWD); scan.Decide {
+			class := "shell-operate"
+			target := command
+			action := "shell_operate"
+			reason := "shell operation: " + scan.Reason
+			if scan.SensitiveTarget != "" {
+				class = "sensitive-file-write"
+				target = scan.SensitiveTarget
+				action = "file_write"
+				reason = "sensitive file operation"
+			}
 			return hookClassification{
-				ShouldDecide: true,
-				Class:        "shell-operate",
-				Target:       command,
-				Action:       "shell_operate",
-				ToolID:       "shell",
-				Reason:       "shell operation: " + scan.Reason,
-				Metadata:     shellscanReceiptMetadata(scan),
+				ShouldDecide:            true,
+				Class:                   class,
+				Target:                  target,
+				Action:                  action,
+				ToolID:                  "shell",
+				Reason:                  reason,
+				Metadata:                shellscanReceiptMetadata(scan),
+				RequiresShellPermission: scan.RequiresShellPermission,
 			}
 		}
 	case strings.HasPrefix(tool, "mcp__"):
@@ -217,7 +257,7 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 		if isSensitiveWriteTarget(target) {
 			return hookClassification{
 				ShouldDecide: true,
-				Class:        "secret",
+				Class:        "sensitive-file-write",
 				Target:       target,
 				Action:       "file_write",
 				ToolID:       tool,
@@ -232,11 +272,26 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 	effectType, effectMode, defaultAction, defaultTool := workstation.EffectDefaults(classification.Class)
 	action := firstNonEmptyString(classification.Action, defaultAction)
 	toolID := firstNonEmptyString(classification.ToolID, payload.ToolName, defaultTool)
-	profile, err := workstation.LoadPolicyProfileFile("")
+	targetFingerprint := fingerprintHookTarget(classification.Target)
+	profile, profileDigest, err := workstation.LoadPolicyProfileFileWithDigest(opts.PolicyProfile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", errHookPolicyProfile, err)
+	}
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		approvedDigest := strings.TrimSpace(opts.PolicyProfileSHA256)
+		if approvedDigest == "" {
+			return nil, fmt.Errorf("%w: custom policy profile has no approved digest", errHookPolicyProfile)
+		}
+		if approvedDigest != profileDigest {
+			return nil, fmt.Errorf("%w: custom policy profile digest does not match installed configuration", errHookPolicyProfile)
+		}
+	}
+	requestID, err := newHookRequestID()
+	if err != nil {
+		return nil, fmt.Errorf("generate hook request ID: %w", err)
 	}
 	req := contracts.WorkstationDecisionRequest{
+		RequestID:    requestID,
 		RunID:        firstNonEmptyString(payload.SessionID, "hook-pre-tool"),
 		ActorID:      "agent.local",
 		WorkspaceID:  firstNonEmptyString(payload.CWD, "local-workstation"),
@@ -259,7 +314,38 @@ func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classifi
 	if err != nil {
 		return nil, fmt.Errorf("load workstation signing key: %w", err)
 	}
-	return workstation.Decide(profile, req, workstation.DecisionOptions{SigningSeed: seed})
+	persistedMetadata := map[string]string{
+		"target_binding": "sha256:utf-8",
+	}
+	if profileDigest != "" {
+		persistedMetadata["policy_profile_sha256"] = profileDigest
+	}
+	if effectType == contracts.EffectTypeWorkstationMCPToolCall {
+		canonicalInput, err := canonicalize.JCS(payload.ToolInput)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalize MCP tool input: %w", err)
+		}
+		persistedMetadata["mcp_input_binding"] = "jcs-sha256"
+		persistedMetadata["mcp_input_sha256"] = canonicalize.ComputeArtifactHash(canonicalInput)
+	}
+	return workstation.Decide(profile, req, workstation.DecisionOptions{
+		SigningSeed:       seed,
+		PersistedTarget:   targetFingerprint,
+		PersistedMetadata: persistedMetadata,
+	})
+}
+
+func newHookRequestID() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", err
+	}
+	return "hook_" + hex.EncodeToString(value[:]), nil
+}
+
+func fingerprintHookTarget(target string) string {
+	sum := sha256.Sum256([]byte(target))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func shellscanReceiptMetadata(scan shellscan.Result) map[string]string {
@@ -322,6 +408,10 @@ func isSensitiveWriteTarget(path string) bool {
 		"id_ed25519",
 		".git/",
 		".git\\",
+		".claude/settings.json",
+		".codex/hooks.json",
+		".claude\\settings.json",
+		".codex\\hooks.json",
 	}
 	for _, needle := range sensitive {
 		if strings.Contains(p, needle) {

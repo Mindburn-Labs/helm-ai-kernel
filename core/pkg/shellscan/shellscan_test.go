@@ -1,6 +1,8 @@
 package shellscan
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -121,6 +123,7 @@ var decideCases = []struct {
 	{"evasion-redirect-windows-git", `echo x > 'repo/.git\config'`, "sensitive target"},
 	{"evasion-redirect-all-env", "echo SECRET=x &> .env", "sensitive target"},
 	{"evasion-append-all-key", "cat pub &>> /home/u/.ssh/id_ed25519", "sensitive target"},
+	{"protected-config-copy", "cp replacement .codex/hooks.json", "sensitive target"},
 
 	// Fail-closed: unparseable input must not pass silently.
 	{"failclosed-unparseable", "rm -rf /tmp/x '", "unparseable"},
@@ -380,6 +383,82 @@ func TestClassifyPassesBenign(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClassifyMarksOnlyStaticallyDiscernibleSensitiveWrites(t *testing.T) {
+	cases := []struct {
+		name    string
+		command string
+		decide  bool
+		target  string
+	}{
+		{"read protected config", "cat .codex/hooks.json", false, ""},
+		{"copy protected config", "cp replacement .codex/hooks.json", true, ".codex/hooks.json"},
+		{"copy dynamic protected config", `cp replacement "$PWD/.codex/hooks.json"`, true, ".codex/hooks.json"},
+		{"copy into protected config directory", "cp /tmp/hooks.json .codex/", true, ".codex/hooks.json"},
+		{"copy into ambiguous protected config directory", "cp /tmp/hooks.json .codex", true, ".codex/hooks.json"},
+		{"copy target-directory protected config", "cp -t .codex/ /tmp/hooks.json", true, ".codex/hooks.json"},
+		{"remove protected config", "rm .codex/hooks.json", true, ".codex/hooks.json"},
+		{"python concatenated write target", `python -c "open('.codex/' + 'hooks.json','w').write('x')"`, true, ".codex/hooks.json"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Classify(tc.command)
+			if res.Decide != tc.decide {
+				t.Fatalf("Classify(%q).Decide = %t (%s), want %t", tc.command, res.Decide, res.Reason, tc.decide)
+			}
+			if res.SensitiveTarget != tc.target {
+				t.Fatalf("Classify(%q).SensitiveTarget = %q, want %q", tc.command, res.SensitiveTarget, tc.target)
+			}
+		})
+	}
+}
+
+func TestClassifyAtRecognizesExistingCopyDirectoryWithoutTrailingSlash(t *testing.T) {
+	cwd := t.TempDir()
+	if err := os.Mkdir(filepath.Join(cwd, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	res := ClassifyAt("cp /tmp/hooks.json .codex", cwd)
+	if !res.Decide || res.SensitiveTarget != ".codex/hooks.json" {
+		t.Fatalf("ClassifyAt existing copy destination = %+v, want protected hooks decision", res)
+	}
+}
+
+func TestClassifyRequiresShellPermissionForSensitiveDestructiveEffects(t *testing.T) {
+	cases := []struct {
+		name    string
+		command string
+		want    bool
+	}{
+		{"sensitive recursive removal", "rm -rf .env /tmp/helm-cleanup", true},
+		{"sensitive nonrecursive removal", "rm .env", true},
+		{"sensitive write only", "echo x > .env", false},
+		{"destructive operation only", "rm -rf /tmp/helm-cleanup", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Classify(tc.command)
+			if res.RequiresShellPermission != tc.want {
+				t.Fatalf("Classify(%q).RequiresShellPermission = %t, want %t (signals=%v)", tc.command, res.RequiresShellPermission, tc.want, res.Signals)
+			}
+			if tc.want && !containsSignal(res.Signals, SignalSensitiveDestructive) {
+				t.Fatalf("Classify(%q) did not record %q in %v", tc.command, SignalSensitiveDestructive, res.Signals)
+			}
+		})
+	}
+}
+
+func containsSignal(signals []string, want string) bool {
+	for _, signal := range signals {
+		if signal == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestClassifyAtResolvesGeneratedScriptsAgainstCWD(t *testing.T) {

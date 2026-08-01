@@ -82,16 +82,21 @@ Before tagging a release:
 1. run `make prepare-version VERSION=<version>` and review the coordinated
    bump across `VERSION`, chart metadata, SDK manifests, OpenAPI metadata,
    generated SDK headers, and release docs
-2. update `CHANGELOG.md`
-3. run `make docs-coverage docs-truth`
-4. run `make quality-merge`
-5. run `make quality-release`
-6. run `make release-readiness`
-7. run `make release-assets`
-8. after publication, run or confirm `make version-drift-published`
+2. synchronize `api/openapi/helm.openapi.yaml` into
+   `Mindburn-Labs/contracts-catalog` and merge the catalog change to `main`
+3. update `CHANGELOG.md`
+4. run `make docs-coverage docs-truth`
+5. run `make quality-merge`
+6. run `make quality-release`
+7. run `make release-readiness`
+8. run `make release-assets`
+9. after publication, run or confirm `make version-drift-published`
 
 Tag-triggered release workflows fail if the tag `v<version>` does not match
-the checked-in `VERSION` file. The chart and SDK package manifests are not
+the checked-in `VERSION` file, the tag's peeled commit is not current Kernel
+`main`, or the catalog OpenAPI differs from the tagged Kernel OpenAPI. The
+preflight reads catalog `main` with `DOWNSTREAM_FANOUT_TOKEN`; it never opens
+or merges a downstream catalog PR. The chart and SDK package manifests are not
 patched in CI; source-controlled release metadata is the authority.
 
 ## Release Automation

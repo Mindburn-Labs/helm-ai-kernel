@@ -97,7 +97,6 @@ func TestCanonicalizeDecision_EmptyFields(t *testing.T) {
 	}
 }
 
-
 // TestCanonicalizeDecisionV2_ReasonNotBound pins the HELM-303 semantics
 // change explicitly: mutating free-text Reason on a V2-signed record does NOT
 // invalidate the signature — ReasonCode is the attested claim.

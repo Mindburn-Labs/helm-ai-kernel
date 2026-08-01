@@ -73,7 +73,8 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			public_key_set JSONB,
 			signature_profile TEXT DEFAULT '',
 			signature_algorithm TEXT DEFAULT '',
-			correlation_id TEXT DEFAULT ''
+			correlation_id TEXT DEFAULT '',
+			signature_version TEXT DEFAULT ''
 		);
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS effect_id TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS external_reference_id TEXT;
@@ -88,6 +89,11 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_profile TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_algorithm TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS correlation_id TEXT DEFAULT '';
+		-- signature_version names the preimage revision the signature was made
+		-- over (HELM-303). It MUST round-trip: a stored receipt whose version is
+		-- dropped verifies against the legacy V4 preimage and fails, which is
+		-- indistinguishable from tampering.
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_version TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS log_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS leaf_index BIGINT DEFAULT 0;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS transparency JSONB;
@@ -105,7 +111,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 }
 
 // receiptColumns is the canonical column list for receipt queries.
-const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id`
+const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id, COALESCE(signature_version, '') AS signature_version`
 
 func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE decision_id = $1`
@@ -199,7 +205,7 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
 		&r.BlobHash, &r.OutputHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
 		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.LogID, &r.LeafIndex, &transparency,
-		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID,
+		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID, &r.SignatureVersion,
 	)
 	if err != nil {
 		return nil, err
@@ -292,10 +298,10 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
 			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, args_hash, blob_hash,
 			log_id, leaf_index, transparency,
-			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
+			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, signature_version
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb,
-			$20, $21::jsonb, $22, $23, $24)
+			$20, $21::jsonb, $22, $23, $24, $25)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
@@ -334,6 +340,7 @@ func insertPostgresReceipt(ctx context.Context, execer sqlExecer, r *contracts.R
 		r.SignatureProfile,
 		r.SignatureAlgorithm,
 		r.CorrelationID,
+		r.SignatureVersion,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)

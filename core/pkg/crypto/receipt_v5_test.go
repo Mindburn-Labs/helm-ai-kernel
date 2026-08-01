@@ -8,18 +8,18 @@ import (
 
 func v5TestReceipt() *contracts.Receipt {
 	return &contracts.Receipt{
-		ReceiptID:  "rcpt-1",
-		DecisionID: "dec-1",
-		EffectID:   "eff-1",
-		Status:     "EXECUTED",
-		OutputHash: "sha256:out",
-		PrevHash:   "sha256:prev",
+		ReceiptID:    "rcpt-1",
+		DecisionID:   "dec-1",
+		EffectID:     "eff-1",
+		Status:       "EXECUTED",
+		OutputHash:   "sha256:out",
+		PrevHash:     "sha256:prev",
 		LamportClock: 7,
-		ArgsHash:   "sha256:args",
-		Verdict:    "ALLOW",
-		ReasonCode: "POLICY_ALLOW",
-		PolicyHash: "sha256:policy",
-		SessionID:  "sess-1",
+		ArgsHash:     "sha256:args",
+		Verdict:      "ALLOW",
+		ReasonCode:   "POLICY_ALLOW",
+		PolicyHash:   "sha256:policy",
+		SessionID:    "sess-1",
 	}
 }
 

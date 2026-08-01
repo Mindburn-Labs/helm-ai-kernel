@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Functional tests for the HELM Java SDK.
  * These test client construction, request building, serialization,
  * and error handling without requiring a live server.
+ * quantum_posture: HTTP compatibility tests do not implement or assert a cryptographic primitive.
  */
 public class HelmClientTest {
     private static final ObjectMapper mapper = new ObjectMapper()

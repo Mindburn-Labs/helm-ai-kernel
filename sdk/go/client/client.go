@@ -173,13 +173,13 @@ func (c *HelmClient) ChatCompletionsWithReceipt(req ChatCompletionRequest) (*Cha
 
 // EvaluateDecision calls POST /api/v1/evaluate with the canonical V5 request.
 func (c *HelmClient) EvaluateDecision(req EvaluateRequest) (*EvaluateResponse, error) {
-	if strings.TrimSpace(req.Tool) == "" {
+	if strings.TrimSpace(req.GetTool()) == "" {
 		return nil, fmt.Errorf("evaluate decision requires a non-blank tool")
 	}
-	if strings.TrimSpace(req.EffectLevel) == "" {
+	if strings.TrimSpace(req.GetEffectLevel()) == "" {
 		return nil, fmt.Errorf("evaluate decision requires a non-blank effect_level")
 	}
-	if strings.TrimSpace(req.SessionId) == "" {
+	if strings.TrimSpace(req.GetSessionId()) == "" {
 		return nil, fmt.Errorf("evaluate decision requires a non-blank session_id")
 	}
 	var out EvaluateResponse

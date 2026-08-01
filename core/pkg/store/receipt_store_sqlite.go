@@ -208,6 +208,26 @@ func (s *SQLiteReceiptStore) GetByReceiptID(ctx context.Context, receiptID strin
 	return s.queryOne(ctx, query, receiptID)
 }
 
+// GetByReceiptIDForTenant returns only a V5 receipt persisted through the
+// authenticated tenant scope. Unscoped legacy records are intentionally not
+// surfaced by public tenant routes.
+func (s *SQLiteReceiptStore) GetByReceiptIDForTenant(ctx context.Context, tenantID, receiptID string) (*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `
+		SELECT ` + sqliteReceiptColumns + `
+		FROM receipts
+		WHERE receipt_id = ?
+		  AND signature_version = ?
+		  AND COALESCE(session_id, '') <> ''
+		  AND substr(causal_session_id, 1, ?) = ?
+	`
+	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, len(prefix), prefix)
+}
+
 func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
 	query := `
 		SELECT ` + sqliteReceiptColumns + `
@@ -263,6 +283,51 @@ func (s *SQLiteReceiptStore) ListByAgent(ctx context.Context, agentID string, si
 	return receipts, nil
 }
 
+// ListByTenant lists only V5 receipts with durable authenticated tenant
+// provenance. It deliberately never uses executor_id as a public read scope.
+func (s *SQLiteReceiptStore) ListByTenant(ctx context.Context, tenantID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `
+		SELECT ` + sqliteReceiptColumns + `
+		FROM receipts
+		WHERE signature_version = ?
+		  AND COALESCE(session_id, '') <> ''
+		  AND substr(causal_session_id, 1, ?) = ?
+		  AND lamport_clock > ?
+		ORDER BY lamport_clock ASC, timestamp ASC
+		LIMIT ?
+	`
+	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, len(prefix), prefix, since, limit)
+}
+
+// ListByTenantSession returns the receipt chain keyed by the signed
+// Receipt.SessionID inside an authenticated tenant scope.
+func (s *SQLiteReceiptStore) ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	sessionID = strings.TrimSpace(sessionID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("session id is required")
+	}
+	query := `
+		SELECT ` + sqliteReceiptColumns + `
+		FROM receipts
+		WHERE causal_session_id = ?
+		  AND session_id = ?
+		  AND signature_version = ?
+		  AND lamport_clock > ?
+		ORDER BY lamport_clock ASC, timestamp ASC
+		LIMIT ?
+	`
+	return s.queryReceipts(ctx, query, causalReceiptScopeKey(tenantID, sessionID), sessionID, contracts.ReceiptSignatureV5, since, limit)
+}
+
 func (s *SQLiteReceiptStore) ListSince(ctx context.Context, since uint64, limit int) ([]*contracts.Receipt, error) {
 	query := `
 		SELECT ` + sqliteReceiptColumns + `
@@ -272,6 +337,27 @@ func (s *SQLiteReceiptStore) ListSince(ctx context.Context, since uint64, limit 
         LIMIT ?
     `
 	rows, err := s.db.QueryContext(ctx, query, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var receipts []*contracts.Receipt
+	for rows.Next() {
+		r, err := scanReceiptRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return receipts, nil
+}
+
+func (s *SQLiteReceiptStore) queryReceipts(ctx context.Context, query string, args ...any) ([]*contracts.Receipt, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -413,8 +499,8 @@ func queryLastSQLiteReceipt(ctx context.Context, queryer sqlQueryer, sessionID s
 	return r, nil
 }
 
-func (s *SQLiteReceiptStore) queryOne(ctx context.Context, query string, arg any) (*contracts.Receipt, error) {
-	receipt, err := scanSQLiteReceipt(s.db.QueryRowContext(ctx, query, arg))
+func (s *SQLiteReceiptStore) queryOne(ctx context.Context, query string, args ...any) (*contracts.Receipt, error) {
+	receipt, err := scanSQLiteReceipt(s.db.QueryRowContext(ctx, query, args...))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("receipt not found")

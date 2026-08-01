@@ -218,19 +218,31 @@ def test_generated_models_exercise_json_entrypoints() -> None:
     assert len(exercised) >= 250, failures[:10]
 
 
-def test_generated_evaluate_request_session_id_regex_uses_stdlib_re() -> None:
+def test_generated_evaluate_request_preserves_public_compatibility_envelope() -> None:
     request = types_gen.EvaluateRequest(
         tool="read_file",
         effect_level="read",
         session_id="session-1",
     )
     assert request.session_id == "session-1"
-    with pytest.raises(ValidationError):
-        types_gen.EvaluateRequest(
-            tool="read_file",
-            effect_level="read",
-            session_id="   ",
-        )
+
+    legacy = types_gen.EvaluateRequest(
+        action="read_file",
+        resource="read",
+        context={"session_id": "session-legacy"},
+    )
+    assert legacy.action == "read_file"
+    assert legacy.resource == "read"
+    assert legacy.context == {"session_id": "session-legacy"}
+
+    # The generated public model accepts the legacy/additive envelope. SDK
+    # client methods and the daemon reject blank effective values at runtime.
+    whitespace = types_gen.EvaluateRequest(
+        tool="read_file",
+        effect_level="read",
+        session_id="   ",
+    )
+    assert whitespace.session_id == "   "
 
 
 def test_generated_models_exercise_nullable_and_nested_false_paths() -> None:

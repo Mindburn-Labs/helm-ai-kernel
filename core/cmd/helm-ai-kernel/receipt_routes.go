@@ -29,15 +29,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Guardian unavailable", "guardian not initialized")
 			return
 		}
-		// The public operation uses api.EvaluateRequest. Keep action/resource as
-		// an undocumented compatibility adapter for existing direct daemon
-		// callers; generated SDKs use the canonical tool/effect_level fields.
-		var payload struct {
-			api.EvaluateRequest
-			Action   string `json:"action"`
-			Resource string `json:"resource"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		// V0.8 retains the public direct-daemon action/resource envelope while
+		// generated SDKs use the canonical V5 tool/effect_level/session_id
+		// fields. Authentication remains authoritative for principal and tenant.
+		var req api.EvaluateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			api.WriteBadRequest(w, "Invalid JSON body")
 			return
 		}
@@ -68,14 +64,13 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 		}
-		req := payload.EvaluateRequest
 		req.Tool = strings.TrimSpace(req.Tool)
 		if req.Tool == "" {
-			req.Tool = strings.TrimSpace(payload.Action)
+			req.Tool = strings.TrimSpace(req.Action)
 		}
 		req.EffectLevel = strings.TrimSpace(req.EffectLevel)
 		if req.EffectLevel == "" {
-			req.EffectLevel = strings.TrimSpace(payload.Resource)
+			req.EffectLevel = strings.TrimSpace(req.Resource)
 		}
 		if req.Tool == "" || req.EffectLevel == "" {
 			api.WriteBadRequest(w, "Evaluate route requires tool and effect_level")
@@ -147,14 +142,21 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(api.EvaluateResponse{
-			Allow:        contracts.Verdict(decision.Verdict) == contracts.VerdictAllow,
-			Verdict:      decision.Verdict,
-			ReceiptID:    receipt.ReceiptID,
-			DecisionID:   decision.ID,
-			DecisionHash: receipt.DecisionHash,
-			ReasonCode:   decision.ReasonCode,
-			PolicyRef:    policyRef,
-			LamportClock: receipt.LamportClock,
+			Allow:              contracts.Verdict(decision.Verdict) == contracts.VerdictAllow,
+			Verdict:            decision.Verdict,
+			ReceiptID:          receipt.ReceiptID,
+			DecisionID:         decision.ID,
+			DecisionHash:       receipt.DecisionHash,
+			ReasonCode:         decision.ReasonCode,
+			PolicyRef:          policyRef,
+			LamportClock:       receipt.LamportClock,
+			ID:                 decision.ID,
+			Action:             req.Tool,
+			Resource:           req.EffectLevel,
+			Reason:             decision.Reason,
+			PolicyVersion:      decision.PolicyVersion,
+			PolicyDecisionHash: decision.PolicyDecisionHash,
+			Signature:          decision.Signature,
 		})
 	}))
 
@@ -167,7 +169,12 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
-		agent := r.URL.Query().Get("agent")
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			return
+		}
+		sessionID := requestedReceiptSessionID(r)
 		since, err := parseReceiptCursor(r.URL.Query().Get("since"))
 		if err != nil {
 			api.WriteBadRequest(w, "Invalid since cursor")
@@ -188,7 +195,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		defer ticker.Stop()
 		cursor := since
 		for {
-			receipts, err := listReceiptsForCursor(r.Context(), svc, agent, cursor, limit)
+			receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, sessionID, cursor, limit)
 			if err != nil {
 				fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
 				flusher.Flush()
@@ -220,13 +227,18 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			return
+		}
 		limit := parseLimit(r.URL.Query().Get("limit"), 100, 1000)
 		since, err := parseReceiptCursor(r.URL.Query().Get("since"))
 		if err != nil {
 			api.WriteBadRequest(w, "Invalid since cursor")
 			return
 		}
-		receipts, err := listReceiptsForCursor(r.Context(), svc, r.URL.Query().Get("agent"), since, limit+1)
+		receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, requestedReceiptSessionID(r), since, limit+1)
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -254,12 +266,17 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			return
+		}
 		id := strings.TrimPrefix(r.URL.Path, "/api/v1/receipts/")
 		if id == "" || strings.Contains(id, "/") {
 			api.WriteBadRequest(w, "Invalid receipt id")
 			return
 		}
-		receipt, err := svc.ReceiptStore.GetByReceiptID(r.Context(), id)
+		receipt, err := receiptForTenant(r.Context(), svc, tenantID, id)
 		if err != nil {
 			api.WriteError(w, http.StatusNotFound, "Receipt not found", err.Error())
 			return
@@ -269,11 +286,56 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 	}))
 }
 
-func listReceiptsForCursor(ctx context.Context, svc *Services, agent string, since uint64, limit int) ([]*contracts.Receipt, error) {
-	if agent != "" {
-		return svc.ReceiptStore.ListByAgent(ctx, agent, since, limit)
+func authenticatedReceiptTenantID(ctx context.Context) (string, error) {
+	principal, err := helmauth.GetPrincipal(ctx)
+	if err != nil || principal == nil {
+		return "", fmt.Errorf("authenticated tenant principal is required")
 	}
-	return svc.ReceiptStore.ListSince(ctx, since, limit)
+	tenantID := strings.TrimSpace(principal.GetTenantID())
+	if tenantID == "" {
+		return "", fmt.Errorf("authenticated tenant id is required")
+	}
+	return tenantID, nil
+}
+
+func requestedReceiptSessionID(r *http.Request) string {
+	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
+	if sessionID != "" {
+		return sessionID
+	}
+	// Retain the old query spelling as an alias only. It is interpreted as a
+	// signed session ID, never as an executor filter.
+	return strings.TrimSpace(r.URL.Query().Get("agent"))
+}
+
+func tenantScopedReceiptReader(svc *Services) (store.TenantScopedReceiptReader, error) {
+	if svc == nil || svc.ReceiptStore == nil {
+		return nil, fmt.Errorf("receipt store unavailable")
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedReceiptReader)
+	if !ok {
+		return nil, fmt.Errorf("receipt store lacks tenant-scoped V5 read capability")
+	}
+	return reader, nil
+}
+
+func listReceiptsForCursor(ctx context.Context, svc *Services, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	reader, err := tenantScopedReceiptReader(svc)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(sessionID) != "" {
+		return reader.ListByTenantSession(ctx, tenantID, sessionID, since, limit)
+	}
+	return reader.ListByTenant(ctx, tenantID, since, limit)
+}
+
+func receiptForTenant(ctx context.Context, svc *Services, tenantID, receiptID string) (*contracts.Receipt, error) {
+	reader, err := tenantScopedReceiptReader(svc)
+	if err != nil {
+		return nil, err
+	}
+	return reader.GetByReceiptIDForTenant(ctx, tenantID, receiptID)
 }
 
 func parseReceiptCursor(raw string) (uint64, error) {

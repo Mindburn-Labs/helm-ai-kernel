@@ -40,6 +40,17 @@ type TenantScopedCausalReceiptAppender interface {
 	AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build CausalReceiptBuilder) error
 }
 
+// TenantScopedReceiptReader exposes read operations that are constrained by an
+// authenticated tenant and a V5 signed receipt session. Public runtime routes
+// must use this capability instead of executor-oriented legacy queries.
+// Implementations intentionally exclude unscoped and pre-V5 receipts: their
+// tenant provenance cannot be reconstructed safely at read time.
+type TenantScopedReceiptReader interface {
+	GetByReceiptIDForTenant(ctx context.Context, tenantID, receiptID string) (*contracts.Receipt, error)
+	ListByTenant(ctx context.Context, tenantID string, since uint64, limit int) ([]*contracts.Receipt, error)
+	ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error)
+}
+
 // ReceiptTimestampNormalizer exposes a store's durable timestamp precision to
 // producers. A producer must normalize before it signs or anchors a receipt
 // whose chain hash will later be reloaded from that store.
@@ -65,6 +76,14 @@ func causalReceiptSessionID(r *contracts.Receipt) string {
 // length framing avoids collisions between arbitrary tenant/session strings.
 func causalReceiptScopeKey(tenantID, sessionID string) string {
 	return fmt.Sprintf("tenant:%d:%s:session:%d:%s", len(tenantID), tenantID, len(sessionID), sessionID)
+}
+
+// causalReceiptTenantScopePrefix is the stable, length-framed prefix shared
+// by every authenticated session for a tenant. It is used only in durable
+// lookup predicates; the signed receipt envelope keeps the external session
+// identifier unchanged.
+func causalReceiptTenantScopePrefix(tenantID string) string {
+	return fmt.Sprintf("tenant:%d:%s:session:", len(tenantID), tenantID)
 }
 
 const backfillCausalReceiptSessionsSQL = `
@@ -188,6 +207,23 @@ func (s *PostgresReceiptStore) GetByReceiptID(ctx context.Context, receiptID str
 	return s.queryOne(ctx, query, receiptID)
 }
 
+// GetByReceiptIDForTenant returns only a V5 receipt persisted through the
+// authenticated tenant scope. Legacy/unscoped receipts fail closed rather than
+// being guessed into a tenant from caller-controlled data.
+func (s *PostgresReceiptStore) GetByReceiptIDForTenant(ctx context.Context, tenantID, receiptID string) (*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `SELECT ` + receiptColumns + ` FROM receipts
+		WHERE receipt_id = $1
+		  AND signature_version = $2
+		  AND COALESCE(session_id, '') <> ''
+		  AND substring(causal_session_id from 1 for $3) = $4`
+	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, len(prefix), prefix)
+}
+
 func (s *PostgresReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts ORDER BY timestamp DESC LIMIT $1`
 	rows, err := s.db.QueryContext(ctx, query, limit)
@@ -232,9 +268,67 @@ func (s *PostgresReceiptStore) ListByAgent(ctx context.Context, agentID string, 
 	return receipts, nil
 }
 
+// ListByTenant lists only V5 receipts with durable authenticated tenant
+// provenance. It deliberately does not fall back to executor_id.
+func (s *PostgresReceiptStore) ListByTenant(ctx context.Context, tenantID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `SELECT ` + receiptColumns + ` FROM receipts
+		WHERE signature_version = $1
+		  AND COALESCE(session_id, '') <> ''
+		  AND substring(causal_session_id from 1 for $2) = $3
+		  AND lamport_clock > $4
+		ORDER BY lamport_clock ASC, timestamp ASC LIMIT $5`
+	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, len(prefix), prefix, since, limit)
+}
+
+// ListByTenantSession returns the receipt chain keyed by the signed
+// Receipt.SessionID inside an authenticated tenant scope.
+func (s *PostgresReceiptStore) ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	sessionID = strings.TrimSpace(sessionID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("session id is required")
+	}
+	query := `SELECT ` + receiptColumns + ` FROM receipts
+		WHERE causal_session_id = $1
+		  AND session_id = $2
+		  AND signature_version = $3
+		  AND lamport_clock > $4
+		ORDER BY lamport_clock ASC, timestamp ASC LIMIT $5`
+	return s.queryReceipts(ctx, query, causalReceiptScopeKey(tenantID, sessionID), sessionID, contracts.ReceiptSignatureV5, since, limit)
+}
+
 func (s *PostgresReceiptStore) ListSince(ctx context.Context, since uint64, limit int) ([]*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE lamport_clock > $1 ORDER BY lamport_clock ASC, timestamp ASC LIMIT $2`
 	rows, err := s.db.QueryContext(ctx, query, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var receipts []*contracts.Receipt
+	for rows.Next() {
+		r, err := scanReceipt(rows)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return receipts, nil
+}
+
+func (s *PostgresReceiptStore) queryReceipts(ctx context.Context, query string, args ...any) ([]*contracts.Receipt, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -333,8 +427,8 @@ func nullableJSON(raw []byte) any {
 	return string(raw)
 }
 
-func (s *PostgresReceiptStore) queryOne(ctx context.Context, query string, arg any) (*contracts.Receipt, error) {
-	row := s.db.QueryRowContext(ctx, query, arg)
+func (s *PostgresReceiptStore) queryOne(ctx context.Context, query string, args ...any) (*contracts.Receipt, error) {
+	row := s.db.QueryRowContext(ctx, query, args...)
 	r, err := scanReceipt(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

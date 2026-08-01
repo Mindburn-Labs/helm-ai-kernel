@@ -418,6 +418,12 @@ paths:
           schema: { type: string }
         - name: agent
           in: query
+          deprecated: true
+          description: Deprecated alias for session_id. It is interpreted as a signed receipt session, never as an executor filter.
+          schema: { type: string }
+        - name: session_id
+          in: query
+          description: Filter by the signed Receipt.SessionID within the authenticated tenant.
           schema: { type: string }
       responses:
         '200':
@@ -453,6 +459,12 @@ paths:
           schema: { type: string }
         - name: agent
           in: query
+          deprecated: true
+          description: Deprecated alias for session_id. It is interpreted as a signed receipt session, never as an executor filter.
+          schema: { type: string }
+        - name: session_id
+          in: query
+          description: Filter by the signed Receipt.SessionID within the authenticated tenant.
           schema: { type: string }
       responses:
         '200':
@@ -4505,14 +4517,21 @@ components:
           additionalProperties: true
 
     EvaluateRequest:
-      description: Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
+      description: Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
       type: object
-      required: [tool, effect_level, session_id]
       properties:
+        principal:
+          type: string
+          description: Ignored; the authenticated principal is recorded as the receipt executor.
+        action:
+          type: string
+          description: Legacy direct-daemon alias for tool.
+        resource:
+          type: string
+          description: Legacy direct-daemon alias for effect_level.
         tool:
           type: string
           minLength: 1
-          pattern: '.*\S.*'
         args:
           type: object
           additionalProperties: true
@@ -4522,7 +4541,6 @@ components:
         effect_level:
           type: string
           minLength: 1
-          pattern: '.*\S.*'
           description: Policy resource used to evaluate the governed tool call.
         session_id:
           allOf:
@@ -4535,7 +4553,7 @@ components:
 
     NonBlankSessionID:
       type: string
-      pattern: '.*\S.*'
+      minLength: 1
 
     EvaluateResponse:
       type: object
@@ -4556,6 +4574,27 @@ components:
           type: integer
           format: int64
           minimum: 0
+        id:
+          type: string
+          description: Legacy decision identifier alias for decision_id.
+        action:
+          type: string
+          description: Legacy decision action.
+        resource:
+          type: string
+          description: Legacy decision resource.
+        reason:
+          type: string
+          description: Legacy human-readable decision reason.
+        policy_version:
+          type: string
+          description: Legacy policy version.
+        policy_decision_hash:
+          type: string
+          description: Legacy policy decision hash.
+        signature:
+          type: string
+          description: Legacy decision signature.
 
     DecisionRecord:
       type: object

@@ -394,11 +394,11 @@ impl HelmClient {
         req: &EvaluateRequest,
     ) -> Result<EvaluateResponse, HelmApiError> {
         for (field, value) in [
-            ("tool", &req.tool),
-            ("effect_level", &req.effect_level),
-            ("session_id", &req.session_id),
+            ("tool", req.tool.as_deref()),
+            ("effect_level", req.effect_level.as_deref()),
+            ("session_id", req.session_id.as_deref()),
         ] {
-            if value.trim().is_empty() {
+            if value.map(str::trim).is_none_or(str::is_empty) {
                 return Err(HelmApiError {
                     status: 0,
                     message: format!("evaluate_decision requires a non-blank {field}"),
@@ -1133,18 +1133,24 @@ mod tests {
 
     #[test]
     fn test_evaluate_decision_requires_canonical_v5_request() {
-        let request = EvaluateRequest::new(
-            "read_file".to_string(),
-            "read".to_string(),
-            "session-test".to_string(),
-        );
+        let request = EvaluateRequest {
+            tool: Some("read_file".to_string()),
+            effect_level: Some("read".to_string()),
+            session_id: Some("session-test".to_string()),
+            ..EvaluateRequest::new()
+        };
         let encoded = serde_json::to_value(&request).unwrap();
         assert_eq!(encoded["tool"], "read_file");
         assert_eq!(encoded["effect_level"], "read");
         assert_eq!(encoded["session_id"], "session-test");
 
         let client = HelmClient::new("http://127.0.0.1:1");
-        let blank = EvaluateRequest::new("read_file".to_string(), "read".to_string(), " ".to_string());
+        let blank = EvaluateRequest {
+            tool: Some("read_file".to_string()),
+            effect_level: Some("read".to_string()),
+            session_id: Some(" ".to_string()),
+            ..EvaluateRequest::new()
+        };
         let err = client.evaluate_decision(&blank).unwrap_err();
         assert_eq!(err.status, 0);
         assert!(err.message.contains("non-blank session_id"));

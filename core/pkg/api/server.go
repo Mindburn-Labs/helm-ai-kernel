@@ -146,6 +146,11 @@ func FromCanonical(r *contracts.Receipt) *ReceiptDTO {
 
 // EvaluateRequest is the JSON body sent by SDKs.
 type EvaluateRequest struct {
+	// Principal, Action, and Resource retain the v0.8 direct-daemon request
+	// envelope. Authentication always supplies the effective principal.
+	Principal   string         `json:"principal,omitempty"`
+	Action      string         `json:"action,omitempty"`
+	Resource    string         `json:"resource,omitempty"`
 	Tool        string         `json:"tool"`
 	Args        map[string]any `json:"args"`
 	AgentID     string         `json:"agent_id"`
@@ -164,6 +169,15 @@ type EvaluateResponse struct {
 	ReasonCode   string `json:"reason_code"`
 	PolicyRef    string `json:"policy_ref"`
 	LamportClock uint64 `json:"lamport_clock"`
+	// The legacy DecisionRecord-shaped fields remain additive v0.8 response
+	// compatibility for direct-daemon callers.
+	ID                 string `json:"id,omitempty"`
+	Action             string `json:"action,omitempty"`
+	Resource           string `json:"resource,omitempty"`
+	Reason             string `json:"reason,omitempty"`
+	PolicyVersion      string `json:"policy_version,omitempty"`
+	PolicyDecisionHash string `json:"policy_decision_hash,omitempty"`
+	Signature          string `json:"signature,omitempty"`
 }
 
 // ServerConfig configures the API server.
@@ -290,22 +304,21 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var payload struct {
-		EvaluateRequest
-		Action   string `json:"action"`
-		Resource string `json:"resource"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+	var req EvaluateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-	req := payload.EvaluateRequest
 	// Preserve DecisionRequest callers while the V5 shape uses tool/effect_level.
+	// The public OpenAPI envelope keeps both shapes optional for compatibility;
+	// the daemon still requires one complete, non-blank effective intent.
+	req.Tool = strings.TrimSpace(req.Tool)
 	if req.Tool == "" {
-		req.Tool = payload.Action
+		req.Tool = strings.TrimSpace(req.Action)
 	}
+	req.EffectLevel = strings.TrimSpace(req.EffectLevel)
 	if req.EffectLevel == "" {
-		req.EffectLevel = payload.Resource
+		req.EffectLevel = strings.TrimSpace(req.Resource)
 	}
 	req.SessionID = strings.TrimSpace(req.SessionID)
 	if req.SessionID == "" && req.Context != nil {
@@ -440,14 +453,20 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Helm-Receipt-ID", receiptID)
 
 	writeJSON(w, http.StatusOK, EvaluateResponse{
-		Allow:        decResp.Allow,
-		Verdict:      status,
-		ReceiptID:    receiptID,
-		DecisionID:   decisionID,
-		DecisionHash: decResp.DecisionHash,
-		ReasonCode:   decResp.ReasonCode,
-		PolicyRef:    policyRef,
-		LamportClock: lamport,
+		Allow:              decResp.Allow,
+		Verdict:            status,
+		ReceiptID:          receiptID,
+		DecisionID:         decisionID,
+		DecisionHash:       decResp.DecisionHash,
+		ReasonCode:         decResp.ReasonCode,
+		PolicyRef:          policyRef,
+		LamportClock:       lamport,
+		ID:                 decisionID,
+		Action:             req.Tool,
+		Resource:           req.EffectLevel,
+		Reason:             decResp.ReasonCode,
+		PolicyVersion:      policyRef,
+		PolicyDecisionHash: decResp.DecisionHash,
 	})
 }
 

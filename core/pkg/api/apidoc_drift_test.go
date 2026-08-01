@@ -65,11 +65,12 @@ func TestOpenAPISpec_Integrity(t *testing.T) {
 	}
 }
 
-// TestEvaluateRequestOpenAPISessionRequirement validates the generator-compatible
-// JSON Schema expression directly, rather than only checking the server's
-// runtime validation. A nonblank session is mandatory at either accepted
-// location; a valid context value remains a fallback when the top-level value
-// is blank.
+// TestEvaluateRequestOpenAPISessionRequirement validates the v0.8 public
+// compatibility envelope directly, rather than only checking runtime
+// validation. Canonical V5 clients use top-level tool/effect_level/session_id;
+// legacy direct-daemon callers retain action/resource with context.session_id.
+// The operation-level schema must not make the V5 fields globally required,
+// because that would reject the established public legacy request shape.
 func TestEvaluateRequestOpenAPISessionRequirement(t *testing.T) {
 	paths := []string{
 		"../../api/openapi/helm.openapi.yaml",
@@ -109,14 +110,16 @@ func TestEvaluateRequestOpenAPISessionRequirement(t *testing.T) {
 	}
 
 	for name, value := range map[string]any{
-		"top-level session": map[string]any{
-			"tool": "read_file", "session_id": "session-top",
+		"canonical V5 request": map[string]any{
+			"tool": "read_file", "effect_level": "read", "session_id": "session-top",
 		},
-		"context session": map[string]any{
-			"tool": "read_file", "context": map[string]any{"session_id": "session-context"},
+		"legacy public request": map[string]any{
+			"principal": "legacy-client", "action": "read_file", "resource": "read",
+			"context": map[string]any{"session_id": "session-context"},
 		},
-		"context fallback after blank top-level": map[string]any{
-			"tool": "read_file", "session_id": " \t ", "context": map[string]any{"session_id": "session-context"},
+		"legacy request with V5 additions": map[string]any{
+			"action": "read_file", "resource": "read", "tool": "read_file",
+			"effect_level": "read", "context": map[string]any{"session_id": "session-context"},
 		},
 	} {
 		if err := schema.Validate(value); err != nil {
@@ -124,18 +127,39 @@ func TestEvaluateRequestOpenAPISessionRequirement(t *testing.T) {
 		}
 	}
 
-	for name, value := range map[string]any{
-		"missing":              map[string]any{"tool": "read_file"},
-		"whitespace top-level": map[string]any{"tool": "read_file", "session_id": " \t\n "},
-		"whitespace context": map[string]any{
-			"tool": "read_file", "context": map[string]any{"session_id": " \t\n "},
-		},
-		"both whitespace": map[string]any{
-			"tool": "read_file", "session_id": " ", "context": map[string]any{"session_id": "\t"},
-		},
+	// The operation schema intentionally has no global required fields: v0.8
+	// accepts both public request envelopes and the runtime performs the
+	// shape/non-blank validation before it issues a receipt.
+	if err := schema.Validate(map[string]any{"tool": "read_file"}); err != nil {
+		t.Errorf("EvaluateRequest must retain additive compatibility at the OpenAPI boundary: %v", err)
+	}
+
+	components, ok := spec["components"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI components missing")
+	}
+	schemas, ok := components["schemas"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI component schemas missing")
+	}
+	for schemaName, fields := range map[string][]string{
+		"EvaluateRequest":  {"principal", "action", "resource", "tool", "effect_level", "session_id"},
+		"EvaluateResponse": {"id", "action", "resource", "reason", "policy_version", "policy_decision_hash", "signature"},
 	} {
-		if err := schema.Validate(value); err == nil {
-			t.Errorf("EvaluateRequest accepted invalid %s session: %#v", name, value)
+		schemaMap, ok := schemas[schemaName].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI schema %s missing", schemaName)
+			continue
+		}
+		properties, ok := schemaMap["properties"].(map[string]any)
+		if !ok {
+			t.Errorf("OpenAPI schema %s properties missing", schemaName)
+			continue
+		}
+		for _, field := range fields {
+			if _, ok := properties[field]; !ok {
+				t.Errorf("OpenAPI schema %s is missing compatibility field %q", schemaName, field)
+			}
 		}
 	}
 }

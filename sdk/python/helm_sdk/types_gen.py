@@ -6146,36 +6146,18 @@ class EnvExposurePolicy(BaseModel):
 
 class EvaluateRequest(BaseModel):
     """
-    Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
+    Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
     """ # noqa: E501
-    tool: Annotated[str, Field(min_length=1, strict=True)]
+    principal: Optional[StrictStr] = Field(default=None, description="Ignored; the authenticated principal is recorded as the receipt executor.")
+    action: Optional[StrictStr] = Field(default=None, description="Legacy direct-daemon alias for tool.")
+    resource: Optional[StrictStr] = Field(default=None, description="Legacy direct-daemon alias for effect_level.")
+    tool: Optional[Annotated[str, Field(min_length=1, strict=True)]] = None
     args: Optional[Dict[str, Any]] = None
     agent_id: Optional[StrictStr] = Field(default=None, description="Ignored; the authenticated principal is recorded as the receipt executor.")
-    effect_level: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Policy resource used to evaluate the governed tool call.")
-    session_id: Annotated[str, Field(strict=True)] = Field(description="Non-whitespace signed causal session identifier.")
+    effect_level: Optional[Annotated[str, Field(min_length=1, strict=True)]] = Field(default=None, description="Policy resource used to evaluate the governed tool call.")
+    session_id: Optional[Annotated[str, Field(min_length=1, strict=True)]] = Field(default=None, description="Non-whitespace signed causal session identifier.")
     context: Optional[Dict[str, Any]] = Field(default=None, description="Optional input context; authenticated principal and tenant fields are added by the server.")
-    __properties: ClassVar[List[str]] = ["tool", "args", "agent_id", "effect_level", "session_id", "context"]
-
-    @field_validator('tool')
-    def tool_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r".*\S.*", value):
-            raise ValueError(r"must validate the regular expression /.*\S.*/")
-        return value
-
-    @field_validator('effect_level')
-    def effect_level_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r".*\S.*", value):
-            raise ValueError(r"must validate the regular expression /.*\S.*/")
-        return value
-
-    @field_validator('session_id')
-    def session_id_validate_regular_expression(cls, value):
-        """Validates the regular expression"""
-        if not re.match(r".*\S.*", value):
-            raise ValueError(r"must validate the regular expression /.*\S.*/")
-        return value
+    __properties: ClassVar[List[str]] = ["principal", "action", "resource", "tool", "args", "agent_id", "effect_level", "session_id", "context"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -6228,6 +6210,9 @@ class EvaluateRequest(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "principal": obj.get("principal"),
+            "action": obj.get("action"),
+            "resource": obj.get("resource"),
             "tool": obj.get("tool"),
             "args": obj.get("args"),
             "agent_id": obj.get("agent_id"),
@@ -6265,7 +6250,14 @@ class EvaluateResponse(BaseModel):
     reason_code: StrictStr
     policy_ref: StrictStr
     lamport_clock: Annotated[int, Field(strict=True, ge=0)]
-    __properties: ClassVar[List[str]] = ["allow", "verdict", "receipt_id", "decision_id", "decision_hash", "reason_code", "policy_ref", "lamport_clock"]
+    id: Optional[StrictStr] = Field(default=None, description="Legacy decision identifier alias for decision_id.")
+    action: Optional[StrictStr] = Field(default=None, description="Legacy decision action.")
+    resource: Optional[StrictStr] = Field(default=None, description="Legacy decision resource.")
+    reason: Optional[StrictStr] = Field(default=None, description="Legacy human-readable decision reason.")
+    policy_version: Optional[StrictStr] = Field(default=None, description="Legacy policy version.")
+    policy_decision_hash: Optional[StrictStr] = Field(default=None, description="Legacy policy decision hash.")
+    signature: Optional[StrictStr] = Field(default=None, description="Legacy decision signature.")
+    __properties: ClassVar[List[str]] = ["allow", "verdict", "receipt_id", "decision_id", "decision_hash", "reason_code", "policy_ref", "lamport_clock", "id", "action", "resource", "reason", "policy_version", "policy_decision_hash", "signature"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -6325,7 +6317,14 @@ class EvaluateResponse(BaseModel):
             "decision_hash": obj.get("decision_hash"),
             "reason_code": obj.get("reason_code"),
             "policy_ref": obj.get("policy_ref"),
-            "lamport_clock": obj.get("lamport_clock")
+            "lamport_clock": obj.get("lamport_clock"),
+            "id": obj.get("id"),
+            "action": obj.get("action"),
+            "resource": obj.get("resource"),
+            "reason": obj.get("reason"),
+            "policy_version": obj.get("policy_version"),
+            "policy_decision_hash": obj.get("policy_decision_hash"),
+            "signature": obj.get("signature")
         })
         return _obj
 

@@ -122,8 +122,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		case http.MethodPost:
 			receiptCount := 0
 			if svc != nil && svc.ReceiptStore != nil {
-				if receipts, err := contractReceipts(r.Context(), svc, "", 1000); err == nil {
-					receiptCount = len(receipts)
+				if tenantID, err := authenticatedReceiptTenantID(r.Context()); err == nil {
+					if receipts, err := contractReceipts(r.Context(), svc, tenantID, "", 1000); err == nil {
+						receiptCount = len(receipts)
+					}
 				}
 			}
 			checkpoint, err := surfaces.CreateCheckpoint(receiptCount)
@@ -156,7 +158,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		receipts, err := contractReceipts(r.Context(), svc, "", parseLimit(r.URL.Query().Get("limit"), 50, 1000))
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "ProofGraph route requires authenticated tenant principal context")
+			return
+		}
+		receipts, err := contractReceipts(r.Context(), svc, tenantID, "", parseLimit(r.URL.Query().Get("limit"), 50, 1000))
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -180,7 +187,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteNotFound(w, "proofgraph session route not found")
 			return
 		}
-		receipts, err := contractReceipts(r.Context(), svc, sessionID, parseLimit(r.URL.Query().Get("limit"), 100, 1000))
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "ProofGraph route requires authenticated tenant principal context")
+			return
+		}
+		receipts, err := contractReceipts(r.Context(), svc, tenantID, sessionID, parseLimit(r.URL.Query().Get("limit"), 100, 1000))
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -202,7 +214,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid receipt reference")
 			return
 		}
-		receipt, err := findReceiptByReference(r.Context(), svc, receiptRef)
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "ProofGraph route requires authenticated tenant principal context")
+			return
+		}
+		receipt, err := findReceiptByReference(r.Context(), svc, tenantID, receiptRef)
 		if err != nil {
 			api.WriteNotFound(w, err.Error())
 			return
@@ -226,7 +243,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Unsupported evidence export format")
 			return
 		}
-		receipts, err := contractReceiptsForExport(r.Context(), svc, req.SessionID)
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "Evidence export requires authenticated tenant principal context")
+			return
+		}
+		receipts, err := contractReceiptsForExport(r.Context(), svc, tenantID, req.SessionID)
 		if err != nil {
 			if errors.Is(err, errEvidenceExportTooLarge) {
 				api.WriteError(w, http.StatusRequestEntityTooLarge, "Evidence export too large", fmt.Sprintf("Evidence export is limited to %d receipts; export a narrower session or retention window", maxEvidenceExportReceipts))
@@ -1337,14 +1359,11 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 	}))
 }
 
-func contractReceipts(ctx context.Context, svc *Services, sessionID string, limit int) ([]*contracts.Receipt, error) {
+func contractReceipts(ctx context.Context, svc *Services, tenantID, sessionID string, limit int) ([]*contracts.Receipt, error) {
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
-	if strings.TrimSpace(sessionID) != "" {
-		return svc.ReceiptStore.ListByAgent(ctx, sessionID, 0, limit)
-	}
-	return listReceiptsForCursor(ctx, svc, "", 0, limit)
+	return listReceiptsForCursor(ctx, svc, tenantID, sessionID, 0, limit)
 }
 
 func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegistry, records []mcppkg.ServerQuarantineRecord) {
@@ -1419,7 +1438,7 @@ func verifySandboxGrantForDispatch(grant contracts.SandboxGrant, expectedHash st
 	return result
 }
 
-func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID string) ([]*contracts.Receipt, error) {
+func contractReceiptsForExport(ctx context.Context, svc *Services, tenantID, sessionID string) ([]*contracts.Receipt, error) {
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
@@ -1436,11 +1455,7 @@ func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID str
 		}
 		var page []*contracts.Receipt
 		var err error
-		if strings.TrimSpace(sessionID) != "" {
-			page, err = svc.ReceiptStore.ListByAgent(ctx, sessionID, cursor, limit)
-		} else {
-			page, err = svc.ReceiptStore.ListSince(ctx, cursor, limit)
-		}
+		page, err = listReceiptsForCursor(ctx, svc, tenantID, sessionID, cursor, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -1462,7 +1477,7 @@ func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID str
 func proofgraphSessions(receipts []*contracts.Receipt) []map[string]any {
 	bySession := make(map[string]map[string]any)
 	for _, receipt := range receipts {
-		sessionID := receipt.ExecutorID
+		sessionID := receipt.SessionID
 		if strings.TrimSpace(sessionID) == "" {
 			sessionID = "anonymous"
 		}
@@ -1494,14 +1509,14 @@ func proofgraphSessions(receipts []*contracts.Receipt) []map[string]any {
 	return sessions
 }
 
-func findReceiptByReference(ctx context.Context, svc *Services, ref string) (*contracts.Receipt, error) {
+func findReceiptByReference(ctx context.Context, svc *Services, tenantID, ref string) (*contracts.Receipt, error) {
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
-	if receipt, err := svc.ReceiptStore.GetByReceiptID(ctx, ref); err == nil {
+	if receipt, err := receiptForTenant(ctx, svc, tenantID, ref); err == nil {
 		return receipt, nil
 	}
-	receipts, err := contractReceipts(ctx, svc, "", 1000)
+	receipts, err := contractReceipts(ctx, svc, tenantID, "", 1000)
 	if err != nil {
 		return nil, err
 	}

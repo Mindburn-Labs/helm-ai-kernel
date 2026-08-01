@@ -2859,36 +2859,48 @@ impl Default for EnvExposurePolicyMode {
  */
 
 
-/// EvaluateRequest : Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
+/// EvaluateRequest : Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EvaluateRequest {
-    #[serde(rename = "tool")]
-    pub tool: String,
+    /// Ignored; the authenticated principal is recorded as the receipt executor.
+    #[serde(rename = "principal", skip_serializing_if = "Option::is_none")]
+    pub principal: Option<String>,
+    /// Legacy direct-daemon alias for tool.
+    #[serde(rename = "action", skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    /// Legacy direct-daemon alias for effect_level.
+    #[serde(rename = "resource", skip_serializing_if = "Option::is_none")]
+    pub resource: Option<String>,
+    #[serde(rename = "tool", skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
     #[serde(rename = "args", skip_serializing_if = "Option::is_none")]
     pub args: Option<std::collections::HashMap<String, serde_json::Value>>,
     /// Ignored; the authenticated principal is recorded as the receipt executor.
     #[serde(rename = "agent_id", skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
     /// Policy resource used to evaluate the governed tool call.
-    #[serde(rename = "effect_level")]
-    pub effect_level: String,
+    #[serde(rename = "effect_level", skip_serializing_if = "Option::is_none")]
+    pub effect_level: Option<String>,
     /// Non-whitespace signed causal session identifier.
-    #[serde(rename = "session_id")]
-    pub session_id: String,
+    #[serde(rename = "session_id", skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     /// Optional input context; authenticated principal and tenant fields are added by the server.
     #[serde(rename = "context", skip_serializing_if = "Option::is_none")]
     pub context: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 impl EvaluateRequest {
-    /// Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
-    pub fn new(tool: String, effect_level: String, session_id: String) -> EvaluateRequest {
+    /// Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
+    pub fn new() -> EvaluateRequest {
         EvaluateRequest {
-            tool,
+            principal: None,
+            action: None,
+            resource: None,
+            tool: None,
             args: None,
             agent_id: None,
-            effect_level,
-            session_id,
+            effect_level: None,
+            session_id: None,
             context: None,
         }
     }
@@ -2925,6 +2937,27 @@ pub struct EvaluateResponse {
     pub policy_ref: String,
     #[serde(rename = "lamport_clock")]
     pub lamport_clock: i64,
+    /// Legacy decision identifier alias for decision_id.
+    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Legacy decision action.
+    #[serde(rename = "action", skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    /// Legacy decision resource.
+    #[serde(rename = "resource", skip_serializing_if = "Option::is_none")]
+    pub resource: Option<String>,
+    /// Legacy human-readable decision reason.
+    #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Legacy policy version.
+    #[serde(rename = "policy_version", skip_serializing_if = "Option::is_none")]
+    pub policy_version: Option<String>,
+    /// Legacy policy decision hash.
+    #[serde(rename = "policy_decision_hash", skip_serializing_if = "Option::is_none")]
+    pub policy_decision_hash: Option<String>,
+    /// Legacy decision signature.
+    #[serde(rename = "signature", skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
 }
 
 impl EvaluateResponse {
@@ -2938,6 +2971,13 @@ impl EvaluateResponse {
             reason_code,
             policy_ref,
             lamport_clock,
+            id: None,
+            action: None,
+            resource: None,
+            reason: None,
+            policy_version: None,
+            policy_decision_hash: None,
+            signature: None,
         }
     }
 }

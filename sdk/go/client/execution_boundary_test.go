@@ -110,12 +110,17 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 
 // This guards the generated request model against a root-schema composition
 // change that would turn EvaluateRequest into a union and silently drop its
-// canonical V5 fields during serialization.
-func TestEvaluateRequestGeneratedModelRequiresCanonicalSession(t *testing.T) {
+// canonical V5 fields during serialization. The public schema intentionally
+// keeps those fields optional for legacy direct-daemon compatibility; the SDK
+// method enforces its canonical V5 contract before sending a request.
+func TestEvaluateRequestGeneratedModelSupportsCanonicalSession(t *testing.T) {
 	tool := "read_file"
 	effectLevel := "read"
 	topLevelSession := "session-top"
-	request := NewEvaluateRequest(tool, effectLevel, topLevelSession)
+	request := NewEvaluateRequest()
+	request.SetTool(tool)
+	request.SetEffectLevel(effectLevel)
+	request.SetSessionId(topLevelSession)
 	request.Args = map[string]interface{}{"path": "/tmp/input"}
 	request.Context = map[string]interface{}{"request_id": "req-1"}
 
@@ -135,8 +140,14 @@ func TestEvaluateRequestGeneratedModelRequiresCanonicalSession(t *testing.T) {
 	}
 
 	var incomplete EvaluateRequest
-	if err := json.Unmarshal([]byte(`{"tool":"read_file","effect_level":"read"}`), &incomplete); err == nil {
-		t.Fatal("generated request accepted a payload without the required top-level session_id")
+	if err := json.Unmarshal([]byte(`{"tool":"read_file","effect_level":"read"}`), &incomplete); err != nil {
+		t.Fatalf("public compatibility model rejected partial request: %v", err)
+	}
+	if got := incomplete.GetSessionId(); got != "" {
+		t.Fatalf("unset optional session_id = %q, want empty", got)
+	}
+	if _, err := New("http://invalid.example").EvaluateDecision(incomplete); err == nil {
+		t.Fatal("SDK EvaluateDecision accepted a request without a canonical top-level session_id")
 	}
 }
 
@@ -190,7 +201,11 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			return err
 		}},
 		{"evaluate decision", "POST /api/v1/evaluate", func() error {
-			result, err := client.EvaluateDecision(*NewEvaluateRequest("read_file", "read", "session-test"))
+			request := NewEvaluateRequest()
+			request.SetTool("read_file")
+			request.SetEffectLevel("read")
+			request.SetSessionId("session-test")
+			result, err := client.EvaluateDecision(*request)
 			if err == nil && (result.ReceiptId != "receipt-evaluate" || result.LamportClock != 1) {
 				t.Fatalf("canonical evaluate response = %#v", result)
 			}

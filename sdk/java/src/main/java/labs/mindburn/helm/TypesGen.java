@@ -21643,9 +21643,12 @@ public static class EnvExposurePolicy {
 
 
 /**
- * Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
+ * Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
  */
 @JsonPropertyOrder({
+  EvaluateRequest.JSON_PROPERTY_PRINCIPAL,
+  EvaluateRequest.JSON_PROPERTY_ACTION,
+  EvaluateRequest.JSON_PROPERTY_RESOURCE,
   EvaluateRequest.JSON_PROPERTY_TOOL,
   EvaluateRequest.JSON_PROPERTY_ARGS,
   EvaluateRequest.JSON_PROPERTY_AGENT_ID,
@@ -21655,6 +21658,15 @@ public static class EnvExposurePolicy {
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class EvaluateRequest {
+  public static final String JSON_PROPERTY_PRINCIPAL = "principal";
+  private String principal;
+
+  public static final String JSON_PROPERTY_ACTION = "action";
+  private String action;
+
+  public static final String JSON_PROPERTY_RESOURCE = "resource";
+  private String resource;
+
   public static final String JSON_PROPERTY_TOOL = "tool";
   private String tool;
 
@@ -21676,6 +21688,81 @@ public static class EvaluateRequest {
   public EvaluateRequest() {
   }
 
+  public EvaluateRequest principal(String principal) {
+    this.principal = principal;
+    return this;
+  }
+
+   /**
+   * Ignored; the authenticated principal is recorded as the receipt executor.
+   * @return principal
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPrincipal() {
+    return principal;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PRINCIPAL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPrincipal(String principal) {
+    this.principal = principal;
+  }
+
+
+  public EvaluateRequest action(String action) {
+    this.action = action;
+    return this;
+  }
+
+   /**
+   * Legacy direct-daemon alias for tool.
+   * @return action
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAction() {
+    return action;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAction(String action) {
+    this.action = action;
+  }
+
+
+  public EvaluateRequest resource(String resource) {
+    this.resource = resource;
+    return this;
+  }
+
+   /**
+   * Legacy direct-daemon alias for effect_level.
+   * @return resource
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getResource() {
+    return resource;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setResource(String resource) {
+    this.resource = resource;
+  }
+
+
   public EvaluateRequest tool(String tool) {
     this.tool = tool;
     return this;
@@ -21685,9 +21772,9 @@ public static class EvaluateRequest {
    * Get tool
    * @return tool
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_TOOL)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getTool() {
     return tool;
@@ -21695,7 +21782,7 @@ public static class EvaluateRequest {
 
 
   @JsonProperty(JSON_PROPERTY_TOOL)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setTool(String tool) {
     this.tool = tool;
   }
@@ -21768,9 +21855,9 @@ public static class EvaluateRequest {
    * Policy resource used to evaluate the governed tool call.
    * @return effectLevel
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_EFFECT_LEVEL)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getEffectLevel() {
     return effectLevel;
@@ -21778,7 +21865,7 @@ public static class EvaluateRequest {
 
 
   @JsonProperty(JSON_PROPERTY_EFFECT_LEVEL)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setEffectLevel(String effectLevel) {
     this.effectLevel = effectLevel;
   }
@@ -21793,9 +21880,9 @@ public static class EvaluateRequest {
    * Non-whitespace signed causal session identifier.
    * @return sessionId
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getSessionId() {
     return sessionId;
@@ -21803,7 +21890,7 @@ public static class EvaluateRequest {
 
 
   @JsonProperty(JSON_PROPERTY_SESSION_ID)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setSessionId(String sessionId) {
     this.sessionId = sessionId;
   }
@@ -21854,7 +21941,10 @@ public static class EvaluateRequest {
       return false;
     }
     EvaluateRequest evaluateRequest = (EvaluateRequest) o;
-    return Objects.equals(this.tool, evaluateRequest.tool) &&
+    return Objects.equals(this.principal, evaluateRequest.principal) &&
+        Objects.equals(this.action, evaluateRequest.action) &&
+        Objects.equals(this.resource, evaluateRequest.resource) &&
+        Objects.equals(this.tool, evaluateRequest.tool) &&
         Objects.equals(this.args, evaluateRequest.args) &&
         Objects.equals(this.agentId, evaluateRequest.agentId) &&
         Objects.equals(this.effectLevel, evaluateRequest.effectLevel) &&
@@ -21864,13 +21954,16 @@ public static class EvaluateRequest {
 
   @Override
   public int hashCode() {
-    return Objects.hash(tool, args, agentId, effectLevel, sessionId, context);
+    return Objects.hash(principal, action, resource, tool, args, agentId, effectLevel, sessionId, context);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class EvaluateRequest {\n");
+    sb.append("    principal: ").append(toIndentedString(principal)).append("\n");
+    sb.append("    action: ").append(toIndentedString(action)).append("\n");
+    sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
     sb.append("    tool: ").append(toIndentedString(tool)).append("\n");
     sb.append("    args: ").append(toIndentedString(args)).append("\n");
     sb.append("    agentId: ").append(toIndentedString(agentId)).append("\n");
@@ -21923,6 +22016,21 @@ public static class EvaluateRequest {
     }
 
     StringJoiner joiner = new StringJoiner("&");
+
+    // add `principal` to the URL query string
+    if (getPrincipal() != null) {
+      joiner.add(String.format("%sprincipal%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPrincipal()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `action` to the URL query string
+    if (getAction() != null) {
+      joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `resource` to the URL query string
+    if (getResource() != null) {
+      joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
 
     // add `tool` to the URL query string
     if (getTool() != null) {
@@ -21993,7 +22101,14 @@ public static class EvaluateRequest {
   EvaluateResponse.JSON_PROPERTY_DECISION_HASH,
   EvaluateResponse.JSON_PROPERTY_REASON_CODE,
   EvaluateResponse.JSON_PROPERTY_POLICY_REF,
-  EvaluateResponse.JSON_PROPERTY_LAMPORT_CLOCK
+  EvaluateResponse.JSON_PROPERTY_LAMPORT_CLOCK,
+  EvaluateResponse.JSON_PROPERTY_ID,
+  EvaluateResponse.JSON_PROPERTY_ACTION,
+  EvaluateResponse.JSON_PROPERTY_RESOURCE,
+  EvaluateResponse.JSON_PROPERTY_REASON,
+  EvaluateResponse.JSON_PROPERTY_POLICY_VERSION,
+  EvaluateResponse.JSON_PROPERTY_POLICY_DECISION_HASH,
+  EvaluateResponse.JSON_PROPERTY_SIGNATURE
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class EvaluateResponse {
@@ -22020,6 +22135,27 @@ public static class EvaluateResponse {
 
   public static final String JSON_PROPERTY_LAMPORT_CLOCK = "lamport_clock";
   private Long lamportClock;
+
+  public static final String JSON_PROPERTY_ID = "id";
+  private String id;
+
+  public static final String JSON_PROPERTY_ACTION = "action";
+  private String action;
+
+  public static final String JSON_PROPERTY_RESOURCE = "resource";
+  private String resource;
+
+  public static final String JSON_PROPERTY_REASON = "reason";
+  private String reason;
+
+  public static final String JSON_PROPERTY_POLICY_VERSION = "policy_version";
+  private String policyVersion;
+
+  public static final String JSON_PROPERTY_POLICY_DECISION_HASH = "policy_decision_hash";
+  private String policyDecisionHash;
+
+  public static final String JSON_PROPERTY_SIGNATURE = "signature";
+  private String signature;
 
   public EvaluateResponse() {
   }
@@ -22225,6 +22361,181 @@ public static class EvaluateResponse {
   }
 
 
+  public EvaluateResponse id(String id) {
+    this.id = id;
+    return this;
+  }
+
+   /**
+   * Legacy decision identifier alias for decision_id.
+   * @return id
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getId() {
+    return id;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setId(String id) {
+    this.id = id;
+  }
+
+
+  public EvaluateResponse action(String action) {
+    this.action = action;
+    return this;
+  }
+
+   /**
+   * Legacy decision action.
+   * @return action
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAction() {
+    return action;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAction(String action) {
+    this.action = action;
+  }
+
+
+  public EvaluateResponse resource(String resource) {
+    this.resource = resource;
+    return this;
+  }
+
+   /**
+   * Legacy decision resource.
+   * @return resource
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getResource() {
+    return resource;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RESOURCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setResource(String resource) {
+    this.resource = resource;
+  }
+
+
+  public EvaluateResponse reason(String reason) {
+    this.reason = reason;
+    return this;
+  }
+
+   /**
+   * Legacy human-readable decision reason.
+   * @return reason
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReason() {
+    return reason;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReason(String reason) {
+    this.reason = reason;
+  }
+
+
+  public EvaluateResponse policyVersion(String policyVersion) {
+    this.policyVersion = policyVersion;
+    return this;
+  }
+
+   /**
+   * Legacy policy version.
+   * @return policyVersion
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyVersion() {
+    return policyVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyVersion(String policyVersion) {
+    this.policyVersion = policyVersion;
+  }
+
+
+  public EvaluateResponse policyDecisionHash(String policyDecisionHash) {
+    this.policyDecisionHash = policyDecisionHash;
+    return this;
+  }
+
+   /**
+   * Legacy policy decision hash.
+   * @return policyDecisionHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyDecisionHash() {
+    return policyDecisionHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_DECISION_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyDecisionHash(String policyDecisionHash) {
+    this.policyDecisionHash = policyDecisionHash;
+  }
+
+
+  public EvaluateResponse signature(String signature) {
+    this.signature = signature;
+    return this;
+  }
+
+   /**
+   * Legacy decision signature.
+   * @return signature
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignature() {
+    return signature;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignature(String signature) {
+    this.signature = signature;
+  }
+
+
   /**
    * Return true if this EvaluateResponse object is equal to o.
    */
@@ -22244,12 +22555,19 @@ public static class EvaluateResponse {
         Objects.equals(this.decisionHash, evaluateResponse.decisionHash) &&
         Objects.equals(this.reasonCode, evaluateResponse.reasonCode) &&
         Objects.equals(this.policyRef, evaluateResponse.policyRef) &&
-        Objects.equals(this.lamportClock, evaluateResponse.lamportClock);
+        Objects.equals(this.lamportClock, evaluateResponse.lamportClock) &&
+        Objects.equals(this.id, evaluateResponse.id) &&
+        Objects.equals(this.action, evaluateResponse.action) &&
+        Objects.equals(this.resource, evaluateResponse.resource) &&
+        Objects.equals(this.reason, evaluateResponse.reason) &&
+        Objects.equals(this.policyVersion, evaluateResponse.policyVersion) &&
+        Objects.equals(this.policyDecisionHash, evaluateResponse.policyDecisionHash) &&
+        Objects.equals(this.signature, evaluateResponse.signature);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(allow, verdict, receiptId, decisionId, decisionHash, reasonCode, policyRef, lamportClock);
+    return Objects.hash(allow, verdict, receiptId, decisionId, decisionHash, reasonCode, policyRef, lamportClock, id, action, resource, reason, policyVersion, policyDecisionHash, signature);
   }
 
   @Override
@@ -22264,6 +22582,13 @@ public static class EvaluateResponse {
     sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
     sb.append("    policyRef: ").append(toIndentedString(policyRef)).append("\n");
     sb.append("    lamportClock: ").append(toIndentedString(lamportClock)).append("\n");
+    sb.append("    id: ").append(toIndentedString(id)).append("\n");
+    sb.append("    action: ").append(toIndentedString(action)).append("\n");
+    sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
+    sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    policyVersion: ").append(toIndentedString(policyVersion)).append("\n");
+    sb.append("    policyDecisionHash: ").append(toIndentedString(policyDecisionHash)).append("\n");
+    sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -22345,6 +22670,41 @@ public static class EvaluateResponse {
     // add `lamport_clock` to the URL query string
     if (getLamportClock() != null) {
       joiner.add(String.format("%slamport_clock%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getLamportClock()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `id` to the URL query string
+    if (getId() != null) {
+      joiner.add(String.format("%sid%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `action` to the URL query string
+    if (getAction() != null) {
+      joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `resource` to the URL query string
+    if (getResource() != null) {
+      joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason` to the URL query string
+    if (getReason() != null) {
+      joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_version` to the URL query string
+    if (getPolicyVersion() != null) {
+      joiner.add(String.format("%spolicy_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_decision_hash` to the URL query string
+    if (getPolicyDecisionHash() != null) {
+      joiner.add(String.format("%spolicy_decision_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyDecisionHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature` to the URL query string
+    if (getSignature() != null) {
+      joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

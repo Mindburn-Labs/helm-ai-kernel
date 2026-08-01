@@ -6647,17 +6647,35 @@ export function EnvExposurePolicyToJSON(value?: EnvExposurePolicy | null): any {
  */
 
 /**
- * Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
+ * Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
  * @export
  * @interface EvaluateRequest
  */
 export interface EvaluateRequest {
     /**
+     * Ignored; the authenticated principal is recorded as the receipt executor.
+     * @type {string}
+     * @memberof EvaluateRequest
+     */
+    principal?: string;
+    /**
+     * Legacy direct-daemon alias for tool.
+     * @type {string}
+     * @memberof EvaluateRequest
+     */
+    action?: string;
+    /**
+     * Legacy direct-daemon alias for effect_level.
+     * @type {string}
+     * @memberof EvaluateRequest
+     */
+    resource?: string;
+    /**
      *
      * @type {string}
      * @memberof EvaluateRequest
      */
-    tool: string;
+    tool?: string;
     /**
      *
      * @type {{ [key: string]: any; }}
@@ -6675,13 +6693,13 @@ export interface EvaluateRequest {
      * @type {string}
      * @memberof EvaluateRequest
      */
-    effect_level: string;
+    effect_level?: string;
     /**
      * Non-whitespace signed causal session identifier.
      * @type {string}
      * @memberof EvaluateRequest
      */
-    session_id: string;
+    session_id?: string;
     /**
      * Optional input context; authenticated principal and tenant fields are added by the server.
      * @type {{ [key: string]: any; }}
@@ -6694,9 +6712,6 @@ export interface EvaluateRequest {
  * Check if a given object implements the EvaluateRequest interface.
  */
 export function instanceOfEvaluateRequest(value: object): boolean {
-    if (!('tool' in value)) return false;
-    if (!('effect_level' in value)) return false;
-    if (!('session_id' in value)) return false;
     return true;
 }
 
@@ -6710,11 +6725,14 @@ export function EvaluateRequestFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
 
-        'tool': json['tool'],
+        'principal': json['principal'] == null ? undefined : json['principal'],
+        'action': json['action'] == null ? undefined : json['action'],
+        'resource': json['resource'] == null ? undefined : json['resource'],
+        'tool': json['tool'] == null ? undefined : json['tool'],
         'args': json['args'] == null ? undefined : json['args'],
         'agent_id': json['agent_id'] == null ? undefined : json['agent_id'],
-        'effect_level': json['effect_level'],
-        'session_id': json['session_id'],
+        'effect_level': json['effect_level'] == null ? undefined : json['effect_level'],
+        'session_id': json['session_id'] == null ? undefined : json['session_id'],
         'context': json['context'] == null ? undefined : json['context'],
     };
 }
@@ -6725,6 +6743,9 @@ export function EvaluateRequestToJSON(value?: EvaluateRequest | null): any {
     }
     return {
 
+        'principal': value['principal'],
+        'action': value['action'],
+        'resource': value['resource'],
         'tool': value['tool'],
         'args': value['args'],
         'agent_id': value['agent_id'],
@@ -6802,6 +6823,48 @@ export interface EvaluateResponse {
      * @memberof EvaluateResponse
      */
     lamport_clock: number;
+    /**
+     * Legacy decision identifier alias for decision_id.
+     * @type {string}
+     * @memberof EvaluateResponse
+     */
+    id?: string;
+    /**
+     * Legacy decision action.
+     * @type {string}
+     * @memberof EvaluateResponse
+     */
+    action?: string;
+    /**
+     * Legacy decision resource.
+     * @type {string}
+     * @memberof EvaluateResponse
+     */
+    resource?: string;
+    /**
+     * Legacy human-readable decision reason.
+     * @type {string}
+     * @memberof EvaluateResponse
+     */
+    reason?: string;
+    /**
+     * Legacy policy version.
+     * @type {string}
+     * @memberof EvaluateResponse
+     */
+    policy_version?: string;
+    /**
+     * Legacy policy decision hash.
+     * @type {string}
+     * @memberof EvaluateResponse
+     */
+    policy_decision_hash?: string;
+    /**
+     * Legacy decision signature.
+     * @type {string}
+     * @memberof EvaluateResponse
+     */
+    signature?: string;
 }
 
 /**
@@ -6837,6 +6900,13 @@ export function EvaluateResponseFromJSONTyped(json: any, ignoreDiscriminator: bo
         'reason_code': json['reason_code'],
         'policy_ref': json['policy_ref'],
         'lamport_clock': json['lamport_clock'],
+        'id': json['id'] == null ? undefined : json['id'],
+        'action': json['action'] == null ? undefined : json['action'],
+        'resource': json['resource'] == null ? undefined : json['resource'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
+        'policy_version': json['policy_version'] == null ? undefined : json['policy_version'],
+        'policy_decision_hash': json['policy_decision_hash'] == null ? undefined : json['policy_decision_hash'],
+        'signature': json['signature'] == null ? undefined : json['signature'],
     };
 }
 
@@ -6854,6 +6924,13 @@ export function EvaluateResponseToJSON(value?: EvaluateResponse | null): any {
         'reason_code': value['reason_code'],
         'policy_ref': value['policy_ref'],
         'lamport_clock': value['lamport_clock'],
+        'id': value['id'],
+        'action': value['action'],
+        'resource': value['resource'],
+        'reason': value['reason'],
+        'policy_version': value['policy_version'],
+        'policy_decision_hash': value['policy_decision_hash'],
+        'signature': value['signature'],
     };
 }
 

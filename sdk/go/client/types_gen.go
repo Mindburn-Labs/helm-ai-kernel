@@ -15590,31 +15590,32 @@ API version: 0.7.5
 // checks if the EvaluateRequest type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &EvaluateRequest{}
 
-// EvaluateRequest Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
+// EvaluateRequest Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
 type EvaluateRequest struct {
-	Tool string                 `json:"tool"`
-	Args map[string]interface{} `json:"args,omitempty"`
+	// Ignored; the authenticated principal is recorded as the receipt executor.
+	Principal *string `json:"principal,omitempty"`
+	// Legacy direct-daemon alias for tool.
+	Action *string `json:"action,omitempty"`
+	// Legacy direct-daemon alias for effect_level.
+	Resource *string                `json:"resource,omitempty"`
+	Tool     *string                `json:"tool,omitempty"`
+	Args     map[string]interface{} `json:"args,omitempty"`
 	// Ignored; the authenticated principal is recorded as the receipt executor.
 	AgentId *string `json:"agent_id,omitempty"`
 	// Policy resource used to evaluate the governed tool call.
-	EffectLevel string `json:"effect_level"`
+	EffectLevel *string `json:"effect_level,omitempty"`
 	// Non-whitespace signed causal session identifier.
-	SessionId string `json:"session_id"`
+	SessionId *string `json:"session_id,omitempty"`
 	// Optional input context; authenticated principal and tenant fields are added by the server.
 	Context map[string]interface{} `json:"context,omitempty"`
 }
-
-type _EvaluateRequest EvaluateRequest
 
 // NewEvaluateRequest instantiates a new EvaluateRequest object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewEvaluateRequest(tool string, effectLevel string, sessionId string) *EvaluateRequest {
+func NewEvaluateRequest() *EvaluateRequest {
 	this := EvaluateRequest{}
-	this.Tool = tool
-	this.EffectLevel = effectLevel
-	this.SessionId = sessionId
 	return &this
 }
 
@@ -15626,28 +15627,132 @@ func NewEvaluateRequestWithDefaults() *EvaluateRequest {
 	return &this
 }
 
-// GetTool returns the Tool field value
-func (o *EvaluateRequest) GetTool() string {
-	if o == nil {
+// GetPrincipal returns the Principal field value if set, zero value otherwise.
+func (o *EvaluateRequest) GetPrincipal() string {
+	if o == nil || IsNil(o.Principal) {
 		var ret string
 		return ret
 	}
-
-	return o.Tool
+	return *o.Principal
 }
 
-// GetToolOk returns a tuple with the Tool field value
+// GetPrincipalOk returns a tuple with the Principal field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *EvaluateRequest) GetToolOk() (*string, bool) {
-	if o == nil {
+func (o *EvaluateRequest) GetPrincipalOk() (*string, bool) {
+	if o == nil || IsNil(o.Principal) {
 		return nil, false
 	}
-	return &o.Tool, true
+	return o.Principal, true
 }
 
-// SetTool sets field value
+// HasPrincipal returns a boolean if a field has been set.
+func (o *EvaluateRequest) HasPrincipal() bool {
+	if o != nil && !IsNil(o.Principal) {
+		return true
+	}
+
+	return false
+}
+
+// SetPrincipal gets a reference to the given string and assigns it to the Principal field.
+func (o *EvaluateRequest) SetPrincipal(v string) {
+	o.Principal = &v
+}
+
+// GetAction returns the Action field value if set, zero value otherwise.
+func (o *EvaluateRequest) GetAction() string {
+	if o == nil || IsNil(o.Action) {
+		var ret string
+		return ret
+	}
+	return *o.Action
+}
+
+// GetActionOk returns a tuple with the Action field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateRequest) GetActionOk() (*string, bool) {
+	if o == nil || IsNil(o.Action) {
+		return nil, false
+	}
+	return o.Action, true
+}
+
+// HasAction returns a boolean if a field has been set.
+func (o *EvaluateRequest) HasAction() bool {
+	if o != nil && !IsNil(o.Action) {
+		return true
+	}
+
+	return false
+}
+
+// SetAction gets a reference to the given string and assigns it to the Action field.
+func (o *EvaluateRequest) SetAction(v string) {
+	o.Action = &v
+}
+
+// GetResource returns the Resource field value if set, zero value otherwise.
+func (o *EvaluateRequest) GetResource() string {
+	if o == nil || IsNil(o.Resource) {
+		var ret string
+		return ret
+	}
+	return *o.Resource
+}
+
+// GetResourceOk returns a tuple with the Resource field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateRequest) GetResourceOk() (*string, bool) {
+	if o == nil || IsNil(o.Resource) {
+		return nil, false
+	}
+	return o.Resource, true
+}
+
+// HasResource returns a boolean if a field has been set.
+func (o *EvaluateRequest) HasResource() bool {
+	if o != nil && !IsNil(o.Resource) {
+		return true
+	}
+
+	return false
+}
+
+// SetResource gets a reference to the given string and assigns it to the Resource field.
+func (o *EvaluateRequest) SetResource(v string) {
+	o.Resource = &v
+}
+
+// GetTool returns the Tool field value if set, zero value otherwise.
+func (o *EvaluateRequest) GetTool() string {
+	if o == nil || IsNil(o.Tool) {
+		var ret string
+		return ret
+	}
+	return *o.Tool
+}
+
+// GetToolOk returns a tuple with the Tool field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateRequest) GetToolOk() (*string, bool) {
+	if o == nil || IsNil(o.Tool) {
+		return nil, false
+	}
+	return o.Tool, true
+}
+
+// HasTool returns a boolean if a field has been set.
+func (o *EvaluateRequest) HasTool() bool {
+	if o != nil && !IsNil(o.Tool) {
+		return true
+	}
+
+	return false
+}
+
+// SetTool gets a reference to the given string and assigns it to the Tool field.
 func (o *EvaluateRequest) SetTool(v string) {
-	o.Tool = v
+	o.Tool = &v
 }
 
 // GetArgs returns the Args field value if set, zero value otherwise.
@@ -15714,52 +15819,68 @@ func (o *EvaluateRequest) SetAgentId(v string) {
 	o.AgentId = &v
 }
 
-// GetEffectLevel returns the EffectLevel field value
+// GetEffectLevel returns the EffectLevel field value if set, zero value otherwise.
 func (o *EvaluateRequest) GetEffectLevel() string {
-	if o == nil {
+	if o == nil || IsNil(o.EffectLevel) {
 		var ret string
 		return ret
 	}
-
-	return o.EffectLevel
+	return *o.EffectLevel
 }
 
-// GetEffectLevelOk returns a tuple with the EffectLevel field value
+// GetEffectLevelOk returns a tuple with the EffectLevel field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *EvaluateRequest) GetEffectLevelOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.EffectLevel) {
 		return nil, false
 	}
-	return &o.EffectLevel, true
+	return o.EffectLevel, true
 }
 
-// SetEffectLevel sets field value
+// HasEffectLevel returns a boolean if a field has been set.
+func (o *EvaluateRequest) HasEffectLevel() bool {
+	if o != nil && !IsNil(o.EffectLevel) {
+		return true
+	}
+
+	return false
+}
+
+// SetEffectLevel gets a reference to the given string and assigns it to the EffectLevel field.
 func (o *EvaluateRequest) SetEffectLevel(v string) {
-	o.EffectLevel = v
+	o.EffectLevel = &v
 }
 
-// GetSessionId returns the SessionId field value
+// GetSessionId returns the SessionId field value if set, zero value otherwise.
 func (o *EvaluateRequest) GetSessionId() string {
-	if o == nil {
+	if o == nil || IsNil(o.SessionId) {
 		var ret string
 		return ret
 	}
-
-	return o.SessionId
+	return *o.SessionId
 }
 
-// GetSessionIdOk returns a tuple with the SessionId field value
+// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *EvaluateRequest) GetSessionIdOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.SessionId) {
 		return nil, false
 	}
-	return &o.SessionId, true
+	return o.SessionId, true
 }
 
-// SetSessionId sets field value
+// HasSessionId returns a boolean if a field has been set.
+func (o *EvaluateRequest) HasSessionId() bool {
+	if o != nil && !IsNil(o.SessionId) {
+		return true
+	}
+
+	return false
+}
+
+// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
 func (o *EvaluateRequest) SetSessionId(v string) {
-	o.SessionId = v
+	o.SessionId = &v
 }
 
 // GetContext returns the Context field value if set, zero value otherwise.
@@ -15804,58 +15925,34 @@ func (o EvaluateRequest) MarshalJSON() ([]byte, error) {
 
 func (o EvaluateRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["tool"] = o.Tool
+	if !IsNil(o.Principal) {
+		toSerialize["principal"] = o.Principal
+	}
+	if !IsNil(o.Action) {
+		toSerialize["action"] = o.Action
+	}
+	if !IsNil(o.Resource) {
+		toSerialize["resource"] = o.Resource
+	}
+	if !IsNil(o.Tool) {
+		toSerialize["tool"] = o.Tool
+	}
 	if !IsNil(o.Args) {
 		toSerialize["args"] = o.Args
 	}
 	if !IsNil(o.AgentId) {
 		toSerialize["agent_id"] = o.AgentId
 	}
-	toSerialize["effect_level"] = o.EffectLevel
-	toSerialize["session_id"] = o.SessionId
+	if !IsNil(o.EffectLevel) {
+		toSerialize["effect_level"] = o.EffectLevel
+	}
+	if !IsNil(o.SessionId) {
+		toSerialize["session_id"] = o.SessionId
+	}
 	if !IsNil(o.Context) {
 		toSerialize["context"] = o.Context
 	}
 	return toSerialize, nil
-}
-
-func (o *EvaluateRequest) UnmarshalJSON(data []byte) (err error) {
-	// This validates that all required properties are included in the JSON object
-	// by unmarshalling the object into a generic map with string keys and checking
-	// that every required field exists as a key in the generic map.
-	requiredProperties := []string{
-		"tool",
-		"effect_level",
-		"session_id",
-	}
-
-	allProperties := make(map[string]interface{})
-
-	err = json.Unmarshal(data, &allProperties)
-
-	if err != nil {
-		return err
-	}
-
-	for _, requiredProperty := range requiredProperties {
-		if _, exists := allProperties[requiredProperty]; !exists {
-			return fmt.Errorf("no value given for required property %v", requiredProperty)
-		}
-	}
-
-	varEvaluateRequest := _EvaluateRequest{}
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varEvaluateRequest)
-
-	if err != nil {
-		return err
-	}
-
-	*o = EvaluateRequest(varEvaluateRequest)
-
-	return err
 }
 
 type NullableEvaluateRequest struct {
@@ -15919,6 +16016,20 @@ type EvaluateResponse struct {
 	ReasonCode   string `json:"reason_code"`
 	PolicyRef    string `json:"policy_ref"`
 	LamportClock int64  `json:"lamport_clock"`
+	// Legacy decision identifier alias for decision_id.
+	Id *string `json:"id,omitempty"`
+	// Legacy decision action.
+	Action *string `json:"action,omitempty"`
+	// Legacy decision resource.
+	Resource *string `json:"resource,omitempty"`
+	// Legacy human-readable decision reason.
+	Reason *string `json:"reason,omitempty"`
+	// Legacy policy version.
+	PolicyVersion *string `json:"policy_version,omitempty"`
+	// Legacy policy decision hash.
+	PolicyDecisionHash *string `json:"policy_decision_hash,omitempty"`
+	// Legacy decision signature.
+	Signature *string `json:"signature,omitempty"`
 }
 
 type _EvaluateResponse EvaluateResponse
@@ -16140,6 +16251,230 @@ func (o *EvaluateResponse) SetLamportClock(v int64) {
 	o.LamportClock = v
 }
 
+// GetId returns the Id field value if set, zero value otherwise.
+func (o *EvaluateResponse) GetId() string {
+	if o == nil || IsNil(o.Id) {
+		var ret string
+		return ret
+	}
+	return *o.Id
+}
+
+// GetIdOk returns a tuple with the Id field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateResponse) GetIdOk() (*string, bool) {
+	if o == nil || IsNil(o.Id) {
+		return nil, false
+	}
+	return o.Id, true
+}
+
+// HasId returns a boolean if a field has been set.
+func (o *EvaluateResponse) HasId() bool {
+	if o != nil && !IsNil(o.Id) {
+		return true
+	}
+
+	return false
+}
+
+// SetId gets a reference to the given string and assigns it to the Id field.
+func (o *EvaluateResponse) SetId(v string) {
+	o.Id = &v
+}
+
+// GetAction returns the Action field value if set, zero value otherwise.
+func (o *EvaluateResponse) GetAction() string {
+	if o == nil || IsNil(o.Action) {
+		var ret string
+		return ret
+	}
+	return *o.Action
+}
+
+// GetActionOk returns a tuple with the Action field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateResponse) GetActionOk() (*string, bool) {
+	if o == nil || IsNil(o.Action) {
+		return nil, false
+	}
+	return o.Action, true
+}
+
+// HasAction returns a boolean if a field has been set.
+func (o *EvaluateResponse) HasAction() bool {
+	if o != nil && !IsNil(o.Action) {
+		return true
+	}
+
+	return false
+}
+
+// SetAction gets a reference to the given string and assigns it to the Action field.
+func (o *EvaluateResponse) SetAction(v string) {
+	o.Action = &v
+}
+
+// GetResource returns the Resource field value if set, zero value otherwise.
+func (o *EvaluateResponse) GetResource() string {
+	if o == nil || IsNil(o.Resource) {
+		var ret string
+		return ret
+	}
+	return *o.Resource
+}
+
+// GetResourceOk returns a tuple with the Resource field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateResponse) GetResourceOk() (*string, bool) {
+	if o == nil || IsNil(o.Resource) {
+		return nil, false
+	}
+	return o.Resource, true
+}
+
+// HasResource returns a boolean if a field has been set.
+func (o *EvaluateResponse) HasResource() bool {
+	if o != nil && !IsNil(o.Resource) {
+		return true
+	}
+
+	return false
+}
+
+// SetResource gets a reference to the given string and assigns it to the Resource field.
+func (o *EvaluateResponse) SetResource(v string) {
+	o.Resource = &v
+}
+
+// GetReason returns the Reason field value if set, zero value otherwise.
+func (o *EvaluateResponse) GetReason() string {
+	if o == nil || IsNil(o.Reason) {
+		var ret string
+		return ret
+	}
+	return *o.Reason
+}
+
+// GetReasonOk returns a tuple with the Reason field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateResponse) GetReasonOk() (*string, bool) {
+	if o == nil || IsNil(o.Reason) {
+		return nil, false
+	}
+	return o.Reason, true
+}
+
+// HasReason returns a boolean if a field has been set.
+func (o *EvaluateResponse) HasReason() bool {
+	if o != nil && !IsNil(o.Reason) {
+		return true
+	}
+
+	return false
+}
+
+// SetReason gets a reference to the given string and assigns it to the Reason field.
+func (o *EvaluateResponse) SetReason(v string) {
+	o.Reason = &v
+}
+
+// GetPolicyVersion returns the PolicyVersion field value if set, zero value otherwise.
+func (o *EvaluateResponse) GetPolicyVersion() string {
+	if o == nil || IsNil(o.PolicyVersion) {
+		var ret string
+		return ret
+	}
+	return *o.PolicyVersion
+}
+
+// GetPolicyVersionOk returns a tuple with the PolicyVersion field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateResponse) GetPolicyVersionOk() (*string, bool) {
+	if o == nil || IsNil(o.PolicyVersion) {
+		return nil, false
+	}
+	return o.PolicyVersion, true
+}
+
+// HasPolicyVersion returns a boolean if a field has been set.
+func (o *EvaluateResponse) HasPolicyVersion() bool {
+	if o != nil && !IsNil(o.PolicyVersion) {
+		return true
+	}
+
+	return false
+}
+
+// SetPolicyVersion gets a reference to the given string and assigns it to the PolicyVersion field.
+func (o *EvaluateResponse) SetPolicyVersion(v string) {
+	o.PolicyVersion = &v
+}
+
+// GetPolicyDecisionHash returns the PolicyDecisionHash field value if set, zero value otherwise.
+func (o *EvaluateResponse) GetPolicyDecisionHash() string {
+	if o == nil || IsNil(o.PolicyDecisionHash) {
+		var ret string
+		return ret
+	}
+	return *o.PolicyDecisionHash
+}
+
+// GetPolicyDecisionHashOk returns a tuple with the PolicyDecisionHash field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateResponse) GetPolicyDecisionHashOk() (*string, bool) {
+	if o == nil || IsNil(o.PolicyDecisionHash) {
+		return nil, false
+	}
+	return o.PolicyDecisionHash, true
+}
+
+// HasPolicyDecisionHash returns a boolean if a field has been set.
+func (o *EvaluateResponse) HasPolicyDecisionHash() bool {
+	if o != nil && !IsNil(o.PolicyDecisionHash) {
+		return true
+	}
+
+	return false
+}
+
+// SetPolicyDecisionHash gets a reference to the given string and assigns it to the PolicyDecisionHash field.
+func (o *EvaluateResponse) SetPolicyDecisionHash(v string) {
+	o.PolicyDecisionHash = &v
+}
+
+// GetSignature returns the Signature field value if set, zero value otherwise.
+func (o *EvaluateResponse) GetSignature() string {
+	if o == nil || IsNil(o.Signature) {
+		var ret string
+		return ret
+	}
+	return *o.Signature
+}
+
+// GetSignatureOk returns a tuple with the Signature field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *EvaluateResponse) GetSignatureOk() (*string, bool) {
+	if o == nil || IsNil(o.Signature) {
+		return nil, false
+	}
+	return o.Signature, true
+}
+
+// HasSignature returns a boolean if a field has been set.
+func (o *EvaluateResponse) HasSignature() bool {
+	if o != nil && !IsNil(o.Signature) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignature gets a reference to the given string and assigns it to the Signature field.
+func (o *EvaluateResponse) SetSignature(v string) {
+	o.Signature = &v
+}
+
 func (o EvaluateResponse) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -16158,6 +16493,27 @@ func (o EvaluateResponse) ToMap() (map[string]interface{}, error) {
 	toSerialize["reason_code"] = o.ReasonCode
 	toSerialize["policy_ref"] = o.PolicyRef
 	toSerialize["lamport_clock"] = o.LamportClock
+	if !IsNil(o.Id) {
+		toSerialize["id"] = o.Id
+	}
+	if !IsNil(o.Action) {
+		toSerialize["action"] = o.Action
+	}
+	if !IsNil(o.Resource) {
+		toSerialize["resource"] = o.Resource
+	}
+	if !IsNil(o.Reason) {
+		toSerialize["reason"] = o.Reason
+	}
+	if !IsNil(o.PolicyVersion) {
+		toSerialize["policy_version"] = o.PolicyVersion
+	}
+	if !IsNil(o.PolicyDecisionHash) {
+		toSerialize["policy_decision_hash"] = o.PolicyDecisionHash
+	}
+	if !IsNil(o.Signature) {
+		toSerialize["signature"] = o.Signature
+	}
 	return toSerialize, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -170,11 +171,20 @@ func (c *HelmClient) ChatCompletionsWithReceipt(req ChatCompletionRequest) (*Cha
 	}, nil
 }
 
-// EvaluateDecision calls POST /api/v1/evaluate.
-func (c *HelmClient) EvaluateDecision(req any) (map[string]any, error) {
-	var out map[string]any
+// EvaluateDecision calls POST /api/v1/evaluate with the canonical V5 request.
+func (c *HelmClient) EvaluateDecision(req EvaluateRequest) (*EvaluateResponse, error) {
+	if strings.TrimSpace(req.Tool) == "" {
+		return nil, fmt.Errorf("evaluate decision requires a non-blank tool")
+	}
+	if strings.TrimSpace(req.EffectLevel) == "" {
+		return nil, fmt.Errorf("evaluate decision requires a non-blank effect_level")
+	}
+	if strings.TrimSpace(req.SessionId) == "" {
+		return nil, fmt.Errorf("evaluate decision requires a non-blank session_id")
+	}
+	var out EvaluateResponse
 	err := c.do("POST", "/api/v1/evaluate", req, &out)
-	return out, err
+	return &out, err
 }
 
 // RunPublicDemo calls POST /api/demo/run.

@@ -389,11 +389,39 @@ impl HelmClient {
     }
 
     /// POST /api/v1/evaluate
-    pub fn evaluate_decision<T: Serialize>(
+    pub fn evaluate_decision(
         &self,
-        req: &T,
-    ) -> Result<serde_json::Value, HelmApiError> {
-        self.post_value("/api/v1/evaluate", req)
+        req: &EvaluateRequest,
+    ) -> Result<EvaluateResponse, HelmApiError> {
+        for (field, value) in [
+            ("tool", &req.tool),
+            ("effect_level", &req.effect_level),
+            ("session_id", &req.session_id),
+        ] {
+            if value.trim().is_empty() {
+                return Err(HelmApiError {
+                    status: 0,
+                    message: format!("evaluate_decision requires a non-blank {field}"),
+                    reason_code: ReasonCode::ErrorInternal,
+                });
+            }
+        }
+        let resp = self
+            .client
+            .post(self.url("/api/v1/evaluate"))
+            .json(req)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
     }
 
     /// POST /api/v1/kernel/approve
@@ -1101,6 +1129,25 @@ mod tests {
         let code = ReasonCode::DenyToolNotFound;
         let json = serde_json::to_string(&code).unwrap();
         assert_eq!(json, "\"DENY_TOOL_NOT_FOUND\"");
+    }
+
+    #[test]
+    fn test_evaluate_decision_requires_canonical_v5_request() {
+        let request = EvaluateRequest::new(
+            "read_file".to_string(),
+            "read".to_string(),
+            "session-test".to_string(),
+        );
+        let encoded = serde_json::to_value(&request).unwrap();
+        assert_eq!(encoded["tool"], "read_file");
+        assert_eq!(encoded["effect_level"], "read");
+        assert_eq!(encoded["session_id"], "session-test");
+
+        let client = HelmClient::new("http://127.0.0.1:1");
+        let blank = EvaluateRequest::new("read_file".to_string(), "read".to_string(), " ".to_string());
+        let err = client.evaluate_decision(&blank).unwrap_err();
+        assert_eq!(err.status, 0);
+        assert!(err.message.contains("non-blank session_id"));
     }
 
     #[test]

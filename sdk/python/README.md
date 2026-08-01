@@ -28,15 +28,15 @@ been run.
 ## Usage
 
 ```python
-from helm_sdk import HelmClient
+from helm_sdk import EvaluateRequest, HelmClient
 
 client = HelmClient(base_url="http://127.0.0.1:7714")
-decision = client.evaluate_decision({
-    "principal": "example-agent",
-    "action": "read-ticket",
-    "resource": "ticket:123",
-})
-print(decision["verdict"])  # ALLOW, DENY, or ESCALATE
+decision = client.evaluate_decision(EvaluateRequest(
+    tool="read-ticket",
+    effect_level="ticket:123",
+    session_id="example-session",
+))
+print(decision.verdict)  # ALLOW or DENY
 ```
 
 Run the first-class local example with `make sdk-examples-smoke` or directly

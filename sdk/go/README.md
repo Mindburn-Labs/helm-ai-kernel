@@ -79,7 +79,7 @@ func main() {
 | --- | --- |
 | `ChatCompletions(req)` | `POST /v1/chat/completions` |
 | `ChatCompletionsWithReceipt(req)` | `POST /v1/chat/completions` plus `X-Helm-*` governance headers |
-| `EvaluateDecision(req)` | `POST /api/v1/evaluate` |
+| `EvaluateDecision(EvaluateRequest)` | `POST /api/v1/evaluate`; requires non-blank `tool`, `effect_level`, and `session_id` |
 | `RunPublicDemo(actionID, args)` | `POST /api/demo/run` |
 | `VerifyPublicDemoReceipt(receipt, expectedHash)` | `POST /api/demo/verify` |
 | `ApproveIntent(req)` | `POST /api/v1/kernel/approve` |

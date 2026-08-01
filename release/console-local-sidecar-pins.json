@@ -5,8 +5,8 @@
       "kernel_release_version": "v0.8.0",
       "source_repository": "Mindburn-Labs/app-helm-console",
       "source": {
-        "commit": "79a9a79b557776eb720a722706e441a7791fa573",
-        "tree": "03afdc5a75ca2e7f11d7349db68029feba4c7508",
+        "commit": "f9583f9a218cd557c82c79e853b6d2dfbbd86906",
+        "tree": "4a5cfca92bfab2eab6008cd703a023b009df9c83",
         "version": "0.2.1",
         "package_lock_sha256": "1028990307789189333657942de79d11e6889ef47dc539f77e0a9c94c26a2076"
       }

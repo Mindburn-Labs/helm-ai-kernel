@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Guard tag-release provenance and no-fanout workflow invariants."""
+"""Guard tag-release provenance and no-fanout workflow invariants.
+
+quantum_posture: this text-level contract test checks classical cosign and
+checksum workflow wiring; it implements no cryptographic control or
+post-quantum assurance.
+"""
 from __future__ import annotations
 
 import re

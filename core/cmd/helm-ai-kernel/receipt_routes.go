@@ -28,8 +28,15 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Guardian unavailable", "guardian not initialized")
 			return
 		}
-		var req guardian.DecisionRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// The public operation uses api.EvaluateRequest. Keep action/resource as
+		// an undocumented compatibility adapter for existing direct daemon
+		// callers; generated SDKs use the canonical tool/effect_level fields.
+		var payload struct {
+			api.EvaluateRequest
+			Action   string `json:"action"`
+			Resource string `json:"resource"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			api.WriteBadRequest(w, "Invalid JSON body")
 			return
 		}
@@ -60,31 +67,94 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 		}
-		req.Principal = principalID
+		req := payload.EvaluateRequest
+		req.Tool = strings.TrimSpace(req.Tool)
+		if req.Tool == "" {
+			req.Tool = strings.TrimSpace(payload.Action)
+		}
+		req.EffectLevel = strings.TrimSpace(req.EffectLevel)
+		if req.EffectLevel == "" {
+			req.EffectLevel = strings.TrimSpace(payload.Resource)
+		}
+		if req.Tool == "" || req.EffectLevel == "" {
+			api.WriteBadRequest(w, "Evaluate route requires tool and effect_level")
+			return
+		}
+		req.SessionID = strings.TrimSpace(req.SessionID)
+		if req.SessionID == "" && req.Context != nil {
+			if legacySessionID, ok := req.Context["session_id"].(string); ok {
+				req.SessionID = strings.TrimSpace(legacySessionID)
+			}
+		}
+		if req.SessionID == "" {
+			api.WriteBadRequest(w, "Evaluate route requires a non-blank session_id")
+			return
+		}
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
+		req.AgentID = principalID
 		req.Context["principal_id"] = principalID
 		req.Context["tenant_id"] = tenantID
+		// The external session ID remains a signed field. Durable storage may
+		// derive a private tenant-qualified ordering key from this authenticated
+		// context, but that key is not part of the public API contract.
+		req.Context["session_id"] = req.SessionID
+		if req.Args != nil {
+			req.Context["args"] = req.Args
+		}
 		if workspaceID != "" {
 			req.Context["workspace_id"] = workspaceID
 		}
-		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
+		args, err := json.Marshal(req.Args)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid evaluate args")
+			return
+		}
+		decision, err := svc.Guardian.EvaluateDecision(r.Context(), guardian.DecisionRequest{
+			Principal: principalID,
+			Action:    req.Tool,
+			Resource:  req.EffectLevel,
+			Context:   req.Context,
+		})
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
 		}
-		if err := persistDecisionReceipt(r.Context(), svc, decision, req.Principal, []byte(req.Action+":"+req.Resource), map[string]any{
+		if err := persistDecisionReceipt(r.Context(), svc, decision, principalID, args, map[string]any{
 			"source":   "api.evaluate",
-			"action":   req.Action,
-			"resource": req.Resource,
+			"action":   req.Tool,
+			"resource": req.EffectLevel,
 			"reason":   decision.Reason,
 		}); err != nil {
 			api.WriteInternal(w, err)
 			return
 		}
+		receiptID := "rcpt_" + decision.ID
+		receipt, err := svc.ReceiptStore.GetByReceiptID(r.Context(), receiptID)
+		if err != nil {
+			api.WriteInternal(w, fmt.Errorf("load persisted receipt %s: %w", receiptID, err))
+			return
+		}
+		if receipt == nil {
+			api.WriteInternal(w, fmt.Errorf("persisted receipt %s is unavailable", receiptID))
+			return
+		}
+		policyRef := decision.PolicyVersion
+		if policyRef == "" {
+			policyRef = decision.PolicyContentHash
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(decision)
+		_ = json.NewEncoder(w).Encode(api.EvaluateResponse{
+			Allow:        contracts.Verdict(decision.Verdict) == contracts.VerdictAllow,
+			Verdict:      decision.Verdict,
+			ReceiptID:    receipt.ReceiptID,
+			DecisionID:   decision.ID,
+			DecisionHash: receipt.DecisionHash,
+			ReasonCode:   decision.ReasonCode,
+			PolicyRef:    policyRef,
+			LamportClock: receipt.LamportClock,
+		})
 	}))
 
 	mux.HandleFunc("/api/v1/receipts/tail", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
@@ -282,6 +352,7 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 			Status:       decision.Verdict,
 			BlobHash:     argsHash,
 			OutputHash:   decision.PolicyDecisionHash,
+			DecisionHash: decision.PolicyDecisionHash,
 			Timestamp:    timestamp,
 			ExecutorID:   agentID,
 			Verdict:      decision.Verdict,

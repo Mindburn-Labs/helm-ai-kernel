@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -339,21 +340,96 @@ func TestEvaluateRouteBindsReceiptToAuthenticatedPrincipal(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("authenticated evaluate status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if receipts.sessionID != "session-1" {
-		t.Fatalf("causal chain session = %q, want signed session", receipts.sessionID)
-	}
 	if receipts.stored == nil {
 		t.Fatal("authenticated evaluate did not persist receipt")
+	}
+	if receipts.stored.SessionID != "session-1" {
+		t.Fatalf("signed receipt session = %q, want session-1", receipts.stored.SessionID)
 	}
 	if receipts.stored.ExecutorID != "principal-trusted" {
 		t.Fatalf("receipt executor = %q, want trusted principal", receipts.stored.ExecutorID)
 	}
-	var decision contracts.DecisionRecord
-	if err := json.Unmarshal(rec.Body.Bytes(), &decision); err != nil {
+	var response api.EvaluateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if decision.InputContext["tenant_id"] != "tenant-trusted" || decision.InputContext["principal_id"] != "principal-trusted" {
-		t.Fatalf("decision context did not use trusted identity: %+v", decision.InputContext)
+	if response.ReceiptID != receipts.stored.ReceiptID || response.DecisionID != receipts.stored.DecisionID || response.LamportClock != receipts.stored.LamportClock {
+		t.Fatalf("legacy route response must use the canonical evaluate shape: %+v receipt=%+v", response, receipts.stored)
+	}
+}
+
+func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","args":{"message":"hello"},"agent_id":"attacker","session_id":" canonical-session ","context":{"session_id":"legacy-session","tenant_id":"tenant-attacker"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("canonical evaluate status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored == nil {
+		t.Fatal("canonical evaluate did not persist a receipt")
+	}
+	if receipts.stored.SessionID != "canonical-session" {
+		t.Fatalf("top-level session must be trimmed and take precedence: receipt=%q", receipts.stored.SessionID)
+	}
+	if receipts.stored.ExecutorID != "principal-trusted" || receipts.stored.EffectID != "EXECUTE_TOOL" {
+		t.Fatalf("canonical evaluate did not bind authenticated executor/action: %+v", receipts.stored)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"allow", "verdict", "receipt_id", "decision_id", "decision_hash", "reason_code", "policy_ref", "lamport_clock"} {
+		if _, ok := raw[field]; !ok {
+			t.Fatalf("canonical evaluate response omitted %q: %s", field, rec.Body.String())
+		}
+	}
+	var response api.EvaluateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.ReceiptID != receipts.stored.ReceiptID || response.DecisionID != receipts.stored.DecisionID || response.DecisionHash != receipts.stored.DecisionHash || response.LamportClock != receipts.stored.LamportClock {
+		t.Fatalf("canonical response does not match persisted V5 receipt: response=%+v receipt=%+v", response, receipts.stored)
+	}
+}
+
+func TestEvaluateRouteRejectsIncompleteCanonicalContract(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	for name, body := range map[string]string{
+		"session": `{"tool":"EXECUTE_TOOL","effect_level":"local.echo"}`,
+		"tool":    `{"effect_level":"local.echo","session_id":"session-1"}`,
+		"effect":  `{"tool":"EXECUTE_TOOL","session_id":"session-1"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, receipts := newEvaluateRouteTestServices(t)
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("incomplete canonical request status = %d body=%s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored != nil {
+				t.Fatalf("rejected request persisted receipt: %+v", receipts.stored)
+			}
+		})
 	}
 }
 
@@ -415,7 +491,7 @@ func TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled(t *
 
 	// The body attempts to select an unfenced workspace. The handler must use
 	// the independently authenticated header binding instead.
-	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"workspace_id":"workspace-unfenced"}}`)
+	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","session_id":"fenced-session","context":{"workspace_id":"workspace-unfenced"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
@@ -426,18 +502,15 @@ func TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled(t *
 	if rec.Code != http.StatusOK {
 		t.Fatalf("fenced evaluate status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var decision contracts.DecisionRecord
-	if err := json.Unmarshal(rec.Body.Bytes(), &decision); err != nil {
+	var response api.EvaluateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if decision.Verdict != string(contracts.VerdictDeny) || decision.ReasonCode != string(contracts.ReasonEmergencyStopFenced) {
-		t.Fatalf("fenced evaluate decision = %+v", decision)
+	if response.Verdict != string(contracts.VerdictDeny) || response.ReasonCode != string(contracts.ReasonEmergencyStopFenced) {
+		t.Fatalf("fenced evaluate response = %+v", response)
 	}
 	if reader.calls != 1 || reader.scope != command.Scope() {
 		t.Fatalf("evaluate route did not use the authenticated scope: calls=%d scope=%+v", reader.calls, reader.scope)
-	}
-	if decision.InputContext["emergency_stop_command_id"] != command.CommandID || decision.InputContext["emergency_stop_scope_hash"] == "" {
-		t.Fatalf("fenced evaluate missing signed stop provenance: %+v", decision.InputContext)
 	}
 	if receipts.stored == nil || receipts.stored.ReasonCode != string(contracts.ReasonEmergencyStopFenced) {
 		t.Fatalf("fenced evaluate must persist a denial receipt, got %+v", receipts.stored)

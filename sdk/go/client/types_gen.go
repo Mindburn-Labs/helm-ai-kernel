@@ -11972,7 +11972,7 @@ API version: 0.7.5
 // checks if the DecisionRequest type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &DecisionRequest{}
 
-// DecisionRequest Legacy evaluation shape. Supply the signed causal session identifier as context.session_id.
+// DecisionRequest Legacy direct-daemon evaluation shape. It is retained only for existing callers; generated SDKs must use EvaluateRequest with a top-level session_id.
 type DecisionRequest struct {
 	Principal *string                `json:"principal,omitempty"`
 	Action    string                 `json:"action"`
@@ -15590,32 +15590,31 @@ API version: 0.7.5
 // checks if the EvaluateRequest type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &EvaluateRequest{}
 
-// EvaluateRequest V5 evaluation shape. Legacy action/resource aliases are accepted when tool/effect_level are omitted. The server trims and uses a non-whitespace session_id, or falls back to context.session_id.
+// EvaluateRequest Canonical V5 evaluation shape. Generated SDK clients must send non-blank top-level tool, effect_level, and session_id fields. The daemon retains legacy action/resource plus context.session_id handling only for direct compatibility callers.
 type EvaluateRequest struct {
-	Tool *string                `json:"tool,omitempty"`
+	Tool string                 `json:"tool"`
 	Args map[string]interface{} `json:"args,omitempty"`
 	// Ignored; the authenticated principal is recorded as the receipt executor.
 	AgentId *string `json:"agent_id,omitempty"`
 	// Policy resource used to evaluate the governed tool call.
-	EffectLevel *string `json:"effect_level,omitempty"`
-	// Legacy field ignored; the authenticated principal is recorded as the receipt executor.
-	Principal *string `json:"principal,omitempty"`
-	// Legacy alias for tool when tool is omitted.
-	Action *string `json:"action,omitempty"`
-	// Legacy alias for effect_level when effect_level is omitted.
-	Resource *string `json:"resource,omitempty"`
+	EffectLevel string `json:"effect_level"`
 	// Non-whitespace signed causal session identifier.
-	SessionId *string `json:"session_id,omitempty"`
+	SessionId string `json:"session_id"`
 	// Optional input context; authenticated principal and tenant fields are added by the server.
 	Context map[string]interface{} `json:"context,omitempty"`
 }
+
+type _EvaluateRequest EvaluateRequest
 
 // NewEvaluateRequest instantiates a new EvaluateRequest object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewEvaluateRequest() *EvaluateRequest {
+func NewEvaluateRequest(tool string, effectLevel string, sessionId string) *EvaluateRequest {
 	this := EvaluateRequest{}
+	this.Tool = tool
+	this.EffectLevel = effectLevel
+	this.SessionId = sessionId
 	return &this
 }
 
@@ -15627,36 +15626,28 @@ func NewEvaluateRequestWithDefaults() *EvaluateRequest {
 	return &this
 }
 
-// GetTool returns the Tool field value if set, zero value otherwise.
+// GetTool returns the Tool field value
 func (o *EvaluateRequest) GetTool() string {
-	if o == nil || IsNil(o.Tool) {
+	if o == nil {
 		var ret string
 		return ret
 	}
-	return *o.Tool
+
+	return o.Tool
 }
 
-// GetToolOk returns a tuple with the Tool field value if set, nil otherwise
+// GetToolOk returns a tuple with the Tool field value
 // and a boolean to check if the value has been set.
 func (o *EvaluateRequest) GetToolOk() (*string, bool) {
-	if o == nil || IsNil(o.Tool) {
+	if o == nil {
 		return nil, false
 	}
-	return o.Tool, true
+	return &o.Tool, true
 }
 
-// HasTool returns a boolean if a field has been set.
-func (o *EvaluateRequest) HasTool() bool {
-	if o != nil && !IsNil(o.Tool) {
-		return true
-	}
-
-	return false
-}
-
-// SetTool gets a reference to the given string and assigns it to the Tool field.
+// SetTool sets field value
 func (o *EvaluateRequest) SetTool(v string) {
-	o.Tool = &v
+	o.Tool = v
 }
 
 // GetArgs returns the Args field value if set, zero value otherwise.
@@ -15723,164 +15714,52 @@ func (o *EvaluateRequest) SetAgentId(v string) {
 	o.AgentId = &v
 }
 
-// GetEffectLevel returns the EffectLevel field value if set, zero value otherwise.
+// GetEffectLevel returns the EffectLevel field value
 func (o *EvaluateRequest) GetEffectLevel() string {
-	if o == nil || IsNil(o.EffectLevel) {
+	if o == nil {
 		var ret string
 		return ret
 	}
-	return *o.EffectLevel
+
+	return o.EffectLevel
 }
 
-// GetEffectLevelOk returns a tuple with the EffectLevel field value if set, nil otherwise
+// GetEffectLevelOk returns a tuple with the EffectLevel field value
 // and a boolean to check if the value has been set.
 func (o *EvaluateRequest) GetEffectLevelOk() (*string, bool) {
-	if o == nil || IsNil(o.EffectLevel) {
+	if o == nil {
 		return nil, false
 	}
-	return o.EffectLevel, true
+	return &o.EffectLevel, true
 }
 
-// HasEffectLevel returns a boolean if a field has been set.
-func (o *EvaluateRequest) HasEffectLevel() bool {
-	if o != nil && !IsNil(o.EffectLevel) {
-		return true
-	}
-
-	return false
-}
-
-// SetEffectLevel gets a reference to the given string and assigns it to the EffectLevel field.
+// SetEffectLevel sets field value
 func (o *EvaluateRequest) SetEffectLevel(v string) {
-	o.EffectLevel = &v
+	o.EffectLevel = v
 }
 
-// GetPrincipal returns the Principal field value if set, zero value otherwise.
-func (o *EvaluateRequest) GetPrincipal() string {
-	if o == nil || IsNil(o.Principal) {
-		var ret string
-		return ret
-	}
-	return *o.Principal
-}
-
-// GetPrincipalOk returns a tuple with the Principal field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *EvaluateRequest) GetPrincipalOk() (*string, bool) {
-	if o == nil || IsNil(o.Principal) {
-		return nil, false
-	}
-	return o.Principal, true
-}
-
-// HasPrincipal returns a boolean if a field has been set.
-func (o *EvaluateRequest) HasPrincipal() bool {
-	if o != nil && !IsNil(o.Principal) {
-		return true
-	}
-
-	return false
-}
-
-// SetPrincipal gets a reference to the given string and assigns it to the Principal field.
-func (o *EvaluateRequest) SetPrincipal(v string) {
-	o.Principal = &v
-}
-
-// GetAction returns the Action field value if set, zero value otherwise.
-func (o *EvaluateRequest) GetAction() string {
-	if o == nil || IsNil(o.Action) {
-		var ret string
-		return ret
-	}
-	return *o.Action
-}
-
-// GetActionOk returns a tuple with the Action field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *EvaluateRequest) GetActionOk() (*string, bool) {
-	if o == nil || IsNil(o.Action) {
-		return nil, false
-	}
-	return o.Action, true
-}
-
-// HasAction returns a boolean if a field has been set.
-func (o *EvaluateRequest) HasAction() bool {
-	if o != nil && !IsNil(o.Action) {
-		return true
-	}
-
-	return false
-}
-
-// SetAction gets a reference to the given string and assigns it to the Action field.
-func (o *EvaluateRequest) SetAction(v string) {
-	o.Action = &v
-}
-
-// GetResource returns the Resource field value if set, zero value otherwise.
-func (o *EvaluateRequest) GetResource() string {
-	if o == nil || IsNil(o.Resource) {
-		var ret string
-		return ret
-	}
-	return *o.Resource
-}
-
-// GetResourceOk returns a tuple with the Resource field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *EvaluateRequest) GetResourceOk() (*string, bool) {
-	if o == nil || IsNil(o.Resource) {
-		return nil, false
-	}
-	return o.Resource, true
-}
-
-// HasResource returns a boolean if a field has been set.
-func (o *EvaluateRequest) HasResource() bool {
-	if o != nil && !IsNil(o.Resource) {
-		return true
-	}
-
-	return false
-}
-
-// SetResource gets a reference to the given string and assigns it to the Resource field.
-func (o *EvaluateRequest) SetResource(v string) {
-	o.Resource = &v
-}
-
-// GetSessionId returns the SessionId field value if set, zero value otherwise.
+// GetSessionId returns the SessionId field value
 func (o *EvaluateRequest) GetSessionId() string {
-	if o == nil || IsNil(o.SessionId) {
+	if o == nil {
 		var ret string
 		return ret
 	}
-	return *o.SessionId
+
+	return o.SessionId
 }
 
-// GetSessionIdOk returns a tuple with the SessionId field value if set, nil otherwise
+// GetSessionIdOk returns a tuple with the SessionId field value
 // and a boolean to check if the value has been set.
 func (o *EvaluateRequest) GetSessionIdOk() (*string, bool) {
-	if o == nil || IsNil(o.SessionId) {
+	if o == nil {
 		return nil, false
 	}
-	return o.SessionId, true
+	return &o.SessionId, true
 }
 
-// HasSessionId returns a boolean if a field has been set.
-func (o *EvaluateRequest) HasSessionId() bool {
-	if o != nil && !IsNil(o.SessionId) {
-		return true
-	}
-
-	return false
-}
-
-// SetSessionId gets a reference to the given string and assigns it to the SessionId field.
+// SetSessionId sets field value
 func (o *EvaluateRequest) SetSessionId(v string) {
-	o.SessionId = &v
+	o.SessionId = v
 }
 
 // GetContext returns the Context field value if set, zero value otherwise.
@@ -15925,34 +15804,58 @@ func (o EvaluateRequest) MarshalJSON() ([]byte, error) {
 
 func (o EvaluateRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	if !IsNil(o.Tool) {
-		toSerialize["tool"] = o.Tool
-	}
+	toSerialize["tool"] = o.Tool
 	if !IsNil(o.Args) {
 		toSerialize["args"] = o.Args
 	}
 	if !IsNil(o.AgentId) {
 		toSerialize["agent_id"] = o.AgentId
 	}
-	if !IsNil(o.EffectLevel) {
-		toSerialize["effect_level"] = o.EffectLevel
-	}
-	if !IsNil(o.Principal) {
-		toSerialize["principal"] = o.Principal
-	}
-	if !IsNil(o.Action) {
-		toSerialize["action"] = o.Action
-	}
-	if !IsNil(o.Resource) {
-		toSerialize["resource"] = o.Resource
-	}
-	if !IsNil(o.SessionId) {
-		toSerialize["session_id"] = o.SessionId
-	}
+	toSerialize["effect_level"] = o.EffectLevel
+	toSerialize["session_id"] = o.SessionId
 	if !IsNil(o.Context) {
 		toSerialize["context"] = o.Context
 	}
 	return toSerialize, nil
+}
+
+func (o *EvaluateRequest) UnmarshalJSON(data []byte) (err error) {
+	// This validates that all required properties are included in the JSON object
+	// by unmarshalling the object into a generic map with string keys and checking
+	// that every required field exists as a key in the generic map.
+	requiredProperties := []string{
+		"tool",
+		"effect_level",
+		"session_id",
+	}
+
+	allProperties := make(map[string]interface{})
+
+	err = json.Unmarshal(data, &allProperties)
+
+	if err != nil {
+		return err
+	}
+
+	for _, requiredProperty := range requiredProperties {
+		if _, exists := allProperties[requiredProperty]; !exists {
+			return fmt.Errorf("no value given for required property %v", requiredProperty)
+		}
+	}
+
+	varEvaluateRequest := _EvaluateRequest{}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&varEvaluateRequest)
+
+	if err != nil {
+		return err
+	}
+
+	*o = EvaluateRequest(varEvaluateRequest)
+
+	return err
 }
 
 type NullableEvaluateRequest struct {
@@ -15987,464 +15890,6 @@ func (v NullableEvaluateRequest) MarshalJSON() ([]byte, error) {
 }
 
 func (v *NullableEvaluateRequest) UnmarshalJSON(src []byte) error {
-	v.isSet = true
-	return json.Unmarshal(src, &v.value)
-}
-
-/*
-HELM Kernel API
-
-Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
-
-API version: 0.7.5
-*/
-
-// Code generated by OpenAPI Generator (https://openapi-generator.tech); DO NOT EDIT.
-
-// checks if the EvaluateRequestNotAllOfNot type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &EvaluateRequestNotAllOfNot{}
-
-// EvaluateRequestNotAllOfNot struct for EvaluateRequestNotAllOfNot
-type EvaluateRequestNotAllOfNot struct {
-	SessionId string `json:"session_id"`
-}
-
-type _EvaluateRequestNotAllOfNot EvaluateRequestNotAllOfNot
-
-// NewEvaluateRequestNotAllOfNot instantiates a new EvaluateRequestNotAllOfNot object
-// This constructor will assign default values to properties that have it defined,
-// and makes sure properties required by API are set, but the set of arguments
-// will change when the set of required properties is changed
-func NewEvaluateRequestNotAllOfNot(sessionId string) *EvaluateRequestNotAllOfNot {
-	this := EvaluateRequestNotAllOfNot{}
-	this.SessionId = sessionId
-	return &this
-}
-
-// NewEvaluateRequestNotAllOfNotWithDefaults instantiates a new EvaluateRequestNotAllOfNot object
-// This constructor will only assign default values to properties that have it defined,
-// but it doesn't guarantee that properties required by API are set
-func NewEvaluateRequestNotAllOfNotWithDefaults() *EvaluateRequestNotAllOfNot {
-	this := EvaluateRequestNotAllOfNot{}
-	return &this
-}
-
-// GetSessionId returns the SessionId field value
-func (o *EvaluateRequestNotAllOfNot) GetSessionId() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.SessionId
-}
-
-// GetSessionIdOk returns a tuple with the SessionId field value
-// and a boolean to check if the value has been set.
-func (o *EvaluateRequestNotAllOfNot) GetSessionIdOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.SessionId, true
-}
-
-// SetSessionId sets field value
-func (o *EvaluateRequestNotAllOfNot) SetSessionId(v string) {
-	o.SessionId = v
-}
-
-func (o EvaluateRequestNotAllOfNot) MarshalJSON() ([]byte, error) {
-	toSerialize, err := o.ToMap()
-	if err != nil {
-		return []byte{}, err
-	}
-	return json.Marshal(toSerialize)
-}
-
-func (o EvaluateRequestNotAllOfNot) ToMap() (map[string]interface{}, error) {
-	toSerialize := map[string]interface{}{}
-	toSerialize["session_id"] = o.SessionId
-	return toSerialize, nil
-}
-
-func (o *EvaluateRequestNotAllOfNot) UnmarshalJSON(data []byte) (err error) {
-	// This validates that all required properties are included in the JSON object
-	// by unmarshalling the object into a generic map with string keys and checking
-	// that every required field exists as a key in the generic map.
-	requiredProperties := []string{
-		"session_id",
-	}
-
-	allProperties := make(map[string]interface{})
-
-	err = json.Unmarshal(data, &allProperties)
-
-	if err != nil {
-		return err
-	}
-
-	for _, requiredProperty := range requiredProperties {
-		if _, exists := allProperties[requiredProperty]; !exists {
-			return fmt.Errorf("no value given for required property %v", requiredProperty)
-		}
-	}
-
-	varEvaluateRequestNotAllOfNot := _EvaluateRequestNotAllOfNot{}
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varEvaluateRequestNotAllOfNot)
-
-	if err != nil {
-		return err
-	}
-
-	*o = EvaluateRequestNotAllOfNot(varEvaluateRequestNotAllOfNot)
-
-	return err
-}
-
-type NullableEvaluateRequestNotAllOfNot struct {
-	value *EvaluateRequestNotAllOfNot
-	isSet bool
-}
-
-func (v NullableEvaluateRequestNotAllOfNot) Get() *EvaluateRequestNotAllOfNot {
-	return v.value
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot) Set(val *EvaluateRequestNotAllOfNot) {
-	v.value = val
-	v.isSet = true
-}
-
-func (v NullableEvaluateRequestNotAllOfNot) IsSet() bool {
-	return v.isSet
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot) Unset() {
-	v.value = nil
-	v.isSet = false
-}
-
-func NewNullableEvaluateRequestNotAllOfNot(val *EvaluateRequestNotAllOfNot) *NullableEvaluateRequestNotAllOfNot {
-	return &NullableEvaluateRequestNotAllOfNot{value: val, isSet: true}
-}
-
-func (v NullableEvaluateRequestNotAllOfNot) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.value)
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot) UnmarshalJSON(src []byte) error {
-	v.isSet = true
-	return json.Unmarshal(src, &v.value)
-}
-
-/*
-HELM Kernel API
-
-Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
-
-API version: 0.7.5
-*/
-
-// Code generated by OpenAPI Generator (https://openapi-generator.tech); DO NOT EDIT.
-
-// checks if the EvaluateRequestNotAllOfNot1 type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &EvaluateRequestNotAllOfNot1{}
-
-// EvaluateRequestNotAllOfNot1 struct for EvaluateRequestNotAllOfNot1
-type EvaluateRequestNotAllOfNot1 struct {
-	Context EvaluateRequestNotAllOfNot1Context `json:"context"`
-}
-
-type _EvaluateRequestNotAllOfNot1 EvaluateRequestNotAllOfNot1
-
-// NewEvaluateRequestNotAllOfNot1 instantiates a new EvaluateRequestNotAllOfNot1 object
-// This constructor will assign default values to properties that have it defined,
-// and makes sure properties required by API are set, but the set of arguments
-// will change when the set of required properties is changed
-func NewEvaluateRequestNotAllOfNot1(context EvaluateRequestNotAllOfNot1Context) *EvaluateRequestNotAllOfNot1 {
-	this := EvaluateRequestNotAllOfNot1{}
-	this.Context = context
-	return &this
-}
-
-// NewEvaluateRequestNotAllOfNot1WithDefaults instantiates a new EvaluateRequestNotAllOfNot1 object
-// This constructor will only assign default values to properties that have it defined,
-// but it doesn't guarantee that properties required by API are set
-func NewEvaluateRequestNotAllOfNot1WithDefaults() *EvaluateRequestNotAllOfNot1 {
-	this := EvaluateRequestNotAllOfNot1{}
-	return &this
-}
-
-// GetContext returns the Context field value
-func (o *EvaluateRequestNotAllOfNot1) GetContext() EvaluateRequestNotAllOfNot1Context {
-	if o == nil {
-		var ret EvaluateRequestNotAllOfNot1Context
-		return ret
-	}
-
-	return o.Context
-}
-
-// GetContextOk returns a tuple with the Context field value
-// and a boolean to check if the value has been set.
-func (o *EvaluateRequestNotAllOfNot1) GetContextOk() (*EvaluateRequestNotAllOfNot1Context, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Context, true
-}
-
-// SetContext sets field value
-func (o *EvaluateRequestNotAllOfNot1) SetContext(v EvaluateRequestNotAllOfNot1Context) {
-	o.Context = v
-}
-
-func (o EvaluateRequestNotAllOfNot1) MarshalJSON() ([]byte, error) {
-	toSerialize, err := o.ToMap()
-	if err != nil {
-		return []byte{}, err
-	}
-	return json.Marshal(toSerialize)
-}
-
-func (o EvaluateRequestNotAllOfNot1) ToMap() (map[string]interface{}, error) {
-	toSerialize := map[string]interface{}{}
-	toSerialize["context"] = o.Context
-	return toSerialize, nil
-}
-
-func (o *EvaluateRequestNotAllOfNot1) UnmarshalJSON(data []byte) (err error) {
-	// This validates that all required properties are included in the JSON object
-	// by unmarshalling the object into a generic map with string keys and checking
-	// that every required field exists as a key in the generic map.
-	requiredProperties := []string{
-		"context",
-	}
-
-	allProperties := make(map[string]interface{})
-
-	err = json.Unmarshal(data, &allProperties)
-
-	if err != nil {
-		return err
-	}
-
-	for _, requiredProperty := range requiredProperties {
-		if _, exists := allProperties[requiredProperty]; !exists {
-			return fmt.Errorf("no value given for required property %v", requiredProperty)
-		}
-	}
-
-	varEvaluateRequestNotAllOfNot1 := _EvaluateRequestNotAllOfNot1{}
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varEvaluateRequestNotAllOfNot1)
-
-	if err != nil {
-		return err
-	}
-
-	*o = EvaluateRequestNotAllOfNot1(varEvaluateRequestNotAllOfNot1)
-
-	return err
-}
-
-type NullableEvaluateRequestNotAllOfNot1 struct {
-	value *EvaluateRequestNotAllOfNot1
-	isSet bool
-}
-
-func (v NullableEvaluateRequestNotAllOfNot1) Get() *EvaluateRequestNotAllOfNot1 {
-	return v.value
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot1) Set(val *EvaluateRequestNotAllOfNot1) {
-	v.value = val
-	v.isSet = true
-}
-
-func (v NullableEvaluateRequestNotAllOfNot1) IsSet() bool {
-	return v.isSet
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot1) Unset() {
-	v.value = nil
-	v.isSet = false
-}
-
-func NewNullableEvaluateRequestNotAllOfNot1(val *EvaluateRequestNotAllOfNot1) *NullableEvaluateRequestNotAllOfNot1 {
-	return &NullableEvaluateRequestNotAllOfNot1{value: val, isSet: true}
-}
-
-func (v NullableEvaluateRequestNotAllOfNot1) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.value)
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot1) UnmarshalJSON(src []byte) error {
-	v.isSet = true
-	return json.Unmarshal(src, &v.value)
-}
-
-/*
-HELM Kernel API
-
-Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
-
-API version: 0.7.5
-*/
-
-// Code generated by OpenAPI Generator (https://openapi-generator.tech); DO NOT EDIT.
-
-// checks if the EvaluateRequestNotAllOfNot1Context type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &EvaluateRequestNotAllOfNot1Context{}
-
-// EvaluateRequestNotAllOfNot1Context struct for EvaluateRequestNotAllOfNot1Context
-type EvaluateRequestNotAllOfNot1Context struct {
-	SessionId            string `json:"session_id"`
-	AdditionalProperties map[string]interface{}
-}
-
-type _EvaluateRequestNotAllOfNot1Context EvaluateRequestNotAllOfNot1Context
-
-// NewEvaluateRequestNotAllOfNot1Context instantiates a new EvaluateRequestNotAllOfNot1Context object
-// This constructor will assign default values to properties that have it defined,
-// and makes sure properties required by API are set, but the set of arguments
-// will change when the set of required properties is changed
-func NewEvaluateRequestNotAllOfNot1Context(sessionId string) *EvaluateRequestNotAllOfNot1Context {
-	this := EvaluateRequestNotAllOfNot1Context{}
-	this.SessionId = sessionId
-	return &this
-}
-
-// NewEvaluateRequestNotAllOfNot1ContextWithDefaults instantiates a new EvaluateRequestNotAllOfNot1Context object
-// This constructor will only assign default values to properties that have it defined,
-// but it doesn't guarantee that properties required by API are set
-func NewEvaluateRequestNotAllOfNot1ContextWithDefaults() *EvaluateRequestNotAllOfNot1Context {
-	this := EvaluateRequestNotAllOfNot1Context{}
-	return &this
-}
-
-// GetSessionId returns the SessionId field value
-func (o *EvaluateRequestNotAllOfNot1Context) GetSessionId() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.SessionId
-}
-
-// GetSessionIdOk returns a tuple with the SessionId field value
-// and a boolean to check if the value has been set.
-func (o *EvaluateRequestNotAllOfNot1Context) GetSessionIdOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.SessionId, true
-}
-
-// SetSessionId sets field value
-func (o *EvaluateRequestNotAllOfNot1Context) SetSessionId(v string) {
-	o.SessionId = v
-}
-
-func (o EvaluateRequestNotAllOfNot1Context) MarshalJSON() ([]byte, error) {
-	toSerialize, err := o.ToMap()
-	if err != nil {
-		return []byte{}, err
-	}
-	return json.Marshal(toSerialize)
-}
-
-func (o EvaluateRequestNotAllOfNot1Context) ToMap() (map[string]interface{}, error) {
-	toSerialize := map[string]interface{}{}
-	toSerialize["session_id"] = o.SessionId
-
-	for key, value := range o.AdditionalProperties {
-		toSerialize[key] = value
-	}
-
-	return toSerialize, nil
-}
-
-func (o *EvaluateRequestNotAllOfNot1Context) UnmarshalJSON(data []byte) (err error) {
-	// This validates that all required properties are included in the JSON object
-	// by unmarshalling the object into a generic map with string keys and checking
-	// that every required field exists as a key in the generic map.
-	requiredProperties := []string{
-		"session_id",
-	}
-
-	allProperties := make(map[string]interface{})
-
-	err = json.Unmarshal(data, &allProperties)
-
-	if err != nil {
-		return err
-	}
-
-	for _, requiredProperty := range requiredProperties {
-		if _, exists := allProperties[requiredProperty]; !exists {
-			return fmt.Errorf("no value given for required property %v", requiredProperty)
-		}
-	}
-
-	varEvaluateRequestNotAllOfNot1Context := _EvaluateRequestNotAllOfNot1Context{}
-
-	err = json.Unmarshal(data, &varEvaluateRequestNotAllOfNot1Context)
-
-	if err != nil {
-		return err
-	}
-
-	*o = EvaluateRequestNotAllOfNot1Context(varEvaluateRequestNotAllOfNot1Context)
-
-	additionalProperties := make(map[string]interface{})
-
-	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "session_id")
-		o.AdditionalProperties = additionalProperties
-	}
-
-	return err
-}
-
-type NullableEvaluateRequestNotAllOfNot1Context struct {
-	value *EvaluateRequestNotAllOfNot1Context
-	isSet bool
-}
-
-func (v NullableEvaluateRequestNotAllOfNot1Context) Get() *EvaluateRequestNotAllOfNot1Context {
-	return v.value
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot1Context) Set(val *EvaluateRequestNotAllOfNot1Context) {
-	v.value = val
-	v.isSet = true
-}
-
-func (v NullableEvaluateRequestNotAllOfNot1Context) IsSet() bool {
-	return v.isSet
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot1Context) Unset() {
-	v.value = nil
-	v.isSet = false
-}
-
-func NewNullableEvaluateRequestNotAllOfNot1Context(val *EvaluateRequestNotAllOfNot1Context) *NullableEvaluateRequestNotAllOfNot1Context {
-	return &NullableEvaluateRequestNotAllOfNot1Context{value: val, isSet: true}
-}
-
-func (v NullableEvaluateRequestNotAllOfNot1Context) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.value)
-}
-
-func (v *NullableEvaluateRequestNotAllOfNot1Context) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }

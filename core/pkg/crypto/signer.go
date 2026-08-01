@@ -219,7 +219,7 @@ func (s *Ed25519Signer) SignIntent(i *contracts.AuthorizedExecutionIntent) error
 
 // SignReceipt signs a Receipt
 func (s *Ed25519Signer) SignReceipt(r *contracts.Receipt) error {
-	// Canonicalize: ID:DecisionID:EffectID:Status:OutputHash
+	// ReceiptSigningPayload selects the active versioned receipt preimage.
 	payload, err := ReceiptSigningPayload(r)
 	if err != nil {
 		return err

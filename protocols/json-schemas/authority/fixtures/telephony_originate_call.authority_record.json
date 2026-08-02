@@ -1,0 +1,25 @@
+{
+  "action_urn": "urn:helm:effect:telephony:originate_call",
+  "connector_id": "telephony",
+  "tool_name": "originate_call",
+  "executor_kind": "DIGITAL",
+  "effect_class": "CUSTOMER_OUTREACH",
+  "risk_class": "T3",
+  "required_scopes": [
+    "telephony.calls.originate"
+  ],
+  "p0_ceilings": [
+    "p0:autonomy_envelope.budgets.rate_limits[outbound.attempts].max_per_day",
+    "p0:autonomy_envelope.budgets.rate_limits[outbound.dials.did].max_per_day",
+    "p0:outbound.abandonment_rate_7d"
+  ],
+  "approval_policy": "required",
+  "rollback_or_compensation": "none_a_placed_call_is_irreversible_dnc_writes_suppression_immediately",
+  "receipt_type": "CallReceipt",
+  "evidence_pack_slice": "outbound_call",
+  "boundary_submission_mode": "kernel_effect_gateway",
+  "schema_hash": "sha256:unbound",
+  "policy_hash": "sha256:unbound",
+  "signer_id": "signer:unbound",
+  "status": "stale"
+}

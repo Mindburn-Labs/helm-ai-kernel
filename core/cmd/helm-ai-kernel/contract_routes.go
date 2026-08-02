@@ -1709,6 +1709,9 @@ func tarEvidenceBundleFiles(files map[string][]byte) ([]byte, error) {
 
 func writeEvidenceBundlePackFiles(packDir string, files map[string][]byte) error {
 	for name, data := range files {
+		if !safeArchiveName(name) {
+			return fmt.Errorf("unsafe archive path %q", name)
+		}
 		fullPath := filepath.Join(packDir, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o700); err != nil {
 			return fmt.Errorf("mkdir evidence bundle path %s: %w", name, err)

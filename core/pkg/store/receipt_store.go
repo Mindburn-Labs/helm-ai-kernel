@@ -50,11 +50,10 @@ type TenantScopedReceiptReader interface {
 	ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error)
 }
 
-// TenantReceiptCursor is the stable ordering position for a tenant-wide V5
-// receipt listing. Lamport clocks are scoped to signed sessions, so a tenant
-// can legitimately contain multiple receipts with the same Lamport clock.
-// The timestamp and receipt ID complete the ordering key for lossless
-// pagination across those session chains.
+// TenantReceiptCursor is the stable opaque position for a tenant-wide V5
+// receipt listing. ReceiptID resolves to the store's durable append sequence;
+// LamportClock and Timestamp remain in the v1 cursor wire format for
+// compatibility, but cannot order receipts across signed sessions.
 type TenantReceiptCursor struct {
 	LamportClock uint64
 	Timestamp    time.Time
@@ -126,6 +125,32 @@ const backfillReceiptDecisionHashSQL = `
 	  AND NULLIF(metadata->>'decision_hash', '') IS NOT NULL;
 `
 
+// Historical receipts did not persist a tenant-wide append position. Give
+// those rows one deterministic baseline before new receipts receive the
+// database sequence default. Timestamp and receipt ID are only a migration
+// tie-breaker; all post-migration tenant cursor reads use append_sequence.
+const backfillReceiptAppendSequenceSQL = `
+	WITH missing AS (
+		SELECT receipt_id,
+			COALESCE((SELECT MAX(append_sequence) FROM receipts), 0)
+				+ ROW_NUMBER() OVER (ORDER BY timestamp ASC NULLS FIRST, receipt_id ASC) AS append_sequence
+		FROM receipts
+		WHERE COALESCE(append_sequence, 0) = 0
+	)
+	UPDATE receipts AS target
+	SET append_sequence = missing.append_sequence
+	FROM missing
+	WHERE target.receipt_id = missing.receipt_id;
+`
+
+const syncReceiptAppendSequenceSQL = `
+	SELECT setval(
+		'receipts_append_sequence_seq',
+		COALESCE((SELECT MAX(append_sequence) + 1 FROM receipts), 1),
+		false
+	);
+`
+
 // PostgresReceiptStore is a durable SQL-based implementation.
 type PostgresReceiptStore struct {
 	db *sql.DB
@@ -137,6 +162,7 @@ func NewPostgresReceiptStore(db *sql.DB) *PostgresReceiptStore {
 
 func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 	schemaQuery := `
+		CREATE SEQUENCE IF NOT EXISTS receipts_append_sequence_seq AS BIGINT;
 		CREATE TABLE IF NOT EXISTS receipts (
 			receipt_id TEXT PRIMARY KEY,
 			decision_id TEXT,
@@ -169,7 +195,8 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			public_key_set JSONB,
 			signature_profile TEXT DEFAULT '',
 			signature_algorithm TEXT DEFAULT '',
-			correlation_id TEXT DEFAULT ''
+			correlation_id TEXT DEFAULT '',
+			append_sequence BIGINT NOT NULL DEFAULT nextval('receipts_append_sequence_seq')
 		);
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS effect_id TEXT;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS external_reference_id TEXT;
@@ -191,6 +218,9 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_profile TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_algorithm TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS correlation_id TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS append_sequence BIGINT;
+		ALTER TABLE receipts ALTER COLUMN append_sequence SET DEFAULT nextval('receipts_append_sequence_seq');
+		ALTER SEQUENCE receipts_append_sequence_seq OWNED BY receipts.append_sequence;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS log_id TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS leaf_index BIGINT DEFAULT 0;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS transparency JSONB;
@@ -202,6 +232,15 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		return err
 	}
 	if _, err := s.db.ExecContext(ctx, backfillCausalReceiptSessionsSQL); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, backfillReceiptAppendSequenceSQL); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, syncReceiptAppendSequenceSQL); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE receipts ALTER COLUMN append_sequence SET NOT NULL`); err != nil {
 		return err
 	}
 	indexQuery := `
@@ -217,6 +256,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_receipts_causal_session_lamport_desc ON receipts(causal_session_id, lamport_clock DESC);
 		CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_append_sequence_unique ON receipts(append_sequence);
 	`
 	_, err := s.db.ExecContext(ctx, indexQuery)
 	return err
@@ -248,8 +288,8 @@ func (s *PostgresReceiptStore) GetByReceiptIDForTenant(ctx context.Context, tena
 		WHERE receipt_id = $1
 		  AND signature_version = $2
 		  AND COALESCE(session_id, '') <> ''
-		  AND substring(causal_session_id from 1 for $3) = $4`
-	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, len(prefix), prefix)
+		  AND left(causal_session_id, char_length($3)) = $3`
+	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, prefix)
 }
 
 func (s *PostgresReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
@@ -307,15 +347,16 @@ func (s *PostgresReceiptStore) ListByTenant(ctx context.Context, tenantID string
 	query := `SELECT ` + receiptColumns + ` FROM receipts
 		WHERE signature_version = $1
 		  AND COALESCE(session_id, '') <> ''
-		  AND substring(causal_session_id from 1 for $2) = $3
-		  AND lamport_clock > $4
-		ORDER BY lamport_clock ASC, timestamp ASC LIMIT $5`
-	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, len(prefix), prefix, since, limit)
+		  AND left(causal_session_id, char_length($2)) = $2
+		  AND lamport_clock > $3
+		ORDER BY lamport_clock ASC, timestamp ASC LIMIT $4`
+	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix, since, limit)
 }
 
-// ListByTenantCursor returns V5 receipts in a strict tenant-wide keyset order.
-// Unlike ListByTenant, this method is safe when separate signed sessions share
-// a Lamport clock.
+// ListByTenantCursor returns V5 receipts in durable append order. The opaque
+// cursor's receipt ID is resolved inside the authenticated tenant scope, so
+// later session genesis receipts are never compared to another session's
+// Lamport clock.
 func (s *PostgresReceiptStore) ListByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, limit int) ([]*contracts.Receipt, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	if tenantID == "" {
@@ -329,17 +370,21 @@ func (s *PostgresReceiptStore) ListByTenantCursor(ctx context.Context, tenantID 
 	query := `SELECT ` + receiptColumns + ` FROM receipts
 		WHERE signature_version = $1
 		  AND COALESCE(session_id, '') <> ''
-		  AND substring(causal_session_id from 1 for $2) = $3`
-	args := []any{contracts.ReceiptSignatureV5, len(prefix), prefix}
+		  AND left(causal_session_id, char_length($2)) = $2`
+	args := []any{contracts.ReceiptSignatureV5, prefix}
 	if cursor.ReceiptID != "" {
-		cursor.Timestamp = s.NormalizeReceiptTimestamp(cursor.Timestamp.UTC())
 		query += `
-		  AND (lamport_clock > $4
-		       OR (lamport_clock = $4 AND timestamp > $5)
-		       OR (lamport_clock = $4 AND timestamp = $5 AND receipt_id > $6))`
-		args = append(args, cursor.LamportClock, cursor.Timestamp, cursor.ReceiptID)
+		  AND append_sequence > (
+			SELECT cursor_receipt.append_sequence
+			FROM receipts AS cursor_receipt
+			WHERE cursor_receipt.receipt_id = $3
+			  AND cursor_receipt.signature_version = $1
+			  AND COALESCE(cursor_receipt.session_id, '') <> ''
+			  AND left(cursor_receipt.causal_session_id, char_length($2)) = $2
+		)`
+		args = append(args, cursor.ReceiptID)
 	}
-	query += fmt.Sprintf("\n\t\tORDER BY lamport_clock ASC, timestamp ASC, receipt_id ASC LIMIT $%d", len(args)+1)
+	query += fmt.Sprintf("\n\t\tORDER BY append_sequence ASC LIMIT $%d", len(args)+1)
 	args = append(args, limit)
 	return s.queryReceipts(ctx, query, args...)
 }

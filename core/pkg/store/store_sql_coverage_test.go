@@ -244,6 +244,9 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS receipts").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("UPDATE receipts").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("UPDATE receipts").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("WITH missing").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("SELECT setval").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("ALTER TABLE receipts ALTER COLUMN append_sequence SET NOT NULL").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_receipts_executor_id").WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := store.Init(ctx); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -353,7 +356,7 @@ func TestPostgresReceiptDecisionHashRoundTripsTenantReads(t *testing.T) {
 		t.Fatalf("new signer: %v", err)
 	}
 
-	const tenantID = "tenant-a"
+	const tenantID = "организация-猫"
 	const sessionID = "signed-session"
 	lookupKey := causalReceiptScopeKey(tenantID, sessionID)
 	prefix := causalReceiptTenantScopePrefix(tenantID)
@@ -397,8 +400,8 @@ func TestPostgresReceiptDecisionHashRoundTripsTenantReads(t *testing.T) {
 		t.Fatalf("issued receipt lost distinct decision hash: %+v", issued)
 	}
 
-	mock.ExpectQuery("FROM receipts[\\s\\S]*WHERE receipt_id").
-		WithArgs(issued.ReceiptID, contracts.ReceiptSignatureV5, len(prefix), prefix).
+	mock.ExpectQuery(`FROM receipts[\s\S]*left\(causal_session_id, char_length\(\$3\)\) = \$3`).
+		WithArgs(issued.ReceiptID, contracts.ReceiptSignatureV5, prefix).
 		WillReturnRows(storePostgresReceiptRows(issued, nil))
 	got, err := store.GetByReceiptIDForTenant(ctx, tenantID, issued.ReceiptID)
 	if err != nil {
@@ -411,8 +414,16 @@ func TestPostgresReceiptDecisionHashRoundTripsTenantReads(t *testing.T) {
 		t.Fatalf("tenant get V5 signature verification: valid=%v err=%v", valid, err)
 	}
 
-	mock.ExpectQuery("FROM receipts[\\s\\S]*ORDER BY lamport_clock ASC, timestamp ASC, receipt_id ASC").
-		WithArgs(contracts.ReceiptSignatureV5, len(prefix), prefix, 10).
+	mock.ExpectQuery(`left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*lamport_clock > \$3`).
+		WithArgs(contracts.ReceiptSignatureV5, prefix, uint64(0), 10).
+		WillReturnRows(storePostgresReceiptRows(issued, nil))
+	byLamport, err := store.ListByTenant(ctx, tenantID, 0, 10)
+	if err != nil || len(byLamport) != 1 || byLamport[0].ReceiptID != issued.ReceiptID {
+		t.Fatalf("tenant scalar list = %+v err=%v", byLamport, err)
+	}
+
+	mock.ExpectQuery(`left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*ORDER BY append_sequence ASC`).
+		WithArgs(contracts.ReceiptSignatureV5, prefix, 10).
 		WillReturnRows(storePostgresReceiptRows(issued, nil))
 	listed, err := store.ListByTenantCursor(ctx, tenantID, TenantReceiptCursor{}, 10)
 	if err != nil {

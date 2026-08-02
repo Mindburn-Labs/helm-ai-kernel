@@ -88,6 +88,39 @@ func TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash(t *testing.T) 
 		t.Fatalf("durable migration decision_hash = %q, want trusted metadata value", recoveredHash)
 	}
 
+	appendSequenceMigration, err := os.ReadFile(filepath.Join("migrations", "005_add_receipt_append_sequence.sql"))
+	if err != nil {
+		t.Fatalf("read 005 receipt migration: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, string(appendSequenceMigration)); err != nil {
+		t.Fatalf("apply 005 receipt migration: %v", err)
+	}
+	for wantSequence, receiptID := range map[int64]string{
+		1: "r-v5-recoverable",
+		2: "r-v5-unrecoverable",
+	} {
+		var gotSequence int64
+		if err := db.QueryRowContext(ctx, `SELECT append_sequence FROM receipts WHERE receipt_id = $1`, receiptID).Scan(&gotSequence); err != nil {
+			t.Fatalf("read append sequence for %s: %v", receiptID, err)
+		}
+		if gotSequence != wantSequence {
+			t.Fatalf("append sequence for %s = %d, want %d", receiptID, gotSequence, wantSequence)
+		}
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO receipts (
+		receipt_id, decision_id, status, timestamp, executor_id, prev_hash, lamport_clock
+	) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		"r-v5-after-append-migration", "d-v5-after-append-migration", "ALLOW", timestamp, "executor", "", 1); err != nil {
+		t.Fatalf("insert post-005 receipt: %v", err)
+	}
+	var newSequence int64
+	if err := db.QueryRowContext(ctx, `SELECT append_sequence FROM receipts WHERE receipt_id = $1`, "r-v5-after-append-migration").Scan(&newSequence); err != nil {
+		t.Fatalf("read post-005 append sequence: %v", err)
+	}
+	if newSequence != 3 {
+		t.Fatalf("post-005 append sequence = %d, want 3", newSequence)
+	}
+
 	store := NewPostgresReceiptStore(db)
 	if err := store.Init(ctx); err != nil {
 		t.Fatalf("initialize current receipt store after migration: %v", err)

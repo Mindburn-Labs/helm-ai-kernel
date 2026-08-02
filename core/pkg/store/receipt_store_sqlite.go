@@ -34,6 +34,15 @@ const backfillSQLiteReceiptDecisionHashSQL = `
 	  AND NULLIF(json_extract(metadata, '$.decision_hash'), '') IS NOT NULL;
 `
 
+// SQLite preserves the insertion order of this rowid table. Existing receipt
+// rows predate append_sequence, so use that durable local order once; new
+// writes allocate max(append_sequence)+1 while SQLite serializes writers.
+const backfillSQLiteReceiptAppendSequenceSQL = `
+	UPDATE receipts
+	SET append_sequence = rowid
+	WHERE COALESCE(append_sequence, 0) = 0;
+`
+
 func NewSQLiteReceiptStore(db *sql.DB) (*SQLiteReceiptStore, error) {
 	s := &SQLiteReceiptStore{db: db}
 
@@ -96,7 +105,8 @@ func (s *SQLiteReceiptStore) migrate() error {
 		public_key_set TEXT,
 		signature_profile TEXT NOT NULL DEFAULT '',
 		signature_algorithm TEXT NOT NULL DEFAULT '',
-		correlation_id TEXT NOT NULL DEFAULT ''
+		correlation_id TEXT NOT NULL DEFAULT '',
+		append_sequence INTEGER NOT NULL DEFAULT 0
 	);`
 	if _, err := s.db.ExecContext(context.Background(), query); err != nil {
 		return err
@@ -146,6 +156,9 @@ func (s *SQLiteReceiptStore) migrate() error {
 	if err := s.ensureColumn("correlation_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn("append_sequence", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 	if err := s.ensureColumn("transparency", "TEXT"); err != nil {
 		return err
 	}
@@ -153,6 +166,9 @@ func (s *SQLiteReceiptStore) migrate() error {
 		return err
 	}
 	if _, err := s.db.ExecContext(context.Background(), backfillCausalReceiptSessionsSQL); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(context.Background(), backfillSQLiteReceiptAppendSequenceSQL); err != nil {
 		return err
 	}
 	indexes := []string{
@@ -166,6 +182,19 @@ func (s *SQLiteReceiptStore) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_receipts_causal_session_lamport_desc ON receipts(causal_session_id, lamport_clock DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_append_sequence_unique ON receipts(append_sequence) WHERE append_sequence > 0`,
+		`CREATE TRIGGER IF NOT EXISTS receipts_append_sequence_after_insert
+		AFTER INSERT ON receipts
+		FOR EACH ROW WHEN COALESCE(NEW.append_sequence, 0) = 0
+		BEGIN
+			UPDATE receipts
+			SET append_sequence = (
+				SELECT COALESCE(MAX(append_sequence), 0) + 1
+				FROM receipts
+				WHERE rowid <> NEW.rowid
+			)
+			WHERE rowid = NEW.rowid;
+		END`,
 	}
 	for _, stmt := range indexes {
 		if _, err := s.db.ExecContext(context.Background(), stmt); err != nil {
@@ -244,9 +273,9 @@ func (s *SQLiteReceiptStore) GetByReceiptIDForTenant(ctx context.Context, tenant
 		WHERE receipt_id = ?
 		  AND signature_version = ?
 		  AND COALESCE(session_id, '') <> ''
-		  AND substr(causal_session_id, 1, ?) = ?
+		  AND substr(causal_session_id, 1, length(?)) = ?
 	`
-	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, len(prefix), prefix)
+	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, prefix, prefix)
 }
 
 func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {
@@ -317,17 +346,18 @@ func (s *SQLiteReceiptStore) ListByTenant(ctx context.Context, tenantID string, 
 		FROM receipts
 		WHERE signature_version = ?
 		  AND COALESCE(session_id, '') <> ''
-		  AND substr(causal_session_id, 1, ?) = ?
+		  AND substr(causal_session_id, 1, length(?)) = ?
 		  AND lamport_clock > ?
 		ORDER BY lamport_clock ASC, timestamp ASC
 		LIMIT ?
 	`
-	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, len(prefix), prefix, since, limit)
+	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix, prefix, since, limit)
 }
 
-// ListByTenantCursor returns V5 receipts in a strict tenant-wide keyset order.
-// Unlike ListByTenant, this method is safe when separate signed sessions share
-// a Lamport clock.
+// ListByTenantCursor returns V5 receipts in durable append order. The opaque
+// cursor's receipt ID is resolved inside the authenticated tenant scope, so
+// later session genesis receipts are never compared to another session's
+// Lamport clock.
 func (s *SQLiteReceiptStore) ListByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, limit int) ([]*contracts.Receipt, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	if tenantID == "" {
@@ -343,23 +373,22 @@ func (s *SQLiteReceiptStore) ListByTenantCursor(ctx context.Context, tenantID st
 		FROM receipts
 		WHERE signature_version = ?
 		  AND COALESCE(session_id, '') <> ''
-		  AND substr(causal_session_id, 1, ?) = ?`
-	args := []any{contracts.ReceiptSignatureV5, len(prefix), prefix}
+		  AND substr(causal_session_id, 1, length(?)) = ?`
+	args := []any{contracts.ReceiptSignatureV5, prefix, prefix}
 	if cursor.ReceiptID != "" {
-		cursor.Timestamp = cursor.Timestamp.UTC()
-		cursorTimestamp := cursor.Timestamp.Format(time.RFC3339Nano)
 		query += `
-		  AND (lamport_clock > ?
-		       OR (lamport_clock = ? AND timestamp > ?)
-		       OR (lamport_clock = ? AND timestamp = ? AND receipt_id > ?))`
-		args = append(args,
-			cursor.LamportClock,
-			cursor.LamportClock, cursorTimestamp,
-			cursor.LamportClock, cursorTimestamp, cursor.ReceiptID,
-		)
+		  AND append_sequence > (
+			SELECT cursor_receipt.append_sequence
+			FROM receipts AS cursor_receipt
+			WHERE cursor_receipt.receipt_id = ?
+			  AND cursor_receipt.signature_version = ?
+			  AND COALESCE(cursor_receipt.session_id, '') <> ''
+			  AND substr(cursor_receipt.causal_session_id, 1, length(?)) = ?
+		)`
+		args = append(args, cursor.ReceiptID, contracts.ReceiptSignatureV5, prefix, prefix)
 	}
 	query += `
-		ORDER BY lamport_clock ASC, timestamp ASC, receipt_id ASC
+		ORDER BY append_sequence ASC
 		LIMIT ?
 	`
 	args = append(args, limit)
@@ -454,8 +483,8 @@ func insertSQLiteReceiptWithCausalSession(ctx context.Context, execer sqlExecer,
 		return err
 	}
 	query := `INSERT INTO receipts (
-		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, decision_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, decision_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, append_sequence
+	) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(MAX(append_sequence), 0) + 1 FROM receipts`
 
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {

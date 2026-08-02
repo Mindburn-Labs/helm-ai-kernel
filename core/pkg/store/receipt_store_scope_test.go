@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -95,13 +96,13 @@ func TestSQLiteReceiptAppendCausalScopedIsolatesSameExternalSession(t *testing.T
 	}
 }
 
-func TestSQLiteListByTenantCursorRetainsTiedSessionLamports(t *testing.T) {
+func TestSQLiteTenantCursorContinuesWithLateSessionGenesis(t *testing.T) {
 	receiptStore, cleanup := newTestSQLiteStore(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	timestamp := time.Date(2026, 5, 5, 0, 0, 0, 123456789, time.UTC)
-	appendReceipt := func(sessionID, receiptID string) *contracts.Receipt {
+	appendReceipt := func(sessionID, receiptID string, issuedAt time.Time) *contracts.Receipt {
 		t.Helper()
 		var issued *contracts.Receipt
 		err := receiptStore.AppendCausalScoped(ctx, "tenant-a", sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
@@ -110,7 +111,7 @@ func TestSQLiteListByTenantCursorRetainsTiedSessionLamports(t *testing.T) {
 				DecisionID:       "decision-" + receiptID,
 				EffectID:         "effect-" + receiptID,
 				Status:           "SUCCESS",
-				Timestamp:        timestamp,
+				Timestamp:        issuedAt,
 				OutputHash:       "output-" + receiptID,
 				DecisionHash:     "decision-hash-" + receiptID,
 				ArgsHash:         "args-" + receiptID,
@@ -128,31 +129,132 @@ func TestSQLiteListByTenantCursorRetainsTiedSessionLamports(t *testing.T) {
 		return issued
 	}
 
-	firstIssued := appendReceipt("session-a", "receipt-a")
-	secondIssued := appendReceipt("session-b", "receipt-b")
-	if firstIssued.LamportClock != 1 || secondIssued.LamportClock != 1 {
-		t.Fatalf("independent tenant sessions must both start at Lamport 1: first=%d second=%d", firstIssued.LamportClock, secondIssued.LamportClock)
+	firstIssued := appendReceipt("session-a", "receipt-a", timestamp)
+	secondIssued := appendReceipt("session-a", "receipt-b", timestamp.Add(time.Second))
+	if firstIssued.LamportClock != 1 || secondIssued.LamportClock != 2 {
+		t.Fatalf("first session Lamports = %d, %d; want 1, 2", firstIssued.LamportClock, secondIssued.LamportClock)
 	}
 
-	firstPage, err := receiptStore.ListByTenantCursor(ctx, "tenant-a", TenantReceiptCursor{}, 1)
-	if err != nil || len(firstPage) != 1 {
+	firstPage, err := receiptStore.ListByTenantCursor(ctx, "tenant-a", TenantReceiptCursor{}, 2)
+	if err != nil || len(firstPage) != 2 {
 		t.Fatalf("first tenant cursor page = %+v err=%v", firstPage, err)
 	}
+	if firstPage[0].ReceiptID != firstIssued.ReceiptID || firstPage[1].ReceiptID != secondIssued.ReceiptID {
+		t.Fatalf("first tenant cursor page = %+v, want append order %q then %q", firstPage, firstIssued.ReceiptID, secondIssued.ReceiptID)
+	}
 	cursor := TenantReceiptCursor{
-		LamportClock: firstPage[0].LamportClock,
-		Timestamp:    firstPage[0].Timestamp,
-		ReceiptID:    firstPage[0].ReceiptID,
+		LamportClock: secondIssued.LamportClock,
+		Timestamp:    secondIssued.Timestamp,
+		ReceiptID:    secondIssued.ReceiptID,
 	}
-	secondPage, err := receiptStore.ListByTenantCursor(ctx, "tenant-a", cursor, 1)
-	if err != nil || len(secondPage) != 1 {
-		t.Fatalf("second tenant cursor page = %+v err=%v", secondPage, err)
+
+	// This is a new signed session root after the cursor. Its older timestamp
+	// and reset Lamport clock must not put it behind the cursor for either a
+	// paginated list or the tail loop, which both call ListByTenantCursor.
+	lateGenesis := appendReceipt("session-b", "receipt-c", timestamp.Add(-time.Hour))
+	if lateGenesis.LamportClock != 1 {
+		t.Fatalf("late session genesis Lamport = %d, want 1", lateGenesis.LamportClock)
 	}
-	if firstPage[0].ReceiptID == secondPage[0].ReceiptID {
-		t.Fatalf("tenant cursor repeated receipt %q", firstPage[0].ReceiptID)
+	continued, err := receiptStore.ListByTenantCursor(ctx, "tenant-a", cursor, 1)
+	if err != nil || len(continued) != 1 || continued[0].ReceiptID != lateGenesis.ReceiptID {
+		t.Fatalf("tenant cursor omitted late session genesis: receipts=%+v err=%v", continued, err)
 	}
-	got := map[string]bool{firstPage[0].ReceiptID: true, secondPage[0].ReceiptID: true}
-	if len(got) != 2 || !got["receipt-a"] || !got["receipt-b"] {
-		t.Fatalf("tenant cursor lost a tied-Lamport receipt: %+v", got)
+}
+
+func TestSQLiteTenantPrefixQueriesSupportUnicodeTenantID(t *testing.T) {
+	receiptStore, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	const tenantID = "организация-猫"
+	const sessionID = "unicode-session"
+	issuedAt := time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC)
+	var issued *contracts.Receipt
+	if err := receiptStore.AppendCausalScoped(ctx, tenantID, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		issued = &contracts.Receipt{
+			ReceiptID:        "receipt-unicode",
+			DecisionID:       "decision-unicode",
+			EffectID:         "effect-unicode",
+			Status:           "SUCCESS",
+			Timestamp:        issuedAt,
+			OutputHash:       "output-unicode",
+			DecisionHash:     "decision-hash-unicode",
+			ArgsHash:         "args-unicode",
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        sessionID,
+			PrevHash:         prevHash,
+			LamportClock:     lamport,
+			Verdict:          string(contracts.VerdictAllow),
+		}
+		return issued, nil
+	}); err != nil {
+		t.Fatalf("append unicode tenant receipt: %v", err)
+	}
+
+	got, err := receiptStore.GetByReceiptIDForTenant(ctx, tenantID, issued.ReceiptID)
+	if err != nil || got == nil || got.ReceiptID != issued.ReceiptID {
+		t.Fatalf("get unicode tenant receipt = %+v err=%v", got, err)
+	}
+	listed, err := receiptStore.ListByTenant(ctx, tenantID, 0, 10)
+	if err != nil || len(listed) != 1 || listed[0].ReceiptID != issued.ReceiptID {
+		t.Fatalf("list unicode tenant receipts = %+v err=%v", listed, err)
+	}
+	cursorListed, err := receiptStore.ListByTenantCursor(ctx, tenantID, TenantReceiptCursor{}, 10)
+	if err != nil || len(cursorListed) != 1 || cursorListed[0].ReceiptID != issued.ReceiptID {
+		t.Fatalf("list unicode tenant cursor receipts = %+v err=%v", cursorListed, err)
+	}
+}
+
+func TestSQLiteReceiptMigrationBackfillsAppendSequence(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// This is the subset of the prior schema used by the migration and its
+	// indexes. It intentionally has no append_sequence column.
+	if _, err := db.Exec(`CREATE TABLE receipts (
+		receipt_id TEXT PRIMARY KEY,
+		decision_id TEXT,
+		executor_id TEXT,
+		timestamp DATETIME,
+		metadata JSON,
+		signature_version TEXT DEFAULT '',
+		decision_hash TEXT DEFAULT '',
+		causal_session_id TEXT DEFAULT '',
+		session_id TEXT DEFAULT '',
+		lamport_clock INTEGER DEFAULT 0
+	)`); err != nil {
+		t.Fatalf("create legacy receipts: %v", err)
+	}
+	for _, receiptID := range []string{"receipt-old-a", "receipt-old-b"} {
+		if _, err := db.Exec(`INSERT INTO receipts (receipt_id, decision_id, executor_id, timestamp) VALUES (?, ?, ?, ?)`, receiptID, "decision-"+receiptID, "executor", time.Now().UTC()); err != nil {
+			t.Fatalf("insert legacy receipt %s: %v", receiptID, err)
+		}
+	}
+
+	if _, err := NewSQLiteReceiptStore(db); err != nil {
+		t.Fatalf("migrate legacy sqlite receipt store: %v", err)
+	}
+	for sequence, receiptID := range []string{"receipt-old-a", "receipt-old-b"} {
+		var got int64
+		if err := db.QueryRow(`SELECT append_sequence FROM receipts WHERE receipt_id = ?`, receiptID).Scan(&got); err != nil {
+			t.Fatalf("read append sequence for %s: %v", receiptID, err)
+		}
+		if want := int64(sequence + 1); got != want {
+			t.Fatalf("append sequence for %s = %d, want %d", receiptID, got, want)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO receipts (receipt_id, decision_id, executor_id, timestamp) VALUES (?, ?, ?, ?)`, "receipt-new", "decision-new", "executor", time.Now().UTC()); err != nil {
+		t.Fatalf("insert post-migration receipt: %v", err)
+	}
+	var newSequence int64
+	if err := db.QueryRow(`SELECT append_sequence FROM receipts WHERE receipt_id = ?`, "receipt-new").Scan(&newSequence); err != nil {
+		t.Fatalf("read post-migration append sequence: %v", err)
+	}
+	if newSequence != 3 {
+		t.Fatalf("post-migration append sequence = %d, want 3", newSequence)
 	}
 }
 
@@ -229,19 +331,20 @@ func TestPostgresReceiptAppendCausalScopedReloadsDurablePredecessorAcrossStoreIn
 	}
 }
 
-func TestPostgresListByTenantCursorUsesFullKeyset(t *testing.T) {
+func TestPostgresListByTenantCursorUsesAppendSequence(t *testing.T) {
 	ctx := context.Background()
 	db, mock, cleanup := newStoreCoverageSQLMock(t)
 	defer cleanup()
 	receiptStore := NewPostgresReceiptStore(db)
 	timestamp := time.Date(2026, 5, 5, 0, 0, 0, 123456789, time.UTC)
-	prefix := causalReceiptTenantScopePrefix("tenant-a")
+	const tenantID = "организация-猫"
+	prefix := causalReceiptTenantScopePrefix(tenantID)
 	receipt := storeCoverageReceipt("receipt-b", "decision-b", "session-b", 1, timestamp)
 
-	mock.ExpectQuery(`lamport_clock > \$4[\s\S]*timestamp > \$5[\s\S]*receipt_id > \$6[\s\S]*ORDER BY lamport_clock ASC, timestamp ASC, receipt_id ASC`).
-		WithArgs(contracts.ReceiptSignatureV5, len(prefix), prefix, uint64(1), timestamp.Truncate(time.Microsecond), "receipt-a", 1).
+	mock.ExpectQuery(`left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*append_sequence >[\s\S]*cursor_receipt\.receipt_id = \$3[\s\S]*ORDER BY append_sequence ASC LIMIT \$4`).
+		WithArgs(contracts.ReceiptSignatureV5, prefix, "receipt-a", 1).
 		WillReturnRows(storePostgresReceiptRows(receipt, nil))
-	got, err := receiptStore.ListByTenantCursor(ctx, "tenant-a", TenantReceiptCursor{
+	got, err := receiptStore.ListByTenantCursor(ctx, tenantID, TenantReceiptCursor{
 		LamportClock: 1,
 		Timestamp:    timestamp,
 		ReceiptID:    "receipt-a",

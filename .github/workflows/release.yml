@@ -1293,6 +1293,24 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Wait for published version convergence
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          for attempt in $(seq 1 40); do
+            if python3 scripts/release/check_version_drift.py \
+              --expected-version "$VERSION" \
+              --surface-timeout 10 \
+              published; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 40 ]; then
+              echo "Published version surfaces have not converged (${attempt}/40); retrying."
+              sleep 30
+            fi
+          done
+          echo "::error::Published version surfaces did not converge within the bounded retry budget."
+          exit 1
       - name: Check full published version status
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

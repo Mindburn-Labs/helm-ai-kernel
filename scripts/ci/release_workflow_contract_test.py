@@ -112,6 +112,13 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         )
         self.assertIn("always()", post_release)
         self.assertIn("needs.console-release-assets.result == 'success'", post_release)
+        self.assertIn("for attempt in $(seq 1 40); do", post_release)
+        self.assertIn("--surface-timeout 10", post_release)
+        self.assertIn("Published version surfaces did not converge within the bounded retry budget.", post_release)
+        self.assertLess(
+            post_release.index("- name: Wait for published version convergence"),
+            post_release.index("- name: Check full published version status"),
+        )
         self.assertRegex(post_release, r"- name: Replace release version status with full post-release status\n\s+if: always\(\)")
 
 

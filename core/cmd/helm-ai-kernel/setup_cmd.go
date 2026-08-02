@@ -124,7 +124,7 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 		printSetupUsage(stdout)
 		return 0
 	}
-	if isHelpRequest(args) {
+	if len(args) == 1 && isHelpRequest(args) {
 		printSetupUsage(stdout)
 		return 0
 	}
@@ -147,6 +147,10 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupFrontDoorUsage(stdout)
+		return 0
+	}
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	client := fs.String("client", "", "Client to print config for")
@@ -403,6 +407,10 @@ func confirmSetupInstall(input io.Reader, chrome io.Writer, caps ui.Capabilities
 }
 
 func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupInstallUsage(stdout)
+		return 0
+	}
 	opts, code := parseSetupInstallArgs(args, stderr)
 	if code != 0 {
 		return code
@@ -519,6 +527,10 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupInspectUsage(stdout, "status", false)
+		return 0
+	}
 	opts, code := parseSetupInspectArgs("setup status", args, stderr, false)
 	if code != 0 {
 		return code
@@ -555,6 +567,10 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupInspectUsage(stdout, "repair", true)
+		return 0
+	}
 	opts, code := parseSetupInspectArgs("setup repair", args, stderr, true)
 	if code != 0 {
 		return code
@@ -615,6 +631,10 @@ func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupInspectUsage(stdout, "remove", true)
+		return 0
+	}
 	opts, code := parseSetupInspectArgs("setup remove", args, stderr, true)
 	if code != 0 {
 		return code
@@ -701,6 +721,61 @@ func printSetupUsage(w io.Writer) {
 	printSupportMatrix(w)
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Interactive terminals show the scoped preview and require APPROVE; pipes and JSON require --yes. Setup starts Quickstart only with --quickstart.")
+}
+
+func printSetupFrontDoorUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: helm-ai-kernel setup [front-door options]")
+	fmt.Fprintln(w, "Use one read-only discovery mode or start the local first-run proof path.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Modes:")
+	fmt.Fprintln(w, "  --quickstart                                  Start the local first-run proof path")
+	fmt.Fprintln(w, "  --client CLIENT --print-config                Print config for Cursor, Windsurf, or VS Code")
+	fmt.Fprintln(w, "  --json                                        Print the machine-readable support matrix")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Quickstart options:")
+	fmt.Fprintln(w, "  --profile claude|codex|mcp|openai-compatible  First-run profile (default mcp)")
+	fmt.Fprintln(w, "  --data-dir DIR                                Local first-run state directory")
+	fmt.Fprintln(w, "  --console [--console-port PORT] [--no-open]  Start the verified local Policies and Receipts Console")
+	fmt.Fprintln(w, "  --offline | --reset | --dry-run | --json     Constrain, reset, preview, or automate the first run")
+	fmt.Fprintln(w, "  --yes                                         Apply the first run; otherwise HELM previews and exits")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Safety: only --quickstart can make local changes, and it requires --yes. Use --dry-run to inspect its exact plan.")
+}
+
+func printSetupInstallUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: helm-ai-kernel setup <claude-code|codex> [options]")
+	fmt.Fprintln(w, "Install a scoped HELM MCP server and PreToolUse hook for one local coding agent.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Options:")
+	fmt.Fprintln(w, "  --scope user|project                          Install scope (default user)")
+	fmt.Fprintln(w, "  --workspace DIR                               Project-scope workspace (defaults to the current directory)")
+	fmt.Fprintln(w, "  --data-dir DIR                                HELM local state directory")
+	fmt.Fprintln(w, "  --dry-run | --json | --yes                    Preview, automate output, or approve installation")
+	fmt.Fprintln(w, "  --no-quickstart | --quickstart                Keep setup headless (default) or start the proof path")
+	fmt.Fprintln(w, "  --console [--console-port PORT] [--no-open]   Start the verified local Policies and Receipts Console with Quickstart")
+	fmt.Fprintln(w, "  --signing-seed-file FILE | --policy-profile FILE  Supply explicit local signing or policy material")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Safety: --dry-run writes nothing. Interactive terminals require typing APPROVE; pipes and --json require --yes.")
+}
+
+func printSetupInspectUsage(w io.Writer, operation string, includeYes bool) {
+	fmt.Fprintf(w, "Usage: helm-ai-kernel setup %s <claude-code|codex> [options]\n", operation)
+	if operation == "status" {
+		fmt.Fprintln(w, "Inspect the installed local HELM integration without changing configuration.")
+	} else {
+		fmt.Fprintf(w, "%s HELM-owned local integration configuration.\n", strings.ToUpper(operation[:1])+operation[1:])
+	}
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Options:")
+	fmt.Fprintln(w, "  --scope user|project                          Installation scope (default user)")
+	fmt.Fprintln(w, "  --workspace DIR                               Project-scope workspace (defaults to the current directory)")
+	fmt.Fprintln(w, "  --data-dir DIR | --policy-profile FILE        Inspect explicit local state or policy material")
+	fmt.Fprintln(w, "  --dry-run | --json                            Preview or emit machine-readable output")
+	if includeYes {
+		fmt.Fprintln(w, "  --yes                                         Required before repair or removal changes")
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "Safety: --dry-run writes nothing; repair and removal require --yes.")
+	}
 }
 
 func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) {

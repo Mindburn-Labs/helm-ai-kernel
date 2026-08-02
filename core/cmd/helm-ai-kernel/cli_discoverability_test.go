@@ -202,6 +202,12 @@ func TestNestedHelpReachesLeafFlagSets(t *testing.T) {
 		{"receipts tail", []string{"receipts", "tail", "--help"}, 2, "-agent string", "Usage: helm-ai-kernel receipts [options]"},
 		{"mcp authorize-call", []string{"mcp", "authorize-call", "--help"}, 2, "-server-id string", "Usage: helm-ai-kernel mcp [options]"},
 		{"workstation verify-decision", []string{"workstation", "verify-decision", "--help"}, 0, "-receipt string", "Usage: helm-ai-kernel workstation [options]"},
+		{"setup install", []string{"setup", "codex", "--help"}, 0, "--scope user|project", "Choose a local agent profile"},
+		{"setup status", []string{"setup", "status", "codex", "--help"}, 0, "Usage: helm-ai-kernel setup status", "Choose a local agent profile"},
+		{"setup remove", []string{"setup", "remove", "codex", "--help"}, 0, "--yes", "Choose a local agent profile"},
+		{"setup quickstart", []string{"setup", "--quickstart", "--help"}, 0, "--console", "Choose a local agent profile"},
+		{"setup support matrix", []string{"setup", "--json", "--help"}, 0, "--json", "Choose a local agent profile"},
+		{"setup print config", []string{"setup", "--client", "cursor", "--print-config", "--help"}, 0, "--print-config", "Choose a local agent profile"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer

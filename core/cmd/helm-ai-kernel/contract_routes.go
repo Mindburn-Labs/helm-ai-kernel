@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: contract-route evidence export wires existing SHA-256 and
+// configured receipt-signer paths; it adds no standalone post-quantum assurance.
+
 import (
 	"archive/tar"
 	"bytes"
@@ -12,25 +15,31 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 const (
 	maxEvidenceBundleBytes    = 32 << 20
 	maxEvidenceExportReceipts = 10000
 	evidenceExportPageSize    = 500
+	evidenceBundleIndexPath   = "00_INDEX.json"
 )
 
 var errEvidenceExportTooLarge = errors.New("evidence export receipt limit exceeded")
@@ -45,6 +54,37 @@ type evidenceManifest struct {
 type evidenceBundle struct {
 	Manifest evidenceManifest
 	Files    map[string][]byte
+}
+
+type runtimeEvidenceSealSigner struct {
+	keyID      string
+	publicKey  string
+	signerType string
+	signFn     func([]byte) (string, error)
+}
+
+func (s runtimeEvidenceSealSigner) KeyID() string {
+	return s.keyID
+}
+
+func (s runtimeEvidenceSealSigner) Sign(_ context.Context, payload []byte) ([]byte, error) {
+	signatureHex, err := s.signFn(payload)
+	if err != nil {
+		return nil, err
+	}
+	signature, err := hex.DecodeString(signatureHex)
+	if err != nil {
+		return nil, fmt.Errorf("decode runtime evidence seal signature: %w", err)
+	}
+	return signature, nil
+}
+
+func (s runtimeEvidenceSealSigner) SignerType() string {
+	return s.signerType
+}
+
+func (s runtimeEvidenceSealSigner) PublicKeyHex() string {
+	return s.publicKey
 }
 
 func registerContractRoutes(mux *http.ServeMux, svc *Services) {
@@ -122,8 +162,19 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		case http.MethodPost:
 			receiptCount := 0
 			if svc != nil && svc.ReceiptStore != nil {
-				if receipts, err := contractReceipts(r.Context(), svc, "", 1000); err == nil {
-					receiptCount = len(receipts)
+				// SurfaceRegistry checkpoints are process-global, so this count must
+				// cover every durable receipt rather than the admin principal's
+				// synthetic "system" tenant.
+				counter, ok := svc.ReceiptStore.(store.ReceiptCounter)
+				if !ok {
+					api.WriteInternal(w, fmt.Errorf("receipt store does not support durable receipt counting"))
+					return
+				}
+				var err error
+				receiptCount, err = counter.CountReceipts(r.Context())
+				if err != nil {
+					api.WriteInternal(w, err)
+					return
 				}
 			}
 			checkpoint, err := surfaces.CreateCheckpoint(receiptCount)
@@ -156,7 +207,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		receipts, err := contractReceipts(r.Context(), svc, "", parseLimit(r.URL.Query().Get("limit"), 50, 1000))
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "ProofGraph route requires authenticated tenant principal context")
+			return
+		}
+		receipts, err := canonicalContractReceipts(r.Context(), svc, tenantID, "", parseLimit(r.URL.Query().Get("limit"), 50, 1000))
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -180,7 +236,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteNotFound(w, "proofgraph session route not found")
 			return
 		}
-		receipts, err := contractReceipts(r.Context(), svc, sessionID, parseLimit(r.URL.Query().Get("limit"), 100, 1000))
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "ProofGraph route requires authenticated tenant principal context")
+			return
+		}
+		receipts, err := canonicalContractReceipts(r.Context(), svc, tenantID, sessionID, parseLimit(r.URL.Query().Get("limit"), 100, 1000))
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -202,7 +263,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid receipt reference")
 			return
 		}
-		receipt, err := findReceiptByReference(r.Context(), svc, receiptRef)
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "ProofGraph route requires authenticated tenant principal context")
+			return
+		}
+		receipt, err := findReceiptByReference(r.Context(), svc, tenantID, receiptRef)
 		if err != nil {
 			api.WriteNotFound(w, err.Error())
 			return
@@ -226,7 +292,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Unsupported evidence export format")
 			return
 		}
-		receipts, err := contractReceiptsForExport(r.Context(), svc, req.SessionID)
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil {
+			api.WriteForbidden(w, "Evidence export requires authenticated tenant principal context")
+			return
+		}
+		receipts, err := contractReceiptsForExport(r.Context(), svc, tenantID, req.SessionID)
 		if err != nil {
 			if errors.Is(err, errEvidenceExportTooLarge) {
 				api.WriteError(w, http.StatusRequestEntityTooLarge, "Evidence export too large", fmt.Sprintf("Evidence export is limited to %d receipts; export a narrower session or retention window", maxEvidenceExportReceipts))
@@ -239,7 +310,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusConflict, "No receipts available", "evidence export requires at least one receipt")
 			return
 		}
-		bundle, err := buildEvidenceBundle(req.SessionID, receipts, surfaces)
+		bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts(req.SessionID, receipts, surfaces, svc)
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -256,7 +327,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		result := verifyEvidenceRequest(r)
+		result := verifyEvidenceRequest(r, svc)
 		writeContractJSON(w, http.StatusOK, result)
 	})
 
@@ -268,6 +339,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			var scope contracts.VerificationScope
 			if err := json.NewDecoder(r.Body).Decode(&scope); err != nil {
 				api.WriteBadRequest(w, "Invalid verification scope JSON")
+				return
+			}
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, scope.ReceiptRefs...); err != nil {
+				api.WriteBadRequest(w, err.Error())
 				return
 			}
 			sealed, err := surfaces.PutVerificationScope(scope)
@@ -316,6 +396,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				api.WriteBadRequest(w, "Invalid harness trace JSON")
 				return
 			}
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, trace.ReceiptRefs...); err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
 			sealed, err := surfaces.PutHarnessTrace(trace)
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
@@ -360,6 +449,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			var tx contracts.PlanTransaction
 			if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
 				api.WriteBadRequest(w, "Invalid plan transaction JSON")
+				return
+			}
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, tx.ReceiptRefs...); err != nil {
+				api.WriteBadRequest(w, err.Error())
 				return
 			}
 			sealed, err := surfaces.PutPlanTransaction(tx)
@@ -408,6 +506,17 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				api.WriteBadRequest(w, "Invalid harness change contract JSON")
 				return
 			}
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if receiptRef := strings.TrimSpace(contract.ActivationReceiptRef); receiptRef != "" {
+				if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, receiptRef); err != nil {
+					api.WriteBadRequest(w, err.Error())
+					return
+				}
+			}
 			sealed, err := surfaces.PutHarnessChange(contract)
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
@@ -439,6 +548,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				ReceiptRef string `json:"receipt_ref"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, req.ReceiptRef); err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
 			contract, err := surfaces.ApproveHarnessChange(id, req.ReceiptRef)
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
@@ -592,7 +710,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		result := verifyEvidenceRequest(r)
+		result := verifyEvidenceRequest(r, svc)
 		checks, _ := result["checks"].(map[string]string)
 		if checks == nil {
 			checks = map[string]string{}
@@ -1230,11 +1348,18 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		var req struct {
-			Actor     string `json:"actor"`
-			ReceiptID string `json:"receipt_id"`
-			Reason    string `json:"reason"`
+			ReceiptID            string `json:"receipt_id"`
+			Reason               string `json:"reason"`
+			ExpectedCeremonyHash string `json:"expected_ceremony_hash"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			api.WriteBadRequest(w, "Invalid approval transition request")
+			return
+		}
+		if strings.TrimSpace(req.ExpectedCeremonyHash) == "" {
+			api.WriteBadRequest(w, "expected_ceremony_hash is required; refresh and review the approval before transitioning it")
+			return
+		}
 		state := contracts.ApprovalCeremonyPending
 		switch action {
 		case "approve":
@@ -1247,8 +1372,17 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteNotFound(w, "approval action not found")
 			return
 		}
-		approval, err := surfaces.TransitionApproval(approvalID, state, req.Actor, req.ReceiptID, req.Reason)
+		principal, err := helmauth.GetPrincipal(r.Context())
+		if err != nil || principal == nil || strings.TrimSpace(principal.GetID()) == "" {
+			api.WriteUnauthorized(w, "Authenticated principal is required for approval transition")
+			return
+		}
+		approval, err := surfaces.TransitionApprovalIfCurrent(approvalID, state, principal.GetID(), req.ReceiptID, req.Reason, req.ExpectedCeremonyHash)
 		if err != nil {
+			if errors.Is(err, boundarypkg.ErrApprovalTransitionConflict) {
+				api.WriteConflict(w, "Approval changed; refresh and review again")
+				return
+			}
 			api.WriteBadRequest(w, err.Error())
 			return
 		}
@@ -1337,14 +1471,73 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 	}))
 }
 
-func contractReceipts(ctx context.Context, svc *Services, sessionID string, limit int) ([]*contracts.Receipt, error) {
+func contractReceipts(ctx context.Context, svc *Services, tenantID, sessionID string, limit int) ([]*contracts.Receipt, error) {
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
-	if strings.TrimSpace(sessionID) != "" {
-		return svc.ReceiptStore.ListByAgent(ctx, sessionID, 0, limit)
+	return listReceiptsForCursor(ctx, svc, tenantID, sessionID, store.TenantReceiptCursor{}, limit)
+}
+
+func canonicalContractReceipts(ctx context.Context, svc *Services, tenantID, sessionID string, limit int) ([]*contracts.Receipt, error) {
+	receipts, err := contractReceipts(ctx, svc, tenantID, sessionID, limit)
+	if err != nil {
+		return nil, err
 	}
-	return listReceiptsForCursor(ctx, svc, "", 0, limit)
+	return canonicalReceiptsForTenant(ctx, svc, tenantID, receipts)
+}
+
+func canonicalReceiptsForTenant(ctx context.Context, svc *Services, tenantID string, receipts []*contracts.Receipt) ([]*contracts.Receipt, error) {
+	canonical := make([]*contracts.Receipt, 0, len(receipts))
+	for _, receipt := range receipts {
+		if receipt == nil {
+			return nil, fmt.Errorf("receipt store returned nil receipt")
+		}
+		verified, err := canonicalReceiptForTenant(ctx, svc, tenantID, receipt.ReceiptID)
+		if err != nil {
+			return nil, err
+		}
+		canonical = append(canonical, verified)
+	}
+	return canonical, nil
+}
+
+func canonicalReceiptForTenant(ctx context.Context, svc *Services, tenantID, receiptID string) (*contracts.Receipt, error) {
+	if svc == nil || svc.ReceiptStore == nil {
+		return nil, fmt.Errorf("receipt store unavailable")
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedCanonicalReceiptReader)
+	if !ok {
+		return nil, fmt.Errorf("receipt store lacks canonical evidence reader capability")
+	}
+	return reader.GetCanonicalReceiptByIDForTenant(ctx, tenantID, receiptID)
+}
+
+// authorizeArtifactReceiptReferences ensures a shared boundary artifact cannot
+// claim a receipt owned by a different tenant. The registry seals artifact
+// content, but tenant-scoped canonical receipt lookup is the authority for
+// whether that content may name a receipt at all.
+func authorizeArtifactReceiptReferences(ctx context.Context, svc *Services, tenantID string, receiptRefs ...string) error {
+	if len(receiptRefs) == 0 {
+		return nil
+	}
+	if svc == nil || svc.ReceiptStore == nil {
+		return errors.New("receipt store unavailable for artifact receipt references")
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedCanonicalReceiptReader)
+	if !ok {
+		return errors.New("receipt store lacks canonical tenant receipt reader capability")
+	}
+	for _, receiptRef := range receiptRefs {
+		receiptRef = strings.TrimSpace(receiptRef)
+		if receiptRef == "" {
+			return errors.New("artifact receipt references must not contain empty values")
+		}
+		receipt, err := reader.GetCanonicalReceiptByIDForTenant(ctx, tenantID, receiptRef)
+		if err != nil || receipt == nil || strings.TrimSpace(receipt.ReceiptID) != receiptRef {
+			return fmt.Errorf("artifact receipt reference %q is not available to authenticated tenant", receiptRef)
+		}
+	}
+	return nil
 }
 
 func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegistry, records []mcppkg.ServerQuarantineRecord) {
@@ -1419,40 +1612,52 @@ func verifySandboxGrantForDispatch(grant contracts.SandboxGrant, expectedHash st
 	return result
 }
 
-func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID string) ([]*contracts.Receipt, error) {
+func contractReceiptsForExport(ctx context.Context, svc *Services, tenantID, sessionID string) ([]*contracts.Receipt, error) {
+	return contractReceiptsForExportWithPageSize(ctx, svc, tenantID, sessionID, evidenceExportPageSize)
+}
+
+func contractReceiptsForExportWithPageSize(ctx context.Context, svc *Services, tenantID, sessionID string, pageSize int) ([]*contracts.Receipt, error) {
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
+	if pageSize <= 0 {
+		return nil, fmt.Errorf("evidence export page size must be positive")
+	}
 	var receipts []*contracts.Receipt
-	var cursor uint64
+	var cursor store.TenantReceiptCursor
 	for {
 		remaining := maxEvidenceExportReceipts - len(receipts)
 		if remaining <= 0 {
 			return nil, errEvidenceExportTooLarge
 		}
-		limit := evidenceExportPageSize
-		if remaining < limit {
-			limit = remaining
+		limit := pageSize
+		if remaining <= limit {
+			// Read one extra receipt at the cap so exactly-max exports succeed
+			// while a truncated export still fails closed.
+			limit = remaining + 1
 		}
 		var page []*contracts.Receipt
 		var err error
-		if strings.TrimSpace(sessionID) != "" {
-			page, err = svc.ReceiptStore.ListByAgent(ctx, sessionID, cursor, limit)
-		} else {
-			page, err = svc.ReceiptStore.ListSince(ctx, cursor, limit)
-		}
+		page, err = listReceiptsForCursor(ctx, svc, tenantID, sessionID, cursor, limit)
 		if err != nil {
 			return nil, err
 		}
 		if len(page) == 0 {
 			return receipts, nil
 		}
-		for _, receipt := range page {
-			receipts = append(receipts, receipt)
-			if receipt.LamportClock > cursor {
-				cursor = receipt.LamportClock
-			}
+		if len(page) > remaining {
+			return nil, errEvidenceExportTooLarge
 		}
+		canonicalPage, err := canonicalReceiptsForTenant(ctx, svc, tenantID, page)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, canonicalPage...)
+		nextCursor, err := receiptCursorForReceipt(sessionID, page[len(page)-1])
+		if err != nil {
+			return nil, err
+		}
+		cursor = nextCursor
 		if len(page) < limit {
 			return receipts, nil
 		}
@@ -1462,7 +1667,7 @@ func contractReceiptsForExport(ctx context.Context, svc *Services, sessionID str
 func proofgraphSessions(receipts []*contracts.Receipt) []map[string]any {
 	bySession := make(map[string]map[string]any)
 	for _, receipt := range receipts {
-		sessionID := receipt.ExecutorID
+		sessionID := receipt.SessionID
 		if strings.TrimSpace(sessionID) == "" {
 			sessionID = "anonymous"
 		}
@@ -1494,26 +1699,77 @@ func proofgraphSessions(receipts []*contracts.Receipt) []map[string]any {
 	return sessions
 }
 
-func findReceiptByReference(ctx context.Context, svc *Services, ref string) (*contracts.Receipt, error) {
+func findReceiptByReference(ctx context.Context, svc *Services, tenantID, ref string) (*contracts.Receipt, error) {
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
-	if receipt, err := svc.ReceiptStore.GetByReceiptID(ctx, ref); err == nil {
+	if receipt, err := canonicalReceiptForTenant(ctx, svc, tenantID, ref); err == nil {
 		return receipt, nil
 	}
-	receipts, err := contractReceipts(ctx, svc, "", 1000)
+	receipts, err := contractReceipts(ctx, svc, tenantID, "", 1000)
 	if err != nil {
 		return nil, err
 	}
 	for _, receipt := range receipts {
 		if receiptLinkHash(receipt) == ref || receipt.Signature == ref || receipt.MerkleRoot == ref {
-			return receipt, nil
+			return canonicalReceiptForTenant(ctx, svc, tenantID, receipt.ReceiptID)
 		}
 	}
 	return nil, fmt.Errorf("receipt not found")
 }
 
-func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) ([]byte, error) {
+func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byte, error) {
+	return buildEvidenceBundleWithSurfaceArtifacts(sessionID, receipts, nil)
+}
+
+func buildEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) ([]byte, error) {
+	files, err := buildEvidenceBundleFilesWithSurfaceArtifacts(sessionID, receipts, surfaces)
+	if err != nil {
+		return nil, err
+	}
+	return tarEvidenceBundleFiles(files)
+}
+
+func buildTrustedEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry, svc *Services) ([]byte, error) {
+	files, err := buildEvidenceBundleFilesWithSurfaceArtifacts(sessionID, receipts, surfaces)
+	if err != nil {
+		return nil, err
+	}
+	sealSigner, trustConfig, err := trustedEvidenceBundleSealSigner(svc)
+	if err != nil {
+		return nil, err
+	}
+	packDir, err := os.MkdirTemp("", "helm-evidence-export-*")
+	if err != nil {
+		return nil, fmt.Errorf("create evidence export workspace: %w", err)
+	}
+	defer os.RemoveAll(packDir)
+	if err := writeEvidenceBundlePackFiles(packDir, files); err != nil {
+		return nil, err
+	}
+	if err := writeEvidenceBundleIndex(packDir, files); err != nil {
+		return nil, err
+	}
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), packDir, evidencepkg.SealEvidencePackOptions{
+		PackID:      evidenceBundlePackID(sessionID, files),
+		Profile:     evidencepkg.EvidenceTrustProfileDevLocal,
+		Signer:      sealSigner,
+		TrustConfig: trustConfig,
+		SignedAt:    evidenceBundleSignedAt(receipts),
+	}); err != nil {
+		return nil, fmt.Errorf("seal evidence bundle: %w", err)
+	}
+	for _, controlPath := range []string{evidenceBundleIndexPath, evidencepkg.EvidencePackSealPath} {
+		data, err := os.ReadFile(filepath.Join(packDir, filepath.FromSlash(controlPath)))
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", controlPath, err)
+		}
+		files[controlPath] = data
+	}
+	return tarEvidenceBundleFiles(files)
+}
+
+func buildEvidenceBundleFilesWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	for _, receipt := range receipts {
 		data, err := json.Marshal(receipt)
@@ -1523,22 +1779,7 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt, surfac
 		files["receipts/"+receipt.ReceiptID+".json"] = data
 	}
 	if surfaces != nil {
-		if err := addEvidenceArtifactFiles(files, "verification_scopes", "verification_scope_id", surfaces.ListVerificationScopes()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "harness_traces", "trace_id", surfaces.ListHarnessTraces()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "plan_transactions", "plan_transaction_id", surfaces.ListPlanTransactions()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "harness_change_contracts", "change_contract_id", surfaces.ListHarnessChanges()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "grounded_action_refs", "grounded_action_id", surfaces.ListGroundedActions()); err != nil {
-			return nil, err
-		}
-		if err := addEvidenceArtifactFiles(files, "gui_action_receipts", "receipt_id", surfaces.ListGUIReceipts()); err != nil {
+		if err := addReferencedSurfaceArtifacts(files, surfaces, receipts); err != nil {
 			return nil, err
 		}
 	}
@@ -1558,7 +1799,10 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt, surfac
 		return nil, fmt.Errorf("marshal manifest: %w", err)
 	}
 	files["manifest.json"] = manifestData
+	return files, nil
+}
 
+func tarEvidenceBundleFiles(files map[string][]byte) ([]byte, error) {
 	var buf bytes.Buffer
 	gzipWriter := gzip.NewWriter(&buf)
 	tarWriter := tar.NewWriter(gzipWriter)
@@ -1584,21 +1828,122 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt, surfac
 	return buf.Bytes(), nil
 }
 
-func addEvidenceArtifactFiles[T any](files map[string][]byte, dir, idField string, values []T) error {
-	for i, value := range values {
-		data, err := json.Marshal(value)
-		if err != nil {
-			return fmt.Errorf("marshal %s artifact: %w", dir, err)
+func writeEvidenceBundlePackFiles(packDir string, files map[string][]byte) error {
+	root, err := os.OpenRoot(packDir)
+	if err != nil {
+		return fmt.Errorf("open evidence bundle root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+	for name, data := range files {
+		if !safeArchiveName(name) {
+			return fmt.Errorf("unsafe archive path %q", name)
 		}
-		var probe map[string]any
-		if err := json.Unmarshal(data, &probe); err != nil {
-			return fmt.Errorf("probe %s artifact: %w", dir, err)
+		if dir := path.Dir(name); dir != "." {
+			if err := root.MkdirAll(dir, 0o700); err != nil {
+				return fmt.Errorf("mkdir evidence bundle path %s: %w", name, err)
+			}
 		}
-		id, _ := probe[idField].(string)
-		if strings.TrimSpace(id) == "" {
-			id = fmt.Sprintf("%06d", i+1)
+		if err := root.WriteFile(name, data, 0o600); err != nil {
+			return fmt.Errorf("write evidence bundle file %s: %w", name, err)
 		}
-		files[dir+"/"+id+".json"] = data
+	}
+	return nil
+}
+
+func writeEvidenceBundleIndex(packDir string, files map[string][]byte) error {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	entries := make([]map[string]string, 0, len(names))
+	for _, name := range names {
+		sum := sha256.Sum256(files[name])
+		entries = append(entries, map[string]string{
+			"path":   name,
+			"sha256": hex.EncodeToString(sum[:]),
+		})
+	}
+	indexData, err := json.MarshalIndent(map[string]any{
+		"version": "1.0.0",
+		"entries": entries,
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal evidence bundle index: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(packDir, evidenceBundleIndexPath), append(indexData, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", evidenceBundleIndexPath, err)
+	}
+	return nil
+}
+
+func evidenceBundlePackID(sessionID string, files map[string][]byte) string {
+	if strings.TrimSpace(sessionID) != "" {
+		return "evidence-export-" + sessionID
+	}
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	sum := sha256.Sum256([]byte(strings.Join(names, "\n")))
+	return "evidence-export-" + hex.EncodeToString(sum[:8])
+}
+
+func evidenceBundleSignedAt(receipts []*contracts.Receipt) time.Time {
+	signedAt := time.Unix(0, 0).UTC()
+	for _, receipt := range receipts {
+		if receipt != nil && receipt.Timestamp.After(signedAt) {
+			signedAt = receipt.Timestamp.UTC()
+		}
+	}
+	return signedAt
+}
+
+func addReferencedSurfaceArtifacts(files map[string][]byte, surfaces *boundarypkg.SurfaceRegistry, receipts []*contracts.Receipt) error {
+	for _, scope := range surfaces.ListVerificationScopes() {
+		if err := addSurfaceArtifactIfReferenced(files, "verification_scopes/", scope.VerificationScopeID, scope, receipts); err != nil {
+			return err
+		}
+	}
+	for _, trace := range surfaces.ListHarnessTraces() {
+		if err := addSurfaceArtifactIfReferenced(files, "harness_traces/", trace.TraceID, trace, receipts); err != nil {
+			return err
+		}
+	}
+	for _, tx := range surfaces.ListPlanTransactions() {
+		if err := addSurfaceArtifactIfReferenced(files, "plan_transactions/", tx.PlanTransactionID, tx, receipts); err != nil {
+			return err
+		}
+	}
+	for _, change := range surfaces.ListHarnessChanges() {
+		if err := addSurfaceArtifactIfReferenced(files, "harness_change_contracts/", change.ChangeContractID, change, receipts); err != nil {
+			return err
+		}
+	}
+	for _, action := range surfaces.ListGroundedActions() {
+		if err := addSurfaceArtifactIfReferenced(files, "grounded_action_refs/", action.GroundedActionID, action, receipts); err != nil {
+			return err
+		}
+	}
+	for _, receipt := range surfaces.ListGUIReceipts() {
+		if err := addSurfaceArtifactIfReferenced(files, "gui_action_receipts/", receipt.ReceiptID, receipt, receipts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addSurfaceArtifactIfReferenced(files map[string][]byte, prefix, id string, artifact any, receipts []*contracts.Receipt) error {
+	data, err := json.Marshal(artifact)
+	if err != nil {
+		return fmt.Errorf("marshal %s artifact %s: %w", strings.TrimSuffix(prefix, "/"), id, err)
+	}
+	for _, receipt := range receipts {
+		if evidenceArtifactReferencesReceipt(prefix, data, receipt) {
+			files[prefix+id+".json"] = data
+			return nil
+		}
 	}
 	return nil
 }
@@ -1617,9 +1962,12 @@ func writeTarEntry(tw *tar.Writer, name string, data []byte) error {
 	return nil
 }
 
-func verifyEvidenceRequest(r *http.Request) map[string]any {
+func verifyEvidenceRequest(r *http.Request, svc *Services) map[string]any {
 	bundle, err := readEvidenceBundleRequest(r)
 	if err != nil {
+		return verificationResult([]string{err.Error()}, nil)
+	}
+	if err := verifyTrustedEvidenceBundleSeal(bundle, svc); err != nil {
 		return verificationResult([]string{err.Error()}, nil)
 	}
 	parsed, err := readEvidenceBundle(bundle)
@@ -1637,7 +1985,7 @@ func verifyEvidenceRequest(r *http.Request) map[string]any {
 		}
 		receipts = append(receipts, &receipt)
 	}
-	errs := verifyReceiptBundle(parsed, receipts)
+	errs := verifyReceiptBundle(parsed, receipts, svc)
 	recordVerification(r.Context(), helmotel.VerificationEvent{
 		EnvelopeID:  parsed.Manifest.SessionID,
 		Verified:    len(errs) == 0,
@@ -1716,7 +2064,88 @@ func readEvidenceBundle(data []byte) (*evidenceBundle, error) {
 	return &evidenceBundle{Manifest: manifest, Files: files}, nil
 }
 
-func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {
+func verifyTrustedEvidenceBundleSeal(bundle []byte, svc *Services) error {
+	packDir, err := os.MkdirTemp("", "helm-evidence-verify-*")
+	if err != nil {
+		return fmt.Errorf("create evidence verify workspace: %w", err)
+	}
+	defer os.RemoveAll(packDir)
+	if err := extractEvidenceBundleToDir(bundle, packDir); err != nil {
+		return err
+	}
+	trustConfig, err := trustedEvidenceBundleSealTrustConfig(svc)
+	if err != nil {
+		return err
+	}
+	report := evidencepkg.VerifyEvidencePackSeal(packDir, evidencepkg.VerifyEvidencePackSealOptions{
+		Profile:     evidencepkg.EvidenceTrustProfileDevLocal,
+		TrustConfig: trustConfig,
+	})
+	if report.State == "valid" && report.SignatureValid && len(report.Errors) == 0 {
+		return nil
+	}
+	if len(report.Errors) == 0 {
+		return fmt.Errorf("trusted evidence bundle seal verification failed: state=%s signer=%s", report.State, report.SignerKeyID)
+	}
+	return fmt.Errorf("trusted evidence bundle seal verification failed: %s", strings.Join(report.Errors, "; "))
+}
+
+func extractEvidenceBundleToDir(data []byte, dstDir string) error {
+	if len(data) == 0 {
+		return fmt.Errorf("empty evidence bundle")
+	}
+	if len(data) > maxEvidenceBundleBytes {
+		return fmt.Errorf("evidence bundle exceeds %d bytes", maxEvidenceBundleBytes)
+	}
+	root, err := os.OpenRoot(dstDir)
+	if err != nil {
+		return fmt.Errorf("open evidence extraction root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+	gzipReader, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("open evidence gzip: %w", err)
+	}
+	defer func() { _ = gzipReader.Close() }()
+	tarReader := tar.NewReader(gzipReader)
+	totalSize := int64(0)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read evidence tar: %w", err)
+		}
+		if !safeArchiveName(header.Name) {
+			return fmt.Errorf("unsafe archive path %q", header.Name)
+		}
+		if header.Size < 0 {
+			return fmt.Errorf("archive entry %q has invalid size", header.Name)
+		}
+		if header.Size > maxEvidenceBundleBytes {
+			return fmt.Errorf("archive entry %q too large", header.Name)
+		}
+		totalSize += header.Size
+		if totalSize > maxEvidenceBundleBytes {
+			return fmt.Errorf("evidence archive exceeds %d bytes", maxEvidenceBundleBytes)
+		}
+		entryData, err := io.ReadAll(io.LimitReader(tarReader, maxEvidenceBundleBytes+1))
+		if err != nil {
+			return fmt.Errorf("read archive entry %q: %w", header.Name, err)
+		}
+		if dir := path.Dir(header.Name); dir != "." {
+			if err := root.MkdirAll(dir, 0o700); err != nil {
+				return fmt.Errorf("mkdir extract path %s: %w", header.Name, err)
+			}
+		}
+		if err := root.WriteFile(header.Name, entryData, 0o600); err != nil {
+			return fmt.Errorf("write archive entry %q: %w", header.Name, err)
+		}
+	}
+}
+
+func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt, svc *Services) []string {
 	var errors []string
 	for name, expected := range bundle.Manifest.FileHashes {
 		data, ok := bundle.Files[name]
@@ -1730,6 +2159,9 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 		}
 	}
 	for name := range bundle.Files {
+		if isEvidenceBundleControlFile(name) {
+			continue
+		}
 		if _, ok := bundle.Manifest.FileHashes[name]; !ok {
 			errors = append(errors, fmt.Sprintf("%s present but not listed in manifest", name))
 		}
@@ -1739,25 +2171,24 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 	}
 	errors = append(errors, verifyHarnessEvidenceRequirements(bundle, receipts)...)
 	sort.Slice(receipts, func(i, j int) bool {
-		if receipts[i].ExecutorID == receipts[j].ExecutorID {
+		if receipts[i].SessionID == receipts[j].SessionID {
 			return receipts[i].LamportClock < receipts[j].LamportClock
 		}
-		return receipts[i].ExecutorID < receipts[j].ExecutorID
+		return receipts[i].SessionID < receipts[j].SessionID
 	})
-	lastByExecutor := map[string]uint64{}
-	prevByExecutor := map[string]*contracts.Receipt{}
+	lastBySession := map[string]uint64{}
+	prevBySession := map[string]*contracts.Receipt{}
 	for _, receipt := range receipts {
 		if strings.TrimSpace(receipt.Signature) == "" {
 			errors = append(errors, fmt.Sprintf("%s missing signature", receipt.ReceiptID))
+		} else if err := verifyTrustedEvidenceReceipt(svc, receipt); err != nil {
+			errors = append(errors, fmt.Sprintf("%s signature verification failed: %v", receipt.ReceiptID, err))
 		}
-		executor := receipt.ExecutorID
-		if executor == "" {
-			executor = "anonymous"
-		}
-		if last := lastByExecutor[executor]; last != 0 && receipt.LamportClock <= last {
+		sessionID := receipt.SessionID
+		if last := lastBySession[sessionID]; last != 0 && receipt.LamportClock <= last {
 			errors = append(errors, fmt.Sprintf("%s non-monotonic lamport clock", receipt.ReceiptID))
 		}
-		if previous := prevByExecutor[executor]; previous == nil {
+		if previous := prevBySession[sessionID]; previous == nil {
 			if !isGenesisPrevHash(receipt.PrevHash) {
 				errors = append(errors, fmt.Sprintf("%s invalid genesis prev_hash %q", receipt.ReceiptID, receipt.PrevHash))
 			}
@@ -1769,42 +2200,217 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 				errors = append(errors, fmt.Sprintf("%s prev_hash mismatch: expected %s got %s", receipt.ReceiptID, expected, receipt.PrevHash))
 			}
 		}
-		lastByExecutor[executor] = receipt.LamportClock
-		prevByExecutor[executor] = receipt
+		lastBySession[sessionID] = receipt.LamportClock
+		prevBySession[sessionID] = receipt
 	}
 	return errors
 }
 
+// verifyTrustedEvidenceReceipt verifies against the runtime trust anchor, not
+// receipt-provided public keys. A self-signed uploaded bundle is consistency
+// evidence only and must not become its own authority.
+func verifyTrustedEvidenceReceipt(svc *Services, receipt *contracts.Receipt) error {
+	if svc == nil || svc.ReceiptSigner == nil {
+		return errors.New("trusted receipt signer unavailable")
+	}
+
+	switch signer := svc.ReceiptSigner.(type) {
+	case *helmcrypto.Ed25519Signer:
+		if signer == nil {
+			return errors.New("trusted receipt signer unavailable")
+		}
+		return verifyEvidenceReceiptProfile(signer.PublicKey(), "", receipt)
+	case *helmcrypto.MLDSASigner:
+		if signer == nil {
+			return errors.New("trusted receipt signer unavailable")
+		}
+		return verifyEvidenceReceiptProfile("", signer.PublicKey(), receipt)
+	case *helmcrypto.HybridSigner:
+		if signer == nil || signer.Ed25519Signer() == nil || signer.MLDSASigner() == nil {
+			return errors.New("trusted hybrid receipt signer unavailable")
+		}
+		return verifyEvidenceReceiptProfile(signer.Ed25519Signer().PublicKey(), signer.MLDSASigner().PublicKey(), receipt)
+	}
+
+	// KeyRing and external signers that expose VerifyReceipt remain the trusted
+	// verification path for rotated or provider-owned runtime keys.
+	verifier, ok := svc.ReceiptSigner.(interface {
+		VerifyReceipt(*contracts.Receipt) (bool, error)
+	})
+	if !ok {
+		return errors.New("trusted receipt signer cannot verify receipts")
+	}
+	valid, err := verifier.VerifyReceipt(receipt)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return errors.New("receipt signature does not match trusted signer")
+	}
+	return nil
+}
+
+func trustedEvidenceBundleSealSigner(svc *Services) (evidencepkg.EvidenceSigner, *evidencepkg.EvidencePackTrustConfig, error) {
+	if svc == nil || svc.ReceiptSigner == nil {
+		return nil, nil, errors.New("trusted evidence bundle seal signer unavailable")
+	}
+	switch signer := svc.ReceiptSigner.(type) {
+	case *helmcrypto.Ed25519Signer:
+		if signer == nil {
+			return nil, nil, errors.New("trusted evidence bundle seal signer unavailable")
+		}
+		return runtimeEvidenceSealSigner{
+			keyID:      signer.GetKeyID(),
+			publicKey:  signer.PublicKey(),
+			signerType: "runtime-receipt-ed25519",
+			signFn:     signer.Sign,
+		}, trustedEvidenceBundleSealConfig(signer.GetKeyID(), signer.PublicKey(), "runtime-receipt-ed25519"), nil
+	case *helmcrypto.HybridSigner:
+		if signer == nil || signer.Ed25519Signer() == nil {
+			return nil, nil, errors.New("trusted evidence bundle seal signer unavailable")
+		}
+		edSigner := signer.Ed25519Signer()
+		return runtimeEvidenceSealSigner{
+			keyID:      signer.GetKeyID(),
+			publicKey:  edSigner.PublicKey(),
+			signerType: "runtime-receipt-hybrid-ed25519",
+			signFn:     edSigner.Sign,
+		}, trustedEvidenceBundleSealConfig(signer.GetKeyID(), edSigner.PublicKey(), "runtime-receipt-hybrid-ed25519"), nil
+	case *helmcrypto.MLDSASigner:
+		return nil, nil, errors.New("trusted evidence bundle seal signer unsupported: runtime is MLDSA-only and existing EvidencePack seals require Ed25519")
+	case *helmcrypto.KeyRing:
+		return nil, nil, errors.New("trusted evidence bundle seal signer unsupported: runtime signer keyring does not expose a stable Ed25519 trust root for bundle sealing")
+	default:
+		return nil, nil, fmt.Errorf("trusted evidence bundle seal signer unsupported: %T", svc.ReceiptSigner)
+	}
+}
+
+func trustedEvidenceBundleSealTrustConfig(svc *Services) (*evidencepkg.EvidencePackTrustConfig, error) {
+	_, trustConfig, err := trustedEvidenceBundleSealSigner(svc)
+	return trustConfig, err
+}
+
+func trustedEvidenceBundleSealConfig(keyID, publicKey, signerType string) *evidencepkg.EvidencePackTrustConfig {
+	return &evidencepkg.EvidencePackTrustConfig{
+		Version:       "evidence-pack-trust/v1",
+		ActiveProfile: evidencepkg.EvidenceTrustProfileDevLocal,
+		Signer: evidencepkg.EvidencePackTrustSigner{
+			Type:      signerType,
+			KeyID:     keyID,
+			PublicKey: publicKey,
+		},
+		TrustedKeys: map[string]string{keyID: publicKey},
+		UpdatedAt:   time.Unix(0, 0).UTC(),
+	}
+}
+
+func verifyEvidenceReceiptProfile(ed25519PublicKey, mldsa65PublicKey string, receipt *contracts.Receipt) error {
+	profile, valid, err := helmcrypto.VerifyReceiptProfile(ed25519PublicKey, mldsa65PublicKey, receipt)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return fmt.Errorf("receipt signature does not match trusted %s profile", profile)
+	}
+	return nil
+}
+
 func verifyHarnessEvidenceRequirements(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {
 	var errs []string
-	hasScopes := bundleHasDir(bundle, "verification_scopes/")
-	hasTraces := bundleHasDir(bundle, "harness_traces/")
-	hasTransactions := bundleHasDir(bundle, "plan_transactions/")
-	hasChanges := bundleHasDir(bundle, "harness_change_contracts/")
-	hasGroundedActions := bundleHasDir(bundle, "grounded_action_refs/")
 	for _, receipt := range receipts {
-		if receiptRequiresVerificationScope(receipt) && !hasScopes {
+		if receiptRequiresVerificationScope(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "verification_scopes/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing verification scope", receipt.ReceiptID))
 		}
-		if receiptRequiresHarnessTrace(receipt) && !hasTraces {
+		if receiptRequiresHarnessTrace(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "harness_traces/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing harness trace", receipt.ReceiptID))
 		}
-		if receiptRequiresPlanTransaction(receipt) && !hasTransactions {
+		if receiptRequiresPlanTransaction(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "plan_transactions/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing plan transaction", receipt.ReceiptID))
 		}
-		if receiptRequiresHarnessChange(receipt) && !hasChanges {
+		if receiptRequiresHarnessChange(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "harness_change_contracts/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing harness change contract", receipt.ReceiptID))
 		}
-		if receiptRequiresGroundedAction(receipt) && !hasGroundedActions {
+		if receiptRequiresGroundedAction(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "grounded_action_refs/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing grounded action ref", receipt.ReceiptID))
 		}
 	}
 	return errs
 }
 
-func bundleHasDir(bundle *evidenceBundle, prefix string) bool {
-	for name := range bundle.Files {
-		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".json") {
+func bundleHasReferencedSurfaceArtifact(bundle *evidenceBundle, prefix string, receipt *contracts.Receipt) bool {
+	for name, data := range bundle.Files {
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".json") && evidenceArtifactReferencesReceipt(prefix, data, receipt) {
+			return true
+		}
+	}
+	return false
+}
+
+func evidenceArtifactReferencesReceipt(prefix string, data []byte, receipt *contracts.Receipt) bool {
+	switch prefix {
+	case "verification_scopes/":
+		var scope contracts.VerificationScope
+		return json.Unmarshal(data, &scope) == nil && receiptRequiresVerificationScope(receipt) && (receiptReferencesArtifact(receipt, scope.VerificationScopeID, scope.ScopeHash) || receiptMetadataReferencesArtifact(receipt, "verification_scope_ref", scope.VerificationScopeID, scope.ScopeHash) || artifactReferencesReceipt(receipt, scope.ReceiptRefs...))
+	case "harness_traces/":
+		var trace contracts.HarnessTrace
+		if json.Unmarshal(data, &trace) != nil || !receiptRequiresHarnessTrace(receipt) {
+			return false
+		}
+		return receiptReferencesArtifact(receipt, trace.TraceID, trace.TraceHash) || receiptMetadataReferencesArtifact(receipt, "harness_trace_ref", trace.TraceID, trace.TraceHash) || artifactReferencesReceipt(receipt, trace.ReceiptRefs...)
+	case "plan_transactions/":
+		var tx contracts.PlanTransaction
+		return json.Unmarshal(data, &tx) == nil && receiptRequiresPlanTransaction(receipt) && (receiptReferencesArtifact(receipt, tx.PlanTransactionID, tx.PlanHash, tx.TransactionHash) || receiptMetadataReferencesArtifact(receipt, "plan_transaction_ref", tx.PlanTransactionID, tx.PlanHash, tx.TransactionHash) || artifactReferencesReceipt(receipt, tx.ReceiptRefs...))
+	case "harness_change_contracts/":
+		var change contracts.HarnessChangeContract
+		return json.Unmarshal(data, &change) == nil && receiptRequiresHarnessChange(receipt) && (receiptReferencesArtifact(receipt, change.ChangeContractID, change.ContractHash) || receiptMetadataReferencesArtifact(receipt, "harness_change_contract_ref", change.ChangeContractID, change.ContractHash) || artifactReferencesReceipt(receipt, change.ActivationReceiptRef))
+	case "grounded_action_refs/":
+		var action contracts.GroundedActionRef
+		return json.Unmarshal(data, &action) == nil && receiptRequiresGroundedAction(receipt) && (receiptReferencesArtifact(receipt, action.GroundedActionID, action.GroundingHash, action.ProofGraphNodeRef, action.VerificationScopeRef) || receiptMetadataReferencesArtifact(receipt, "grounded_action_ref", action.GroundedActionID, action.GroundingHash, action.ProofGraphNodeRef, action.VerificationScopeRef) || artifactReferencesReceipt(receipt, action.ReceiptRefs...))
+	case "gui_action_receipts/":
+		var actionReceipt contracts.GUIActionReceipt
+		return json.Unmarshal(data, &actionReceipt) == nil && receiptRequiresGroundedAction(receipt) && (receiptReferencesArtifact(receipt, actionReceipt.GroundedActionRef, actionReceipt.ReceiptHash) || receiptMetadataReferencesArtifact(receipt, "gui_action_receipt_ref", actionReceipt.GroundedActionRef, actionReceipt.ReceiptHash) || artifactReferencesReceipt(receipt, actionReceipt.ReceiptID))
+	default:
+		return false
+	}
+}
+
+func receiptReferencesArtifact(receipt *contracts.Receipt, artifactRefs ...string) bool {
+	if receipt == nil || len(receipt.Evidence) == 0 {
+		return false
+	}
+	for _, value := range receipt.Evidence {
+		for _, ref := range artifactRefs {
+			if strings.TrimSpace(value) != "" && strings.TrimSpace(value) == strings.TrimSpace(ref) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func receiptMetadataReferencesArtifact(receipt *contracts.Receipt, key string, artifactRefs ...string) bool {
+	return artifactReferenceMatches(receiptMetadataString(receipt, key), artifactRefs...)
+}
+
+func artifactReferencesReceipt(receipt *contracts.Receipt, artifactRefs ...string) bool {
+	if receipt == nil {
+		return false
+	}
+	for _, ref := range artifactRefs {
+		if strings.TrimSpace(receipt.ReceiptID) != "" && strings.TrimSpace(receipt.ReceiptID) == strings.TrimSpace(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func artifactReferenceMatches(value string, artifactRefs ...string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for _, ref := range artifactRefs {
+		if value == strings.TrimSpace(ref) {
 			return true
 		}
 	}
@@ -1887,8 +2493,20 @@ func verificationResult(errs []string, receipts []*contracts.Receipt) map[string
 }
 
 func safeArchiveName(name string) bool {
+	if strings.Contains(name, `\`) {
+		return false
+	}
 	clean := path.Clean(name)
 	return name != "" && clean == name && !strings.HasPrefix(clean, "../") && !strings.HasPrefix(clean, "/") && clean != ".."
+}
+
+func isEvidenceBundleControlFile(name string) bool {
+	switch name {
+	case evidenceBundleIndexPath, evidencepkg.EvidencePackSealPath:
+		return true
+	default:
+		return false
+	}
 }
 
 func writeContractJSON(w http.ResponseWriter, status int, value any) {

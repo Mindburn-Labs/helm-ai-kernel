@@ -13,7 +13,8 @@ import type {
   VersionInfo,
   HelmError,
   ReasonCode,
-  DecisionRequest,
+  EvaluateRequest,
+  EvaluateResponse,
 } from './types.gen.js';
 
 export type { ReasonCode, HelmError };
@@ -112,6 +113,8 @@ export interface SandboxGrant {
 }
 
 export type SurfaceRecord = Record<string, unknown>;
+export type EvaluateDecisionRequest = EvaluateRequest;
+export type EvaluateDecisionResponse = EvaluateResponse;
 export type BoundaryStatus = SurfaceRecord;
 export type BoundaryCapabilitySummary = SurfaceRecord;
 export type ExecutionBoundaryRecord = SurfaceRecord;
@@ -138,6 +141,18 @@ export type TelemetryOTelConfig = SurfaceRecord;
 export type TelemetryExportRequest = SurfaceRecord;
 export type TelemetryExportResult = SurfaceRecord;
 export type CoexistenceCapabilityManifest = SurfaceRecord;
+
+function validateEvaluateDecisionRequest(req: EvaluateRequest): void {
+  if (!req || typeof req.tool !== 'string' || !req.tool.trim()) {
+    throw new TypeError('evaluateDecision requires a non-blank tool');
+  }
+  if (typeof req.effect_level !== 'string' || !req.effect_level.trim()) {
+    throw new TypeError('evaluateDecision requires a non-blank effect_level');
+  }
+  if (typeof req.session_id !== 'string' || !req.session_id.trim()) {
+    throw new TypeError('evaluateDecision requires a non-blank session_id');
+  }
+}
 
 /** Governance metadata extracted from X-Helm-* response headers. */
 export interface GovernanceMetadata {
@@ -191,6 +206,7 @@ export interface HelmClientConfig {
   baseUrl: string;
   apiKey?: string;
   tenantId?: string;
+  principalId?: string;
   timeout?: number; // ms, default 30000
 }
 
@@ -208,6 +224,9 @@ export class HelmClient {
     }
     if (config.tenantId) {
       this.headers['X-Helm-Tenant-ID'] = config.tenantId;
+    }
+    if (config.principalId) {
+      this.headers['X-Helm-Principal-ID'] = config.principalId;
     }
   }
 
@@ -275,8 +294,9 @@ export class HelmClient {
   }
 
   // ── Decision Evaluation ──────────────────────────
-  async evaluateDecision(req: DecisionRequest | SurfaceRecord): Promise<SurfaceRecord> {
-    return this.request<SurfaceRecord>('POST', '/api/v1/evaluate', req);
+  async evaluateDecision(req: EvaluateDecisionRequest): Promise<EvaluateDecisionResponse> {
+	validateEvaluateDecisionRequest(req);
+    return this.request<EvaluateDecisionResponse>('POST', '/api/v1/evaluate', req);
   }
 
   async runPublicDemo(actionId: string, args: SurfaceRecord = {}): Promise<DemoRunResult> {

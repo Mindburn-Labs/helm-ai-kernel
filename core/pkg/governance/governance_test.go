@@ -3,6 +3,7 @@ package governance
 import (
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
@@ -77,5 +78,12 @@ func TestGuardian_Authorize(t *testing.T) {
 	}
 	if dec.Verdict != "DENY" {
 		t.Errorf("Expected DENY, got %s", dec.Verdict)
+	}
+	if dec.ReasonCode != string(contracts.ReasonPolicyViolation) {
+		t.Errorf("Expected POLICY_VIOLATION, got %s", dec.ReasonCode)
+	}
+	valid, err = signer.VerifyDecision(dec)
+	if err != nil || !valid {
+		t.Fatalf("denied decision signature invalid: valid=%v err=%v", valid, err)
 	}
 }

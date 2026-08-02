@@ -19,7 +19,6 @@ import (
 // prompting and delegates every state change to ui.ConfirmDecision.
 type watchModel struct {
 	client approvalClient
-	actor  string
 
 	pending     []contracts.ApprovalCeremony
 	lastErr     error
@@ -30,8 +29,8 @@ type watchModel struct {
 	inFlight   bool
 }
 
-func newWatchModel(client approvalClient, actor string, _ ...time.Duration) *watchModel {
-	return &watchModel{client: client, actor: strings.TrimSpace(actor)}
+func newWatchModel(client approvalClient, _ ...time.Duration) *watchModel {
+	return &watchModel{client: client}
 }
 
 // beginRefresh starts a generation only when no other refresh is active.
@@ -127,6 +126,16 @@ func watchTransitionBlockReason(item contracts.ApprovalCeremony) string {
 		return ""
 	}
 	return "it declares " + strings.Join(requirements, ", ") + "; use a verified approval flow that can satisfy those requirements"
+}
+
+// watchActionBlockReason keeps break-glass approvals visible and denyable,
+// while refusing a terminal APPROVE path that cannot supply their mandatory
+// receipt evidence.
+func watchActionBlockReason(item contracts.ApprovalCeremony, action ui.DecisionAction) string {
+	if item.BreakGlass && action == ui.DecisionApprove {
+		return "break-glass approvals cannot be approved from watch; use the verified break-glass approval flow (DENY remains available)"
+	}
+	return ""
 }
 
 // filterPendingApprovals keeps only pending ceremonies. It sorts by creation

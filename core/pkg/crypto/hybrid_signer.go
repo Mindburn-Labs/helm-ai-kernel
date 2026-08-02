@@ -101,8 +101,11 @@ func (h *HybridSigner) PublicKeyBytes() []byte {
 // The composite signature is stored in d.Signature and the SignatureType is
 // set to "Hybrid-Ed25519-MLDSA65:<keyID>".
 func (h *HybridSigner) SignDecision(d *contracts.DecisionRecord) error {
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
-	sig, err := h.Sign([]byte(payload))
+	payload, err := DecisionSigningPayload(d)
+	if err != nil {
+		return err
+	}
+	sig, err := h.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -127,8 +130,11 @@ func (h *HybridSigner) SignIntent(i *contracts.AuthorizedExecutionIntent) error 
 
 // SignReceipt signs a Receipt using both Ed25519 and ML-DSA-65.
 func (h *HybridSigner) SignReceipt(r *contracts.Receipt) error {
-	payload := CanonicalizeReceipt(r.ReceiptID, r.DecisionID, r.EffectID, r.Status, r.OutputHash, r.PrevHash, r.LamportClock, r.ArgsHash)
-	sig, err := h.Sign([]byte(payload))
+	payload, err := ReceiptSigningPayload(r)
+	if err != nil {
+		return err
+	}
+	sig, err := h.Sign(payload)
 	if err != nil {
 		return err
 	}

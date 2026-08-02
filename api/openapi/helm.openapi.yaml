@@ -2,7 +2,7 @@ openapi: "3.1.0"
 # quantum_posture: schema documents signature-related fields; crypto behavior lives in kernel implementation.
 info:
   title: HELM Kernel API
-  version: "0.7.5"
+  version: "0.8.0"
   description: |
     Deterministic execution kernel for AI tool calls.
     Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
@@ -373,10 +373,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DecisionRequest'
+              $ref: '#/components/schemas/EvaluateRequest'
       responses:
         '200':
-          description: Guardian decision record
+          description: Governed evaluation result and receipt reference
           headers:
             X-Helm-Idempotency-Replayed:
               schema: { type: string, enum: ["true"] }
@@ -384,7 +384,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DecisionRecord'
+                $ref: '#/components/schemas/EvaluateResponse'
         '400':
           $ref: '#/components/responses/HelmError'
         '401':
@@ -418,6 +418,12 @@ paths:
           schema: { type: string }
         - name: agent
           in: query
+          deprecated: true
+          description: Deprecated alias for session_id. It is interpreted as a signed receipt session, never as an executor filter.
+          schema: { type: string }
+        - name: session_id
+          in: query
+          description: Filter by the signed Receipt.SessionID within the authenticated tenant.
           schema: { type: string }
       responses:
         '200':
@@ -453,6 +459,12 @@ paths:
           schema: { type: string }
         - name: agent
           in: query
+          deprecated: true
+          description: Deprecated alias for session_id. It is interpreted as a signed receipt session, never as an executor filter.
+          schema: { type: string }
+        - name: session_id
+          in: query
+          description: Filter by the signed Receipt.SessionID within the authenticated tenant.
           schema: { type: string }
       responses:
         '200':
@@ -2182,7 +2194,8 @@ paths:
         - name: session_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            $ref: '#/components/schemas/NonBlankSessionID'
       responses:
         '200':
           description: List of receipts in session
@@ -3756,10 +3769,15 @@ paths:
           application/json:
             schema:
               type: object
+              required: [expected_ceremony_hash]
               properties:
                 actor: { type: string }
                 receipt_id: { type: string }
                 reason: { type: string }
+                expected_ceremony_hash:
+                  type: string
+                  minLength: 1
+                  description: Current ceremony hash returned by the most recent approval read; prevents stale transitions.
       responses:
         '200':
           description: Approval ceremony
@@ -4145,9 +4163,18 @@ components:
       properties:
         receipt_id: { type: string }
         decision_id: { type: string }
+        correlation_id: { type: string }
         effect_id: { type: string }
+        external_reference_id: { type: string }
         status: { type: string }
+        # HELM-303 receipt.v5 signing envelope fields. These are transported
+        # independently so a verifier can reconstruct the signed governance view.
+        signature_version: { type: string }
+        verdict: { type: string }
         reason_code: { type: string }
+        decision_hash:
+          type: string
+          description: PDP decision hash, bound by the V5-signed output_hash for API-minted receipts.
         output_hash: { type: string }
         blob_hash: { type: string }
         prev_hash: { type: string }
@@ -4168,10 +4195,15 @@ components:
           additionalProperties:
             type: string
           description: Public verification keys keyed by algorithm for the emitted receipt signature.
-        timestamp: { type: string, format: date-time }
+        timestamp:
+          type: string
+          format: date-time
+          description: Canonical RFC3339Nano receipt timestamp.
         principal: { type: string }
         executor_id: { type: string }
         args_hash: { type: string }
+        policy_hash: { type: string }
+        session_id: { type: string }
         metadata:
           type: object
           additionalProperties: true
@@ -4297,6 +4329,9 @@ components:
       required: [verification_scope_id, subject_hash, checks_performed, verifier_hash, policy_hash, created_at]
       properties:
         verification_scope_id: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
         subject_hash: { type: string }
         risk_class:
           type: string
@@ -4370,6 +4405,9 @@ components:
       required: [plan_transaction_id, plan_hash, read_set, write_set, assumption_set, verification_obligations, conflict_policy]
       properties:
         plan_transaction_id: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
         plan_hash: { type: string }
         read_set:
           type: array
@@ -4437,6 +4475,9 @@ components:
       required: [grounded_action_id, screenshot_hash, dom_or_ax_snapshot_hash, target_ref, bbox_or_element_id, action_type, precondition, postcondition, postcondition_ref, verification_scope_ref, policy_hash, proof_graph_node_ref]
       properties:
         grounded_action_id: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
         screenshot_hash: { type: string }
         dom_or_ax_snapshot_hash: { type: string }
         target_ref: { type: string }
@@ -4479,6 +4520,7 @@ components:
         receipt_hash: { type: string }
 
     DecisionRequest:
+      description: Legacy direct-daemon evaluation shape. It is retained only for existing callers; generated SDKs must use EvaluateRequest with a top-level session_id.
       type: object
       required: [action, resource]
       properties:
@@ -4489,6 +4531,87 @@ components:
           type: object
           additionalProperties: true
 
+    EvaluateRequest:
+      description: Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
+      type: object
+      properties:
+        principal:
+          type: string
+          description: Ignored; the authenticated principal is recorded as the receipt executor.
+        action:
+          type: string
+          description: Legacy direct-daemon alias for tool.
+        resource:
+          type: string
+          description: Legacy direct-daemon alias for effect_level.
+        tool:
+          type: string
+          minLength: 1
+        args:
+          type: object
+          additionalProperties: true
+        agent_id:
+          type: string
+          description: Ignored; the authenticated principal is recorded as the receipt executor.
+        effect_level:
+          type: string
+          minLength: 1
+          description: Policy resource used to evaluate the governed tool call.
+        session_id:
+          allOf:
+            - $ref: '#/components/schemas/NonBlankSessionID'
+          description: Non-whitespace signed causal session identifier.
+        context:
+          type: object
+          additionalProperties: true
+          description: Optional input context; authenticated principal and tenant fields are added by the server.
+
+    NonBlankSessionID:
+      type: string
+      minLength: 1
+      pattern: '^[^\\/]*[^\s\\/][^\\/]*$'
+
+    EvaluateResponse:
+      type: object
+      required: [allow, verdict, receipt_id, decision_id, decision_hash, reason_code, policy_ref, lamport_clock]
+      properties:
+        allow: { type: boolean }
+        verdict:
+          type: string
+          description: ALLOW or DENY for a receipt-bearing decision; empty when evaluation fails before receipt issuance.
+        receipt_id:
+          type: string
+          description: Issued V5 receipt identifier; empty when evaluation fails before receipt issuance.
+        decision_id: { type: string }
+        decision_hash: { type: string }
+        reason_code: { type: string }
+        policy_ref: { type: string }
+        lamport_clock:
+          type: integer
+          format: int64
+          minimum: 0
+        id:
+          type: string
+          description: Legacy decision identifier alias for decision_id.
+        action:
+          type: string
+          description: Legacy decision action.
+        resource:
+          type: string
+          description: Legacy decision resource.
+        reason:
+          type: string
+          description: Legacy human-readable decision reason.
+        policy_version:
+          type: string
+          description: Legacy policy version.
+        policy_decision_hash:
+          type: string
+          description: Legacy policy decision hash.
+        signature:
+          type: string
+          description: Legacy decision signature.
+
     DecisionRecord:
       type: object
       properties:
@@ -4497,6 +4620,12 @@ components:
         resource: { type: string }
         verdict: { type: string }
         reason: { type: string }
+        # HELM-303 decision.v2 signing envelope fields.
+        signature_version: { type: string }
+        reason_code: { type: string }
+        phenotype_hash: { type: string }
+        policy_content_hash: { type: string }
+        effect_digest: { type: string }
         policy_version: { type: string }
         policy_decision_hash: { type: string }
         signature: { type: string }

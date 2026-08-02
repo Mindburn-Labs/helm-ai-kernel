@@ -45,7 +45,10 @@ surface for the `helm-ai-kernel` project.
   `CLAUDE_MANAGED_AGENTS_LIVE_CONFIG_JSON` and `HELM_SIGNING_KEY_HEX` secrets.
 - `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
   egress-proxy artifacts, then runs gated live local-container conformance when
-  manually dispatched with the scoped CI key.
+  manually dispatched with the scoped CI key. Main runs retain artifact evidence
+  only; an explicitly dispatched, live-conformance-backed run can attach a
+  review patch, but neither this workflow nor the catalog workflow creates a
+  branch or pull request.
 - `launchpad-clean-install.yml` validates the published Homebrew package on a
   macOS runner, launches OpenClaw and Hermes through `local-container`, verifies
   produced EvidencePacks, and uploads redacted GA evidence.

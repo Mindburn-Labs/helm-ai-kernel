@@ -3,6 +3,7 @@ package boundary
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -65,6 +66,71 @@ func TestApprovalTransitionSealsCeremony(t *testing.T) {
 	}
 	if approval.State != contracts.ApprovalCeremonyAllowed || approval.CeremonyHash == "" {
 		t.Fatalf("unexpected approval: %+v", approval)
+	}
+}
+
+func TestApprovalTransitionIfCurrentRejectsStaleAndConcurrentSnapshots(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry := NewSurfaceRegistry(func() time.Time { return now })
+	approval, err := registry.PutApproval(contracts.ApprovalCeremony{
+		ApprovalID:  "approval-cas",
+		Subject:     "mcp:cas",
+		Action:      "mcp.approve",
+		State:       contracts.ApprovalCeremonyPending,
+		RequestedBy: "agent:test",
+		Quorum:      1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.TransitionApprovalIfCurrent(approval.ApprovalID, contracts.ApprovalCeremonyAllowed, "user:alice", "receipt", "reviewed", "sha256:stale"); !errors.Is(err, ErrApprovalTransitionConflict) {
+		t.Fatalf("stale transition error = %v, want conflict", err)
+	}
+	for _, item := range registry.ListApprovals() {
+		if item.ApprovalID == approval.ApprovalID && (item.State != contracts.ApprovalCeremonyPending || item.CeremonyHash != approval.CeremonyHash) {
+			t.Fatalf("stale transition mutated approval: %+v", item)
+		}
+	}
+
+	type result struct {
+		state    contracts.ApprovalCeremonyState
+		approval contracts.ApprovalCeremony
+		err      error
+	}
+	results := make(chan result, 2)
+	start := make(chan struct{})
+	for _, state := range []contracts.ApprovalCeremonyState{contracts.ApprovalCeremonyAllowed, contracts.ApprovalCeremonyDenied} {
+		go func(state contracts.ApprovalCeremonyState) {
+			<-start
+			transitioned, err := registry.TransitionApprovalIfCurrent(approval.ApprovalID, state, "user:alice", "receipt", "reviewed", approval.CeremonyHash)
+			results <- result{state: state, approval: transitioned, err: err}
+		}(state)
+	}
+	close(start)
+
+	winners, conflicts := 0, 0
+	var winner result
+	for range 2 {
+		result := <-results
+		switch {
+		case result.err == nil:
+			winners++
+			winner = result
+		case errors.Is(result.err, ErrApprovalTransitionConflict):
+			conflicts++
+		default:
+			t.Fatalf("concurrent transition error = %v", result.err)
+		}
+	}
+	if winners != 1 || conflicts != 1 {
+		t.Fatalf("concurrent transition winners=%d conflicts=%d", winners, conflicts)
+	}
+	for _, item := range registry.ListApprovals() {
+		if item.ApprovalID == approval.ApprovalID && item.State != winner.approval.State {
+			t.Fatalf("winning transition %s was overwritten by %s", winner.state, item.State)
+		}
 	}
 }
 
@@ -173,6 +239,37 @@ func TestFileBackedSurfaceRegistryPersistsRecords(t *testing.T) {
 	}
 	if got.RecordHash != record.RecordHash {
 		t.Fatalf("record hash changed after reload: %s != %s", got.RecordHash, record.RecordHash)
+	}
+}
+
+func TestFileBackedSurfaceRegistryPersistsExplicitReceiptRefs(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	path := filepath.Join(t.TempDir(), "surfaces.json")
+	registry, err := NewFileBackedSurfaceRegistry(path, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.PutVerificationScope(contracts.VerificationScope{VerificationScopeID: "scope-refs", ReceiptRefs: []string{"rcpt-scope"}, SubjectHash: "sha256:subject", ChecksPerformed: []string{"hash"}, VerifierHash: "sha256:verifier", PolicyHash: "sha256:policy"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.PutPlanTransaction(contracts.PlanTransaction{PlanTransactionID: "tx-refs", ReceiptRefs: []string{"rcpt-tx"}, PlanHash: "sha256:plan", ReadSet: []string{"artifact:read"}, WriteSet: []string{"artifact:write"}, AssumptionSet: []string{"assumption"}, VerificationObligations: []string{"verify"}, ConflictPolicy: "deny"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.PutGroundedAction(contracts.GroundedActionRef{GroundedActionID: "action-refs", ReceiptRefs: []string{"rcpt-action"}, ScreenshotHash: "sha256:screenshot", DOMOrAXSnapshotHash: "sha256:dom", TargetRef: "button#save", BBoxOrElementID: "button#save", ActionType: "click", Precondition: "form dirty", Postcondition: "saved", PostconditionRef: "proof:save", ProofGraphNodeRef: "proofgraph:save", VerificationScopeRef: "scope-refs", PolicyHash: "sha256:policy"}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := NewFileBackedSurfaceRegistry(path, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := reloaded.GetVerificationScope("scope-refs"); !ok || len(got.ReceiptRefs) != 1 || got.ReceiptRefs[0] != "rcpt-scope" {
+		t.Fatalf("persisted scope refs = %+v, found=%v", got.ReceiptRefs, ok)
+	}
+	if got, ok := reloaded.GetPlanTransaction("tx-refs"); !ok || len(got.ReceiptRefs) != 1 || got.ReceiptRefs[0] != "rcpt-tx" {
+		t.Fatalf("persisted transaction refs = %+v, found=%v", got.ReceiptRefs, ok)
+	}
+	if got, ok := reloaded.GetGroundedAction("action-refs"); !ok || len(got.ReceiptRefs) != 1 || got.ReceiptRefs[0] != "rcpt-action" {
+		t.Fatalf("persisted action refs = %+v, found=%v", got.ReceiptRefs, ok)
 	}
 }
 

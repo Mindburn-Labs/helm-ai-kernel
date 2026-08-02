@@ -117,6 +117,34 @@ func TestLaunchpadF2ReportsRequireContractEvidenceArtifacts(t *testing.T) {
       ]`, "docs/launchpad/v1_report.json")
 }
 
+func TestLaunchpadAutomationDoesNotCreateRefsOrPullRequests(t *testing.T) {
+	root := repoRoot(t)
+	catalogWorkflow := readDoc(t, root, ".github/workflows/launchpad-model-provider-catalog.yml")
+	for _, forbidden := range []string{
+		"contents: write",
+		"pull-requests: write",
+		"git push",
+		"git commit",
+		"gh pr",
+	} {
+		requireNotContains(t, catalogWorkflow, forbidden, ".github/workflows/launchpad-model-provider-catalog.yml")
+	}
+	requireContains(t, catalogWorkflow, "reviewable catalog refresh candidate")
+	requireContains(t, catalogWorkflow, "Upload catalog refresh candidate")
+
+	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
+	for _, forbidden := range []string{
+		"git push",
+		"git commit",
+		"gh pr",
+	} {
+		requireNotContains(t, artifactWorkflow, forbidden, ".github/workflows/launchpad-artifacts.yml")
+	}
+	requireContains(t, artifactWorkflow, "generate_promotion_candidate")
+	requireContains(t, artifactWorkflow, "Human-reviewed Launchpad promotion candidate")
+	requireContains(t, artifactWorkflow, "Upload promotion candidate")
+}
+
 func TestLaunchConformanceReviewOracleIsWired(t *testing.T) {
 	root := repoRoot(t)
 	oracle := readDoc(t, root, "docs/launchpad/launch-conformance.md")

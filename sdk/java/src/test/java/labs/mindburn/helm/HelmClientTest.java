@@ -4,11 +4,17 @@ import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.sun.net.httpserver.HttpServer;
+
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Functional tests for the HELM Java SDK.
  * These test client construction, request building, serialization,
  * and error handling without requiring a live server.
+ * quantum_posture: HTTP compatibility tests do not implement or assert a cryptographic primitive.
  */
 public class HelmClientTest {
     private static final ObjectMapper mapper = new ObjectMapper()
@@ -26,6 +32,40 @@ public class HelmClientTest {
     void testClientConstructionWithApiKey() {
         HelmClient client = new HelmClient("http://localhost:8080", "test-api-key");
         assertNotNull(client);
+    }
+
+    @Test
+    @DisplayName("Authenticated client sends API key, tenant, and principal headers")
+    void testAuthenticatedClientHeaders() throws Exception {
+        AtomicReference<String> authorization = new AtomicReference<>();
+        AtomicReference<String> tenant = new AtomicReference<>();
+        AtomicReference<String> principal = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/healthz", exchange -> {
+            authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            tenant.set(exchange.getRequestHeaders().getFirst("X-Helm-Tenant-ID"));
+            principal.set(exchange.getRequestHeaders().getFirst("X-Helm-Principal-ID"));
+            byte[] response = "\"ok\"".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            HelmClient client = new HelmClient(
+                "http://127.0.0.1:" + server.getAddress().getPort(),
+                "test-api-key",
+                "tenant-a",
+                "principal-a"
+            );
+            assertEquals("ok", client.health());
+            assertEquals("Bearer test-api-key", authorization.get());
+            assertEquals("tenant-a", tenant.get());
+            assertEquals("principal-a", principal.get());
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test
@@ -104,6 +144,41 @@ public class HelmClientTest {
         TypesGen.HelmError err = mapper.readValue(json, TypesGen.HelmError.class);
         assertNotNull(err.getError());
         assertEquals("Tool not found", err.getError().getMessage());
+    }
+
+    @Test
+    @DisplayName("EvaluateDecision uses the canonical V5 request and response")
+    void testEvaluateDecisionCanonicalContract() throws Exception {
+        AtomicReference<String> body = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/evaluate", exchange -> {
+            body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = "{\"allow\":true,\"verdict\":\"ALLOW\",\"receipt_id\":\"receipt-evaluate\",\"decision_id\":\"decision-evaluate\",\"decision_hash\":\"sha256:decision\",\"reason_code\":\"\",\"policy_ref\":\"helm:test\",\"lamport_clock\":1}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            HelmClient client = new HelmClient("http://127.0.0.1:" + server.getAddress().getPort());
+            TypesGen.EvaluateResponse result = client.evaluateDecision(new TypesGen.EvaluateRequest()
+                    .tool("read_file")
+                    .effectLevel("read")
+                    .sessionId("session-test"));
+            assertEquals("receipt-evaluate", result.getReceiptId());
+            assertEquals("decision-evaluate", result.getDecisionId());
+            assertTrue(body.get().contains("\"effect_level\":\"read\""));
+            assertTrue(body.get().contains("\"session_id\":\"session-test\""));
+        } finally {
+            server.stop(0);
+        }
+
+        HelmClient client = new HelmClient("http://127.0.0.1:1");
+        assertThrows(IllegalArgumentException.class, () -> client.evaluateDecision(new TypesGen.EvaluateRequest()
+                .tool("read_file")
+                .effectLevel("read")
+                .sessionId(" ")));
     }
 
     @Test

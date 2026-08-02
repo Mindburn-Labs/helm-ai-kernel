@@ -116,7 +116,7 @@ func TestWatchInteractiveTransitionRequiresExactSecondConfirmation(t *testing.T)
 	item := watchTestCeremony("ap-1", time.Unix(1, 0))
 	client := &watchFakeClient{items: []contracts.ApprovalCeremony{item}}
 	var chrome bytes.Buffer
-	code := runWatchInteractive(client, "operator.cli", strings.NewReader("ap-1\nAPPROVE\nnot-approved\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+	code := runWatchInteractive(client, strings.NewReader("ap-1\nAPPROVE\nnot-approved\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
 	if code != 0 {
 		t.Fatalf("exit code = %d, chrome=%s", code, chrome.String())
 	}
@@ -144,7 +144,7 @@ func TestWatchInteractiveRoutesApproveAndDenyThroughConfirmation(t *testing.T) {
 			client := &watchFakeClient{items: []contracts.ApprovalCeremony{watchTestCeremony("ap-1", time.Unix(1, 0))}}
 			input := "ap-1\n" + test.action + "\n" + test.action + "\n\n"
 			var chrome bytes.Buffer
-			code := runWatchInteractive(client, "operator.cli", strings.NewReader(input), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+			code := runWatchInteractive(client, strings.NewReader(input), &chrome, ui.Capabilities{Interactive: true, Width: 100})
 			if code != 0 {
 				t.Fatalf("exit code = %d, chrome=%s", code, chrome.String())
 			}
@@ -152,7 +152,7 @@ func TestWatchInteractiveRoutesApproveAndDenyThroughConfirmation(t *testing.T) {
 				t.Fatalf("transitions = %+v", client.transitions)
 			}
 			got := client.transitions[0]
-			if got.action != test.want || got.approvalID != "ap-1" || got.actor != "operator.cli" || got.reason == "" {
+			if got.action != test.want || got.approvalID != "ap-1" || got.expectedCeremonyHash != "sha256:ceremony" || got.reason == "" {
 				t.Fatalf("transition = %+v", got)
 			}
 		})
@@ -195,7 +195,7 @@ func TestWatchInteractiveKeepsCredentialBoundCeremoniesReadOnly(t *testing.T) {
 			client := &watchFakeClient{items: []contracts.ApprovalCeremony{item}}
 			var chrome bytes.Buffer
 
-			code := runWatchInteractive(client, "operator.cli", strings.NewReader("ap-1\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+			code := runWatchInteractive(client, strings.NewReader("ap-1\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
 			if code != 0 {
 				t.Fatalf("exit code = %d, chrome=%s", code, chrome.String())
 			}
@@ -224,8 +224,8 @@ func (f *pendingWatchTransitionClient) ListApprovals(context.Context) ([]contrac
 	return append([]contracts.ApprovalCeremony(nil), f.items...), nil
 }
 
-func (f *pendingWatchTransitionClient) TransitionApproval(_ context.Context, approvalID, action, actor, reason string) (contracts.ApprovalCeremony, error) {
-	f.transitions = append(f.transitions, watchTransition{approvalID: approvalID, action: action, actor: actor, reason: reason})
+func (f *pendingWatchTransitionClient) TransitionApproval(_ context.Context, approvalID, action, expectedCeremonyHash, reason string) (contracts.ApprovalCeremony, error) {
+	f.transitions = append(f.transitions, watchTransition{approvalID: approvalID, action: action, expectedCeremonyHash: expectedCeremonyHash, reason: reason})
 	return f.transitioned, nil
 }
 
@@ -248,7 +248,7 @@ func TestWatchInteractiveDoesNotReportPendingApproveAsSuccess(t *testing.T) {
 			}
 
 			var chrome bytes.Buffer
-			code := runWatchInteractive(client, "operator.cli", strings.NewReader("ap-1\nAPPROVE\nAPPROVE\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+			code := runWatchInteractive(client, strings.NewReader("ap-1\nAPPROVE\nAPPROVE\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
 			if code != 0 {
 				t.Fatalf("exit code = %d, chrome=%s", code, chrome.String())
 			}
@@ -278,7 +278,7 @@ func TestWatchInteractiveDoesNotReportPendingApproveAsSuccess(t *testing.T) {
 func TestWatchInteractiveRefreshFailureDisablesActions(t *testing.T) {
 	client := &watchFakeClient{listErr: errors.New("server\x1b[2J unavailable")}
 	var chrome bytes.Buffer
-	code := runWatchInteractive(client, "operator.cli", strings.NewReader("ap-1\nAPPROVE\nAPPROVE\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+	code := runWatchInteractive(client, strings.NewReader("ap-1\nAPPROVE\nAPPROVE\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
 	if code != 1 {
 		t.Fatalf("exit code = %d, chrome=%s", code, chrome.String())
 	}
@@ -288,6 +288,57 @@ func TestWatchInteractiveRefreshFailureDisablesActions(t *testing.T) {
 	out := chrome.String()
 	if strings.Contains(out, "\x1b") || !strings.Contains(out, "Actions are disabled") || strings.Contains(out, "Type APPROVE") {
 		t.Fatalf("failed-refresh chrome = %q", out)
+	}
+}
+
+func TestWatchRejectsCallerControlledActorFlag(t *testing.T) {
+	t.Setenv(watchAdminAPIKeyEnv, "environment-key")
+	var stdout, stderr bytes.Buffer
+	code := runWatchCmdWithRuntime([]string{"--actor", "user:alice"}, &stdout, &stderr, testWatchRuntime("", &watchFakeClient{}, false, false))
+	if code != 2 || !strings.Contains(stderr.String(), "flag provided but not defined") {
+		t.Fatalf("caller-controlled actor flag code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestWatchBlocksBreakGlassApproveButAllowsDeny(t *testing.T) {
+	t.Run("approve", func(t *testing.T) {
+		item := watchTestCeremony("ap-1", time.Unix(1, 0))
+		item.BreakGlass = true
+		client := &watchFakeClient{items: []contracts.ApprovalCeremony{item}}
+		var chrome bytes.Buffer
+		code := runWatchInteractive(client, strings.NewReader("ap-1\nAPPROVE\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+		if code != 0 || len(client.transitions) != 0 {
+			t.Fatalf("break-glass approve code=%d transitions=%+v chrome=%s", code, client.transitions, chrome.String())
+		}
+		if !strings.Contains(chrome.String(), "break-glass approvals cannot be approved from watch") || strings.Contains(chrome.String(), "Type APPROVE") {
+			t.Fatalf("break-glass approve guidance=%s", chrome.String())
+		}
+	})
+
+	t.Run("deny", func(t *testing.T) {
+		item := watchTestCeremony("ap-1", time.Unix(1, 0))
+		item.BreakGlass = true
+		client := &watchFakeClient{items: []contracts.ApprovalCeremony{item}}
+		var chrome bytes.Buffer
+		code := runWatchInteractive(client, strings.NewReader("ap-1\nDENY\nDENY\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+		if code != 0 || len(client.transitions) != 1 || client.transitions[0].action != "deny" {
+			t.Fatalf("break-glass deny code=%d transitions=%+v chrome=%s", code, client.transitions, chrome.String())
+		}
+	})
+}
+
+func TestWatchConflictRefreshesAndRequiresReviewAgain(t *testing.T) {
+	client := &watchFakeClient{
+		items:         []contracts.ApprovalCeremony{watchTestCeremony("ap-1", time.Unix(1, 0))},
+		transitionErr: errWatchApprovalChanged,
+	}
+	var chrome bytes.Buffer
+	code := runWatchInteractive(client, strings.NewReader("ap-1\nAPPROVE\nAPPROVE\n\n"), &chrome, ui.Capabilities{Interactive: true, Width: 100})
+	if code != 0 || len(client.transitions) != 0 || client.listCalls < 2 {
+		t.Fatalf("conflict code=%d listCalls=%d transitions=%+v chrome=%s", code, client.listCalls, client.transitions, chrome.String())
+	}
+	if !strings.Contains(chrome.String(), "Approval changed; refresh and review again") || !strings.Contains(chrome.String(), "fresh server snapshot") {
+		t.Fatalf("conflict guidance=%s", chrome.String())
 	}
 }
 

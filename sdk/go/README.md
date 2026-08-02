@@ -4,14 +4,14 @@ Typed Go client for the HELM kernel HTTP API.
 
 ## Install
 
-After the `sdk/go/v0.7.5` subdirectory tag is published and verified:
+After the `sdk/go/v0.8.0` subdirectory tag is published and verified:
 
 ```bash
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.7.5
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.0
 ```
 
-Version truth is the repository `VERSION` file (`0.7.5` for this source target).
-Tagged Go module releases use the subdirectory tag form `sdk/go/v0.7.5`; this
+Version truth is the repository `VERSION` file (`0.8.0` for this source target).
+Tagged Go module releases use the subdirectory tag form shown above; this
 source target does not claim that the tag already exists.
 
 ## Local Test
@@ -79,7 +79,7 @@ func main() {
 | --- | --- |
 | `ChatCompletions(req)` | `POST /v1/chat/completions` |
 | `ChatCompletionsWithReceipt(req)` | `POST /v1/chat/completions` plus `X-Helm-*` governance headers |
-| `EvaluateDecision(req)` | `POST /api/v1/evaluate` |
+| `EvaluateDecision(EvaluateRequest)` | `POST /api/v1/evaluate`; requires non-blank `tool`, `effect_level`, and `session_id` |
 | `RunPublicDemo(actionID, args)` | `POST /api/demo/run` |
 | `VerifyPublicDemoReceipt(receipt, expectedHash)` | `POST /api/demo/verify` |
 | `ApproveIntent(req)` | `POST /api/v1/kernel/approve` |
@@ -110,6 +110,8 @@ func main() {
 | `Health()` | `GET /healthz` |
 | `Version()` | `GET /version` |
 
-## Release Notes
+## Source target
 
-`0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the public HTTP client surface, conformance entrypoints, and evidence verification helpers.
+This source target includes the canonical typed evaluation contract and signed
+receipt v5 fields. Verify the tag and registry evidence before treating its
+module coordinate as published.

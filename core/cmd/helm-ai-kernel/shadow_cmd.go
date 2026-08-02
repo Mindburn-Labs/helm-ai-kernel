@@ -132,7 +132,7 @@ func writeShadowReport(w io.Writer, r *shadow.Report, exitCode int) {
 	fmt.Fprintf(w, "  API key exposures:    %d\n", r.Grade.APIKeyExposures)
 	if !r.Grade.BoundaryPresent {
 		fmt.Fprintf(w, "  Replayable actions:   0 (no boundary — nothing provable)\n")
-		fmt.Fprintf(w, "\n%sNo receipt, no production.%s Wrap this setup: helm-ai-kernel onboard\n", ColorBold, ColorReset)
+		fmt.Fprintf(w, "\n%sNo receipt, no production.%s Start guided setup: helm-ai-kernel setup --quickstart --profile mcp --yes\n", ColorBold, ColorReset)
 	}
 	fmt.Fprintln(w)
 

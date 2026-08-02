@@ -120,6 +120,31 @@ func TestDemoRunDoesNotRequireReceiptStore(t *testing.T) {
 	}
 }
 
+func TestBuildDemoReceiptBindsDecisionGovernanceFields(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("demo-governance-fields")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := &contracts.DecisionRecord{
+		ID:                "demo-decision-v5",
+		Action:            "READ_TICKET",
+		Verdict:           string(contracts.VerdictDeny),
+		ReasonCode:        string(contracts.ReasonPolicyViolation),
+		PolicyContentHash: "sha256:demo-policy",
+		InputContext:      map[string]any{"session_id": " demo-session "},
+	}
+	receipt, err := buildDemoReceipt(&Services{ReceiptSigner: signer}, decision, []byte("demo body"), nil)
+	if err != nil {
+		t.Fatalf("build demo receipt: %v", err)
+	}
+	if receipt.SignatureVersion != contracts.ReceiptSignatureV5 || receipt.Verdict != decision.Verdict || receipt.ReasonCode != decision.ReasonCode || receipt.PolicyHash != decision.PolicyContentHash || receipt.SessionID != "demo-session" {
+		t.Fatalf("demo receipt did not bind decision governance fields: %+v", receipt)
+	}
+	if valid, err := signer.VerifyReceipt(receipt); err != nil || !valid {
+		t.Fatalf("demo receipt signature invalid: valid=%v err=%v", valid, err)
+	}
+}
+
 func TestDemoVerifyRejectsUnsignedEnvelopeMutation(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("demo-test")
 	if err != nil {

@@ -14,6 +14,7 @@ from helm_sdk.client import (
     MCPRegistryDiscoverRequest,
     _json_body,
 )
+from helm_sdk.types_gen import EvaluateRequest, EvaluateResponse
 from tests.test_generated_models_coverage import CLASSES, _build_model
 
 
@@ -114,6 +115,17 @@ ENVELOPE_MANIFEST = {
     "created_at": "2026-01-01T00:00:00Z",
 }
 
+EVALUATE_RESPONSE = {
+    "allow": True,
+    "verdict": "ALLOW",
+    "receipt_id": "receipt-evaluate",
+    "decision_id": "decision-evaluate",
+    "decision_hash": "sha256:decision",
+    "reason_code": "",
+    "policy_ref": "helm:test",
+    "lamport_clock": 1,
+}
+
 
 class DumpOnly:
     value = "x"
@@ -126,7 +138,7 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
     fake = FakeHTTPClient()
     client_cls = MagicMock(return_value=fake)
     with patch("helm_sdk.client.httpx.Client", client_cls):
-        client = HelmClient(base_url="http://h/", api_key="key", tenant_id="tenant", timeout=2.5)
+        client = HelmClient(base_url="http://h/", api_key="key", tenant_id="tenant", principal_id="principal", timeout=2.5)
         assert client.base_url == "http://h"
         client.close()
 
@@ -134,7 +146,11 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
     kwargs = client_cls.call_args.kwargs
     assert kwargs["base_url"] == "http://h"
     assert kwargs["timeout"] == 2.5
-    assert kwargs["headers"] == {"Authorization": "Bearer key", "X-Helm-Tenant-ID": "tenant"}
+    assert kwargs["headers"] == {
+        "Authorization": "Bearer key",
+        "X-Helm-Tenant-ID": "tenant",
+        "X-Helm-Principal-ID": "principal",
+    }
 
 
 def test_json_body_handles_dataclass_generated_model_model_dump_and_plain_dict() -> None:
@@ -160,7 +176,7 @@ def test_check_handles_non_object_error_body() -> None:
 @pytest.mark.parametrize(
     ("method_name", "invoke", "response", "expected_method", "expected_path"),
     [
-        ("evaluate_decision", lambda c: c.evaluate_decision({"input": True}), {"verdict": "ALLOW"}, "POST", "/api/v1/evaluate"),
+        ("evaluate_decision", lambda c: c.evaluate_decision(EvaluateRequest(tool="read_file", effect_level="read", session_id="session-test")), EVALUATE_RESPONSE, "POST", "/api/v1/evaluate"),
         ("run_public_demo_empty_args", lambda c: c.run_public_demo("read_ticket"), {"ok": True}, "POST", "/api/demo/run"),
         ("run_public_demo_with_args", lambda c: c.run_public_demo("read_ticket", {"id": 1}), {"ok": True}, "POST", "/api/demo/run"),
         ("verify_public_demo_receipt", lambda c: c.verify_public_demo_receipt({"r": 1}, "hash"), {"ok": True}, "POST", "/api/demo/verify"),
@@ -253,6 +269,21 @@ def test_client_endpoint_matrix(method_name: str, invoke: Any, response: Any, ex
     assert fake.calls[0][1] == expected_path
     if method_name == "export_evidence":
         assert result == b"bundle"
+    if method_name == "evaluate_decision":
+        assert isinstance(result, EvaluateResponse)
+        assert result.receipt_id == "receipt-evaluate"
+        assert fake.calls[0][2]["json"] == {"tool": "read_file", "effect_level": "read", "session_id": "session-test"}
+
+
+def test_evaluate_decision_rejects_legacy_or_blank_input_before_request() -> None:
+    fake = FakeHTTPClient()
+    with patch("helm_sdk.client.httpx.Client", return_value=fake):
+        client = HelmClient(base_url="http://h")
+        with pytest.raises(TypeError, match="EvaluateRequest"):
+            client.evaluate_decision({"tool": "read_file"})  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="non-blank session_id"):
+            client.evaluate_decision(EvaluateRequest.model_construct(tool="read_file", effect_level="read", session_id=""))
+    assert fake.calls == []
 
 
 def test_list_sessions_uses_params_for_query_values() -> None:

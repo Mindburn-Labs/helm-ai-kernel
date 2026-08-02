@@ -262,8 +262,12 @@ type DecisionRecord struct {
 	// for — the stable join key across lifecycle events, receipts, and
 	// evidence. Optional; outside the decision signature until HELM-303.
 	CorrelationId string `protobuf:"bytes,13,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// HELM-303 decision.v2 signing envelope fields.
+	SignatureVersion  string `protobuf:"bytes,14,opt,name=signature_version,json=signatureVersion,proto3" json:"signature_version,omitempty"`
+	PhenotypeHash     string `protobuf:"bytes,15,opt,name=phenotype_hash,json=phenotypeHash,proto3" json:"phenotype_hash,omitempty"`
+	PolicyContentHash string `protobuf:"bytes,16,opt,name=policy_content_hash,json=policyContentHash,proto3" json:"policy_content_hash,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *DecisionRecord) Reset() {
@@ -383,6 +387,27 @@ func (x *DecisionRecord) GetInputContext() []byte {
 func (x *DecisionRecord) GetCorrelationId() string {
 	if x != nil {
 		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetSignatureVersion() string {
+	if x != nil {
+		return x.SignatureVersion
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetPhenotypeHash() string {
+	if x != nil {
+		return x.PhenotypeHash
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetPolicyContentHash() string {
+	if x != nil {
+		return x.PolicyContentHash
 	}
 	return ""
 }
@@ -508,8 +533,17 @@ type Receipt struct {
 	// Product request identity (X-Helm-Correlation-ID) this receipt belongs
 	// to. Optional; outside the receipt signature until HELM-303.
 	CorrelationId string `protobuf:"bytes,17,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+	// reason_code fields are also signed by receipt.v5.
+	SignatureVersion string `protobuf:"bytes,18,opt,name=signature_version,json=signatureVersion,proto3" json:"signature_version,omitempty"`
+	Status           string `protobuf:"bytes,19,opt,name=status,proto3" json:"status,omitempty"`
+	OutputHash       string `protobuf:"bytes,20,opt,name=output_hash,json=outputHash,proto3" json:"output_hash,omitempty"`
+	PrevHash         string `protobuf:"bytes,21,opt,name=prev_hash,json=prevHash,proto3" json:"prev_hash,omitempty"`
+	ArgsHash         string `protobuf:"bytes,22,opt,name=args_hash,json=argsHash,proto3" json:"args_hash,omitempty"`
+	PolicyHash       string `protobuf:"bytes,23,opt,name=policy_hash,json=policyHash,proto3" json:"policy_hash,omitempty"`
+	SessionId        string `protobuf:"bytes,24,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Receipt) Reset() {
@@ -657,6 +691,55 @@ func (x *Receipt) GetMetadata() map[string]string {
 func (x *Receipt) GetCorrelationId() string {
 	if x != nil {
 		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *Receipt) GetSignatureVersion() string {
+	if x != nil {
+		return x.SignatureVersion
+	}
+	return ""
+}
+
+func (x *Receipt) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *Receipt) GetOutputHash() string {
+	if x != nil {
+		return x.OutputHash
+	}
+	return ""
+}
+
+func (x *Receipt) GetPrevHash() string {
+	if x != nil {
+		return x.PrevHash
+	}
+	return ""
+}
+
+func (x *Receipt) GetArgsHash() string {
+	if x != nil {
+		return x.ArgsHash
+	}
+	return ""
+}
+
+func (x *Receipt) GetPolicyHash() string {
+	if x != nil {
+		return x.PolicyHash
+	}
+	return ""
+}
+
+func (x *Receipt) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
 	}
 	return ""
 }
@@ -1267,7 +1350,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"effectType\x12\x1b\n" +
 	"\teffect_id\x18\x02 \x01(\tR\beffectId\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x12\x1b\n" +
-	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x98\x04\n" +
+	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x9c\x05\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1284,7 +1367,10 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	" \x01(\tR\tpolicyRef\x120\n" +
 	"\x14policy_decision_hash\x18\v \x01(\tR\x12policyDecisionHash\x12#\n" +
 	"\rinput_context\x18\f \x01(\fR\finputContext\x12%\n" +
-	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\"\xca\x02\n" +
+	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\x12+\n" +
+	"\x11signature_version\x18\x0e \x01(\tR\x10signatureVersion\x12%\n" +
+	"\x0ephenotype_hash\x18\x0f \x01(\tR\rphenotypeHash\x12.\n" +
+	"\x13policy_content_hash\x18\x10 \x01(\tR\x11policyContentHash\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +
@@ -1295,7 +1381,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1c\n" +
 	"\tsignature\x18\x06 \x01(\tR\tsignature\x12\"\n" +
 	"\rsigner_key_id\x18\a \x01(\tR\vsignerKeyId\x12\x1c\n" +
-	"\tprincipal\x18\b \x01(\tR\tprincipal\"\xd2\x05\n" +
+	"\tprincipal\x18\b \x01(\tR\tprincipal\"\xb2\a\n" +
 	"\aReceipt\x12'\n" +
 	"\x0freceipt_version\x18\x01 \x01(\tR\x0ereceiptVersion\x12\x1d\n" +
 	"\n" +
@@ -1317,7 +1403,17 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\vreason_code\x18\x0f \x01(\x0e2\x1a.helm.kernel.v1.ReasonCodeR\n" +
 	"reasonCode\x12A\n" +
 	"\bmetadata\x18\x10 \x03(\v2%.helm.kernel.v1.Receipt.MetadataEntryR\bmetadata\x12%\n" +
-	"\x0ecorrelation_id\x18\x11 \x01(\tR\rcorrelationId\x1a;\n" +
+	"\x0ecorrelation_id\x18\x11 \x01(\tR\rcorrelationId\x12+\n" +
+	"\x11signature_version\x18\x12 \x01(\tR\x10signatureVersion\x12\x16\n" +
+	"\x06status\x18\x13 \x01(\tR\x06status\x12\x1f\n" +
+	"\voutput_hash\x18\x14 \x01(\tR\n" +
+	"outputHash\x12\x1b\n" +
+	"\tprev_hash\x18\x15 \x01(\tR\bprevHash\x12\x1b\n" +
+	"\targs_hash\x18\x16 \x01(\tR\bargsHash\x12\x1f\n" +
+	"\vpolicy_hash\x18\x17 \x01(\tR\n" +
+	"policyHash\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x18 \x01(\tR\tsessionId\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb6\x01\n" +

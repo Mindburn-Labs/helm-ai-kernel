@@ -13,6 +13,7 @@ on:
       - "core/pkg/canonicalize/**"
       - "core/pkg/contracts/**"
       - "core/pkg/crypto/**"
+      - "core/pkg/store/**"
       - "core/pkg/effects/**"
       - "core/pkg/runtimeadapters/mcp/**"
       - "core/pkg/connectors/github/**"
@@ -41,6 +42,7 @@ on:
       - "core/pkg/canonicalize/**"
       - "core/pkg/contracts/**"
       - "core/pkg/crypto/**"
+      - "core/pkg/store/**"
       - "core/pkg/effects/**"
       - "core/pkg/runtimeadapters/mcp/**"
       - "core/pkg/connectors/github/**"
@@ -96,6 +98,8 @@ jobs:
         run: make verify-effect-disposition-vectors
       - name: Prove non-bypass RLS and single-use concurrency
         run: make test-approval-ceremony-postgres
+      - name: Prove V5 receipt decision hash migration fails closed
+        run: make test-receipt-store-postgres-migration
       - name: Prove connector authority append-only isolation and ordering
         run: make test-connector-release-authority-postgres
       - name: Prove effect reservation disposition and signed close ordering

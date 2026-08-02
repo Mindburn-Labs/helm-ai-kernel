@@ -83,19 +83,22 @@ type SecurityFindingRef struct {
 
 // VerificationScope records verification coverage and residual risk.
 type VerificationScope struct {
-	VerificationScopeID string    `json:"verification_scope_id"`
-	SubjectHash         string    `json:"subject_hash"`
-	RiskClass           string    `json:"risk_class,omitempty"`
-	ChecksPerformed     []string  `json:"checks_performed"`
-	Assumptions         []string  `json:"assumptions,omitempty"`
-	UntestedRegions     []string  `json:"untested_regions,omitempty"`
-	KnownLimits         []string  `json:"known_limits,omitempty"`
-	RemainingRisks      []string  `json:"remaining_risks,omitempty"`
-	RequiredFollowup    []string  `json:"required_followup,omitempty"`
-	VerifierHash        string    `json:"verifier_hash"`
-	PolicyHash          string    `json:"policy_hash"`
-	CreatedAt           time.Time `json:"created_at,omitempty"`
-	ScopeHash           string    `json:"scope_hash,omitempty"`
+	VerificationScopeID string `json:"verification_scope_id"`
+	// ReceiptRefs explicitly bind this scope to issued receipts. They are
+	// optional for compatibility, but when present are sealed into ScopeHash.
+	ReceiptRefs      []string  `json:"receipt_refs,omitempty"`
+	SubjectHash      string    `json:"subject_hash"`
+	RiskClass        string    `json:"risk_class,omitempty"`
+	ChecksPerformed  []string  `json:"checks_performed"`
+	Assumptions      []string  `json:"assumptions,omitempty"`
+	UntestedRegions  []string  `json:"untested_regions,omitempty"`
+	KnownLimits      []string  `json:"known_limits,omitempty"`
+	RemainingRisks   []string  `json:"remaining_risks,omitempty"`
+	RequiredFollowup []string  `json:"required_followup,omitempty"`
+	VerifierHash     string    `json:"verifier_hash"`
+	PolicyHash       string    `json:"policy_hash"`
+	CreatedAt        time.Time `json:"created_at,omitempty"`
+	ScopeHash        string    `json:"scope_hash,omitempty"`
 }
 
 // HarnessTraceRef points to a canonical harness trace artifact.

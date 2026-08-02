@@ -89,6 +89,18 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+### Pending v0.8 source target
+
+- First-party SDKs use the canonical typed `EvaluateRequest` and
+  `EvaluateResponse` contract. Direct-daemon `action`/`resource` compatibility
+  remains bounded and is not an SDK contract.
+- Receipt reads are tenant-scoped. Session streams retain scalar Lamport
+  cursors, while tenant-wide continuation uses an opaque versioned keyset
+  cursor so equal clocks across sessions are not lost.
+- Signed `receipt.v5` persistence includes the semantic `decision_hash`; older
+  rows recover only from an already-stored trusted metadata value and otherwise
+  fail closed.
+
 ## [0.7.4] - 2026-07-21
 
 Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.4>.

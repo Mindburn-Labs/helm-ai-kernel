@@ -1,7 +1,12 @@
 package main
 
+// quantum_posture: legacy quickstart migration validates classical Ed25519 root keys; no post-quantum cryptographic control is added or claimed.
+
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -145,7 +150,7 @@ func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, in
 	opts := quickstartOptions{
 		Addr:    "127.0.0.1",
 		Port:    7714,
-		DataDir: "data",
+		DataDir: defaultQuickstartDataDir(),
 		Profile: "mcp",
 	}
 	fs := flag.NewFlagSet("quickstart", flag.ContinueOnError)
@@ -335,12 +340,18 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	return prepared, nil
 }
 
-// preflightQuickstartReset performs the non-mutating reset ownership and
-// target validation shared by real resets and dry-run previews. It also keeps
-// the prepared paths canonical after symlink resolution.
+// preflightQuickstartReset performs the non-mutating data-directory validation
+// shared by real initialization and dry-run previews. It also keeps the
+// prepared paths canonical after symlink resolution. Non-reset previews must
+// validate an existing target before claiming that their plan can be applied.
 func preflightQuickstartReset(opts quickstartOptions, prepared quickstartPrepared) (quickstartOptions, quickstartPrepared, error) {
 	opts.DataDir = prepared.DataDir
 	if !opts.Reset {
+		if _, err := os.Lstat(opts.DataDir); !os.IsNotExist(err) {
+			if _, _, err := validateExistingQuickstartDataDirOwnership(opts.DataDir); err != nil {
+				return opts, prepared, err
+			}
+		}
 		return opts, prepared, nil
 	}
 	resetTarget, err := validateQuickstartResetTarget(opts)
@@ -357,7 +368,22 @@ const (
 	quickstartOwnershipMarker         = ".helm-ai-kernel-quickstart"
 	quickstartOwnershipMarkerContents = "HELM AI Kernel quickstart state v1\n"
 	quickstartSessionCredentialFile   = ".helm-local-session.json"
+	quickstartSQLiteHeader            = "SQLite format 3\x00"
 )
+
+const quickstartReferencePackContents = `{
+  "pack_id": "oss-local-first-run",
+  "label": "OSS Local First Run",
+  "version": 1,
+  "runtime_actions": [
+    {"action": "HELM_ONBOARDING_HEALTH", "expression": "true", "description": "local health proof"},
+    {"action": "HELM_ONBOARDING_POLICY", "expression": "true", "description": "local policy proof"},
+    {"action": "HELM_ONBOARDING_ALLOW", "expression": "true", "description": "safe allow proof"}
+  ]
+}
+`
+
+var errQuickstartOwnershipMarkerMissing = errors.New("quickstart ownership marker is missing")
 
 func printQuickstartUsage(stdout io.Writer) {
 	fmt.Fprintln(stdout, "Usage: helm-ai-kernel quickstart [--addr ADDR] [--port PORT] [--data-dir DIR] [--profile PROFILE] [--console --console-port PORT --no-open] [--offline] [--json] [--dry-run]")
@@ -459,7 +485,7 @@ func validateQuickstartResetTarget(opts quickstartOptions) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("refusing to reset non-directory target %q", target)
 	}
-	if err := validateQuickstartOwnershipMarker(target); err != nil {
+	if _, err := validateQuickstartDataDirOwnership(target); err != nil {
 		return "", fmt.Errorf("refusing to reset unmarked target %q; preserve it or initialize a new quickstart directory: %w", target, err)
 	}
 	return target, nil
@@ -508,10 +534,10 @@ func isPathSameOrAncestor(target, protected string) bool {
 }
 
 // ensureQuickstartDataDirOwnership creates and marks only a directory that
-// this invocation created. An existing directory must already carry the exact
-// marker, so normal startup cannot turn unrelated files into resettable state.
+// this invocation created or an empty directory. A nonempty existing directory
+// must already carry the exact marker, so startup cannot claim unrelated state.
 func ensureQuickstartDataDirOwnership(dataDir string) error {
-	info, err := os.Lstat(dataDir)
+	_, err := os.Lstat(dataDir)
 	if os.IsNotExist(err) {
 		if err := os.MkdirAll(filepath.Dir(dataDir), 0750); err != nil {
 			return fmt.Errorf("create quickstart parent directory: %w", err)
@@ -521,25 +547,74 @@ func ensureQuickstartDataDirOwnership(dataDir string) error {
 		} else if !os.IsExist(err) {
 			return fmt.Errorf("create quickstart data directory: %w", err)
 		}
-		info, err = os.Lstat(dataDir)
+		_, err = os.Lstat(dataDir)
 	}
 	if err != nil {
 		return fmt.Errorf("inspect quickstart data directory %q: %w", dataDir, err)
 	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return fmt.Errorf("refusing non-directory quickstart data target %q", dataDir)
+	legacy, empty, err := validateExistingQuickstartDataDirOwnership(dataDir)
+	if err != nil {
+		return err
 	}
-	if err := validateQuickstartOwnershipMarker(dataDir); err != nil {
-		return fmt.Errorf("refusing to initialize existing data directory %q without a valid HELM quickstart ownership marker: %w", dataDir, err)
+	if legacy || empty {
+		// v0.7 quickstart predates the explicit marker. Its complete, static
+		// layout is a migration proof. An empty directory has no foreign state
+		// to overwrite, so it is safe to claim for the first run.
+		if err := writeQuickstartOwnershipMarker(dataDir); err != nil {
+			return fmt.Errorf("write quickstart ownership marker: %w", err)
+		}
 	}
 	return nil
+}
+
+// validateExistingQuickstartDataDirOwnership checks the same proof required
+// by normal initialization without writing a marker. It is used by previews
+// so their successful plan is actually applicable. Empty reports that the
+// directory is safe to claim because it contains no foreign state.
+func validateExistingQuickstartDataDirOwnership(dataDir string) (legacy bool, empty bool, err error) {
+	info, err := os.Lstat(dataDir)
+	if err != nil {
+		return false, false, fmt.Errorf("inspect quickstart data directory %q: %w", dataDir, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return false, false, fmt.Errorf("refusing non-directory quickstart data target %q", dataDir)
+	}
+	legacy, err = validateQuickstartDataDirOwnership(dataDir)
+	if err == nil {
+		return legacy, false, nil
+	}
+	entries, readErr := os.ReadDir(dataDir)
+	if readErr != nil {
+		return false, false, fmt.Errorf("inspect quickstart data directory %q: %w", dataDir, readErr)
+	}
+	if len(entries) == 0 {
+		return false, true, nil
+	}
+	return false, false, fmt.Errorf("refusing to initialize existing data directory %q without a valid HELM quickstart ownership marker: %w", dataDir, err)
+}
+
+// validateQuickstartDataDirOwnership accepts either the current marker or the
+// complete read-only v0.7 quickstart layout. A malformed marker never falls
+// back to legacy detection, so it cannot be replaced by a newly trusted one.
+func validateQuickstartDataDirOwnership(dataDir string) (legacy bool, err error) {
+	err = validateQuickstartOwnershipMarker(dataDir)
+	if err == nil {
+		return false, nil
+	}
+	if !errors.Is(err, errQuickstartOwnershipMarkerMissing) {
+		return false, err
+	}
+	if err := validateLegacyQuickstartDataDir(dataDir); err != nil {
+		return false, fmt.Errorf("legacy quickstart layout is not a complete ownership proof: %w", err)
+	}
+	return true, nil
 }
 
 func validateQuickstartOwnershipMarker(dataDir string) error {
 	markerPath := filepath.Join(dataDir, quickstartOwnershipMarker)
 	info, err := os.Lstat(markerPath)
 	if os.IsNotExist(err) {
-		return errors.New("quickstart ownership marker is missing")
+		return errQuickstartOwnershipMarkerMissing
 	}
 	if err != nil {
 		return fmt.Errorf("inspect quickstart ownership marker: %w", err)
@@ -553,6 +628,171 @@ func validateQuickstartOwnershipMarker(dataDir string) error {
 	}
 	if string(marker) != quickstartOwnershipMarkerContents {
 		return errors.New("quickstart ownership marker is invalid")
+	}
+	return nil
+}
+
+// validateLegacyQuickstartDataDir recognizes only the exact state generated
+// by the v0.7 local quickstart. It is intentionally stricter than normal
+// startup because its success permits migration (and explicit reset).
+func validateLegacyQuickstartDataDir(dataDir string) error {
+	if err := validateLegacyQuickstartEntries(dataDir, map[string]bool{
+		"artifacts": true, "evidence": true, "helm.db": true, "helm.db-journal": true,
+		"helm.db-shm": true, "helm.db-wal": true, "quickstart": true, "root.key": true,
+		"root.mldsa65.key": true, "root.pub": true,
+	}); err != nil {
+		return err
+	}
+	for _, name := range []string{"artifacts", "evidence", "quickstart"} {
+		if err := validateLegacyQuickstartDirectory(filepath.Join(dataDir, name)); err != nil {
+			return err
+		}
+	}
+	quickstartDir := filepath.Join(dataDir, "quickstart")
+	if err := validateLegacyQuickstartEntries(quickstartDir, map[string]bool{
+		"oss_local_first_run.toml": true, "reference_packs": true,
+	}); err != nil {
+		return err
+	}
+	refDir := filepath.Join(quickstartDir, "reference_packs")
+	if err := validateLegacyQuickstartDirectory(refDir); err != nil {
+		return err
+	}
+	if err := validateLegacyQuickstartEntries(refDir, map[string]bool{"oss_local_first_run.v1.json": true}); err != nil {
+		return err
+	}
+	if err := validateLegacyQuickstartSQLite(filepath.Join(dataDir, "helm.db")); err != nil {
+		return err
+	}
+	if err := validateLegacyQuickstartRootKey(dataDir); err != nil {
+		return err
+	}
+	policyPath := filepath.Join(quickstartDir, "oss_local_first_run.toml")
+	if err := validateLegacyQuickstartRegularFile(policyPath, true); err != nil {
+		return err
+	}
+	policy, err := loadServePolicy(policyPath)
+	if err != nil {
+		return fmt.Errorf("read legacy quickstart policy: %w", err)
+	}
+	if policy.Name != "oss_local_first_run" || policy.Profile != "oss_core" || policy.ReferencePack != "./reference_packs/oss_local_first_run.v1.json" || policy.Receipts.Store != "sqlite" || policy.Receipts.Path != "../helm.db" {
+		return errors.New("legacy quickstart policy does not match the v0.7 local profile")
+	}
+	if ip := net.ParseIP(policy.Server.Bind); ip == nil || !ip.IsLoopback() {
+		return errors.New("legacy quickstart policy must use a loopback server bind")
+	}
+	refPath := filepath.Join(refDir, "oss_local_first_run.v1.json")
+	if err := validateLegacyQuickstartRegularFile(refPath, true); err != nil {
+		return err
+	}
+	ref, err := os.ReadFile(refPath)
+	if err != nil {
+		return fmt.Errorf("read legacy quickstart reference pack: %w", err)
+	}
+	if string(ref) != quickstartReferencePackContents {
+		return errors.New("legacy quickstart reference pack does not match the v0.7 local profile")
+	}
+	if err := validateOptionalLegacyQuickstartPrivateFile(filepath.Join(dataDir, "root.mldsa65.key")); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateLegacyQuickstartEntries(dir string, allowed map[string]bool) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("read legacy quickstart directory %q: %w", dir, err)
+	}
+	for _, entry := range entries {
+		if !allowed[entry.Name()] {
+			return fmt.Errorf("legacy quickstart directory %q contains unexpected entry %q", dir, entry.Name())
+		}
+	}
+	return nil
+}
+
+func validateLegacyQuickstartDirectory(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("inspect legacy quickstart directory %q: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("legacy quickstart path %q must be a directory, not a symlink or special file", path)
+	}
+	return nil
+}
+
+func validateLegacyQuickstartRegularFile(path string, private bool) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("inspect legacy quickstart file %q: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return fmt.Errorf("legacy quickstart path %q must be a regular file, not a symlink or special file", path)
+	}
+	if private && info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("legacy quickstart file %q must not be readable by group or others", path)
+	}
+	return nil
+}
+
+func validateOptionalLegacyQuickstartPrivateFile(path string) error {
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return nil
+	}
+	return validateLegacyQuickstartRegularFile(path, true)
+}
+
+func validateLegacyQuickstartSQLite(path string) error {
+	if err := validateLegacyQuickstartRegularFile(path, false); err != nil {
+		return err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open legacy quickstart sqlite store: %w", err)
+	}
+	defer file.Close()
+	header := make([]byte, len(quickstartSQLiteHeader))
+	if _, err := io.ReadFull(file, header); err != nil {
+		return fmt.Errorf("read legacy quickstart sqlite header: %w", err)
+	}
+	if string(header) != quickstartSQLiteHeader {
+		return errors.New("legacy quickstart helm.db is not a SQLite database")
+	}
+	return nil
+}
+
+func validateLegacyQuickstartRootKey(dataDir string) error {
+	keyPath := filepath.Join(dataDir, "root.key")
+	if err := validateLegacyQuickstartRegularFile(keyPath, true); err != nil {
+		return err
+	}
+	key, err := os.ReadFile(keyPath)
+	if err != nil {
+		return fmt.Errorf("read legacy quickstart root key: %w", err)
+	}
+	seed, err := hex.DecodeString(strings.TrimSpace(string(key)))
+	if err != nil || len(seed) != ed25519.SeedSize {
+		return errors.New("legacy quickstart root key is not an Ed25519 seed")
+	}
+	pubPath := filepath.Join(dataDir, "root.pub")
+	if _, err := os.Lstat(pubPath); os.IsNotExist(err) {
+		return nil // v0.7 logged but did not fail if writing root.pub failed.
+	}
+	if err := validateLegacyQuickstartRegularFile(pubPath, false); err != nil {
+		return err
+	}
+	pub, err := os.ReadFile(pubPath)
+	if err != nil {
+		return fmt.Errorf("read legacy quickstart root public key: %w", err)
+	}
+	decoded, err := hex.DecodeString(strings.TrimSpace(string(pub)))
+	if err != nil || len(decoded) != ed25519.PublicKeySize {
+		return errors.New("legacy quickstart root public key is invalid")
+	}
+	expected := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	if subtle.ConstantTimeCompare(expected, decoded) != 1 {
+		return errors.New("legacy quickstart root key pair does not match")
 	}
 	return nil
 }
@@ -610,18 +850,7 @@ func ensureQuickstartPolicy(opts quickstartOptions) (string, error) {
 	}
 	refPath := filepath.Join(refDir, "oss_local_first_run.v1.json")
 	if _, err := os.Stat(refPath); os.IsNotExist(err) {
-		ref := `{
-  "pack_id": "oss-local-first-run",
-  "label": "OSS Local First Run",
-  "version": 1,
-  "runtime_actions": [
-    {"action": "HELM_ONBOARDING_HEALTH", "expression": "true", "description": "local health proof"},
-    {"action": "HELM_ONBOARDING_POLICY", "expression": "true", "description": "local policy proof"},
-    {"action": "HELM_ONBOARDING_ALLOW", "expression": "true", "description": "safe allow proof"}
-  ]
-}
-`
-		if err := os.WriteFile(refPath, []byte(ref), 0600); err != nil {
+		if err := os.WriteFile(refPath, []byte(quickstartReferencePackContents), 0600); err != nil {
 			return "", fmt.Errorf("write quickstart reference pack: %w", err)
 		}
 	}

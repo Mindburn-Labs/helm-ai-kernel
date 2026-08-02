@@ -47,6 +47,8 @@ type CheckResult struct {
 	Suggestion string      `json:"suggestion,omitempty"`
 }
 
+const doctorOnboardingSuggestion = "Run: helm-ai-kernel setup --quickstart --profile mcp --yes"
+
 // doctorSummary is the JSON-serializable summary.
 type doctorSummary struct {
 	Pass int `json:"pass"`
@@ -264,9 +266,12 @@ func failColor(n int) string {
 // Individual checks
 // ---------------------------------------------------------------------------
 
-// resolveDataDir returns the data directory, honoring HELM_DATA_DIR.
+// resolveDataDir returns the Quickstart data directory, honoring HELM_DATA_DIR.
 func resolveDataDir() string {
 	if d := os.Getenv("HELM_DATA_DIR"); d != "" {
+		return d
+	}
+	if d := defaultQuickstartDataDir(); d != "" {
 		return d
 	}
 	return "data"
@@ -319,7 +324,7 @@ func checkCryptoKeys(verbose bool) CheckResult {
 
 	r.Status = statusFail
 	r.Message = "No keypair found"
-	r.Suggestion = "Run: helm-ai-kernel init"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 
@@ -346,7 +351,7 @@ func checkDataDirectory(verbose bool) CheckResult {
 		r.Status = statusFail
 		r.Message = "Data directory missing"
 		r.Detail = dataDir
-		r.Suggestion = "Run: helm-ai-kernel init"
+		r.Suggestion = doctorOnboardingSuggestion
 		return r
 	}
 	if !info.IsDir() {
@@ -390,7 +395,10 @@ func checkConfig(verbose bool) CheckResult {
 		return r
 	}
 
-	for _, candidate := range []string{"helm.yaml", "helm.yml", ".helm.yaml"} {
+	for _, candidate := range []string{
+		filepath.Join(resolveDataDir(), "quickstart", "oss_local_first_run.toml"),
+		"helm.yaml", "helm.yml", ".helm.yaml",
+	} {
 		if _, err := os.Stat(candidate); err == nil {
 			r.Status = statusPass
 			r.Message = fmt.Sprintf("Loaded from %s", candidate)
@@ -401,7 +409,7 @@ func checkConfig(verbose bool) CheckResult {
 
 	r.Status = statusWarn
 	r.Message = "No config file found, using defaults"
-	r.Suggestion = "Run: helm-ai-kernel init"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 
@@ -429,7 +437,7 @@ func checkDatabase(verbose bool) CheckResult {
 
 	r.Status = statusFail
 	r.Message = "Database not found"
-	r.Suggestion = "Run: helm-ai-kernel init"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 
@@ -438,6 +446,8 @@ func checkPolicyBundles(verbose bool) CheckResult {
 
 	policiesDirs := []string{
 		filepath.Join(resolveDataDir(), "policies"),
+		filepath.Join(resolveDataDir(), "quickstart"),
+		filepath.Join(resolveDataDir(), "quickstart", "reference_packs"),
 		"packs",
 		"policies",
 	}
@@ -456,6 +466,7 @@ func checkPolicyBundles(verbose bool) CheckResult {
 			name := entry.Name()
 			if strings.HasSuffix(name, ".yaml") ||
 				strings.HasSuffix(name, ".yml") ||
+				strings.HasSuffix(name, ".toml") ||
 				strings.HasSuffix(name, ".json") ||
 				strings.HasSuffix(name, ".wasm") ||
 				strings.HasSuffix(name, ".cel") ||
@@ -477,7 +488,7 @@ func checkPolicyBundles(verbose bool) CheckResult {
 
 	r.Status = statusWarn
 	r.Message = "No policy bundles found -- all actions will use default policy"
-	r.Suggestion = "Add policy files to data/policies/ or packs/"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 
@@ -503,7 +514,7 @@ func checkEvidenceStore(verbose bool) CheckResult {
 	r.Status = statusWarn
 	r.Message = "Evidence directory missing"
 	r.Detail = filepath.Join(dataDir, "evidence")
-	r.Suggestion = "Run: helm-ai-kernel init"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 

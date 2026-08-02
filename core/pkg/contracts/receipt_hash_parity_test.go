@@ -148,3 +148,42 @@ func TestCanonicalReceiptHash_Parity(t *testing.T) {
 	t.Logf("TV4 (nested metadata):   %s", hash4)
 	t.Logf("TV5 (empty strings):     %s", hash5)
 }
+
+func TestReceiptChainHashBypassesV5TransportSerialization(t *testing.T) {
+	// A local defined type has the historical tags but no MarshalJSON method.
+	// It is the pre-transport-hardening canonical envelope used by old chain
+	// links, including legacy receipts.
+	type historicalReceipt Receipt
+	for name, receipt := range map[string]*Receipt{
+		"legacy": {
+			ReceiptID:    "rcpt-legacy-chain",
+			DecisionID:   "dec-legacy-chain",
+			EffectID:     "effect-legacy-chain",
+			Status:       "DENY",
+			ExecutorID:   "legacy-agent",
+			LamportClock: 1,
+		},
+		"v5": {
+			ReceiptID:        "rcpt-v5-chain",
+			DecisionID:       "dec-v5-chain",
+			EffectID:         "effect-v5-chain",
+			Status:           "DENY",
+			SignatureVersion: ReceiptSignatureV5,
+			LamportClock:     1,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			want, err := canonicalize.CanonicalHash((*historicalReceipt)(receipt))
+			if err != nil {
+				t.Fatalf("hash historical receipt envelope: %v", err)
+			}
+			got, err := ReceiptChainHash(receipt)
+			if err != nil {
+				t.Fatalf("hash receipt chain: %v", err)
+			}
+			if got != want {
+				t.Fatalf("chain hash changed with transport serialization: got %s, want %s", got, want)
+			}
+		})
+	}
+}

@@ -57,7 +57,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("CLOSED)", homebrew)
         self.assertIn("Timed out waiting for Homebrew PR", homebrew)
 
-    def test_core_release_does_not_depend_on_console_sidecar(self) -> None:
+    def test_release_creation_requires_prebuilt_console_assets(self) -> None:
         binaries = self.job("binaries")
         self.assertIn("needs: [validate, deployment-smoke, kind-smoke, release-smoke]", binaries)
         self.assertNotIn("console-local-sidecar", binaries)
@@ -68,22 +68,45 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("console-local-sidecar", reproducibility)
 
         github_release = self.job("github-release")
-        self.assertNotIn("console-local-sidecar", github_release)
-        self.assertNotIn("Require retained Console manifest bundles", github_release)
+        self.assertIn("console-release-assets", github_release)
+        self.assertNotIn("needs: console-local-sidecar", github_release)
+        self.assertIn("name: console-release-assets", github_release)
+        self.assertNotIn("console-release-assets/*", github_release)
+        for asset in (
+            "console-release-assets/helm-console-local-sidecar-*",
+            "console-release-assets/helm-ai-kernel-*-console.tar.gz",
+            "console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle",
+            "console-release-assets/CONSOLE-SHA256SUMS.txt",
+            "console-release-assets/CONSOLE-SHA256SUMS.txt.cosign.bundle",
+        ):
+            self.assertIn(asset, github_release)
 
-    def test_console_attachment_is_optional_and_checks_the_v08_asset_contract(self) -> None:
+    def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
-        self.assertIn("needs: [console-local-sidecar, github-release]", console_assets)
-        self.assertIn("always()", console_assets)
-        self.assertIn("needs.console-local-sidecar.result == 'success'", console_assets)
-        self.assertIn("needs.github-release.result == 'success'", console_assets)
+        self.assertIn("needs: console-local-sidecar", console_assets)
+        self.assertNotIn("github-release", console_assets)
+        self.assertNotIn("always()", console_assets)
         self.assertIn("make release-binaries-reproducible", console_assets)
         self.assertIn("console_local_sidecar.py stage", console_assets)
         self.assertIn("console_local_sidecar.py layout", console_assets)
+        self.assertIn("layout_input=console-layout-input", console_assets)
+        self.assertIn('cp "${assets}"/* "${layout_input}/"', console_assets)
+        self.assertIn('"${layout_input}/"', console_assets)
+        self.assertIn("repository: ${{ steps.console-pin.outputs.repository }}", console_assets)
+        self.assertIn("ref: ${{ steps.console-pin.outputs.source_sha }}", console_assets)
+        self.assertIn("token: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}", console_assets)
+        self.assertIn("npx playwright install --with-deps chromium", console_assets)
+        self.assertIn("console_layout_browser_smoke.mjs", console_assets)
+        self.assertIn("--layout console-release-assets/helm-ai-kernel-linux-amd64-console.tar.gz", console_assets)
+        self.assertLess(
+            console_assets.index("console_layout_browser_smoke.mjs"),
+            console_assets.index("Cosign keyless-sign standalone Console layouts"),
+        )
         self.assertIn("CONSOLE-SHA256SUMS.txt", console_assets)
         self.assertIn("cosign sign-blob", console_assets)
-        self.assertIn("gh release upload", console_assets)
-        self.assertIn("--only github-release-console-local-sidecar", console_assets)
+        self.assertIn("actions/upload-artifact", console_assets)
+        self.assertNotIn("gh release upload", console_assets)
+        self.assertNotIn("published", console_assets)
         self.assertIn("-name 'helm-console-local-sidecar-*'", console_assets)
         self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz'", console_assets)
         self.assertIn("-name 'helm-ai-kernel-*-console.tar.gz.cosign.bundle'", console_assets)
@@ -98,6 +121,15 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             post_release,
         )
         self.assertIn("always()", post_release)
+        self.assertIn("needs.console-release-assets.result == 'success'", post_release)
+        self.assertIn("for attempt in $(seq 1 40); do", post_release)
+        self.assertIn("--surface-timeout 10", post_release)
+        self.assertIn("Published version surfaces did not converge within the bounded retry budget.", post_release)
+        self.assertLess(
+            post_release.index("- name: Wait for published version convergence"),
+            post_release.index("- name: Check full published version status"),
+        )
+        self.assertRegex(post_release, r"- name: Check full published version status\n\s+if: always\(\)")
         self.assertRegex(post_release, r"- name: Replace release version status with full post-release status\n\s+if: always\(\)")
 
 

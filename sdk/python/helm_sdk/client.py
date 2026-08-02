@@ -18,7 +18,8 @@ from .types_gen import (
     ChatCompletionResponse,
     ConformanceRequest,
     ConformanceResult,
-    DecisionRequest,
+    EvaluateRequest,
+    EvaluateResponse,
     Receipt,
     Session,
     VerificationResult,
@@ -168,6 +169,7 @@ class HelmClient:
         api_key: Optional[str] = None,
         tenant_id: Optional[str] = None,
         timeout: float = 30.0,
+        principal_id: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
         headers: dict[str, str] = {}
@@ -175,6 +177,8 @@ class HelmClient:
             headers["Authorization"] = f"Bearer {api_key}"
         if tenant_id:
             headers["X-Helm-Tenant-ID"] = tenant_id
+        if principal_id:
+            headers["X-Helm-Principal-ID"] = principal_id
         self._client = httpx.Client(
             base_url=self.base_url,
             headers=headers,
@@ -219,10 +223,18 @@ class HelmClient:
         return result
 
     # ── Decision Evaluation ─────────────────────────
-    def evaluate_decision(self, req: Union[DecisionRequest, dict[str, Any]]) -> dict[str, Any]:
+    def evaluate_decision(self, req: EvaluateRequest) -> EvaluateResponse:
+        if not isinstance(req, EvaluateRequest):
+            raise TypeError("evaluate_decision requires an EvaluateRequest")
+        for field in ("tool", "effect_level", "session_id"):
+            value = getattr(req, field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"evaluate_decision requires a non-blank {field}")
         resp = self._client.post("/api/v1/evaluate", json=_json_body(req))
         self._check(resp)
-        return resp.json()
+        result = EvaluateResponse.from_dict(resp.json())
+        assert result is not None
+        return result
 
     def run_public_demo(self, action_id: str, args: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         resp = self._client.post(

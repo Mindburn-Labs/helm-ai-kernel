@@ -1,3 +1,4 @@
+// quantum_posture: test-only coverage of existing signature behavior; no production cryptographic control or post-quantum assurance is added.
 package crypto
 
 import (
@@ -66,7 +67,7 @@ func TestFinal_Ed25519VerifyBadKeySize(t *testing.T) {
 
 func TestFinal_SignDecision(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "ok"}
+	d := decisionForSigningTest("d1", "ALLOW", "ok")
 	if err := s.SignDecision(d); err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +78,7 @@ func TestFinal_SignDecision(t *testing.T) {
 
 func TestFinal_VerifyDecision(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "ok"}
+	d := decisionForSigningTest("d1", "ALLOW", "ok")
 	s.SignDecision(d)
 	ok, err := s.VerifyDecision(d)
 	if err != nil || !ok {
@@ -220,7 +221,7 @@ func TestFinal_ConcurrentSign(t *testing.T) {
 
 func TestFinal_DecisionRecordSignatureJSON(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "DENY", Reason: "r"}
+	d := decisionForSigningTest("d1", "DENY", "r")
 	s.SignDecision(d)
 	data, _ := json.Marshal(d)
 	var d2 contracts.DecisionRecord

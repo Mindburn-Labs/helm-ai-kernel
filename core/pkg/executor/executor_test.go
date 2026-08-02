@@ -272,6 +272,12 @@ func testEffectDigest(t *testing.T, effect *contracts.Effect) string {
 	return canonicalize.HashBytes(effectBytes)
 }
 
+func bindExecutionTestDecision(decision *contracts.DecisionRecord, resource string) {
+	decision.SubjectID = "agent:executor-test"
+	decision.Action = "EXECUTE_TOOL"
+	decision.Resource = resource
+}
+
 type testEffectDigestEnvelope struct {
 	EffectType     string                    `json:"effect_type"`
 	Params         map[string]any            `json:"params,omitempty"`
@@ -319,6 +325,7 @@ func TestSafeExecutor_Gating(t *testing.T) {
 		InputContext:      map[string]any{"session_id": "session-executor"},
 		EffectDigest:      testEffectDigest(t, effect),
 	}
+	bindExecutionTestDecision(validDec, "tool:ls")
 	// Sign the decision so it passes signature validation
 	if err := signer.SignDecision(validDec); err != nil {
 		t.Fatalf("Failed to sign decision: %v", err)
@@ -399,6 +406,7 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 			"tenant_id":  "tenant-before-mutation",
 		},
 	}
+	bindExecutionTestDecision(decision, "tool:ls")
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
@@ -452,6 +460,7 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 		EffectDigest:      testEffectDigest(t, effect),
 		InputContext:      map[string]any{"session_id": "tenant-scope-session"},
 	}
+	bindExecutionTestDecision(blockedDecision, "tool:ls")
 	if err := signer.SignDecision(blockedDecision); err != nil {
 		t.Fatal(err)
 	}
@@ -509,6 +518,7 @@ func TestSafeExecutorScopesIdempotencyToAuthenticatedTenant(t *testing.T) {
 		EffectDigest:      testEffectDigest(t, effect),
 		InputContext:      map[string]any{"session_id": "tenant-idempotency-session"},
 	}
+	bindExecutionTestDecision(decision, "tool:ls")
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
@@ -568,6 +578,7 @@ func TestSafeExecutorTenantQualifiedReceiptIdentityAvoidsCollisionAndRetriesIdem
 		EffectDigest:      testEffectDigest(t, effect),
 		InputContext:      map[string]any{"session_id": "shared-session"},
 	}
+	bindExecutionTestDecision(decision, "tool:ls")
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
@@ -628,6 +639,7 @@ func TestSafeExecutorRejectsAuthenticatedUnscopedCausalStoreBeforeDispatch(t *te
 		EffectDigest:      testEffectDigest(t, effect),
 		InputContext:      map[string]any{"session_id": "unscoped-causal-session"},
 	}
+	bindExecutionTestDecision(decision, "tool:ls")
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
@@ -676,6 +688,7 @@ func TestSafeExecutorChainsReceiptsBySignedSessionID(t *testing.T) {
 			InputContext:      map[string]any{"session_id": sessionID},
 			EffectDigest:      testEffectDigest(t, effect),
 		}
+		bindExecutionTestDecision(decision, "tool:ls")
 		if err := signer.SignDecision(decision); err != nil {
 			t.Fatalf("sign decision %s: %v", decisionID, err)
 		}
@@ -751,6 +764,7 @@ func TestSafeExecutorAllocatesConcurrentReceiptChainsAtomically(t *testing.T) {
 			InputContext:      map[string]any{"session_id": sessionID},
 			EffectDigest:      testEffectDigest(t, effect),
 		}
+		bindExecutionTestDecision(decision, "tool:ls")
 		if err := signer.SignDecision(decision); err != nil {
 			t.Fatalf("sign decision %s: %v", id, err)
 		}
@@ -840,6 +854,7 @@ func TestSafeExecutorRejectsRuntimeEffectDigestMismatch(t *testing.T) {
 		Verdict:      string(contracts.VerdictAllow),
 		EffectDigest: testEffectDigest(t, approvedEffect),
 	}
+	bindExecutionTestDecision(decision, "tool:deploy")
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
@@ -882,6 +897,7 @@ func TestSafeExecutorSafeDepGateBlocksBeforeOutboxAndDispatch(t *testing.T) {
 			}, nil
 		}))
 	decision := &contracts.DecisionRecord{ID: "dec-safedep-block", Verdict: string(contracts.VerdictAllow)}
+	bindExecutionTestDecision(decision, "tool:ls")
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
@@ -907,6 +923,7 @@ func TestSafeExecutorSafeDepGateRequired(t *testing.T) {
 		ID:      "dec-safedep-gate-required",
 		Verdict: string(contracts.VerdictAllow),
 	}
+	bindExecutionTestDecision(decision, "tool:ls")
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
@@ -942,6 +959,7 @@ func TestSafeExecutorCopiesEmergencyAuthorityToReceipt(t *testing.T) {
 		}))
 	effect := &contracts.Effect{EffectID: "eff-safedep-allow", Params: map[string]any{"tool_name": "ls"}}
 	decision := &contracts.DecisionRecord{ID: "dec-safedep-allow", Verdict: string(contracts.VerdictAllow), EffectDigest: testEffectDigest(t, effect)}
+	bindExecutionTestDecision(decision, "tool:ls")
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
@@ -978,6 +996,7 @@ func TestSafeExecutor_WithClock(t *testing.T) {
 		Verdict:      string(contracts.VerdictAllow),
 		EffectDigest: testEffectDigest(t, effect),
 	}
+	bindExecutionTestDecision(dec, "tool:ls")
 	if err := signer.SignDecision(dec); err != nil {
 		t.Fatalf("Failed to sign decision: %v", err)
 	}
@@ -1016,6 +1035,7 @@ func TestSafeExecutor_ExpiredIntent(t *testing.T) {
 		Verdict:      string(contracts.VerdictAllow),
 		EffectDigest: testEffectDigest(t, effect),
 	}
+	bindExecutionTestDecision(dec, "tool:ls")
 	if err := signer.SignDecision(dec); err != nil {
 		t.Fatalf("Failed to sign decision: %v", err)
 	}

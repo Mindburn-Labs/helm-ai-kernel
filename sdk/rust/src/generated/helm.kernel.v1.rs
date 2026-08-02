@@ -42,13 +42,26 @@ pub struct DecisionRecord {
     /// evidence. Optional; outside the decision signature until HELM-303.
     #[prost(string, tag = "13")]
     pub correlation_id: ::prost::alloc::string::String,
-    /// HELM-303 decision.v2 signing envelope fields.
+    /// HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
     #[prost(string, tag = "14")]
     pub signature_version: ::prost::alloc::string::String,
     #[prost(string, tag = "15")]
     pub phenotype_hash: ::prost::alloc::string::String,
     #[prost(string, tag = "16")]
     pub policy_content_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "17")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "18")]
+    pub action: ::prost::alloc::string::String,
+    #[prost(string, tag = "19")]
+    pub resource: ::prost::alloc::string::String,
+    #[prost(string, tag = "20")]
+    pub signature_type: ::prost::alloc::string::String,
+    /// Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+    /// this when reconstructing a signed decision; reason_code above remains the
+    /// legacy closed enum for backward compatibility.
+    #[prost(string, tag = "21")]
+    pub reason_code_text: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizedExecutionIntent {

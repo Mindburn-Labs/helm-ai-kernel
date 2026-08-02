@@ -812,6 +812,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			decision := &contracts.DecisionRecord{
 				ID:            newDecisionID(),
 				Timestamp:     g.clock.Now(),
+				SubjectID:     req.Principal,
+				Action:        req.Action,
+				Resource:      req.Resource,
 				Verdict:       string(contracts.VerdictDeny),
 				ReasonCode:    string(contracts.ReasonPolicyNotReady),
 				Reason:        fmt.Sprintf("%s: no active policy snapshot for %s", contracts.ReasonPolicyNotReady, scope.Key()),
@@ -827,6 +830,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			decision := &contracts.DecisionRecord{
 				ID:            newDecisionID(),
 				Timestamp:     g.clock.Now(),
+				SubjectID:     req.Principal,
+				Action:        req.Action,
+				Resource:      req.Resource,
 				Verdict:       string(contracts.VerdictDeny),
 				ReasonCode:    string(contracts.ReasonPolicyNotReady),
 				Reason:        fmt.Sprintf("%s: policy snapshot for %s is %s", contracts.ReasonPolicyNotReady, scope.Key(), snapshot.Validation.Status),
@@ -866,6 +872,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				decision := &contracts.DecisionRecord{
 					ID:            newDecisionID(),
 					Timestamp:     g.clock.Now(),
+					SubjectID:     req.Principal,
+					Action:        req.Action,
+					Resource:      req.Resource,
 					Verdict:       string(contracts.VerdictDeny),
 					ReasonCode:    string(classification.ReasonCode),
 					Reason:        fmt.Sprintf("%s: safe deprecation state %s blocks %s", classification.ReasonCode, classification.State, req.Action),
@@ -916,6 +925,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			decision := &contracts.DecisionRecord{
 				ID:                     newDecisionID(),
 				Timestamp:              now,
+				SubjectID:              req.Principal,
+				Action:                 req.Action,
+				Resource:               req.Resource,
 				Verdict:                string(contracts.VerdictDeny),
 				Reason:                 fmt.Sprintf("%s: trajectory risk %.4f over %d actions", contracts.ReasonSessionRiskDeny, snapshot.TrajectoryRiskScore, snapshot.RiskAccumulationWindow),
 				ReasonCode:             string(contracts.ReasonSessionRiskDeny),
@@ -1037,6 +1049,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		decision := &contracts.DecisionRecord{
 			ID:             newDecisionID(),
 			Timestamp:      g.clock.Now(),
+			SubjectID:      req.Principal,
+			Action:         req.Action,
+			Resource:       req.Resource,
 			Verdict:        string(contracts.VerdictDeny), // Default deny
 			EffectDigest:   effectDigest,
 			InputContext:   req.Context,

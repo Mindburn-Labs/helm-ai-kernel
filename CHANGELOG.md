@@ -91,6 +91,11 @@ that exact capability.
 
 ### Pending v0.8 source target
 
+- Newly issued decision signatures use `decision_record.v3`, binding the
+  evaluated subject, action, resource, `reason_code`, policy/effect hashes and
+  signer metadata. Legacy and `decision_record.v2` verification remain
+  supported. This is a source compatibility note, not a release, runtime, or
+  production claim.
 - First-party SDKs use the canonical typed `EvaluateRequest` and
   `EvaluateResponse` contract. Direct-daemon `action`/`resource` compatibility
   remains bounded and is not an SDK contract.

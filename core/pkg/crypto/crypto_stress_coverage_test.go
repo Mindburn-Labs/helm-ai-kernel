@@ -1,3 +1,4 @@
+// quantum_posture: test-only coverage of existing signature behavior; no production cryptographic control or post-quantum assurance is added.
 package crypto
 
 import (
@@ -93,7 +94,7 @@ func TestStress_KeyRing20Keys(t *testing.T) {
 		signer, _ := NewEd25519Signer(fmt.Sprintf("key-%d", i))
 		ring.AddKey(signer)
 	}
-	d := &contracts.DecisionRecord{ID: "d-1", Verdict: "ALLOW", Reason: "ok"}
+	d := decisionForSigningTest("d-1", "ALLOW", "ok")
 	if err := ring.SignDecision(d); err != nil {
 		t.Fatalf("sign decision: %v", err)
 	}
@@ -214,7 +215,7 @@ func TestStress_HSM10CertKeys(t *testing.T) {
 
 func TestStress_Ed25519SignDecision(t *testing.T) {
 	signer, _ := NewEd25519Signer("ed-dec")
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "ok"}
+	d := decisionForSigningTest("d1", "ALLOW", "ok")
 	if err := signer.SignDecision(d); err != nil {
 		t.Fatalf("sign decision: %v", err)
 	}
@@ -252,7 +253,7 @@ func TestStress_Ed25519SignReceipt(t *testing.T) {
 
 func TestStress_MLDSASignDecision(t *testing.T) {
 	signer, _ := NewMLDSASigner("pq-dec")
-	d := &contracts.DecisionRecord{ID: "d2", Verdict: "DENY", Reason: "blocked"}
+	d := decisionForSigningTest("d2", "DENY", "blocked")
 	if err := signer.SignDecision(d); err != nil {
 		t.Fatalf("sign decision: %v", err)
 	}
@@ -408,7 +409,7 @@ func TestStress_HSMKeyDir(t *testing.T) {
 
 func TestStress_VerifierDecision(t *testing.T) {
 	signer, _ := NewEd25519Signer("vd-key")
-	d := &contracts.DecisionRecord{ID: "d-vd", Verdict: "ALLOW", Reason: "ok"}
+	d := decisionForSigningTest("d-vd", "ALLOW", "ok")
 	_ = signer.SignDecision(d)
 	verifier, _ := NewEd25519Verifier(signer.PublicKeyBytes())
 	ok, err := verifier.VerifyDecision(d)

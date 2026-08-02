@@ -247,6 +247,42 @@ func TestIntegration_ComplianceChecker(t *testing.T) {
 	})
 }
 
+func TestSignDecisionFailsClosedWithoutRequestBinding(t *testing.T) {
+	ctx := context.Background()
+	signer, err := crypto.NewEd25519Signer("direct-signing-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph := prg.NewGraph()
+	if err := graph.AddRule("direct-sign-tool", prg.RequirementSet{ID: "direct-sign-rule", Logic: prg.AND}); err != nil {
+		t.Fatal(err)
+	}
+	g := NewGuardian(signer, graph, nil)
+	effect := &contracts.Effect{
+		EffectID:   "effect-direct-sign",
+		EffectType: "CUSTOM_TOOL",
+		Params:     map[string]interface{}{"tool_name": "direct-sign-tool"},
+	}
+
+	incomplete := &contracts.DecisionRecord{ID: "decision-incomplete"}
+	if err := g.SignDecision(ctx, incomplete, effect, nil, nil); err == nil {
+		t.Fatal("SignDecision signed a decision without subject, action, and resource")
+	}
+
+	complete := &contracts.DecisionRecord{
+		ID:        "decision-complete",
+		SubjectID: "agent:direct-sign",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "direct-sign-tool",
+	}
+	if err := g.SignDecision(ctx, complete, effect, nil, nil); err != nil {
+		t.Fatalf("SignDecision with request binding: %v", err)
+	}
+	if valid, err := signer.VerifyDecision(complete); err != nil || !valid {
+		t.Fatalf("complete direct decision did not verify: valid=%t err=%v", valid, err)
+	}
+}
+
 type mockComplianceChecker struct {
 	compliant bool
 	reason    string

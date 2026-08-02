@@ -97,8 +97,27 @@ func (c *InterceptorChain) Execute(ctx context.Context, evalCtx *EvaluationConte
 
 // signDecisionWithContext binds runtime policy details and signs a DecisionRecord using the Guardian's signer.
 func (g *Guardian) signDecisionWithContext(decision *contracts.DecisionRecord, evalCtx *EvaluationContext) error {
+	bindDecisionRequest(decision, evalCtx.Request)
 	bindRuntimePolicyDecision(decision, evalCtx.ActiveSnapshot, evalCtx.PolicyVersion)
 	return g.signer.SignDecision(decision)
+}
+
+// bindDecisionRequest fills missing signed request fields from the request
+// under evaluation. Explicitly bound values remain untouched; incomplete
+// requests fail closed at the V3 signing boundary.
+func bindDecisionRequest(decision *contracts.DecisionRecord, request DecisionRequest) {
+	if decision == nil {
+		return
+	}
+	if decision.SubjectID == "" {
+		decision.SubjectID = request.Principal
+	}
+	if decision.Action == "" {
+		decision.Action = request.Action
+	}
+	if decision.Resource == "" {
+		decision.Resource = request.Resource
+	}
 }
 
 // ── TemporalInterceptor ──

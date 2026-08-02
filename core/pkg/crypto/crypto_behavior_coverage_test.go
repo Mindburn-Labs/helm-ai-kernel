@@ -1,3 +1,4 @@
+// quantum_posture: test-only coverage of existing signature behavior; no production cryptographic control or post-quantum assurance is added.
 package crypto
 
 import (
@@ -5,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // ── Ed25519 Signer ───────────────────────────────────────────
@@ -222,7 +221,7 @@ func TestSoftHSM_UnsupportedAlgorithm(t *testing.T) {
 
 func TestEd25519_SignDecisionRoundTrip(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "ok"}
+	d := decisionForSigningTest("d1", "ALLOW", "ok")
 	if err := s.SignDecision(d); err != nil {
 		t.Fatal(err)
 	}

@@ -1,3 +1,4 @@
+// quantum_posture: test-only coverage of existing signature behavior; no production cryptographic control or post-quantum assurance is added.
 package crypto
 
 import (
@@ -68,7 +69,7 @@ func TestDeepEd25519VerifyInvalidSig(t *testing.T) {
 
 func TestDeepEd25519SignDecision(t *testing.T) {
 	signer, _ := NewEd25519Signer("key-1")
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "test"}
+	d := decisionForSigningTest("d1", "ALLOW", "test")
 	if err := signer.SignDecision(d); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func TestDeepEd25519SignDecision(t *testing.T) {
 
 func TestDeepEd25519VerifyDecisionRoundTrip(t *testing.T) {
 	signer, _ := NewEd25519Signer("key-1")
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "DENY", Reason: "test"}
+	d := decisionForSigningTest("d1", "DENY", "test")
 	signer.SignDecision(d)
 	valid, err := signer.VerifyDecision(d)
 	if err != nil || !valid {
@@ -142,7 +143,7 @@ func TestDeepMLDSASign100Messages(t *testing.T) {
 
 func TestDeepMLDSASignDecisionVerify(t *testing.T) {
 	signer, _ := NewMLDSASigner("pq-key-1")
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "test"}
+	d := decisionForSigningTest("d1", "ALLOW", "test")
 	signer.SignDecision(d)
 	valid, err := signer.VerifyDecision(d)
 	if err != nil || !valid {
@@ -205,7 +206,7 @@ func TestDeepKeyRingVerifyDecisionAfterRotation(t *testing.T) {
 	kr := NewKeyRing()
 	s1, _ := NewEd25519Signer("key-v1")
 	kr.AddKey(s1)
-	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW"}
+	d := decisionForSigningTest("d1", "ALLOW", "")
 	s1.SignDecision(d)
 	// Add new key, keep old
 	s2, _ := NewEd25519Signer("key-v2")

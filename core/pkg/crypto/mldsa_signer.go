@@ -79,7 +79,7 @@ func (s *MLDSASigner) Verify(message []byte, signature []byte) bool {
 
 // SignDecision signs a DecisionRecord using ML-DSA-65.
 func (s *MLDSASigner) SignDecision(d *contracts.DecisionRecord) error {
-	payload, err := DecisionSigningPayload(d)
+	payload, err := prepareDecisionForSigning(d, SigPrefixMLDSA65+SigSeparator+s.keyID)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,6 @@ func (s *MLDSASigner) SignDecision(d *contracts.DecisionRecord) error {
 		return err
 	}
 	d.Signature = sig
-	d.SignatureType = SigPrefixMLDSA65 + SigSeparator + s.keyID
 	return nil
 }
 

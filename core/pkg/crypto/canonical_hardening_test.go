@@ -1,8 +1,11 @@
+// quantum_posture: test-only coverage of existing signature behavior; no production cryptographic control or post-quantum assurance is added.
 package crypto
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
@@ -20,9 +23,13 @@ func TestCanonicalizeDecision_FullBinding(t *testing.T) {
 		ID:                "dec-001",
 		Verdict:           "PASS",
 		Reason:            "All checks passed",
+		ReasonCode:        "POLICY_MATCHED",
 		PhenotypeHash:     "sha256:aaaa",
 		PolicyContentHash: "sha256:bbbb",
 		EffectDigest:      "sha256:cccc",
+		SubjectID:         "agent:alice",
+		Action:            "EXECUTE_TOOL",
+		Resource:          "tool:publish",
 	}
 
 	// Sign it
@@ -46,14 +53,17 @@ func TestCanonicalizeDecision_FullBinding(t *testing.T) {
 	}{
 		{"ID", func(d *contracts.DecisionRecord) { d.ID = "dec-TAMPERED" }},
 		{"Verdict", func(d *contracts.DecisionRecord) { d.Verdict = "FAIL" }},
-		// HELM-303 preimage V2: the attested reason field is the
-		// machine-readable ReasonCode; free-text Reason left the preimage
-		// deliberately (prose is prohibited from export and must not carry
-		// the signed claim). See TestCanonicalizeDecisionV2_ReasonNotBound.
+		// V3 retains the V2 rule: ReasonCode is the signed claim and free-text
+		// Reason remains explanatory only.
 		{"ReasonCode", func(d *contracts.DecisionRecord) { d.ReasonCode = "TAMPERED_CODE" }},
 		{"PhenotypeHash", func(d *contracts.DecisionRecord) { d.PhenotypeHash = "sha256:deadbeef" }},
 		{"PolicyContentHash", func(d *contracts.DecisionRecord) { d.PolicyContentHash = "sha256:YYYY" }},
 		{"EffectDigest", func(d *contracts.DecisionRecord) { d.EffectDigest = "sha256:ZZZZ" }},
+		{"SubjectID", func(d *contracts.DecisionRecord) { d.SubjectID = "agent:bob" }},
+		{"Action", func(d *contracts.DecisionRecord) { d.Action = "DELETE" }},
+		{"Resource", func(d *contracts.DecisionRecord) { d.Resource = "tool:delete" }},
+		{"SignatureType", func(d *contracts.DecisionRecord) { d.SignatureType = "ed25519:other" }},
+		{"SignatureVersion", func(d *contracts.DecisionRecord) { d.SignatureVersion = contracts.DecisionRecordSignatureV2 }},
 	}
 
 	for _, tt := range tamperTests {
@@ -81,9 +91,12 @@ func TestCanonicalizeDecision_EmptyFields(t *testing.T) {
 	}
 
 	d := &contracts.DecisionRecord{
-		ID:      "dec-002",
-		Verdict: "DENY",
-		Reason:  "Policy violation",
+		ID:        "dec-002",
+		Verdict:   "DENY",
+		Reason:    "Policy violation",
+		SubjectID: "agent:alice",
+		Action:    "EXECUTE_TOOL",
+		Resource:  "tool:read",
 		// All other fields empty
 	}
 
@@ -97,6 +110,44 @@ func TestCanonicalizeDecision_EmptyFields(t *testing.T) {
 	}
 }
 
+func TestCanonicalizeDecisionV3MatchesJCS(t *testing.T) {
+	d := &contracts.DecisionRecord{
+		ID:                "dec-\x01-\"quoted\"",
+		Verdict:           "ALLOW",
+		ReasonCode:        "POLICY_MATCHED",
+		PhenotypeHash:     "sha256:phenotype",
+		PolicyContentHash: "sha256:policy",
+		EffectDigest:      "sha256:effect",
+		SubjectID:         "agent:alice",
+		Action:            "EXECUTE_TOOL",
+		Resource:          "tool:read",
+		SignatureType:     "ed25519:key\\one",
+	}
+	got, err := CanonicalizeDecisionV3(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := canonicalize.JCS(map[string]string{
+		"action":              d.Action,
+		"effect_digest":       d.EffectDigest,
+		"id":                  d.ID,
+		"phenotype_hash":      d.PhenotypeHash,
+		"policy_content_hash": d.PolicyContentHash,
+		"reason_code":         d.ReasonCode,
+		"resource":            d.Resource,
+		"signature_type":      d.SignatureType,
+		"signature_version":   contracts.DecisionRecordSignatureV3,
+		"subject_id":          d.SubjectID,
+		"verdict":             d.Verdict,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("V3 payload differs from JCS\n got: %s\nwant: %s", got, want)
+	}
+}
+
 // TestCanonicalizeDecisionV2_ReasonNotBound pins the HELM-303 semantics
 // change explicitly: mutating free-text Reason on a V2-signed record does NOT
 // invalidate the signature — ReasonCode is the attested claim.
@@ -105,8 +156,19 @@ func TestCanonicalizeDecisionV2_ReasonNotBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := &contracts.DecisionRecord{ID: "dec-v2", Verdict: "DENY", Reason: "human words", ReasonCode: "POLICY_DENY"}
-	if err := signer.SignDecision(d); err != nil {
+	d := &contracts.DecisionRecord{
+		ID:               "dec-v2",
+		Verdict:          "DENY",
+		Reason:           "human words",
+		ReasonCode:       "POLICY_DENY",
+		SignatureVersion: contracts.DecisionRecordSignatureV2,
+		SignatureType:    SigPrefixEd25519 + SigSeparator + "drift7-v2-key",
+	}
+	payload, err := CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Signature, err = signer.Sign(payload); err != nil {
 		t.Fatal(err)
 	}
 	if d.SignatureVersion != contracts.DecisionRecordSignatureV2 {
@@ -131,6 +193,9 @@ func TestDecisionSemanticHashIgnoresUnsignedPolicyDecisionHash(t *testing.T) {
 		PhenotypeHash:      "sha256:phenotype",
 		PolicyContentHash:  "sha256:policy",
 		EffectDigest:       "sha256:effect",
+		SubjectID:          "agent:alice",
+		Action:             "EXECUTE_TOOL",
+		Resource:           "tool:read",
 		PolicyDecisionHash: "sha256:trusted-source",
 	}
 	if err := signer.SignDecision(decision); err != nil {

@@ -69,6 +69,7 @@ func (g *Guardian) Authorize(action string, riskScore int) (*contracts.DecisionR
 		ID:         fmt.Sprintf("gdec-%d", time.Now().UnixNano()),
 		SubjectID:  "guardian",
 		Action:     action,
+		Resource:   "governance:default-risk-policy",
 		Verdict:    verdict,
 		Reason:     reason,
 		ReasonCode: reasonCode,

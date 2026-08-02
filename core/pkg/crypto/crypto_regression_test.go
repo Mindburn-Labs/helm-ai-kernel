@@ -1,3 +1,4 @@
+// quantum_posture: test-only coverage of existing signature behavior; no production cryptographic control or post-quantum assurance is added.
 package crypto
 
 import (
@@ -24,7 +25,7 @@ func TestClosing_Ed25519_SignVerify_Decision(t *testing.T) {
 	}
 	for _, verdict := range []string{"ALLOW", "DENY", "ESCALATE"} {
 		t.Run("verdict_"+verdict, func(t *testing.T) {
-			d := &contracts.DecisionRecord{ID: "d1", Verdict: verdict, Reason: "test"}
+			d := decisionForSigningTest("d1", verdict, "test")
 			if err := signer.SignDecision(d); err != nil {
 				t.Fatal(err)
 			}
@@ -98,7 +99,7 @@ func TestClosing_MLDSA_SignVerify_Decision(t *testing.T) {
 	}
 	for _, verdict := range []string{"ALLOW", "DENY", "ESCALATE"} {
 		t.Run("verdict_"+verdict, func(t *testing.T) {
-			d := &contracts.DecisionRecord{ID: "d-ml", Verdict: verdict, Reason: "pq-test"}
+			d := decisionForSigningTest("d-ml", verdict, "pq-test")
 			if err := signer.SignDecision(d); err != nil {
 				t.Fatal(err)
 			}
@@ -233,7 +234,7 @@ func TestClosing_KeyRing_SingleKey_SignVerify(t *testing.T) {
 		t.Run(op, func(t *testing.T) {
 			switch op {
 			case "Decision":
-				d := &contracts.DecisionRecord{ID: "kr-d", Verdict: "ALLOW", Reason: "ok"}
+				d := decisionForSigningTest("kr-d", "ALLOW", "ok")
 				if err := kr.SignDecision(d); err != nil {
 					t.Fatal(err)
 				}
@@ -272,7 +273,7 @@ func TestClosing_KeyRing_MultiKey_VerifyAll(t *testing.T) {
 	}
 	for _, label := range []string{"key-0", "key-1", "key-2"} {
 		t.Run(label, func(t *testing.T) {
-			d := &contracts.DecisionRecord{ID: "mk-" + label, Verdict: "DENY", Reason: "multi"}
+			d := decisionForSigningTest("mk-"+label, "DENY", "multi")
 			if err := kr.SignDecision(d); err != nil {
 				t.Fatal(err)
 			}
@@ -705,7 +706,7 @@ func TestClosing_SigPrefix_Ed25519_DecisionFormat(t *testing.T) {
 	for _, kid := range []string{"key-1", "key-2", "key-3"} {
 		t.Run(kid, func(t *testing.T) {
 			s, _ := NewEd25519Signer(kid)
-			d := &contracts.DecisionRecord{ID: "fmt-d", Verdict: "ALLOW", Reason: "test"}
+			d := decisionForSigningTest("fmt-d", "ALLOW", "test")
 			_ = s.SignDecision(d)
 			expected := SigPrefixEd25519 + SigSeparator + kid
 			if d.SignatureType != expected {
@@ -719,7 +720,7 @@ func TestClosing_SigPrefix_MLDSA_DecisionFormat(t *testing.T) {
 	for _, kid := range []string{"ml-1", "ml-2", "ml-3"} {
 		t.Run(kid, func(t *testing.T) {
 			s, _ := NewMLDSASigner(kid)
-			d := &contracts.DecisionRecord{ID: "fmt-d-ml", Verdict: "DENY", Reason: "pq"}
+			d := decisionForSigningTest("fmt-d-ml", "DENY", "pq")
 			_ = s.SignDecision(d)
 			expected := SigPrefixMLDSA65 + SigSeparator + kid
 			if d.SignatureType != expected {
@@ -790,7 +791,7 @@ func TestClosing_Ed25519Verifier_DecisionVerify(t *testing.T) {
 	verifier, _ := NewEd25519Verifier(signer.PublicKeyBytes())
 	for _, verdict := range []string{"ALLOW", "DENY", "ESCALATE"} {
 		t.Run(verdict, func(t *testing.T) {
-			d := &contracts.DecisionRecord{ID: "vd-" + verdict, Verdict: verdict, Reason: "test"}
+			d := decisionForSigningTest("vd-"+verdict, verdict, "test")
 			_ = signer.SignDecision(d)
 			ok, err := verifier.VerifyDecision(d)
 			if err != nil || !ok {

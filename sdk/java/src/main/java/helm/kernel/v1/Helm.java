@@ -1495,7 +1495,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
 
     /**
      * <pre>
-     * HELM-303 decision.v2 signing envelope fields.
+     * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
      * </pre>
      *
      * <code>string signature_version = 14;</code>
@@ -1504,7 +1504,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
     java.lang.String getSignatureVersion();
     /**
      * <pre>
-     * HELM-303 decision.v2 signing envelope fields.
+     * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
      * </pre>
      *
      * <code>string signature_version = 14;</code>
@@ -1536,6 +1536,78 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
      */
     com.google.protobuf.ByteString
         getPolicyContentHashBytes();
+
+    /**
+     * <code>string subject_id = 17;</code>
+     * @return The subjectId.
+     */
+    java.lang.String getSubjectId();
+    /**
+     * <code>string subject_id = 17;</code>
+     * @return The bytes for subjectId.
+     */
+    com.google.protobuf.ByteString
+        getSubjectIdBytes();
+
+    /**
+     * <code>string action = 18;</code>
+     * @return The action.
+     */
+    java.lang.String getAction();
+    /**
+     * <code>string action = 18;</code>
+     * @return The bytes for action.
+     */
+    com.google.protobuf.ByteString
+        getActionBytes();
+
+    /**
+     * <code>string resource = 19;</code>
+     * @return The resource.
+     */
+    java.lang.String getResource();
+    /**
+     * <code>string resource = 19;</code>
+     * @return The bytes for resource.
+     */
+    com.google.protobuf.ByteString
+        getResourceBytes();
+
+    /**
+     * <code>string signature_type = 20;</code>
+     * @return The signatureType.
+     */
+    java.lang.String getSignatureType();
+    /**
+     * <code>string signature_type = 20;</code>
+     * @return The bytes for signatureType.
+     */
+    com.google.protobuf.ByteString
+        getSignatureTypeBytes();
+
+    /**
+     * <pre>
+     * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+     * this when reconstructing a signed decision; reason_code above remains the
+     * legacy closed enum for backward compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 21;</code>
+     * @return The reasonCodeText.
+     */
+    java.lang.String getReasonCodeText();
+    /**
+     * <pre>
+     * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+     * this when reconstructing a signed decision; reason_code above remains the
+     * legacy closed enum for backward compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 21;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    com.google.protobuf.ByteString
+        getReasonCodeTextBytes();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.DecisionRecord}
@@ -1574,6 +1646,11 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       signatureVersion_ = "";
       phenotypeHash_ = "";
       policyContentHash_ = "";
+      subjectId_ = "";
+      action_ = "";
+      resource_ = "";
+      signatureType_ = "";
+      reasonCodeText_ = "";
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -2036,7 +2113,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
     private volatile java.lang.Object signatureVersion_ = "";
     /**
      * <pre>
-     * HELM-303 decision.v2 signing envelope fields.
+     * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
      * </pre>
      *
      * <code>string signature_version = 14;</code>
@@ -2057,7 +2134,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
     }
     /**
      * <pre>
-     * HELM-303 decision.v2 signing envelope fields.
+     * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
      * </pre>
      *
      * <code>string signature_version = 14;</code>
@@ -2156,6 +2233,213 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       }
     }
 
+    public static final int SUBJECT_ID_FIELD_NUMBER = 17;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object subjectId_ = "";
+    /**
+     * <code>string subject_id = 17;</code>
+     * @return The subjectId.
+     */
+    @java.lang.Override
+    public java.lang.String getSubjectId() {
+      java.lang.Object ref = subjectId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        subjectId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string subject_id = 17;</code>
+     * @return The bytes for subjectId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSubjectIdBytes() {
+      java.lang.Object ref = subjectId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        subjectId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int ACTION_FIELD_NUMBER = 18;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object action_ = "";
+    /**
+     * <code>string action = 18;</code>
+     * @return The action.
+     */
+    @java.lang.Override
+    public java.lang.String getAction() {
+      java.lang.Object ref = action_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        action_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string action = 18;</code>
+     * @return The bytes for action.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getActionBytes() {
+      java.lang.Object ref = action_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        action_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int RESOURCE_FIELD_NUMBER = 19;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object resource_ = "";
+    /**
+     * <code>string resource = 19;</code>
+     * @return The resource.
+     */
+    @java.lang.Override
+    public java.lang.String getResource() {
+      java.lang.Object ref = resource_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        resource_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string resource = 19;</code>
+     * @return The bytes for resource.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getResourceBytes() {
+      java.lang.Object ref = resource_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        resource_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int SIGNATURE_TYPE_FIELD_NUMBER = 20;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object signatureType_ = "";
+    /**
+     * <code>string signature_type = 20;</code>
+     * @return The signatureType.
+     */
+    @java.lang.Override
+    public java.lang.String getSignatureType() {
+      java.lang.Object ref = signatureType_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        signatureType_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string signature_type = 20;</code>
+     * @return The bytes for signatureType.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSignatureTypeBytes() {
+      java.lang.Object ref = signatureType_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        signatureType_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int REASON_CODE_TEXT_FIELD_NUMBER = 21;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object reasonCodeText_ = "";
+    /**
+     * <pre>
+     * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+     * this when reconstructing a signed decision; reason_code above remains the
+     * legacy closed enum for backward compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 21;</code>
+     * @return The reasonCodeText.
+     */
+    @java.lang.Override
+    public java.lang.String getReasonCodeText() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        reasonCodeText_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+     * this when reconstructing a signed decision; reason_code above remains the
+     * legacy closed enum for backward compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 21;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getReasonCodeTextBytes() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        reasonCodeText_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -2218,6 +2502,21 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(policyContentHash_)) {
         com.google.protobuf.GeneratedMessage.writeString(output, 16, policyContentHash_);
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(subjectId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 17, subjectId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(action_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 18, action_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(resource_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 19, resource_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureType_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 20, signatureType_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 21, reasonCodeText_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -2279,6 +2578,21 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(policyContentHash_)) {
         size += com.google.protobuf.GeneratedMessage.computeStringSize(16, policyContentHash_);
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(subjectId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(17, subjectId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(action_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(18, action_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(resource_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(19, resource_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureType_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(20, signatureType_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(21, reasonCodeText_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -2327,6 +2641,16 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           .equals(other.getPhenotypeHash())) return false;
       if (!getPolicyContentHash()
           .equals(other.getPolicyContentHash())) return false;
+      if (!getSubjectId()
+          .equals(other.getSubjectId())) return false;
+      if (!getAction()
+          .equals(other.getAction())) return false;
+      if (!getResource()
+          .equals(other.getResource())) return false;
+      if (!getSignatureType()
+          .equals(other.getSignatureType())) return false;
+      if (!getReasonCodeText()
+          .equals(other.getReasonCodeText())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -2372,6 +2696,16 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       hash = (53 * hash) + getPhenotypeHash().hashCode();
       hash = (37 * hash) + POLICY_CONTENT_HASH_FIELD_NUMBER;
       hash = (53 * hash) + getPolicyContentHash().hashCode();
+      hash = (37 * hash) + SUBJECT_ID_FIELD_NUMBER;
+      hash = (53 * hash) + getSubjectId().hashCode();
+      hash = (37 * hash) + ACTION_FIELD_NUMBER;
+      hash = (53 * hash) + getAction().hashCode();
+      hash = (37 * hash) + RESOURCE_FIELD_NUMBER;
+      hash = (53 * hash) + getResource().hashCode();
+      hash = (37 * hash) + SIGNATURE_TYPE_FIELD_NUMBER;
+      hash = (53 * hash) + getSignatureType().hashCode();
+      hash = (37 * hash) + REASON_CODE_TEXT_FIELD_NUMBER;
+      hash = (53 * hash) + getReasonCodeText().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -2529,6 +2863,11 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         signatureVersion_ = "";
         phenotypeHash_ = "";
         policyContentHash_ = "";
+        subjectId_ = "";
+        action_ = "";
+        resource_ = "";
+        signatureType_ = "";
+        reasonCodeText_ = "";
         return this;
       }
 
@@ -2613,6 +2952,21 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         }
         if (((from_bitField0_ & 0x00008000) != 0)) {
           result.policyContentHash_ = policyContentHash_;
+        }
+        if (((from_bitField0_ & 0x00010000) != 0)) {
+          result.subjectId_ = subjectId_;
+        }
+        if (((from_bitField0_ & 0x00020000) != 0)) {
+          result.action_ = action_;
+        }
+        if (((from_bitField0_ & 0x00040000) != 0)) {
+          result.resource_ = resource_;
+        }
+        if (((from_bitField0_ & 0x00080000) != 0)) {
+          result.signatureType_ = signatureType_;
+        }
+        if (((from_bitField0_ & 0x00100000) != 0)) {
+          result.reasonCodeText_ = reasonCodeText_;
         }
         result.bitField0_ |= to_bitField0_;
       }
@@ -2699,6 +3053,31 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         if (!other.getPolicyContentHash().isEmpty()) {
           policyContentHash_ = other.policyContentHash_;
           bitField0_ |= 0x00008000;
+          onChanged();
+        }
+        if (!other.getSubjectId().isEmpty()) {
+          subjectId_ = other.subjectId_;
+          bitField0_ |= 0x00010000;
+          onChanged();
+        }
+        if (!other.getAction().isEmpty()) {
+          action_ = other.action_;
+          bitField0_ |= 0x00020000;
+          onChanged();
+        }
+        if (!other.getResource().isEmpty()) {
+          resource_ = other.resource_;
+          bitField0_ |= 0x00040000;
+          onChanged();
+        }
+        if (!other.getSignatureType().isEmpty()) {
+          signatureType_ = other.signatureType_;
+          bitField0_ |= 0x00080000;
+          onChanged();
+        }
+        if (!other.getReasonCodeText().isEmpty()) {
+          reasonCodeText_ = other.reasonCodeText_;
+          bitField0_ |= 0x00100000;
           onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
@@ -2809,6 +3188,31 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
                 bitField0_ |= 0x00008000;
                 break;
               } // case 130
+              case 138: {
+                subjectId_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00010000;
+                break;
+              } // case 138
+              case 146: {
+                action_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00020000;
+                break;
+              } // case 146
+              case 154: {
+                resource_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00040000;
+                break;
+              } // case 154
+              case 162: {
+                signatureType_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00080000;
+                break;
+              } // case 162
+              case 170: {
+                reasonCodeText_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00100000;
+                break;
+              } // case 170
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -3764,7 +4168,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       private java.lang.Object signatureVersion_ = "";
       /**
        * <pre>
-       * HELM-303 decision.v2 signing envelope fields.
+       * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
        * </pre>
        *
        * <code>string signature_version = 14;</code>
@@ -3784,7 +4188,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       }
       /**
        * <pre>
-       * HELM-303 decision.v2 signing envelope fields.
+       * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
        * </pre>
        *
        * <code>string signature_version = 14;</code>
@@ -3805,7 +4209,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       }
       /**
        * <pre>
-       * HELM-303 decision.v2 signing envelope fields.
+       * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
        * </pre>
        *
        * <code>string signature_version = 14;</code>
@@ -3822,7 +4226,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       }
       /**
        * <pre>
-       * HELM-303 decision.v2 signing envelope fields.
+       * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
        * </pre>
        *
        * <code>string signature_version = 14;</code>
@@ -3836,7 +4240,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       }
       /**
        * <pre>
-       * HELM-303 decision.v2 signing envelope fields.
+       * HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
        * </pre>
        *
        * <code>string signature_version = 14;</code>
@@ -3993,6 +4397,396 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         checkByteStringIsUtf8(value);
         policyContentHash_ = value;
         bitField0_ |= 0x00008000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object subjectId_ = "";
+      /**
+       * <code>string subject_id = 17;</code>
+       * @return The subjectId.
+       */
+      public java.lang.String getSubjectId() {
+        java.lang.Object ref = subjectId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          subjectId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string subject_id = 17;</code>
+       * @return The bytes for subjectId.
+       */
+      public com.google.protobuf.ByteString
+          getSubjectIdBytes() {
+        java.lang.Object ref = subjectId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          subjectId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string subject_id = 17;</code>
+       * @param value The subjectId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubjectId(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        subjectId_ = value;
+        bitField0_ |= 0x00010000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string subject_id = 17;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSubjectId() {
+        subjectId_ = getDefaultInstance().getSubjectId();
+        bitField0_ = (bitField0_ & ~0x00010000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string subject_id = 17;</code>
+       * @param value The bytes for subjectId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubjectIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        subjectId_ = value;
+        bitField0_ |= 0x00010000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object action_ = "";
+      /**
+       * <code>string action = 18;</code>
+       * @return The action.
+       */
+      public java.lang.String getAction() {
+        java.lang.Object ref = action_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          action_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string action = 18;</code>
+       * @return The bytes for action.
+       */
+      public com.google.protobuf.ByteString
+          getActionBytes() {
+        java.lang.Object ref = action_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          action_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string action = 18;</code>
+       * @param value The action to set.
+       * @return This builder for chaining.
+       */
+      public Builder setAction(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        action_ = value;
+        bitField0_ |= 0x00020000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string action = 18;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearAction() {
+        action_ = getDefaultInstance().getAction();
+        bitField0_ = (bitField0_ & ~0x00020000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string action = 18;</code>
+       * @param value The bytes for action to set.
+       * @return This builder for chaining.
+       */
+      public Builder setActionBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        action_ = value;
+        bitField0_ |= 0x00020000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object resource_ = "";
+      /**
+       * <code>string resource = 19;</code>
+       * @return The resource.
+       */
+      public java.lang.String getResource() {
+        java.lang.Object ref = resource_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          resource_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string resource = 19;</code>
+       * @return The bytes for resource.
+       */
+      public com.google.protobuf.ByteString
+          getResourceBytes() {
+        java.lang.Object ref = resource_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          resource_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string resource = 19;</code>
+       * @param value The resource to set.
+       * @return This builder for chaining.
+       */
+      public Builder setResource(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        resource_ = value;
+        bitField0_ |= 0x00040000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string resource = 19;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearResource() {
+        resource_ = getDefaultInstance().getResource();
+        bitField0_ = (bitField0_ & ~0x00040000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string resource = 19;</code>
+       * @param value The bytes for resource to set.
+       * @return This builder for chaining.
+       */
+      public Builder setResourceBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        resource_ = value;
+        bitField0_ |= 0x00040000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object signatureType_ = "";
+      /**
+       * <code>string signature_type = 20;</code>
+       * @return The signatureType.
+       */
+      public java.lang.String getSignatureType() {
+        java.lang.Object ref = signatureType_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          signatureType_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string signature_type = 20;</code>
+       * @return The bytes for signatureType.
+       */
+      public com.google.protobuf.ByteString
+          getSignatureTypeBytes() {
+        java.lang.Object ref = signatureType_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          signatureType_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string signature_type = 20;</code>
+       * @param value The signatureType to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureType(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        signatureType_ = value;
+        bitField0_ |= 0x00080000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string signature_type = 20;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSignatureType() {
+        signatureType_ = getDefaultInstance().getSignatureType();
+        bitField0_ = (bitField0_ & ~0x00080000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string signature_type = 20;</code>
+       * @param value The bytes for signatureType to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureTypeBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        signatureType_ = value;
+        bitField0_ |= 0x00080000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object reasonCodeText_ = "";
+      /**
+       * <pre>
+       * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+       * this when reconstructing a signed decision; reason_code above remains the
+       * legacy closed enum for backward compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 21;</code>
+       * @return The reasonCodeText.
+       */
+      public java.lang.String getReasonCodeText() {
+        java.lang.Object ref = reasonCodeText_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          reasonCodeText_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+       * this when reconstructing a signed decision; reason_code above remains the
+       * legacy closed enum for backward compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 21;</code>
+       * @return The bytes for reasonCodeText.
+       */
+      public com.google.protobuf.ByteString
+          getReasonCodeTextBytes() {
+        java.lang.Object ref = reasonCodeText_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          reasonCodeText_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+       * this when reconstructing a signed decision; reason_code above remains the
+       * legacy closed enum for backward compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 21;</code>
+       * @param value The reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeText(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00100000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+       * this when reconstructing a signed decision; reason_code above remains the
+       * legacy closed enum for backward compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 21;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearReasonCodeText() {
+        reasonCodeText_ = getDefaultInstance().getReasonCodeText();
+        bitField0_ = (bitField0_ & ~0x00100000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+       * this when reconstructing a signed decision; reason_code above remains the
+       * legacy closed enum for backward compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 21;</code>
+       * @param value The bytes for reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeTextBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00100000;
         onChanged();
         return this;
       }
@@ -18941,7 +19735,7 @@ java.lang.String defaultValue) {
       ".v1\032\037google/protobuf/timestamp.proto\"S\n\006" +
       "Effect\022\023\n\013effect_type\030\001 \001(\t\022\021\n\teffect_id" +
       "\030\002 \001(\t\022\016\n\006params\030\003 \001(\014\022\021\n\tbudget_id\030\004 \001(" +
-      "\t\"\306\003\n\016DecisionRecord\022\n\n\002id\030\001 \001(\t\022-\n\ttime" +
+      "\t\"\256\004\n\016DecisionRecord\022\n\n\002id\030\001 \001(\t\022-\n\ttime" +
       "stamp\030\002 \001(\0132\032.google.protobuf.Timestamp\022" +
       "(\n\007verdict\030\003 \001(\0162\027.helm.kernel.v1.Verdic" +
       "t\022\016\n\006reason\030\004 \001(\t\022/\n\013reason_code\030\005 \001(\0162\032" +
@@ -18952,89 +19746,92 @@ java.lang.String defaultValue) {
       "_hash\030\013 \001(\t\022\025\n\rinput_context\030\014 \001(\014\022\026\n\016co" +
       "rrelation_id\030\r \001(\t\022\031\n\021signature_version\030" +
       "\016 \001(\t\022\026\n\016phenotype_hash\030\017 \001(\t\022\033\n\023policy_" +
-      "content_hash\030\020 \001(\t\"\362\001\n\031AuthorizedExecuti" +
-      "onIntent\022\021\n\tintent_id\030\001 \001(\t\022\023\n\013decision_" +
-      "id\030\002 \001(\t\022\021\n\teffect_id\030\003 \001(\t\022-\n\tissued_at" +
-      "\030\004 \001(\0132\032.google.protobuf.Timestamp\022.\n\nex" +
-      "pires_at\030\005 \001(\0132\032.google.protobuf.Timesta" +
-      "mp\022\021\n\tsignature\030\006 \001(\t\022\025\n\rsigner_key_id\030\007" +
-      " \001(\t\022\021\n\tprincipal\030\010 \001(\t\"\224\005\n\007Receipt\022\027\n\017r" +
-      "eceipt_version\030\001 \001(\t\022\022\n\nreceipt_id\030\002 \001(\t" +
-      "\022\023\n\013decision_id\030\003 \001(\t\022\021\n\teffect_id\030\004 \001(\t" +
-      "\022(\n\007verdict\030\005 \001(\0162\027.helm.kernel.v1.Verdi" +
-      "ct\022\021\n\tprincipal\030\006 \001(\t\022\014\n\004tool\030\007 \001(\t\022\016\n\006a" +
-      "ction\030\010 \001(\t\022-\n\ttimestamp\030\t \001(\0132\032.google." +
-      "protobuf.Timestamp\022\017\n\007lamport\030\n \001(\004\022\027\n\017p" +
-      "roofgraph_node\030\013 \001(\t\022\021\n\tsignature\030\014 \001(\t\022" +
-      "\025\n\rsigner_key_id\030\r \001(\t\022\024\n\014payload_hash\030\016" +
-      " \001(\t\022/\n\013reason_code\030\017 \001(\0162\032.helm.kernel." +
-      "v1.ReasonCode\0227\n\010metadata\030\020 \003(\0132%.helm.k" +
-      "ernel.v1.Receipt.MetadataEntry\022\026\n\016correl" +
-      "ation_id\030\021 \001(\t\022\031\n\021signature_version\030\022 \001(" +
-      "\t\022\016\n\006status\030\023 \001(\t\022\023\n\013output_hash\030\024 \001(\t\022\021" +
-      "\n\tprev_hash\030\025 \001(\t\022\021\n\targs_hash\030\026 \001(\t\022\023\n\013" +
-      "policy_hash\030\027 \001(\t\022\022\n\nsession_id\030\030 \001(\t\032/\n" +
-      "\rMetadataEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001" +
-      "(\t:\0028\001\"\234\001\n\nPDPRequest\022&\n\006effect\030\001 \001(\0132\026." +
-      "helm.kernel.v1.Effect\0222\n\007subject\030\002 \001(\0132!" +
-      ".helm.kernel.v1.SubjectDescriptor\0222\n\007con" +
-      "text\030\003 \001(\0132!.helm.kernel.v1.ContextDescr" +
-      "iptor\"E\n\021SubjectDescriptor\022\021\n\tprincipal\030" +
-      "\001 \001(\t\022\016\n\006tenant\030\002 \001(\t\022\r\n\005roles\030\003 \003(\t\"\252\001\n" +
-      "\021ContextDescriptor\022\024\n\014jurisdiction\030\001 \001(\t" +
-      "\022\023\n\013environment\030\002 \001(\t\0225\n\021time_window_sta" +
-      "rt\030\003 \001(\0132\032.google.protobuf.Timestamp\0223\n\017" +
-      "time_window_end\030\004 \001(\0132\032.google.protobuf." +
-      "Timestamp\"\251\001\n\013PDPResponse\022\r\n\005allow\030\001 \001(\010" +
-      "\022/\n\013reason_code\030\002 \001(\0162\032.helm.kernel.v1.R" +
-      "easonCode\022\022\n\npolicy_ref\030\003 \001(\t\022\025\n\rdecisio" +
-      "n_hash\030\004 \001(\t\022/\n\013obligations\030\005 \003(\0132\032.helm" +
-      ".kernel.v1.Obligation\"i\n\nObligation\022\n\n\002i" +
-      "d\030\001 \001(\t\022\014\n\004type\030\002 \001(\t\022\023\n\013description\030\003 \001" +
-      "(\t\022,\n\010deadline\030\004 \001(\0132\032.google.protobuf.T" +
-      "imestamp\"\267\001\n\rEffectRequest\022&\n\006effect\030\001 \001" +
-      "(\0132\026.helm.kernel.v1.Effect\022\021\n\tprincipal\030" +
-      "\002 \001(\t\022;\n\007context\030\003 \003(\0132*.helm.kernel.v1." +
-      "EffectRequest.ContextEntry\032.\n\014ContextEnt" +
-      "ry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\340\001\n\016E" +
-      "ffectResponse\022(\n\007verdict\030\001 \001(\0162\027.helm.ke" +
-      "rnel.v1.Verdict\022/\n\013reason_code\030\002 \001(\0162\032.h" +
-      "elm.kernel.v1.ReasonCode\022\016\n\006reason\030\003 \001(\t" +
-      "\022(\n\007receipt\030\004 \001(\0132\027.helm.kernel.v1.Recei" +
-      "pt\0229\n\006intent\030\005 \001(\0132).helm.kernel.v1.Auth" +
-      "orizedExecutionIntent\"\216\001\n\017ExecutionResul" +
-      "t\022\021\n\tintent_id\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\016\n" +
-      "\006output\030\003 \001(\014\022\025\n\rerror_message\030\004 \001(\t\0220\n\014" +
-      "completed_at\030\005 \001(\0132\032.google.protobuf.Tim" +
-      "estamp\"V\n\021CompletionReceipt\022(\n\007receipt\030\001" +
-      " \001(\0132\027.helm.kernel.v1.Receipt\022\027\n\017proofgr" +
-      "aph_node\030\002 \001(\t*]\n\007Verdict\022\027\n\023VERDICT_UNS" +
-      "PECIFIED\020\000\022\021\n\rVERDICT_ALLOW\020\001\022\020\n\014VERDICT" +
-      "_DENY\020\002\022\024\n\020VERDICT_ESCALATE\020\003*\362\004\n\nReason" +
-      "Code\022\033\n\027REASON_CODE_UNSPECIFIED\020\000\022 \n\034REA" +
-      "SON_CODE_POLICY_VIOLATION\020\001\022!\n\035REASON_CO" +
-      "DE_NO_POLICY_DEFINED\020\002\022$\n REASON_CODE_PR" +
-      "G_EVALUATION_ERROR\020\003\022#\n\037REASON_CODE_MISS" +
-      "ING_REQUIREMENT\020\004\022\030\n\024REASON_CODE_PDP_DEN" +
-      "Y\020\005\022\031\n\025REASON_CODE_PDP_ERROR\020\006\022\037\n\033REASON" +
-      "_CODE_BUDGET_EXCEEDED\020\007\022\034\n\030REASON_CODE_B" +
-      "UDGET_ERROR\020\010\022 \n\034REASON_CODE_ENVELOPE_IN" +
-      "VALID\020\t\022 \n\034REASON_CODE_SCHEMA_VIOLATION\020" +
-      "\n\022%\n!REASON_CODE_TEMPORAL_INTERVENTION\020\013" +
-      "\022!\n\035REASON_CODE_TEMPORAL_THROTTLE\020\014\022!\n\035R" +
-      "EASON_CODE_SANDBOX_VIOLATION\020\r\022\"\n\036REASON" +
-      "_CODE_PROVENANCE_FAILURE\020\016\022$\n REASON_COD" +
-      "E_VERIFICATION_FAILURE\020\017\022 \n\034REASON_CODE_" +
-      "TENANT_ISOLATION\020\020\022&\n\"REASON_CODE_JURISD" +
-      "ICTION_VIOLATION\020\0212a\n\032PolicyDecisionPoin" +
-      "tService\022C\n\010Evaluate\022\032.helm.kernel.v1.PD" +
-      "PRequest\032\033.helm.kernel.v1.PDPResponse2\260\001" +
-      "\n\025EffectBoundaryService\022G\n\006Submit\022\035.helm" +
-      ".kernel.v1.EffectRequest\032\036.helm.kernel.v" +
-      "1.EffectResponse\022N\n\010Complete\022\037.helm.kern" +
-      "el.v1.ExecutionResult\032!.helm.kernel.v1.C" +
-      "ompletionReceiptB&Z$helm.mindburn.run/ke" +
-      "rnel/v1;kernelv1b\006proto3"
+      "content_hash\030\020 \001(\t\022\022\n\nsubject_id\030\021 \001(\t\022\016" +
+      "\n\006action\030\022 \001(\t\022\020\n\010resource\030\023 \001(\t\022\026\n\016sign" +
+      "ature_type\030\024 \001(\t\022\030\n\020reason_code_text\030\025 \001" +
+      "(\t\"\362\001\n\031AuthorizedExecutionIntent\022\021\n\tinte" +
+      "nt_id\030\001 \001(\t\022\023\n\013decision_id\030\002 \001(\t\022\021\n\teffe" +
+      "ct_id\030\003 \001(\t\022-\n\tissued_at\030\004 \001(\0132\032.google." +
+      "protobuf.Timestamp\022.\n\nexpires_at\030\005 \001(\0132\032" +
+      ".google.protobuf.Timestamp\022\021\n\tsignature\030" +
+      "\006 \001(\t\022\025\n\rsigner_key_id\030\007 \001(\t\022\021\n\tprincipa" +
+      "l\030\010 \001(\t\"\224\005\n\007Receipt\022\027\n\017receipt_version\030\001" +
+      " \001(\t\022\022\n\nreceipt_id\030\002 \001(\t\022\023\n\013decision_id\030" +
+      "\003 \001(\t\022\021\n\teffect_id\030\004 \001(\t\022(\n\007verdict\030\005 \001(" +
+      "\0162\027.helm.kernel.v1.Verdict\022\021\n\tprincipal\030" +
+      "\006 \001(\t\022\014\n\004tool\030\007 \001(\t\022\016\n\006action\030\010 \001(\t\022-\n\tt" +
+      "imestamp\030\t \001(\0132\032.google.protobuf.Timesta" +
+      "mp\022\017\n\007lamport\030\n \001(\004\022\027\n\017proofgraph_node\030\013" +
+      " \001(\t\022\021\n\tsignature\030\014 \001(\t\022\025\n\rsigner_key_id" +
+      "\030\r \001(\t\022\024\n\014payload_hash\030\016 \001(\t\022/\n\013reason_c" +
+      "ode\030\017 \001(\0162\032.helm.kernel.v1.ReasonCode\0227\n" +
+      "\010metadata\030\020 \003(\0132%.helm.kernel.v1.Receipt" +
+      ".MetadataEntry\022\026\n\016correlation_id\030\021 \001(\t\022\031" +
+      "\n\021signature_version\030\022 \001(\t\022\016\n\006status\030\023 \001(" +
+      "\t\022\023\n\013output_hash\030\024 \001(\t\022\021\n\tprev_hash\030\025 \001(" +
+      "\t\022\021\n\targs_hash\030\026 \001(\t\022\023\n\013policy_hash\030\027 \001(" +
+      "\t\022\022\n\nsession_id\030\030 \001(\t\032/\n\rMetadataEntry\022\013" +
+      "\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\234\001\n\nPDPRe" +
+      "quest\022&\n\006effect\030\001 \001(\0132\026.helm.kernel.v1.E" +
+      "ffect\0222\n\007subject\030\002 \001(\0132!.helm.kernel.v1." +
+      "SubjectDescriptor\0222\n\007context\030\003 \001(\0132!.hel" +
+      "m.kernel.v1.ContextDescriptor\"E\n\021Subject" +
+      "Descriptor\022\021\n\tprincipal\030\001 \001(\t\022\016\n\006tenant\030" +
+      "\002 \001(\t\022\r\n\005roles\030\003 \003(\t\"\252\001\n\021ContextDescript" +
+      "or\022\024\n\014jurisdiction\030\001 \001(\t\022\023\n\013environment\030" +
+      "\002 \001(\t\0225\n\021time_window_start\030\003 \001(\0132\032.googl" +
+      "e.protobuf.Timestamp\0223\n\017time_window_end\030" +
+      "\004 \001(\0132\032.google.protobuf.Timestamp\"\251\001\n\013PD" +
+      "PResponse\022\r\n\005allow\030\001 \001(\010\022/\n\013reason_code\030" +
+      "\002 \001(\0162\032.helm.kernel.v1.ReasonCode\022\022\n\npol" +
+      "icy_ref\030\003 \001(\t\022\025\n\rdecision_hash\030\004 \001(\t\022/\n\013" +
+      "obligations\030\005 \003(\0132\032.helm.kernel.v1.Oblig" +
+      "ation\"i\n\nObligation\022\n\n\002id\030\001 \001(\t\022\014\n\004type\030" +
+      "\002 \001(\t\022\023\n\013description\030\003 \001(\t\022,\n\010deadline\030\004" +
+      " \001(\0132\032.google.protobuf.Timestamp\"\267\001\n\rEff" +
+      "ectRequest\022&\n\006effect\030\001 \001(\0132\026.helm.kernel" +
+      ".v1.Effect\022\021\n\tprincipal\030\002 \001(\t\022;\n\007context" +
+      "\030\003 \003(\0132*.helm.kernel.v1.EffectRequest.Co" +
+      "ntextEntry\032.\n\014ContextEntry\022\013\n\003key\030\001 \001(\t\022" +
+      "\r\n\005value\030\002 \001(\t:\0028\001\"\340\001\n\016EffectResponse\022(\n" +
+      "\007verdict\030\001 \001(\0162\027.helm.kernel.v1.Verdict\022" +
+      "/\n\013reason_code\030\002 \001(\0162\032.helm.kernel.v1.Re" +
+      "asonCode\022\016\n\006reason\030\003 \001(\t\022(\n\007receipt\030\004 \001(" +
+      "\0132\027.helm.kernel.v1.Receipt\0229\n\006intent\030\005 \001" +
+      "(\0132).helm.kernel.v1.AuthorizedExecutionI" +
+      "ntent\"\216\001\n\017ExecutionResult\022\021\n\tintent_id\030\001" +
+      " \001(\t\022\017\n\007success\030\002 \001(\010\022\016\n\006output\030\003 \001(\014\022\025\n" +
+      "\rerror_message\030\004 \001(\t\0220\n\014completed_at\030\005 \001" +
+      "(\0132\032.google.protobuf.Timestamp\"V\n\021Comple" +
+      "tionReceipt\022(\n\007receipt\030\001 \001(\0132\027.helm.kern" +
+      "el.v1.Receipt\022\027\n\017proofgraph_node\030\002 \001(\t*]" +
+      "\n\007Verdict\022\027\n\023VERDICT_UNSPECIFIED\020\000\022\021\n\rVE" +
+      "RDICT_ALLOW\020\001\022\020\n\014VERDICT_DENY\020\002\022\024\n\020VERDI" +
+      "CT_ESCALATE\020\003*\362\004\n\nReasonCode\022\033\n\027REASON_C" +
+      "ODE_UNSPECIFIED\020\000\022 \n\034REASON_CODE_POLICY_" +
+      "VIOLATION\020\001\022!\n\035REASON_CODE_NO_POLICY_DEF" +
+      "INED\020\002\022$\n REASON_CODE_PRG_EVALUATION_ERR" +
+      "OR\020\003\022#\n\037REASON_CODE_MISSING_REQUIREMENT\020" +
+      "\004\022\030\n\024REASON_CODE_PDP_DENY\020\005\022\031\n\025REASON_CO" +
+      "DE_PDP_ERROR\020\006\022\037\n\033REASON_CODE_BUDGET_EXC" +
+      "EEDED\020\007\022\034\n\030REASON_CODE_BUDGET_ERROR\020\010\022 \n" +
+      "\034REASON_CODE_ENVELOPE_INVALID\020\t\022 \n\034REASO" +
+      "N_CODE_SCHEMA_VIOLATION\020\n\022%\n!REASON_CODE" +
+      "_TEMPORAL_INTERVENTION\020\013\022!\n\035REASON_CODE_" +
+      "TEMPORAL_THROTTLE\020\014\022!\n\035REASON_CODE_SANDB" +
+      "OX_VIOLATION\020\r\022\"\n\036REASON_CODE_PROVENANCE" +
+      "_FAILURE\020\016\022$\n REASON_CODE_VERIFICATION_F" +
+      "AILURE\020\017\022 \n\034REASON_CODE_TENANT_ISOLATION" +
+      "\020\020\022&\n\"REASON_CODE_JURISDICTION_VIOLATION" +
+      "\020\0212a\n\032PolicyDecisionPointService\022C\n\010Eval" +
+      "uate\022\032.helm.kernel.v1.PDPRequest\032\033.helm." +
+      "kernel.v1.PDPResponse2\260\001\n\025EffectBoundary" +
+      "Service\022G\n\006Submit\022\035.helm.kernel.v1.Effec" +
+      "tRequest\032\036.helm.kernel.v1.EffectResponse" +
+      "\022N\n\010Complete\022\037.helm.kernel.v1.ExecutionR" +
+      "esult\032!.helm.kernel.v1.CompletionReceipt" +
+      "B&Z$helm.mindburn.run/kernel/v1;kernelv1" +
+      "b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -19052,7 +19849,7 @@ java.lang.String defaultValue) {
     internal_static_helm_kernel_v1_DecisionRecord_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_DecisionRecord_descriptor,
-        new java.lang.String[] { "Id", "Timestamp", "Verdict", "Reason", "ReasonCode", "EffectDigest", "RequirementSetHash", "Signature", "SignerKeyId", "PolicyRef", "PolicyDecisionHash", "InputContext", "CorrelationId", "SignatureVersion", "PhenotypeHash", "PolicyContentHash", });
+        new java.lang.String[] { "Id", "Timestamp", "Verdict", "Reason", "ReasonCode", "EffectDigest", "RequirementSetHash", "Signature", "SignerKeyId", "PolicyRef", "PolicyDecisionHash", "InputContext", "CorrelationId", "SignatureVersion", "PhenotypeHash", "PolicyContentHash", "SubjectId", "Action", "Resource", "SignatureType", "ReasonCodeText", });
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_descriptor =
       getDescriptor().getMessageType(2);
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_fieldAccessorTable = new

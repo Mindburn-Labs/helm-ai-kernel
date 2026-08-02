@@ -4,8 +4,6 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestKeyRing_DeterministicSigning(t *testing.T) {
@@ -21,11 +19,7 @@ func TestKeyRing_DeterministicSigning(t *testing.T) {
 	kr.AddKey(k3)
 
 	// Sign a decision
-	d := &contracts.DecisionRecord{
-		ID:      "decision-1",
-		Verdict: "ALLOW",
-		Reason:  "Test",
-	}
+	d := decisionForSigningTest("decision-1", "ALLOW", "Test")
 
 	if err := kr.SignDecision(d); err != nil {
 		t.Fatalf("SignDecision failed: %v", err)

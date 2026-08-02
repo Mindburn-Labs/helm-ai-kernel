@@ -68,10 +68,18 @@ message DecisionRecord {
   // for — the stable join key across lifecycle events, receipts, and
   // evidence. Optional; outside the decision signature until HELM-303.
   string correlation_id = 13;
-  // HELM-303 decision.v2 signing envelope fields.
+  // HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
   string signature_version = 14;
   string phenotype_hash = 15;
   string policy_content_hash = 16;
+  string subject_id = 17;
+  string action = 18;
+  string resource = 19;
+  string signature_type = 20;
+  // Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+  // this when reconstructing a signed decision; reason_code above remains the
+  // legacy closed enum for backward compatibility.
+  string reason_code_text = 21;
 }
 
 message AuthorizedExecutionIntent {

@@ -649,6 +649,9 @@ func TestStandaloneExecutorReceiptIsRetrievableAndExportableBySignedSession(t *t
 	}
 	decision := &contracts.DecisionRecord{
 		ID:                "decision-standalone-route",
+		SubjectID:         "standalone-route",
+		Action:            "EXECUTE_TOOL",
+		Resource:          "tool:ls",
 		Verdict:           string(contracts.VerdictAllow),
 		ReasonCode:        "ALLOW_BY_POLICY",
 		PolicyContentHash: "policy-standalone-route",

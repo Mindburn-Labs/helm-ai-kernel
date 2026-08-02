@@ -282,6 +282,63 @@ func CanonicalizeDecisionV2(id, verdict, reasonCode, phenotypeHash, policyConten
 	return payload, nil
 }
 
+// CanonicalizeDecisionV3 returns the current decision-signing preimage.
+func CanonicalizeDecisionV3(d *contracts.DecisionRecord) ([]byte, error) {
+	if d == nil {
+		return nil, fmt.Errorf("decision is nil")
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"decision ID", d.ID},
+		{"verdict", d.Verdict},
+		{"subject ID", d.SubjectID},
+		{"action", d.Action},
+		{"resource", d.Resource},
+		{"signature type", d.SignatureType},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return nil, fmt.Errorf("%s is required for %s", field.name, contracts.DecisionRecordSignatureV3)
+		}
+	}
+	// V3 is also a fixed all-string JCS envelope. Keep Guardian's evaluated
+	// decision path on the allocation profile established by V2.
+	payload := make([]byte, 0, len(d.Action)+len(d.EffectDigest)+len(d.ID)+len(d.PhenotypeHash)+len(d.PolicyContentHash)+len(d.ReasonCode)+len(d.Resource)+len(d.SignatureType)+len(d.SubjectID)+len(d.Verdict)+288)
+	payload = append(payload, `{"action":`...)
+	payload = appendJCSQuotedString(payload, d.Action)
+	payload = append(payload, `,"effect_digest":`...)
+	payload = appendJCSQuotedString(payload, d.EffectDigest)
+	payload = append(payload, `,"id":`...)
+	payload = appendJCSQuotedString(payload, d.ID)
+	payload = append(payload, `,"phenotype_hash":`...)
+	payload = appendJCSQuotedString(payload, d.PhenotypeHash)
+	payload = append(payload, `,"policy_content_hash":`...)
+	payload = appendJCSQuotedString(payload, d.PolicyContentHash)
+	payload = append(payload, `,"reason_code":`...)
+	payload = appendJCSQuotedString(payload, d.ReasonCode)
+	payload = append(payload, `,"resource":`...)
+	payload = appendJCSQuotedString(payload, d.Resource)
+	payload = append(payload, `,"signature_type":`...)
+	payload = appendJCSQuotedString(payload, d.SignatureType)
+	payload = append(payload, `,"signature_version":`...)
+	payload = appendJCSQuotedString(payload, contracts.DecisionRecordSignatureV3)
+	payload = append(payload, `,"subject_id":`...)
+	payload = appendJCSQuotedString(payload, d.SubjectID)
+	payload = append(payload, `,"verdict":`...)
+	payload = appendJCSQuotedString(payload, d.Verdict)
+	return append(payload, '}'), nil
+}
+
+func prepareDecisionForSigning(d *contracts.DecisionRecord, signatureType string) ([]byte, error) {
+	if d == nil {
+		return nil, fmt.Errorf("decision is nil")
+	}
+	d.SignatureVersion = contracts.DecisionRecordSignatureV3
+	d.SignatureType = signatureType
+	return CanonicalizeDecisionV3(d)
+}
+
 // appendJCSQuotedString appends an RFC 8785 JSON string. The V2 decision
 // envelope contains only strings, so this avoids re-parsing a generic JSON map
 // on Guardian's signing path while keeping the exact bytes canonicalize.JCS
@@ -324,13 +381,13 @@ func appendJCSQuotedString(dst []byte, value string) []byte {
 }
 
 // DecisionSigningPayload stamps the record with the current preimage version
-// and returns the payload to sign.
+// and returns the payload to sign. Callers that know their signer should use
+// prepareDecisionForSigning so SignatureType is bound before signing.
 func DecisionSigningPayload(d *contracts.DecisionRecord) ([]byte, error) {
 	if d == nil {
 		return nil, fmt.Errorf("decision is nil")
 	}
-	d.SignatureVersion = contracts.DecisionRecordSignatureV2
-	return CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	return prepareDecisionForSigning(d, d.SignatureType)
 }
 
 // DecisionVerifyPayload reconstructs the signed payload per the record's
@@ -344,6 +401,8 @@ func DecisionVerifyPayload(d *contracts.DecisionRecord) ([]byte, error) {
 		return []byte(CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)), nil
 	case contracts.DecisionRecordSignatureV2:
 		return CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	case contracts.DecisionRecordSignatureV3:
+		return CanonicalizeDecisionV3(d)
 	default:
 		return nil, fmt.Errorf("unsupported decision signature version %q", d.SignatureVersion)
 	}

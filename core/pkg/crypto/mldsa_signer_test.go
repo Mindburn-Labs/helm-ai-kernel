@@ -81,9 +81,13 @@ func TestMLDSASigner_SignDecision(t *testing.T) {
 		ID:                "dec-pq-001",
 		Verdict:           "ALLOW",
 		Reason:            "policy-match",
+		ReasonCode:        "POLICY_MATCHED",
 		PhenotypeHash:     "sha256:pheno",
 		PolicyContentHash: "sha256:policy",
 		EffectDigest:      "sha256:effect",
+		SubjectID:         "agent:pq-test",
+		Action:            "EXECUTE_TOOL",
+		Resource:          "tool:read",
 		Timestamp:         time.Now(),
 	}
 
@@ -108,13 +112,17 @@ func TestMLDSASigner_SignDecision(t *testing.T) {
 		t.Error("VerifyDecision returned false for valid decision")
 	}
 
-	// HELM-303 (preimage V2): the machine-readable ReasonCode is attested;
+	if d.SignatureVersion != contracts.DecisionRecordSignatureV3 {
+		t.Fatalf("SignatureVersion = %q", d.SignatureVersion)
+	}
+
+	// V3 retains the HELM-303 rule: the machine-readable ReasonCode is attested;
 	// free-text Reason deliberately is NOT (prose is prohibited from export
 	// and must not be the signed claim).
 	d.Reason = "I changed this"
 	valid, err = signer.VerifyDecision(d)
 	if err != nil || !valid {
-		t.Error("Reason is not part of the V2 preimage; mutating it must not invalidate")
+		t.Error("Reason is not part of the V3 preimage; mutating it must not invalidate")
 	}
 	d.ReasonCode = "TAMPERED_CODE"
 	valid, _ = signer.VerifyDecision(d)
@@ -275,11 +283,7 @@ func TestMLDSAVerifier_VerifyDecision(t *testing.T) {
 		t.Fatalf("NewMLDSASigner failed: %v", err)
 	}
 
-	d := &contracts.DecisionRecord{
-		ID:      "dec-v-001",
-		Verdict: "DENY",
-		Reason:  "blocked",
-	}
+	d := decisionForSigningTest("dec-v-001", "DENY", "blocked")
 
 	if err := signer.SignDecision(d); err != nil {
 		t.Fatalf("SignDecision failed: %v", err)
@@ -351,11 +355,7 @@ func TestKeyRing_AddKeyMLDSA(t *testing.T) {
 	kr.AddKey(pq)
 
 	// Sign with keyring
-	d := &contracts.DecisionRecord{
-		ID:      "dec-ring-pq",
-		Verdict: "ALLOW",
-		Reason:  "keyring-pq-test",
-	}
+	d := decisionForSigningTest("dec-ring-pq", "ALLOW", "keyring-pq-test")
 
 	if err := kr.SignDecision(d); err != nil {
 		t.Fatalf("KeyRing.SignDecision failed: %v", err)
@@ -391,11 +391,7 @@ func TestKeyRing_MixedAlgorithms(t *testing.T) {
 	kr.AddKey(pq)
 
 	// Sign a decision with Ed25519 signer directly
-	dEd := &contracts.DecisionRecord{
-		ID:      "dec-ed",
-		Verdict: "ALLOW",
-		Reason:  "ed25519-signed",
-	}
+	dEd := decisionForSigningTest("dec-ed", "ALLOW", "ed25519-signed")
 	if err := ed.SignDecision(dEd); err != nil {
 		t.Fatalf("Ed25519 SignDecision failed: %v", err)
 	}
@@ -410,11 +406,7 @@ func TestKeyRing_MixedAlgorithms(t *testing.T) {
 	}
 
 	// Sign a decision with ML-DSA-65 signer directly
-	dPQ := &contracts.DecisionRecord{
-		ID:      "dec-pq",
-		Verdict: "DENY",
-		Reason:  "ml-dsa-65-signed",
-	}
+	dPQ := decisionForSigningTest("dec-pq", "DENY", "ml-dsa-65-signed")
 	if err := pq.SignDecision(dPQ); err != nil {
 		t.Fatalf("ML-DSA-65 SignDecision failed: %v", err)
 	}
@@ -538,11 +530,7 @@ func TestSoftHSM_GetSignerWithAlgorithm(t *testing.T) {
 	}
 
 	// Sign and verify round-trip
-	d := &contracts.DecisionRecord{
-		ID:      "hsm-dec-1",
-		Verdict: "ALLOW",
-		Reason:  "hsm-test",
-	}
+	d := decisionForSigningTest("hsm-dec-1", "ALLOW", "hsm-test")
 	if err := pqSigner.SignDecision(d); err != nil {
 		t.Fatalf("SignDecision failed: %v", err)
 	}

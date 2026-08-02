@@ -262,12 +262,20 @@ type DecisionRecord struct {
 	// for — the stable join key across lifecycle events, receipts, and
 	// evidence. Optional; outside the decision signature until HELM-303.
 	CorrelationId string `protobuf:"bytes,13,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	// HELM-303 decision.v2 signing envelope fields.
+	// HELM-303 decision.v2 and HELM-174 V3 signing envelope fields.
 	SignatureVersion  string `protobuf:"bytes,14,opt,name=signature_version,json=signatureVersion,proto3" json:"signature_version,omitempty"`
 	PhenotypeHash     string `protobuf:"bytes,15,opt,name=phenotype_hash,json=phenotypeHash,proto3" json:"phenotype_hash,omitempty"`
 	PolicyContentHash string `protobuf:"bytes,16,opt,name=policy_content_hash,json=policyContentHash,proto3" json:"policy_content_hash,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	SubjectId         string `protobuf:"bytes,17,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
+	Action            string `protobuf:"bytes,18,opt,name=action,proto3" json:"action,omitempty"`
+	Resource          string `protobuf:"bytes,19,opt,name=resource,proto3" json:"resource,omitempty"`
+	SignatureType     string `protobuf:"bytes,20,opt,name=signature_type,json=signatureType,proto3" json:"signature_type,omitempty"`
+	// Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+	// this when reconstructing a signed decision; reason_code above remains the
+	// legacy closed enum for backward compatibility.
+	ReasonCodeText string `protobuf:"bytes,21,opt,name=reason_code_text,json=reasonCodeText,proto3" json:"reason_code_text,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DecisionRecord) Reset() {
@@ -408,6 +416,41 @@ func (x *DecisionRecord) GetPhenotypeHash() string {
 func (x *DecisionRecord) GetPolicyContentHash() string {
 	if x != nil {
 		return x.PolicyContentHash
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetSubjectId() string {
+	if x != nil {
+		return x.SubjectId
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetSignatureType() string {
+	if x != nil {
+		return x.SignatureType
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetReasonCodeText() string {
+	if x != nil {
+		return x.ReasonCodeText
 	}
 	return ""
 }
@@ -1350,7 +1393,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"effectType\x12\x1b\n" +
 	"\teffect_id\x18\x02 \x01(\tR\beffectId\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x12\x1b\n" +
-	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x9c\x05\n" +
+	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\xc0\x06\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1370,7 +1413,13 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\x12+\n" +
 	"\x11signature_version\x18\x0e \x01(\tR\x10signatureVersion\x12%\n" +
 	"\x0ephenotype_hash\x18\x0f \x01(\tR\rphenotypeHash\x12.\n" +
-	"\x13policy_content_hash\x18\x10 \x01(\tR\x11policyContentHash\"\xca\x02\n" +
+	"\x13policy_content_hash\x18\x10 \x01(\tR\x11policyContentHash\x12\x1d\n" +
+	"\n" +
+	"subject_id\x18\x11 \x01(\tR\tsubjectId\x12\x16\n" +
+	"\x06action\x18\x12 \x01(\tR\x06action\x12\x1a\n" +
+	"\bresource\x18\x13 \x01(\tR\bresource\x12%\n" +
+	"\x0esignature_type\x18\x14 \x01(\tR\rsignatureType\x12(\n" +
+	"\x10reason_code_text\x18\x15 \x01(\tR\x0ereasonCodeText\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +

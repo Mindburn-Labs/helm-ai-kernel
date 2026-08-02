@@ -133,9 +133,13 @@ func TestHybridSigner_SignDecision(t *testing.T) {
 		ID:                "dec-hybrid-001",
 		Verdict:           "ALLOW",
 		Reason:            "policy-match",
+		ReasonCode:        "POLICY_MATCHED",
 		PhenotypeHash:     "sha256:pheno",
 		PolicyContentHash: "sha256:policy",
 		EffectDigest:      "sha256:effect",
+		SubjectID:         "agent:hybrid-test",
+		Action:            "EXECUTE_TOOL",
+		Resource:          "tool:read",
 		Timestamp:         time.Now(),
 	}
 
@@ -149,6 +153,7 @@ func TestHybridSigner_SignDecision(t *testing.T) {
 	// SignatureType must be "Hybrid-Ed25519-MLDSA65:hybrid-key-1"
 	expectedSigType := SigPrefixHybrid + SigSeparator + "hybrid-key-1"
 	assert.Equal(t, expectedSigType, d.SignatureType)
+	assert.Equal(t, contracts.DecisionRecordSignatureV3, d.SignatureVersion)
 
 	// Verify the composite signature
 	payload, err := DecisionVerifyPayload(d)

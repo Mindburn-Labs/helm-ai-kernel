@@ -34,6 +34,7 @@ func TestSafeExecutorCreatesStandaloneV5SessionWhenInputSessionMissing(t *testin
 			PolicyContentHash: "policy-" + suffix,
 			EffectDigest:      testEffectDigest(t, effect),
 		}
+		bindExecutionTestDecision(decision, "tool:ls")
 		if err := signer.SignDecision(decision); err != nil {
 			t.Fatalf("sign decision %s: %v", suffix, err)
 		}

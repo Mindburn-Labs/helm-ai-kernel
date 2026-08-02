@@ -1,3 +1,4 @@
+// quantum_posture: benchmark coverage of existing signature behavior; no production cryptographic control or post-quantum assurance is added.
 package crypto
 
 import (
@@ -108,6 +109,9 @@ func BenchmarkMLDSA65_SignDecision(b *testing.B) {
 		PhenotypeHash:     "sha256:pheno",
 		PolicyContentHash: "sha256:policy",
 		EffectDigest:      "sha256:effect",
+		SubjectID:         "agent:benchmark",
+		Action:            "EXECUTE_TOOL",
+		Resource:          "tool:benchmark",
 		Timestamp:         time.Now(),
 	}
 

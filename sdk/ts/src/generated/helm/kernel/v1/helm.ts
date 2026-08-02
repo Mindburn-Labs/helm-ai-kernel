@@ -233,10 +233,20 @@ export interface DecisionRecord {
    * evidence. Optional; outside the decision signature until HELM-303.
    */
   correlationId: string;
-  /** HELM-303 decision.v2 signing envelope fields. */
+  /** HELM-303 decision.v2 and HELM-174 V3 signing envelope fields. */
   signatureVersion: string;
   phenotypeHash: string;
   policyContentHash: string;
+  subjectId: string;
+  action: string;
+  resource: string;
+  signatureType: string;
+  /**
+   * Full open-string ReasonCode value bound by decision_record.v2/v3. Use
+   * this when reconstructing a signed decision; reason_code above remains the
+   * legacy closed enum for backward compatibility.
+   */
+  reasonCodeText: string;
 }
 
 export interface AuthorizedExecutionIntent {
@@ -494,6 +504,11 @@ function createBaseDecisionRecord(): DecisionRecord {
     signatureVersion: "",
     phenotypeHash: "",
     policyContentHash: "",
+    subjectId: "",
+    action: "",
+    resource: "",
+    signatureType: "",
+    reasonCodeText: "",
   };
 }
 
@@ -546,6 +561,21 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     }
     if (message.policyContentHash !== "") {
       writer.uint32(130).string(message.policyContentHash);
+    }
+    if (message.subjectId !== "") {
+      writer.uint32(138).string(message.subjectId);
+    }
+    if (message.action !== "") {
+      writer.uint32(146).string(message.action);
+    }
+    if (message.resource !== "") {
+      writer.uint32(154).string(message.resource);
+    }
+    if (message.signatureType !== "") {
+      writer.uint32(162).string(message.signatureType);
+    }
+    if (message.reasonCodeText !== "") {
+      writer.uint32(170).string(message.reasonCodeText);
     }
     return writer;
   },
@@ -685,6 +715,46 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
           message.policyContentHash = reader.string();
           continue;
         }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.subjectId = reader.string();
+          continue;
+        }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.action = reader.string();
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.resource = reader.string();
+          continue;
+        }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.signatureType = reader.string();
+          continue;
+        }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          message.reasonCodeText = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -756,6 +826,23 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
         : isSet(object.policy_content_hash)
         ? globalThis.String(object.policy_content_hash)
         : "",
+      subjectId: isSet(object.subjectId)
+        ? globalThis.String(object.subjectId)
+        : isSet(object.subject_id)
+        ? globalThis.String(object.subject_id)
+        : "",
+      action: isSet(object.action) ? globalThis.String(object.action) : "",
+      resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+      signatureType: isSet(object.signatureType)
+        ? globalThis.String(object.signatureType)
+        : isSet(object.signature_type)
+        ? globalThis.String(object.signature_type)
+        : "",
+      reasonCodeText: isSet(object.reasonCodeText)
+        ? globalThis.String(object.reasonCodeText)
+        : isSet(object.reason_code_text)
+        ? globalThis.String(object.reason_code_text)
+        : "",
     };
   },
 
@@ -809,6 +896,21 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.policyContentHash !== "") {
       obj.policyContentHash = message.policyContentHash;
     }
+    if (message.subjectId !== "") {
+      obj.subjectId = message.subjectId;
+    }
+    if (message.action !== "") {
+      obj.action = message.action;
+    }
+    if (message.resource !== "") {
+      obj.resource = message.resource;
+    }
+    if (message.signatureType !== "") {
+      obj.signatureType = message.signatureType;
+    }
+    if (message.reasonCodeText !== "") {
+      obj.reasonCodeText = message.reasonCodeText;
+    }
     return obj;
   },
 
@@ -833,6 +935,11 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     message.signatureVersion = object.signatureVersion ?? "";
     message.phenotypeHash = object.phenotypeHash ?? "";
     message.policyContentHash = object.policyContentHash ?? "";
+    message.subjectId = object.subjectId ?? "";
+    message.action = object.action ?? "";
+    message.resource = object.resource ?? "";
+    message.signatureType = object.signatureType ?? "";
+    message.reasonCodeText = object.reasonCodeText ?? "";
     return message;
   },
 };

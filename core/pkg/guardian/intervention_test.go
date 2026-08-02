@@ -28,7 +28,7 @@ func TestGuardian_SignDecision_TemporalInterventions(t *testing.T) {
 	}
 
 	t.Run("Intervention: Interrupt", func(t *testing.T) {
-		decision := &contracts.DecisionRecord{ID: "dec-1"}
+		decision := &contracts.DecisionRecord{ID: "dec-1", SubjectID: "agent:test", Action: "EXECUTE_TOOL", Resource: "tool:test"}
 		intervention := &contracts.InterventionMetadata{
 			Type:         contracts.InterventionInterrupt,
 			ReasonCode:   "VELOCITY_LIMIT_EXCEEDED",
@@ -45,7 +45,7 @@ func TestGuardian_SignDecision_TemporalInterventions(t *testing.T) {
 	})
 
 	t.Run("Intervention: Quarantine", func(t *testing.T) {
-		decision := &contracts.DecisionRecord{ID: "dec-2"}
+		decision := &contracts.DecisionRecord{ID: "dec-2", SubjectID: "agent:test", Action: "EXECUTE_TOOL", Resource: "tool:test"}
 		intervention := &contracts.InterventionMetadata{
 			Type:       contracts.InterventionQuarantine,
 			ReasonCode: "SUSPICIOUS_PATTERN",
@@ -58,7 +58,7 @@ func TestGuardian_SignDecision_TemporalInterventions(t *testing.T) {
 	})
 
 	t.Run("Intervention: None (Fallthrough to PRG)", func(t *testing.T) {
-		decision := &contracts.DecisionRecord{ID: "dec-3"}
+		decision := &contracts.DecisionRecord{ID: "dec-3", SubjectID: "agent:test", Action: "EXECUTE_TOOL", Resource: "tool:test"}
 
 		// PRG is empty, so "test_tool" is not allowed -> FAIL
 		// But we want to ensure Intervention didn't force INTERVENE
@@ -76,11 +76,11 @@ func TestGuardian_SignDecision_TemporalInterventions(t *testing.T) {
 		}
 
 		// Run 1
-		d1 := &contracts.DecisionRecord{ID: "run-1"}
+		d1 := &contracts.DecisionRecord{ID: "run-1", SubjectID: "agent:test", Action: "EXECUTE_TOOL", Resource: "tool:test"}
 		_ = g.SignDecision(ctx, d1, effect, []string{}, interventionData)
 
 		// Run 2
-		d2 := &contracts.DecisionRecord{ID: "run-2"}
+		d2 := &contracts.DecisionRecord{ID: "run-2", SubjectID: "agent:test", Action: "EXECUTE_TOOL", Resource: "tool:test"}
 		_ = g.SignDecision(ctx, d2, effect, []string{}, interventionData)
 
 		// Check Intervention Metadata Equality

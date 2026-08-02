@@ -150,9 +150,14 @@ const VerdictPending = "PENDING"
 // portable effect semantics. Unversioned legacy intents are never executable.
 const AuthorizedExecutionIntentSignatureV2 = "authorized_execution_intent.v2"
 
-// DecisionRecordSignatureV2 marks the HELM-303 decision preimage: ReasonCode
-// replaces free-text Reason in the signed payload.
-const DecisionRecordSignatureV2 = "decision_record.v2"
+const (
+	// DecisionRecordSignatureV2 marks the HELM-303 decision preimage:
+	// ReasonCode replaces free-text Reason in the signed payload.
+	DecisionRecordSignatureV2 = "decision_record.v2"
+	// DecisionRecordSignatureV3 extends V2 with the evaluated subject, action,
+	// resource, and signer metadata for newly issued decisions.
+	DecisionRecordSignatureV3 = "decision_record.v3"
+)
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)

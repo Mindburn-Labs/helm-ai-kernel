@@ -2369,6 +2369,9 @@ func verificationResult(errs []string, receipts []*contracts.Receipt) map[string
 }
 
 func safeArchiveName(name string) bool {
+	if strings.Contains(name, `\`) {
+		return false
+	}
 	clean := path.Clean(name)
 	return name != "" && clean == name && !strings.HasPrefix(clean, "../") && !strings.HasPrefix(clean, "/") && clean != ".."
 }

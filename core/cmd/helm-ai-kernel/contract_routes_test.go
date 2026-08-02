@@ -1254,6 +1254,62 @@ func TestWriteEvidenceBundlePackFilesRejectsUnsafeDerivedNames(t *testing.T) {
 	}
 }
 
+func TestWriteEvidenceBundlePackFilesRejectsBackslashDerivedNames(t *testing.T) {
+	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
+	scope, err := registry.PutVerificationScope(contracts.VerificationScope{
+		VerificationScopeID: `..\..\escaped-artifact`,
+		SubjectHash:         "sha256:subject",
+		RiskClass:           "T2",
+		ChecksPerformed:     []string{"hash"},
+		VerifierHash:        "sha256:verifier",
+		PolicyHash:          "sha256:policy",
+	})
+	if err != nil {
+		t.Fatalf("seed verification scope: %v", err)
+	}
+	files, err := buildEvidenceBundleFilesWithSurfaceArtifacts("session-unsafe", []*contracts.Receipt{{
+		ReceiptID:    `..\..\escaped-receipt`,
+		DecisionID:   "dec-unsafe",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		Signature:    "sig-unsafe",
+		ScopeHash:    scope.ScopeHash,
+		LamportClock: 1,
+		ArgsHash:     "args-unsafe",
+		Metadata: map[string]any{
+			"risk_class": "T2",
+		},
+	}}, registry)
+	if err != nil {
+		t.Fatalf("build unsafe bundle files: %v", err)
+	}
+	for _, name := range []string{
+		`receipts/..\..\escaped-receipt.json`,
+		`verification_scopes/..\..\escaped-artifact.json`,
+	} {
+		if _, ok := files[name]; !ok {
+			t.Fatalf("expected derived file %q in bundle files: %v", name, files)
+		}
+	}
+
+	root := t.TempDir()
+	packDir := filepath.Join(root, "pack")
+	if err := os.Mkdir(packDir, 0o700); err != nil {
+		t.Fatalf("create pack dir: %v", err)
+	}
+	err = writeEvidenceBundlePackFiles(packDir, files)
+	if err == nil || !strings.Contains(err.Error(), "unsafe archive path") {
+		t.Fatalf("expected unsafe path rejection, got %v", err)
+	}
+	for _, escaped := range []string{"escaped-receipt.json", "escaped-artifact.json"} {
+		if _, statErr := os.Stat(filepath.Join(root, escaped)); !os.IsNotExist(statErr) {
+			t.Fatalf("expected no escaped write for %q, stat err=%v", escaped, statErr)
+		}
+	}
+}
+
 func TestBuildTrustedEvidenceBundleWithSurfaceArtifactsAllowsSafeNames(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("safe-export")
 	if err != nil {

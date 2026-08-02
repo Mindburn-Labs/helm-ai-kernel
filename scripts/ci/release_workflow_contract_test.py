@@ -92,6 +92,16 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("layout_input=console-layout-input", console_assets)
         self.assertIn('cp "${assets}"/* "${layout_input}/"', console_assets)
         self.assertIn('"${layout_input}/"', console_assets)
+        self.assertIn("repository: ${{ steps.console-pin.outputs.repository }}", console_assets)
+        self.assertIn("ref: ${{ steps.console-pin.outputs.source_sha }}", console_assets)
+        self.assertIn("token: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}", console_assets)
+        self.assertIn("npx playwright install --with-deps chromium", console_assets)
+        self.assertIn("console_layout_browser_smoke.mjs", console_assets)
+        self.assertIn("--layout console-release-assets/helm-ai-kernel-linux-amd64-console.tar.gz", console_assets)
+        self.assertLess(
+            console_assets.index("console_layout_browser_smoke.mjs"),
+            console_assets.index("Cosign keyless-sign standalone Console layouts"),
+        )
         self.assertIn("CONSOLE-SHA256SUMS.txt", console_assets)
         self.assertIn("cosign sign-blob", console_assets)
         self.assertIn("actions/upload-artifact", console_assets)

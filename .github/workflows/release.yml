@@ -1230,6 +1230,39 @@ jobs:
             --pins release/console-local-sidecar-pins.json \
             --kernel-release "${GITHUB_REF_NAME}" \
             --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+      - id: console-pin
+        name: Resolve exact Console browser source pin
+        run: |
+          set -euo pipefail
+          python3 scripts/release/console_local_sidecar.py pin \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --github-output
+      - name: Check out pinned Console browser tooling
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: ${{ steps.console-pin.outputs.repository }}
+          ref: ${{ steps.console-pin.outputs.source_sha }}
+          token: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
+          path: console-browser-tools
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console-browser-tools/package-lock.json
+      - name: Install pinned Console Playwright Chromium
+        run: |
+          set -euo pipefail
+          cd console-browser-tools
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Browser-smoke the archived Linux Console layout
+        run: |
+          set -euo pipefail
+          node scripts/release/console_layout_browser_smoke.mjs \
+            --layout console-release-assets/helm-ai-kernel-linux-amd64-console.tar.gz \
+            --console-checkout console-browser-tools
       - name: Cosign keyless-sign standalone Console layouts
         env:
           COSIGN_EXPERIMENTAL: "1"

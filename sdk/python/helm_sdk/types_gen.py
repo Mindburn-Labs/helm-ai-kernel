@@ -6171,8 +6171,8 @@ class EvaluateRequest(BaseModel):
         if value is None:
             return value
 
-        if not re.match(r"\S", value):
-            raise ValueError(r"must validate the regular expression /\S/")
+        if not re.match(r"^(?=.*\S)(?!.*[\\/]).+$", value):
+            raise ValueError(r"must validate the regular expression /^(?=.*\S)(?!.*[\\/]).+$/")
         return value
 
     model_config = ConfigDict(

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
@@ -62,6 +63,37 @@ func TestEvaluate_Allow(t *testing.T) {
 	}
 	if resp.DecisionHash == "" {
 		t.Error("DecisionHash should be set")
+	}
+}
+
+func TestEvaluate_UsesCanonicalArgsHash(t *testing.T) {
+	srv := newTestServer(t)
+	args := []byte(`{"nested":{"beta":2,"alpha":1},"message":"<hello>"}`)
+	wantHash, err := agentruntime.ComputeArgsHash(args)
+	if err != nil {
+		t.Fatalf("expected canonical args hash: %v", err)
+	}
+	body := []byte(`{"tool":"read_file","effect_level":"read_file","session_id":"session-001","args":{"nested":{"beta":2,"alpha":1},"message":"<hello>"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("evaluate status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp EvaluateResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode evaluate response: %v", err)
+	}
+
+	srv.mu.RLock()
+	stored := srv.receipts[resp.ReceiptID]
+	srv.mu.RUnlock()
+	if stored == nil {
+		t.Fatal("evaluate did not retain a receipt")
+	}
+	if stored.ArgsHash != wantHash {
+		t.Fatalf("receipt args_hash = %q, want canonical %q", stored.ArgsHash, wantHash)
 	}
 }
 
@@ -265,6 +297,33 @@ func TestEvaluateRejectsBlankSessionIDBeforeReceiptIssuance(t *testing.T) {
 			}
 			if len(srv.receipts) != 0 {
 				t.Fatalf("blank session_id issued receipts: %+v", srv.receipts)
+			}
+		})
+	}
+}
+
+func TestEvaluateRejectsSessionIDWithPathSeparators(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body EvaluateRequest
+	}{
+		{name: "top level", body: EvaluateRequest{Tool: "read_file", EffectLevel: "read_file", SessionID: "bad/session"}},
+		{name: "legacy context", body: EvaluateRequest{Tool: "read_file", EffectLevel: "read_file", Context: map[string]any{"session_id": `bad\session`}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newTestServer(t)
+			reqBody, err := json.Marshal(tc.body)
+			if err != nil {
+				t.Fatalf("marshal request: %v", err)
+			}
+
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(reqBody)))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("evaluate with invalid session_id = %d, want 400: %s", w.Code, w.Body.String())
+			}
+			if len(srv.receipts) != 0 {
+				t.Fatalf("invalid session_id issued receipts: %+v", srv.receipts)
 			}
 		})
 	}

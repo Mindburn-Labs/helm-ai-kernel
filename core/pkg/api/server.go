@@ -18,8 +18,6 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -28,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
@@ -333,6 +332,12 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id is required"})
 		return
 	}
+	normalizedSessionID, err := NormalizePublicSessionID(req.SessionID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id may not contain path separators"})
+		return
+	}
+	req.SessionID = normalizedSessionID
 	if s.receiptSigner == nil {
 		http.Error(w, "receipt signer unavailable", http.StatusServiceUnavailable)
 		return
@@ -344,6 +349,18 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Context["principal_id"] = principal.ID
 	req.Context["tenant_id"] = principal.TenantID
+	req.Context["session_id"] = req.SessionID
+
+	argsRaw, err := json.Marshal(req.Args)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid args"})
+		return
+	}
+	argsHash, err := agentruntime.ComputeArgsHash(argsRaw)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid args"})
+		return
+	}
 
 	// Map to PDP DecisionRequest.
 	decReq := &pdp.DecisionRequest{
@@ -398,8 +415,6 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	// Binding them to the receipt identity also keeps the V5 signed fields
 	// unique for the lifetime of that receipt.
 	decisionID := "dec-" + receiptID
-	argsJSON, _ := json.Marshal(req.Args)
-	argsHash := sha256.Sum256(argsJSON)
 
 	status := "DENY"
 	if decResp.Allow {
@@ -429,7 +444,7 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		ExecutorID:   req.AgentID,
 		PrevHash:     prevHash,
 		LamportClock: lamport,
-		ArgsHash:     "sha256:" + hex.EncodeToString(argsHash[:]),
+		ArgsHash:     argsHash,
 		Verdict:      status,
 		ReasonCode:   decResp.ReasonCode,
 		PolicyHash:   policyHash,

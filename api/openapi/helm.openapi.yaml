@@ -2194,7 +2194,8 @@ paths:
         - name: session_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            $ref: '#/components/schemas/NonBlankSessionID'
       responses:
         '200':
           description: List of receipts in session
@@ -4554,7 +4555,7 @@ components:
     NonBlankSessionID:
       type: string
       minLength: 1
-      pattern: '\S'
+      pattern: '^(?=.*\S)(?!.*[\\/]).+$'
 
     EvaluateResponse:
       type: object

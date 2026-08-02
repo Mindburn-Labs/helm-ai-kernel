@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -480,6 +481,38 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 	}
 }
 
+func TestEvaluateRouteUsesCanonicalArgsHash(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	svc, receipts := newEvaluateRouteTestServices(t)
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	args := []byte(`{"nested":{"beta":2,"alpha":1},"message":"<hello>"}`)
+	wantHash, err := agentruntime.ComputeArgsHash(args)
+	if err != nil {
+		t.Fatalf("expected canonical args hash: %v", err)
+	}
+	body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","args":{"nested":{"beta":2,"alpha":1},"message":"<hello>"},"session_id":"canonical-session"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("canonical args evaluate status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if receipts.stored == nil {
+		t.Fatal("canonical args evaluate did not persist a receipt")
+	}
+	if receipts.stored.ArgsHash != wantHash {
+		t.Fatalf("receipt args_hash = %q, want canonical %q", receipts.stored.ArgsHash, wantHash)
+	}
+}
+
 func TestEvaluateRouteRejectsIncompleteCanonicalContract(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
@@ -506,6 +539,50 @@ func TestEvaluateRouteRejectsIncompleteCanonicalContract(t *testing.T) {
 				t.Fatalf("rejected request persisted receipt: %+v", receipts.stored)
 			}
 		})
+	}
+}
+
+func TestEvaluateRouteRejectsSessionIDWithPathSeparators(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	for name, body := range map[string]string{
+		"forward slash": `{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"bad/session"}`,
+		"back slash":    `{"tool":"EXECUTE_TOOL","effect_level":"local.echo","context":{"session_id":"bad\\session"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, receipts := newEvaluateRouteTestServices(t)
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("invalid session status = %d body=%s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored != nil {
+				t.Fatalf("invalid session persisted receipt: %+v", receipts.stored)
+			}
+		})
+	}
+}
+
+func TestReceiptRoutesRejectInvalidSessionQuery(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?session_id=bad/session", nil)
+	authorizeTestRequest(req)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid session query status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

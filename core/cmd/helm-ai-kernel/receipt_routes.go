@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -88,6 +89,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Evaluate route requires a non-blank session_id")
 			return
 		}
+		req.SessionID, err = api.NormalizePublicSessionID(req.SessionID)
+		if err != nil {
+			api.WriteBadRequest(w, "Evaluate route session_id may not contain path separators")
+			return
+		}
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
@@ -109,6 +115,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid evaluate args")
 			return
 		}
+		argsHash, err := agentruntime.ComputeArgsHash(args)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid evaluate args")
+			return
+		}
 		decision, err := svc.Guardian.EvaluateDecision(r.Context(), guardian.DecisionRequest{
 			Principal: principalID,
 			Action:    req.Tool,
@@ -120,10 +131,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		if err := persistDecisionReceiptForTenant(r.Context(), svc, decision, principalID, tenantID, args, map[string]any{
-			"source":   "api.evaluate",
-			"action":   req.Tool,
-			"resource": req.EffectLevel,
-			"reason":   decision.Reason,
+			"source":    "api.evaluate",
+			"action":    req.Tool,
+			"resource":  req.EffectLevel,
+			"reason":    decision.Reason,
+			"args_hash": argsHash,
 		}); err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -176,7 +188,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
 			return
 		}
-		sessionID := requestedReceiptSessionID(r)
+		sessionID, err := requestedReceiptSessionID(r)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid session_id")
+			return
+		}
 		rawCursor := r.URL.Query().Get("since")
 		if strings.TrimSpace(rawCursor) == "" {
 			rawCursor = r.Header.Get("Last-Event-ID")
@@ -248,7 +264,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		limit := parseLimit(r.URL.Query().Get("limit"), 100, 1000)
-		sessionID := requestedReceiptSessionID(r)
+		sessionID, err := requestedReceiptSessionID(r)
+		if err != nil {
+			api.WriteBadRequest(w, "Invalid session_id")
+			return
+		}
 		cursor, err := parseReceiptCursor(r.URL.Query().Get("since"), sessionID)
 		if err != nil {
 			api.WriteBadRequest(w, "Invalid since cursor")
@@ -318,14 +338,18 @@ func authenticatedReceiptTenantID(ctx context.Context) (string, error) {
 	return tenantID, nil
 }
 
-func requestedReceiptSessionID(r *http.Request) string {
+func requestedReceiptSessionID(r *http.Request) (string, error) {
 	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
 	if sessionID != "" {
-		return sessionID
+		return api.NormalizePublicSessionID(sessionID)
 	}
 	// Retain the old query spelling as an alias only. It is interpreted as a
 	// signed session ID, never as an executor filter.
-	return strings.TrimSpace(r.URL.Query().Get("agent"))
+	agent := strings.TrimSpace(r.URL.Query().Get("agent"))
+	if agent == "" {
+		return "", nil
+	}
+	return api.NormalizePublicSessionID(agent)
 }
 
 func tenantScopedReceiptReader(svc *Services) (store.TenantScopedReceiptReader, error) {
@@ -504,6 +528,11 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 		agentID = "anonymous"
 	}
 	argsHash := sha256HexBytes(body)
+	if metadata != nil {
+		if override, ok := metadata["args_hash"].(string); ok && strings.TrimSpace(override) != "" {
+			argsHash = strings.TrimSpace(override)
+		}
+	}
 	receiptID := "rcpt_" + decision.ID
 	effectID := decision.Action
 	if effectID == "" {

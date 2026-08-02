@@ -225,12 +225,29 @@ s = path.read_text()
 # receives cls must be explicit classmethods. Keep this structural rather than
 # model-specific so a newly generated validator cannot silently miss the fix.
 lines = s.splitlines()
+
+def validator_definition_index(lines, decorator_index):
+    indent = len(lines[decorator_index]) - len(lines[decorator_index].lstrip())
+    for index in range(decorator_index + 1, len(lines)):
+        stripped = lines[index].lstrip()
+        if re.match(r"^def\s+", stripped):
+            return index
+        if stripped.startswith("@") or stripped.startswith("#") or not stripped:
+            continue
+        line_indent = len(lines[index]) - len(stripped)
+        if line_indent <= indent:
+            return None
+    return None
+
+def classmethod_present(lines, decorator_index, definition_index):
+    return any(line.lstrip() == "@classmethod" for line in lines[decorator_index + 1:definition_index])
+
 out = []
 for i, line in enumerate(lines):
     out.append(line)
     if line.lstrip().startswith("@field_validator("):
-        next_line = lines[i + 1] if i + 1 < len(lines) else ""
-        if re.match(r"^\s*def\s+\w+\(cls(?:,|\))", next_line):
+        definition_index = validator_definition_index(lines, i)
+        if definition_index is not None and re.match(r"^\s*def\s+\w+\(cls(?:,|\))", lines[definition_index]) and not classmethod_present(lines, i, definition_index):
             out.append(f"{line[:len(line) - len(line.lstrip())]}@classmethod")
 s = "\n".join(out)
 
@@ -239,12 +256,9 @@ missing_classmethods = []
 for i, line in enumerate(generated_lines):
     if not line.lstrip().startswith("@field_validator("):
         continue
-    next_line = generated_lines[i + 1] if i + 1 < len(generated_lines) else ""
-    has_classmethod = next_line.lstrip() == "@classmethod"
-    if has_classmethod:
-        next_line = generated_lines[i + 2] if i + 2 < len(generated_lines) else ""
-    if re.match(r"^\s*def\s+\w+\(cls(?:,|\))", next_line) and not has_classmethod:
-        missing_classmethods.append(next_line.strip().split("(", 1)[0])
+    definition_index = validator_definition_index(generated_lines, i)
+    if definition_index is not None and re.match(r"^\s*def\s+\w+\(cls(?:,|\))", generated_lines[definition_index]) and not classmethod_present(generated_lines, i, definition_index):
+        missing_classmethods.append(generated_lines[definition_index].strip().split("(", 1)[0])
 if missing_classmethods:
     raise SystemExit(f"py patch did not apply: missing @classmethod for {missing_classmethods}")
 

@@ -384,6 +384,13 @@ database sequence, and makes the value unique. This keeps a newly opened
 signed session (whose Lamport clock restarts at one) visible after a tenant
 cursor has advanced.
 
+`006_add_receipt_chain_hash.sql` persists each newly issued receipt's canonical
+chain hash beside its durable projection. Future causal appends use that stored
+hash, so omitted non-envelope fields cannot change the predecessor link after
+a reload. Rows created before this migration have no recoverable original hash
+when those fields were never stored; they retain the legacy recomputation
+fallback rather than being presented as losslessly reconstructed history.
+
 This is deliberately **not** a claim that the whole receipt is signed: fields
 outside the durable V5 envelope, including post-sign transparency anchoring,
 remain separately verified or recorded claims. It is source/test evidence only;

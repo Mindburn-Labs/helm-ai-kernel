@@ -243,6 +243,19 @@ reference packs are promoted together.
 | `authority_evaluation.v1.schema.json`              | L2          | normative | Authority evaluation request/decision   |
 | `side_effect_authority_record.schema.json`         | L2          | preview   | Registered side-effect authority record |
 
+`fixtures/` holds reference instances of `side_effect_authority_record`, not
+schemas. They fix the vocabulary of an action — action URN, executor kind,
+effect class, risk class, receipt type — so consumers read those values instead
+of inventing them. Their `schema_hash`, `policy_hash` and `signer_id` are
+deployment-owned and ship explicitly unbound, and the records ship with status
+`stale`: a fixture is a shape, never a grant. Binding one is a deliberate act at
+registration time, and a registry that loads a fixture verbatim refuses to
+dispatch.
+
+| Fixture                                             | Action URN                                  |
+| --------------------------------------------------- | ------------------------------------------- |
+| `fixtures/telephony_originate_call.authority_record.json` | `urn:helm:effect:telephony:originate_call` |
+
 ### Reason Codes (`reason-codes/`)
 
 | Schema                        | Conformance | Status    | Description                   |

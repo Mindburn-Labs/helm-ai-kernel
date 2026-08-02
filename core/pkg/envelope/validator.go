@@ -228,14 +228,41 @@ func (v *Validator) validateBudgets(result *ValidationResult, b *contracts.Envel
 		}
 	}
 
+	seenResources := make(map[string]bool, len(b.RateLimits))
 	for i, rl := range b.RateLimits {
 		if rl.Resource == "" {
 			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].resource", i), "REQUIRED",
 				"resource is required")
+		} else if seenResources[rl.Resource] {
+			// Two limits on one resource would each reserve against the same
+			// effect, so the effective ceiling would be neither of the declared
+			// numbers. Reject rather than pick one.
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].resource", i), "DUPLICATE",
+				fmt.Sprintf("duplicate rate limit resource %q", rl.Resource))
 		}
-		if rl.MaxPerMinute <= 0 {
+		seenResources[rl.Resource] = true
+
+		if rl.MaxPerMinute < 0 {
 			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].max_per_minute", i), "INVALID_VALUE",
-				"max_per_minute must be positive")
+				"max_per_minute must not be negative")
+		}
+		if rl.MaxPerDay < 0 {
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].max_per_day", i), "INVALID_VALUE",
+				"max_per_day must not be negative")
+		}
+		// An undeclared window is not an unlimited window. A rate limit that
+		// declares neither ceiling would be enforced as nothing at all, so it
+		// is malformed rather than permissive.
+		if rl.MaxPerMinute <= 0 && rl.MaxPerDay <= 0 {
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d]", i), "INVALID_VALUE",
+				"at least one of max_per_minute or max_per_day must be positive")
+		}
+		// A day ceiling below the minute ceiling can never bind: the minute
+		// window would exhaust the day inside one minute. Declaring both in
+		// that order means one of the two numbers is wrong.
+		if rl.MaxPerMinute > 0 && rl.MaxPerDay > 0 && rl.MaxPerDay < rl.MaxPerMinute {
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].max_per_day", i), "INCOHERENT_WINDOW",
+				fmt.Sprintf("max_per_day (%d) must be >= max_per_minute (%d)", rl.MaxPerDay, rl.MaxPerMinute))
 		}
 	}
 }

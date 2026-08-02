@@ -349,6 +349,152 @@ func TestSchemaAlignment(t *testing.T) {
 		}
 	})
 
+	t.Run("AutonomyEnvelope_v1_rate_limit_windows", func(t *testing.T) {
+		schema := compileSchema(t, "autonomy_envelope/v1.json")
+
+		envelope := func(limits ...contracts.RateLimit) contracts.AutonomyEnvelope {
+			return contracts.AutonomyEnvelope{
+				EnvelopeID:    "env-outbound-001",
+				Version:       "1.0.0",
+				FormatVersion: "1.0.0",
+				JurisdictionScope: contracts.JurisdictionConstraint{
+					AllowedJurisdictions: []string{"US", "GB"},
+					RegulatoryMode:       contracts.RegulatoryModeStrict,
+				},
+				DataHandling: contracts.DataHandlingRules{
+					MaxClassification: contracts.DataClassConfidential,
+					RedactionPolicy:   "pii_only",
+				},
+				AllowedEffects: []contracts.EffectClassAllowlist{{EffectClass: "E2", Allowed: true}},
+				Budgets: contracts.EnvelopeBudgets{
+					CostCeilingCents:   10000,
+					TimeCeilingSeconds: 3600,
+					ToolCallCap:        500,
+					RateLimits:         limits,
+				},
+				RequiredEvidence: []contracts.EvidenceRequirement{
+					{ActionClass: "E2", EvidenceType: contracts.EvidenceTypeReceipt, When: "after"},
+				},
+				EscalationPolicy: contracts.EscalationRules{DefaultMode: contracts.EscalationModeAutonomous},
+				Attestation:      contracts.EnvelopeAttestation{ContentHash: "sha256:" + strings.Repeat("a", 64)},
+			}
+		}
+
+		// The pre-extension shape must still validate: backward compatibility
+		// of this schema is a hard requirement, not a preference.
+		legacy := envelope(contracts.RateLimit{Resource: "search.query", MaxPerMinute: 30})
+		if err := validateAgainstSchema(t, schema, legacy); err != nil {
+			t.Fatalf("minute-only envelope no longer validates: %v", err)
+		}
+
+		// A day-only ceiling — the shape that carries a per-day attempt cap.
+		daily := envelope(contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 700})
+		if err := validateAgainstSchema(t, schema, daily); err != nil {
+			t.Fatalf("day-only envelope should validate: %v", err)
+		}
+
+		both := envelope(contracts.RateLimit{Resource: "outbound.attempts", MaxPerMinute: 2, MaxPerDay: 700})
+		if err := validateAgainstSchema(t, schema, both); err != nil {
+			t.Fatalf("two-window envelope should validate: %v", err)
+		}
+
+		// An undeclared window is not an unlimited window.
+		none := envelope(contracts.RateLimit{Resource: "outbound.attempts"})
+		if err := validateAgainstSchema(t, schema, none); err == nil {
+			t.Fatal("expected a rate limit declaring no positive window to fail schema validation")
+		}
+
+		negative := map[string]interface{}{"resource": "outbound.attempts", "max_per_day": -1}
+		raw, err := json.Marshal(daily)
+		if err != nil {
+			t.Fatalf("marshal envelope: %v", err)
+		}
+		var mutated map[string]interface{}
+		if err := json.Unmarshal(raw, &mutated); err != nil {
+			t.Fatalf("unmarshal envelope: %v", err)
+		}
+		mutated["budgets"].(map[string]interface{})["rate_limits"] = []interface{}{negative}
+		if err := schema.Validate(mutated); err == nil {
+			t.Fatal("expected a negative max_per_day to fail schema validation")
+		}
+	})
+
+	t.Run("TelephonyOriginateCall_authority_record_fixture", func(t *testing.T) {
+		schema := compileSchema(t, "authority/side_effect_authority_record.schema.json")
+
+		fixturePath := filepath.Join(root, "protocols", "json-schemas", "authority", "fixtures",
+			"telephony_originate_call.authority_record.json")
+		data, err := os.ReadFile(fixturePath)
+		if err != nil {
+			t.Fatalf("cannot read telephony authority fixture: %v", err)
+		}
+
+		var record map[string]interface{}
+		if err := json.Unmarshal(data, &record); err != nil {
+			t.Fatalf("telephony authority fixture is not valid JSON: %v", err)
+		}
+		if err := schema.Validate(record); err != nil {
+			t.Fatalf("telephony authority fixture does not match its schema: %v", err)
+		}
+
+		// The vocabulary is the point of the fixture: downstream workstreams
+		// read these values rather than inventing their own.
+		for field, want := range map[string]string{
+			"action_urn":               "urn:helm:effect:telephony:originate_call",
+			"connector_id":             "telephony",
+			"tool_name":                "originate_call",
+			"executor_kind":            "DIGITAL",
+			"effect_class":             "CUSTOMER_OUTREACH",
+			"risk_class":               "T3",
+			"receipt_type":             "CallReceipt",
+			"boundary_submission_mode": "kernel_effect_gateway",
+		} {
+			if got, _ := record[field].(string); got != want {
+				t.Errorf("fixture %s = %q, want %q", field, got, want)
+			}
+		}
+
+		// CUSTOMER_OUTREACH must be a member of the existing effect taxonomy.
+		// A record naming an effect class the catalog does not carry would be
+		// a parallel taxonomy, which this program explicitly does not create.
+		catalog, err := os.ReadFile(filepath.Join(root, "protocols", "json-schemas", "effects",
+			"effect_type_catalog.schema.json"))
+		if err != nil {
+			t.Fatalf("cannot read effect type catalog: %v", err)
+		}
+		if !strings.Contains(string(catalog), `"CUSTOMER_OUTREACH"`) {
+			t.Fatal("CUSTOMER_OUTREACH is absent from the effect type catalog")
+		}
+
+		// The fixture is a shape, not a grant. Its schema, policy and signer
+		// bindings are deployment-owned, so it ships inactive: a registry that
+		// loaded it verbatim must refuse to dispatch rather than authorize a
+		// call against placeholder digests.
+		if status, _ := record["status"].(string); status != "stale" {
+			t.Errorf("fixture status = %q, want \"stale\" — a fixture must not ship as a live authorization", status)
+		}
+		for _, field := range []string{"schema_hash", "policy_hash", "signer_id"} {
+			value, _ := record[field].(string)
+			if !strings.HasSuffix(value, ":unbound") {
+				t.Errorf("fixture %s = %q, want an explicitly unbound placeholder ending in \":unbound\"", field, value)
+			}
+		}
+
+		// The ceilings this action is registered under must name the envelope
+		// window that actually carries them, so the two halves of the ceiling
+		// story cannot drift apart silently.
+		ceilings, _ := record["p0_ceilings"].([]interface{})
+		var found bool
+		for _, c := range ceilings {
+			if s, _ := c.(string); strings.Contains(s, "max_per_day") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("p0_ceilings %v names no max_per_day window", ceilings)
+		}
+	})
+
 	t.Run("AccessRequest_field_names", func(t *testing.T) {
 		// Verify that AccessRequest marshals with expected JSON field names.
 		req := contracts.AccessRequest{

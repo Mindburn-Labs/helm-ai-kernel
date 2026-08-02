@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -128,12 +127,12 @@ func TestBoundaryStatusRouteReturnsRuntimeContract(t *testing.T) {
 }
 
 func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
-	svc, cleanup := newContractRouteTestServices(t)
+	svc, cleanup := newVerifiedEvidenceRouteTestServices(t)
 	defer cleanup()
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
 
-	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"session-test","format":"tar.gz"}`))
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"verified-session","format":"tar.gz"}`))
 	authorizeTestRequest(exportReq)
 	exportRec := httptest.NewRecorder()
 	mux.ServeHTTP(exportRec, exportReq)
@@ -161,7 +160,7 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 }
 
 func TestTenantEvidenceExportIncludesReferencedSurfaceArtifactsOnly(t *testing.T) {
-	svc, cleanup := newContractRouteTestServices(t)
+	svc, cleanup := newVerifiedEvidenceRouteTestServices(t)
 	defer cleanup()
 	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
 	scope, err := registry.PutVerificationScope(contracts.VerificationScope{
@@ -221,7 +220,7 @@ func TestTenantEvidenceExportIncludesReferencedSurfaceArtifactsOnly(t *testing.T
 			"side_effectful": true,
 			"scope_hash":     scope.ScopeHash,
 		},
-	})
+	}, svc.ReceiptSigner)
 	svc.BoundarySurfaces = registry
 
 	mux := http.NewServeMux()
@@ -725,12 +724,12 @@ func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
 }
 
 func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
-	svc, cleanup := newContractRouteTestServices(t)
+	svc, cleanup := newVerifiedEvidenceRouteTestServices(t)
 	defer cleanup()
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
 
-	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"session-test","format":"tar.gz"}`))
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"verified-session","format":"tar.gz"}`))
 	authorizeTestRequest(exportReq)
 	exportRec := httptest.NewRecorder()
 	mux.ServeHTTP(exportRec, exportReq)
@@ -755,6 +754,73 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	}
 	if result["verdict"] != "FAIL" {
 		t.Fatalf("expected tampered bundle to fail verification, got %+v", result)
+	}
+}
+
+func TestEvidenceAndReplayVerifyRejectForgedSelfConsistentBundle(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "")
+	trustedSigner, err := helmcrypto.NewHybridSigner("trusted")
+	if err != nil {
+		t.Fatalf("create trusted signer: %v", err)
+	}
+	forgedSigner, err := helmcrypto.NewHybridSigner("forged")
+	if err != nil {
+		t.Fatalf("create forged signer: %v", err)
+	}
+	valid := &contracts.Receipt{
+		ReceiptID:    "rcpt-trusted",
+		DecisionID:   "dec-trusted",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		SessionID:    "trusted-session",
+		LamportClock: 1,
+		ArgsHash:     "args-trusted",
+	}
+	if err := trustedSigner.SignReceipt(valid); err != nil {
+		t.Fatalf("sign trusted receipt: %v", err)
+	}
+	forged := *valid
+	forged.ReceiptID = "rcpt-forged"
+	forged.DecisionID = "dec-forged"
+	forged.SessionID = "forged-session"
+	forged.ArgsHash = "args-forged"
+	forged.Signature = ""
+	if err := forgedSigner.SignReceipt(&forged); err != nil {
+		t.Fatalf("sign forged receipt: %v", err)
+	}
+
+	validBundle, err := buildEvidenceBundle("trusted-session", []*contracts.Receipt{valid})
+	if err != nil {
+		t.Fatalf("build trusted bundle: %v", err)
+	}
+	forgedBundle, err := buildEvidenceBundle("forged-session", []*contracts.Receipt{&forged})
+	if err != nil {
+		t.Fatalf("build forged bundle: %v", err)
+	}
+	trustedKeyring := helmcrypto.NewKeyRing()
+	trustedKeyring.AddKey(trustedSigner)
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{ReceiptSigner: trustedKeyring})
+
+	for _, endpoint := range []string{"/api/v1/evidence/verify", "/api/v1/replay/verify"} {
+		t.Run(endpoint+" trusted", func(t *testing.T) {
+			result := postEvidenceVerification(t, mux, endpoint, validBundle)
+			if result["verdict"] != "PASS" {
+				t.Fatalf("trusted bundle verification = %+v", result)
+			}
+		})
+		t.Run(endpoint+" forged", func(t *testing.T) {
+			result := postEvidenceVerification(t, mux, endpoint, forgedBundle)
+			if result["verdict"] != "FAIL" {
+				t.Fatalf("forged bundle verification = %+v", result)
+			}
+			checks, _ := result["checks"].(map[string]any)
+			if checks["signatures"] != "FAIL" {
+				t.Fatalf("forged bundle did not fail trusted signature verification: %+v", result)
+			}
+		})
 	}
 }
 
@@ -857,6 +923,10 @@ func TestApprovalRouteDerivesActorAndRejectsStaleCeremony(t *testing.T) {
 }
 
 func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("chain-test")
+	if err != nil {
+		t.Fatal(err)
+	}
 	good := &contracts.Receipt{
 		ReceiptID:    "rcpt-good",
 		DecisionID:   "dec-good",
@@ -880,12 +950,18 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 		LamportClock: 2,
 		ArgsHash:     "args-broken",
 	}
+	if err := signer.SignReceipt(good); err != nil {
+		t.Fatal(err)
+	}
+	if err := signer.SignReceipt(broken); err != nil {
+		t.Fatal(err)
+	}
 	bundle, err := buildEvidenceBundle("session-test", []*contracts.Receipt{good, broken})
 	if err != nil {
 		t.Fatalf("build valid-manifest bundle: %v", err)
 	}
 	mux := http.NewServeMux()
-	registerContractRoutes(mux, &Services{})
+	registerContractRoutes(mux, &Services{ReceiptSigner: signer})
 
 	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/replay/verify", bytes.NewReader(bundle))
 	verifyReq.Header.Set("Content-Type", "application/octet-stream")
@@ -908,6 +984,10 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 }
 
 func TestEvidenceVerifyScopesReceiptChainsBySession(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("session-chain-test")
+	if err != nil {
+		t.Fatal(err)
+	}
 	newReceipt := func(id, sessionID string, lamport uint64, prevHash string) *contracts.Receipt {
 		return &contracts.Receipt{
 			ReceiptID:    id,
@@ -917,7 +997,6 @@ func TestEvidenceVerifyScopesReceiptChainsBySession(t *testing.T) {
 			Timestamp:    time.Date(2026, 5, 5, 0, int(lamport), 0, 0, time.UTC),
 			ExecutorID:   "agent.test",
 			SessionID:    sessionID,
-			Signature:    "sig-" + id,
 			PrevHash:     prevHash,
 			LamportClock: lamport,
 			ArgsHash:     "args-" + id,
@@ -925,17 +1004,29 @@ func TestEvidenceVerifyScopesReceiptChainsBySession(t *testing.T) {
 	}
 
 	firstSessionGenesis := newReceipt("first-session-1", "session-first", 1, "")
+	if err := signer.SignReceipt(firstSessionGenesis); err != nil {
+		t.Fatal(err)
+	}
 	firstSessionHash, err := contracts.ReceiptChainHash(firstSessionGenesis)
 	if err != nil {
 		t.Fatal(err)
 	}
 	firstSessionNext := newReceipt("first-session-2", "session-first", 2, firstSessionHash)
+	if err := signer.SignReceipt(firstSessionNext); err != nil {
+		t.Fatal(err)
+	}
 	secondSessionGenesis := newReceipt("second-session-1", "session-second", 1, "")
+	if err := signer.SignReceipt(secondSessionGenesis); err != nil {
+		t.Fatal(err)
+	}
 	secondSessionHash, err := contracts.ReceiptChainHash(secondSessionGenesis)
 	if err != nil {
 		t.Fatal(err)
 	}
 	secondSessionNext := newReceipt("second-session-2", "session-second", 2, secondSessionHash)
+	if err := signer.SignReceipt(secondSessionNext); err != nil {
+		t.Fatal(err)
+	}
 
 	bundle, err := buildEvidenceBundle("", []*contracts.Receipt{
 		firstSessionNext,
@@ -947,7 +1038,7 @@ func TestEvidenceVerifyScopesReceiptChainsBySession(t *testing.T) {
 		t.Fatalf("build multi-session evidence bundle: %v", err)
 	}
 	mux := http.NewServeMux()
-	registerContractRoutes(mux, &Services{})
+	registerContractRoutes(mux, &Services{ReceiptSigner: signer})
 
 	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/verify", bytes.NewReader(bundle))
 	verifyReq.Header.Set("Content-Type", "application/octet-stream")
@@ -1113,8 +1204,34 @@ func newContractRouteTestServices(t *testing.T) (*Services, func()) {
 	return &Services{ReceiptStore: receiptStore}, func() { _ = db.Close() }
 }
 
-func appendTenantScopedReceipt(t *testing.T, receiptStore *store.SQLiteReceiptStore, tenantID, sessionID string, receipt *contracts.Receipt) {
+func newVerifiedEvidenceRouteTestServices(t *testing.T) (*Services, func()) {
 	t.Helper()
+	t.Setenv("HELM_PRODUCTION", "")
+	svc, cleanup := newContractRouteTestServices(t)
+	signer, err := helmcrypto.NewEd25519Signer("evidence-route-test")
+	if err != nil {
+		cleanup()
+		t.Fatal(err)
+	}
+	svc.ReceiptSigner = signer
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "verified-session", &contracts.Receipt{
+		ReceiptID:    "rcpt-verified",
+		DecisionID:   "dec-verified",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		DecisionHash: "sha256:verified-decision",
+		ArgsHash:     "args-verified",
+	}, signer)
+	return svc, cleanup
+}
+
+func appendTenantScopedReceipt(t *testing.T, receiptStore *store.SQLiteReceiptStore, tenantID, sessionID string, receipt *contracts.Receipt, signers ...helmcrypto.Signer) {
+	t.Helper()
+	if len(signers) > 1 {
+		t.Fatal("append tenant-scoped receipt accepts at most one signer")
+	}
 	if err := receiptStore.AppendCausalScoped(context.Background(), tenantID, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		copy := *receipt
 		copy.SignatureVersion = contracts.ReceiptSignatureV5
@@ -1124,6 +1241,11 @@ func appendTenantScopedReceipt(t *testing.T, receiptStore *store.SQLiteReceiptSt
 		copy.SessionID = sessionID
 		copy.LamportClock = lamport
 		copy.PrevHash = prevHash
+		if len(signers) == 1 {
+			if err := signers[0].SignReceipt(&copy); err != nil {
+				return nil, fmt.Errorf("sign tenant-scoped receipt: %w", err)
+			}
+		}
 		return &copy, nil
 	}); err != nil {
 		t.Fatalf("append tenant-scoped receipt: %v", err)
@@ -1239,42 +1361,31 @@ func tamperEvidenceReceipt(bundle []byte) ([]byte, error) {
 	}
 	for name, data := range parsed.Files {
 		if strings.HasPrefix(name, "receipts/") {
-			parsed.Files[name] = bytes.Replace(data, []byte("sig-test"), []byte("sig-tampered"), 1)
-			break
+			var receipt contracts.Receipt
+			if err := json.Unmarshal(data, &receipt); err != nil {
+				return nil, err
+			}
+			receipt.Signature = strings.Repeat("0", len(receipt.Signature))
+			return buildEvidenceBundle(parsed.Manifest.SessionID, []*contracts.Receipt{&receipt})
 		}
 	}
-	manifestData, err := json.Marshal(parsed.Manifest)
-	if err != nil {
-		return nil, err
-	}
-	files := map[string][]byte{"manifest.json": manifestData}
-	for name, data := range parsed.Files {
-		files[name] = data
-	}
+	return nil, fmt.Errorf("evidence bundle has no receipt")
+}
 
-	var buf bytes.Buffer
-	gzipWriter := gzip.NewWriter(&buf)
-	tarWriter := tar.NewWriter(gzipWriter)
-	names := make([]string, 0, len(files))
-	for name := range files {
-		names = append(names, name)
+func postEvidenceVerification(t *testing.T, mux *http.ServeMux, endpoint string, bundle []byte) map[string]any {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, endpoint, bytes.NewReader(bundle))
+	req.Header.Set("Content-Type", "application/octet-stream")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify %s status=%d body=%s", endpoint, rec.Code, rec.Body.String())
 	}
-	sort.Strings(names)
-	for _, name := range names {
-		if err := writeTarEntry(tarWriter, name, files[name]); err != nil {
-			_ = tarWriter.Close()
-			_ = gzipWriter.Close()
-			return nil, err
-		}
+	var result map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
 	}
-	if err := tarWriter.Close(); err != nil {
-		_ = gzipWriter.Close()
-		return nil, err
-	}
-	if err := gzipWriter.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return result
 }
 
 func unsafeEvidenceBundle() ([]byte, error) {

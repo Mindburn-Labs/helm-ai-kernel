@@ -22,6 +22,7 @@ import (
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
@@ -284,7 +285,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		result := verifyEvidenceRequest(r)
+		result := verifyEvidenceRequest(r, svc)
 		writeContractJSON(w, http.StatusOK, result)
 	})
 
@@ -620,7 +621,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		result := verifyEvidenceRequest(r)
+		result := verifyEvidenceRequest(r, svc)
 		checks, _ := result["checks"].(map[string]string)
 		if checks == nil {
 			checks = map[string]string{}
@@ -1684,7 +1685,7 @@ func writeTarEntry(tw *tar.Writer, name string, data []byte) error {
 	return nil
 }
 
-func verifyEvidenceRequest(r *http.Request) map[string]any {
+func verifyEvidenceRequest(r *http.Request, svc *Services) map[string]any {
 	bundle, err := readEvidenceBundleRequest(r)
 	if err != nil {
 		return verificationResult([]string{err.Error()}, nil)
@@ -1704,7 +1705,7 @@ func verifyEvidenceRequest(r *http.Request) map[string]any {
 		}
 		receipts = append(receipts, &receipt)
 	}
-	errs := verifyReceiptBundle(parsed, receipts)
+	errs := verifyReceiptBundle(parsed, receipts, svc)
 	recordVerification(r.Context(), helmotel.VerificationEvent{
 		EnvelopeID:  parsed.Manifest.SessionID,
 		Verified:    len(errs) == 0,
@@ -1783,7 +1784,7 @@ func readEvidenceBundle(data []byte) (*evidenceBundle, error) {
 	return &evidenceBundle{Manifest: manifest, Files: files}, nil
 }
 
-func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {
+func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt, svc *Services) []string {
 	var errors []string
 	for name, expected := range bundle.Manifest.FileHashes {
 		data, ok := bundle.Files[name]
@@ -1816,6 +1817,8 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 	for _, receipt := range receipts {
 		if strings.TrimSpace(receipt.Signature) == "" {
 			errors = append(errors, fmt.Sprintf("%s missing signature", receipt.ReceiptID))
+		} else if err := verifyTrustedEvidenceReceipt(svc, receipt); err != nil {
+			errors = append(errors, fmt.Sprintf("%s signature verification failed: %v", receipt.ReceiptID, err))
 		}
 		sessionID := receipt.SessionID
 		if last := lastBySession[sessionID]; last != 0 && receipt.LamportClock <= last {
@@ -1837,6 +1840,61 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 		prevBySession[sessionID] = receipt
 	}
 	return errors
+}
+
+// verifyTrustedEvidenceReceipt verifies against the runtime trust anchor, not
+// receipt-provided public keys. A self-signed uploaded bundle is consistency
+// evidence only and must not become its own authority.
+func verifyTrustedEvidenceReceipt(svc *Services, receipt *contracts.Receipt) error {
+	if svc == nil || svc.ReceiptSigner == nil {
+		return errors.New("trusted receipt signer unavailable")
+	}
+
+	switch signer := svc.ReceiptSigner.(type) {
+	case *helmcrypto.Ed25519Signer:
+		if signer == nil {
+			return errors.New("trusted receipt signer unavailable")
+		}
+		return verifyEvidenceReceiptProfile(signer.PublicKey(), "", receipt)
+	case *helmcrypto.MLDSASigner:
+		if signer == nil {
+			return errors.New("trusted receipt signer unavailable")
+		}
+		return verifyEvidenceReceiptProfile("", signer.PublicKey(), receipt)
+	case *helmcrypto.HybridSigner:
+		if signer == nil || signer.Ed25519Signer() == nil || signer.MLDSASigner() == nil {
+			return errors.New("trusted hybrid receipt signer unavailable")
+		}
+		return verifyEvidenceReceiptProfile(signer.Ed25519Signer().PublicKey(), signer.MLDSASigner().PublicKey(), receipt)
+	}
+
+	// KeyRing and external signers that expose VerifyReceipt remain the trusted
+	// verification path for rotated or provider-owned runtime keys.
+	verifier, ok := svc.ReceiptSigner.(interface {
+		VerifyReceipt(*contracts.Receipt) (bool, error)
+	})
+	if !ok {
+		return errors.New("trusted receipt signer cannot verify receipts")
+	}
+	valid, err := verifier.VerifyReceipt(receipt)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return errors.New("receipt signature does not match trusted signer")
+	}
+	return nil
+}
+
+func verifyEvidenceReceiptProfile(ed25519PublicKey, mldsa65PublicKey string, receipt *contracts.Receipt) error {
+	profile, valid, err := helmcrypto.VerifyReceiptProfile(ed25519PublicKey, mldsa65PublicKey, receipt)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return fmt.Errorf("receipt signature does not match trusted %s profile", profile)
+	}
+	return nil
 }
 
 func verifyHarnessEvidenceRequirements(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {

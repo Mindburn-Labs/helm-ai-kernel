@@ -119,6 +119,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             post_release.index("- name: Wait for published version convergence"),
             post_release.index("- name: Check full published version status"),
         )
+        self.assertRegex(post_release, r"- name: Check full published version status\n\s+if: always\(\)")
         self.assertRegex(post_release, r"- name: Replace release version status with full post-release status\n\s+if: always\(\)")
 
 

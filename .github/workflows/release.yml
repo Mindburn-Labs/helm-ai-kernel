@@ -1312,6 +1312,7 @@ jobs:
           echo "::error::Published version surfaces did not converge within the bounded retry budget."
           exit 1
       - name: Check full published version status
+        if: always()
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           python3 scripts/release/check_version_drift.py \

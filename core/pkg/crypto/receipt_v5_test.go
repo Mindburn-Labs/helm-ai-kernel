@@ -129,11 +129,11 @@ func TestReceiptV5_JCSEnvelopePreventsFieldBoundaryCollisions(t *testing.T) {
 }
 
 func TestDecisionV2_JCSEnvelopePreventsFieldBoundaryCollisions(t *testing.T) {
-	first, err := CanonicalizeDecisionV2("dec", "DENY:POLICY", "VIOLATION", "sha256:phenotype", "sha256:policy", "sha256:effect")
+	first, err := CanonicalizeDecisionV2("dec", "DENY:POLICY", "why", "VIOLATION", "sha256:phenotype", "sha256:policy", "sha256:effect")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := CanonicalizeDecisionV2("dec:DENY", "POLICY", "VIOLATION", "sha256:phenotype", "sha256:policy", "sha256:effect")
+	second, err := CanonicalizeDecisionV2("dec:DENY", "POLICY", "why", "VIOLATION", "sha256:phenotype", "sha256:policy", "sha256:effect")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,13 +146,14 @@ func TestDecisionV2PreimageMatchesGenericJCS(t *testing.T) {
 	const (
 		id                = "dec-\u2028\"quoted\""
 		verdict           = "DENY\ncontrol\x01"
+		reason            = "denied: \u2028 prose\nwith control\x02"
 		reasonCode        = "POLICY\\DENY"
 		phenotypeHash     = "sha256:<phenotype>"
 		policyContentHash = "sha256:policy"
 		effectDigest      = "sha256:effect"
 	)
 
-	got, err := CanonicalizeDecisionV2(id, verdict, reasonCode, phenotypeHash, policyContentHash, effectDigest)
+	got, err := CanonicalizeDecisionV2(id, verdict, reason, reasonCode, phenotypeHash, policyContentHash, effectDigest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,6 +162,7 @@ func TestDecisionV2PreimageMatchesGenericJCS(t *testing.T) {
 		ID:                id,
 		Verdict:           verdict,
 		ReasonCode:        reasonCode,
+		ReasonHash:        HashReason(reason),
 		PhenotypeHash:     phenotypeHash,
 		PolicyContentHash: policyContentHash,
 		EffectDigest:      effectDigest,
@@ -173,7 +175,7 @@ func TestDecisionV2PreimageMatchesGenericJCS(t *testing.T) {
 	}
 
 	invalidUTF8 := string([]byte{0xff})
-	got, err = CanonicalizeDecisionV2(invalidUTF8, verdict, reasonCode, phenotypeHash, policyContentHash, effectDigest)
+	got, err = CanonicalizeDecisionV2(invalidUTF8, verdict, invalidUTF8, reasonCode, phenotypeHash, policyContentHash, effectDigest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,6 +184,7 @@ func TestDecisionV2PreimageMatchesGenericJCS(t *testing.T) {
 		ID:                invalidUTF8,
 		Verdict:           verdict,
 		ReasonCode:        reasonCode,
+		ReasonHash:        HashReason(invalidUTF8),
 		PhenotypeHash:     phenotypeHash,
 		PolicyContentHash: policyContentHash,
 		EffectDigest:      effectDigest,

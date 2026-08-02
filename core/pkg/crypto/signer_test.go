@@ -35,13 +35,16 @@ func TestSigner_Integrity(t *testing.T) {
 		t.Error("Valid decision rejected")
 	}
 
-	// HELM-303 (preimage V2): the machine-readable ReasonCode is attested;
-	// free-text Reason deliberately is NOT (prose is prohibited from export
-	// and must not be the signed claim).
+	// HELM-303 (preimage V2): ReasonCode is attested, and free-text Reason
+	// stays attested as reason_hash — rewriting the emitted explanation must
+	// still break the signature.
 	decision.Reason = "I changed this"
 	valid, err = signer.VerifyDecision(decision)
-	if err != nil || !valid {
-		t.Error("Reason is not part of the V2 preimage; mutating it must not invalidate")
+	if err != nil {
+		t.Fatalf("VerifyDecision after Reason mutation: %v", err)
+	}
+	if valid {
+		t.Error("Reason is bound via reason_hash; mutating it must invalidate the V2 signature")
 	}
 	decision.ReasonCode = "TAMPERED_CODE"
 	valid, _ = signer.VerifyDecision(decision)

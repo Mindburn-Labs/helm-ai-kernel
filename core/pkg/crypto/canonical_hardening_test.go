@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -46,11 +47,12 @@ func TestCanonicalizeDecision_FullBinding(t *testing.T) {
 	}{
 		{"ID", func(d *contracts.DecisionRecord) { d.ID = "dec-TAMPERED" }},
 		{"Verdict", func(d *contracts.DecisionRecord) { d.Verdict = "FAIL" }},
-		// HELM-303 preimage V2: the attested reason field is the
-		// machine-readable ReasonCode; free-text Reason left the preimage
-		// deliberately (prose is prohibited from export and must not carry
-		// the signed claim). See TestCanonicalizeDecisionV2_ReasonNotBound.
+		// HELM-303 preimage V2: the machine-readable ReasonCode is bound
+		// directly, free-text Reason as its digest — prose is prohibited from
+		// export and must not carry the signed claim itself. See
+		// TestCanonicalizeDecisionV2_ReasonBoundByDigest.
 		{"ReasonCode", func(d *contracts.DecisionRecord) { d.ReasonCode = "TAMPERED_CODE" }},
+		{"Reason", func(d *contracts.DecisionRecord) { d.Reason = "All checks TAMPERED" }},
 		{"PhenotypeHash", func(d *contracts.DecisionRecord) { d.PhenotypeHash = "sha256:deadbeef" }},
 		{"PolicyContentHash", func(d *contracts.DecisionRecord) { d.PolicyContentHash = "sha256:YYYY" }},
 		{"EffectDigest", func(d *contracts.DecisionRecord) { d.EffectDigest = "sha256:ZZZZ" }},
@@ -97,10 +99,10 @@ func TestCanonicalizeDecision_EmptyFields(t *testing.T) {
 	}
 }
 
-// TestCanonicalizeDecisionV2_ReasonNotBound pins the HELM-303 semantics
-// change explicitly: mutating free-text Reason on a V2-signed record does NOT
-// invalidate the signature — ReasonCode is the attested claim.
-func TestCanonicalizeDecisionV2_ReasonNotBound(t *testing.T) {
+// TestCanonicalizeDecisionV2_ReasonBoundByDigest pins the HELM-303 semantics:
+// V2 promotes ReasonCode into the preimage without dropping free-text Reason,
+// which stays attested as reason_hash.
+func TestCanonicalizeDecisionV2_ReasonBoundByDigest(t *testing.T) {
 	signer, err := NewEd25519Signer("drift7-v2-key")
 	if err != nil {
 		t.Fatal(err)
@@ -114,8 +116,53 @@ func TestCanonicalizeDecisionV2_ReasonNotBound(t *testing.T) {
 	}
 	d.Reason = "different human words"
 	ok, err := signer.VerifyDecision(d)
-	if err != nil || !ok {
-		t.Fatalf("Reason mutation must not invalidate a V2 signature (ok=%v err=%v)", ok, err)
+	if err != nil {
+		t.Fatalf("verify after Reason mutation: %v", err)
+	}
+	if ok {
+		t.Fatal("Reason mutation must invalidate a V2 signature: it is bound as reason_hash")
+	}
+
+	// The prose itself must not appear in the preimage — only its digest.
+	d.Reason = "human words"
+	payload, err := DecisionSigningPayload(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(payload, []byte("human words")) {
+		t.Fatalf("free-text Reason leaked into the signed preimage: %s", payload)
+	}
+}
+
+// An ALLOW decision carries no ReasonCode by contract — the registry in
+// contracts/verdict.go is defined for DENY/ESCALATE. Without reason_hash the V2
+// preimage would therefore authenticate nothing about why an action was
+// permitted, where the legacy preimage bound the reason. That is the regression
+// this test exists to catch.
+func TestCanonicalizeDecisionV2_AllowExplanationIsAttested(t *testing.T) {
+	signer, err := NewEd25519Signer("v2-allow-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &contracts.DecisionRecord{
+		ID:      "dec-allow",
+		Verdict: string(contracts.VerdictAllow),
+		Reason:  "risk_score 12 < threshold 80 for action \"deploy\"",
+	}
+	if err := signer.SignDecision(d); err != nil {
+		t.Fatal(err)
+	}
+	if d.ReasonCode != "" {
+		t.Fatalf("precondition: ALLOW must carry no reason code, got %q", d.ReasonCode)
+	}
+
+	d.Reason = "operator override, no policy consulted"
+	ok, err := signer.VerifyDecision(d)
+	if err != nil {
+		t.Fatalf("verify after Reason mutation: %v", err)
+	}
+	if ok {
+		t.Fatal("an ALLOW decision's explanation is unauthenticated — V2 attests nothing on the allow path")
 	}
 }
 

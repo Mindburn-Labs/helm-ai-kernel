@@ -151,6 +151,17 @@ const syncReceiptAppendSequenceSQL = `
 	);
 `
 
+func durableReceiptChainHash(r *contracts.Receipt) (string, error) {
+	if r == nil {
+		return "", fmt.Errorf("receipt is nil")
+	}
+	hash, err := contracts.ReceiptChainHash(r)
+	if err != nil {
+		return "", fmt.Errorf("canonical receipt chain hash: %w", err)
+	}
+	return hash, nil
+}
+
 // PostgresReceiptStore is a durable SQL-based implementation.
 type PostgresReceiptStore struct {
 	db *sql.DB
@@ -196,6 +207,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			signature_profile TEXT DEFAULT '',
 			signature_algorithm TEXT DEFAULT '',
 			correlation_id TEXT DEFAULT '',
+			chain_hash TEXT DEFAULT '',
 			append_sequence BIGINT NOT NULL DEFAULT nextval('receipts_append_sequence_seq')
 		);
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS effect_id TEXT;
@@ -218,6 +230,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_profile TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_algorithm TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS correlation_id TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS chain_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS append_sequence BIGINT;
 		ALTER TABLE receipts ALTER COLUMN append_sequence SET DEFAULT nextval('receipts_append_sequence_seq');
 		ALTER SEQUENCE receipts_append_sequence_seq OWNED BY receipts.append_sequence;
@@ -497,6 +510,44 @@ func scanReceipt(s scanner) (*contracts.Receipt, error) {
 	return &r, nil
 }
 
+func scanReceiptWithChainHash(s scanner) (*contracts.Receipt, string, error) {
+	var chainHash sql.NullString
+	var r contracts.Receipt
+	var metadata []byte
+	var signature sql.NullString
+	var merkleRoot sql.NullString
+	var transparency []byte
+	var publicKeySet []byte
+	err := s.Scan(
+		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
+		&r.BlobHash, &r.OutputHash, &r.DecisionHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
+		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.SignatureVersion, &r.Verdict, &r.ReasonCode, &r.PolicyHash, &r.SessionID, &r.LogID, &r.LeafIndex, &transparency,
+		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID, &chainHash,
+	)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(metadata) > 0 && string(metadata) != "null" {
+		if err := json.Unmarshal(metadata, &r.Metadata); err != nil {
+			return nil, "", fmt.Errorf("decode receipt metadata: %w", err)
+		}
+	}
+	if err := decodeTransparencyAnchor(transparency, &r); err != nil {
+		return nil, "", err
+	}
+	if len(publicKeySet) > 0 && string(publicKeySet) != "null" {
+		if err := json.Unmarshal(publicKeySet, &r.PublicKeySet); err != nil {
+			return nil, "", fmt.Errorf("decode receipt public_key_set: %w", err)
+		}
+	}
+	r.Signature = signature.String
+	r.MerkleRoot = merkleRoot.String
+	if err := restoreOrRejectV5DecisionHash(&r); err != nil {
+		return nil, "", err
+	}
+	return &r, strings.TrimSpace(chainHash.String), nil
+}
+
 // restoreOrRejectV5DecisionHash makes the V5 semantic decision hash durable
 // across the storage gap that predated its dedicated column. The metadata
 // fallback is deliberately limited to the exact value persisted by early V5
@@ -594,14 +645,18 @@ func insertPostgresReceiptWithCausalSession(ctx context.Context, execer sqlExece
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
 			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, decision_hash, args_hash, blob_hash,
 			signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency,
-			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id
+			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, chain_hash
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb,
-			$27, $28::jsonb, $29, $30, $31)
+			$27, $28::jsonb, $29, $30, $31, $32)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
 		return fmt.Errorf("marshal receipt metadata: %w", err)
+	}
+	chainHash, err := durableReceiptChainHash(r)
+	if err != nil {
+		return err
 	}
 	transparencyJSON, err := encodeTransparencyAnchor(r)
 	if err != nil {
@@ -643,6 +698,7 @@ func insertPostgresReceiptWithCausalSession(ctx context.Context, execer sqlExece
 		r.SignatureProfile,
 		r.SignatureAlgorithm,
 		r.CorrelationID,
+		chainHash,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
@@ -691,11 +747,11 @@ func (s *PostgresReceiptStore) appendCausal(ctx context.Context, causalSessionID
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, causalSessionID); err != nil {
 		return fmt.Errorf("lock receipt session %s: %w", causalSessionID, err)
 	}
-	last, err := queryLastPostgresReceipt(ctx, tx, causalSessionID)
+	last, lastChainHash, err := queryLastPostgresReceiptWithChainHash(ctx, tx, causalSessionID)
 	if err != nil {
 		return err
 	}
-	receipt, err := buildNextCausalReceiptScoped(causalSessionID, externalSessionID, last, build)
+	receipt, err := buildNextCausalReceiptScoped(causalSessionID, externalSessionID, last, lastChainHash, build)
 	if err != nil {
 		return err
 	}
@@ -733,32 +789,40 @@ type sqlQueryer interface {
 }
 
 func queryLastPostgresReceipt(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, error) {
-	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE causal_session_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
+	receipt, _, err := queryLastPostgresReceiptWithChainHash(ctx, queryer, sessionID)
+	return receipt, err
+}
+
+func queryLastPostgresReceiptWithChainHash(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, string, error) {
+	query := `SELECT ` + receiptColumns + `, COALESCE(chain_hash, '') AS chain_hash FROM receipts WHERE causal_session_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
 	row := queryer.QueryRowContext(ctx, query, sessionID)
-	r, err := scanReceipt(row)
+	r, chainHash, err := scanReceiptWithChainHash(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil // No previous receipt for this session — genesis
+			return nil, "", nil // No previous receipt for this session — genesis
 		}
-		return nil, err
+		return nil, "", err
 	}
-	return r, nil
+	return r, chainHash, nil
 }
 
 func buildNextCausalReceipt(sessionID string, previous *contracts.Receipt, build CausalReceiptBuilder) (*contracts.Receipt, error) {
-	return buildNextCausalReceiptScoped(sessionID, sessionID, previous, build)
+	return buildNextCausalReceiptScoped(sessionID, sessionID, previous, "", build)
 }
 
-func buildNextCausalReceiptScoped(causalSessionID, externalSessionID string, previous *contracts.Receipt, build CausalReceiptBuilder) (*contracts.Receipt, error) {
+func buildNextCausalReceiptScoped(causalSessionID, externalSessionID string, previous *contracts.Receipt, previousChainHash string, build CausalReceiptBuilder) (*contracts.Receipt, error) {
 	lamport := uint64(1)
 	prevHash := ""
 	if previous != nil {
 		lamport = previous.LamportClock + 1
-		hash, err := contracts.ReceiptChainHash(previous)
-		if err != nil {
-			return nil, fmt.Errorf("hash previous receipt for %s: %w", causalSessionID, err)
+		prevHash = strings.TrimSpace(previousChainHash)
+		if prevHash == "" {
+			hash, err := contracts.ReceiptChainHash(previous)
+			if err != nil {
+				return nil, fmt.Errorf("hash previous receipt for %s: %w", causalSessionID, err)
+			}
+			prevHash = hash
 		}
-		prevHash = hash
 	}
 	receipt, err := build(previous, lamport, prevHash)
 	if err != nil {

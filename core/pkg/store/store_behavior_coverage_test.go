@@ -182,6 +182,55 @@ func TestSQLiteReceiptV5RoundTripKeepsSignedGovernanceFields(t *testing.T) {
 	}
 }
 
+func TestSQLiteReceiptAppendCausalUsesDurableChainHashAcrossReloadForOmittedFields(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+	const sessionID = "signed-session"
+
+	var first *contracts.Receipt
+	if err := store.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		first = storeCoverageReceipt("r-chain-first", "d-chain-first", sessionID, lamport, time.Unix(1700000000, 0).UTC())
+		first.PrevHash = prevHash
+		return first, nil
+	}); err != nil {
+		t.Fatalf("append first receipt: %v", err)
+	}
+	firstHash, err := contracts.ReceiptChainHash(first)
+	if err != nil {
+		t.Fatalf("hash first receipt at issuance: %v", err)
+	}
+	reloaded, err := store.GetByReceiptID(ctx, first.ReceiptID)
+	if err != nil {
+		t.Fatalf("reload first receipt: %v", err)
+	}
+	reloadedHash, err := contracts.ReceiptChainHash(reloaded)
+	if err != nil {
+		t.Fatalf("hash reloaded receipt: %v", err)
+	}
+	if reloadedHash == firstHash {
+		t.Fatalf("test fixture lost the omitted-field gap: reload hash %q unexpectedly matched issued hash", reloadedHash)
+	}
+
+	var second *contracts.Receipt
+	if err := store.AppendCausal(ctx, sessionID, func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		if previous == nil || previous.ReceiptID != first.ReceiptID {
+			t.Fatalf("builder previous = %+v, want first receipt", previous)
+		}
+		if prevHash != firstHash {
+			t.Fatalf("durable prev_hash = %q, want issued chain hash %q", prevHash, firstHash)
+		}
+		second = storeCoverageReceipt("r-chain-second", "d-chain-second", sessionID, lamport, time.Unix(1700000001, 0).UTC())
+		second.PrevHash = prevHash
+		return second, nil
+	}); err != nil {
+		t.Fatalf("append second receipt: %v", err)
+	}
+	if second == nil || second.PrevHash != firstHash {
+		t.Fatalf("second receipt prev_hash = %+v, want %q", second, firstHash)
+	}
+}
+
 func TestSQLiteReceiptMigrationBackfillsOrRejectsV5DecisionHash(t *testing.T) {
 	store, cleanup := newTestSQLiteStore(t)
 	defer cleanup()

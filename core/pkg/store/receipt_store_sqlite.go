@@ -106,6 +106,7 @@ func (s *SQLiteReceiptStore) migrate() error {
 		signature_profile TEXT NOT NULL DEFAULT '',
 		signature_algorithm TEXT NOT NULL DEFAULT '',
 		correlation_id TEXT NOT NULL DEFAULT '',
+		chain_hash TEXT NOT NULL DEFAULT '',
 		append_sequence INTEGER NOT NULL DEFAULT 0
 	);`
 	if _, err := s.db.ExecContext(context.Background(), query); err != nil {
@@ -154,6 +155,9 @@ func (s *SQLiteReceiptStore) migrate() error {
 		return err
 	}
 	if err := s.ensureColumn("correlation_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("chain_hash", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn("append_sequence", "INTEGER NOT NULL DEFAULT 0"); err != nil {
@@ -483,12 +487,16 @@ func insertSQLiteReceiptWithCausalSession(ctx context.Context, execer sqlExecer,
 		return err
 	}
 	query := `INSERT INTO receipts (
-		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, decision_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, append_sequence
-	) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(MAX(append_sequence), 0) + 1 FROM receipts`
+		receipt_id, decision_id, effect_id, external_reference_id, status, blob_hash, output_hash, decision_hash, timestamp, executor_id, metadata, signature, merkle_root, prev_hash, lamport_clock, args_hash, signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency, key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, chain_hash, append_sequence
+	) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(MAX(append_sequence), 0) + 1 FROM receipts`
 
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
 		return fmt.Errorf("marshal receipt metadata: %w", err)
+	}
+	chainHash, err := durableReceiptChainHash(r)
+	if err != nil {
+		return err
 	}
 	transparencyJSON, err := encodeTransparencyAnchor(r)
 	if err != nil {
@@ -501,7 +509,7 @@ func insertSQLiteReceiptWithCausalSession(ctx context.Context, execer sqlExecer,
 	timestamp := r.Timestamp.UTC().Format(time.RFC3339Nano)
 
 	_, err = execer.ExecContext(ctx, query,
-		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, r.DecisionHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.SignatureVersion, r.Verdict, r.ReasonCode, r.PolicyHash, r.SessionID, causalSessionID, r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), r.KeyID, nullableJSON(publicKeySetJSON), r.SignatureProfile, r.SignatureAlgorithm, r.CorrelationID,
+		r.ReceiptID, r.DecisionID, r.EffectID, r.ExternalReferenceID, r.Status, r.BlobHash, r.OutputHash, r.DecisionHash, timestamp, r.ExecutorID, string(metaJSON), r.Signature, r.MerkleRoot, r.PrevHash, r.LamportClock, r.ArgsHash, r.SignatureVersion, r.Verdict, r.ReasonCode, r.PolicyHash, r.SessionID, causalSessionID, r.LogID, r.LeafIndex, nullableJSON(transparencyJSON), r.KeyID, nullableJSON(publicKeySetJSON), r.SignatureProfile, r.SignatureAlgorithm, r.CorrelationID, chainHash,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert receipt: %w", err)
@@ -552,11 +560,11 @@ func (s *SQLiteReceiptStore) appendCausal(ctx context.Context, causalSessionID, 
 		}
 	}()
 
-	last, err := queryLastSQLiteReceipt(ctx, conn, causalSessionID)
+	last, lastChainHash, err := queryLastSQLiteReceiptWithChainHash(ctx, conn, causalSessionID)
 	if err != nil {
 		return err
 	}
-	receipt, err := buildNextCausalReceiptScoped(causalSessionID, externalSessionID, last, build)
+	receipt, err := buildNextCausalReceiptScoped(causalSessionID, externalSessionID, last, lastChainHash, build)
 	if err != nil {
 		return err
 	}
@@ -576,21 +584,26 @@ func (s *SQLiteReceiptStore) GetLastForSession(ctx context.Context, sessionID st
 }
 
 func queryLastSQLiteReceipt(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, error) {
+	receipt, _, err := queryLastSQLiteReceiptWithChainHash(ctx, queryer, sessionID)
+	return receipt, err
+}
+
+func queryLastSQLiteReceiptWithChainHash(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, string, error) {
 	query := `
-		SELECT ` + sqliteReceiptColumns + `
+		SELECT ` + sqliteReceiptColumns + `, COALESCE(chain_hash, '') AS chain_hash
         FROM receipts
 		WHERE causal_session_id = ?
         ORDER BY lamport_clock DESC
         LIMIT 1
     `
-	r, err := scanSQLiteReceipt(queryer.QueryRowContext(ctx, query, sessionID))
+	r, chainHash, err := scanSQLiteReceiptWithChainHash(queryer.QueryRowContext(ctx, query, sessionID))
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, "", nil
 		}
-		return nil, err
+		return nil, "", err
 	}
-	return r, nil
+	return r, chainHash, nil
 }
 
 func (s *SQLiteReceiptStore) queryOne(ctx context.Context, query string, args ...any) (*contracts.Receipt, error) {
@@ -644,6 +657,49 @@ func scanSQLiteReceipt(scanner sqliteScanner) (*contracts.Receipt, error) {
 		return nil, err
 	}
 	return receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, decisionHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, argsHash, signatureVersion, verdict, reasonCode, policyHash, sessionID, logID, leafIndex, transparency, keyID, publicKeySet, sigProfile, sigAlgorithm, correlationID)
+}
+
+func scanSQLiteReceiptWithChainHash(scanner sqliteScanner) (*contracts.Receipt, string, error) {
+	var (
+		receiptID        string
+		decisionID       string
+		effectID         string
+		externalID       sql.NullString
+		status           string
+		blobHash         string
+		outputHash       string
+		decisionHash     sql.NullString
+		timestamp        string
+		executorID       sql.NullString
+		metaJSON         sql.NullString
+		signature        sql.NullString
+		merkleRoot       sql.NullString
+		prevHash         sql.NullString
+		lamport          uint64
+		argsHash         sql.NullString
+		signatureVersion sql.NullString
+		verdict          sql.NullString
+		reasonCode       sql.NullString
+		policyHash       sql.NullString
+		sessionID        sql.NullString
+		logID            sql.NullString
+		leafIndex        uint64
+		transparency     sql.NullString
+		keyID            sql.NullString
+		publicKeySet     sql.NullString
+		sigProfile       sql.NullString
+		sigAlgorithm     sql.NullString
+		correlationID    sql.NullString
+		chainHash        sql.NullString
+	)
+	if err := scanner.Scan(&receiptID, &decisionID, &effectID, &externalID, &status, &blobHash, &outputHash, &decisionHash, &timestamp, &executorID, &metaJSON, &signature, &merkleRoot, &prevHash, &lamport, &argsHash, &signatureVersion, &verdict, &reasonCode, &policyHash, &sessionID, &logID, &leafIndex, &transparency, &keyID, &publicKeySet, &sigProfile, &sigAlgorithm, &correlationID, &chainHash); err != nil {
+		return nil, "", err
+	}
+	receipt, err := receiptFromSQLiteFields(receiptID, decisionID, effectID, externalID, status, blobHash, outputHash, decisionHash, timestamp, executorID, metaJSON, signature, merkleRoot, prevHash, lamport, argsHash, signatureVersion, verdict, reasonCode, policyHash, sessionID, logID, leafIndex, transparency, keyID, publicKeySet, sigProfile, sigAlgorithm, correlationID)
+	if err != nil {
+		return nil, "", err
+	}
+	return receipt, strings.TrimSpace(chainHash.String), nil
 }
 
 func receiptFromSQLiteFields(receiptID, decisionID, effectID string, externalID sql.NullString, status, blobHash, outputHash string, decisionHash sql.NullString, timestamp string, executorID, metaJSON, signature, merkleRoot, prevHash sql.NullString, lamport uint64, argsHash, signatureVersion, verdict, reasonCode, policyHash, sessionID, logID sql.NullString, leafIndex uint64, transparency sql.NullString,

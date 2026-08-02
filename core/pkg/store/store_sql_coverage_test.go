@@ -42,7 +42,7 @@ func (v storeCoverageVerifier) VerifyReceipt(*contracts.Receipt) (bool, error) {
 
 type storeRoundTripFunc func(*http.Request) (*http.Response, error)
 
-const storePostgresReceiptInsertArgCount = 31
+const storePostgresReceiptInsertArgCount = 32
 
 func (f storeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
@@ -760,27 +760,32 @@ func storeAnySQLArgs(count int) []driver.Value {
 
 func storeCoverageReceipt(receiptID, decisionID, executorID string, lamport uint64, timestamp time.Time) *contracts.Receipt {
 	return &contracts.Receipt{
-		ReceiptID:           receiptID,
-		DecisionID:          decisionID,
-		EffectID:            "effect",
-		ExternalReferenceID: "external",
-		Status:              "OK",
-		BlobHash:            "blob",
-		OutputHash:          "output",
-		DecisionHash:        "decision-hash",
-		Timestamp:           timestamp,
-		ExecutorID:          executorID,
-		Metadata:            map[string]any{"source": "coverage"},
-		Signature:           "signature",
-		MerkleRoot:          "merkle",
-		PrevHash:            "",
-		LamportClock:        lamport,
-		ArgsHash:            "args",
-		SignatureVersion:    contracts.ReceiptSignatureV5,
-		Verdict:             "ALLOW",
-		ReasonCode:          "POLICY_VIOLATION",
-		PolicyHash:          "policy-hash",
-		SessionID:           executorID,
+		ReceiptID:                    receiptID,
+		DecisionID:                   decisionID,
+		EffectID:                     "effect",
+		ExternalReferenceID:          "external",
+		Status:                       "OK",
+		BlobHash:                     "blob",
+		OutputHash:                   "output",
+		DecisionHash:                 "decision-hash",
+		Timestamp:                    timestamp,
+		ExecutorID:                   executorID,
+		Metadata:                     map[string]any{"source": "coverage"},
+		Signature:                    "signature",
+		MerkleRoot:                   "merkle",
+		PrevHash:                     "",
+		LamportClock:                 lamport,
+		ArgsHash:                     "args",
+		SignatureVersion:             contracts.ReceiptSignatureV5,
+		Verdict:                      "ALLOW",
+		ReasonCode:                   "POLICY_VIOLATION",
+		PolicyHash:                   "policy-hash",
+		SessionID:                    executorID,
+		EmergencyActivationID:        "activation-1",
+		EmergencyDelegationSessionID: "delegation-1",
+		EmergencyScopeHash:           "sha256:scope",
+		SafeDepState:                 string(contracts.SafeDepDegradedNarrowing),
+		SafeDepReasonCode:            string(contracts.ReasonSafeDepDegradedNarrowing),
 	}
 }
 
@@ -818,6 +823,11 @@ func storePostgresReceiptColumns() []string {
 	}
 }
 
+func storePostgresReceiptColumnsWithChainHash() []string {
+	columns := append([]string{}, storePostgresReceiptColumns()...)
+	return append(columns, "chain_hash")
+}
+
 func storePostgresReceiptRows(receipt *contracts.Receipt, metadata []byte) *sqlmock.Rows {
 	if metadata == nil {
 		metadata = []byte(`null`)
@@ -853,6 +863,53 @@ func storePostgresReceiptRows(receipt *contracts.Receipt, metadata []byte) *sqlm
 			receipt.SignatureProfile,
 			receipt.SignatureAlgorithm,
 			receipt.CorrelationID,
+		)
+}
+
+func storePostgresReceiptRowsWithChainHash(t *testing.T, receipt *contracts.Receipt, metadata []byte, chainHash string) *sqlmock.Rows {
+	t.Helper()
+	if chainHash == "" {
+		var err error
+		chainHash, err = contracts.ReceiptChainHash(receipt)
+		if err != nil {
+			t.Fatalf("compute chain hash for %s: %v", receipt.ReceiptID, err)
+		}
+	}
+	if metadata == nil {
+		metadata = []byte(`null`)
+	}
+	return sqlmock.NewRows(storePostgresReceiptColumnsWithChainHash()).
+		AddRow(
+			receipt.ReceiptID,
+			receipt.DecisionID,
+			receipt.EffectID,
+			receipt.ExternalReferenceID,
+			receipt.Status,
+			receipt.BlobHash,
+			receipt.OutputHash,
+			receipt.DecisionHash,
+			receipt.Timestamp,
+			receipt.ExecutorID,
+			metadata,
+			receipt.Signature,
+			receipt.MerkleRoot,
+			receipt.PrevHash,
+			receipt.LamportClock,
+			receipt.ArgsHash,
+			receipt.SignatureVersion,
+			receipt.Verdict,
+			receipt.ReasonCode,
+			receipt.PolicyHash,
+			receipt.SessionID,
+			receipt.LogID,
+			receipt.LeafIndex,
+			nil,
+			receipt.KeyID,
+			nil,
+			receipt.SignatureProfile,
+			receipt.SignatureAlgorithm,
+			receipt.CorrelationID,
+			chainHash,
 		)
 }
 

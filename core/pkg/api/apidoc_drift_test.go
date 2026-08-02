@@ -10,9 +10,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestOpenAPISpec_Integrity verifies the canonical OpenAPI spec loads and has required endpoints.
-func TestOpenAPISpec_Integrity(t *testing.T) {
-	// Find the canonical OpenAPI spec relative to repo root.
+// kernelOpenAPITitle identifies the kernel's own API document.
+//
+// Renaming it makes the tests below skip rather than fail, so treat this
+// constant as part of the spec's identity and change both together.
+const kernelOpenAPITitle = "HELM Kernel API"
+
+// loadKernelOpenAPISpec returns the kernel's canonical OpenAPI document, or
+// skips.
+//
+// It skips in two cases. The spec may be absent, when tests run from somewhere
+// other than the repo. Or the document sitting at this path may belong to
+// someone else: helm-ai-enterprise mirrors this package but publishes its own,
+// larger API document at the same relative path. Asserting the kernel's
+// contract against the commercial one tests nothing and fails for the wrong
+// reason, so the document is identified before it is trusted.
+func loadKernelOpenAPISpec(t *testing.T) (map[string]interface{}, []byte) {
+	t.Helper()
+
 	paths := []string{
 		"../../api/openapi/helm.openapi.yaml",
 		"../../../api/openapi/helm.openapi.yaml",
@@ -28,13 +43,27 @@ func TestOpenAPISpec_Integrity(t *testing.T) {
 	}
 	if err != nil {
 		t.Skip("canonical OpenAPI spec not found (run from repo root)")
-		return
+		return nil, nil
 	}
 
 	var spec map[string]interface{}
 	if err := yaml.Unmarshal(data, &spec); err != nil {
 		t.Fatalf("canonical OpenAPI parse error: %v", err)
 	}
+
+	info, _ := spec["info"].(map[string]interface{})
+	title, _ := info["title"].(string)
+	if title != kernelOpenAPITitle {
+		t.Skipf("OpenAPI document at this path is %q, not the kernel's %q", title, kernelOpenAPITitle)
+		return nil, nil
+	}
+
+	return spec, data
+}
+
+// TestOpenAPISpec_Integrity verifies the canonical OpenAPI spec loads and has required endpoints.
+func TestOpenAPISpec_Integrity(t *testing.T) {
+	spec, _ := loadKernelOpenAPISpec(t)
 
 	// Verify required paths exist
 	pathsMap, ok := spec["paths"].(map[string]interface{})
@@ -72,27 +101,8 @@ func TestOpenAPISpec_Integrity(t *testing.T) {
 // The operation-level schema must not make the V5 fields globally required,
 // because that would reject the established public legacy request shape.
 func TestEvaluateRequestOpenAPISessionRequirement(t *testing.T) {
-	paths := []string{
-		"../../api/openapi/helm.openapi.yaml",
-		"../../../api/openapi/helm.openapi.yaml",
-	}
+	spec, _ := loadKernelOpenAPISpec(t)
 
-	var data []byte
-	var err error
-	for _, p := range paths {
-		data, err = os.ReadFile(p)
-		if err == nil {
-			break
-		}
-	}
-	if err != nil {
-		t.Skip("canonical OpenAPI spec not found (run from repo root)")
-	}
-
-	var spec map[string]any
-	if err := yaml.Unmarshal(data, &spec); err != nil {
-		t.Fatalf("canonical OpenAPI parse error: %v", err)
-	}
 	encoded, err := json.Marshal(spec)
 	if err != nil {
 		t.Fatalf("marshal OpenAPI spec as JSON Schema resource: %v", err)

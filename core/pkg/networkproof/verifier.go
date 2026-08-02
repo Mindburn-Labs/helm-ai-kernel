@@ -1,5 +1,9 @@
 package networkproof
 
+// quantum_posture: presentation and receipt signatures are classical Ed25519
+// over SHA-256 RFC 8785 preimages; no post-quantum assurance is claimed or
+// provided by this file.
+
 import (
 	"bytes"
 	"context"

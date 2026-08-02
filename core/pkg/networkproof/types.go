@@ -4,6 +4,9 @@
 // named by source-owned inputs.
 package networkproof
 
+// quantum_posture: declares classical Ed25519 suite and algorithm identifiers
+// only; no post-quantum assurance is claimed or provided by this file.
+
 import (
 	"context"
 	"errors"

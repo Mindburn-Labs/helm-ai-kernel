@@ -43,6 +43,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+For a protected tenant-scoped route, construct the client with the API key and
+explicit server-bound tenant and principal IDs. `HelmClient::new` remains
+available for public routes.
+
+```rust
+let client = HelmClient::with_auth(
+    "http://127.0.0.1:7714",
+    Some("api-key"),
+    Some("tenant-id"),
+    Some("principal-id"),
+);
+```
+
 ## Execution Boundary Methods
 
 `HelmClient` includes calls for evidence envelope manifests, boundary records

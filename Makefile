@@ -173,7 +173,7 @@ docker-verify:
 	docker build -f core/Dockerfile.api -t helm-ai-kernel:verify-core-api .
 	docker build -f oss-fuzz/Dockerfile -t helm-ai-kernel:verify-oss-fuzz oss-fuzz
 
-release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify conformance-release-gate deployment-smoke release-smoke
+release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone sdk-examples-smoke proto-lint proto-breaking docker-verify conformance-release-gate deployment-smoke release-smoke
 	@echo "✅ Release readiness gate passed"
 
 crucible: build

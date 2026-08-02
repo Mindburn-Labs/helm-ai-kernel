@@ -51,6 +51,19 @@ class Example {
 }
 ```
 
+For a protected tenant-scoped route, pass the API key and explicit server-bound
+tenant and principal IDs. Existing one- and two-argument constructors remain
+available for public routes.
+
+```java
+HelmClient client = new HelmClient(
+    "http://127.0.0.1:7714",
+    System.getenv("HELM_ADMIN_API_KEY"),
+    "tenant-id",
+    "principal-id"
+);
+```
+
 ## Execution Boundary Methods
 
 `HelmClient` exposes methods for evidence envelope manifests, boundary records

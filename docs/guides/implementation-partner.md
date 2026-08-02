@@ -77,17 +77,16 @@ credential.
 Tenant-scoped routes also bind tenant and principal identity. When the scoped
 emergency fence is enabled, the server can additionally require
 `X-Helm-Workspace-ID`. Use [HTTP API](/reference/http-api) for the route class and
-[SDKs](/sdks#authentication-coverage) for the per-language header gap.
+[SDKs](/sdks#authentication-coverage) for the per-language header support.
 
 If the selected SDK cannot send a required identity header, stop and use direct
 HTTP or a client generated from `/openapi.yaml`. Never remove a required scope
 merely to make an example run.
 
-For this source target, the handwritten TypeScript and Python clients cannot
-set the principal header, and the Go client cannot set the optional workspace header.
-Use those convenience clients only for routes covered by their helpers. For a
-protected evaluate call, direct HTTP or a generated OpenAPI client is the
-documented path until the required header helpers ship in a verified release.
+The maintained Go, TypeScript, Python, Java, and Rust clients can send the
+required API-key, tenant, and principal headers. The Go client cannot set the
+optional workspace header, so use direct HTTP or a generated OpenAPI client
+when a scoped emergency fence requires that additional binding.
 
 ## 6. Run One Protected HTTP Evaluation
 

@@ -138,7 +138,7 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
     fake = FakeHTTPClient()
     client_cls = MagicMock(return_value=fake)
     with patch("helm_sdk.client.httpx.Client", client_cls):
-        client = HelmClient(base_url="http://h/", api_key="key", tenant_id="tenant", timeout=2.5)
+        client = HelmClient(base_url="http://h/", api_key="key", tenant_id="tenant", principal_id="principal", timeout=2.5)
         assert client.base_url == "http://h"
         client.close()
 
@@ -146,7 +146,11 @@ def test_constructor_sets_headers_timeout_and_close() -> None:
     kwargs = client_cls.call_args.kwargs
     assert kwargs["base_url"] == "http://h"
     assert kwargs["timeout"] == 2.5
-    assert kwargs["headers"] == {"Authorization": "Bearer key", "X-Helm-Tenant-ID": "tenant"}
+    assert kwargs["headers"] == {
+        "Authorization": "Bearer key",
+        "X-Helm-Tenant-ID": "tenant",
+        "X-Helm-Principal-ID": "principal",
+    }
 
 
 def test_json_body_handles_dataclass_generated_model_model_dump_and_plain_dict() -> None:

@@ -169,6 +169,7 @@ class HelmClient:
         api_key: Optional[str] = None,
         tenant_id: Optional[str] = None,
         timeout: float = 30.0,
+        principal_id: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
         headers: dict[str, str] = {}
@@ -176,6 +177,8 @@ class HelmClient:
             headers["Authorization"] = f"Bearer {api_key}"
         if tenant_id:
             headers["X-Helm-Tenant-ID"] = tenant_id
+        if principal_id:
+            headers["X-Helm-Principal-ID"] = principal_id
         self._client = httpx.Client(
             base_url=self.base_url,
             headers=headers,

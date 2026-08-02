@@ -26,14 +26,25 @@ public class HelmClient {
     private final HttpClient httpClient;
     private final Gson gson;
     private final String apiKey;
+    private final String tenantId;
+    private final String principalId;
 
     public HelmClient(String baseUrl) {
-        this(baseUrl, null);
+        this(baseUrl, null, null, null);
     }
 
     public HelmClient(String baseUrl, String apiKey) {
+        this(baseUrl, apiKey, null, null);
+    }
+
+    /**
+     * Creates a client with optional API and tenant identity headers for protected routes.
+     */
+    public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.apiKey = apiKey;
+        this.tenantId = tenantId;
+        this.principalId = principalId;
         this.gson = new GsonBuilder()
                 .setFieldNamingPolicy(com.google.gson.FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
                 .create();
@@ -183,6 +194,12 @@ public class HelmClient {
                 .header("Content-Type", "application/json");
         if (apiKey != null && !apiKey.isEmpty()) {
             b.header("Authorization", "Bearer " + apiKey);
+        }
+        if (tenantId != null && !tenantId.isEmpty()) {
+            b.header("X-Helm-Tenant-ID", tenantId);
+        }
+        if (principalId != null && !principalId.isEmpty()) {
+            b.header("X-Helm-Principal-ID", principalId);
         }
         return b;
     }

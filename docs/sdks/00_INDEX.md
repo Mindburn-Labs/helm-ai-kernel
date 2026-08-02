@@ -74,10 +74,10 @@ additionally require `X-Helm-Workspace-ID`.
 | Client | API key | Tenant | Principal | Workspace |
 | --- | --- | --- | --- | --- |
 | Go | yes | yes | yes | no helper |
-| TypeScript | yes | yes | no helper | no helper |
-| Python | yes | yes | no helper | no helper |
-| Java | yes | no helper | no helper | no helper |
-| Rust | no helper | no helper | no helper | no helper |
+| TypeScript | yes | yes | yes | no helper |
+| Python | yes | yes | yes | no helper |
+| Java | yes | yes | yes | no helper |
+| Rust | yes | yes | yes | no helper |
 
 When the chosen client lacks a required header, use the documented HTTP route or
 generate a client from the [public OpenAPI](/openapi.yaml). Do not silently omit

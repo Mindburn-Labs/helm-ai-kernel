@@ -58,7 +58,8 @@ def main() -> None:
     helm_url = os.environ.get("HELM_URL", "http://127.0.0.1:7715")
     admin_key = os.environ.get("HELM_ADMIN_API_KEY")
     tenant_id = os.environ.get("HELM_TENANT_ID", "sdk-python-example")
-    with HelmClient(base_url=helm_url, api_key=admin_key, tenant_id=tenant_id) as helm:
+    principal_id = os.environ.get("HELM_PRINCIPAL_ID", "system-admin")
+    with HelmClient(base_url=helm_url, api_key=admin_key, tenant_id=tenant_id, principal_id=principal_id) as helm:
         allowed = helm.evaluate_decision(
             EvaluateRequest(
                 tool="read-ticket",
@@ -98,7 +99,7 @@ def main() -> None:
         )
         require_verdict(preflight, "ALLOW", "sandbox preflight")
 
-        evidence = helm.export_evidence("sdk-python-agent")
+        evidence = helm.export_evidence("python-sdk-example")
         evidence_result = helm.verify_evidence(evidence)
         if evidence_result.verdict != "PASS":
             raise AssertionError(f"evidence verification failed: {evidence_result.to_dict()}")

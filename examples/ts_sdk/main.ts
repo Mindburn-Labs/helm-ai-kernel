@@ -55,6 +55,7 @@ const helm = new HelmClient({
   baseUrl: helmUrl,
   apiKey: process.env.HELM_ADMIN_API_KEY,
   tenantId: process.env.HELM_TENANT_ID ?? 'sdk-ts-example',
+  principalId: process.env.HELM_PRINCIPAL_ID ?? 'system-admin',
 });
 
 const allowed = await helm.evaluateDecision({
@@ -89,7 +90,7 @@ const preflight = await helm.preflightSandboxGrant({
 });
 requireVerdict(preflight, 'ALLOW', 'sandbox preflight');
 
-const evidence = await helm.exportEvidence('sdk-ts-agent');
+const evidence = await helm.exportEvidence('ts-sdk-example');
 const evidenceResult = await helm.verifyEvidence(evidence);
 if (evidenceResult.verdict !== 'PASS') {
   throw new Error(`evidence verification failed: ${JSON.stringify(evidenceResult)}`);

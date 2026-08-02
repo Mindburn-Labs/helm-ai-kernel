@@ -356,7 +356,10 @@ func runServerWithOptions(opts serverOptions) error {
 	// 2.5 PRG & Guardian. --policy remains bootstrap/source configuration;
 	// runtime policy authority is installed only through the reconciler.
 	ruleGraph := prg.NewGraph()
-	policyScope := policyreconcile.DefaultScope
+	policyScope := policyreconcile.PolicyScope{
+		TenantID:    configuredRuntimeTenantID(),
+		WorkspaceID: configuredRuntimeWorkspaceID(),
+	}.Normalize()
 	var (
 		policyStore      policyreconcile.PolicySnapshotStore
 		policyReconciler *policyreconcile.Reconciler

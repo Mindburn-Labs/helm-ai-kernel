@@ -516,8 +516,9 @@ func TestStandaloneExecutorReceiptIsRetrievableAndExportableBySignedSession(t *t
 	}
 
 	mux := http.NewServeMux()
-	registerReceiptRoutes(mux, &Services{ReceiptStore: receiptStore})
-	registerContractRoutes(mux, &Services{ReceiptStore: receiptStore})
+	services := &Services{ReceiptStore: receiptStore, ReceiptSigner: signer}
+	registerReceiptRoutes(mux, services)
+	registerContractRoutes(mux, services)
 	assertReceiptSessionRetrievalAndExport(t, mux, wantSessionID, receipt.ReceiptID)
 }
 

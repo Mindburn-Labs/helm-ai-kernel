@@ -102,6 +102,7 @@ func TestQuickstartDryRunJSONIsPurePreview(t *testing.T) {
 }
 
 func TestQuickstartSourceBuildFromRepoRootUsesDedicatedUserState(t *testing.T) {
+	t.Setenv("GOWORK", "off")
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +114,12 @@ func TestQuickstartSourceBuildFromRepoRootUsesDedicatedUserState(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "helm-ai-kernel")
 	build := exec.Command("go", "build", "-o", binary, "./core/cmd/helm-ai-kernel")
 	build.Dir = repoRoot
+	build.Env = os.Environ()
+	for i, entry := range build.Env {
+		if strings.HasPrefix(entry, "GOWORK=") {
+			build.Env[i] = "GOWORK="
+		}
+	}
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("source build from repo root: %v\n%s", err, out)
 	}

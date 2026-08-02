@@ -1,3 +1,4 @@
+// quantum_posture: this test imports receipt signing only to construct chain-integrity fixtures; production signer posture is assessed in receipts.
 package session
 
 import (
@@ -100,7 +101,11 @@ func TestExecutorRecordsRuntimeHandleBeforeRunning(t *testing.T) {
 	if !strings.Contains(run.VerificationCommand, ".tar") {
 		t.Fatalf("verification command must point to sealed archive: %s", run.VerificationCommand)
 	}
-	archivePath := strings.TrimPrefix(run.VerificationCommand, "helm-ai-kernel verify --bundle ")
+	_, archivePath, ok := strings.Cut(run.VerificationCommand, "--bundle ")
+	if !ok {
+		t.Fatalf("verification command missing bundle: %s", run.VerificationCommand)
+	}
+	archivePath = strings.Fields(archivePath)[0]
 	assertTarContains(t, archivePath, "07_ATTESTATIONS/evidence_pack.sig")
 }
 

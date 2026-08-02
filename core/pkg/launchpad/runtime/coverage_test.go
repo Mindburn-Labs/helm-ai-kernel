@@ -535,11 +535,34 @@ exit 0
 	if err := json.Unmarshal(data, &receipt); err != nil {
 		t.Fatalf("decode sidecar receipt: %v", err)
 	}
-	if receipt.ExecutorID != "launch/sidecar:egress-proxy" || receipt.PrevHash != "" || receipt.LamportClock != 1 {
+	if receipt.ExecutorID != "launch/sidecar:egress-proxy:docker_sidecar_started" || receipt.PrevHash != "" || receipt.LamportClock != 1 {
 		t.Fatalf("sidecar receipt must start a distinct causal session: %+v", receipt)
 	}
 	if err := handle.Stop(); err != nil {
 		t.Fatalf("sidecar stop failed: %v", err)
+	}
+	entries, err := os.ReadDir(handle.ReceiptDir)
+	if err != nil {
+		t.Fatalf("read sidecar receipt directory: %v", err)
+	}
+	sessions := map[string]bool{}
+	for _, entry := range entries {
+		data, err := os.ReadFile(filepath.Join(handle.ReceiptDir, entry.Name()))
+		if err != nil {
+			t.Fatalf("read sidecar receipt %s: %v", entry.Name(), err)
+		}
+		if err := json.Unmarshal(data, &receipt); err != nil {
+			t.Fatalf("decode sidecar receipt %s: %v", entry.Name(), err)
+		}
+		if receipt.PrevHash != "" || receipt.LamportClock != 1 {
+			t.Fatalf("sidecar receipt must be a session genesis: %+v", receipt)
+		}
+		sessions[receipt.ExecutorID] = true
+	}
+	for _, sessionID := range []string{"launch/sidecar:egress-proxy:docker_sidecar_started", "launch/sidecar:egress-proxy:docker_sidecar_stopped"} {
+		if !sessions[sessionID] {
+			t.Fatalf("sidecar receipt session missing %q: %#v", sessionID, sessions)
+		}
 	}
 	logData, err := os.ReadFile(logPath)
 	if err != nil {

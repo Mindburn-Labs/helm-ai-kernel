@@ -124,11 +124,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		case http.MethodPost:
 			receiptCount := 0
 			if svc != nil && svc.ReceiptStore != nil {
-				if tenantID, err := authenticatedReceiptTenantID(r.Context()); err == nil {
-					if receipts, err := contractReceipts(r.Context(), svc, tenantID, "", 1000); err == nil {
-						receiptCount = len(receipts)
-					}
+				// SurfaceRegistry checkpoints are process-global, so this count must
+				// cover every durable receipt rather than the admin principal's
+				// synthetic "system" tenant.
+				receipts, err := svc.ReceiptStore.List(r.Context(), int(^uint(0)>>1))
+				if err != nil {
+					api.WriteInternal(w, err)
+					return
 				}
+				receiptCount = len(receipts)
 			}
 			checkpoint, err := surfaces.CreateCheckpoint(receiptCount)
 			if err != nil {
@@ -263,10 +267,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusConflict, "No receipts available", "evidence export requires at least one receipt")
 			return
 		}
-		// SurfaceRegistry artifacts are process-global and do not carry durable
-		// tenant/session provenance. Tenant evidence exports therefore contain
-		// only tenant-scoped signed receipts until those artifacts are scoped.
-		bundle, err := buildEvidenceBundle(req.SessionID, receipts)
+		bundle, err := buildEvidenceBundleWithSurfaceArtifacts(req.SessionID, receipts, surfaces)
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -1478,8 +1479,10 @@ func contractReceiptsForExportWithPageSize(ctx context.Context, svc *Services, t
 			return nil, errEvidenceExportTooLarge
 		}
 		limit := pageSize
-		if remaining < limit {
-			limit = remaining
+		if remaining <= limit {
+			// Read one extra receipt at the cap so exactly-max exports succeed
+			// while a truncated export still fails closed.
+			limit = remaining + 1
 		}
 		var page []*contracts.Receipt
 		var err error
@@ -1489,6 +1492,9 @@ func contractReceiptsForExportWithPageSize(ctx context.Context, svc *Services, t
 		}
 		if len(page) == 0 {
 			return receipts, nil
+		}
+		if len(page) > remaining {
+			return nil, errEvidenceExportTooLarge
 		}
 		receipts = append(receipts, page...)
 		nextCursor, err := receiptCursorForReceipt(sessionID, page[len(page)-1])
@@ -1557,6 +1563,10 @@ func findReceiptByReference(ctx context.Context, svc *Services, tenantID, ref st
 }
 
 func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byte, error) {
+	return buildEvidenceBundleWithSurfaceArtifacts(sessionID, receipts, nil)
+}
+
+func buildEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) ([]byte, error) {
 	files := make(map[string][]byte)
 	for _, receipt := range receipts {
 		data, err := json.Marshal(receipt)
@@ -1564,6 +1574,11 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byt
 			return nil, fmt.Errorf("marshal receipt %s: %w", receipt.ReceiptID, err)
 		}
 		files["receipts/"+receipt.ReceiptID+".json"] = data
+	}
+	if surfaces != nil {
+		if err := addReferencedSurfaceArtifacts(files, surfaces, receipts); err != nil {
+			return nil, err
+		}
 	}
 	fileHashes := make(map[string]string, len(files))
 	for name, data := range files {
@@ -1605,6 +1620,54 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byt
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func addReferencedSurfaceArtifacts(files map[string][]byte, surfaces *boundarypkg.SurfaceRegistry, receipts []*contracts.Receipt) error {
+	for _, scope := range surfaces.ListVerificationScopes() {
+		if err := addSurfaceArtifactIfReferenced(files, "verification_scopes/", scope.VerificationScopeID, scope, receipts); err != nil {
+			return err
+		}
+	}
+	for _, trace := range surfaces.ListHarnessTraces() {
+		if err := addSurfaceArtifactIfReferenced(files, "harness_traces/", trace.TraceID, trace, receipts); err != nil {
+			return err
+		}
+	}
+	for _, tx := range surfaces.ListPlanTransactions() {
+		if err := addSurfaceArtifactIfReferenced(files, "plan_transactions/", tx.PlanTransactionID, tx, receipts); err != nil {
+			return err
+		}
+	}
+	for _, change := range surfaces.ListHarnessChanges() {
+		if err := addSurfaceArtifactIfReferenced(files, "harness_change_contracts/", change.ChangeContractID, change, receipts); err != nil {
+			return err
+		}
+	}
+	for _, action := range surfaces.ListGroundedActions() {
+		if err := addSurfaceArtifactIfReferenced(files, "grounded_action_refs/", action.GroundedActionID, action, receipts); err != nil {
+			return err
+		}
+	}
+	for _, receipt := range surfaces.ListGUIReceipts() {
+		if err := addSurfaceArtifactIfReferenced(files, "gui_action_receipts/", receipt.ReceiptID, receipt, receipts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addSurfaceArtifactIfReferenced(files map[string][]byte, prefix, id string, artifact any, receipts []*contracts.Receipt) error {
+	data, err := json.Marshal(artifact)
+	if err != nil {
+		return fmt.Errorf("marshal %s artifact %s: %w", strings.TrimSuffix(prefix, "/"), id, err)
+	}
+	for _, receipt := range receipts {
+		if evidenceArtifactReferencesReceipt(prefix, data, receipt) {
+			files[prefix+id+".json"] = data
+			return nil
+		}
+	}
+	return nil
 }
 
 func writeTarEntry(tw *tar.Writer, name string, data []byte) error {
@@ -1778,34 +1841,109 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 
 func verifyHarnessEvidenceRequirements(bundle *evidenceBundle, receipts []*contracts.Receipt) []string {
 	var errs []string
-	hasScopes := bundleHasDir(bundle, "verification_scopes/")
-	hasTraces := bundleHasDir(bundle, "harness_traces/")
-	hasTransactions := bundleHasDir(bundle, "plan_transactions/")
-	hasChanges := bundleHasDir(bundle, "harness_change_contracts/")
-	hasGroundedActions := bundleHasDir(bundle, "grounded_action_refs/")
 	for _, receipt := range receipts {
-		if receiptRequiresVerificationScope(receipt) && !hasScopes {
+		if receiptRequiresVerificationScope(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "verification_scopes/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing verification scope", receipt.ReceiptID))
 		}
-		if receiptRequiresHarnessTrace(receipt) && !hasTraces {
+		if receiptRequiresHarnessTrace(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "harness_traces/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing harness trace", receipt.ReceiptID))
 		}
-		if receiptRequiresPlanTransaction(receipt) && !hasTransactions {
+		if receiptRequiresPlanTransaction(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "plan_transactions/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing plan transaction", receipt.ReceiptID))
 		}
-		if receiptRequiresHarnessChange(receipt) && !hasChanges {
+		if receiptRequiresHarnessChange(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "harness_change_contracts/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing harness change contract", receipt.ReceiptID))
 		}
-		if receiptRequiresGroundedAction(receipt) && !hasGroundedActions {
+		if receiptRequiresGroundedAction(receipt) && !bundleHasReferencedSurfaceArtifact(bundle, "grounded_action_refs/", receipt) {
 			errs = append(errs, fmt.Sprintf("%s missing grounded action ref", receipt.ReceiptID))
 		}
 	}
 	return errs
 }
 
-func bundleHasDir(bundle *evidenceBundle, prefix string) bool {
-	for name := range bundle.Files {
-		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".json") {
+func bundleHasReferencedSurfaceArtifact(bundle *evidenceBundle, prefix string, receipt *contracts.Receipt) bool {
+	for name, data := range bundle.Files {
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".json") && evidenceArtifactReferencesReceipt(prefix, data, receipt) {
+			return true
+		}
+	}
+	return false
+}
+
+func evidenceArtifactReferencesReceipt(prefix string, data []byte, receipt *contracts.Receipt) bool {
+	switch prefix {
+	case "verification_scopes/":
+		var scope contracts.VerificationScope
+		return json.Unmarshal(data, &scope) == nil && receiptRequiresVerificationScope(receipt) && receiptReferencesArtifact(receipt, scope.VerificationScopeID, scope.ScopeHash)
+	case "harness_traces/":
+		var trace contracts.HarnessTrace
+		if json.Unmarshal(data, &trace) != nil || !receiptRequiresHarnessTrace(receipt) {
+			return false
+		}
+		return receiptReferencesArtifact(receipt, append([]string{trace.TraceID, trace.TraceHash}, trace.ReceiptRefs...)...)
+	case "plan_transactions/":
+		var tx contracts.PlanTransaction
+		return json.Unmarshal(data, &tx) == nil && receiptRequiresPlanTransaction(receipt) && receiptReferencesArtifact(receipt, tx.PlanTransactionID, tx.PlanHash, tx.TransactionHash)
+	case "harness_change_contracts/":
+		var change contracts.HarnessChangeContract
+		return json.Unmarshal(data, &change) == nil && receiptRequiresHarnessChange(receipt) && receiptReferencesArtifact(receipt, change.ChangeContractID, change.ContractHash, change.ActivationReceiptRef)
+	case "grounded_action_refs/":
+		var action contracts.GroundedActionRef
+		return json.Unmarshal(data, &action) == nil && receiptRequiresGroundedAction(receipt) && receiptReferencesArtifact(receipt, action.GroundedActionID, action.GroundingHash, action.ProofGraphNodeRef, action.VerificationScopeRef)
+	case "gui_action_receipts/":
+		var actionReceipt contracts.GUIActionReceipt
+		return json.Unmarshal(data, &actionReceipt) == nil && receiptRequiresGroundedAction(receipt) && receiptReferencesArtifact(receipt, actionReceipt.ReceiptID, actionReceipt.GroundedActionRef, actionReceipt.ReceiptHash)
+	default:
+		return false
+	}
+}
+
+func receiptReferencesArtifact(receipt *contracts.Receipt, artifactRefs ...string) bool {
+	if receipt == nil {
+		return false
+	}
+	receiptRefs := map[string]struct{}{}
+	for _, value := range []string{
+		receipt.ReceiptID,
+		receiptLinkHash(receipt),
+		receipt.Signature,
+		receipt.MerkleRoot,
+		receipt.ScopeHash,
+		receipt.EffectGraphNodeID,
+	} {
+		if value = strings.TrimSpace(value); value != "" {
+			receiptRefs[value] = struct{}{}
+		}
+	}
+	for _, value := range receipt.Evidence {
+		if value = strings.TrimSpace(value); value != "" {
+			receiptRefs[value] = struct{}{}
+		}
+	}
+	for _, value := range receipt.Metadata {
+		switch value := value.(type) {
+		case string:
+			if value = strings.TrimSpace(value); value != "" {
+				receiptRefs[value] = struct{}{}
+			}
+		case []string:
+			for _, ref := range value {
+				if ref = strings.TrimSpace(ref); ref != "" {
+					receiptRefs[ref] = struct{}{}
+				}
+			}
+		case []any:
+			for _, ref := range value {
+				if ref, ok := ref.(string); ok {
+					if ref = strings.TrimSpace(ref); ref != "" {
+						receiptRefs[ref] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+	for _, ref := range artifactRefs {
+		if _, ok := receiptRefs[strings.TrimSpace(ref)]; ok && strings.TrimSpace(ref) != "" {
 			return true
 		}
 	}

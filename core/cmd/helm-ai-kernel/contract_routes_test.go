@@ -160,10 +160,31 @@ func TestEvidenceExportAndVerifyRoundTrip(t *testing.T) {
 	}
 }
 
-func TestTenantEvidenceExportExcludesGlobalSurfaceRegistryArtifacts(t *testing.T) {
+func TestTenantEvidenceExportIncludesReferencedSurfaceArtifactsOnly(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
+	scope, err := registry.PutVerificationScope(contracts.VerificationScope{
+		VerificationScopeID: "tenant-a-scope",
+		SubjectHash:         "sha256:tenant-a-subject",
+		RiskClass:           "T2",
+		ChecksPerformed:     []string{"hash"},
+		VerifierHash:        "sha256:verifier",
+		PolicyHash:          "sha256:policy",
+	})
+	if err != nil {
+		t.Fatalf("seed tenant scope: %v", err)
+	}
+	if _, err := registry.PutHarnessTrace(contracts.HarnessTrace{
+		TraceID:    "tenant-a-trace",
+		PlanHash:   "sha256:plan",
+		PolicyHash: "sha256:policy",
+		ReceiptRefs: []string{
+			"rcpt-evidence-a",
+		},
+	}); err != nil {
+		t.Fatalf("seed tenant trace: %v", err)
+	}
 	if _, err := registry.PutVerificationScope(contracts.VerificationScope{
 		VerificationScopeID: "tenant-b-global-scope",
 		SubjectHash:         "sha256:tenant-b-sensitive-subject",
@@ -174,11 +195,38 @@ func TestTenantEvidenceExportExcludesGlobalSurfaceRegistryArtifacts(t *testing.T
 	}); err != nil {
 		t.Fatalf("seed global verification scope: %v", err)
 	}
+	if _, err := registry.PutHarnessTrace(contracts.HarnessTrace{
+		TraceID:    "tenant-b-global-trace",
+		PlanHash:   "sha256:other-plan",
+		PolicyHash: "sha256:other-policy",
+		ReceiptRefs: []string{
+			"rcpt-other",
+		},
+	}); err != nil {
+		t.Fatalf("seed global harness trace: %v", err)
+	}
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "evidence-session", &contracts.Receipt{
+		ReceiptID:    "rcpt-evidence-a",
+		DecisionID:   "dec-evidence-a",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 1, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		Signature:    "sig-evidence-a",
+		DecisionHash: "sha256:evidence-decision",
+		ArgsHash:     "args-evidence",
+		ScopeHash:    scope.ScopeHash,
+		Metadata: map[string]any{
+			"risk_class":     "T2",
+			"side_effectful": true,
+			"scope_hash":     scope.ScopeHash,
+		},
+	})
 	svc.BoundarySurfaces = registry
 
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
-	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"session-test","format":"tar.gz"}`))
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"evidence-session","format":"tar.gz"}`))
 	authorizeTestRequest(exportReq)
 	exportRec := httptest.NewRecorder()
 	mux.ServeHTTP(exportRec, exportReq)
@@ -189,18 +237,36 @@ func TestTenantEvidenceExportExcludesGlobalSurfaceRegistryArtifacts(t *testing.T
 	if err != nil {
 		t.Fatalf("read evidence bundle: %v", err)
 	}
-	for name, data := range bundle.Files {
-		for _, prefix := range []string{
-			"verification_scopes/", "harness_traces/", "plan_transactions/",
-			"harness_change_contracts/", "grounded_action_refs/", "gui_action_receipts/",
-		} {
-			if strings.HasPrefix(name, prefix) {
-				t.Fatalf("tenant evidence export included global artifact %q", name)
-			}
+	for _, name := range []string{
+		"verification_scopes/tenant-a-scope.json",
+		"harness_traces/tenant-a-trace.json",
+	} {
+		if _, ok := bundle.Files[name]; !ok {
+			t.Fatalf("tenant evidence export omitted referenced artifact %q: %v", name, bundle.Files)
 		}
+	}
+	for _, name := range []string{
+		"verification_scopes/tenant-b-global-scope.json",
+		"harness_traces/tenant-b-global-trace.json",
+	} {
+		if _, ok := bundle.Files[name]; ok {
+			t.Fatalf("tenant evidence export included global artifact %q", name)
+		}
+	}
+	for name, data := range bundle.Files {
 		if bytes.Contains(data, []byte("tenant-b-sensitive-subject")) {
 			t.Fatalf("tenant evidence export leaked global artifact content in %q", name)
 		}
+	}
+	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/verify", bytes.NewReader(exportRec.Body.Bytes()))
+	verifyRec := httptest.NewRecorder()
+	mux.ServeHTTP(verifyRec, verifyReq)
+	var result map[string]any
+	if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if verifyRec.Code != http.StatusOK || result["verdict"] != "PASS" {
+		t.Fatalf("referenced evidence verification status=%d result=%+v", verifyRec.Code, result)
 	}
 }
 
@@ -242,6 +308,49 @@ func TestEvidenceExportFailsWhenReceiptLimitWouldTruncate(t *testing.T) {
 	}
 	if !strings.Contains(exportRec.Header().Get("Content-Type"), "application/problem+json") {
 		t.Fatalf("export error content type = %q", exportRec.Header().Get("Content-Type"))
+	}
+}
+
+func TestContractReceiptsForExportAllowsExactReceiptLimit(t *testing.T) {
+	receipts, err := contractReceiptsForExportWithPageSize(context.Background(), &Services{ReceiptStore: &exactLimitReceiptStore{}}, defaultRuntimeTenantID, "exact-limit", evidenceExportPageSize)
+	if err != nil {
+		t.Fatalf("collect exact receipt limit: %v", err)
+	}
+	if len(receipts) != maxEvidenceExportReceipts {
+		t.Fatalf("exact receipt export count=%d, want %d", len(receipts), maxEvidenceExportReceipts)
+	}
+}
+
+func TestBoundaryCheckpointCountsAllDurableReceipts(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), "tenant-live", "live-session", &contracts.Receipt{
+		ReceiptID:    "rcpt-live",
+		DecisionID:   "dec-live",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 1, 0, time.UTC),
+		ExecutorID:   "agent.live",
+		Signature:    "sig-live",
+		DecisionHash: "sha256:live-decision",
+		ArgsHash:     "args-live",
+	})
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/boundary/checkpoints", nil)
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("checkpoint status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var checkpoint contracts.BoundaryCheckpoint
+	if err := json.Unmarshal(rec.Body.Bytes(), &checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	if checkpoint.ReceiptCount != 2 {
+		t.Fatalf("global checkpoint receipt_count=%d, want 2", checkpoint.ReceiptCount)
 	}
 }
 
@@ -1065,6 +1174,21 @@ func authorizeTestRequest(req *http.Request) {
 
 type overflowReceiptStore struct {
 	captureReceiptStore
+}
+
+type exactLimitReceiptStore struct {
+	overflowReceiptStore
+}
+
+func (s *exactLimitReceiptStore) ListByTenantSession(_ context.Context, _, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	if since >= maxEvidenceExportReceipts {
+		return nil, nil
+	}
+	remaining := int(maxEvidenceExportReceipts - since)
+	if limit > remaining {
+		limit = remaining
+	}
+	return overflowReceipts(sessionID, since, limit), nil
 }
 
 func (s *overflowReceiptStore) ListByAgent(_ context.Context, agentID string, since uint64, limit int) ([]*contracts.Receipt, error) {

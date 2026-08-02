@@ -4555,7 +4555,7 @@ components:
     NonBlankSessionID:
       type: string
       minLength: 1
-      pattern: '^(?=.*\S)(?!.*[\\/]).+$'
+      pattern: '^[^\\/]*[^\s\\/][^\\/]*$'
 
     EvaluateResponse:
       type: object

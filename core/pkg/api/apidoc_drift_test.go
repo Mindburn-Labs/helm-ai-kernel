@@ -133,10 +133,16 @@ func TestEvaluateRequestOpenAPISessionRequirement(t *testing.T) {
 	if err := schema.Validate(map[string]any{"tool": "read_file"}); err != nil {
 		t.Errorf("EvaluateRequest must retain additive compatibility at the OpenAPI boundary: %v", err)
 	}
-	if err := schema.Validate(map[string]any{
-		"tool": "read_file", "effect_level": "read", "session_id": " \t\n ",
-	}); err == nil {
-		t.Error("EvaluateRequest accepted a whitespace-only top-level session_id")
+	for name, sessionID := range map[string]string{
+		"whitespace-only": " \t\n ",
+		"slash":           "bad/session",
+		"backslash":       `bad\session`,
+	} {
+		if err := schema.Validate(map[string]any{
+			"tool": "read_file", "effect_level": "read", "session_id": sessionID,
+		}); err == nil {
+			t.Errorf("EvaluateRequest accepted an invalid %s top-level session_id", name)
+		}
 	}
 
 	components, ok := spec["components"].(map[string]any)

@@ -377,6 +377,13 @@ available. The Guardian's basic policy denial now emits the machine-readable
 `decision_record.v2` preimage to sign `reason_code` instead of free-text
 reason.
 
+`005_add_receipt_append_sequence.sql` adds a durable, globally monotonic
+append sequence for tenant-wide receipt cursors. It backfills historical rows
+with the former timestamp/receipt-ID order, advances future inserts through a
+database sequence, and makes the value unique. This keeps a newly opened
+signed session (whose Lamport clock restarts at one) visible after a tenant
+cursor has advanced.
+
 This is deliberately **not** a claim that the whole receipt is signed: fields
 outside the durable V5 envelope, including post-sign transparency anchoring,
 remain separately verified or recorded claims. It is source/test evidence only;

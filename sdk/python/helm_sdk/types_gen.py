@@ -1015,6 +1015,7 @@ class ApprovalCeremony(BaseModel):
     __properties: ClassVar[List[str]] = ["approval_id", "subject", "action", "state", "requested_by", "approvers", "quorum", "timelock_until", "expires_at", "break_glass", "reason", "receipt_id", "ceremony_hash", "created_at", "updated_at"]
 
     @field_validator('state')
+    @classmethod
     def state_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -2529,6 +2530,7 @@ class ChatCompletionRequestMessagesInner(BaseModel):
     __properties: ClassVar[List[str]] = ["role", "content", "tool_call_id"]
 
     @field_validator('role')
+    @classmethod
     def role_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['system', 'user', 'assistant', 'tool']):
@@ -2617,6 +2619,7 @@ class ChatCompletionRequestToolsInner(BaseModel):
     __properties: ClassVar[List[str]] = ["type", "function"]
 
     @field_validator('type')
+    @classmethod
     def type_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -3406,6 +3409,7 @@ class ConformanceRequest(BaseModel):
     __properties: ClassVar[List[str]] = ["level", "profile"]
 
     @field_validator('level')
+    @classmethod
     def level_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['L1', 'L2']):
@@ -3497,6 +3501,7 @@ class ConformanceResult(BaseModel):
     __properties: ClassVar[List[str]] = ["report_id", "level", "verdict", "gates", "failed", "details"]
 
     @field_validator('verdict')
+    @classmethod
     def verdict_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -6160,6 +6165,7 @@ class EvaluateRequest(BaseModel):
     __properties: ClassVar[List[str]] = ["principal", "action", "resource", "tool", "args", "agent_id", "effect_level", "session_id", "context"]
 
     @field_validator('session_id')
+    @classmethod
     def session_id_validate_regular_expression(cls, value):
         """Validates the regular expression"""
         if value is None:
@@ -6464,6 +6470,7 @@ class EvidenceEnvelopeManifest(BaseModel):
     __properties: ClassVar[List[str]] = ["manifest_id", "envelope", "native_evidence_hash", "native_authority", "subject", "statement_hash", "experimental", "created_at", "manifest_hash"]
 
     @field_validator('envelope')
+    @classmethod
     def envelope_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['dsse', 'jws', 'in-toto', 'slsa', 'sigstore', 'scitt', 'cose']):
@@ -6661,6 +6668,7 @@ class ExecutionBoundaryRecord(BaseModel):
     __properties: ClassVar[List[str]] = ["record_id", "verdict", "reason_code", "tool_name", "args_hash", "policy_epoch", "mcp_server_id", "oauth_resource", "oauth_scopes", "sandbox_grant_hash", "authz_snapshot_hash", "approval_receipt_id", "receipt_id", "record_hash", "created_at"]
 
     @field_validator('verdict')
+    @classmethod
     def verdict_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -6764,6 +6772,7 @@ class ExportRequest(BaseModel):
     __properties: ClassVar[List[str]] = ["session_id", "format"]
 
     @field_validator('format')
+    @classmethod
     def format_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -6855,6 +6864,7 @@ class FilesystemPreopen(BaseModel):
     __properties: ClassVar[List[str]] = ["path", "mode", "content_hash"]
 
     @field_validator('mode')
+    @classmethod
     def mode_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['ro', 'rw']):
@@ -7523,6 +7533,7 @@ class GovernanceDecision(BaseModel):
     __properties: ClassVar[List[str]] = ["decision_id", "effect_id", "verdict", "reason_code", "receipt", "active_packs"]
 
     @field_validator('verdict')
+    @classmethod
     def verdict_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['ALLOW', 'DENY', 'ESCALATE']):
@@ -7635,6 +7646,7 @@ class GroundedActionRef(BaseModel):
     __properties: ClassVar[List[str]] = ["grounded_action_id", "screenshot_hash", "dom_or_ax_snapshot_hash", "target_ref", "bbox_or_element_id", "action_type", "precondition", "postcondition", "postcondition_ref", "verification_scope_ref", "policy_hash", "proof_graph_node_ref", "sandbox_grant_hash", "created_at", "grounding_hash"]
 
     @field_validator('action_type')
+    @classmethod
     def action_type_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['click', 'type', 'select', 'submit', 'navigate']):
@@ -7750,6 +7762,7 @@ class GUIActionReceipt(BaseModel):
     __properties: ClassVar[List[str]] = ["receipt_id", "grounded_action_ref", "screenshot_hash", "dom_or_ax_snapshot_hash", "target_ref", "bbox_or_element_id", "action_type", "precondition", "postcondition", "postcondition_ref", "postcondition_verified", "verification_scope_ref", "policy_hash", "proof_graph_node_ref", "sandbox_grant_hash", "created_at", "receipt_hash"]
 
     @field_validator('action_type')
+    @classmethod
     def action_type_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['click', 'type', 'select', 'submit', 'navigate']):
@@ -7864,6 +7877,7 @@ class HarnessChangeContract(BaseModel):
     __properties: ClassVar[List[str]] = ["change_contract_id", "component_modified", "failure_mode_targeted", "predicted_improvement", "invariants_preserved", "safety_properties", "regression_suite_refs", "simulation_evidence_refs", "canary_scope", "rollback_plan", "approval_required", "activation_receipt_ref", "created_at", "contract_hash"]
 
     @field_validator('component_modified')
+    @classmethod
     def component_modified_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['connector_contract', 'tool_schema', 'sandbox_grant', 'mcp_approval', 'policy_overlay', 'verifier', 'evidence_template', 'routing_rule']):
@@ -8239,6 +8253,7 @@ class HelmErrorError(BaseModel):
     __properties: ClassVar[List[str]] = ["message", "type", "code", "reason_code", "details"]
 
     @field_validator('type')
+    @classmethod
     def type_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['invalid_request', 'authentication_error', 'permission_denied', 'not_found', 'internal_error']):
@@ -8246,6 +8261,7 @@ class HelmErrorError(BaseModel):
         return value
 
     @field_validator('reason_code')
+    @classmethod
     def reason_code_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['DENY_TOOL_NOT_FOUND', 'DENY_SCHEMA_MISMATCH', 'DENY_OUTPUT_DRIFT', 'DENY_BUDGET_EXCEEDED', 'DENY_APPROVAL_REQUIRED', 'DENY_APPROVAL_TIMEOUT', 'DENY_SANDBOX_TRAP', 'DENY_GAS_EXHAUSTION', 'DENY_TIME_LIMIT', 'DENY_MEMORY_LIMIT', 'DENY_POLICY_VIOLATION', 'DENY_TRUST_KEY_REVOKED', 'DENY_IDEMPOTENCY_DUPLICATE', 'ERROR_INTERNAL']):
@@ -9172,6 +9188,7 @@ class LaunchpadImportRecord(BaseModel):
     __properties: ClassVar[List[str]] = ["id", "state", "created_at", "updated_at", "request", "source_snapshot", "capability_graph", "launch_recipe", "preflight", "evidence_ledger"]
 
     @field_validator('state')
+    @classmethod
     def state_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['IMPORTED', 'PREFLIGHTED', 'PROMOTABLE', 'BLOCKED', 'LAUNCHED', 'TORN_DOWN']):
@@ -11989,6 +12006,7 @@ class MCPQuarantineRecord(BaseModel):
     __properties: ClassVar[List[str]] = ["server_id", "name", "transport", "endpoint", "tool_names", "risk", "state", "discovered_at", "approved_at", "approved_by", "approval_receipt_id", "revoked_at", "expires_at", "reason"]
 
     @field_validator('risk')
+    @classmethod
     def risk_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['unknown', 'low', 'medium', 'high', 'critical']):
@@ -11996,6 +12014,7 @@ class MCPQuarantineRecord(BaseModel):
         return value
 
     @field_validator('state')
+    @classmethod
     def state_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['discovered', 'quarantined', 'approved', 'revoked', 'expired']):
@@ -12184,6 +12203,7 @@ class MCPRegistryDiscoverRequest(BaseModel):
     __properties: ClassVar[List[str]] = ["server_id", "name", "transport", "endpoint", "tool_names", "risk", "reason"]
 
     @field_validator('risk')
+    @classmethod
     def risk_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -12748,6 +12768,7 @@ class MCPToolCallResponseResult(BaseModel):
             super().__init__(**kwargs)
 
     @field_validator('actual_instance')
+    @classmethod
     def actual_instance_must_validate_oneof(cls, v):
         instance = MCPToolCallResponseResult.model_construct()
         error_messages = []
@@ -13028,6 +13049,7 @@ class MCPJSONRPCRequest(BaseModel):
     __properties: ClassVar[List[str]] = ["jsonrpc", "id", "method", "params"]
 
     @field_validator('jsonrpc')
+    @classmethod
     def jsonrpc_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['2.0']):
@@ -13140,6 +13162,7 @@ class MCPJSONRPCRequestId(BaseModel):
             super().__init__(**kwargs)
 
     @field_validator('actual_instance')
+    @classmethod
     def actual_instance_must_validate_oneof(cls, v):
         instance = MCPJSONRPCRequestId.model_construct()
         error_messages = []
@@ -13256,6 +13279,7 @@ class MCPJSONRPCResponse(BaseModel):
     __properties: ClassVar[List[str]] = ["jsonrpc", "id", "result", "error"]
 
     @field_validator('jsonrpc')
+    @classmethod
     def jsonrpc_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -13374,6 +13398,7 @@ class MCPJSONRPCResponseId(BaseModel):
             super().__init__(**kwargs)
 
     @field_validator('actual_instance')
+    @classmethod
     def actual_instance_must_validate_oneof(cls, v):
         instance = MCPJSONRPCResponseId.model_construct()
         error_messages = []
@@ -13494,6 +13519,7 @@ class NegativeBoundaryVector(BaseModel):
     __properties: ClassVar[List[str]] = ["id", "category", "trigger", "expected_verdict", "expected_reason_code", "must_emit_receipt", "must_not_dispatch", "must_bind_evidence"]
 
     @field_validator('expected_verdict')
+    @classmethod
     def expected_verdict_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['ALLOW', 'DENY', 'ESCALATE']):
@@ -13588,6 +13614,7 @@ class NetworkGrant(BaseModel):
     __properties: ClassVar[List[str]] = ["mode", "destinations", "cidrs"]
 
     @field_validator('mode')
+    @classmethod
     def mode_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['deny-all', 'allowlist']):
@@ -14333,6 +14360,7 @@ class PlanTransaction(BaseModel):
     __properties: ClassVar[List[str]] = ["plan_transaction_id", "plan_hash", "read_set", "write_set", "assumption_set", "version_dependencies", "verification_obligations", "conflict_policy", "rollback_policy", "rollback_or_compensation_policy", "approval_state", "human_review_state", "transaction_hash"]
 
     @field_validator('conflict_policy')
+    @classmethod
     def conflict_policy_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['deny', 'escalate', 'last_writer_forbidden']):
@@ -14340,6 +14368,7 @@ class PlanTransaction(BaseModel):
         return value
 
     @field_validator('approval_state')
+    @classmethod
     def approval_state_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -14444,6 +14473,7 @@ class PolicyBundle(BaseModel):
     __properties: ClassVar[List[str]] = ["name", "version", "content_hash", "signature", "pack_type"]
 
     @field_validator('pack_type')
+    @classmethod
     def pack_type_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -15215,6 +15245,7 @@ class RunPublicDemo200Response(BaseModel):
     __properties: ClassVar[List[str]] = ["verdict", "reason_code", "receipt", "proof_refs", "verification_hint", "sandbox_label", "helm_ai_kernel_version"]
 
     @field_validator('verdict')
+    @classmethod
     def verdict_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['ALLOW', 'DENY', 'ESCALATE']):
@@ -15396,6 +15427,7 @@ class RunPublicDemoRequest(BaseModel):
     __properties: ClassVar[List[str]] = ["action_id", "policy_id", "args"]
 
     @field_validator('action_id')
+    @classmethod
     def action_id_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['read_ticket', 'draft_reply', 'small_refund', 'large_refund', 'dangerous_shell', 'export_customer_list', 'modify_policy']):
@@ -15488,6 +15520,7 @@ class SandboxBackendProfile(BaseModel):
     __properties: ClassVar[List[str]] = ["name", "kind", "runtime", "hosted", "deny_network_by_default", "native_isolation", "experimental"]
 
     @field_validator('kind')
+    @classmethod
     def kind_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['wasi-wazero', 'wasi-wasmtime', 'native-nsjail', 'native-gvisor', 'native-firecracker', 'hosted-adapter']):
@@ -15718,6 +15751,7 @@ class SandboxGrantInspection(BaseModel):
             super().__init__(**kwargs)
 
     @field_validator('actual_instance')
+    @classmethod
     def actual_instance_must_validate_oneof(cls, v):
         instance = SandboxGrantInspection.model_construct()
         error_messages = []
@@ -16008,6 +16042,7 @@ class SandboxPreflightResult(BaseModel):
     __properties: ClassVar[List[str]] = ["verdict", "reason_code", "grant_id", "grant_hash", "dispatch_ready", "findings", "checked_at"]
 
     @field_validator('verdict')
+    @classmethod
     def verdict_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -17193,6 +17228,7 @@ class VerificationResult(BaseModel):
     __properties: ClassVar[List[str]] = ["verdict", "checks", "roots", "errors"]
 
     @field_validator('verdict')
+    @classmethod
     def verdict_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -17292,6 +17328,7 @@ class VerificationResultChecks(BaseModel):
     __properties: ClassVar[List[str]] = ["signatures", "causal_chain", "policy_compliance"]
 
     @field_validator('signatures')
+    @classmethod
     def signatures_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -17302,6 +17339,7 @@ class VerificationResultChecks(BaseModel):
         return value
 
     @field_validator('causal_chain')
+    @classmethod
     def causal_chain_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -17312,6 +17350,7 @@ class VerificationResultChecks(BaseModel):
         return value
 
     @field_validator('policy_compliance')
+    @classmethod
     def policy_compliance_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:
@@ -17496,6 +17535,7 @@ class VerificationScope(BaseModel):
     __properties: ClassVar[List[str]] = ["verification_scope_id", "subject_hash", "risk_class", "checks_performed", "assumptions", "untested_regions", "known_limits", "remaining_risks", "required_followup", "verifier_hash", "policy_hash", "created_at", "scope_hash"]
 
     @field_validator('risk_class')
+    @classmethod
     def risk_class_validate_enum(cls, value):
         """Validates the enum"""
         if value is None:

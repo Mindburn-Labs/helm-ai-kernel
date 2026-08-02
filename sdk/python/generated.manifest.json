@@ -2,7 +2,7 @@
   "files": [
     {
       "path": "helm_sdk/types_gen.py",
-      "sha256": "ffa02e9ff4347ca32d4b85ed85a78230fe38fbb609c6af384d8fae8572691a1b"
+      "sha256": "c3b90904f77c365122c26180397038c2bb04ded4a84b280ac5482b135bc059a7"
     }
   ],
   "generator": "openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a",

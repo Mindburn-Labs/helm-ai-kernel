@@ -66,6 +66,7 @@ done
 [ "$TS_MODEL_COUNT" -gt 0 ] || fail "[ts] generator produced zero model files"
 python3 - "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 path = Path(sys.argv[1])
@@ -214,55 +215,38 @@ done
 [ "$PY_MODEL_COUNT" -gt 0 ] || fail "[py] generator produced zero model files"
 python3 - "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
 
-# Patch-as-assertion: every expected enum-validator @classmethod injection is
-# tracked and verified; a renamed model or validator hard-fails the build.
-classmethod_validators = {
-    "AccountEntitlements": {"plan_validate_enum"},
-    "AccountSession": {"plan_validate_enum"},
-    "BoundaryStatus": {
-        "status_validate_enum", "mode_validate_enum", "receipt_signer_validate_enum",
-        "receipt_store_validate_enum", "pdp_validate_enum", "mcp_firewall_validate_enum",
-        "sandbox_validate_enum", "authz_validate_enum", "evidence_verifier_validate_enum",
-        "checkpoint_log_validate_enum",
-    },
-    "EntitlementDecision": {"user_state_validate_enum"},
-    "EnvExposurePolicy": {"mode_validate_enum"},
-    "EvidenceEnvelopeExportRequest": {"envelope_validate_enum"},
-    "LocalConsoleRuntimeConfig": {"profile_validate_enum", "entitlements_validate_enum"},
-    "LocalSessionExchangeResponse": {"entitlements_validate_enum"},
-    "OnboardingRunStepRequest": {"step_id_validate_enum"},
-    "OnboardingState": {"mode_validate_enum", "entitlements_validate_enum"},
-    "OnboardingStep": {"id_validate_enum", "status_validate_enum", "verdict_validate_enum"},
-    "Receipt": {"signature_profile_validate_enum"},
-}
-applied_validators: dict[str, set[str]] = {}
+# Patch-as-assertion: Pydantic v2 field validators whose generated signature
+# receives cls must be explicit classmethods. Keep this structural rather than
+# model-specific so a newly generated validator cannot silently miss the fix.
 lines = s.splitlines()
 out = []
-current_class = None
 for i, line in enumerate(lines):
-    if line.startswith("class ") and line.endswith("(BaseModel):"):
-        current_class = line.split("(", 1)[0].split()[1]
     out.append(line)
-    if line.lstrip().startswith("@field_validator(") and current_class in classmethod_validators:
+    if line.lstrip().startswith("@field_validator("):
         next_line = lines[i + 1] if i + 1 < len(lines) else ""
-        method_name = next_line.strip().split("(", 1)[0].removeprefix("def ")
-        if method_name in classmethod_validators[current_class]:
+        if re.match(r"^\s*def\s+\w+\(cls(?:,|\))", next_line):
             out.append(f"{line[:len(line) - len(line.lstrip())]}@classmethod")
-            applied_validators.setdefault(current_class, set()).add(method_name)
 s = "\n".join(out)
 
-for class_name, expected_methods in classmethod_validators.items():
-    applied_methods = applied_validators.get(class_name, set())
-    if applied_methods != expected_methods:
-        raise SystemExit(
-            f"py patch did not apply: {class_name} expected @classmethod validators "
-            f"{sorted(expected_methods)}, applied {sorted(applied_methods)}"
-        )
+generated_lines = s.splitlines()
+missing_classmethods = []
+for i, line in enumerate(generated_lines):
+    if not line.lstrip().startswith("@field_validator("):
+        continue
+    next_line = generated_lines[i + 1] if i + 1 < len(generated_lines) else ""
+    has_classmethod = next_line.lstrip() == "@classmethod"
+    if has_classmethod:
+        next_line = generated_lines[i + 2] if i + 2 < len(generated_lines) else ""
+    if re.match(r"^\s*def\s+\w+\(cls(?:,|\))", next_line) and not has_classmethod:
+        missing_classmethods.append(next_line.strip().split("(", 1)[0])
+if missing_classmethods:
+    raise SystemExit(f"py patch did not apply: missing @classmethod for {missing_classmethods}")
 
 receipt_public_key_set = (
     '            "signature_algorithm": obj.get("signature_algorithm"),\n'

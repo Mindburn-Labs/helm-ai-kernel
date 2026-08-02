@@ -796,6 +796,68 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 	}
 }
 
+func TestEvidenceVerifyScopesReceiptChainsBySession(t *testing.T) {
+	newReceipt := func(id, sessionID string, lamport uint64, prevHash string) *contracts.Receipt {
+		return &contracts.Receipt{
+			ReceiptID:    id,
+			DecisionID:   "decision-" + id,
+			EffectID:     "EXECUTE_TOOL",
+			Status:       string(contracts.VerdictAllow),
+			Timestamp:    time.Date(2026, 5, 5, 0, int(lamport), 0, 0, time.UTC),
+			ExecutorID:   "agent.test",
+			SessionID:    sessionID,
+			Signature:    "sig-" + id,
+			PrevHash:     prevHash,
+			LamportClock: lamport,
+			ArgsHash:     "args-" + id,
+		}
+	}
+
+	firstSessionGenesis := newReceipt("first-session-1", "session-first", 1, "")
+	firstSessionHash, err := contracts.ReceiptChainHash(firstSessionGenesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstSessionNext := newReceipt("first-session-2", "session-first", 2, firstSessionHash)
+	secondSessionGenesis := newReceipt("second-session-1", "session-second", 1, "")
+	secondSessionHash, err := contracts.ReceiptChainHash(secondSessionGenesis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSessionNext := newReceipt("second-session-2", "session-second", 2, secondSessionHash)
+
+	bundle, err := buildEvidenceBundle("", []*contracts.Receipt{
+		firstSessionNext,
+		secondSessionNext,
+		firstSessionGenesis,
+		secondSessionGenesis,
+	})
+	if err != nil {
+		t.Fatalf("build multi-session evidence bundle: %v", err)
+	}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, &Services{})
+
+	verifyReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/verify", bytes.NewReader(bundle))
+	verifyReq.Header.Set("Content-Type", "application/octet-stream")
+	verifyRec := httptest.NewRecorder()
+	mux.ServeHTTP(verifyRec, verifyReq)
+	if verifyRec.Code != http.StatusOK {
+		t.Fatalf("verify status = %d body=%s", verifyRec.Code, verifyRec.Body.String())
+	}
+	var result map[string]any
+	if err := json.Unmarshal(verifyRec.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["verdict"] != "PASS" {
+		t.Fatalf("expected independent session chains to verify, got %+v", result)
+	}
+	checks, _ := result["checks"].(map[string]any)
+	if checks["causal_chain"] != "PASS" {
+		t.Fatalf("expected causal chain verification to pass, got %+v", result)
+	}
+}
+
 func TestEvidenceVerifyRejectsUnsafeArchivePaths(t *testing.T) {
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, &Services{})

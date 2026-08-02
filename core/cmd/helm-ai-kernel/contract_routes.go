@@ -1743,25 +1743,22 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 	}
 	errors = append(errors, verifyHarnessEvidenceRequirements(bundle, receipts)...)
 	sort.Slice(receipts, func(i, j int) bool {
-		if receipts[i].ExecutorID == receipts[j].ExecutorID {
+		if receipts[i].SessionID == receipts[j].SessionID {
 			return receipts[i].LamportClock < receipts[j].LamportClock
 		}
-		return receipts[i].ExecutorID < receipts[j].ExecutorID
+		return receipts[i].SessionID < receipts[j].SessionID
 	})
-	lastByExecutor := map[string]uint64{}
-	prevByExecutor := map[string]*contracts.Receipt{}
+	lastBySession := map[string]uint64{}
+	prevBySession := map[string]*contracts.Receipt{}
 	for _, receipt := range receipts {
 		if strings.TrimSpace(receipt.Signature) == "" {
 			errors = append(errors, fmt.Sprintf("%s missing signature", receipt.ReceiptID))
 		}
-		executor := receipt.ExecutorID
-		if executor == "" {
-			executor = "anonymous"
-		}
-		if last := lastByExecutor[executor]; last != 0 && receipt.LamportClock <= last {
+		sessionID := receipt.SessionID
+		if last := lastBySession[sessionID]; last != 0 && receipt.LamportClock <= last {
 			errors = append(errors, fmt.Sprintf("%s non-monotonic lamport clock", receipt.ReceiptID))
 		}
-		if previous := prevByExecutor[executor]; previous == nil {
+		if previous := prevBySession[sessionID]; previous == nil {
 			if !isGenesisPrevHash(receipt.PrevHash) {
 				errors = append(errors, fmt.Sprintf("%s invalid genesis prev_hash %q", receipt.ReceiptID, receipt.PrevHash))
 			}
@@ -1773,8 +1770,8 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt) 
 				errors = append(errors, fmt.Sprintf("%s prev_hash mismatch: expected %s got %s", receipt.ReceiptID, expected, receipt.PrevHash))
 			}
 		}
-		lastByExecutor[executor] = receipt.LamportClock
-		prevByExecutor[executor] = receipt
+		lastBySession[sessionID] = receipt.LamportClock
+		prevBySession[sessionID] = receipt
 	}
 	return errors
 }

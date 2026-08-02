@@ -1,5 +1,7 @@
 package main
 
+// quantum_posture: legacy quickstart migration validates classical Ed25519 root keys; no post-quantum cryptographic control is added or claimed.
+
 import (
 	"context"
 	"crypto/ed25519"

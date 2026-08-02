@@ -1,5 +1,7 @@
 package main
 
+// quantum_posture: contract-route tests verify existing classical Ed25519 receipts; no post-quantum cryptographic control is added or claimed.
+
 import (
 	"archive/tar"
 	"bytes"

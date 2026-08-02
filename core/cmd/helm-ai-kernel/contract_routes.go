@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -34,6 +36,7 @@ const (
 	maxEvidenceBundleBytes    = 32 << 20
 	maxEvidenceExportReceipts = 10000
 	evidenceExportPageSize    = 500
+	evidenceBundleIndexPath   = "00_INDEX.json"
 )
 
 var errEvidenceExportTooLarge = errors.New("evidence export receipt limit exceeded")
@@ -48,6 +51,37 @@ type evidenceManifest struct {
 type evidenceBundle struct {
 	Manifest evidenceManifest
 	Files    map[string][]byte
+}
+
+type runtimeEvidenceSealSigner struct {
+	keyID      string
+	publicKey  string
+	signerType string
+	signFn     func([]byte) (string, error)
+}
+
+func (s runtimeEvidenceSealSigner) KeyID() string {
+	return s.keyID
+}
+
+func (s runtimeEvidenceSealSigner) Sign(_ context.Context, payload []byte) ([]byte, error) {
+	signatureHex, err := s.signFn(payload)
+	if err != nil {
+		return nil, err
+	}
+	signature, err := hex.DecodeString(signatureHex)
+	if err != nil {
+		return nil, fmt.Errorf("decode runtime evidence seal signature: %w", err)
+	}
+	return signature, nil
+}
+
+func (s runtimeEvidenceSealSigner) SignerType() string {
+	return s.signerType
+}
+
+func (s runtimeEvidenceSealSigner) PublicKeyHex() string {
+	return s.publicKey
 }
 
 func registerContractRoutes(mux *http.ServeMux, svc *Services) {
@@ -268,7 +302,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusConflict, "No receipts available", "evidence export requires at least one receipt")
 			return
 		}
-		bundle, err := buildEvidenceBundleWithSurfaceArtifacts(req.SessionID, receipts, surfaces)
+		bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts(req.SessionID, receipts, surfaces, svc)
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -1568,6 +1602,53 @@ func buildEvidenceBundle(sessionID string, receipts []*contracts.Receipt) ([]byt
 }
 
 func buildEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) ([]byte, error) {
+	files, err := buildEvidenceBundleFilesWithSurfaceArtifacts(sessionID, receipts, surfaces)
+	if err != nil {
+		return nil, err
+	}
+	return tarEvidenceBundleFiles(files)
+}
+
+func buildTrustedEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry, svc *Services) ([]byte, error) {
+	files, err := buildEvidenceBundleFilesWithSurfaceArtifacts(sessionID, receipts, surfaces)
+	if err != nil {
+		return nil, err
+	}
+	sealSigner, trustConfig, err := trustedEvidenceBundleSealSigner(svc)
+	if err != nil {
+		return nil, err
+	}
+	packDir, err := os.MkdirTemp("", "helm-evidence-export-*")
+	if err != nil {
+		return nil, fmt.Errorf("create evidence export workspace: %w", err)
+	}
+	defer os.RemoveAll(packDir)
+	if err := writeEvidenceBundlePackFiles(packDir, files); err != nil {
+		return nil, err
+	}
+	if err := writeEvidenceBundleIndex(packDir, files); err != nil {
+		return nil, err
+	}
+	if _, err := evidencepkg.SealEvidencePack(context.Background(), packDir, evidencepkg.SealEvidencePackOptions{
+		PackID:      evidenceBundlePackID(sessionID, files),
+		Profile:     evidencepkg.EvidenceTrustProfileDevLocal,
+		Signer:      sealSigner,
+		TrustConfig: trustConfig,
+		SignedAt:    evidenceBundleSignedAt(receipts),
+	}); err != nil {
+		return nil, fmt.Errorf("seal evidence bundle: %w", err)
+	}
+	for _, controlPath := range []string{evidenceBundleIndexPath, evidencepkg.EvidencePackSealPath} {
+		data, err := os.ReadFile(filepath.Join(packDir, filepath.FromSlash(controlPath)))
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", controlPath, err)
+		}
+		files[controlPath] = data
+	}
+	return tarEvidenceBundleFiles(files)
+}
+
+func buildEvidenceBundleFilesWithSurfaceArtifacts(sessionID string, receipts []*contracts.Receipt, surfaces *boundarypkg.SurfaceRegistry) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	for _, receipt := range receipts {
 		data, err := json.Marshal(receipt)
@@ -1597,7 +1678,10 @@ func buildEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contr
 		return nil, fmt.Errorf("marshal manifest: %w", err)
 	}
 	files["manifest.json"] = manifestData
+	return files, nil
+}
 
+func tarEvidenceBundleFiles(files map[string][]byte) ([]byte, error) {
 	var buf bytes.Buffer
 	gzipWriter := gzip.NewWriter(&buf)
 	tarWriter := tar.NewWriter(gzipWriter)
@@ -1621,6 +1705,69 @@ func buildEvidenceBundleWithSurfaceArtifacts(sessionID string, receipts []*contr
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func writeEvidenceBundlePackFiles(packDir string, files map[string][]byte) error {
+	for name, data := range files {
+		fullPath := filepath.Join(packDir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o700); err != nil {
+			return fmt.Errorf("mkdir evidence bundle path %s: %w", name, err)
+		}
+		if err := os.WriteFile(fullPath, data, 0o600); err != nil {
+			return fmt.Errorf("write evidence bundle file %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func writeEvidenceBundleIndex(packDir string, files map[string][]byte) error {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	entries := make([]map[string]string, 0, len(names))
+	for _, name := range names {
+		sum := sha256.Sum256(files[name])
+		entries = append(entries, map[string]string{
+			"path":   name,
+			"sha256": hex.EncodeToString(sum[:]),
+		})
+	}
+	indexData, err := json.MarshalIndent(map[string]any{
+		"version": "1.0.0",
+		"entries": entries,
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal evidence bundle index: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(packDir, evidenceBundleIndexPath), append(indexData, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", evidenceBundleIndexPath, err)
+	}
+	return nil
+}
+
+func evidenceBundlePackID(sessionID string, files map[string][]byte) string {
+	if strings.TrimSpace(sessionID) != "" {
+		return "evidence-export-" + sessionID
+	}
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	sum := sha256.Sum256([]byte(strings.Join(names, "\n")))
+	return "evidence-export-" + hex.EncodeToString(sum[:8])
+}
+
+func evidenceBundleSignedAt(receipts []*contracts.Receipt) time.Time {
+	signedAt := time.Unix(0, 0).UTC()
+	for _, receipt := range receipts {
+		if receipt != nil && receipt.Timestamp.After(signedAt) {
+			signedAt = receipt.Timestamp.UTC()
+		}
+	}
+	return signedAt
 }
 
 func addReferencedSurfaceArtifacts(files map[string][]byte, surfaces *boundarypkg.SurfaceRegistry, receipts []*contracts.Receipt) error {
@@ -1688,6 +1835,9 @@ func writeTarEntry(tw *tar.Writer, name string, data []byte) error {
 func verifyEvidenceRequest(r *http.Request, svc *Services) map[string]any {
 	bundle, err := readEvidenceBundleRequest(r)
 	if err != nil {
+		return verificationResult([]string{err.Error()}, nil)
+	}
+	if err := verifyTrustedEvidenceBundleSeal(bundle, svc); err != nil {
 		return verificationResult([]string{err.Error()}, nil)
 	}
 	parsed, err := readEvidenceBundle(bundle)
@@ -1784,6 +1934,81 @@ func readEvidenceBundle(data []byte) (*evidenceBundle, error) {
 	return &evidenceBundle{Manifest: manifest, Files: files}, nil
 }
 
+func verifyTrustedEvidenceBundleSeal(bundle []byte, svc *Services) error {
+	packDir, err := os.MkdirTemp("", "helm-evidence-verify-*")
+	if err != nil {
+		return fmt.Errorf("create evidence verify workspace: %w", err)
+	}
+	defer os.RemoveAll(packDir)
+	if err := extractEvidenceBundleToDir(bundle, packDir); err != nil {
+		return err
+	}
+	trustConfig, err := trustedEvidenceBundleSealTrustConfig(svc)
+	if err != nil {
+		return err
+	}
+	report := evidencepkg.VerifyEvidencePackSeal(packDir, evidencepkg.VerifyEvidencePackSealOptions{
+		Profile:     evidencepkg.EvidenceTrustProfileDevLocal,
+		TrustConfig: trustConfig,
+	})
+	if report.State == "valid" && report.SignatureValid && len(report.Errors) == 0 {
+		return nil
+	}
+	if len(report.Errors) == 0 {
+		return fmt.Errorf("trusted evidence bundle seal verification failed: state=%s signer=%s", report.State, report.SignerKeyID)
+	}
+	return fmt.Errorf("trusted evidence bundle seal verification failed: %s", strings.Join(report.Errors, "; "))
+}
+
+func extractEvidenceBundleToDir(data []byte, dstDir string) error {
+	if len(data) == 0 {
+		return fmt.Errorf("empty evidence bundle")
+	}
+	if len(data) > maxEvidenceBundleBytes {
+		return fmt.Errorf("evidence bundle exceeds %d bytes", maxEvidenceBundleBytes)
+	}
+	gzipReader, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("open evidence gzip: %w", err)
+	}
+	defer func() { _ = gzipReader.Close() }()
+	tarReader := tar.NewReader(gzipReader)
+	totalSize := int64(0)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read evidence tar: %w", err)
+		}
+		if !safeArchiveName(header.Name) {
+			return fmt.Errorf("unsafe archive path %q", header.Name)
+		}
+		if header.Size < 0 {
+			return fmt.Errorf("archive entry %q has invalid size", header.Name)
+		}
+		if header.Size > maxEvidenceBundleBytes {
+			return fmt.Errorf("archive entry %q too large", header.Name)
+		}
+		totalSize += header.Size
+		if totalSize > maxEvidenceBundleBytes {
+			return fmt.Errorf("evidence archive exceeds %d bytes", maxEvidenceBundleBytes)
+		}
+		entryData, err := io.ReadAll(io.LimitReader(tarReader, maxEvidenceBundleBytes+1))
+		if err != nil {
+			return fmt.Errorf("read archive entry %q: %w", header.Name, err)
+		}
+		fullPath := filepath.Join(dstDir, filepath.FromSlash(header.Name))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o700); err != nil {
+			return fmt.Errorf("mkdir extract path %s: %w", header.Name, err)
+		}
+		if err := os.WriteFile(fullPath, entryData, 0o600); err != nil {
+			return fmt.Errorf("write archive entry %q: %w", header.Name, err)
+		}
+	}
+}
+
 func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt, svc *Services) []string {
 	var errors []string
 	for name, expected := range bundle.Manifest.FileHashes {
@@ -1798,6 +2023,9 @@ func verifyReceiptBundle(bundle *evidenceBundle, receipts []*contracts.Receipt, 
 		}
 	}
 	for name := range bundle.Files {
+		if isEvidenceBundleControlFile(name) {
+			continue
+		}
 		if _, ok := bundle.Manifest.FileHashes[name]; !ok {
 			errors = append(errors, fmt.Sprintf("%s present but not listed in manifest", name))
 		}
@@ -1884,6 +2112,60 @@ func verifyTrustedEvidenceReceipt(svc *Services, receipt *contracts.Receipt) err
 		return errors.New("receipt signature does not match trusted signer")
 	}
 	return nil
+}
+
+func trustedEvidenceBundleSealSigner(svc *Services) (evidencepkg.EvidenceSigner, *evidencepkg.EvidencePackTrustConfig, error) {
+	if svc == nil || svc.ReceiptSigner == nil {
+		return nil, nil, errors.New("trusted evidence bundle seal signer unavailable")
+	}
+	switch signer := svc.ReceiptSigner.(type) {
+	case *helmcrypto.Ed25519Signer:
+		if signer == nil {
+			return nil, nil, errors.New("trusted evidence bundle seal signer unavailable")
+		}
+		return runtimeEvidenceSealSigner{
+			keyID:      signer.GetKeyID(),
+			publicKey:  signer.PublicKey(),
+			signerType: "runtime-receipt-ed25519",
+			signFn:     signer.Sign,
+		}, trustedEvidenceBundleSealConfig(signer.GetKeyID(), signer.PublicKey(), "runtime-receipt-ed25519"), nil
+	case *helmcrypto.HybridSigner:
+		if signer == nil || signer.Ed25519Signer() == nil {
+			return nil, nil, errors.New("trusted evidence bundle seal signer unavailable")
+		}
+		edSigner := signer.Ed25519Signer()
+		return runtimeEvidenceSealSigner{
+			keyID:      signer.GetKeyID(),
+			publicKey:  edSigner.PublicKey(),
+			signerType: "runtime-receipt-hybrid-ed25519",
+			signFn:     edSigner.Sign,
+		}, trustedEvidenceBundleSealConfig(signer.GetKeyID(), edSigner.PublicKey(), "runtime-receipt-hybrid-ed25519"), nil
+	case *helmcrypto.MLDSASigner:
+		return nil, nil, errors.New("trusted evidence bundle seal signer unsupported: runtime is MLDSA-only and existing EvidencePack seals require Ed25519")
+	case *helmcrypto.KeyRing:
+		return nil, nil, errors.New("trusted evidence bundle seal signer unsupported: runtime signer keyring does not expose a stable Ed25519 trust root for bundle sealing")
+	default:
+		return nil, nil, fmt.Errorf("trusted evidence bundle seal signer unsupported: %T", svc.ReceiptSigner)
+	}
+}
+
+func trustedEvidenceBundleSealTrustConfig(svc *Services) (*evidencepkg.EvidencePackTrustConfig, error) {
+	_, trustConfig, err := trustedEvidenceBundleSealSigner(svc)
+	return trustConfig, err
+}
+
+func trustedEvidenceBundleSealConfig(keyID, publicKey, signerType string) *evidencepkg.EvidencePackTrustConfig {
+	return &evidencepkg.EvidencePackTrustConfig{
+		Version:       "evidence-pack-trust/v1",
+		ActiveProfile: evidencepkg.EvidenceTrustProfileDevLocal,
+		Signer: evidencepkg.EvidencePackTrustSigner{
+			Type:      signerType,
+			KeyID:     keyID,
+			PublicKey: publicKey,
+		},
+		TrustedKeys: map[string]string{keyID: publicKey},
+		UpdatedAt:   time.Unix(0, 0).UTC(),
+	}
 }
 
 func verifyEvidenceReceiptProfile(ed25519PublicKey, mldsa65PublicKey string, receipt *contracts.Receipt) error {
@@ -2086,6 +2368,15 @@ func verificationResult(errs []string, receipts []*contracts.Receipt) map[string
 func safeArchiveName(name string) bool {
 	clean := path.Clean(name)
 	return name != "" && clean == name && !strings.HasPrefix(clean, "../") && !strings.HasPrefix(clean, "/") && clean != ".."
+}
+
+func isEvidenceBundleControlFile(name string) bool {
+	switch name {
+	case evidenceBundleIndexPath, evidencepkg.EvidencePackSealPath:
+		return true
+	default:
+		return false
+	}
 }
 
 func writeContractJSON(w http.ResponseWriter, status int, value any) {

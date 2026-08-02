@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -755,6 +756,9 @@ func TestReplayVerifyDetectsTamperedEvidenceBundle(t *testing.T) {
 	if result["verdict"] != "FAIL" {
 		t.Fatalf("expected tampered bundle to fail verification, got %+v", result)
 	}
+	if !resultErrorsContain(result, "trusted evidence bundle seal verification failed") {
+		t.Fatalf("expected trusted seal failure, got %+v", result)
+	}
 }
 
 func TestEvidenceAndReplayVerifyRejectForgedSelfConsistentBundle(t *testing.T) {
@@ -791,18 +795,16 @@ func TestEvidenceAndReplayVerifyRejectForgedSelfConsistentBundle(t *testing.T) {
 		t.Fatalf("sign forged receipt: %v", err)
 	}
 
-	validBundle, err := buildEvidenceBundle("trusted-session", []*contracts.Receipt{valid})
+	validBundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts("trusted-session", []*contracts.Receipt{valid}, nil, &Services{ReceiptSigner: trustedSigner})
 	if err != nil {
 		t.Fatalf("build trusted bundle: %v", err)
 	}
-	forgedBundle, err := buildEvidenceBundle("forged-session", []*contracts.Receipt{&forged})
+	forgedBundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts("forged-session", []*contracts.Receipt{&forged}, nil, &Services{ReceiptSigner: forgedSigner})
 	if err != nil {
 		t.Fatalf("build forged bundle: %v", err)
 	}
-	trustedKeyring := helmcrypto.NewKeyRing()
-	trustedKeyring.AddKey(trustedSigner)
 	mux := http.NewServeMux()
-	registerContractRoutes(mux, &Services{ReceiptSigner: trustedKeyring})
+	registerContractRoutes(mux, &Services{ReceiptSigner: trustedSigner})
 
 	for _, endpoint := range []string{"/api/v1/evidence/verify", "/api/v1/replay/verify"} {
 		t.Run(endpoint+" trusted", func(t *testing.T) {
@@ -816,11 +818,119 @@ func TestEvidenceAndReplayVerifyRejectForgedSelfConsistentBundle(t *testing.T) {
 			if result["verdict"] != "FAIL" {
 				t.Fatalf("forged bundle verification = %+v", result)
 			}
-			checks, _ := result["checks"].(map[string]any)
-			if checks["signatures"] != "FAIL" {
-				t.Fatalf("forged bundle did not fail trusted signature verification: %+v", result)
+			if !resultErrorsContain(result, "trusted evidence bundle seal verification failed") {
+				t.Fatalf("forged bundle did not fail trusted seal verification: %+v", result)
 			}
 		})
+	}
+}
+
+func TestEvidenceAndReplayVerifyRejectTamperedUnsignedReceiptAttachments(t *testing.T) {
+	svc, cleanup := newVerifiedEvidenceRouteTestServices(t)
+	defer cleanup()
+	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
+	scope, err := registry.PutVerificationScope(contracts.VerificationScope{
+		VerificationScopeID: "scope-unsigned",
+		SubjectHash:         "sha256:subject-unsigned",
+		RiskClass:           "T2",
+		ChecksPerformed:     []string{"hash"},
+		VerifierHash:        "sha256:verifier",
+		PolicyHash:          "sha256:policy",
+	})
+	if err != nil {
+		t.Fatalf("seed verification scope: %v", err)
+	}
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, "unsigned-fields-session", &contracts.Receipt{
+		ReceiptID:    "rcpt-unsigned-fields",
+		DecisionID:   "dec-unsigned-fields",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 2, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		DecisionHash: "sha256:unsigned-fields-decision",
+		ArgsHash:     "args-unsigned-fields",
+		ScopeHash:    scope.ScopeHash,
+		Evidence: map[string]string{
+			"scope_ref": scope.ScopeHash,
+		},
+		Metadata: map[string]any{
+			"risk_class": "T2",
+			"scope_hash": scope.ScopeHash,
+		},
+	}, svc.ReceiptSigner)
+	svc.BoundarySurfaces = registry
+
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"unsigned-fields-session","format":"tar.gz"}`))
+	authorizeTestRequest(exportReq)
+	exportRec := httptest.NewRecorder()
+	mux.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("export status = %d body=%s", exportRec.Code, exportRec.Body.String())
+	}
+
+	tampered, err := tamperEvidenceReceiptFields(exportRec.Body.Bytes(), func(receipt *contracts.Receipt) {
+		receipt.ScopeHash = "sha256:tampered-scope"
+		if receipt.Evidence == nil {
+			receipt.Evidence = map[string]string{}
+		}
+		receipt.Evidence["scope_ref"] = "sha256:tampered-scope"
+		if receipt.Metadata == nil {
+			receipt.Metadata = map[string]any{}
+		}
+		receipt.Metadata["scope_hash"] = "sha256:tampered-scope"
+		receipt.Metadata["operator_note"] = "tampered after issuance"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := readEvidenceBundle(tampered)
+	if err != nil {
+		t.Fatalf("read tampered bundle: %v", err)
+	}
+	var tamperedReceipt contracts.Receipt
+	for name, data := range parsed.Files {
+		if strings.HasPrefix(name, "receipts/") {
+			if err := json.Unmarshal(data, &tamperedReceipt); err != nil {
+				t.Fatalf("decode tampered receipt: %v", err)
+			}
+			break
+		}
+	}
+	if err := verifyTrustedEvidenceReceipt(svc, &tamperedReceipt); err != nil {
+		t.Fatalf("tampered unsigned fields unexpectedly broke receipt signature: %v", err)
+	}
+
+	for _, endpoint := range []string{"/api/v1/evidence/verify", "/api/v1/replay/verify"} {
+		result := postEvidenceVerification(t, mux, endpoint, tampered)
+		if result["verdict"] != "FAIL" {
+			t.Fatalf("%s expected tampered unsigned fields to fail, got %+v", endpoint, result)
+		}
+		if !resultErrorsContain(result, "trusted evidence bundle seal verification failed") {
+			t.Fatalf("%s expected trusted seal failure, got %+v", endpoint, result)
+		}
+	}
+}
+
+func TestTrustedEvidenceBundleSealSignerRejectsUnsupportedRuntimeProfiles(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "")
+	mldsaSigner, err := helmcrypto.NewMLDSASigner("mldsa-only")
+	if err != nil {
+		t.Fatalf("create mldsa signer: %v", err)
+	}
+	if _, _, err := trustedEvidenceBundleSealSigner(&Services{ReceiptSigner: mldsaSigner}); err == nil || !strings.Contains(err.Error(), "MLDSA-only") {
+		t.Fatalf("expected MLDSA-only compatibility error, got %v", err)
+	}
+
+	keyring := helmcrypto.NewKeyRing()
+	edSigner, err := helmcrypto.NewEd25519Signer("keyring-ed25519")
+	if err != nil {
+		t.Fatalf("create keyring signer: %v", err)
+	}
+	keyring.AddKey(edSigner)
+	if _, _, err := trustedEvidenceBundleSealSigner(&Services{ReceiptSigner: keyring}); err == nil || !strings.Contains(err.Error(), "keyring") {
+		t.Fatalf("expected keyring compatibility error, got %v", err)
 	}
 }
 
@@ -956,7 +1066,7 @@ func TestReplayVerifyDetectsReceiptChainBreakWithValidManifest(t *testing.T) {
 	if err := signer.SignReceipt(broken); err != nil {
 		t.Fatal(err)
 	}
-	bundle, err := buildEvidenceBundle("session-test", []*contracts.Receipt{good, broken})
+	bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts("session-test", []*contracts.Receipt{good, broken}, nil, &Services{ReceiptSigner: signer})
 	if err != nil {
 		t.Fatalf("build valid-manifest bundle: %v", err)
 	}
@@ -1028,12 +1138,12 @@ func TestEvidenceVerifyScopesReceiptChainsBySession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	bundle, err := buildEvidenceBundle("", []*contracts.Receipt{
+	bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts("", []*contracts.Receipt{
 		firstSessionNext,
 		secondSessionNext,
 		firstSessionGenesis,
 		secondSessionGenesis,
-	})
+	}, nil, &Services{ReceiptSigner: signer})
 	if err != nil {
 		t.Fatalf("build multi-session evidence bundle: %v", err)
 	}
@@ -1355,21 +1465,69 @@ func overflowReceipts(agentID string, since uint64, limit int) []*contracts.Rece
 }
 
 func tamperEvidenceReceipt(bundle []byte) ([]byte, error) {
-	parsed, err := readEvidenceBundle(bundle)
+	return tamperEvidenceReceiptFields(bundle, func(receipt *contracts.Receipt) {
+		receipt.Signature = strings.Repeat("0", len(receipt.Signature))
+	})
+}
+
+func tamperEvidenceReceiptFields(bundle []byte, mutate func(*contracts.Receipt)) ([]byte, error) {
+	files, err := readRawEvidenceBundleFiles(bundle)
 	if err != nil {
 		return nil, err
 	}
-	for name, data := range parsed.Files {
+	for name, data := range files {
 		if strings.HasPrefix(name, "receipts/") {
 			var receipt contracts.Receipt
 			if err := json.Unmarshal(data, &receipt); err != nil {
 				return nil, err
 			}
-			receipt.Signature = strings.Repeat("0", len(receipt.Signature))
-			return buildEvidenceBundle(parsed.Manifest.SessionID, []*contracts.Receipt{&receipt})
+			mutate(&receipt)
+			updated, err := json.Marshal(&receipt)
+			if err != nil {
+				return nil, err
+			}
+			files[name] = updated
+			return tarEvidenceBundleFiles(files)
 		}
 	}
 	return nil, fmt.Errorf("evidence bundle has no receipt")
+}
+
+func readRawEvidenceBundleFiles(bundle []byte) (map[string][]byte, error) {
+	if len(bundle) == 0 {
+		return nil, fmt.Errorf("empty evidence bundle")
+	}
+	gzipReader, err := gzip.NewReader(bytes.NewReader(bundle))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = gzipReader.Close() }()
+	tarReader := tar.NewReader(gzipReader)
+	files := make(map[string][]byte)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			return files, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(tarReader)
+		if err != nil {
+			return nil, err
+		}
+		files[header.Name] = data
+	}
+}
+
+func resultErrorsContain(result map[string]any, want string) bool {
+	values, _ := result["errors"].([]any)
+	for _, value := range values {
+		if text, ok := value.(string); ok && strings.Contains(text, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func postEvidenceVerification(t *testing.T, mux *http.ServeMux, endpoint string, bundle []byte) map[string]any {

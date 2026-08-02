@@ -3,6 +3,7 @@
   "$id": "https://helm.org/schemas/autonomy_envelope/v1.json",
   "title": "AutonomyEnvelope",
   "description": "Signed, versioned runtime boundary contract that bounds every autonomous run. Declares what the system may do without humans, under what jurisdictional and budgetary constraints, and what evidence must be produced.",
+  "$comment": "quantum_posture: the attestation section names classical signature algorithms (Ed25519, ECDSA-P256, RSA-PSS-2048) as wire values only; this schema implements no cryptography and makes no hybrid or post-quantum claim.",
   "type": "object",
   "required": [
     "envelope_id",

@@ -1,6 +1,11 @@
 // Package contracts defines the Autonomy Envelope — the signed, versioned
 // runtime boundary contract that bounds every autonomous run.
 //
+// quantum_posture: this file declares wire shapes only. The signature
+// algorithm names it carries (ED25519, ECDSA-P256, RSA-PSS-2048) are classical
+// string values; no cryptography is implemented here and no hybrid or
+// post-quantum claim is made.
+//
 // Per HELM 2030 Spec Section 2 — Autonomy Envelope:
 //   - Signed, versioned, and attached to every autonomous run
 //   - Declares jurisdiction scope, data handling, allowed effects, budgets,

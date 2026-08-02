@@ -1,6 +1,11 @@
 // Package envelope provides validation, hashing, and lifecycle management
 // for the Autonomy Envelope — the signed runtime boundary contract.
 //
+// quantum_posture: envelope validation checks a declared signature algorithm
+// against an allowlist of classical names (ED25519, ECDSA-P256, RSA-PSS-2048)
+// and hashes envelope content with SHA-256. It verifies no signature itself
+// and makes no hybrid or post-quantum claim.
+//
 // The envelope is the foundational primitive for autonomy-by-default:
 //   - Pre-approved and continuously enforced
 //   - Every run must bind to a valid envelope before any effects execute

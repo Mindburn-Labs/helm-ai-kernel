@@ -3,6 +3,7 @@
   "$id": "https://helm.org/schemas/autonomy_envelope/v1.json",
   "title": "AutonomyEnvelope",
   "description": "Signed, versioned runtime boundary contract that bounds every autonomous run. Declares what the system may do without humans, under what jurisdictional and budgetary constraints, and what evidence must be produced.",
+  "$comment": "quantum_posture: the attestation section names classical signature algorithms (Ed25519, ECDSA-P256, RSA-PSS-2048) as wire values only; this schema implements no cryptography and makes no hybrid or post-quantum claim.",
   "type": "object",
   "required": [
     "envelope_id",
@@ -193,13 +194,40 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["resource", "max_per_minute"],
+            "required": ["resource"],
+            "anyOf": [
+              {
+                "required": ["max_per_minute"],
+                "properties": { "max_per_minute": { "minimum": 1 } }
+              },
+              {
+                "required": ["max_per_day"],
+                "properties": { "max_per_day": { "minimum": 1 } }
+              }
+            ],
             "properties": {
-              "resource": { "type": "string" },
-              "max_per_minute": { "type": "integer", "minimum": 0 }
+              "resource": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Resource this limit applies to, or \"*\" for every effect"
+              },
+              "max_per_minute": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Maximum reservations inside one UTC minute; 0 means the minute window is not declared"
+              },
+              "max_per_day": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Maximum reservations inside one UTC calendar day; 0 means the day window is not declared. May be lower than max_per_minute — that is a conservative policy, not a contradiction."
+              },
+              "per_instance": {
+                "type": "boolean",
+                "description": "Give every concrete instance of the resource its own window rather than pooling them into one — one declared ceiling covering a pool of like things, such as dials per number across a number pool. Rejected on the wildcard resource, and an effect naming a per-instance resource without naming its instance is denied rather than admitted uncounted."
+              }
             }
           },
-          "description": "Per-resource rate limits"
+          "description": "Per-resource rate limits over tumbling UTC windows. At least one window must be positive: an undeclared window is not an unlimited one."
         },
         "blast_radius": {
           "type": "string",

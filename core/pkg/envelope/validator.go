@@ -1,6 +1,11 @@
 // Package envelope provides validation, hashing, and lifecycle management
 // for the Autonomy Envelope — the signed runtime boundary contract.
 //
+// quantum_posture: envelope validation checks a declared signature algorithm
+// against an allowlist of classical names (ED25519, ECDSA-P256, RSA-PSS-2048)
+// and hashes envelope content with SHA-256. It verifies no signature itself
+// and makes no hybrid or post-quantum claim.
+//
 // The envelope is the foundational primitive for autonomy-by-default:
 //   - Pre-approved and continuously enforced
 //   - Every run must bind to a valid envelope before any effects execute
@@ -228,14 +233,44 @@ func (v *Validator) validateBudgets(result *ValidationResult, b *contracts.Envel
 		}
 	}
 
+	seenResources := make(map[string]bool, len(b.RateLimits))
 	for i, rl := range b.RateLimits {
 		if rl.Resource == "" {
 			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].resource", i), "REQUIRED",
 				"resource is required")
+		} else if seenResources[rl.Resource] {
+			// Two limits on one resource would each reserve against the same
+			// effect, so the effective ceiling would be neither of the declared
+			// numbers. Reject rather than pick one.
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].resource", i), "DUPLICATE",
+				fmt.Sprintf("duplicate rate limit resource %q", rl.Resource))
 		}
-		if rl.MaxPerMinute <= 0 {
+		seenResources[rl.Resource] = true
+
+		if rl.MaxPerMinute < 0 {
 			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].max_per_minute", i), "INVALID_VALUE",
-				"max_per_minute must be positive")
+				"max_per_minute must not be negative")
+		}
+		if rl.MaxPerDay < 0 {
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].max_per_day", i), "INVALID_VALUE",
+				"max_per_day must not be negative")
+		}
+		// An undeclared window is not an unlimited window. A rate limit that
+		// declares neither ceiling would be enforced as nothing at all, so it
+		// is malformed rather than permissive.
+		if rl.MaxPerMinute <= 0 && rl.MaxPerDay <= 0 {
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d]", i), "INVALID_VALUE",
+				"at least one of max_per_minute or max_per_day must be positive")
+		}
+		// A day ceiling below the minute ceiling is deliberately allowed: it is
+		// a conservative policy in which the minute window never binds first,
+		// not a contradiction. The two windows are enforced independently.
+
+		// The wildcard resource binds every effect, so it has no instances to
+		// partition. Asking for per-instance windows there describes nothing.
+		if rl.PerInstance && rl.Resource == contracts.RateLimitResourceAny {
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].per_instance", i), "INVALID_VALUE",
+				fmt.Sprintf("per_instance is meaningless on the wildcard resource %q", contracts.RateLimitResourceAny))
 		}
 	}
 }

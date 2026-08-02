@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
 )
@@ -525,8 +527,16 @@ exit 0
 	if handle.ProxyImage != "image@sha256:abc" {
 		t.Fatalf("sidecar proxy image = %q", handle.ProxyImage)
 	}
-	if _, err := os.Stat(handle.ReceiptPath); err != nil {
-		t.Fatalf("sidecar receipt path not written: %v", err)
+	data, err := os.ReadFile(handle.ReceiptPath)
+	if err != nil {
+		t.Fatalf("read sidecar receipt: %v", err)
+	}
+	var receipt contracts.Receipt
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		t.Fatalf("decode sidecar receipt: %v", err)
+	}
+	if receipt.ExecutorID != "launch/sidecar:egress-proxy" || receipt.PrevHash != "" || receipt.LamportClock != 1 {
+		t.Fatalf("sidecar receipt must start a distinct causal session: %+v", receipt)
 	}
 	if err := handle.Stop(); err != nil {
 		t.Fatalf("sidecar stop failed: %v", err)

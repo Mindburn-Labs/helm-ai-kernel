@@ -113,15 +113,19 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		"require_schema_pin":    compiled.MCPPolicy.RequireSchemaPin,
 		"effect":                "unknown MCP servers and tools remain quarantined until approval receipt exists",
 	})
-	modelGatewayReceipt := chain.Next("launchpad.model_gateway_grant", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
-		"provider":                   compiled.ModelGatewayProvider,
-		"mode":                       compiled.ModelGatewayMode,
-		"required_secret_refs":       compiled.RequiredSecretRefs,
-		"runtime_env_names":          compiled.ModelGatewayEnv,
-		"raw_provider_key_projected": compiled.RawProviderKeyProjected,
-		"network_allowlist":          compiled.NetworkAllowlist,
-		"budget_ceiling":             compiled.Budgets,
-	})
+	hasModelGateway := compiled.ModelGatewayMode != "" || len(compiled.ModelGatewayEnv) > 0
+	var modelGatewayReceipt receipts.Receipt
+	if hasModelGateway {
+		modelGatewayReceipt = chain.Next("launchpad.model_gateway_grant", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+			"provider":                   compiled.ModelGatewayProvider,
+			"mode":                       compiled.ModelGatewayMode,
+			"required_secret_refs":       compiled.RequiredSecretRefs,
+			"runtime_env_names":          compiled.ModelGatewayEnv,
+			"raw_provider_key_projected": compiled.RawProviderKeyProjected,
+			"network_allowlist":          compiled.NetworkAllowlist,
+			"budget_ceiling":             compiled.Budgets,
+		})
+	}
 	contractReceipt := chain.Next("launchpad.f2_contract_preflight", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
 		"stage":         "f2_contract_preflight",
 		"support_level": compiled.SupportLevel,
@@ -137,7 +141,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	}
 	run.SandboxGrantRefs = append(run.SandboxGrantRefs, sandboxReceipt.ReceiptID)
 	run.MCPRefs = append(run.MCPRefs, mcpReceipt.ReceiptID)
-	if compiled.ModelGatewayMode != "" || len(compiled.ModelGatewayEnv) > 0 {
+	if hasModelGateway {
 		run.ModelGatewayGrantRefs = append(run.ModelGatewayGrantRefs, modelGatewayReceipt.ReceiptID)
 	}
 	run.LaunchReceiptRefs = append(run.LaunchReceiptRefs, launchReceipt.ReceiptID)

@@ -117,8 +117,8 @@ func TestLiveModelProviderLocalContainerConformance(t *testing.T) {
 			if deleted.State != session.StateDeleted || len(deleted.TeardownReceiptRefs) == 0 {
 				t.Fatalf("teardown did not emit receipt: %+v", deleted)
 			}
-			verifyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
 			copyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
+			verifyLiveEvidenceRefs(t, appID, deleted.EvidencePackRefs)
 		})
 	}
 }
@@ -232,7 +232,9 @@ func verifyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
 	if archiveRef == "" {
 		t.Fatalf("%s did not produce an EvidencePack tar archive ref: %#v", appID, refs)
 	}
-	report, err := verifier.VerifyBundle(dirRef)
+	// This process produced the temporary pack, so strict third-party provenance
+	// verification would correctly reject its self-attested dev-local seal.
+	report, err := verifier.VerifyLocallyProducedBundle(dirRef)
 	if err != nil {
 		t.Fatalf("%s EvidencePack directory verifier error: %v", appID, err)
 	}
@@ -241,7 +243,7 @@ func verifyLiveEvidenceRefs(t *testing.T, appID string, refs []string) {
 	}
 	verifyLiveRuntimeTelemetry(t, appID, dirRef)
 	root := repoRoot(t)
-	cmd := exec.Command("go", "run", "./core/cmd/helm-ai-kernel", "verify", "--bundle", archiveRef, "--json")
+	cmd := exec.Command("go", "run", "./core/cmd/helm-ai-kernel", "verify", "--allow-self-attested", "--bundle", archiveRef, "--json")
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {

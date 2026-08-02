@@ -143,6 +143,9 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 		}
 		return receipt, artifact, nil
 	}
+	if err := e.preflightCausalReceiptAppend(ctx, tenantID, decision); err != nil {
+		return nil, nil, fmt.Errorf("execution blocked: %w", err)
+	}
 
 	// 2. Snapshot Verification
 	blobHash, err := e.verifySnapshot(ctx, decision)
@@ -295,6 +298,38 @@ func (e *SafeExecutor) checkIdempotency(ctx context.Context, decisionID string) 
 		}
 	}
 	return nil, false
+}
+
+func (e *SafeExecutor) preflightCausalReceiptAppend(ctx context.Context, tenantID string, decision *contracts.DecisionRecord) error {
+	if e.receiptStore == nil {
+		return nil
+	}
+	sessionID, err := receiptSessionID(decision)
+	if err != nil {
+		return err
+	}
+	if tenantID != "" {
+		if _, scoped := e.receiptStore.(tenantScopedCausalReceiptAppender); scoped {
+			preflighter, ok := e.receiptStore.(tenantScopedCausalReceiptAppendPreflighter)
+			if !ok {
+				return errors.New("fail-closed: receipt store lacks tenant-scoped causal append preflight")
+			}
+			if err := preflighter.PreflightCausalAppendScoped(ctx, tenantID, sessionID); err != nil {
+				return fmt.Errorf("receipt causal append preflight failed: %w", err)
+			}
+			return nil
+		}
+	}
+	if _, causal := e.receiptStore.(causalReceiptAppender); causal {
+		preflighter, ok := e.receiptStore.(causalReceiptAppendPreflighter)
+		if !ok {
+			return errors.New("fail-closed: receipt store lacks causal append preflight")
+		}
+		if err := preflighter.PreflightCausalAppend(ctx, sessionID); err != nil {
+			return fmt.Errorf("receipt causal append preflight failed: %w", err)
+		}
+	}
+	return nil
 }
 
 func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect) error {

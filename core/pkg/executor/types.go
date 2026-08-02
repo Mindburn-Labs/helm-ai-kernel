@@ -47,6 +47,16 @@ type tenantScopedCausalReceiptAppender interface {
 	AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error)) error
 }
 
+// causalReceiptAppendPreflighter detects a known-unappendable durable session
+// before external dispatch. It is not a causal-position reservation.
+type causalReceiptAppendPreflighter interface {
+	PreflightCausalAppend(ctx context.Context, sessionID string) error
+}
+
+type tenantScopedCausalReceiptAppendPreflighter interface {
+	PreflightCausalAppendScoped(ctx context.Context, tenantID, sessionID string) error
+}
+
 type receiptTimestampNormalizer interface {
 	NormalizeReceiptTimestamp(time.Time) time.Time
 }

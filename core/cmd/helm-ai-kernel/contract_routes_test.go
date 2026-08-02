@@ -1198,6 +1198,29 @@ func TestEvidenceVerifyRejectsUnsafeArchivePaths(t *testing.T) {
 	}
 }
 
+func TestExtractEvidenceBundleToDirRejectsUnsafeArchivePaths(t *testing.T) {
+	for _, archiveName := range []string{"../receipt.json", `..\\receipt.json`} {
+		t.Run(archiveName, func(t *testing.T) {
+			root := t.TempDir()
+			dstDir := filepath.Join(root, "extract")
+			if err := os.Mkdir(dstDir, 0o700); err != nil {
+				t.Fatalf("create extract dir: %v", err)
+			}
+			bundle, err := unsafeEvidenceBundleWithName(archiveName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = extractEvidenceBundleToDir(bundle, dstDir)
+			if err == nil || !strings.Contains(err.Error(), "unsafe archive path") {
+				t.Fatalf("expected unsafe path rejection, got %v", err)
+			}
+			if _, statErr := os.Stat(filepath.Join(root, "receipt.json")); !os.IsNotExist(statErr) {
+				t.Fatalf("expected no escaped write, stat err=%v", statErr)
+			}
+		})
+	}
+}
+
 func TestWriteEvidenceBundlePackFilesRejectsUnsafeDerivedNames(t *testing.T) {
 	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
 	scope, err := registry.PutVerificationScope(contracts.VerificationScope{
@@ -1719,10 +1742,14 @@ func postEvidenceVerification(t *testing.T, mux *http.ServeMux, endpoint string,
 }
 
 func unsafeEvidenceBundle() ([]byte, error) {
+	return unsafeEvidenceBundleWithName("../receipt.json")
+}
+
+func unsafeEvidenceBundleWithName(name string) ([]byte, error) {
 	var buf bytes.Buffer
 	gzipWriter := gzip.NewWriter(&buf)
 	tarWriter := tar.NewWriter(gzipWriter)
-	if err := tarWriter.WriteHeader(&tar.Header{Name: "../receipt.json", Size: 2, Mode: 0644}); err != nil {
+	if err := tarWriter.WriteHeader(&tar.Header{Name: name, Size: 2, Mode: 0644}); err != nil {
 		return nil, err
 	}
 	if _, err := tarWriter.Write([]byte("{}")); err != nil {

@@ -39,6 +39,19 @@ type TenantScopedCausalReceiptAppender interface {
 	AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build CausalReceiptBuilder) error
 }
 
+// CausalReceiptAppendPreflighter checks whether a durable causal session can
+// safely accept a successor before an external effect is dispatched. It is a
+// health check, not a reservation; AppendCausal remains authoritative.
+type CausalReceiptAppendPreflighter interface {
+	PreflightCausalAppend(ctx context.Context, sessionID string) error
+}
+
+// TenantScopedCausalReceiptAppendPreflighter is the authenticated-scope form
+// of CausalReceiptAppendPreflighter.
+type TenantScopedCausalReceiptAppendPreflighter interface {
+	PreflightCausalAppendScoped(ctx context.Context, tenantID, sessionID string) error
+}
+
 // TenantScopedReceiptReader exposes read operations that are constrained by an
 // authenticated tenant and a V5 signed receipt session. Public runtime routes
 // must use this capability instead of executor-oriented legacy queries.
@@ -710,6 +723,29 @@ func (s *PostgresReceiptStore) AppendCausal(ctx context.Context, sessionID strin
 	return s.appendCausal(ctx, sessionID, sessionID, build)
 }
 
+// PreflightCausalAppend rejects a session whose durable predecessor cannot be
+// linked before an external effect is dispatched. It does not reserve a chain
+// position; AppendCausal performs the authoritative final allocation.
+func (s *PostgresReceiptStore) PreflightCausalAppend(ctx context.Context, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("session id is required")
+	}
+	return s.preflightCausalAppend(ctx, sessionID)
+}
+
+// PreflightCausalAppendScoped is the tenant-qualified variant of
+// PreflightCausalAppend.
+func (s *PostgresReceiptStore) PreflightCausalAppendScoped(ctx context.Context, tenantID, sessionID string) error {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return fmt.Errorf("tenant id is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("session id is required")
+	}
+	return s.preflightCausalAppend(ctx, causalReceiptScopeKey(tenantID, sessionID))
+}
+
 // AppendCausalScoped preserves the external SessionID in the signed receipt
 // while serializing and indexing the chain by its authenticated tenant scope.
 func (s *PostgresReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build CausalReceiptBuilder) error {
@@ -721,6 +757,22 @@ func (s *PostgresReceiptStore) AppendCausalScoped(ctx context.Context, tenantID,
 		return fmt.Errorf("session id is required")
 	}
 	return s.appendCausal(ctx, causalReceiptScopeKey(tenantID, sessionID), sessionID, build)
+}
+
+func (s *PostgresReceiptStore) preflightCausalAppend(ctx context.Context, causalSessionID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin receipt preflight transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, causalSessionID); err != nil {
+		return fmt.Errorf("lock receipt session %s: %w", causalSessionID, err)
+	}
+	last, lastChainHash, err := queryLastPostgresReceiptWithChainHash(ctx, tx, causalSessionID)
+	if err != nil {
+		return err
+	}
+	return requirePersistedCausalPredecessor(causalSessionID, last, lastChainHash)
 }
 
 func (s *PostgresReceiptStore) appendCausal(ctx context.Context, causalSessionID, externalSessionID string, build CausalReceiptBuilder) error {
@@ -816,12 +868,8 @@ func buildNextCausalReceiptScoped(causalSessionID, externalSessionID string, pre
 	if previous != nil {
 		lamport = previous.LamportClock + 1
 		prevHash = strings.TrimSpace(previousChainHash)
-		if prevHash == "" {
-			hash, err := contracts.ReceiptChainHash(previous)
-			if err != nil {
-				return nil, fmt.Errorf("hash previous receipt for %s: %w", causalSessionID, err)
-			}
-			prevHash = hash
+		if err := requirePersistedCausalPredecessor(causalSessionID, previous, prevHash); err != nil {
+			return nil, err
 		}
 	}
 	receipt, err := build(previous, lamport, prevHash)
@@ -849,6 +897,13 @@ func buildNextCausalReceiptScoped(causalSessionID, externalSessionID string, pre
 		return nil, fmt.Errorf("receipt prev_hash %q does not match assigned prev_hash %q", receipt.PrevHash, prevHash)
 	}
 	return receipt, nil
+}
+
+func requirePersistedCausalPredecessor(causalSessionID string, previous *contracts.Receipt, previousChainHash string) error {
+	if previous != nil && strings.TrimSpace(previousChainHash) == "" {
+		return fmt.Errorf("cannot append causal receipt for %s: predecessor %s has no persisted chain hash; start a new signed session", causalSessionID, previous.ReceiptID)
+	}
+	return nil
 }
 
 // encodePublicKeySet serialises the receipt's published verification keys for

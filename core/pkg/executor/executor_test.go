@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -71,9 +72,18 @@ func (s *MemoryReceiptStore) GetLastForSession(ctx context.Context, sessionID st
 
 type tenantScopedReceiptStore struct {
 	*MemoryReceiptStore
-	tenantID    string
-	sessionID   string
-	appendCalls int
+	tenantID       string
+	sessionID      string
+	appendCalls    int
+	preflightCalls int
+	preflightErr   error
+}
+
+func (s *tenantScopedReceiptStore) PreflightCausalAppendScoped(_ context.Context, tenantID, sessionID string) error {
+	s.tenantID = tenantID
+	s.sessionID = sessionID
+	s.preflightCalls++
+	return s.preflightErr
 }
 
 func (s *tenantScopedReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error)) error {
@@ -171,6 +181,10 @@ func (s *causalReceiptStore) AppendCausal(ctx context.Context, sessionID string,
 	}
 	s.appendCalls++
 	s.receipts[receipt.ReceiptID] = receipt
+	return nil
+}
+
+func (s *causalReceiptStore) PreflightCausalAppend(context.Context, string) error {
 	return nil
 }
 
@@ -337,8 +351,8 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 	if _, _, err := executor.Execute(context.Background(), effect, decision, intent); err == nil || !strings.Contains(err.Error(), "authenticated tenant required") {
 		t.Fatalf("tenant-scoped store accepted an unbound tenant: %v", err)
 	}
-	if driver.Called || store.appendCalls != 0 {
-		t.Fatalf("tenant-scoped store dispatched before authenticated tenant binding: driver=%v appends=%d", driver.Called, store.appendCalls)
+	if driver.Called || store.appendCalls != 0 || store.preflightCalls != 0 {
+		t.Fatalf("tenant-scoped store dispatched before authenticated tenant binding: driver=%v appends=%d preflights=%d", driver.Called, store.appendCalls, store.preflightCalls)
 	}
 
 	ctx := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "operator-a", TenantID: "tenant-authorized"})
@@ -351,6 +365,39 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 	}
 	if valid, err := signer.VerifyReceipt(receipt); err != nil || !valid {
 		t.Fatalf("receipt signature invalid after authenticated tenant scope: valid=%v err=%v", valid, err)
+	}
+	if store.preflightCalls != 1 {
+		t.Fatalf("expected one causal preflight, got %d", store.preflightCalls)
+	}
+
+	store.preflightErr = errors.New("predecessor has no persisted chain hash")
+	driver.Called = false
+	appendsBefore := store.appendCalls
+	blockedDecision := &contracts.DecisionRecord{
+		ID:                "decision-legacy-chain",
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "sha256:policy",
+		EffectDigest:      testEffectDigest(t, effect),
+		InputContext:      map[string]any{"session_id": "tenant-scope-session"},
+	}
+	if err := signer.SignDecision(blockedDecision); err != nil {
+		t.Fatal(err)
+	}
+	blockedIntent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:       blockedDecision.ID,
+		EffectDigestHash: blockedDecision.EffectDigest,
+		AllowedTool:      "ls",
+		ExpiresAt:        clock.Add(time.Hour),
+	}
+	if err := signer.SignIntent(blockedIntent); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := executor.Execute(ctx, effect, blockedDecision, blockedIntent); err == nil || !strings.Contains(err.Error(), "causal append preflight failed") {
+		t.Fatalf("expected causal append preflight denial, got %v", err)
+	}
+	if driver.Called || store.appendCalls != appendsBefore {
+		t.Fatalf("preflight failure dispatched or appended: driver=%v appends=%d", driver.Called, store.appendCalls)
 	}
 }
 

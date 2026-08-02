@@ -457,7 +457,9 @@ func TestSQLiteReceiptMigrationReplacesExecutorLamportUniqueIndex(t *testing.T) 
 		t.Fatalf("legacy receipt was not found without rewriting its envelope: receipt=%+v err=%v", legacy, err)
 	}
 
-	if err := store.AppendCausal(ctx, "agent.migrated", func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+	legacyBuilderCalled := false
+	err = store.AppendCausal(ctx, "agent.migrated", func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		legacyBuilderCalled = true
 		return &contracts.Receipt{
 			ReceiptID:        "r-v5-after-legacy",
 			DecisionID:       "d-v5-after-legacy",
@@ -471,12 +473,34 @@ func TestSQLiteReceiptMigrationReplacesExecutorLamportUniqueIndex(t *testing.T) 
 			PrevHash:         prevHash,
 			LamportClock:     lamport,
 		}, nil
-	}); err != nil {
-		t.Fatalf("append after legacy migration: %v", err)
+	})
+	if err == nil || !strings.Contains(err.Error(), "no persisted chain hash") {
+		t.Fatalf("expected legacy chain rejection, got %v", err)
 	}
-	continued, err := store.GetLastForSession(ctx, "agent.migrated")
-	if err != nil || continued == nil || continued.ReceiptID != "r-v5-after-legacy" || continued.LamportClock != 2 {
-		t.Fatalf("migrated legacy chain did not continue: receipt=%+v err=%v", continued, err)
+	if legacyBuilderCalled {
+		t.Fatal("legacy chain builder ran despite missing persisted hash")
+	}
+
+	if err := store.AppendCausal(ctx, "session-after-legacy", func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		return &contracts.Receipt{
+			ReceiptID:        "r-v5-after-legacy",
+			DecisionID:       "d-v5-after-legacy",
+			EffectID:         "e",
+			Status:           "OK",
+			Timestamp:        time.Now().UTC(),
+			ExecutorID:       "agent.migrated",
+			DecisionHash:     "decision-hash-after-legacy",
+			SignatureVersion: contracts.ReceiptSignatureV5,
+			SessionID:        "session-after-legacy",
+			PrevHash:         prevHash,
+			LamportClock:     lamport,
+		}, nil
+	}); err != nil {
+		t.Fatalf("append new session after legacy migration: %v", err)
+	}
+	fresh, err := store.GetLastForSession(ctx, "session-after-legacy")
+	if err != nil || fresh == nil || fresh.ReceiptID != "r-v5-after-legacy" || fresh.LamportClock != 1 {
+		t.Fatalf("new signed session did not start after migration: receipt=%+v err=%v", fresh, err)
 	}
 
 	for _, receipt := range []*contracts.Receipt{
@@ -566,6 +590,46 @@ func TestSQLiteReceiptAppendCausalAssignsChainInsideStore(t *testing.T) {
 	}
 	if got.LamportClock != 2 || got.PrevHash != expectedPrevHash {
 		t.Fatalf("causal fields = lamport %d prev %q, want 2 %q", got.LamportClock, got.PrevHash, expectedPrevHash)
+	}
+}
+
+func TestSQLiteReceiptAppendCausalRejectsLegacyBlankChainHash(t *testing.T) {
+	store, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+	const sessionID = "agent.legacy-chain"
+	if err := store.AppendCausal(ctx, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		return &contracts.Receipt{
+			ReceiptID:    "r-legacy-chain-1",
+			DecisionID:   "d-legacy-chain-1",
+			EffectID:     "e",
+			Status:       "OK",
+			Timestamp:    time.Unix(1700000000, 0).UTC(),
+			ExecutorID:   "agent.legacy-chain",
+			SessionID:    sessionID,
+			PrevHash:     prevHash,
+			LamportClock: lamport,
+			Signature:    "sig-1",
+		}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE receipts SET chain_hash = '' WHERE receipt_id = ?`, "r-legacy-chain-1"); err != nil {
+		t.Fatalf("clear persisted chain hash: %v", err)
+	}
+	if err := store.PreflightCausalAppend(ctx, sessionID); err == nil || !strings.Contains(err.Error(), "no persisted chain hash") {
+		t.Fatalf("expected legacy chain preflight rejection, got %v", err)
+	}
+	builderCalled := false
+	err := store.AppendCausal(ctx, sessionID, func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
+		builderCalled = true
+		return nil, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "no persisted chain hash") {
+		t.Fatalf("expected legacy chain hash rejection, got %v", err)
+	}
+	if builderCalled {
+		t.Fatal("builder ran after legacy chain hash rejection")
 	}
 }
 

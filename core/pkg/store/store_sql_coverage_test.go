@@ -613,6 +613,30 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRowsWithStoredChainHash(genesis, nil, ""))
+	mock.ExpectRollback()
+	if err := store.PreflightCausalAppend(ctx, "agent"); err == nil || !strings.Contains(err.Error(), "no persisted chain hash") {
+		t.Fatalf("expected legacy chain preflight rejection, got %v", err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRowsWithStoredChainHash(genesis, nil, ""))
+	mock.ExpectRollback()
+	builderCalled := false
+	err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
+		builderCalled = true
+		return nil, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "no persisted chain hash") {
+		t.Fatalf("expected legacy chain hash rejection, got %v", err)
+	}
+	if builderCalled {
+		t.Fatal("builder ran after legacy chain hash rejection")
+	}
+
+	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnError(errors.New("lock failed"))
 	mock.ExpectRollback()
 	if err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) { return nil, nil }); err == nil {
@@ -722,16 +746,15 @@ func TestCoverageBuildNextCausalReceiptBranches(t *testing.T) {
 	}
 
 	previous := storeCoverageReceipt("previous", "decision-prev", "agent", 5, now)
-	got, err := buildNextCausalReceipt("agent", previous, func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
-		if previous == nil || lamport != 6 || prevHash == "" {
-			t.Fatalf("unexpected previous branch inputs previous=%+v lamport=%d prev=%q", previous, lamport, prevHash)
-		}
-		next := storeCoverageReceipt("next", "decision-next", "agent", lamport, now.Add(time.Second))
-		next.PrevHash = prevHash
-		return next, nil
-	})
-	if err != nil || got.LamportClock != 6 || got.PrevHash == "" {
-		t.Fatalf("unexpected previous branch result %+v err=%v", got, err)
+	builderCalled := false
+	if _, err := buildNextCausalReceiptScoped("agent", "agent", previous, "", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
+		builderCalled = true
+		return nil, nil
+	}); err == nil || !strings.Contains(err.Error(), "no persisted chain hash") {
+		t.Fatalf("expected unpersisted predecessor rejection, got %v", err)
+	}
+	if builderCalled {
+		t.Fatal("builder ran after unpersisted predecessor rejection")
 	}
 }
 
@@ -875,6 +898,10 @@ func storePostgresReceiptRowsWithChainHash(t *testing.T, receipt *contracts.Rece
 			t.Fatalf("compute chain hash for %s: %v", receipt.ReceiptID, err)
 		}
 	}
+	return storePostgresReceiptRowsWithStoredChainHash(receipt, metadata, chainHash)
+}
+
+func storePostgresReceiptRowsWithStoredChainHash(receipt *contracts.Receipt, metadata []byte, chainHash string) *sqlmock.Rows {
 	if metadata == nil {
 		metadata = []byte(`null`)
 	}

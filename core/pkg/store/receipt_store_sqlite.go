@@ -521,6 +521,29 @@ func (s *SQLiteReceiptStore) AppendCausal(ctx context.Context, sessionID string,
 	return s.appendCausal(ctx, sessionID, sessionID, build)
 }
 
+// PreflightCausalAppend rejects a session whose durable predecessor cannot be
+// linked before an external effect is dispatched. It does not reserve a chain
+// position; AppendCausal performs the authoritative final allocation.
+func (s *SQLiteReceiptStore) PreflightCausalAppend(ctx context.Context, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("session id is required")
+	}
+	return s.preflightCausalAppend(ctx, sessionID)
+}
+
+// PreflightCausalAppendScoped is the tenant-qualified variant of
+// PreflightCausalAppend.
+func (s *SQLiteReceiptStore) PreflightCausalAppendScoped(ctx context.Context, tenantID, sessionID string) error {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return fmt.Errorf("tenant id is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("session id is required")
+	}
+	return s.preflightCausalAppend(ctx, causalReceiptScopeKey(tenantID, sessionID))
+}
+
 // AppendCausalScoped keeps the signed receipt session caller-visible while the
 // durable chain key includes the authenticated tenant identity.
 func (s *SQLiteReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build CausalReceiptBuilder) error {
@@ -532,6 +555,25 @@ func (s *SQLiteReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, s
 		return fmt.Errorf("session id is required")
 	}
 	return s.appendCausal(ctx, causalReceiptScopeKey(tenantID, sessionID), sessionID, build)
+}
+
+func (s *SQLiteReceiptStore) preflightCausalAppend(ctx context.Context, causalSessionID string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("open receipt connection: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return fmt.Errorf("begin receipt preflight transaction: %w", err)
+	}
+	defer func() { _, _ = conn.ExecContext(context.Background(), "ROLLBACK") }()
+	last, lastChainHash, err := queryLastSQLiteReceiptWithChainHash(ctx, conn, causalSessionID)
+	if err != nil {
+		return err
+	}
+	return requirePersistedCausalPredecessor(causalSessionID, last, lastChainHash)
 }
 
 func (s *SQLiteReceiptStore) appendCausal(ctx context.Context, causalSessionID, externalSessionID string, build CausalReceiptBuilder) error {

@@ -1711,15 +1711,21 @@ func tarEvidenceBundleFiles(files map[string][]byte) ([]byte, error) {
 }
 
 func writeEvidenceBundlePackFiles(packDir string, files map[string][]byte) error {
+	root, err := os.OpenRoot(packDir)
+	if err != nil {
+		return fmt.Errorf("open evidence bundle root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
 	for name, data := range files {
 		if !safeArchiveName(name) {
 			return fmt.Errorf("unsafe archive path %q", name)
 		}
-		fullPath := filepath.Join(packDir, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o700); err != nil {
-			return fmt.Errorf("mkdir evidence bundle path %s: %w", name, err)
+		if dir := path.Dir(name); dir != "." {
+			if err := root.MkdirAll(dir, 0o700); err != nil {
+				return fmt.Errorf("mkdir evidence bundle path %s: %w", name, err)
+			}
 		}
-		if err := os.WriteFile(fullPath, data, 0o600); err != nil {
+		if err := root.WriteFile(name, data, 0o600); err != nil {
 			return fmt.Errorf("write evidence bundle file %s: %w", name, err)
 		}
 	}
@@ -1973,6 +1979,11 @@ func extractEvidenceBundleToDir(data []byte, dstDir string) error {
 	if len(data) > maxEvidenceBundleBytes {
 		return fmt.Errorf("evidence bundle exceeds %d bytes", maxEvidenceBundleBytes)
 	}
+	root, err := os.OpenRoot(dstDir)
+	if err != nil {
+		return fmt.Errorf("open evidence extraction root: %w", err)
+	}
+	defer func() { _ = root.Close() }()
 	gzipReader, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("open evidence gzip: %w", err)
@@ -2005,11 +2016,12 @@ func extractEvidenceBundleToDir(data []byte, dstDir string) error {
 		if err != nil {
 			return fmt.Errorf("read archive entry %q: %w", header.Name, err)
 		}
-		fullPath := filepath.Join(dstDir, filepath.FromSlash(header.Name))
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o700); err != nil {
-			return fmt.Errorf("mkdir extract path %s: %w", header.Name, err)
+		if dir := path.Dir(header.Name); dir != "." {
+			if err := root.MkdirAll(dir, 0o700); err != nil {
+				return fmt.Errorf("mkdir extract path %s: %w", header.Name, err)
+			}
 		}
-		if err := os.WriteFile(fullPath, entryData, 0o600); err != nil {
+		if err := root.WriteFile(header.Name, entryData, 0o600); err != nil {
 			return fmt.Errorf("write archive entry %q: %w", header.Name, err)
 		}
 	}

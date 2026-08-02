@@ -77,7 +77,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if args[1] == "help" {
 		return runHelpCommand(args[2:], stdout, stderr)
 	}
-	if isHelpRequest(args[2:]) {
+	if len(args) == 3 && isHelpRequest(args[2:]) {
 		if code, ok := Dispatch(args[1], []string{"--help"}, stdout, stderr); ok {
 			return code
 		}

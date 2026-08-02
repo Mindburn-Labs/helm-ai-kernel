@@ -189,6 +189,34 @@ func TestLiteralHelpArgumentDoesNotTriggerGlobalHelp(t *testing.T) {
 	}
 }
 
+func TestNestedHelpReachesLeafFlagSets(t *testing.T) {
+	isolateDiscoverabilityTest(t)
+
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		wantCode int
+		wantFlag string
+		parent   string
+	}{
+		{"receipts tail", []string{"receipts", "tail", "--help"}, 2, "-agent string", "Usage: helm-ai-kernel receipts [options]"},
+		{"mcp authorize-call", []string{"mcp", "authorize-call", "--help"}, 2, "-server-id string", "Usage: helm-ai-kernel mcp [options]"},
+		{"workstation verify-decision", []string{"workstation", "verify-decision", "--help"}, 0, "-receipt string", "Usage: helm-ai-kernel workstation [options]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Run(append([]string{"helm-ai-kernel"}, tc.args...), &stdout, &stderr)
+			if code != tc.wantCode {
+				t.Fatalf("code=%d want %d stdout=%q stderr=%q", code, tc.wantCode, stdout.String(), stderr.String())
+			}
+			output := stdout.String() + stderr.String()
+			if !strings.Contains(output, tc.wantFlag) || strings.Contains(output, tc.parent) {
+				t.Fatalf("leaf help not reached: %q", output)
+			}
+		})
+	}
+}
+
 func isolateDiscoverabilityTest(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()

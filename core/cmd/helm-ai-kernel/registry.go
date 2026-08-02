@@ -62,7 +62,7 @@ func Dispatch(name string, args []string, stdout, stderr io.Writer) (int, bool) 
 	if !ok {
 		return 0, false
 	}
-	if isHelpRequest(args) {
+	if len(args) == 1 && isHelpRequest(args) {
 		printSubcommandHelp(cmd, stdout)
 		return 0, true
 	}

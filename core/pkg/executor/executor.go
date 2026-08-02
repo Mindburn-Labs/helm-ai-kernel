@@ -309,16 +309,17 @@ func (e *SafeExecutor) preflightCausalReceiptAppend(ctx context.Context, tenantI
 		return err
 	}
 	if tenantID != "" {
-		if _, scoped := e.receiptStore.(tenantScopedCausalReceiptAppender); scoped {
-			preflighter, ok := e.receiptStore.(tenantScopedCausalReceiptAppendPreflighter)
-			if !ok {
-				return errors.New("fail-closed: receipt store lacks tenant-scoped causal append preflight")
-			}
-			if err := preflighter.PreflightCausalAppendScoped(ctx, tenantID, sessionID); err != nil {
-				return fmt.Errorf("receipt causal append preflight failed: %w", err)
-			}
-			return nil
+		if _, ok := e.receiptStore.(tenantScopedCausalReceiptAppender); !ok {
+			return errors.New("fail-closed: receipt store lacks tenant-scoped causal append")
 		}
+		preflighter, ok := e.receiptStore.(tenantScopedCausalReceiptAppendPreflighter)
+		if !ok {
+			return errors.New("fail-closed: receipt store lacks tenant-scoped causal append preflight")
+		}
+		if err := preflighter.PreflightCausalAppendScoped(ctx, tenantID, sessionID); err != nil {
+			return fmt.Errorf("receipt causal append preflight failed: %w", err)
+		}
+		return nil
 	}
 	if _, causal := e.receiptStore.(causalReceiptAppender); causal {
 		preflighter, ok := e.receiptStore.(causalReceiptAppendPreflighter)

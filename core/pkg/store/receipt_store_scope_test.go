@@ -56,6 +56,12 @@ func TestSQLiteReceiptAppendCausalScopedIsolatesSameExternalSession(t *testing.T
 	base := time.Unix(1700000000, 123456789).UTC()
 	firstA := issue("tenant-a", "a-1", base)
 	firstB := issue("tenant-b", "b-1", base.Add(time.Second))
+	if err := receiptStore.PreflightCausalAppendScoped(ctx, "tenant-a", externalSessionID); err != nil {
+		t.Fatalf("preflight tenant-a: %v", err)
+	}
+	if err := receiptStore.PreflightCausalAppendScoped(ctx, "tenant-b", externalSessionID); err != nil {
+		t.Fatalf("preflight tenant-b: %v", err)
+	}
 	secondA := issue("tenant-a", "a-2", base.Add(2*time.Second))
 	secondB := issue("tenant-b", "b-2", base.Add(3*time.Second))
 
@@ -266,6 +272,14 @@ func TestPostgresReceiptAppendCausalScopedUsesTenantLookupKey(t *testing.T) {
 	const tenantID = "tenant-a"
 	const externalSessionID = "caller-session"
 	lookupKey := causalReceiptScopeKey(tenantID, externalSessionID)
+
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(lookupKey).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(lookupKey).WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumnsWithChainHash()))
+	mock.ExpectRollback()
+	if err := receiptStore.PreflightCausalAppendScoped(ctx, tenantID, externalSessionID); err != nil {
+		t.Fatalf("preflight scoped receipt: %v", err)
+	}
 
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(lookupKey).WillReturnResult(sqlmock.NewResult(0, 0))

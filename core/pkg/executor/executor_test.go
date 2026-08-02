@@ -70,6 +70,25 @@ func (s *MemoryReceiptStore) GetLastForSession(ctx context.Context, sessionID st
 	return last, nil
 }
 
+type recordingOutboxStore struct {
+	scheduleCalls int
+	markDoneCalls int
+}
+
+func (s *recordingOutboxStore) Schedule(context.Context, *contracts.Effect, *contracts.AuthorizedExecutionIntent) error {
+	s.scheduleCalls++
+	return nil
+}
+
+func (s *recordingOutboxStore) GetPending(context.Context) ([]*OutboxRecord, error) {
+	return nil, nil
+}
+
+func (s *recordingOutboxStore) MarkDone(context.Context, string) error {
+	s.markDoneCalls++
+	return nil
+}
+
 type tenantScopedReceiptStore struct {
 	*MemoryReceiptStore
 	tenantID       string
@@ -311,7 +330,8 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 	clock := time.Unix(1700000000, 0).UTC()
 	driver := &MockDriver{}
 	store := &tenantScopedReceiptStore{MemoryReceiptStore: NewMemoryReceiptStore()}
-	executor := NewSafeExecutor(signer, signer, driver, store, nil, nil, "", nil, nil, nil, func() time.Time { return clock })
+	outbox := &recordingOutboxStore{}
+	executor := NewSafeExecutor(signer, signer, driver, store, nil, outbox, "", nil, nil, nil, func() time.Time { return clock })
 	effect := &contracts.Effect{
 		EffectID:   "effect-tenant-scope",
 		EffectType: "EXECUTE_TOOL",
@@ -373,6 +393,7 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 	store.preflightErr = errors.New("predecessor has no persisted chain hash")
 	driver.Called = false
 	appendsBefore := store.appendCalls
+	schedulesBefore := outbox.scheduleCalls
 	blockedDecision := &contracts.DecisionRecord{
 		ID:                "decision-legacy-chain",
 		Verdict:           string(contracts.VerdictAllow),
@@ -396,8 +417,52 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 	if _, _, err := executor.Execute(ctx, effect, blockedDecision, blockedIntent); err == nil || !strings.Contains(err.Error(), "causal append preflight failed") {
 		t.Fatalf("expected causal append preflight denial, got %v", err)
 	}
-	if driver.Called || store.appendCalls != appendsBefore {
-		t.Fatalf("preflight failure dispatched or appended: driver=%v appends=%d", driver.Called, store.appendCalls)
+	if driver.Called || store.appendCalls != appendsBefore || outbox.scheduleCalls != schedulesBefore {
+		t.Fatalf("preflight failure dispatched, scheduled, or appended: driver=%v schedules=%d appends=%d", driver.Called, outbox.scheduleCalls, store.appendCalls)
+	}
+}
+
+func TestSafeExecutorRejectsAuthenticatedUnscopedCausalStoreBeforeDispatch(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("unscoped-causal-store-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Unix(1700000000, 0).UTC()
+	driver := &MockDriver{}
+	store := newCausalReceiptStore()
+	executor := NewSafeExecutor(signer, signer, driver, store, nil, nil, "", nil, nil, nil, func() time.Time { return clock })
+	effect := &contracts.Effect{
+		EffectID:   "effect-unscoped-causal-store",
+		EffectType: "EXECUTE_TOOL",
+		ArgsHash:   "sha256:unscoped-causal-store",
+		Params:     map[string]any{"tool_name": "ls"},
+	}
+	decision := &contracts.DecisionRecord{
+		ID:                "decision-unscoped-causal-store",
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "sha256:policy",
+		EffectDigest:      testEffectDigest(t, effect),
+		InputContext:      map[string]any{"session_id": "unscoped-causal-session"},
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:       decision.ID,
+		EffectDigestHash: decision.EffectDigest,
+		AllowedTool:      "ls",
+		ExpiresAt:        clock.Add(time.Hour),
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+	ctx := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "operator-a", TenantID: "tenant-authorized"})
+	if _, _, err := executor.Execute(ctx, effect, decision, intent); err == nil || !strings.Contains(err.Error(), "lacks tenant-scoped causal append") {
+		t.Fatalf("expected unscoped causal store denial, got %v", err)
+	}
+	if driver.Called || store.appendCalls != 0 {
+		t.Fatalf("unscoped causal store dispatched or appended: driver=%v appends=%d", driver.Called, store.appendCalls)
 	}
 }
 

@@ -3,10 +3,12 @@ package executor
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -65,6 +67,24 @@ func (s *MemoryReceiptStore) GetLastForSession(ctx context.Context, sessionID st
 		}
 	}
 	return last, nil
+}
+
+type tenantScopedReceiptStore struct {
+	*MemoryReceiptStore
+	tenantID    string
+	sessionID   string
+	appendCalls int
+}
+
+func (s *tenantScopedReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error)) error {
+	s.tenantID = tenantID
+	s.sessionID = sessionID
+	s.appendCalls++
+	receipt, err := build(nil, 1, "")
+	if err != nil {
+		return err
+	}
+	return s.Store(ctx, receipt)
 }
 
 // causalReceiptStore models the optional atomic append capability provided by
@@ -266,6 +286,71 @@ func TestSafeExecutor_Gating(t *testing.T) {
 	}
 	if mockDriver.Called {
 		t.Error("Driver called despite mismatch")
+	}
+}
+
+func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("tenant-scope-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Unix(1700000000, 0).UTC()
+	driver := &MockDriver{}
+	store := &tenantScopedReceiptStore{MemoryReceiptStore: NewMemoryReceiptStore()}
+	executor := NewSafeExecutor(signer, signer, driver, store, nil, nil, "", nil, nil, nil, func() time.Time { return clock })
+	effect := &contracts.Effect{
+		EffectID:   "effect-tenant-scope",
+		EffectType: "EXECUTE_TOOL",
+		ArgsHash:   "sha256:tenant-scope",
+		Params:     map[string]any{"tool_name": "ls"},
+	}
+	decision := &contracts.DecisionRecord{
+		ID:                "decision-tenant-scope",
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "sha256:policy",
+		EffectDigest:      testEffectDigest(t, effect),
+		InputContext: map[string]any{
+			"session_id": "tenant-scope-session",
+			"tenant_id":  "tenant-before-mutation",
+		},
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	// InputContext falls outside the decision signature, so this mutation must
+	// not be able to redirect the durable tenant scope.
+	decision.InputContext["tenant_id"] = "tenant-after-mutation"
+	if valid, err := signer.VerifyDecision(decision); err != nil || !valid {
+		t.Fatalf("InputContext mutation unexpectedly changed decision verification: valid=%v err=%v", valid, err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:       decision.ID,
+		EffectDigestHash: decision.EffectDigest,
+		AllowedTool:      "ls",
+		ExpiresAt:        clock.Add(time.Hour),
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := executor.Execute(context.Background(), effect, decision, intent); err == nil || !strings.Contains(err.Error(), "authenticated tenant required") {
+		t.Fatalf("tenant-scoped store accepted an unbound tenant: %v", err)
+	}
+	if driver.Called || store.appendCalls != 0 {
+		t.Fatalf("tenant-scoped store dispatched before authenticated tenant binding: driver=%v appends=%d", driver.Called, store.appendCalls)
+	}
+
+	ctx := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "operator-a", TenantID: "tenant-authorized"})
+	receipt, _, err := executor.Execute(ctx, effect, decision, intent)
+	if err != nil {
+		t.Fatalf("execute with authenticated tenant: %v", err)
+	}
+	if store.tenantID != "tenant-authorized" || store.sessionID != "tenant-scope-session" {
+		t.Fatalf("durable scope = tenant=%q session=%q, want authenticated tenant and requested session", store.tenantID, store.sessionID)
+	}
+	if valid, err := signer.VerifyReceipt(receipt); err != nil || !valid {
+		t.Fatalf("receipt signature invalid after authenticated tenant scope: valid=%v err=%v", valid, err)
 	}
 }
 

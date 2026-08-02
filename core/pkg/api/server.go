@@ -394,6 +394,10 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 
 	s.receiptSequence++
 	receiptID := fmt.Sprintf("rcpt-%s-%d", time.Now().Format("20060102-150405"), s.receiptSequence)
+	// Decision IDs are independent of the tenant/session-local Lamport clock.
+	// Binding them to the receipt identity also keeps the V5 signed fields
+	// unique for the lifetime of that receipt.
+	decisionID := "dec-" + receiptID
 	argsJSON, _ := json.Marshal(req.Args)
 	argsHash := sha256.Sum256(argsJSON)
 
@@ -401,7 +405,6 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	if decResp.Allow {
 		status = "ALLOW"
 	}
-	decisionID := fmt.Sprintf("dec-%d", lamport)
 	policyRef := decResp.PolicyRef
 	if policyRef == "" {
 		policyRef = "default"

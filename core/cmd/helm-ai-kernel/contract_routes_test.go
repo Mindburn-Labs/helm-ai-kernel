@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -358,7 +359,7 @@ func TestStandaloneExecutorReceiptIsRetrievableAndExportableBySignedSession(t *t
 		ReasonCode:        "ALLOW_BY_POLICY",
 		PolicyContentHash: "policy-standalone-route",
 		EffectDigest:      effectDigest,
-		InputContext:      map[string]any{"tenant_id": defaultRuntimeTenantID},
+		InputContext:      map[string]any{"tenant_id": "untrusted-tenant"},
 	}
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
@@ -375,7 +376,8 @@ func TestStandaloneExecutorReceiptIsRetrievableAndExportableBySignedSession(t *t
 	safeExecutor := executor.NewSafeExecutor(signer, signer, receiptRouteStaticDriver{}, receiptStore, nil, nil, "", nil, nil, nil, func() time.Time {
 		return clock
 	})
-	receipt, _, err := safeExecutor.Execute(context.Background(), effect, decision, intent)
+	ctx := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "standalone-route", TenantID: defaultRuntimeTenantID})
+	receipt, _, err := safeExecutor.Execute(ctx, effect, decision, intent)
 	if err != nil {
 		t.Fatalf("execute standalone receipt: %v", err)
 	}

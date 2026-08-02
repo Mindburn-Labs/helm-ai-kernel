@@ -721,6 +721,9 @@ func TestEvaluateScopesCausalSessionsByTenant(t *testing.T) {
 	if a.LamportClock != 1 || b.LamportClock != 1 {
 		t.Fatalf("same external session must start separate tenant chains at Lamport 1: a=%+v b=%+v", a, b)
 	}
+	if a.DecisionID == "" || b.DecisionID == "" || a.DecisionID == b.DecisionID {
+		t.Fatalf("tenant-scoped genesis decisions must retain distinct IDs: a=%q b=%q", a.DecisionID, b.DecisionID)
+	}
 	srv.mu.RLock()
 	for _, response := range []EvaluateResponse{a, b} {
 		receipt := srv.receipts[response.ReceiptID]
@@ -768,6 +771,9 @@ func TestEvaluateStartsCausalChainsAtOnePerSession(t *testing.T) {
 	}
 	if responses[0].ReceiptID == responses[1].ReceiptID {
 		t.Fatalf("separate session receipts must retain unique IDs: %+v", responses)
+	}
+	if responses[0].DecisionID == "" || responses[1].DecisionID == "" || responses[0].DecisionID == responses[1].DecisionID {
+		t.Fatalf("separate session decisions must retain unique IDs: %+v", responses)
 	}
 
 	srv.mu.RLock()

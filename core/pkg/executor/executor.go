@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -120,6 +121,13 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	// examined (F-09).
 	if err := e.validateGating(decision, intent, effect); err != nil {
 		return nil, nil, err
+	}
+	tenantID, tenantErr := authenticatedTenantID(ctx)
+	if _, scoped := e.receiptStore.(tenantScopedCausalReceiptAppender); scoped && tenantErr != nil {
+		return nil, nil, fmt.Errorf("execution blocked: %w", tenantErr)
+	}
+	if tenantErr != nil {
+		tenantID = ""
 	}
 
 	// 2. Idempotency Check — only after the caller has proven it was entitled
@@ -243,7 +251,7 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 
 	// 8. Persistence, Metering & Audit
 	// Fail-closed: if receipt signing fails, execution is considered failed.
-	receipt, err := e.createReceipt(ctx, decision, intent, effect, blobHash, artifact.Digest, safeDepResult)
+	receipt, err := e.createReceipt(ctx, decision, intent, effect, tenantID, blobHash, artifact.Digest, safeDepResult)
 	if err != nil {
 		return nil, nil, fmt.Errorf("receipt creation failed: %w", err)
 	}
@@ -253,14 +261,12 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 
 	// Metering
 	if e.meter != nil {
-		tenantID := "system"
-		if decision.InputContext != nil {
-			if t, ok := decision.InputContext["tenant_id"].(string); ok {
-				tenantID = t
-			}
+		meterTenantID := tenantID
+		if meterTenantID == "" {
+			meterTenantID = "system"
 		}
 		if err := e.meter.Record(ctx, UsageEvent{
-			TenantID:  tenantID,
+			TenantID:  meterTenantID,
 			EventType: "execution",
 			Quantity:  1,
 			Timestamp: e.clock(),
@@ -390,12 +396,20 @@ func receiptSessionID(decision *contracts.DecisionRecord) (string, error) {
 	return standaloneReceiptSessionPrefix + decision.ID, nil
 }
 
-func receiptTenantID(decision *contracts.DecisionRecord) string {
-	if decision == nil || decision.InputContext == nil {
-		return ""
+// authenticatedTenantID derives tenant authority from the request binding.
+// Decision InputContext is explainability data and is outside its signature.
+func authenticatedTenantID(ctx context.Context) (string, error) {
+	if ctx == nil {
+		return "", errors.New("authenticated tenant required")
 	}
-	tenantID, _ := decision.InputContext["tenant_id"].(string)
-	return strings.TrimSpace(tenantID)
+	tenantID, err := helmauth.GetTenantID(ctx)
+	if err != nil {
+		return "", fmt.Errorf("authenticated tenant required: %w", err)
+	}
+	if tenantID = strings.TrimSpace(tenantID); tenantID == "" {
+		return "", errors.New("authenticated tenant required")
+	}
+	return tenantID, nil
 }
 
 func (e *SafeExecutor) verifySnapshot(ctx context.Context, decision *contracts.DecisionRecord) (string, error) {
@@ -419,7 +433,7 @@ func (e *SafeExecutor) verifySnapshot(ctx context.Context, decision *contracts.D
 	return blobHash, nil
 }
 
-func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect, blobHash string, outputHash string, safeDepResult *safedep.GateResult) (*contracts.Receipt, error) {
+func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.DecisionRecord, intent *contracts.AuthorizedExecutionIntent, effect *contracts.Effect, tenantID, blobHash string, outputHash string, safeDepResult *safedep.GateResult) (*contracts.Receipt, error) {
 	sessionID, err := receiptSessionID(decision)
 	if err != nil {
 		return nil, err
@@ -428,7 +442,6 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 	if err != nil {
 		return nil, fmt.Errorf("derive semantic decision hash: %w", err)
 	}
-	tenantID := receiptTenantID(decision)
 	timestamp := e.clock().UTC()
 	if normalizer, ok := e.receiptStore.(receiptTimestampNormalizer); ok {
 		timestamp = normalizer.NormalizeReceiptTimestamp(timestamp)

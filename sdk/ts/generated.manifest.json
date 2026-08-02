@@ -2,13 +2,13 @@
   "files": [
     {
       "path": "src/types.gen.ts",
-      "sha256": "5f0d42b35d4a30e6dc2be8b3c1ea602ac6f0973fc75eb9efbe872f3c970be4b1"
+      "sha256": "a46c696687834154a6c3c42d25e939ed7f3c970fb13c17067c158d292be45388"
     }
   ],
   "generator": "openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a",
   "sdk": "ts",
   "source": {
-    "sha256": "694033117e8bf0a04c1a225facb74dda8186175b903a0e0a34546aaf6854c812",
+    "sha256": "900e3959f1512b38984d362cdd93dde5209631665a1ea6b4cda95dbe7346e690",
     "spec": "api/openapi/helm.openapi.yaml"
   }
 }

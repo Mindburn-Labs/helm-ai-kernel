@@ -13,6 +13,7 @@ const (
 	RouteAuthService       RouteAuth = "service_internal"
 	RouteAuthWorkload      RouteAuth = "workload_jwt"
 	RouteAuthTenant        RouteAuth = "tenant_scoped"
+	RouteAuthLoopback      RouteAuth = "loopback_peer_proof"
 
 	RouteRatePublic   RouteRateLimit = "public"
 	RouteRateKernel   RouteRateLimit = "kernel"
@@ -61,6 +62,8 @@ func RuntimeRouteSpecs() []RuntimeRouteSpec {
 		{Method: http.MethodPost, Path: approvalDispatchAdmissionRecoverPath, MuxPattern: approvalDispatchAdmissionRecoverPath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "recoverApprovalDispatchAdmission", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: effectDispositionPath, MuxPattern: effectDispositionPath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "recordEffectDisposition", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: effectDispositionRecoverPath, MuxPattern: effectDispositionRecoverPath, Auth: RouteAuthWorkload, RateLimit: RouteRateEvidence, ContractStatus: RouteContractInternal, OperationID: "recoverEffectDisposition", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodGet, Path: localConsolePeerProofPath, MuxPattern: localConsolePeerProofPath, Auth: RouteAuthLoopback, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "getLocalConsolePeerProof", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodHead, Path: localConsolePeerProofPath, MuxPattern: localConsolePeerProofPath, Auth: RouteAuthLoopback, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "checkLocalConsolePeerProof", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/v1/kernel/approve", MuxPattern: "/api/v1/kernel/approve", Auth: RouteAuthService, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "approveIntent", Owner: "core/pkg/api"},
 		{Method: http.MethodGet, Path: "/api/health", MuxPattern: "/api/health", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getPublicDemoHealth", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/demo/run", MuxPattern: "/api/demo/run", Auth: RouteAuthPublic, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "runPublicDemo", Owner: "core/cmd/helm-ai-kernel"},

@@ -205,6 +205,7 @@ enum WorkstationPermission {
   WORKSTATION_PERMISSION_DEPLOY_PUBLISH = 6;
   WORKSTATION_PERMISSION_SECRET_READ = 7;
   WORKSTATION_PERMISSION_PAYMENT_INITIATE = 8;
+  WORKSTATION_PERMISSION_FILE_WRITE = 9;
 }
 
 // ── Supporting Types ───────────────────────────────────────────

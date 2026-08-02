@@ -51,23 +51,37 @@ func main() {
 var startServer = runServer
 
 type serverOptions struct {
-	Mode       string
-	BindAddr   string
-	Port       int
-	DataDir    string
-	SQLitePath string
-	PolicyPath string
-	Quickstart *quickstartRuntime
-	OnReady    func(bindAddr string, port int)
-	JSON       bool
-	Stdout     io.Writer
-	Stderr     io.Writer
+	Mode             string
+	BindAddr         string
+	Port             int
+	DataDir          string
+	SQLitePath       string
+	PolicyPath       string
+	Quickstart       *quickstartRuntime
+	ConsoleMode      bool
+	ConsolePeerProof *localConsolePeerProof
+	OnReady          func(bindAddr string, port int) error
+	OnShutdown       func()
+	RuntimeExit      <-chan struct{}
+	JSON             bool
+	Stdout           io.Writer
+	Stderr           io.Writer
 }
 
 // Run is the entrypoint for testing
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 2 {
 		printFrontDoor(stdout)
+		return 0
+	}
+	if args[1] == "help" {
+		return runHelpCommand(args[2:], stdout, stderr)
+	}
+	if isHelpRequest(args[2:]) {
+		if code, ok := Dispatch(args[1], []string{"--help"}, stdout, stderr); ok {
+			return code
+		}
+		printGlobalCommandHelp(args[1], stdout)
 		return 0
 	}
 
@@ -78,6 +92,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	// Handle specific global commands that don't fit the registry pattern
 	switch args[1] {
+	case "completion":
+		return runCompletionCommand(args[2:], stdout, stderr)
 	case "server", "serve":
 		return runServerCommand(args[1], args[2:], stdout, stderr)
 
@@ -100,20 +116,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel run maintenance [--once|--schedule]")
 		return 2
 	case "version", "--version", "-v":
-		fmt.Fprintf(stdout, "%sHELM AI Kernel%s %s (%s)\n", ColorBold, ColorReset, displayVersion(), displayCommit())
-		fmt.Fprintf(stdout, "  Report Schema:          %s\n", reportSchemaVersion)
-		fmt.Fprintf(stdout, "  EvidencePack Schema:    1\n")
-		fmt.Fprintf(stdout, "  Compatibility Schema:   1\n")
-		fmt.Fprintf(stdout, "  MCP Bundle Schema:      1\n")
-		fmt.Fprintf(stdout, "  Build Time:             %s\n", displayBuildTime())
-		return 0
-	case "help":
-		if len(args) > 2 && args[2] == "--all" {
-			printUsageAll(stdout)
-			return 0
-		}
-		printFrontDoor(stdout)
-		return 0
+		return runVersionCommand(args[2:], stdout, stderr)
 	case "--help", "-h":
 		printFrontDoor(stdout)
 		return 0
@@ -129,6 +132,49 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runHelpCommand(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "--json" {
+		return writeCommandCatalogJSON(stdout)
+	}
+	if len(args) > 0 && args[0] == "--all" {
+		printUsageAll(stdout)
+		return 0
+	}
+	if len(args) > 0 {
+		if code, ok := Dispatch(args[0], []string{"--help"}, stdout, stderr); ok {
+			return code
+		}
+		printGlobalCommandHelp(args[0], stdout)
+		return 0
+	}
+	printFrontDoor(stdout)
+	return 0
+}
+
+func printGlobalCommandHelp(name string, stdout io.Writer) {
+	switch name {
+	case "console":
+		fmt.Fprintln(stdout, "The local browser Console is launched by Quickstart, not as a standalone server.")
+		printLocalConsoleJourney(stdout)
+		return
+	case "completion":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel completion <bash|zsh|fish|powershell>")
+	case "help":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel help [--all|--json|<command>]")
+	case "server":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel server [--policy PATH] [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
+	case "serve":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel serve --policy PATH [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
+	case "threat":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel threat <scan|test> [flags]")
+	case "version":
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel version [--json]")
+	default:
+		fmt.Fprintf(stdout, "Usage: helm-ai-kernel %s [options]\n", name)
+	}
+	fmt.Fprintln(stdout, "Run `helm-ai-kernel help --all` to list commands.")
 }
 
 // ANSI Colors
@@ -160,6 +206,7 @@ func runServerWithOptions(opts serverOptions) error {
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
 	}
+	narration := serverNarrationWriter(opts)
 	// SEC: Default to localhost to prevent accidental network exposure.
 	// HELM_BIND_ADDR=0.0.0.0 remains an explicit opt-in for server mode.
 	bindAddr := opts.BindAddr
@@ -185,7 +232,7 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	defer func() { _ = apiListener.Close() }()
 
-	fmt.Fprintf(opts.Stdout, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(narration, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
 	// Stamp trace_id/span_id/correlation_id from ctx onto every record
@@ -211,7 +258,7 @@ func runServerWithOptions(opts serverOptions) error {
 	// 0.2 Connect to Database (Infrastructure)
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		fmt.Fprintf(opts.Stdout, "ℹ️  DATABASE_URL not set. Falling back to %sLite Mode%s (SQLite).\n", ColorBold+ColorCyan, ColorReset)
+		fmt.Fprintf(narration, "ℹ️  DATABASE_URL not set. Falling back to %sLite Mode%s (SQLite).\n", ColorBold+ColorCyan, ColorReset)
 		if opts.SQLitePath != "" {
 			db, _, receiptStore, err = setupLiteModeWithDBPath(ctx, opts.SQLitePath)
 			dataDir = filepath.Dir(opts.SQLitePath)
@@ -268,7 +315,7 @@ func runServerWithOptions(opts serverOptions) error {
 		log.Fatalf("Failed to init signer: %v", err)
 	}
 	verifier, _ := crypto.NewEd25519Verifier(signer.PublicKeyBytes())
-	fmt.Fprintf(opts.Stdout, "🔑 Trust Root: %s%s%s\n", ColorBold+ColorGreen, signer.PublicKey(), ColorReset)
+	fmt.Fprintf(narration, "🔑 Trust Root: %s%s%s\n", ColorBold+ColorGreen, signer.PublicKey(), ColorReset)
 
 	// 2. Registry
 	reg := registry.NewPostgresRegistry(db)
@@ -525,7 +572,66 @@ func runServerWithOptions(opts serverOptions) error {
 		}()
 	}
 
+	shutdown := func() {
+		if opts.OnShutdown != nil {
+			opts.OnShutdown()
+		}
+		runtimeCancel()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[helm] API server shutdown error: %v", err)
+		}
+		if err := healthServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[helm] health server shutdown error: %v", err)
+		}
+		if metricsServer != nil {
+			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+				log.Printf("[helm] metrics server shutdown error: %v", err)
+			}
+		}
+	}
+	if err := writeServerReady(opts, bindAddr, port); err != nil {
+		shutdown()
+		return err
+	}
+	log.Println("[helm] press ctrl+c to stop")
+
+	// Graceful Shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+	var runtimeErr error
+	select {
+	case <-sigChan:
+		log.Println("[helm] shutting down...")
+	case <-opts.RuntimeExit:
+		runtimeErr = fmt.Errorf("local Console exited")
+		log.Println("[helm] local Console exited; shutting down...")
+	}
+	shutdown()
+	log.Println("[helm] shutdown complete")
+	return runtimeErr
+}
+
+// serverNarrationWriter keeps human-only startup prose out of a command's JSON
+// data stream. JSON callers retain stdout for machine data and receive
+// diagnostics and narration on stderr.
+func serverNarrationWriter(opts serverOptions) io.Writer {
 	if opts.JSON {
+		return opts.Stderr
+	}
+	return opts.Stdout
+}
+
+func writeServerReady(opts serverOptions, bindAddr string, port int) error {
+	if opts.OnReady != nil {
+		if err := opts.OnReady(bindAddr, port); err != nil {
+			return err
+		}
+	}
+	if opts.JSON && (opts.Mode != "quickstart" || opts.OnReady == nil) {
 		_ = json.NewEncoder(opts.Stdout).Encode(map[string]any{
 			"name":   "helm-edge-local",
 			"addr":   bindAddr,
@@ -538,32 +644,6 @@ func runServerWithOptions(opts serverOptions) error {
 	} else {
 		log.Printf("[helm] ready: http://%s:%d", bindAddr, port)
 	}
-	if opts.OnReady != nil {
-		opts.OnReady(bindAddr, port)
-	}
-	log.Println("[helm] press ctrl+c to stop")
-
-	// Graceful Shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-	log.Println("[helm] shutting down...")
-	runtimeCancel()
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[helm] API server shutdown error: %v", err)
-	}
-	if err := healthServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[helm] health server shutdown error: %v", err)
-	}
-	if metricsServer != nil {
-		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-			log.Printf("[helm] metrics server shutdown error: %v", err)
-		}
-	}
-	log.Println("[helm] shutdown complete")
 	return nil
 }
 

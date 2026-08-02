@@ -161,6 +161,126 @@ jobs:
       - name: Reproducibility, SBOM, and VEX smoke
         run: make release-smoke
 
+  console-local-sidecar:
+    # The Console closure is built on its own native runners. This job accepts
+    # only its aggregate keyless manifest and an exact source pin committed in
+    # the Kernel release source; it never accepts a mutable Console main build.
+    runs-on: ubuntu-latest
+    needs: validate
+    outputs:
+      manifest_sha256: ${{ steps.console-verify.outputs.manifest_sha256 }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - id: console-pin
+        name: Resolve exact Console source pin
+        run: |
+          set -euo pipefail
+          python3 scripts/release/console_local_sidecar.py pin \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --github-output
+      - name: Require scoped Console artifact token
+        env:
+          CONSOLE_BUNDLE_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CONSOLE_BUNDLE_TOKEN}" ]; then
+            echo "::error::CONSOLE_BUNDLE_TOKEN is required to dispatch and retrieve the pinned Console local-sidecar artifact"
+            exit 1
+          fi
+      - id: console-run
+        name: Dispatch and await exact Console native closure build
+        env:
+          GH_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
+          CONSOLE_REPOSITORY: ${{ steps.console-pin.outputs.repository }}
+          CONSOLE_SOURCE_SHA: ${{ steps.console-pin.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          command -v gh >/dev/null
+          prior_runs="${RUNNER_TEMP}/console-local-sidecar-prior-runs.txt"
+          gh run list \
+            --repo "${CONSOLE_REPOSITORY}" \
+            --workflow release-local-sidecar.yml \
+            --event workflow_dispatch \
+            --limit 100 \
+            --json databaseId \
+            --jq '.[].databaseId' | sort > "${prior_runs}"
+          gh workflow run release-local-sidecar.yml \
+            --repo "${CONSOLE_REPOSITORY}" \
+            --ref main \
+            -f source_sha="${CONSOLE_SOURCE_SHA}" \
+            -f kernel_release_version="${GITHUB_REF_NAME}"
+
+          expected_title="local-sidecar ${GITHUB_REF_NAME} ${CONSOLE_SOURCE_SHA}"
+          run_id=""
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list \
+              --repo "${CONSOLE_REPOSITORY}" \
+              --workflow release-local-sidecar.yml \
+              --event workflow_dispatch \
+              --limit 100 \
+              --json databaseId,displayTitle \
+              | python3 -c 'import json, pathlib, sys; expected, prior_path = sys.argv[1:]; prior = set(pathlib.Path(prior_path).read_text(encoding="utf-8").splitlines()); matches = [str(run["databaseId"]) for run in json.load(sys.stdin) if run.get("displayTitle") == expected and str(run["databaseId"]) not in prior]; sys.exit("multiple newly-dispatched Console sidecar runs matched the exact title") if len(matches) > 1 else print(matches[0] if matches else "")' "${expected_title}" "${prior_runs}")"
+            if [ -n "${run_id}" ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "${run_id}" ]; then
+            echo "::error::Console sidecar workflow did not expose one exact dispatched run"
+            exit 1
+          fi
+
+          for _ in $(seq 1 180); do
+            state="$(gh run view "${run_id}" --repo "${CONSOLE_REPOSITORY}" --json status,conclusion \
+              | python3 -c 'import json, sys; run = json.load(sys.stdin); print(run.get("status", ""), run.get("conclusion") or "")')"
+            status="${state%% *}"
+            conclusion="${state#* }"
+            if [ "${status}" = "completed" ]; then
+              if [ "${conclusion}" != "success" ]; then
+                echo "::error::Console sidecar workflow ${run_id} completed with ${conclusion}"
+                exit 1
+              fi
+              echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Console sidecar workflow ${run_id} did not complete"
+          exit 1
+      - name: Download exact Console aggregate and target artifacts
+        env:
+          GH_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
+          CONSOLE_REPOSITORY: ${{ steps.console-pin.outputs.repository }}
+          CONSOLE_RUN_ID: ${{ steps.console-run.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p console-local-sidecar
+          gh run download "${CONSOLE_RUN_ID}" --repo "${CONSOLE_REPOSITORY}" \
+            --name helm-console-local-sidecar-release-manifest --dir console-local-sidecar
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            gh run download "${CONSOLE_RUN_ID}" --repo "${CONSOLE_REPOSITORY}" \
+              --name "helm-console-local-sidecar-${target}" --dir console-local-sidecar
+          done
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - id: console-verify
+        name: Verify Console signature, source pin, and native closures
+        run: |
+          set -euo pipefail
+          python3 scripts/release/console_local_sidecar.py verify \
+            --input-dir console-local-sidecar \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --github-output
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: console-local-sidecar
+          path: console-local-sidecar/
+          if-no-files-found: error
+
   binaries:
     runs-on: ubuntu-latest
     needs: [validate, deployment-smoke, kind-smoke, release-smoke]
@@ -220,16 +340,20 @@ jobs:
             case "$f" in
               *.cosign.bundle) continue ;;
             esac
+            bundle="${f}.cosign.bundle"
             echo "::group::Signing $f"
-            cosign sign-blob --yes --bundle "${f}.cosign.bundle" "$f"
+            cosign sign-blob --yes --bundle "${bundle}" "$f"
             echo "::endgroup::"
           done
       - name: Verify cosign bundles
-        run: bash scripts/release/verify_cosign.sh release-assets
+        run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh release-assets
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cosign-bundles
-          path: release-assets/*.cosign.bundle
+          path: |
+            release-assets/*.cosign.bundle
+            !release-assets/helm-console-local-sidecar-release-manifest.json.cosign.bundle
+            !release-assets/helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle
 
   reproducibility-check:
     runs-on: ubuntu-latest
@@ -1021,6 +1145,133 @@ jobs:
             benchmarks-release/*.json
             version-status/version-status.json
 
+  console-release-assets:
+    # Sidecar failure must not suppress the independently valid Kernel release.
+    # Only a successful, tag-bound Console closure may attach Console assets.
+    runs-on: ubuntu-latest
+    needs: [console-local-sidecar, github-release]
+    if: >-
+      always() &&
+      needs.console-local-sidecar.result == 'success' &&
+      needs.github-release.result == 'success'
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.12"
+          cache-dependency-path: "**/go.sum"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: console-local-sidecar
+          path: console-local-sidecar/
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Re-verify Console input before optional packaging
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          python3 scripts/release/console_local_sidecar.py verify \
+            --input-dir console-local-sidecar \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+      - name: Bind the verified Console manifest to this Kernel tag
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          manifest="console-local-sidecar/helm-console-local-sidecar-release-manifest.json"
+          kernel_bundle="${manifest}.kernel.cosign.bundle"
+          cosign sign-blob --yes \
+            --bundle "${kernel_bundle}" \
+            "${manifest}"
+          test -s "${kernel_bundle}"
+          KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" \
+            bash scripts/release/verify_cosign.sh console-local-sidecar
+      - name: Build manifest-bound Kernel binaries
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: make release-binaries-reproducible
+      - name: Stage Console assets and standalone layouts
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          assets=console-release-assets
+          mkdir -p "${assets}"
+          cp \
+            bin/helm-ai-kernel-linux-amd64 \
+            bin/helm-ai-kernel-linux-arm64 \
+            bin/helm-ai-kernel-darwin-amd64 \
+            bin/helm-ai-kernel-darwin-arm64 \
+            "${assets}/"
+          python3 scripts/release/console_local_sidecar.py stage \
+            --input-dir console-local-sidecar \
+            --output-dir "${assets}" \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          python3 scripts/release/console_local_sidecar.py layout \
+            --input-dir "${assets}" \
+            --output-dir "${assets}" \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+      - name: Cosign keyless-sign standalone Console layouts
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          for layout in console-release-assets/helm-ai-kernel-*-console.tar.gz; do
+            test -f "${layout}"
+            cosign sign-blob --yes \
+              --bundle "${layout}.cosign.bundle" \
+              "${layout}"
+          done
+      - name: Create a signed Console checksum manifest
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          cd console-release-assets
+          find . -maxdepth 1 -type f \
+            \( \
+              -name 'helm-console-local-sidecar-*' \
+              -o -name 'helm-ai-kernel-*-console.tar.gz' \
+              -o -name 'helm-ai-kernel-*-console.tar.gz.cosign.bundle' \
+            \) \
+            -print0 | sort -z | xargs -0 sha256sum > CONSOLE-SHA256SUMS.txt
+          test -s CONSOLE-SHA256SUMS.txt
+          cosign sign-blob --yes \
+            --bundle CONSOLE-SHA256SUMS.txt.cosign.bundle \
+            CONSOLE-SHA256SUMS.txt
+      - name: Verify optional Console assets before publication
+        run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh console-release-assets
+      - name: Attach verified Console assets to the existing Kernel release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "${GITHUB_REF_NAME}" \
+            console-release-assets/helm-console-local-sidecar-* \
+            console-release-assets/helm-ai-kernel-*-console.tar.gz \
+            console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle \
+            console-release-assets/CONSOLE-SHA256SUMS.txt \
+            console-release-assets/CONSOLE-SHA256SUMS.txt.cosign.bundle \
+            --clobber
+      - name: Require the v0.8 Console asset contract after attachment
+        run: |
+          python3 scripts/release/check_version_drift.py \
+            --expected-version "${GITHUB_REF_NAME#v}" \
+            published \
+            --only github-release-console-local-sidecar
+
   slsa-provenance:
     needs: [binaries, github-release]
     permissions:
@@ -1036,7 +1287,13 @@ jobs:
 
   post-release-version-drift:
     runs-on: ubuntu-latest
-    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag]
+    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]
+    if: >-
+      always() &&
+      needs.github-release.result == 'success' &&
+      needs.slsa-provenance.result == 'success' &&
+      needs.homebrew.result == 'success' &&
+      needs.go-sdk-tag.result == 'success'
     permissions:
       contents: write
     steps:
@@ -1049,6 +1306,7 @@ jobs:
             --write-status version-status.json \
             published
       - name: Replace release version status with full post-release status
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${GITHUB_REF_NAME}" version-status.json --clobber

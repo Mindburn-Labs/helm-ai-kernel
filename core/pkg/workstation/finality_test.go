@@ -158,6 +158,24 @@ func TestUngrantedNamesTheCapability(t *testing.T) {
 	}
 }
 
+func TestUngrantedFileWriteNamesFileWriteCapability(t *testing.T) {
+	profile := learningProfile()
+	profile.Operate.Permissions = []string{contracts.WorkstationPermissionMemoryWrite}
+	event := ToolEvent{
+		Type:       "file_write",
+		EffectType: contracts.EffectTypeWorkstationFileWrite,
+		EffectMode: contracts.WorkstationEffectModeOperate,
+	}
+	verdict, code, _ := EvaluateEvent(profile, event)
+	if verdict != contracts.WorkstationVerdictDeny || code != "OPERATE_PERMISSION_NOT_GRANTED" {
+		t.Fatalf("EvaluateEvent() = %s/%s, want DENY/OPERATE_PERMISSION_NOT_GRANTED", verdict, code)
+	}
+	got := denialCounterfactualFor(profile, event, code)
+	if got == nil || got.Capability != contracts.WorkstationPermissionFileWrite {
+		t.Fatalf("denialCounterfactualFor() = %+v, want file.write", got)
+	}
+}
+
 // Absent, not empty. A profile that never opted in must serialize exactly as it
 // did before these fields existed, or every stored receipt hash moves.
 func TestDisabledByDefaultLeavesReceiptsByteIdentical(t *testing.T) {

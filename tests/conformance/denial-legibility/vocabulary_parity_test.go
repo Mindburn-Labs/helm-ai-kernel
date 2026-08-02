@@ -154,6 +154,7 @@ func TestProtoCounterfactualUsesFixedCapabilityVocabulary(t *testing.T) {
 	}
 	for _, value := range []string{
 		"NETWORK_EGRESS",
+		"FILE_WRITE",
 		"MCP_MUTATE",
 		"MEMORY_WRITE",
 		"LOOP_REGISTER",
@@ -165,6 +166,28 @@ func TestProtoCounterfactualUsesFixedCapabilityVocabulary(t *testing.T) {
 		if !strings.Contains(source, "WORKSTATION_PERMISSION_"+value) {
 			t.Errorf("WorkstationPermission is missing %s", value)
 		}
+	}
+}
+
+func TestReceiptSchemaCounterfactualUsesFixedCapabilityVocabulary(t *testing.T) {
+	got := enumAt(t,
+		"../../../protocols/json-schemas/workstation/agent_run_receipt.v1.schema.json",
+		"$defs", "denied_effect", "properties", "counterfactual", "properties", "capability", "enum")
+	want := []string{
+		"network.egress",
+		"file.write",
+		"mcp.mutate",
+		"memory.write",
+		"loop.register",
+		"shell.operate",
+		"deploy.publish",
+		"secret.read",
+		"payment.initiate",
+	}
+	sort.Strings(got)
+	sort.Strings(want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("receipt-schema permission enum = %v, want %v", got, want)
 	}
 }
 

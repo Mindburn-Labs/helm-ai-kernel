@@ -56,7 +56,7 @@ authorization.
 
 | Decision Type | Rule | Window |
 | --- | --- | --- |
-| Routine code change | Green required deterministic checks on the exact head (repository ruleset) | Per gate |
+| Routine code change | Green required deterministic checks on the pull request's current merge commit (repository ruleset) | Per gate |
 | Architectural change | Same merge rule; maintainer discussion is advisory | 72 hours advisory window |
 | Breaking API change | Same merge rule plus CHANGELOG and SDK requirements | 7 days advisory window |
 | Governance change | Super-majority (2/3) | 14 days |
@@ -66,10 +66,9 @@ authorization.
 ### Code-Merge Authority
 
 All code merges to `main` must use a pull request and are authorized by green
-required deterministic checks (build, test, lint, contract drift) on the exact
-candidate head, enforced by the repository ruleset, with all review threads
-resolved. A maintainer `hold` label or requested-changes review blocks a merge
-until its author releases it.
+required deterministic checks (build, test, lint, contract drift) on the pull
+request's current merge commit, enforced by the repository ruleset, with all
+review threads resolved.
 
 Human identity, formal approvals, CODEOWNERS, labels, commit signing, and
 commit trailers carry no additional merge-authority weight. No per-PR

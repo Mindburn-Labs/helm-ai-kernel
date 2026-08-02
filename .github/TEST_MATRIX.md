@@ -32,14 +32,16 @@ it; it does not define it. Read the live list rather than trusting this copy:
 
 ```bash
 gh api /repos/Mindburn-Labs/helm-ai-kernel/rulesets/16024605 \
-  --jq '.rules[] | select(.type=="required_status_checks")
-        | [.parameters.required_status_checks[].context]'
+  --jq '.rules[]
+        | select(.type=="pull_request" or .type=="required_status_checks")
+        | {type, parameters}'
 ```
 
-As inspected on 2026-07-25 the ruleset is `active` on `refs/heads/main`,
-requires a pull request and linear history, blocks deletion and
-non-fast-forward pushes, and requires these 18 status checks in strict mode, so
-a branch must also be up to date with `main` before it can merge:
+As inspected on 2026-08-03 the ruleset is `active` on `refs/heads/main`,
+requires a pull request with all review threads resolved (and zero required
+approvals), requires linear history, blocks deletion and non-fast-forward
+pushes, and requires these 18 status checks in strict mode, so a branch must
+also be up to date with `main` before it can merge:
 
 `Quality PR profile`, `hygiene`, `kernel`, `contract-drift`, `python-sdk`,
 `ts-sdk`, `rust-sdk`, `java-sdk`, `deployment-smoke`, `kind-smoke`,

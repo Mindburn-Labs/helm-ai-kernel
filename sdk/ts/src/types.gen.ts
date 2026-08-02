@@ -18835,12 +18835,19 @@ export interface TransitionApprovalCeremonyRequest {
      * @memberof TransitionApprovalCeremonyRequest
      */
     reason?: string;
+    /**
+     * Current ceremony hash returned by the most recent approval read; prevents stale transitions.
+     * @type {string}
+     * @memberof TransitionApprovalCeremonyRequest
+     */
+    expected_ceremony_hash: string;
 }
 
 /**
  * Check if a given object implements the TransitionApprovalCeremonyRequest interface.
  */
 export function instanceOfTransitionApprovalCeremonyRequest(value: object): boolean {
+    if (!('expected_ceremony_hash' in value)) return false;
     return true;
 }
 
@@ -18857,6 +18864,7 @@ export function TransitionApprovalCeremonyRequestFromJSONTyped(json: any, ignore
         'actor': json['actor'] == null ? undefined : json['actor'],
         'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
         'reason': json['reason'] == null ? undefined : json['reason'],
+        'expected_ceremony_hash': json['expected_ceremony_hash'],
     };
 }
 
@@ -18869,6 +18877,7 @@ export function TransitionApprovalCeremonyRequestToJSON(value?: TransitionApprov
         'actor': value['actor'],
         'receipt_id': value['receipt_id'],
         'reason': value['reason'],
+        'expected_ceremony_hash': value['expected_ceremony_hash'],
     };
 }
 

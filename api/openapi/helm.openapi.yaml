@@ -3769,10 +3769,15 @@ paths:
           application/json:
             schema:
               type: object
+              required: [expected_ceremony_hash]
               properties:
                 actor: { type: string }
                 receipt_id: { type: string }
                 reason: { type: string }
+                expected_ceremony_hash:
+                  type: string
+                  minLength: 1
+                  description: Current ceremony hash returned by the most recent approval read; prevents stale transitions.
       responses:
         '200':
           description: Approval ceremony

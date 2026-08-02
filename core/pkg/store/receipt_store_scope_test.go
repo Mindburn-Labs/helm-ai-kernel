@@ -201,6 +201,10 @@ func TestSQLiteTenantPrefixQueriesSupportUnicodeTenantID(t *testing.T) {
 	if err != nil || got == nil || got.ReceiptID != issued.ReceiptID {
 		t.Fatalf("get unicode tenant receipt = %+v err=%v", got, err)
 	}
+	miss, err := receiptStore.GetByDecisionIDForTenant(ctx, "other-tenant", issued.DecisionID)
+	if err != nil || miss != nil {
+		t.Fatalf("cross-tenant idempotency miss = %+v err=%v, want nil receipt and nil error", miss, err)
+	}
 	listed, err := receiptStore.ListByTenant(ctx, tenantID, 0, 10)
 	if err != nil || len(listed) != 1 || listed[0].ReceiptID != issued.ReceiptID {
 		t.Fatalf("list unicode tenant receipts = %+v err=%v", listed, err)
@@ -296,6 +300,23 @@ func TestPostgresReceiptAppendCausalScopedUsesTenantLookupKey(t *testing.T) {
 	}
 	if issued.SessionID != externalSessionID {
 		t.Fatalf("Postgres scoped append did not preserve the signed session: receipt=%+v", issued)
+	}
+}
+
+func TestPostgresGetByDecisionIDForTenantMissIsNil(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+	receiptStore := NewPostgresReceiptStore(db)
+	const tenantID = "tenant-a"
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+
+	mock.ExpectQuery(`FROM receipts[\s\S]*decision_id = \$1[\s\S]*left\(causal_session_id, char_length\(\$3\)\) = \$3`).
+		WithArgs("missing-decision", contracts.ReceiptSignatureV5, prefix).
+		WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()))
+	got, err := receiptStore.GetByDecisionIDForTenant(ctx, tenantID, "missing-decision")
+	if err != nil || got != nil {
+		t.Fatalf("tenant idempotency miss = %+v err=%v, want nil receipt and nil error", got, err)
 	}
 }
 

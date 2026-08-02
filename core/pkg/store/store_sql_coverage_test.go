@@ -758,6 +758,19 @@ func TestCoverageBuildNextCausalReceiptBranches(t *testing.T) {
 	}
 }
 
+func TestPostgresReceiptStoreCountReceipts(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM receipts`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(7))
+	count, err := NewPostgresReceiptStore(db).CountReceipts(ctx)
+	if err != nil || count != 7 {
+		t.Fatalf("count receipts = %d, %v", count, err)
+	}
+}
+
 func newStoreCoverageSQLMock(t *testing.T) (*sql.DB, sqlmock.Sqlmock, func()) {
 	t.Helper()
 	db, mock, err := sqlmock.New()

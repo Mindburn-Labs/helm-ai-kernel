@@ -17142,7 +17142,8 @@ class TransitionApprovalCeremonyRequest(BaseModel):
     actor: Optional[StrictStr] = None
     receipt_id: Optional[StrictStr] = None
     reason: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["actor", "receipt_id", "reason"]
+    expected_ceremony_hash: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Current ceremony hash returned by the most recent approval read; prevents stale transitions.")
+    __properties: ClassVar[List[str]] = ["actor", "receipt_id", "reason", "expected_ceremony_hash"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -17197,7 +17198,8 @@ class TransitionApprovalCeremonyRequest(BaseModel):
         _obj = cls.model_validate({
             "actor": obj.get("actor"),
             "receipt_id": obj.get("receipt_id"),
-            "reason": obj.get("reason")
+            "reason": obj.get("reason"),
+            "expected_ceremony_hash": obj.get("expected_ceremony_hash")
         })
         return _obj
 

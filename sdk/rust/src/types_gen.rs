@@ -8167,14 +8167,18 @@ pub struct TransitionApprovalCeremonyRequest {
     pub receipt_id: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// Current ceremony hash returned by the most recent approval read; prevents stale transitions.
+    #[serde(rename = "expected_ceremony_hash")]
+    pub expected_ceremony_hash: String,
 }
 
 impl TransitionApprovalCeremonyRequest {
-    pub fn new() -> TransitionApprovalCeremonyRequest {
+    pub fn new(expected_ceremony_hash: String) -> TransitionApprovalCeremonyRequest {
         TransitionApprovalCeremonyRequest {
             actor: None,
             receipt_id: None,
             reason: None,
+            expected_ceremony_hash,
         }
     }
 }

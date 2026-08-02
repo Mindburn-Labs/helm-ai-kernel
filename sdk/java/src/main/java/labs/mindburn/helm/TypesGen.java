@@ -63133,7 +63133,8 @@ public static class TelemetryOTelConfig {
 @JsonPropertyOrder({
   TransitionApprovalCeremonyRequest.JSON_PROPERTY_ACTOR,
   TransitionApprovalCeremonyRequest.JSON_PROPERTY_RECEIPT_ID,
-  TransitionApprovalCeremonyRequest.JSON_PROPERTY_REASON
+  TransitionApprovalCeremonyRequest.JSON_PROPERTY_REASON,
+  TransitionApprovalCeremonyRequest.JSON_PROPERTY_EXPECTED_CEREMONY_HASH
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class TransitionApprovalCeremonyRequest {
@@ -63145,6 +63146,9 @@ public static class TransitionApprovalCeremonyRequest {
 
   public static final String JSON_PROPERTY_REASON = "reason";
   private String reason;
+
+  public static final String JSON_PROPERTY_EXPECTED_CEREMONY_HASH = "expected_ceremony_hash";
+  private String expectedCeremonyHash;
 
   public TransitionApprovalCeremonyRequest() {
   }
@@ -63224,6 +63228,31 @@ public static class TransitionApprovalCeremonyRequest {
   }
 
 
+  public TransitionApprovalCeremonyRequest expectedCeremonyHash(String expectedCeremonyHash) {
+    this.expectedCeremonyHash = expectedCeremonyHash;
+    return this;
+  }
+
+   /**
+   * Current ceremony hash returned by the most recent approval read; prevents stale transitions.
+   * @return expectedCeremonyHash
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_EXPECTED_CEREMONY_HASH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getExpectedCeremonyHash() {
+    return expectedCeremonyHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_EXPECTED_CEREMONY_HASH)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setExpectedCeremonyHash(String expectedCeremonyHash) {
+    this.expectedCeremonyHash = expectedCeremonyHash;
+  }
+
+
   /**
    * Return true if this transitionApprovalCeremony_request object is equal to o.
    */
@@ -63238,12 +63267,13 @@ public static class TransitionApprovalCeremonyRequest {
     TransitionApprovalCeremonyRequest transitionApprovalCeremonyRequest = (TransitionApprovalCeremonyRequest) o;
     return Objects.equals(this.actor, transitionApprovalCeremonyRequest.actor) &&
         Objects.equals(this.receiptId, transitionApprovalCeremonyRequest.receiptId) &&
-        Objects.equals(this.reason, transitionApprovalCeremonyRequest.reason);
+        Objects.equals(this.reason, transitionApprovalCeremonyRequest.reason) &&
+        Objects.equals(this.expectedCeremonyHash, transitionApprovalCeremonyRequest.expectedCeremonyHash);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(actor, receiptId, reason);
+    return Objects.hash(actor, receiptId, reason, expectedCeremonyHash);
   }
 
   @Override
@@ -63253,6 +63283,7 @@ public static class TransitionApprovalCeremonyRequest {
     sb.append("    actor: ").append(toIndentedString(actor)).append("\n");
     sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    expectedCeremonyHash: ").append(toIndentedString(expectedCeremonyHash)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -63309,6 +63340,11 @@ public static class TransitionApprovalCeremonyRequest {
     // add `reason` to the URL query string
     if (getReason() != null) {
       joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `expected_ceremony_hash` to the URL query string
+    if (getExpectedCeremonyHash() != null) {
+      joiner.add(String.format("%sexpected_ceremony_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExpectedCeremonyHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();

@@ -57,6 +57,13 @@ type tenantScopedCausalReceiptAppendPreflighter interface {
 	PreflightCausalAppendScoped(ctx context.Context, tenantID, sessionID string) error
 }
 
+// tenantScopedIdempotencyReader resolves an existing execution only inside the
+// authenticated tenant. It is deliberately additive so legacy ReceiptStore
+// adapters remain usable for unscoped execution paths.
+type tenantScopedIdempotencyReader interface {
+	GetByDecisionIDForTenant(ctx context.Context, tenantID, decisionID string) (*contracts.Receipt, error)
+}
+
 type receiptTimestampNormalizer interface {
 	NormalizeReceiptTimestamp(time.Time) time.Time
 }

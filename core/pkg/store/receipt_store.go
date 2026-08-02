@@ -26,6 +26,12 @@ type ReceiptStore interface {
 	GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error)
 }
 
+// ReceiptCounter returns the total number of durably stored receipts without
+// materializing them. Global checkpointing uses this additive capability.
+type ReceiptCounter interface {
+	CountReceipts(ctx context.Context) (int, error)
+}
+
 // CausalReceiptBuilder constructs a receipt after the store has locked the
 // session chain and assigned its next Lamport clock and previous hash. It is
 // an alias so consumers can detect the optional atomic append capability
@@ -61,6 +67,13 @@ type TenantScopedReceiptReader interface {
 	GetByReceiptIDForTenant(ctx context.Context, tenantID, receiptID string) (*contracts.Receipt, error)
 	ListByTenant(ctx context.Context, tenantID string, since uint64, limit int) ([]*contracts.Receipt, error)
 	ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error)
+}
+
+// TenantScopedReceiptIdempotencyReader resolves a receipt by decision ID only
+// within the authenticated tenant's durable scope. It is separate from
+// TenantScopedReceiptReader so existing public-route adapters stay compatible.
+type TenantScopedReceiptIdempotencyReader interface {
+	GetByDecisionIDForTenant(ctx context.Context, tenantID, decisionID string) (*contracts.Receipt, error)
 }
 
 // TenantReceiptCursor is the stable opaque position for a tenant-wide V5
@@ -296,6 +309,26 @@ func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*con
 	return s.queryOne(ctx, query, decisionID)
 }
 
+// GetByDecisionIDForTenant returns only a V5 receipt whose durable causal
+// scope belongs to the authenticated tenant.
+func (s *PostgresReceiptStore) GetByDecisionIDForTenant(ctx context.Context, tenantID, decisionID string) (*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `SELECT ` + receiptColumns + ` FROM receipts
+		WHERE decision_id = $1
+		  AND signature_version = $2
+		  AND COALESCE(session_id, '') <> ''
+		  AND left(causal_session_id, char_length($3)) = $3`
+	receipt, err := scanReceipt(s.db.QueryRowContext(ctx, query, decisionID, contracts.ReceiptSignatureV5, prefix))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return receipt, err
+}
+
 func (s *PostgresReceiptStore) GetByReceiptID(ctx context.Context, receiptID string) (*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE receipt_id = $1`
 	return s.queryOne(ctx, query, receiptID)
@@ -316,6 +349,15 @@ func (s *PostgresReceiptStore) GetByReceiptIDForTenant(ctx context.Context, tena
 		  AND COALESCE(session_id, '') <> ''
 		  AND left(causal_session_id, char_length($3)) = $3`
 	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, prefix)
+}
+
+// CountReceipts returns the total number of durably stored receipts.
+func (s *PostgresReceiptStore) CountReceipts(ctx context.Context) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM receipts`).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (s *PostgresReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {

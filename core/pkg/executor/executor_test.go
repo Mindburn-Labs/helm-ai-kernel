@@ -91,11 +91,24 @@ func (s *recordingOutboxStore) MarkDone(context.Context, string) error {
 
 type tenantScopedReceiptStore struct {
 	*MemoryReceiptStore
-	tenantID       string
-	sessionID      string
-	appendCalls    int
-	preflightCalls int
-	preflightErr   error
+	tenantID             string
+	sessionID            string
+	appendCalls          int
+	preflightCalls       int
+	preflightErr         error
+	legacyGetCalls       int
+	idempotencyTenantIDs []string
+	tenantReceipts       map[string]map[string]*contracts.Receipt
+}
+
+func (s *tenantScopedReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
+	s.legacyGetCalls++
+	return s.MemoryReceiptStore.Get(ctx, decisionID)
+}
+
+func (s *tenantScopedReceiptStore) GetByDecisionIDForTenant(_ context.Context, tenantID, decisionID string) (*contracts.Receipt, error) {
+	s.idempotencyTenantIDs = append(s.idempotencyTenantIDs, tenantID)
+	return s.tenantReceipts[tenantID][decisionID], nil
 }
 
 func (s *tenantScopedReceiptStore) PreflightCausalAppendScoped(_ context.Context, tenantID, sessionID string) error {
@@ -113,6 +126,13 @@ func (s *tenantScopedReceiptStore) AppendCausalScoped(ctx context.Context, tenan
 	if err != nil {
 		return err
 	}
+	if s.tenantReceipts == nil {
+		s.tenantReceipts = make(map[string]map[string]*contracts.Receipt)
+	}
+	if s.tenantReceipts[tenantID] == nil {
+		s.tenantReceipts[tenantID] = make(map[string]*contracts.Receipt)
+	}
+	s.tenantReceipts[tenantID][receipt.DecisionID] = receipt
 	return s.Store(ctx, receipt)
 }
 
@@ -422,6 +442,78 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 	}
 }
 
+func TestSafeExecutorScopesIdempotencyToAuthenticatedTenant(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("tenant-idempotency-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Unix(1700000000, 0).UTC()
+	decisionID := "decision-tenant-idempotency"
+	cachedReceipt := &contracts.Receipt{
+		ReceiptID:  "rcpt-tenant-a",
+		DecisionID: decisionID,
+		OutputHash: "sha256:tenant-a-output",
+	}
+	store := &tenantScopedReceiptStore{
+		MemoryReceiptStore: NewMemoryReceiptStore(),
+		preflightErr:       errors.New("tenant-b append preflight"),
+		tenantReceipts: map[string]map[string]*contracts.Receipt{
+			"tenant-a": {decisionID: cachedReceipt},
+		},
+	}
+	store.receipts[cachedReceipt.ReceiptID] = cachedReceipt // A global lookup would leak this receipt to tenant-b.
+	driver := &MockDriver{}
+	outbox := &recordingOutboxStore{}
+	executor := NewSafeExecutor(signer, signer, driver, store, nil, outbox, "", nil, nil, nil, func() time.Time { return clock })
+	effect := &contracts.Effect{
+		EffectID:   "effect-tenant-idempotency",
+		EffectType: "EXECUTE_TOOL",
+		ArgsHash:   "sha256:tenant-idempotency",
+		Params:     map[string]any{"tool_name": "ls"},
+	}
+	decision := &contracts.DecisionRecord{
+		ID:                decisionID,
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "sha256:policy",
+		EffectDigest:      testEffectDigest(t, effect),
+		InputContext:      map[string]any{"session_id": "tenant-idempotency-session"},
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:       decision.ID,
+		EffectDigestHash: decision.EffectDigest,
+		AllowedTool:      "ls",
+		ExpiresAt:        clock.Add(time.Hour),
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+
+	tenantA := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "operator-a", TenantID: "tenant-a"})
+	got, artifact, err := executor.Execute(tenantA, effect, decision, intent)
+	if err != nil {
+		t.Fatalf("tenant-a idempotency hit: %v", err)
+	}
+	if got != cachedReceipt || artifact == nil || driver.Called || outbox.scheduleCalls != 0 || store.preflightCalls != 0 {
+		t.Fatalf("tenant-a cache hit mutated execution state: receipt=%p artifact=%v driver=%v schedules=%d preflights=%d", got, artifact != nil, driver.Called, outbox.scheduleCalls, store.preflightCalls)
+	}
+
+	tenantB := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "operator-b", TenantID: "tenant-b"})
+	got, artifact, err = executor.Execute(tenantB, effect, decision, intent)
+	if err == nil || !strings.Contains(err.Error(), "tenant-b append preflight") {
+		t.Fatalf("tenant-b must not receive tenant-a receipt; got receipt=%+v artifact=%+v err=%v", got, artifact, err)
+	}
+	if driver.Called || outbox.scheduleCalls != 0 || store.legacyGetCalls != 0 {
+		t.Fatalf("cross-tenant idempotency lookup dispatched, scheduled, or used global receipt lookup: driver=%v schedules=%d legacy_gets=%d", driver.Called, outbox.scheduleCalls, store.legacyGetCalls)
+	}
+	if got := strings.Join(store.idempotencyTenantIDs, ","); got != "tenant-a,tenant-b" {
+		t.Fatalf("idempotency tenant scopes = %q, want tenant-a,tenant-b", got)
+	}
+}
+
 func TestSafeExecutorRejectsAuthenticatedUnscopedCausalStoreBeforeDispatch(t *testing.T) {
 	signer, err := crypto.NewEd25519Signer("unscoped-causal-store-key")
 	if err != nil {
@@ -458,7 +550,7 @@ func TestSafeExecutorRejectsAuthenticatedUnscopedCausalStoreBeforeDispatch(t *te
 		t.Fatal(err)
 	}
 	ctx := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "operator-a", TenantID: "tenant-authorized"})
-	if _, _, err := executor.Execute(ctx, effect, decision, intent); err == nil || !strings.Contains(err.Error(), "lacks tenant-scoped causal append") {
+	if _, _, err := executor.Execute(ctx, effect, decision, intent); err == nil || !strings.Contains(err.Error(), "lacks tenant-scoped idempotency lookup") {
 		t.Fatalf("expected unscoped causal store denial, got %v", err)
 	}
 	if driver.Called || store.appendCalls != 0 {

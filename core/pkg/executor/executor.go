@@ -132,7 +132,9 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 
 	// 2. Idempotency Check — only after the caller has proven it was entitled
 	// to ask about this decision at all.
-	if receipt, ok := e.checkIdempotency(ctx, decision.ID); ok {
+	if receipt, ok, err := e.checkIdempotency(ctx, tenantID, decision.ID); err != nil {
+		return nil, nil, fmt.Errorf("execution blocked: %w", err)
+	} else if ok {
 		// Recover artifact if possible, or return a pointer to the receipt
 		// For now, return a synthetic artifact indicating execution already happened
 		artifact := &interfaces.Artifact{
@@ -291,13 +293,25 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	return receipt, artifact, nil
 }
 
-func (e *SafeExecutor) checkIdempotency(ctx context.Context, decisionID string) (*contracts.Receipt, bool) {
-	if e.receiptStore != nil {
-		if receipt, err := e.receiptStore.Get(ctx, decisionID); err == nil && receipt != nil {
-			return receipt, true
-		}
+func (e *SafeExecutor) checkIdempotency(ctx context.Context, tenantID, decisionID string) (*contracts.Receipt, bool, error) {
+	if e.receiptStore == nil {
+		return nil, false, nil
 	}
-	return nil, false
+	if tenantID != "" {
+		reader, ok := e.receiptStore.(tenantScopedIdempotencyReader)
+		if !ok {
+			return nil, false, errors.New("fail-closed: receipt store lacks tenant-scoped idempotency lookup")
+		}
+		receipt, err := reader.GetByDecisionIDForTenant(ctx, tenantID, decisionID)
+		if err != nil {
+			return nil, false, fmt.Errorf("tenant-scoped idempotency lookup: %w", err)
+		}
+		return receipt, receipt != nil, nil
+	}
+	if receipt, err := e.receiptStore.Get(ctx, decisionID); err == nil && receipt != nil {
+		return receipt, true, nil
+	}
+	return nil, false, nil
 }
 
 func (e *SafeExecutor) preflightCausalReceiptAppend(ctx context.Context, tenantID string, decision *contracts.DecisionRecord) error {

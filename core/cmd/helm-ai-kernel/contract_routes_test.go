@@ -357,6 +357,29 @@ func TestBoundaryCheckpointCountsAllDurableReceipts(t *testing.T) {
 	}
 }
 
+func TestBoundaryCheckpointUsesDurableReceiptCounter(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	svc.ReceiptStore = &checkpointCountingReceiptStore{count: 37}
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/boundary/checkpoints", nil)
+	authorizeTestRequest(req)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("checkpoint status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var checkpoint contracts.BoundaryCheckpoint
+	if err := json.Unmarshal(rec.Body.Bytes(), &checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	if checkpoint.ReceiptCount != 37 {
+		t.Fatalf("counter-backed checkpoint receipt_count=%d, want 37", checkpoint.ReceiptCount)
+	}
+}
+
 func TestEvaluateReceiptIsRetrievableAndExportableBySignedSession(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	svc, _ := newEvaluateRouteTestServices(t)
@@ -1605,6 +1628,15 @@ type overflowReceiptStore struct {
 
 type exactLimitReceiptStore struct {
 	overflowReceiptStore
+}
+
+type checkpointCountingReceiptStore struct {
+	captureReceiptStore
+	count int
+}
+
+func (s *checkpointCountingReceiptStore) CountReceipts(context.Context) (int, error) {
+	return s.count, nil
 }
 
 func (s *exactLimitReceiptStore) ListByTenantSession(_ context.Context, _, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {

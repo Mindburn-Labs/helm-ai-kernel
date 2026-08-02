@@ -165,12 +165,17 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				// SurfaceRegistry checkpoints are process-global, so this count must
 				// cover every durable receipt rather than the admin principal's
 				// synthetic "system" tenant.
-				receipts, err := svc.ReceiptStore.List(r.Context(), int(^uint(0)>>1))
+				counter, ok := svc.ReceiptStore.(store.ReceiptCounter)
+				if !ok {
+					api.WriteInternal(w, fmt.Errorf("receipt store does not support durable receipt counting"))
+					return
+				}
+				var err error
+				receiptCount, err = counter.CountReceipts(r.Context())
 				if err != nil {
 					api.WriteInternal(w, err)
 					return
 				}
-				receiptCount = len(receipts)
 			}
 			checkpoint, err := surfaces.CreateCheckpoint(receiptCount)
 			if err != nil {

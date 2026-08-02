@@ -253,6 +253,29 @@ func (s *SQLiteReceiptStore) Get(ctx context.Context, decisionID string) (*contr
 	return s.queryOne(ctx, query, decisionID)
 }
 
+// GetByDecisionIDForTenant returns only a V5 receipt whose durable causal
+// scope belongs to the authenticated tenant.
+func (s *SQLiteReceiptStore) GetByDecisionIDForTenant(ctx context.Context, tenantID, decisionID string) (*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `
+		SELECT ` + sqliteReceiptColumns + `
+		FROM receipts
+		WHERE decision_id = ?
+		  AND signature_version = ?
+		  AND COALESCE(session_id, '') <> ''
+		  AND substr(causal_session_id, 1, length(?)) = ?
+	`
+	receipt, err := scanSQLiteReceipt(s.db.QueryRowContext(ctx, query, decisionID, contracts.ReceiptSignatureV5, prefix, prefix))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return receipt, err
+}
+
 func (s *SQLiteReceiptStore) GetByReceiptID(ctx context.Context, receiptID string) (*contracts.Receipt, error) {
 	query := `
 		SELECT ` + sqliteReceiptColumns + `
@@ -280,6 +303,15 @@ func (s *SQLiteReceiptStore) GetByReceiptIDForTenant(ctx context.Context, tenant
 		  AND substr(causal_session_id, 1, length(?)) = ?
 	`
 	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, prefix, prefix)
+}
+
+// CountReceipts returns the total number of durably stored receipts.
+func (s *SQLiteReceiptStore) CountReceipts(ctx context.Context) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM receipts`).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (s *SQLiteReceiptStore) List(ctx context.Context, limit int) ([]*contracts.Receipt, error) {

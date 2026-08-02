@@ -4148,6 +4148,15 @@ components:
         effect_id: { type: string }
         status: { type: string }
         reason_code: { type: string }
+        signature_version:
+          type: string
+          description: >-
+            Names the signing-preimage revision this receipt's signature was
+            produced under. Absent or empty means the legacy eight-field
+            preimage; "receipt.v5" additionally binds verdict, reason_code,
+            policy_hash and session_id. A client that drops this field
+            reconstructs the wrong preimage and rejects a valid signature.
+          example: receipt.v5
         output_hash: { type: string }
         blob_hash: { type: string }
         prev_hash: { type: string }
@@ -4497,9 +4506,19 @@ components:
         resource: { type: string }
         verdict: { type: string }
         reason: { type: string }
+        reason_code: { type: string }
         policy_version: { type: string }
         policy_decision_hash: { type: string }
         signature: { type: string }
+        signature_version:
+          type: string
+          description: >-
+            Names the signing-preimage revision this record's signature was
+            produced under. Absent or empty means the legacy preimage, which
+            bound free-text reason; "decision_record.v2" binds reason_code and
+            the reason digest. A client that drops this field reconstructs the
+            wrong preimage and rejects a valid signature.
+          example: decision_record.v2
 
     ConsoleCapabilities:
       type: object

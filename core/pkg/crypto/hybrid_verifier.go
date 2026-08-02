@@ -66,7 +66,7 @@ func (v *HybridVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, erro
 	if perr != nil {
 		return false, perr
 	}
-	return v.verifyEnvelope([]byte(payload), d.Signature)
+	return v.verifyEnvelope(payload, d.Signature)
 }
 
 // VerifyIntent verifies a hybrid-signed AuthorizedExecutionIntent.
@@ -85,7 +85,7 @@ func (v *HybridVerifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if perr != nil {
 		return false, perr
 	}
-	return v.verifyEnvelope([]byte(payload), r.Signature)
+	return v.verifyEnvelope(payload, r.Signature)
 }
 
 func (v *HybridVerifier) verifyEnvelope(message []byte, envelope string) (bool, error) {
@@ -199,16 +199,16 @@ func VerifyReceiptProfile(edPubHex, mldsaPubHex string, r *contracts.Receipt) (p
 		if vErr != nil {
 			return profile, false, vErr
 		}
-		ok, vErr := hv.verifyEnvelope([]byte(payload), r.Signature)
+		ok, vErr := hv.verifyEnvelope(payload, r.Signature)
 		return profile, ok, vErr
 	case ReceiptProfilePQC:
 		if mldsaPubHex == "" {
 			return profile, false, fmt.Errorf("pqc receipt requires ml-dsa-65 public key")
 		}
-		ok, vErr := VerifyMLDSA65(mldsaPubHex, r.Signature, []byte(payload))
+		ok, vErr := VerifyMLDSA65(mldsaPubHex, r.Signature, payload)
 		return profile, ok, vErr
 	default:
-		ok, vErr := Verify(edPubHex, r.Signature, []byte(payload))
+		ok, vErr := Verify(edPubHex, r.Signature, payload)
 		return profile, ok, vErr
 	}
 }

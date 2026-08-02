@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -97,10 +98,12 @@ func TestCanonicalizeDecision_EmptyFields(t *testing.T) {
 	}
 }
 
-// TestCanonicalizeDecisionV2_ReasonNotBound pins the HELM-303 semantics
-// change explicitly: mutating free-text Reason on a V2-signed record does NOT
-// invalidate the signature — ReasonCode is the attested claim.
-func TestCanonicalizeDecisionV2_ReasonNotBound(t *testing.T) {
+// TestCanonicalizeDecisionV2_ReasonBoundByHash pins the HELM-303 semantics:
+// V2 promotes ReasonCode into the preimage without dropping free-text Reason,
+// which stays attested as reason_hash. Binding the code alone would have been a
+// regression — ReasonCode is empty by contract on ALLOW, so the emitted
+// explanation would have been freely rewritable past verification.
+func TestCanonicalizeDecisionV2_ReasonBoundByHash(t *testing.T) {
 	signer, err := NewEd25519Signer("drift7-v2-key")
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +117,42 @@ func TestCanonicalizeDecisionV2_ReasonNotBound(t *testing.T) {
 	}
 	d.Reason = "different human words"
 	ok, err := signer.VerifyDecision(d)
-	if err != nil || !ok {
-		t.Fatalf("Reason mutation must not invalidate a V2 signature (ok=%v err=%v)", ok, err)
+	if err != nil {
+		t.Fatalf("verify after Reason mutation: %v", err)
+	}
+	if ok {
+		t.Fatal("Reason mutation must invalidate a V2 signature: it is bound as reason_hash")
+	}
+
+	// The prose itself must not appear in the preimage — only its digest.
+	d.Reason = "human words"
+	payload, err := CanonicalizeDecisionV2(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(payload, []byte("human words")) {
+		t.Fatalf("free-text Reason leaked into the signed preimage: %s", payload)
+	}
+}
+
+// An ALLOW decision carries no ReasonCode by contract. Its explanation must
+// still be attested, otherwise V2 would authenticate nothing about why the
+// action was permitted.
+func TestCanonicalizeDecisionV2_AllowReasonStillBound(t *testing.T) {
+	signer, err := NewEd25519Signer("v2-allow-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &contracts.DecisionRecord{ID: "dec-allow", Verdict: string(contracts.VerdictAllow), Reason: "within budget"}
+	if err := signer.SignDecision(d); err != nil {
+		t.Fatal(err)
+	}
+	d.Reason = "policy explicitly permitted this"
+	ok, err := signer.VerifyDecision(d)
+	if err != nil {
+		t.Fatalf("verify after Reason mutation: %v", err)
+	}
+	if ok {
+		t.Fatal("an ALLOW decision's explanation is unauthenticated — V2 attests nothing on the allow path")
 	}
 }

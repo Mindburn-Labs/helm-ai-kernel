@@ -2320,12 +2320,17 @@ pub struct DecisionRecord {
     pub verdict: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(rename = "reason_code", skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
     #[serde(rename = "policy_version", skip_serializing_if = "Option::is_none")]
     pub policy_version: Option<String>,
     #[serde(rename = "policy_decision_hash", skip_serializing_if = "Option::is_none")]
     pub policy_decision_hash: Option<String>,
     #[serde(rename = "signature", skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// Names the signing-preimage revision this record's signature was produced under. Absent or empty means the legacy preimage, which bound free-text reason; \"decision_record.v2\" binds reason_code and the reason digest. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.
+    #[serde(rename = "signature_version", skip_serializing_if = "Option::is_none")]
+    pub signature_version: Option<String>,
 }
 
 impl DecisionRecord {
@@ -2336,9 +2341,11 @@ impl DecisionRecord {
             resource: None,
             verdict: None,
             reason: None,
+            reason_code: None,
             policy_version: None,
             policy_decision_hash: None,
             signature: None,
+            signature_version: None,
         }
     }
 }
@@ -6892,6 +6899,9 @@ pub struct Receipt {
     pub status: Option<String>,
     #[serde(rename = "reason_code", skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<String>,
+    /// Names the signing-preimage revision this receipt's signature was produced under. Absent or empty means the legacy eight-field preimage; \"receipt.v5\" additionally binds verdict, reason_code, policy_hash and session_id. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.
+    #[serde(rename = "signature_version", skip_serializing_if = "Option::is_none")]
+    pub signature_version: Option<String>,
     #[serde(rename = "output_hash", skip_serializing_if = "Option::is_none")]
     pub output_hash: Option<String>,
     #[serde(rename = "blob_hash", skip_serializing_if = "Option::is_none")]
@@ -6934,6 +6944,7 @@ impl Receipt {
             effect_id: None,
             status: None,
             reason_code: None,
+            signature_version: None,
             output_hash: None,
             blob_hash: None,
             prev_hash: None,

@@ -66,8 +66,13 @@ message DecisionRecord {
   bytes input_context = 12;
   // Product request identity (X-Helm-Correlation-ID) this decision was made
   // for — the stable join key across lifecycle events, receipts, and
-  // evidence. Optional; outside the decision signature until HELM-303.
+  // evidence. Optional; carried outside the decision signature.
   string correlation_id = 13;
+  // Names the signing-preimage revision this record's signature was produced
+  // under (HELM-303). Empty = the legacy preimage; "decision_record.v2" binds
+  // reason_code and the reason digest. A client that loses this field
+  // reconstructs the wrong preimage and rejects a valid signature.
+  string signature_version = 14;
 }
 
 message AuthorizedExecutionIntent {
@@ -99,8 +104,14 @@ message Receipt {
   ReasonCode reason_code = 15;
   map<string, string> metadata = 16;
   // Product request identity (X-Helm-Correlation-ID) this receipt belongs
-  // to. Optional; outside the receipt signature until HELM-303.
+  // to. Optional; carried outside the receipt signature.
   string correlation_id = 17;
+  // Names the signing-preimage revision this receipt's signature was produced
+  // under (HELM-303). Empty = the legacy eight-field preimage; "receipt.v5"
+  // additionally binds verdict, reason_code, policy_hash and session_id. A
+  // client that loses this field reconstructs the wrong preimage and rejects
+  // a valid signature.
+  string signature_version = 18;
 }
 
 // ── PDP Service ────────────────────────────────────────────────

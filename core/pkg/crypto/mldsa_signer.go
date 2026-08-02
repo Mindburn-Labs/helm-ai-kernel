@@ -79,8 +79,11 @@ func (s *MLDSASigner) Verify(message []byte, signature []byte) bool {
 
 // SignDecision signs a DecisionRecord using ML-DSA-65.
 func (s *MLDSASigner) SignDecision(d *contracts.DecisionRecord) error {
-	payload := DecisionSigningPayload(d)
-	sig, err := s.Sign([]byte(payload))
+	payload, err := DecisionSigningPayload(d)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -105,8 +108,11 @@ func (s *MLDSASigner) SignIntent(i *contracts.AuthorizedExecutionIntent) error {
 
 // SignReceipt signs a Receipt using ML-DSA-65.
 func (s *MLDSASigner) SignReceipt(r *contracts.Receipt) error {
-	payload := ReceiptSigningPayload(r)
-	sig, err := s.Sign([]byte(payload))
+	payload, err := ReceiptSigningPayload(r)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -131,7 +137,7 @@ func (s *MLDSASigner) VerifyDecision(d *contracts.DecisionRecord) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(s.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(s.publicKey, payload, nil, sig), nil
 }
 
 // VerifyIntent verifies an AuthorizedExecutionIntent signature using ML-DSA-65.
@@ -163,5 +169,5 @@ func (s *MLDSASigner) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(s.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(s.publicKey, payload, nil, sig), nil
 }

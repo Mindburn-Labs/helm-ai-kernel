@@ -392,18 +392,17 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 	prevHash := "GENESIS"
 	lamportClock := uint64(1)
 
-	if e.receiptStore != nil {
-		sessionID := ""
-		if decision.InputContext != nil {
-			if s, ok := decision.InputContext["session_id"].(string); ok {
-				sessionID = s
-			}
+	sessionID := ""
+	if decision.InputContext != nil {
+		if s, ok := decision.InputContext["session_id"].(string); ok {
+			sessionID = s
 		}
-		if sessionID != "" {
-			if prev, err := e.receiptStore.GetLastForSession(ctx, sessionID); err == nil && prev != nil {
-				prevHash = prev.Signature // Causal link: hash of previous receipt's cryptographic signature
-				lamportClock = prev.LamportClock + 1
-			}
+	}
+
+	if e.receiptStore != nil && sessionID != "" {
+		if prev, err := e.receiptStore.GetLastForSession(ctx, sessionID); err == nil && prev != nil {
+			prevHash = prev.Signature // Causal link: hash of previous receipt's cryptographic signature
+			lamportClock = prev.LamportClock + 1
 		}
 	}
 
@@ -419,6 +418,17 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 		Timestamp:     e.clock(),
 		PrevHash:      prevHash,
 		LamportClock:  lamportClock,
+
+		// HELM-303: the four fields the V5 preimage binds. They must be set
+		// here, before signing below — a receipt that declares receipt.v5 while
+		// carrying them empty authenticates four blank strings and attests no
+		// governance meaning at all. The claims are copied from the decision
+		// this execution was authorized by, so the receipt states which verdict
+		// and which policy version permitted it.
+		Verdict:    decision.Verdict,
+		ReasonCode: decision.ReasonCode,
+		PolicyHash: decision.PolicyContentHash,
+		SessionID:  sessionID,
 	}
 	if receipt.CorrelationID == "" {
 		if corr, ok := tracing.GetCorrelationID(ctx); ok {

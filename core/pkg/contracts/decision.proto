@@ -28,6 +28,13 @@ message DecisionRecord {
   int32 risk_accumulation_window = 13;
   // Product request identity (X-Helm-Correlation-ID) this decision was made
   // for — the stable join key across lifecycle events, receipts, and
-  // evidence. Optional; outside the decision signature until HELM-303.
+  // evidence. Optional; carried outside the decision signature.
   string correlation_id = 14;
+  // Names the signing-preimage revision this record's signature was produced
+  // under (HELM-303). Empty = the legacy preimage, which bound free-text
+  // reason; "decision_record.v2" binds reason_code and the reason digest.
+  // A verifier that does not receive this field reconstructs the wrong
+  // preimage and rejects an otherwise valid signature, so it must survive
+  // every transport, not just the Go struct.
+  string signature_version = 15;
 }

@@ -11428,9 +11428,12 @@ type DecisionRecord struct {
 	Resource           *string `json:"resource,omitempty"`
 	Verdict            *string `json:"verdict,omitempty"`
 	Reason             *string `json:"reason,omitempty"`
+	ReasonCode         *string `json:"reason_code,omitempty"`
 	PolicyVersion      *string `json:"policy_version,omitempty"`
 	PolicyDecisionHash *string `json:"policy_decision_hash,omitempty"`
 	Signature          *string `json:"signature,omitempty"`
+	// Names the signing-preimage revision this record's signature was produced under. Absent or empty means the legacy preimage, which bound free-text reason; \"decision_record.v2\" binds reason_code and the reason digest. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.
+	SignatureVersion *string `json:"signature_version,omitempty"`
 }
 
 // NewDecisionRecord instantiates a new DecisionRecord object
@@ -11610,6 +11613,38 @@ func (o *DecisionRecord) SetReason(v string) {
 	o.Reason = &v
 }
 
+// GetReasonCode returns the ReasonCode field value if set, zero value otherwise.
+func (o *DecisionRecord) GetReasonCode() string {
+	if o == nil || IsNil(o.ReasonCode) {
+		var ret string
+		return ret
+	}
+	return *o.ReasonCode
+}
+
+// GetReasonCodeOk returns a tuple with the ReasonCode field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DecisionRecord) GetReasonCodeOk() (*string, bool) {
+	if o == nil || IsNil(o.ReasonCode) {
+		return nil, false
+	}
+	return o.ReasonCode, true
+}
+
+// HasReasonCode returns a boolean if a field has been set.
+func (o *DecisionRecord) HasReasonCode() bool {
+	if o != nil && !IsNil(o.ReasonCode) {
+		return true
+	}
+
+	return false
+}
+
+// SetReasonCode gets a reference to the given string and assigns it to the ReasonCode field.
+func (o *DecisionRecord) SetReasonCode(v string) {
+	o.ReasonCode = &v
+}
+
 // GetPolicyVersion returns the PolicyVersion field value if set, zero value otherwise.
 func (o *DecisionRecord) GetPolicyVersion() string {
 	if o == nil || IsNil(o.PolicyVersion) {
@@ -11706,6 +11741,38 @@ func (o *DecisionRecord) SetSignature(v string) {
 	o.Signature = &v
 }
 
+// GetSignatureVersion returns the SignatureVersion field value if set, zero value otherwise.
+func (o *DecisionRecord) GetSignatureVersion() string {
+	if o == nil || IsNil(o.SignatureVersion) {
+		var ret string
+		return ret
+	}
+	return *o.SignatureVersion
+}
+
+// GetSignatureVersionOk returns a tuple with the SignatureVersion field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DecisionRecord) GetSignatureVersionOk() (*string, bool) {
+	if o == nil || IsNil(o.SignatureVersion) {
+		return nil, false
+	}
+	return o.SignatureVersion, true
+}
+
+// HasSignatureVersion returns a boolean if a field has been set.
+func (o *DecisionRecord) HasSignatureVersion() bool {
+	if o != nil && !IsNil(o.SignatureVersion) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignatureVersion gets a reference to the given string and assigns it to the SignatureVersion field.
+func (o *DecisionRecord) SetSignatureVersion(v string) {
+	o.SignatureVersion = &v
+}
+
 func (o DecisionRecord) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -11731,6 +11798,9 @@ func (o DecisionRecord) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Reason) {
 		toSerialize["reason"] = o.Reason
 	}
+	if !IsNil(o.ReasonCode) {
+		toSerialize["reason_code"] = o.ReasonCode
+	}
 	if !IsNil(o.PolicyVersion) {
 		toSerialize["policy_version"] = o.PolicyVersion
 	}
@@ -11739,6 +11809,9 @@ func (o DecisionRecord) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.Signature) {
 		toSerialize["signature"] = o.Signature
+	}
+	if !IsNil(o.SignatureVersion) {
+		toSerialize["signature_version"] = o.SignatureVersion
 	}
 	return toSerialize, nil
 }
@@ -38230,16 +38303,18 @@ var _ MappedNullable = &Receipt{}
 
 // Receipt struct for Receipt
 type Receipt struct {
-	ReceiptId    *string `json:"receipt_id,omitempty"`
-	DecisionId   *string `json:"decision_id,omitempty"`
-	EffectId     *string `json:"effect_id,omitempty"`
-	Status       *string `json:"status,omitempty"`
-	ReasonCode   *string `json:"reason_code,omitempty"`
-	OutputHash   *string `json:"output_hash,omitempty"`
-	BlobHash     *string `json:"blob_hash,omitempty"`
-	PrevHash     *string `json:"prev_hash,omitempty"`
-	LamportClock *int32  `json:"lamport_clock,omitempty"`
-	Signature    *string `json:"signature,omitempty"`
+	ReceiptId  *string `json:"receipt_id,omitempty"`
+	DecisionId *string `json:"decision_id,omitempty"`
+	EffectId   *string `json:"effect_id,omitempty"`
+	Status     *string `json:"status,omitempty"`
+	ReasonCode *string `json:"reason_code,omitempty"`
+	// Names the signing-preimage revision this receipt's signature was produced under. Absent or empty means the legacy eight-field preimage; \"receipt.v5\" additionally binds verdict, reason_code, policy_hash and session_id. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.
+	SignatureVersion *string `json:"signature_version,omitempty"`
+	OutputHash       *string `json:"output_hash,omitempty"`
+	BlobHash         *string `json:"blob_hash,omitempty"`
+	PrevHash         *string `json:"prev_hash,omitempty"`
+	LamportClock     *int32  `json:"lamport_clock,omitempty"`
+	Signature        *string `json:"signature,omitempty"`
 	// Receipt signature profile emitted by the signer. Classical is Ed25519-only; hybrid is Ed25519 plus ML-DSA-65.
 	SignatureProfile *string `json:"signature_profile,omitempty"`
 	// Signature algorithm or composite algorithm used for this receipt, such as ed25519, Hybrid-Ed25519-MLDSA65, or ml-dsa-65.
@@ -38430,6 +38505,38 @@ func (o *Receipt) HasReasonCode() bool {
 // SetReasonCode gets a reference to the given string and assigns it to the ReasonCode field.
 func (o *Receipt) SetReasonCode(v string) {
 	o.ReasonCode = &v
+}
+
+// GetSignatureVersion returns the SignatureVersion field value if set, zero value otherwise.
+func (o *Receipt) GetSignatureVersion() string {
+	if o == nil || IsNil(o.SignatureVersion) {
+		var ret string
+		return ret
+	}
+	return *o.SignatureVersion
+}
+
+// GetSignatureVersionOk returns a tuple with the SignatureVersion field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Receipt) GetSignatureVersionOk() (*string, bool) {
+	if o == nil || IsNil(o.SignatureVersion) {
+		return nil, false
+	}
+	return o.SignatureVersion, true
+}
+
+// HasSignatureVersion returns a boolean if a field has been set.
+func (o *Receipt) HasSignatureVersion() bool {
+	if o != nil && !IsNil(o.SignatureVersion) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignatureVersion gets a reference to the given string and assigns it to the SignatureVersion field.
+func (o *Receipt) SetSignatureVersion(v string) {
+	o.SignatureVersion = &v
 }
 
 // GetOutputHash returns the OutputHash field value if set, zero value otherwise.
@@ -38904,6 +39011,9 @@ func (o Receipt) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.ReasonCode) {
 		toSerialize["reason_code"] = o.ReasonCode
+	}
+	if !IsNil(o.SignatureVersion) {
+		toSerialize["signature_version"] = o.SignatureVersion
 	}
 	if !IsNil(o.OutputHash) {
 		toSerialize["output_hash"] = o.OutputHash

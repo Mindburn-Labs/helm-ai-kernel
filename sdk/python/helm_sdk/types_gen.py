@@ -4939,10 +4939,12 @@ class DecisionRecord(BaseModel):
     resource: Optional[StrictStr] = None
     verdict: Optional[StrictStr] = None
     reason: Optional[StrictStr] = None
+    reason_code: Optional[StrictStr] = None
     policy_version: Optional[StrictStr] = None
     policy_decision_hash: Optional[StrictStr] = None
     signature: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["id", "action", "resource", "verdict", "reason", "policy_version", "policy_decision_hash", "signature"]
+    signature_version: Optional[StrictStr] = Field(default=None, description="Names the signing-preimage revision this record's signature was produced under. Absent or empty means the legacy preimage, which bound free-text reason; \"decision_record.v2\" binds reason_code and the reason digest. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.")
+    __properties: ClassVar[List[str]] = ["id", "action", "resource", "verdict", "reason", "reason_code", "policy_version", "policy_decision_hash", "signature", "signature_version"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -5000,9 +5002,11 @@ class DecisionRecord(BaseModel):
             "resource": obj.get("resource"),
             "verdict": obj.get("verdict"),
             "reason": obj.get("reason"),
+            "reason_code": obj.get("reason_code"),
             "policy_version": obj.get("policy_version"),
             "policy_decision_hash": obj.get("policy_decision_hash"),
-            "signature": obj.get("signature")
+            "signature": obj.get("signature"),
+            "signature_version": obj.get("signature_version")
         })
         return _obj
 
@@ -14495,6 +14499,7 @@ class Receipt(BaseModel):
     effect_id: Optional[StrictStr] = None
     status: Optional[StrictStr] = None
     reason_code: Optional[StrictStr] = None
+    signature_version: Optional[StrictStr] = Field(default=None, description="Names the signing-preimage revision this receipt's signature was produced under. Absent or empty means the legacy eight-field preimage; \"receipt.v5\" additionally binds verdict, reason_code, policy_hash and session_id. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.")
     output_hash: Optional[StrictStr] = None
     blob_hash: Optional[StrictStr] = None
     prev_hash: Optional[StrictStr] = None
@@ -14509,7 +14514,7 @@ class Receipt(BaseModel):
     executor_id: Optional[StrictStr] = None
     args_hash: Optional[StrictStr] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["receipt_id", "decision_id", "effect_id", "status", "reason_code", "output_hash", "blob_hash", "prev_hash", "lamport_clock", "signature", "signature_profile", "signature_algorithm", "key_id", "public_key_set", "timestamp", "principal", "executor_id", "args_hash", "metadata"]
+    __properties: ClassVar[List[str]] = ["receipt_id", "decision_id", "effect_id", "status", "reason_code", "signature_version", "output_hash", "blob_hash", "prev_hash", "lamport_clock", "signature", "signature_profile", "signature_algorithm", "key_id", "public_key_set", "timestamp", "principal", "executor_id", "args_hash", "metadata"]
 
     @field_validator('signature_profile')
     @classmethod
@@ -14578,6 +14583,7 @@ class Receipt(BaseModel):
             "effect_id": obj.get("effect_id"),
             "status": obj.get("status"),
             "reason_code": obj.get("reason_code"),
+            "signature_version": obj.get("signature_version"),
             "output_hash": obj.get("output_hash"),
             "blob_hash": obj.get("blob_hash"),
             "prev_hash": obj.get("prev_hash"),

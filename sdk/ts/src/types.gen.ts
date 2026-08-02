@@ -5399,6 +5399,12 @@ export interface DecisionRecord {
      * @type {string}
      * @memberof DecisionRecord
      */
+    reason_code?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DecisionRecord
+     */
     policy_version?: string;
     /**
      *
@@ -5412,6 +5418,12 @@ export interface DecisionRecord {
      * @memberof DecisionRecord
      */
     signature?: string;
+    /**
+     * Names the signing-preimage revision this record's signature was produced under. Absent or empty means the legacy preimage, which bound free-text reason; "decision_record.v2" binds reason_code and the reason digest. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.
+     * @type {string}
+     * @memberof DecisionRecord
+     */
+    signature_version?: string;
 }
 
 /**
@@ -5436,9 +5448,11 @@ export function DecisionRecordFromJSONTyped(json: any, ignoreDiscriminator: bool
         'resource': json['resource'] == null ? undefined : json['resource'],
         'verdict': json['verdict'] == null ? undefined : json['verdict'],
         'reason': json['reason'] == null ? undefined : json['reason'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
         'policy_version': json['policy_version'] == null ? undefined : json['policy_version'],
         'policy_decision_hash': json['policy_decision_hash'] == null ? undefined : json['policy_decision_hash'],
         'signature': json['signature'] == null ? undefined : json['signature'],
+        'signature_version': json['signature_version'] == null ? undefined : json['signature_version'],
     };
 }
 
@@ -5453,9 +5467,11 @@ export function DecisionRecordToJSON(value?: DecisionRecord | null): any {
         'resource': value['resource'],
         'verdict': value['verdict'],
         'reason': value['reason'],
+        'reason_code': value['reason_code'],
         'policy_version': value['policy_version'],
         'policy_decision_hash': value['policy_decision_hash'],
         'signature': value['signature'],
+        'signature_version': value['signature_version'],
     };
 }
 
@@ -15847,6 +15863,12 @@ export interface Receipt {
      */
     reason_code?: string;
     /**
+     * Names the signing-preimage revision this receipt's signature was produced under. Absent or empty means the legacy eight-field preimage; "receipt.v5" additionally binds verdict, reason_code, policy_hash and session_id. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.
+     * @type {string}
+     * @memberof Receipt
+     */
+    signature_version?: string;
+    /**
      *
      * @type {string}
      * @memberof Receipt
@@ -15966,6 +15988,7 @@ export function ReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolean): R
         'effect_id': json['effect_id'] == null ? undefined : json['effect_id'],
         'status': json['status'] == null ? undefined : json['status'],
         'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
+        'signature_version': json['signature_version'] == null ? undefined : json['signature_version'],
         'output_hash': json['output_hash'] == null ? undefined : json['output_hash'],
         'blob_hash': json['blob_hash'] == null ? undefined : json['blob_hash'],
         'prev_hash': json['prev_hash'] == null ? undefined : json['prev_hash'],
@@ -15994,6 +16017,7 @@ export function ReceiptToJSON(value?: Receipt | null): any {
         'effect_id': value['effect_id'],
         'status': value['status'],
         'reason_code': value['reason_code'],
+        'signature_version': value['signature_version'],
         'output_hash': value['output_hash'],
         'blob_hash': value['blob_hash'],
         'prev_hash': value['prev_hash'],

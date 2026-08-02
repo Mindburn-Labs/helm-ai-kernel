@@ -58,7 +58,7 @@ func (v *Ed25519Verifier) VerifyDecision(d *contracts.DecisionRecord) (bool, err
 	if err != nil {
 		return false, err
 	}
-	return v.Verify([]byte(payload), sig), nil
+	return v.Verify(payload, sig), nil
 }
 
 func (v *Ed25519Verifier) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, error) {
@@ -88,5 +88,5 @@ func (v *Ed25519Verifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return v.Verify([]byte(payload), sig), nil
+	return v.Verify(payload, sig), nil
 }

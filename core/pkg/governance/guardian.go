@@ -55,20 +55,27 @@ func (g *Guardian) Authorize(action string, riskScore int) (*contracts.DecisionR
 		return nil, fmt.Errorf("guardian policy evaluation failed: %w", err)
 	}
 
+	// A DENY carries a registry ReasonCode, not only prose: the code is the
+	// machine-readable claim the V2 preimage binds and the only part downstream
+	// consumers may key on. ALLOW has none by contract — the ReasonCode registry
+	// is defined for DENY/ESCALATE.
 	verdict := "DENY"
+	reasonCode := string(contracts.ReasonPolicyViolation)
 	reason := fmt.Sprintf("risk_score %d >= threshold 80 for action %q", riskScore, action)
 	if allowed {
 		verdict = "ALLOW"
+		reasonCode = ""
 		reason = fmt.Sprintf("risk_score %d < threshold 80 for action %q", riskScore, action)
 	}
 
 	dec := &contracts.DecisionRecord{
-		ID:        fmt.Sprintf("gdec-%d", time.Now().UnixNano()),
-		SubjectID: "guardian",
-		Action:    action,
-		Verdict:   verdict,
-		Reason:    reason,
-		Timestamp: time.Now(),
+		ID:         fmt.Sprintf("gdec-%d", time.Now().UnixNano()),
+		SubjectID:  "guardian",
+		Action:     action,
+		Verdict:    verdict,
+		Reason:     reason,
+		ReasonCode: reasonCode,
+		Timestamp:  time.Now(),
 	}
 
 	// Sign the decision

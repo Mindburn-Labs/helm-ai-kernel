@@ -17415,9 +17415,11 @@ public static class CreateSandboxGrantRequest {
   DecisionRecord.JSON_PROPERTY_RESOURCE,
   DecisionRecord.JSON_PROPERTY_VERDICT,
   DecisionRecord.JSON_PROPERTY_REASON,
+  DecisionRecord.JSON_PROPERTY_REASON_CODE,
   DecisionRecord.JSON_PROPERTY_POLICY_VERSION,
   DecisionRecord.JSON_PROPERTY_POLICY_DECISION_HASH,
-  DecisionRecord.JSON_PROPERTY_SIGNATURE
+  DecisionRecord.JSON_PROPERTY_SIGNATURE,
+  DecisionRecord.JSON_PROPERTY_SIGNATURE_VERSION
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class DecisionRecord {
@@ -17436,6 +17438,9 @@ public static class DecisionRecord {
   public static final String JSON_PROPERTY_REASON = "reason";
   private String reason;
 
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
   public static final String JSON_PROPERTY_POLICY_VERSION = "policy_version";
   private String policyVersion;
 
@@ -17444,6 +17449,9 @@ public static class DecisionRecord {
 
   public static final String JSON_PROPERTY_SIGNATURE = "signature";
   private String signature;
+
+  public static final String JSON_PROPERTY_SIGNATURE_VERSION = "signature_version";
+  private String signatureVersion;
 
   public DecisionRecord() {
   }
@@ -17573,6 +17581,31 @@ public static class DecisionRecord {
   }
 
 
+  public DecisionRecord reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Get reasonCode
+   * @return reasonCode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
   public DecisionRecord policyVersion(String policyVersion) {
     this.policyVersion = policyVersion;
     return this;
@@ -17648,6 +17681,31 @@ public static class DecisionRecord {
   }
 
 
+  public DecisionRecord signatureVersion(String signatureVersion) {
+    this.signatureVersion = signatureVersion;
+    return this;
+  }
+
+   /**
+   * Names the signing-preimage revision this record&#39;s signature was produced under. Absent or empty means the legacy preimage, which bound free-text reason; \&quot;decision_record.v2\&quot; binds reason_code and the reason digest. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.
+   * @return signatureVersion
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignatureVersion() {
+    return signatureVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureVersion(String signatureVersion) {
+    this.signatureVersion = signatureVersion;
+  }
+
+
   /**
    * Return true if this DecisionRecord object is equal to o.
    */
@@ -17665,14 +17723,16 @@ public static class DecisionRecord {
         Objects.equals(this.resource, decisionRecord.resource) &&
         Objects.equals(this.verdict, decisionRecord.verdict) &&
         Objects.equals(this.reason, decisionRecord.reason) &&
+        Objects.equals(this.reasonCode, decisionRecord.reasonCode) &&
         Objects.equals(this.policyVersion, decisionRecord.policyVersion) &&
         Objects.equals(this.policyDecisionHash, decisionRecord.policyDecisionHash) &&
-        Objects.equals(this.signature, decisionRecord.signature);
+        Objects.equals(this.signature, decisionRecord.signature) &&
+        Objects.equals(this.signatureVersion, decisionRecord.signatureVersion);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, action, resource, verdict, reason, policyVersion, policyDecisionHash, signature);
+    return Objects.hash(id, action, resource, verdict, reason, reasonCode, policyVersion, policyDecisionHash, signature, signatureVersion);
   }
 
   @Override
@@ -17684,9 +17744,11 @@ public static class DecisionRecord {
     sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
     sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
     sb.append("    policyVersion: ").append(toIndentedString(policyVersion)).append("\n");
     sb.append("    policyDecisionHash: ").append(toIndentedString(policyDecisionHash)).append("\n");
     sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
+    sb.append("    signatureVersion: ").append(toIndentedString(signatureVersion)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -17759,6 +17821,11 @@ public static class DecisionRecord {
       joiner.add(String.format("%sreason%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReason()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `policy_version` to the URL query string
     if (getPolicyVersion() != null) {
       joiner.add(String.format("%spolicy_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -17772,6 +17839,11 @@ public static class DecisionRecord {
     // add `signature` to the URL query string
     if (getSignature() != null) {
       joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_version` to the URL query string
+    if (getSignatureVersion() != null) {
+      joiner.add(String.format("%ssignature_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -53407,6 +53479,7 @@ public static class PreflightLaunchpadImport202Response {
   Receipt.JSON_PROPERTY_EFFECT_ID,
   Receipt.JSON_PROPERTY_STATUS,
   Receipt.JSON_PROPERTY_REASON_CODE,
+  Receipt.JSON_PROPERTY_SIGNATURE_VERSION,
   Receipt.JSON_PROPERTY_OUTPUT_HASH,
   Receipt.JSON_PROPERTY_BLOB_HASH,
   Receipt.JSON_PROPERTY_PREV_HASH,
@@ -53438,6 +53511,9 @@ public static class Receipt {
 
   public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
   private String reasonCode;
+
+  public static final String JSON_PROPERTY_SIGNATURE_VERSION = "signature_version";
+  private String signatureVersion;
 
   public static final String JSON_PROPERTY_OUTPUT_HASH = "output_hash";
   private String outputHash;
@@ -53643,6 +53719,31 @@ public static class Receipt {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setReasonCode(String reasonCode) {
     this.reasonCode = reasonCode;
+  }
+
+
+  public Receipt signatureVersion(String signatureVersion) {
+    this.signatureVersion = signatureVersion;
+    return this;
+  }
+
+   /**
+   * Names the signing-preimage revision this receipt&#39;s signature was produced under. Absent or empty means the legacy eight-field preimage; \&quot;receipt.v5\&quot; additionally binds verdict, reason_code, policy_hash and session_id. A client that drops this field reconstructs the wrong preimage and rejects a valid signature.
+   * @return signatureVersion
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignatureVersion() {
+    return signatureVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureVersion(String signatureVersion) {
+    this.signatureVersion = signatureVersion;
   }
 
 
@@ -54021,6 +54122,7 @@ public static class Receipt {
         Objects.equals(this.effectId, receipt.effectId) &&
         Objects.equals(this.status, receipt.status) &&
         Objects.equals(this.reasonCode, receipt.reasonCode) &&
+        Objects.equals(this.signatureVersion, receipt.signatureVersion) &&
         Objects.equals(this.outputHash, receipt.outputHash) &&
         Objects.equals(this.blobHash, receipt.blobHash) &&
         Objects.equals(this.prevHash, receipt.prevHash) &&
@@ -54039,7 +54141,7 @@ public static class Receipt {
 
   @Override
   public int hashCode() {
-    return Objects.hash(receiptId, decisionId, effectId, status, reasonCode, outputHash, blobHash, prevHash, lamportClock, signature, signatureProfile, signatureAlgorithm, keyId, publicKeySet, timestamp, principal, executorId, argsHash, metadata);
+    return Objects.hash(receiptId, decisionId, effectId, status, reasonCode, signatureVersion, outputHash, blobHash, prevHash, lamportClock, signature, signatureProfile, signatureAlgorithm, keyId, publicKeySet, timestamp, principal, executorId, argsHash, metadata);
   }
 
   @Override
@@ -54051,6 +54153,7 @@ public static class Receipt {
     sb.append("    effectId: ").append(toIndentedString(effectId)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    signatureVersion: ").append(toIndentedString(signatureVersion)).append("\n");
     sb.append("    outputHash: ").append(toIndentedString(outputHash)).append("\n");
     sb.append("    blobHash: ").append(toIndentedString(blobHash)).append("\n");
     sb.append("    prevHash: ").append(toIndentedString(prevHash)).append("\n");
@@ -54135,6 +54238,11 @@ public static class Receipt {
     // add `reason_code` to the URL query string
     if (getReasonCode() != null) {
       joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_version` to the URL query string
+    if (getSignatureVersion() != null) {
+      joiner.add(String.format("%ssignature_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `output_hash` to the URL query string

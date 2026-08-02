@@ -46,7 +46,7 @@ func (v *MLDSAVerifier) VerifyDecision(d *contracts.DecisionRecord) (bool, error
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(v.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(v.publicKey, payload, nil, sig), nil
 }
 
 // VerifyIntent verifies an AuthorizedExecutionIntent signature using ML-DSA-65.
@@ -78,7 +78,7 @@ func (v *MLDSAVerifier) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("invalid signature hex: %w", err)
 	}
-	return mldsa65.Verify(v.publicKey, []byte(payload), nil, sig), nil
+	return mldsa65.Verify(v.publicKey, payload, nil, sig), nil
 }
 
 // VerifyMLDSA65 verifies a hex-encoded ML-DSA-65 signature against a hex-encoded public key.

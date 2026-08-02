@@ -260,10 +260,15 @@ type DecisionRecord struct {
 	InputContext       []byte                 `protobuf:"bytes,12,opt,name=input_context,json=inputContext,proto3" json:"input_context,omitempty"`
 	// Product request identity (X-Helm-Correlation-ID) this decision was made
 	// for — the stable join key across lifecycle events, receipts, and
-	// evidence. Optional; outside the decision signature until HELM-303.
+	// evidence. Optional; carried outside the decision signature.
 	CorrelationId string `protobuf:"bytes,13,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Names the signing-preimage revision this record's signature was produced
+	// under (HELM-303). Empty = the legacy preimage; "decision_record.v2" binds
+	// reason_code and the reason digest. A client that loses this field
+	// reconstructs the wrong preimage and rejects a valid signature.
+	SignatureVersion string `protobuf:"bytes,14,opt,name=signature_version,json=signatureVersion,proto3" json:"signature_version,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DecisionRecord) Reset() {
@@ -387,6 +392,13 @@ func (x *DecisionRecord) GetCorrelationId() string {
 	return ""
 }
 
+func (x *DecisionRecord) GetSignatureVersion() string {
+	if x != nil {
+		return x.SignatureVersion
+	}
+	return ""
+}
+
 type AuthorizedExecutionIntent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IntentId      string                 `protobuf:"bytes,1,opt,name=intent_id,json=intentId,proto3" json:"intent_id,omitempty"`
@@ -506,10 +518,16 @@ type Receipt struct {
 	ReasonCode     ReasonCode             `protobuf:"varint,15,opt,name=reason_code,json=reasonCode,proto3,enum=helm.kernel.v1.ReasonCode" json:"reason_code,omitempty"`
 	Metadata       map[string]string      `protobuf:"bytes,16,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Product request identity (X-Helm-Correlation-ID) this receipt belongs
-	// to. Optional; outside the receipt signature until HELM-303.
+	// to. Optional; carried outside the receipt signature.
 	CorrelationId string `protobuf:"bytes,17,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Names the signing-preimage revision this receipt's signature was produced
+	// under (HELM-303). Empty = the legacy eight-field preimage; "receipt.v5"
+	// additionally binds verdict, reason_code, policy_hash and session_id. A
+	// client that loses this field reconstructs the wrong preimage and rejects
+	// a valid signature.
+	SignatureVersion string `protobuf:"bytes,18,opt,name=signature_version,json=signatureVersion,proto3" json:"signature_version,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Receipt) Reset() {
@@ -657,6 +675,13 @@ func (x *Receipt) GetMetadata() map[string]string {
 func (x *Receipt) GetCorrelationId() string {
 	if x != nil {
 		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *Receipt) GetSignatureVersion() string {
+	if x != nil {
+		return x.SignatureVersion
 	}
 	return ""
 }
@@ -1267,7 +1292,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"effectType\x12\x1b\n" +
 	"\teffect_id\x18\x02 \x01(\tR\beffectId\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x12\x1b\n" +
-	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x98\x04\n" +
+	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\xc5\x04\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1284,7 +1309,8 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	" \x01(\tR\tpolicyRef\x120\n" +
 	"\x14policy_decision_hash\x18\v \x01(\tR\x12policyDecisionHash\x12#\n" +
 	"\rinput_context\x18\f \x01(\fR\finputContext\x12%\n" +
-	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\"\xca\x02\n" +
+	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\x12+\n" +
+	"\x11signature_version\x18\x0e \x01(\tR\x10signatureVersion\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +
@@ -1295,7 +1321,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1c\n" +
 	"\tsignature\x18\x06 \x01(\tR\tsignature\x12\"\n" +
 	"\rsigner_key_id\x18\a \x01(\tR\vsignerKeyId\x12\x1c\n" +
-	"\tprincipal\x18\b \x01(\tR\tprincipal\"\xd2\x05\n" +
+	"\tprincipal\x18\b \x01(\tR\tprincipal\"\xff\x05\n" +
 	"\aReceipt\x12'\n" +
 	"\x0freceipt_version\x18\x01 \x01(\tR\x0ereceiptVersion\x12\x1d\n" +
 	"\n" +
@@ -1317,7 +1343,8 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\vreason_code\x18\x0f \x01(\x0e2\x1a.helm.kernel.v1.ReasonCodeR\n" +
 	"reasonCode\x12A\n" +
 	"\bmetadata\x18\x10 \x03(\v2%.helm.kernel.v1.Receipt.MetadataEntryR\bmetadata\x12%\n" +
-	"\x0ecorrelation_id\x18\x11 \x01(\tR\rcorrelationId\x1a;\n" +
+	"\x0ecorrelation_id\x18\x11 \x01(\tR\rcorrelationId\x12+\n" +
+	"\x11signature_version\x18\x12 \x01(\tR\x10signatureVersion\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb6\x01\n" +

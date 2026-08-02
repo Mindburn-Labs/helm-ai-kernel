@@ -1,6 +1,6 @@
 package crypto
 
-// F-05/F-06 regressions for the v5 receipt envelope.
+// F-05/F-06 regressions for the active v5 receipt preimage (CanonicalizeReceiptV5).
 
 import (
 	"testing"
@@ -34,11 +34,11 @@ func TestF06_FieldBoundaryShiftNoLongerCollides(t *testing.T) {
 			"demonstrating what it claims (negative control)")
 	}
 
-	pa, err := ReceiptPreimageV5(a)
+	pa, err := CanonicalizeReceiptV5(a)
 	if err != nil {
 		t.Fatalf("v5 preimage: %v", err)
 	}
-	pb, err := ReceiptPreimageV5(b)
+	pb, err := CanonicalizeReceiptV5(b)
 	if err != nil {
 		t.Fatalf("v5 preimage: %v", err)
 	}
@@ -51,12 +51,12 @@ func TestF06_FieldBoundaryShiftNoLongerCollides(t *testing.T) {
 // The signature must not be an input to the value it authenticates.
 func TestF05_SignatureItselfIsExcludedFromThePreimage(t *testing.T) {
 	r := &contracts.Receipt{ReceiptID: "r", DecisionID: "d", Status: "APPLIED"}
-	before, err := ReceiptPreimageV5(r)
+	before, err := CanonicalizeReceiptV5(r)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Signature = "abcdef"
-	after, err := ReceiptPreimageV5(r)
+	after, err := CanonicalizeReceiptV5(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,5 +89,39 @@ func TestF05_LegacyV4ReceiptsStillVerifyAndAreReportedAsSuch(t *testing.T) {
 	}
 	if version != ReceiptPreimageLegacy {
 		t.Fatalf("version = %q, want %q: callers cannot flag legacy receipts", version, ReceiptPreimageLegacy)
+	}
+}
+
+// The package's own public verifier must accept what its own signers produce.
+// Every SignReceipt implementation emits the V5 preimage; a VerifyReceiptSignature
+// that reconstructed anything else would reject every receipt this kernel issues.
+func TestVerifyReceiptSignature_AcceptsWhatTheSignersProduce(t *testing.T) {
+	s := testSigner(t)
+	r := &contracts.Receipt{
+		ReceiptID: "rcpt-v5", DecisionID: "dec-1", EffectID: "eff-1",
+		Status: "SUCCESS", OutputHash: "sha256:out", PrevHash: "GENESIS",
+		LamportClock: 3, ArgsHash: "sha256:args",
+		Verdict: "ALLOW", ReasonCode: "", PolicyHash: "sha256:pol", SessionID: "sess-1",
+	}
+	if err := s.SignReceipt(r); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	ok, version, err := VerifyReceiptSignature(s.PublicKey(), r)
+	if err != nil {
+		t.Fatalf("the public verifier errored on this package's own signature: %v", err)
+	}
+	if !ok {
+		t.Fatal("the public verifier rejected this package's own signature")
+	}
+	if version != ReceiptPreimageCurrent {
+		t.Fatalf("version = %q, want %q", version, ReceiptPreimageCurrent)
+	}
+
+	// A receipt relabelled to claim V5 over a V4 signature must not pass by
+	// falling back to a preimage it never declared.
+	r.Verdict = "DENY"
+	if ok, _, _ := VerifyReceiptSignature(s.PublicKey(), r); ok {
+		t.Fatal("verdict mutation verified — governance fields are not bound")
 	}
 }

@@ -3,84 +3,20 @@ package crypto
 import (
 	"fmt"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-// ReceiptPreimageV5 is the JCS canonicalization of a receipt, excluding only
-// the signature field itself.
+// ReceiptPreimageV4 reproduces the legacy eight-field preimage — ReceiptID,
+// DecisionID, EffectID, Status, OutputHash, PrevHash, LamportClock, ArgsHash,
+// joined with a bare ":" — out of roughly eighty receipt fields. Everything
+// else was carried unsigned and could be rewritten without invalidating the
+// signature, including Verdict, PolicyHash, MerkleRoot, KeyID, PublicKeySet
+// and WitnessSignatures (F-05); the unescaped separator also let a
+// colon-bearing value shift field boundaries so two distinct receipts shared
+// signed bytes (F-06).
 //
-// It replaces the v4 preimage (CanonicalizeReceipt), which bound just eight
-// fields — ReceiptID, DecisionID, EffectID, Status, OutputHash, PrevHash,
-// LamportClock, ArgsHash — out of roughly eighty. Everything else was carried
-// unsigned and could be rewritten without invalidating the signature, including
-// Verdict, Timestamp, PolicyHash, MerkleRoot, KeyID, PublicKeySet,
-// WitnessSignatures and the transparency-log anchoring fields (F-05).
-//
-// v4 also joined its fields with a bare ":" and escaped nothing, so a value
-// containing a colon shifted the field boundaries and two distinct receipts
-// produced identical preimages — one signature verifying both (F-06). A JCS
-// object has no such ambiguity: every field is separately keyed and every string
-// is escaped.
-//
-// STATUS: NOT THE ACTIVE PREIMAGE, and not what the "receipt.v5" wire version
-// means. HELM-303 shipped a narrower V5 — CanonicalizeReceiptV5 in canonical.go,
-// which extends the V4 field list with verdict, reason_code, policy_hash and
-// session_id. That is what ReceiptSigningPayload emits, what ReceiptVerifyPayload
-// checks, and what every signer/verifier in this package calls; it stays inside
-// the columns the receipt store round-trips.
-//
-// This file is the wider, still-unshipped ambition: whole-envelope JCS. It has
-// no non-test callers — including VerifyReceiptSignature below, which would
-// compute a DIFFERENT preimage for the same "receipt.v5" tag. Do not wire it
-// without giving it its own version constant.
-//
-// The store no longer blocks this. Both receipt stores persist the receipt
-// document itself in an `envelope` column and restore from it, so every field
-// round-trips regardless of whether it has a column of its own. (That was not
-// true when the narrow V5 shipped: verdict, reason_code, policy_hash and
-// session_id had no columns either, so a signed receipt reloaded without them
-// failed verification as if tampered.) What remains before wiring this wider
-// preimage is its own version constant — reusing "receipt.v5" would make two
-// different preimages answer to one tag.
-//
-// Migration once that lands: signers emit v5, verifiers accept v5 first and v4
-// second so previously issued receipts keep verifying, and
-// VerifyReceiptSignature reports which preimage matched so callers can surface
-// v4 as deprecated. Also note anchorReceiptTransparency mutates the receipt
-// after signing, which is why the three transparency fields are excluded below.
-func ReceiptPreimageV5(r *contracts.Receipt) ([]byte, error) {
-	if r == nil {
-		return nil, fmt.Errorf("receipt is nil")
-	}
-	// Copy so the caller's receipt is never mutated, and clear the signature:
-	// it cannot be an input to the value it authenticates.
-	unsigned := *r
-	unsigned.Signature = ""
-
-	// Transparency-log anchoring is assigned after the receipt is signed —
-	// anchorReceiptTransparency runs on the already-signed receipt — so the
-	// signer cannot attest to it. contracts.ReceiptChainHash excludes the same
-	// three fields for the same reason; the two canonicalizations must agree on
-	// what is and is not signer-attestable.
-	//
-	// This is a deliberate, bounded carve-out: these fields record where an
-	// external log placed the receipt, not what the kernel decided. They remain
-	// outside the signature and must be verified against the transparency log
-	// itself, never trusted from the receipt.
-	unsigned.Transparency = nil
-	unsigned.LogID = ""
-	unsigned.LeafIndex = 0
-
-	payload, err := canonicalize.JCS(&unsigned)
-	if err != nil {
-		return nil, fmt.Errorf("canonicalize receipt for signing: %w", err)
-	}
-	return payload, nil
-}
-
-// ReceiptPreimageV4 reproduces the legacy eight-field preimage. Retained solely
-// so previously issued receipts remain verifiable; never used for signing.
+// Retained solely so previously issued receipts remain verifiable. Never used
+// for signing: CanonicalizeReceiptV5 is the active preimage.
 func ReceiptPreimageV4(r *contracts.Receipt) []byte {
 	return []byte(CanonicalizeReceipt(
 		r.ReceiptID, r.DecisionID, r.EffectID, r.Status,
@@ -92,18 +28,29 @@ func ReceiptPreimageV4(r *contracts.Receipt) []byte {
 type ReceiptPreimageVersion string
 
 const (
-	// ReceiptPreimageCurrent is the JCS envelope over the whole receipt.
-	ReceiptPreimageCurrent ReceiptPreimageVersion = "v5-jcs"
+	// ReceiptPreimageCurrent is the HELM-303 preimage: a JCS object over the
+	// V4 field list plus verdict, reason_code, policy_hash and session_id.
+	// It is what every signer in this package emits.
+	ReceiptPreimageCurrent ReceiptPreimageVersion = "v5-fields-jcs"
 	// ReceiptPreimageLegacy is the eight-field colon-joined string. Deprecated:
 	// it leaves most of the receipt unsigned and its field boundaries collide.
 	ReceiptPreimageLegacy ReceiptPreimageVersion = "v4-fields"
 )
 
-// VerifyReceiptSignature checks r against pubKeyHex under v5, then v4.
+// VerifyReceiptSignature checks r against pubKeyHex using the preimage its own
+// signature_version declares, and reports which one matched.
 //
-// It returns the version that matched. A v4 match means the receipt predates
-// the envelope change and most of its content is unauthenticated — callers
-// should surface that rather than treat it as equivalent to v5.
+// It deliberately reconstructs exactly one preimage rather than trying several:
+// the version tag on the receipt decides, so a v4-signed receipt relabelled
+// "receipt.v5" fails instead of falling back into a passing verification. A
+// ReceiptPreimageLegacy result means the receipt predates HELM-303 and most of
+// its content is unauthenticated — callers should surface that rather than
+// treat it as equivalent to the current preimage.
+//
+// This is the same payload derivation every signer and verifier in this package
+// uses (ReceiptSigningPayload / ReceiptVerifyPayload). They must not diverge:
+// a package whose public verifier rejects its own signatures is worse than one
+// with no public verifier at all.
 func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt) (bool, ReceiptPreimageVersion, error) {
 	if r == nil {
 		return false, "", fmt.Errorf("receipt is nil")
@@ -112,7 +59,12 @@ func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt) (bool, Recei
 		return false, "", fmt.Errorf("missing signature")
 	}
 
-	payload, err := ReceiptPreimageV5(r)
+	version := ReceiptPreimageCurrent
+	if r.SignatureVersion == "" {
+		version = ReceiptPreimageLegacy
+	}
+
+	payload, err := ReceiptVerifyPayload(r)
 	if err != nil {
 		return false, "", err
 	}
@@ -120,16 +72,8 @@ func VerifyReceiptSignature(pubKeyHex string, r *contracts.Receipt) (bool, Recei
 	if err != nil {
 		return false, "", err
 	}
-	if ok {
-		return true, ReceiptPreimageCurrent, nil
+	if !ok {
+		return false, "", nil
 	}
-
-	ok, err = Verify(pubKeyHex, r.Signature, ReceiptPreimageV4(r))
-	if err != nil {
-		return false, "", err
-	}
-	if ok {
-		return true, ReceiptPreimageLegacy, nil
-	}
-	return false, "", nil
+	return true, version, nil
 }

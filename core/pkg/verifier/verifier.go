@@ -517,40 +517,64 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 	if err != nil || len(sigBytes) != ed25519.SignatureSize {
 		return false
 	}
-	var lamport uint64
-	if v := firstUint(document, "lamport_clock"); v != nil {
-		lamport = *v
-	}
-	// Mirrors crypto.CanonicalizeReceipt — receipt_id:decision_id:effect_id:
-	// status:output_hash:prev_hash:lamport_clock:args_hash — and, when the
-	// document declares signature_version "receipt.v5" (HELM-303), the V5
-	// tail: :receipt.v5:verdict:reason_code:policy_hash:session_id
-	// (crypto.CanonicalizeReceiptV5). Unknown versions fail verification
-	// rather than fall back to a preimage the signer never produced.
-	payload := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
-		firstString(document, "receipt_id"),
-		firstString(document, "decision_id"),
-		firstString(document, "effect_id"),
-		firstString(document, "status"),
-		firstString(document, "output_hash"),
-		firstString(document, "prev_hash"),
-		lamport,
-		firstString(document, "args_hash"),
-	)
-	switch sigVersion := firstString(document, "signature_version"); sigVersion {
-	case "":
-		// legacy V4 — payload as built
-	case "receipt.v5":
-		payload = fmt.Sprintf("%s:%s:%s:%s:%s:%s", payload, sigVersion,
-			firstString(document, "verdict"),
-			firstString(document, "reason_code"),
-			firstString(document, "policy_hash"),
-			firstString(document, "session_id"),
-		)
-	default:
+	payload, err := receiptSigningPreimage(document)
+	if err != nil {
 		return false
 	}
-	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), payload, sigBytes)
+}
+
+// receiptSigningPreimage reconstructs the bytes the receipt's signature covers,
+// selected by the signature_version the document itself declares. Unknown
+// versions fail rather than fall back to a preimage the signer never produced.
+//
+// V5 is derived through contracts.ReceiptPreimageV5 — the same function the
+// signer uses — so this verifier cannot drift from what the kernel signs. Only
+// the legacy V4 preimage is reproduced locally, because it predates that shared
+// derivation and exists solely so already-issued receipts keep verifying.
+func receiptSigningPreimage(document map[string]any) ([]byte, error) {
+	switch sigVersion := firstString(document, "signature_version"); sigVersion {
+	case "":
+		var lamport uint64
+		if v := firstUint(document, "lamport_clock"); v != nil {
+			lamport = *v
+		}
+		// receipt_id:decision_id:effect_id:status:output_hash:prev_hash:
+		// lamport_clock:args_hash — eight of roughly eighty fields, joined
+		// with an unescaped separator. Deprecated; never produced any more.
+		return []byte(fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
+			firstString(document, "receipt_id"),
+			firstString(document, "decision_id"),
+			firstString(document, "effect_id"),
+			firstString(document, "status"),
+			firstString(document, "output_hash"),
+			firstString(document, "prev_hash"),
+			lamport,
+			firstString(document, "args_hash"),
+		)), nil
+	case contracts.ReceiptSignatureV5:
+		receipt, err := receiptFromDocument(document)
+		if err != nil {
+			return nil, err
+		}
+		return contracts.ReceiptPreimageV5(receipt)
+	default:
+		return nil, fmt.Errorf("unsupported receipt signature version %q", sigVersion)
+	}
+}
+
+// receiptFromDocument re-hydrates the receipt struct from the pack's JSON so the
+// shared preimage derivation can be applied to it.
+func receiptFromDocument(document map[string]any) (*contracts.Receipt, error) {
+	raw, err := json.Marshal(document)
+	if err != nil {
+		return nil, fmt.Errorf("re-encode receipt document: %w", err)
+	}
+	var receipt contracts.Receipt
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		return nil, fmt.Errorf("decode receipt document: %w", err)
+	}
+	return &receipt, nil
 }
 
 // verifyWitnessReceiptSignature verifies a witness attestation: an Ed25519

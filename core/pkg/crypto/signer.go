@@ -191,8 +191,11 @@ func (s *Ed25519Signer) Verify(message []byte, signature []byte) bool {
 // SignDecision signs a DecisionRecord
 func (s *Ed25519Signer) SignDecision(d *contracts.DecisionRecord) error {
 	// Canonicalize for signing
-	payload := DecisionSigningPayload(d)
-	sig, err := s.Sign([]byte(payload))
+	payload, err := DecisionSigningPayload(d)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -217,8 +220,11 @@ func (s *Ed25519Signer) SignIntent(i *contracts.AuthorizedExecutionIntent) error
 // SignReceipt signs a Receipt
 func (s *Ed25519Signer) SignReceipt(r *contracts.Receipt) error {
 	// Canonicalize: ID:DecisionID:EffectID:Status:OutputHash
-	payload := ReceiptSigningPayload(r)
-	sig, err := s.Sign([]byte(payload))
+	payload, err := ReceiptSigningPayload(r)
+	if err != nil {
+		return err
+	}
+	sig, err := s.Sign(payload)
 	if err != nil {
 		return err
 	}
@@ -239,7 +245,7 @@ func (s *Ed25519Signer) VerifyDecision(d *contracts.DecisionRecord) (bool, error
 	if perr != nil {
 		return false, perr
 	}
-	return Verify(s.PublicKey(), d.Signature, []byte(payload))
+	return Verify(s.PublicKey(), d.Signature, payload)
 }
 
 func (s *Ed25519Signer) VerifyIntent(i *contracts.AuthorizedExecutionIntent) (bool, error) {
@@ -261,7 +267,7 @@ func (s *Ed25519Signer) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	if perr != nil {
 		return false, perr
 	}
-	return Verify(s.PublicKey(), r.Signature, []byte(payload))
+	return Verify(s.PublicKey(), r.Signature, payload)
 }
 
 // SignCounterfactualReceipt seals (if needed) and signs a counterfactual

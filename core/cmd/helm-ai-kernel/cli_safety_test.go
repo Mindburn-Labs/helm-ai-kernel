@@ -30,7 +30,7 @@ func TestDispatchHelpSkipsHandler(t *testing.T) {
 		},
 	})
 
-	for _, args := range [][]string{{"--help"}, {"-h"}, {"help"}, {"nested", "--help"}} {
+	for _, args := range [][]string{{"--help"}, {"-h"}, {"help"}} {
 		var stdout, stderr bytes.Buffer
 		code, ok := Dispatch("mutating-test-command", args, &stdout, &stderr)
 		if !ok || code != 0 {

@@ -372,6 +372,7 @@ func buildMCPProofArtifacts(runID, scenarioName string, generatedAt time.Time, s
 			ArgsHash:     argsHash,
 			Type:         "mcp_policy_decision",
 			LaunchID:     runID,
+			SessionID:    runID,
 			DecisionHash: decisionHash,
 			Verdict:      decision.Verdict,
 			CreatedAt:    generatedAt,

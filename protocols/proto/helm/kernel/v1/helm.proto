@@ -68,6 +68,10 @@ message DecisionRecord {
   // for — the stable join key across lifecycle events, receipts, and
   // evidence. Optional; outside the decision signature until HELM-303.
   string correlation_id = 13;
+  // HELM-303 decision.v2 signing envelope fields.
+  string signature_version = 14;
+  string phenotype_hash = 15;
+  string policy_content_hash = 16;
 }
 
 message AuthorizedExecutionIntent {
@@ -101,6 +105,15 @@ message Receipt {
   // Product request identity (X-Helm-Correlation-ID) this receipt belongs
   // to. Optional; outside the receipt signature until HELM-303.
   string correlation_id = 17;
+  // HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+  // reason_code fields are also signed by receipt.v5.
+  string signature_version = 18;
+  string status = 19;
+  string output_hash = 20;
+  string prev_hash = 21;
+  string args_hash = 22;
+  string policy_hash = 23;
+  string session_id = 24;
 }
 
 // ── PDP Service ────────────────────────────────────────────────

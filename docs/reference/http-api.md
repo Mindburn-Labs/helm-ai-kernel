@@ -85,3 +85,20 @@ Validate route drift locally:
 cd core
 go test ./cmd/helm-ai-kernel -run 'Test.*Route|Test.*OpenAPI|Test.*Receipt|Test.*Boundary' -count=1
 ```
+
+## v0.8 client migration (source target)
+
+First-party SDKs now send a canonical `EvaluateRequest`: non-blank top-level
+`tool`, `effect_level`, and `session_id`. The runtime records the authenticated
+principal; request-body `principal` and `agent_id` do not establish identity.
+
+Direct-daemon callers may temporarily retain the legacy `action`/`resource`
+shape only when `context.session_id` is non-blank. That compatibility path is
+not an SDK contract. Migrate SDK clients to the canonical request and typed
+`EvaluateResponse` before relying on the v0.8 release target.
+
+Receipt reads are tenant-scoped. Prefer `session_id`; legacy `agent` is an
+alias for that signed session ID and is never an executor filter. A session
+listing accepts `since=lamport:<n>`. A tenant-wide listing must continue with
+the opaque `v1.<base64url>` `next_cursor` (or SSE event ID), because scalar
+Lamport clocks can collide across signed sessions.

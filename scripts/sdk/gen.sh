@@ -66,6 +66,7 @@ done
 [ "$TS_MODEL_COUNT" -gt 0 ] || fail "[ts] generator produced zero model files"
 python3 - "$PROJECT_ROOT/sdk/ts/src/types.gen.ts" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 path = Path(sys.argv[1])
@@ -198,6 +199,7 @@ cat > "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'HEADER'
 from __future__ import annotations
 import json
 import pprint
+import re
 from datetime import datetime
 from typing import Annotated, Any, ClassVar, Dict, List, Literal, Optional, Set, Union
 
@@ -213,55 +215,52 @@ done
 [ "$PY_MODEL_COUNT" -gt 0 ] || fail "[py] generator produced zero model files"
 python3 - "$PROJECT_ROOT/sdk/python/helm_sdk/types_gen.py" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 path = Path(sys.argv[1])
 s = path.read_text()
 
-# Patch-as-assertion: every expected enum-validator @classmethod injection is
-# tracked and verified; a renamed model or validator hard-fails the build.
-classmethod_validators = {
-    "AccountEntitlements": {"plan_validate_enum"},
-    "AccountSession": {"plan_validate_enum"},
-    "BoundaryStatus": {
-        "status_validate_enum", "mode_validate_enum", "receipt_signer_validate_enum",
-        "receipt_store_validate_enum", "pdp_validate_enum", "mcp_firewall_validate_enum",
-        "sandbox_validate_enum", "authz_validate_enum", "evidence_verifier_validate_enum",
-        "checkpoint_log_validate_enum",
-    },
-    "EntitlementDecision": {"user_state_validate_enum"},
-    "EnvExposurePolicy": {"mode_validate_enum"},
-    "EvidenceEnvelopeExportRequest": {"envelope_validate_enum"},
-    "LocalConsoleRuntimeConfig": {"profile_validate_enum", "entitlements_validate_enum"},
-    "LocalSessionExchangeResponse": {"entitlements_validate_enum"},
-    "OnboardingRunStepRequest": {"step_id_validate_enum"},
-    "OnboardingState": {"mode_validate_enum", "entitlements_validate_enum"},
-    "OnboardingStep": {"id_validate_enum", "status_validate_enum", "verdict_validate_enum"},
-    "Receipt": {"signature_profile_validate_enum"},
-}
-applied_validators: dict[str, set[str]] = {}
+# Patch-as-assertion: Pydantic v2 field validators whose generated signature
+# receives cls must be explicit classmethods. Keep this structural rather than
+# model-specific so a newly generated validator cannot silently miss the fix.
 lines = s.splitlines()
+
+def validator_definition_index(lines, decorator_index):
+    indent = len(lines[decorator_index]) - len(lines[decorator_index].lstrip())
+    for index in range(decorator_index + 1, len(lines)):
+        stripped = lines[index].lstrip()
+        if re.match(r"^def\s+", stripped):
+            return index
+        if stripped.startswith("@") or stripped.startswith("#") or not stripped:
+            continue
+        line_indent = len(lines[index]) - len(stripped)
+        if line_indent <= indent:
+            return None
+    return None
+
+def classmethod_present(lines, decorator_index, definition_index):
+    return any(line.lstrip() == "@classmethod" for line in lines[decorator_index + 1:definition_index])
+
 out = []
-current_class = None
 for i, line in enumerate(lines):
-    if line.startswith("class ") and line.endswith("(BaseModel):"):
-        current_class = line.split("(", 1)[0].split()[1]
     out.append(line)
-    if line.lstrip().startswith("@field_validator(") and current_class in classmethod_validators:
-        next_line = lines[i + 1] if i + 1 < len(lines) else ""
-        method_name = next_line.strip().split("(", 1)[0].removeprefix("def ")
-        if method_name in classmethod_validators[current_class]:
+    if line.lstrip().startswith("@field_validator("):
+        definition_index = validator_definition_index(lines, i)
+        if definition_index is not None and re.match(r"^\s*def\s+\w+\(cls(?:,|\))", lines[definition_index]) and not classmethod_present(lines, i, definition_index):
             out.append(f"{line[:len(line) - len(line.lstrip())]}@classmethod")
-            applied_validators.setdefault(current_class, set()).add(method_name)
 s = "\n".join(out)
 
-for class_name, expected_methods in classmethod_validators.items():
-    applied_methods = applied_validators.get(class_name, set())
-    if applied_methods != expected_methods:
-        raise SystemExit(
-            f"py patch did not apply: {class_name} expected @classmethod validators "
-            f"{sorted(expected_methods)}, applied {sorted(applied_methods)}"
-        )
+generated_lines = s.splitlines()
+missing_classmethods = []
+for i, line in enumerate(generated_lines):
+    if not line.lstrip().startswith("@field_validator("):
+        continue
+    definition_index = validator_definition_index(generated_lines, i)
+    if definition_index is not None and re.match(r"^\s*def\s+\w+\(cls(?:,|\))", generated_lines[definition_index]) and not classmethod_present(generated_lines, i, definition_index):
+        missing_classmethods.append(generated_lines[definition_index].strip().split("(", 1)[0])
+if missing_classmethods:
+    raise SystemExit(f"py patch did not apply: missing @classmethod for {missing_classmethods}")
 
 receipt_public_key_set = (
     '            "signature_algorithm": obj.get("signature_algorithm"),\n'
@@ -592,6 +591,85 @@ s = must_replace(
     "// Union matching here does not enforce full JSON schema constraints.",
     "rewrite union validation note",
 )
+
+# openapi-generator emits map query values twice: a raw value that has no
+# matching format placeholder, followed by the URL-encoded value that should
+# fill the final placeholder. Remove the raw argument for every generated map
+# field so the query string is encoded and String.format receives four values
+# for four placeholders. Map keys are strings, so their deepObject placeholder
+# must also be %s rather than the list-index %d form.
+lines = s.splitlines()
+patched_lines = []
+map_value_patches = 0
+for line in lines:
+    raw_prefix, separator, encoded = line.partition(", URLEncoder.encode(String.valueOf(")
+    candidate = raw_prefix.strip()
+    if (
+        separator
+        and candidate.endswith(".get(_key)")
+        and encoded.startswith(candidate + "), StandardCharsets.UTF_8)")
+    ):
+        indent = raw_prefix[: len(raw_prefix) - len(candidate)]
+        line = indent + "URLEncoder.encode(String.valueOf(" + encoded
+        map_value_patches += 1
+    patched_lines.append(line)
+s = "\n".join(patched_lines)
+if map_value_patches == 0:
+    raise SystemExit("java patch did not apply (encode map query values): no raw map values matched")
+if any(".get(_key), URLEncoder.encode(String.valueOf(" in line for line in patched_lines):
+    raise SystemExit("java postcondition failed: raw map query value survived encoding patch")
+
+map_key_format = 'String.format("%s%d%s", containerPrefix, _key, containerSuffix)'
+map_key_format_count = s.count(map_key_format)
+if map_key_format_count == 0:
+    raise SystemExit("java patch did not apply (string map deepObject key): no map key placeholders matched")
+s = s.replace(
+    map_key_format,
+    'String.format("%s%s%s", containerPrefix, _key, containerSuffix)',
+)
+
+# Scalar-only query serializers inherit list/map container locals from the
+# generator. Remove them only when they are demonstrably unused in that method;
+# collection serializers retain the declarations and assignments they need.
+method_marker = "  public String toUrlQueryString(String prefix) {"
+cursor = 0
+chunks = []
+unused_container_methods = 0
+while True:
+    start = s.find(method_marker, cursor)
+    if start == -1:
+        chunks.append(s[cursor:])
+        break
+    chunks.append(s[cursor:start])
+    opening_brace = s.find("{", start)
+    depth = 0
+    end = opening_brace
+    while end < len(s):
+        if s[end] == "{":
+            depth += 1
+        elif s[end] == "}":
+            depth -= 1
+            if depth == 0:
+                end += 1
+                break
+        end += 1
+    if depth != 0:
+        raise SystemExit("java patch failed (find query serializer boundary): unmatched braces")
+    method = s[start:end]
+    if method.count("containerSuffix") == 2 and method.count("containerPrefix") == 2:
+        for declaration in (
+            '    String containerSuffix = "";\n',
+            '    String containerPrefix = "";\n',
+            '      containerSuffix = "]";\n',
+            '      containerPrefix = "[";\n',
+        ):
+            method = method.replace(declaration, "")
+        unused_container_methods += 1
+    chunks.append(method)
+    cursor = end
+s = "".join(chunks)
+if unused_container_methods == 0:
+    raise SystemExit("java patch did not apply (remove unused query container locals): no scalar serializers matched")
 s = s + "\n}\n"
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY

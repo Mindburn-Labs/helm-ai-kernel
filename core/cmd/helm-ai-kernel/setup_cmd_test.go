@@ -3,16 +3,19 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
@@ -26,12 +29,291 @@ func TestSetupNoArgsPrintsChooser(t *testing.T) {
 	for _, want := range []string{
 		"helm-ai-kernel setup claude-code --yes",
 		"helm-ai-kernel setup codex --yes",
+		"helm-ai-kernel setup --quickstart --profile mcp --yes",
 		"helm-ai-kernel setup --client cursor --print-config",
-		"No config is written without --yes.",
+		"Interactive terminals show the scoped preview",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("setup chooser missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestConfirmSetupInstallRequiresExactApproval(t *testing.T) {
+	summary := setupSummary{
+		Target:           "codex",
+		Scope:            "project",
+		Workspace:        "/workspace",
+		ClientConfigPath: "/workspace/.codex/config.toml",
+		HookConfigPath:   "/workspace/.codex/hooks.json",
+		DataDir:          "/state",
+		RecoveryCommand:  "helm-ai-kernel setup repair codex --scope project --yes --data-dir /state",
+	}
+	for _, test := range []struct {
+		name      string
+		input     string
+		wantError error
+		wantApply bool
+	}{
+		{name: "cancel", input: "no\n", wantError: ui.ErrConfirmationRequired},
+		{name: "approve", input: "APPROVE\n", wantApply: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var chrome strings.Builder
+			applied := false
+			err := confirmSetupInstall(
+				strings.NewReader(test.input),
+				&chrome,
+				ui.Capabilities{Interactive: true, Width: 100},
+				summary,
+				[]string{"configure the HELM MCP server", "configure the HELM PreToolUse hook"},
+				func() error {
+					applied = true
+					return nil
+				},
+			)
+			if test.wantError != nil && !errors.Is(err, test.wantError) {
+				t.Fatalf("confirmation error = %v, want %v", err, test.wantError)
+			}
+			if test.wantError == nil && err != nil {
+				t.Fatalf("confirmation error = %v", err)
+			}
+			if applied != test.wantApply {
+				t.Fatalf("apply = %v, want %v", applied, test.wantApply)
+			}
+			for _, want := range []string{"HELM setup preview", "MCP config", "Hook config", "Data dir", "Recovery", "Type APPROVE"} {
+				if !strings.Contains(chrome.String(), want) {
+					t.Fatalf("confirmation preview missing %q:\n%s", want, chrome.String())
+				}
+			}
+			if strings.Contains(chrome.String(), "\x1b") {
+				t.Fatalf("confirmation preview emitted ANSI: %q", chrome.String())
+			}
+		})
+	}
+}
+
+func TestSetupQuickstartFrontDoorPreviewsBeforeYesAndForwardsConsole(t *testing.T) {
+	original := setupRunFirstRun
+	t.Cleanup(func() { setupRunFirstRun = original })
+	var calls [][]string
+	setupRunFirstRun = func(args []string, _, _ io.Writer) int {
+		calls = append(calls, append([]string(nil), args...))
+		return 0
+	}
+
+	dataDir := t.TempDir()
+	base := []string{"helm-ai-kernel", "setup", "--quickstart", "--profile", "codex", "--data-dir", dataDir, "--console", "--console-port", "0", "--no-open"}
+	var stdout, stderr bytes.Buffer
+	if code := Run(base, &stdout, &stderr); code != 2 {
+		t.Fatalf("unconfirmed quickstart exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	wantPreview := []string{"--profile", "codex", "--data-dir", dataDir, "--console", "--console-port", "0", "--no-open", "--dry-run"}
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], wantPreview) {
+		t.Fatalf("preview calls=%#v, want %#v", calls, wantPreview)
+	}
+	if !strings.Contains(stderr.String(), "no changes made") {
+		t.Fatalf("missing confirmation guidance: %s", stderr.String())
+	}
+
+	calls = nil
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run(append(base, "--yes", "--json"), &stdout, &stderr); code != 0 {
+		t.Fatalf("confirmed quickstart exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	wantStart := []string{"--profile", "codex", "--data-dir", dataDir, "--console", "--console-port", "0", "--no-open", "--yes", "--json"}
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], wantStart) {
+		t.Fatalf("start calls=%#v, want %#v", calls, wantStart)
+	}
+}
+
+func TestSetupQuickstartResetPreviewIsAuthorizedAndRerunPreservesOptions(t *testing.T) {
+	original := setupRunFirstRun
+	t.Cleanup(func() { setupRunFirstRun = original })
+	var calls [][]string
+	setupRunFirstRun = func(args []string, _, _ io.Writer) int {
+		calls = append(calls, append([]string(nil), args...))
+		return 0
+	}
+
+	dataDir := filepath.Join(t.TempDir(), "helm state")
+	args := []string{
+		"helm-ai-kernel", "setup", "--quickstart", "--profile", "claude-code", "--data-dir", dataDir,
+		"--console", "--console-port", "0", "--no-open", "--offline", "--reset", "--json",
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run(args, &stdout, &stderr); code != 2 {
+		t.Fatalf("unconfirmed reset preview exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	wantPreview := []string{
+		"--profile", "claude", "--data-dir", dataDir,
+		"--console", "--console-port", "0", "--no-open", "--offline", "--reset", "--yes", "--dry-run",
+	}
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], wantPreview) {
+		t.Fatalf("reset preview calls=%#v, want %#v", calls, wantPreview)
+	}
+	wantRerun := "helm-ai-kernel setup --quickstart --profile 'claude' --data-dir " + shellQuote(dataDir) + " --console --console-port '0' --no-open --offline --reset --yes --json"
+	if !strings.Contains(stderr.String(), wantRerun) {
+		t.Fatalf("rerun guidance=%q, want command %q", stderr.String(), wantRerun)
+	}
+
+	calls = nil
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run(append(args, "--dry-run"), &stdout, &stderr); code != 0 {
+		t.Fatalf("explicit reset preview exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	wantDryRunPreview := append(append([]string(nil), wantPreview...), "--json")
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], wantDryRunPreview) {
+		t.Fatalf("explicit reset preview calls=%#v, want %#v", calls, wantDryRunPreview)
+	}
+}
+
+func TestSetupQuickstartDryRunForwardsJSON(t *testing.T) {
+	original := setupRunFirstRun
+	t.Cleanup(func() { setupRunFirstRun = original })
+	var calls [][]string
+	setupRunFirstRun = func(args []string, _, _ io.Writer) int {
+		calls = append(calls, append([]string(nil), args...))
+		return 0
+	}
+
+	if code := Run([]string{"helm-ai-kernel", "setup", "--quickstart", "--profile", "codex", "--dry-run", "--json"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("setup quickstart preview exit=%d", code)
+	}
+	want := []string{"--profile", "codex", "--data-dir", defaultQuickstartDataDir(), "--dry-run", "--json"}
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], want) {
+		t.Fatalf("preview calls=%#v, want %#v", calls, want)
+	}
+}
+
+func TestSetupQuickstartResetPreviewReachesQuickstartWithoutMutation(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeQuickstartOwnershipMarker(dataDir); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(dataDir, "keep")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup", "--quickstart", "--reset", "--offline", "--data-dir", dataDir}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stdout.String(), `"operation":"preview"`) || !strings.Contains(stderr.String(), "no changes made") {
+		t.Fatalf("reset preview exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("reset preview mutated state: %v", err)
+	}
+}
+
+func TestQuickstartPreviewPreflightsExistingDirectoryAcrossEntryPoints(t *testing.T) {
+	original := setupRunFirstRun
+	setupRunFirstRun = runQuickstartCmd
+	t.Cleanup(func() { setupRunFirstRun = original })
+
+	dataDir := filepath.Join(t.TempDir(), "foreign-state")
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(dataDir, "keep")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var directStdout, directStderr bytes.Buffer
+	directCode := runQuickstartCmd([]string{"--dry-run", "--offline", "--data-dir", dataDir}, &directStdout, &directStderr)
+	var setupStdout, setupStderr bytes.Buffer
+	setupCode := Run([]string{"helm-ai-kernel", "setup", "--quickstart", "--dry-run", "--offline", "--data-dir", dataDir}, &setupStdout, &setupStderr)
+
+	if directCode != 1 || setupCode != directCode {
+		t.Fatalf("preview codes direct=%d setup=%d direct stderr=%q setup stderr=%q", directCode, setupCode, directStderr.String(), setupStderr.String())
+	}
+	if directStdout.Len() != 0 || setupStdout.Len() != 0 || directStderr.String() != setupStderr.String() || !strings.Contains(directStderr.String(), "without a valid HELM quickstart ownership marker") {
+		t.Fatalf("preview mismatch direct stdout=%q stderr=%q setup stdout=%q stderr=%q", directStdout.String(), directStderr.String(), setupStdout.String(), setupStderr.String())
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("foreign preview mutated state: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dataDir, quickstartOwnershipMarker)); !os.IsNotExist(err) {
+		t.Fatalf("foreign preview created ownership marker: %v", err)
+	}
+}
+
+func TestSetupFrontDoorRejectsExplicitCrossModeFlags(t *testing.T) {
+	original := setupRunFirstRun
+	t.Cleanup(func() { setupRunFirstRun = original })
+	calls := 0
+	setupRunFirstRun = func([]string, io.Writer, io.Writer) int {
+		calls++
+		return 0
+	}
+
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "quickstart profile in support matrix mode",
+			args: []string{"--profile", "codex", "--yes"},
+			want: "--profile requires --quickstart",
+		},
+		{
+			name: "support matrix client in quickstart mode",
+			args: []string{"--quickstart", "--client", "cursor", "--yes"},
+			want: "--client is not valid with --quickstart",
+		},
+		{
+			name: "config print in quickstart mode",
+			args: []string{"--quickstart", "--print-config", "--yes"},
+			want: "--print-config is not valid with --quickstart",
+		},
+		{
+			name: "client in json support matrix mode",
+			args: []string{"--json", "--client", "cursor"},
+			want: "--client is not valid with the support-matrix mode",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Run(append([]string{"helm-ai-kernel", "setup"}, test.args...), &stdout, &stderr)
+			if code != 2 || stdout.Len() != 0 || !strings.Contains(stderr.String(), test.want) {
+				t.Fatalf("setup %v code=%d stdout=%q stderr=%q", test.args, code, stdout.String(), stderr.String())
+			}
+		})
+	}
+	if calls != 0 {
+		t.Fatalf("invalid front-door flags delegated to Quickstart %d times", calls)
+	}
+}
+
+func TestSetupInstallQuickstartForwardsConsoleIntent(t *testing.T) {
+	tmp := t.TempDir()
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	state := stubSetupSideEffects(t)
+	dataDir := filepath.Join(tmp, "helm")
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "setup", "codex", "--scope", "project", "--workspace", workspace,
+		"--yes", "--quickstart", "--console", "--console-port", "0", "--no-open", "--json", "--data-dir", dataDir,
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("setup exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	want := []string{
+		"--profile", "codex", "--data-dir", filepath.Join(dataDir, "quickstart"),
+		"--console", "--console-port", "0", "--no-open",
+	}
+	if !reflect.DeepEqual(state.quickstartArgs, want) {
+		t.Fatalf("quickstart args=%#v, want %#v", state.quickstartArgs, want)
 	}
 }
 
@@ -57,6 +339,11 @@ func TestSetupHookCommandIncludesExplicitSigningSeedFile(t *testing.T) {
 		t.Fatalf("uninstall command did not preserve explicit signer source: %s", removal)
 	} else if !strings.Contains(removal, "--policy-profile '/private/approved/policy.json'") {
 		t.Fatalf("uninstall command did not preserve policy profile: %s", removal)
+	}
+	if recovery := setupRecoveryCommand(opts); !strings.Contains(recovery, "--signing-seed-file '/private/approved/workstation.seed'") {
+		t.Fatalf("recovery command did not preserve explicit signer source: %s", recovery)
+	} else if !strings.Contains(recovery, "--policy-profile '/private/approved/policy.json'") {
+		t.Fatalf("recovery command did not preserve policy profile: %s", recovery)
 	}
 }
 

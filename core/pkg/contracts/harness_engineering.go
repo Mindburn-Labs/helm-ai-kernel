@@ -55,6 +55,7 @@ type HarnessChangeContract struct {
 // accessibility evidence before an actuator can perform it.
 type GroundedActionRef struct {
 	GroundedActionID     string    `json:"grounded_action_id"`
+	ReceiptRefs          []string  `json:"receipt_refs,omitempty"`
 	ScreenshotHash       string    `json:"screenshot_hash"`
 	DOMOrAXSnapshotHash  string    `json:"dom_or_ax_snapshot_hash"`
 	TargetRef            string    `json:"target_ref"`
@@ -96,6 +97,9 @@ func (s VerificationScope) Validate() error {
 	if strings.TrimSpace(s.VerificationScopeID) == "" {
 		return fmt.Errorf("verification_scope_id is required")
 	}
+	if err := validateOptionalReceiptRefs(s.ReceiptRefs); err != nil {
+		return err
+	}
 	if !isSHA256Ref(s.SubjectHash) {
 		return fmt.Errorf("subject_hash must be sha256-prefixed")
 	}
@@ -133,6 +137,9 @@ func (s VerificationScope) Seal() (VerificationScope, error) {
 func (t PlanTransaction) Validate() error {
 	if strings.TrimSpace(t.PlanTransactionID) == "" {
 		return fmt.Errorf("plan_transaction_id is required")
+	}
+	if err := validateOptionalReceiptRefs(t.ReceiptRefs); err != nil {
+		return err
 	}
 	if !isSHA256Ref(t.PlanHash) {
 		return fmt.Errorf("plan_hash must be sha256-prefixed")
@@ -265,6 +272,9 @@ func (a GroundedActionRef) Validate() error {
 	if strings.TrimSpace(a.GroundedActionID) == "" {
 		return fmt.Errorf("grounded_action_id is required")
 	}
+	if err := validateOptionalReceiptRefs(a.ReceiptRefs); err != nil {
+		return err
+	}
 	if !isSHA256Ref(a.ScreenshotHash) || !isSHA256Ref(a.DOMOrAXSnapshotHash) || !isSHA256Ref(a.PolicyHash) {
 		return fmt.Errorf("screenshot_hash, dom_or_ax_snapshot_hash, and policy_hash must be sha256-prefixed")
 	}
@@ -377,4 +387,13 @@ func nonEmptyStrings(values []string) []string {
 		}
 	}
 	return out
+}
+
+func validateOptionalReceiptRefs(refs []string) error {
+	for _, ref := range refs {
+		if strings.TrimSpace(ref) == "" {
+			return fmt.Errorf("receipt_refs must not contain blank values")
+		}
+	}
+	return nil
 }

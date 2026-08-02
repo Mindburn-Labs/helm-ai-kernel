@@ -1,5 +1,8 @@
 package crypto
 
+// quantum_posture: KeyRing dispatches configured classical Ed25519, ML-DSA,
+// or hybrid signers by key ID; it adds no independent cryptographic assurance.
+
 import (
 	"fmt"
 	"sort"
@@ -223,20 +226,48 @@ func (k *KeyRing) SignReceipt(r *contracts.Receipt) error {
 	return k.signers[selectedKey].SignReceipt(r)
 }
 
-// VerifyReceipt verifies a receipt against the keyring.
-// If the receipt's signature contains a key ID prefix (e.g. "ed25519:key-id:sig"),
-// verification targets that specific key. Otherwise falls back to trying all keys.
+// VerifyReceipt verifies a receipt against the trusted keyring members.
+// Profile-aware signers validate the receipt's declared profile and signature
+// envelope together, so a hybrid receipt cannot be downgraded to classical.
 func (k *KeyRing) VerifyReceipt(r *contracts.Receipt) (bool, error) {
 	k.mu.RLock()
 	defer k.mu.RUnlock()
-	// Try all keys since receipt doesn't have a separate key ID field yet.
-	// Future: add SignatureType to Receipt for targeted verification.
 	for _, s := range k.signers {
-		if v, ok := s.(Verifier); ok {
-			if verified, err := v.VerifyReceipt(r); verified && err == nil {
-				return true, nil
-			}
+		verified, err := verifyReceiptWithKeyringSigner(s, r)
+		if verified && err == nil {
+			return true, nil
 		}
 	}
 	return false, fmt.Errorf("no key verified the receipt")
+}
+
+func verifyReceiptWithKeyringSigner(signer Signer, receipt *contracts.Receipt) (bool, error) {
+	switch signer := signer.(type) {
+	case *Ed25519Signer:
+		if signer == nil {
+			return false, fmt.Errorf("nil ed25519 signer")
+		}
+		_, valid, err := VerifyReceiptProfile(signer.PublicKey(), "", receipt)
+		return valid, err
+	case *MLDSASigner:
+		if signer == nil {
+			return false, fmt.Errorf("nil ml-dsa-65 signer")
+		}
+		_, valid, err := VerifyReceiptProfile("", signer.PublicKey(), receipt)
+		return valid, err
+	case *HybridSigner:
+		if signer == nil || signer.Ed25519Signer() == nil || signer.MLDSASigner() == nil {
+			return false, fmt.Errorf("nil hybrid signer")
+		}
+		_, valid, err := VerifyReceiptProfile(signer.Ed25519Signer().PublicKey(), signer.MLDSASigner().PublicKey(), receipt)
+		return valid, err
+	default:
+		verifier, ok := signer.(interface {
+			VerifyReceipt(*contracts.Receipt) (bool, error)
+		})
+		if !ok {
+			return false, fmt.Errorf("signer does not verify receipts")
+		}
+		return verifier.VerifyReceipt(receipt)
+	}
 }

@@ -1,3 +1,7 @@
+// quantum_posture: legacy onboarding invokes the existing classical Ed25519
+// trust-root helper; this compatibility path adds no post-quantum or hybrid
+// cryptographic control.
+
 package main
 
 import (
@@ -9,22 +13,108 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
 )
 
-// runOnboardCmd implements `helm-ai-kernel onboard` — one-command local setup.
-//
-// It initializes a SQLite-backed local store, generates an Ed25519 trust root,
-// auto-detects existing agent surface (SDKs, MCP configs) in the current
-// directory, and prints deterministic next steps tailored to what it found.
-// Zero external dependencies required.
-//
-// Exit codes:
-//
-//	0 = success
-//	2 = config error
+// onboard is retained as a compatibility shim for scripts that used the
+// former first-run command. New operators should use setup so profile choice,
+// preview, confirmation, and recovery all live in one journey.
+var runOnboardSetup = runSetupFrontDoorFlags
+
 func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printOnboardUsage(stdout)
+		return 0
+	}
+	if isLegacyOnboardInvocation(args) {
+		return runLegacyOnboardCmd(args, stdout, stderr)
+	}
+	fs := flag.NewFlagSet("onboard", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	profile := fs.String("profile", "mcp", "Compatibility first-run profile")
+	yes := fs.Bool("yes", false, "Confirm first-run changes")
+	dryRun := fs.Bool("dry-run", false, "Preview without changing local state")
+	jsonOut := fs.Bool("json", false, "Print machine-readable Quickstart output")
+	dataDir := fs.String("data-dir", "data", "Directory for HELM first-run state")
+	console := fs.Bool("console", false, "Start the packaged local Console")
+	consolePort := fs.Int("console-port", 3400, "Local Console port (0 chooses an ephemeral port)")
+	noOpen := fs.Bool("no-open", false, "Do not open the local Console in a browser")
+	offline := fs.Bool("offline", false, "Refuse optional network checks during first run")
+	reset := fs.Bool("reset", false, "Replace HELM-owned first-run state")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "onboard: unexpected argument %q\n", fs.Arg(0))
+		return 2
+	}
+	consolePortSet := false
+	fs.Visit(func(f *flag.Flag) {
+		consolePortSet = consolePortSet || f.Name == "console-port"
+	})
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "onboard is deprecated; forwarding to `helm-ai-kernel setup --quickstart`. Existing --yes scripts remain supported.")
+	}
+	forwarded := []string{
+		"--quickstart",
+		"--profile", *profile,
+		"--data-dir", *dataDir,
+	}
+	if *yes {
+		forwarded = append(forwarded, "--yes")
+	}
+	if *dryRun {
+		forwarded = append(forwarded, "--dry-run")
+	}
+	if *jsonOut {
+		forwarded = append(forwarded, "--json")
+	}
+	if *console {
+		forwarded = append(forwarded, "--console", "--console-port", fmt.Sprint(*consolePort))
+	} else if consolePortSet {
+		// Preserve an explicitly supplied port so setup remains the single
+		// validation owner for the Console option contract.
+		forwarded = append(forwarded, "--console-port", fmt.Sprint(*consolePort))
+	}
+	if *noOpen {
+		forwarded = append(forwarded, "--no-open")
+	}
+	if *offline {
+		forwarded = append(forwarded, "--offline")
+	}
+	if *reset {
+		forwarded = append(forwarded, "--reset")
+	}
+	return runOnboardSetup(forwarded, stdout, stderr)
+}
+
+// isLegacyOnboardInvocation keeps the documented, explicitly confirmed script
+// contract. New flags deliberately route to the guided Quickstart flow.
+func isLegacyOnboardInvocation(args []string) bool {
+	confirmed := false
+	for index := 0; index < len(args); index++ {
+		switch arg := args[index]; {
+		case arg == "--yes" || arg == "--yes=true":
+			confirmed = true
+		case arg == "--data-dir":
+			if index+1 >= len(args) {
+				return false
+			}
+			index++
+		case strings.HasPrefix(arg, "--data-dir="):
+		default:
+			return false
+		}
+	}
+	return confirmed
+}
+
+// runLegacyOnboardCmd preserves the on-disk contract used by existing
+// `onboard --yes [--data-dir DIR]` scripts. It is intentionally not promoted
+// in the first-run UX; use setup --quickstart for profile-aware onboarding.
+func runLegacyOnboardCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("onboard", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 
@@ -32,19 +122,15 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 		yes     bool
 		dataDir string
 	)
-
 	cmd.BoolVar(&yes, "yes", false, "Skip interactive confirmation")
 	cmd.StringVar(&dataDir, "data-dir", "data", "Directory for HELM data (SQLite, keys, evidence)")
-
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
 
-	// Banner
 	fmt.Fprintf(stdout, "\n%s🚀 HELM Onboard%s\n", ColorBold+ColorBlue, ColorReset)
 	fmt.Fprintf(stdout, "%s   Local fail-closed execution controls.%s\n\n", ColorGray, ColorReset)
 
-	// Step 1: Create data directory
 	fmt.Fprintf(stdout, "%s[1/5]%s Creating data directory...  ", ColorBold, ColorReset)
 	if err := os.MkdirAll(filepath.Join(dataDir, "artifacts"), 0750); err != nil {
 		fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
@@ -56,10 +142,8 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%s✓%s %s\n", ColorGreen, ColorReset, dataDir)
 
-	// Step 2: Initialize SQLite
 	fmt.Fprintf(stdout, "%s[2/5]%s Initializing local store...  ", ColorBold, ColorReset)
-	ctx := context.Background()
-	db, _, _, err := setupLiteModeWithDataDir(ctx, dataDir)
+	db, _, _, err := setupLiteModeWithDataDir(context.Background(), dataDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
 		return 2
@@ -67,7 +151,6 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 	defer db.Close()
 	fmt.Fprintf(stdout, "%s✓%s SQLite at %s/helm.db\n", ColorGreen, ColorReset, dataDir)
 
-	// Step 3: Generate Ed25519 trust root
 	fmt.Fprintf(stdout, "%s[3/5]%s Generating trust root...    ", ColorBold, ColorReset)
 	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
@@ -77,10 +160,8 @@ func runOnboardCmd(args []string, stdout, stderr io.Writer) int {
 	pubKeyHex := hex.EncodeToString(signer.PublicKeyBytes())
 	fmt.Fprintf(stdout, "%s✓%s Ed25519 %s...%s\n", ColorGreen, ColorReset, pubKeyHex[:16], pubKeyHex[len(pubKeyHex)-8:])
 
-	// Step 4: Create helm.yaml if it doesn't exist
 	fmt.Fprintf(stdout, "%s[4/5]%s Writing configuration...    ", ColorBold, ColorReset)
-	configPath := "helm.yaml"
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+	if _, err := os.Stat("helm.yaml"); os.IsNotExist(err) {
 		config := `# HELM Configuration — generated by 'helm-ai-kernel onboard'
 version: "0.2"
 kernel:
@@ -90,7 +171,7 @@ kernel:
 trust:
   root_public_key: "` + pubKeyHex + `"
 `
-		if err := os.WriteFile(configPath, []byte(config), 0600); err != nil {
+		if err := os.WriteFile("helm.yaml", []byte(config), 0600); err != nil {
 			fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
 			return 2
 		}
@@ -99,7 +180,6 @@ trust:
 		fmt.Fprintf(stdout, "%s✓%s helm.yaml (exists)\n", ColorGreen, ColorReset)
 	}
 
-	// Step 5: Auto-detect existing agent surface (read-only, zero network)
 	fmt.Fprintf(stdout, "%s[5/5]%s Detecting agent surface...  ", ColorBold, ColorReset)
 	report, scanErr := shadow.NewScanner().Scan(".")
 	if scanErr != nil {
@@ -108,34 +188,28 @@ trust:
 		fmt.Fprintf(stdout, "%s✓%s grade %s — %s\n", ColorGreen, ColorReset, report.Grade.Letter, report.Grade.Reason)
 	}
 
-	// Success + next steps
 	fmt.Fprintf(stdout, "\n%s────────────────────────────────────────────────%s\n", ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s✅ HELM is ready.%s\n\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "%sNext steps:%s\n\n", ColorBold, ColorReset)
-
-	step := 1
-	if report != nil && !report.Grade.BoundaryPresent && (report.Grade.SDKSignals > 0 || report.Grade.MCPServersDetected > 0) {
-		fmt.Fprintf(stdout, "  %s%d.%s Ungoverned agent surface detected (%d SDK signal(s), %d MCP server(s)) — inspect it:\n", ColorBold+ColorCyan, step, ColorReset, report.Grade.SDKSignals, report.Grade.MCPServersDetected)
-		fmt.Fprintf(stdout, "     %shelm scan%s\n\n", ColorBold, ColorReset)
-		step++
-	}
-
-	fmt.Fprintf(stdout, "  %s%d.%s Run the starter organization demo:\n", ColorBold+ColorCyan, step, ColorReset)
-	fmt.Fprintf(stdout, "     %shelm demo organization --template starter%s\n\n", ColorBold, ColorReset)
-	step++
-
-	fmt.Fprintf(stdout, "  %s%d.%s Start the governance proxy:\n", ColorBold+ColorCyan, step, ColorReset)
-	fmt.Fprintf(stdout, "     %shelm proxy --upstream http://127.0.0.1:19090/v1%s\n\n", ColorBold, ColorReset)
-	step++
-
-	fmt.Fprintf(stdout, "  %s%d.%s Start the MCP server:\n", ColorBold+ColorCyan, step, ColorReset)
-	fmt.Fprintf(stdout, "     %shelm mcp serve%s\n\n", ColorBold, ColorReset)
-
+	fmt.Fprintf(stdout, "  %s1.%s Continue with the guided local proof:\n", ColorBold+ColorCyan, ColorReset)
+	quickstartDataDir := filepath.Join(dataDir, "quickstart")
+	fmt.Fprintf(stdout, "     %shelm-ai-kernel setup --quickstart --profile mcp --data-dir %s --yes%s\n\n", ColorBold, shellQuote(quickstartDataDir), ColorReset)
 	fmt.Fprintf(stdout, "%sDocs:%s https://github.com/Mindburn-Labs/helm-ai-kernel\n\n", ColorGray, ColorReset)
 
 	return 0
 }
 
+func printOnboardUsage(w io.Writer) {
+	fmt.Fprintln(w, "Deprecated: `onboard` preserves only the legacy explicit script contract.")
+	fmt.Fprintln(w, "Use: helm-ai-kernel setup --quickstart --profile <claude|codex|mcp|openai-compatible> --yes")
+	fmt.Fprintln(w, "Existing scripts can keep: helm-ai-kernel onboard --yes [--data-dir DIR]")
+}
+
 func init() {
-	Register(Subcommand{Name: "onboard", Usage: "One-command local setup (detect agents + SQLite + keys + config)", RunFn: runOnboardCmd})
+	Register(Subcommand{
+		Name:   "onboard",
+		Usage:  "Deprecated legacy setup compatibility (explicit --yes scripts)",
+		RunFn:  runOnboardCmd,
+		HelpFn: printOnboardUsage,
+	})
 }

@@ -369,6 +369,34 @@
       "replacement": "sdk/go/v{version}"
     },
     {
+      "id": "sdk-index-source-target-heading",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "## Source-target v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+) Coordinates",
+      "replacement": "## Source-target v{version} Coordinates"
+    },
+    {
+      "id": "sdk-index-source-target-version",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "coordinates target source version `(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`; registry availability is not claimed\\.",
+      "replacement": "coordinates target source version `{version}`; registry availability is not claimed."
+    },
+    {
+      "id": "sdk-index-npm-install-version",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "@mindburn/helm-ai-kernel@(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "@mindburn/helm-ai-kernel@{version}"
+    },
+    {
+      "id": "sdk-index-pip-install-version",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "helm-sdk==(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "helm-sdk=={version}"
+    },
+    {
       "id": "sdk-index-source-version-claims",
       "path": "docs/sdks/00_INDEX.md",
       "kind": "regex",
@@ -386,15 +414,15 @@
       "id": "implementation-partner-guide-packaged-surface",
       "path": "docs/guides/implementation-partner.md",
       "kind": "regex",
-      "pattern": "HELM AI Kernel v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+) surface",
-      "replacement": "HELM AI Kernel v{version} surface"
+      "pattern": "HELM AI Kernel v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+) source target",
+      "replacement": "HELM AI Kernel v{version} source target"
     },
     {
       "id": "implementation-partner-guide-expected-release",
       "path": "docs/guides/implementation-partner.md",
       "kind": "regex",
-      "pattern": "The expected release for this packet is `(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
-      "replacement": "The expected release for this packet is `{version}`"
+      "pattern": "The expected source release target for this packet is `(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
+      "replacement": "The expected source release target for this packet is `{version}`"
     },
     {
       "id": "implementation-partner-guide-release-link-text",
@@ -409,13 +437,6 @@
       "kind": "regex",
       "pattern": "releases/tag/v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
       "replacement": "releases/tag/v{version}"
-    },
-    {
-      "id": "implementation-partner-guide-sdk-header-claim",
-      "path": "docs/guides/implementation-partner.md",
-      "kind": "regex",
-      "pattern": "At v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+), the handwritten",
-      "replacement": "At v{version}, the handwritten"
     },
     {
       "id": "examples-java-coordinate",

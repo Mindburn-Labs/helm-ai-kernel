@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS receipts (
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     executor_id TEXT NOT NULL,
     prev_hash TEXT NOT NULL,
-    lamport_clock BIGINT NOT NULL
+    lamport_clock BIGINT NOT NULL,
+    decision_hash TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_receipts_decision_id ON receipts (decision_id);

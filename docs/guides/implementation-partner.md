@@ -5,7 +5,7 @@ last_reviewed: 2026-07-15
 
 # Implementation Partner Handoff
 
-This guide packages the local, self-hosted HELM AI Kernel v0.7.5 surface for an
+This guide packages the local, self-hosted HELM AI Kernel v0.8.0 source target for an
 implementation partner. It does not describe a hosted HELM API.
 
 NavigoTech Innovation is an official HELM implementation partner.
@@ -22,9 +22,10 @@ brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel --version
 ```
 
-The expected release for this packet is `0.7.5`. If the registry or local cache
-does not return that release, stop and use the signed asset from the
-[v0.7.5 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.5).
+The expected source release target for this packet is `0.8.0`. This is not a
+registry availability claim. If the registry or local cache does not return
+that release after publication, stop and use the signed asset from the
+[v0.8.0 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.0).
 
 ## 2. Run A Clean Local Proof
 
@@ -76,17 +77,16 @@ credential.
 Tenant-scoped routes also bind tenant and principal identity. When the scoped
 emergency fence is enabled, the server can additionally require
 `X-Helm-Workspace-ID`. Use [HTTP API](/reference/http-api) for the route class and
-[SDKs](/sdks#authentication-coverage) for the per-language header gap.
+[SDKs](/sdks#authentication-coverage) for the per-language header support.
 
 If the selected SDK cannot send a required identity header, stop and use direct
 HTTP or a client generated from `/openapi.yaml`. Never remove a required scope
 merely to make an example run.
 
-At v0.7.5, the handwritten TypeScript and Python clients cannot set the
-principal header, and the Go client cannot set the optional workspace header.
-Use those convenience clients only for routes covered by their helpers. For a
-protected evaluate call, direct HTTP or a generated OpenAPI client is the
-documented path until the required header helpers ship in a verified release.
+The maintained Go, TypeScript, Python, Java, and Rust clients can send the
+required API-key, tenant, and principal headers. The Go client cannot set the
+optional workspace header, so use direct HTTP or a generated OpenAPI client
+when a scoped emergency fence requires that additional binding.
 
 ## 6. Run One Protected HTTP Evaluation
 

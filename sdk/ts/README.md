@@ -10,8 +10,8 @@ npm ci
 npm run build
 ```
 
-Package metadata declares version `0.7.5` in `package.json`; this README does
-not claim that a registry package has been published.
+Package metadata identifies source target `0.8.0`; this README does not claim
+that a registry package has been published.
 
 ## Local Development
 
@@ -37,12 +37,17 @@ import { HelmClient } from "@mindburn/helm-ai-kernel";
 
 const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
 const decision = await client.evaluateDecision({
-  principal: "example-agent",
-  action: "read-ticket",
-  resource: "ticket:123",
+  tool: "read-ticket",
+  effect_level: "ticket:123",
+  session_id: "example-session",
 });
-console.log(decision.verdict); // ALLOW, DENY, or ESCALATE
+console.log(decision.verdict); // ALLOW or DENY
 ```
+
+`tool`, `effect_level`, and `session_id` must all be non-blank. The SDK sends
+only this canonical V5 request shape; legacy direct-daemon callers are not an
+SDK contract. The authenticated principal, not a body `principal`, is recorded
+on the receipt.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.
@@ -84,6 +89,7 @@ grants, authz snapshots, approvals, budgets, telemetry export, and coexistence
 capabilities. These methods keep external envelopes, MCP quarantine decisions,
 and sandbox grants attached to HELM-native receipts and EvidencePacks.
 
-## Release Notes
+## Source target
 
-`0.7.5` is a security patch: fail-closed production receipt signing and a golang.org/x/text update for GO-2026-5970. The kernel's Boundary Enforcement Profile is retained, along with the OpenAPI client surface and protobuf message bindings.
+The SDK sends canonical typed evaluation requests and returns receipt-bearing
+V5 responses. Verify registry evidence before relying on a pinned package.

@@ -2,6 +2,9 @@ package approvalceremony
 
 import _ "embed"
 
+//go:embed migrations/001_approval_ceremony_baseline.sql
+var approvalCeremonyBaselinePostgresSchema string
+
 //go:embed migrations/002_effect_reservation_events.sql
 var effectReservationPostgresSchema string
 

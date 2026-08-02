@@ -77,7 +77,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if args[1] == "help" {
 		return runHelpCommand(args[2:], stdout, stderr)
 	}
-	if isHelpRequest(args[2:]) {
+	if len(args) == 3 && isHelpRequest(args[2:]) {
 		if code, ok := Dispatch(args[1], []string{"--help"}, stdout, stderr); ok {
 			return code
 		}
@@ -356,7 +356,10 @@ func runServerWithOptions(opts serverOptions) error {
 	// 2.5 PRG & Guardian. --policy remains bootstrap/source configuration;
 	// runtime policy authority is installed only through the reconciler.
 	ruleGraph := prg.NewGraph()
-	policyScope := policyreconcile.DefaultScope
+	policyScope := policyreconcile.PolicyScope{
+		TenantID:    configuredRuntimeTenantID(),
+		WorkspaceID: configuredRuntimeWorkspaceID(),
+	}.Normalize()
 	var (
 		policyStore      policyreconcile.PolicySnapshotStore
 		policyReconciler *policyreconcile.Reconciler

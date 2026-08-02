@@ -14,6 +14,8 @@ export type {
   BoundaryRecordVerification,
   GovernanceMetadata,
   ChatCompletionWithReceipt,
+  EvaluateDecisionRequest,
+  EvaluateDecisionResponse,
   McpQuarantineRecord,
   McpRegistryApprovalRequest,
   McpRegistryDiscoverRequest,

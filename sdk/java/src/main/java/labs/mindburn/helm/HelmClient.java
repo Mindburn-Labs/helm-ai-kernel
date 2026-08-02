@@ -1,6 +1,7 @@
 package labs.mindburn.helm;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.reflect.TypeToken;
 import labs.mindburn.helm.TypesGen.*;
@@ -25,15 +26,28 @@ public class HelmClient {
     private final HttpClient httpClient;
     private final Gson gson;
     private final String apiKey;
+    private final String tenantId;
+    private final String principalId;
 
     public HelmClient(String baseUrl) {
-        this(baseUrl, null);
+        this(baseUrl, null, null, null);
     }
 
     public HelmClient(String baseUrl, String apiKey) {
+        this(baseUrl, apiKey, null, null);
+    }
+
+    /**
+     * Creates a client with optional API and tenant identity headers for protected routes.
+     */
+    public HelmClient(String baseUrl, String apiKey, String tenantId, String principalId) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.apiKey = apiKey;
-        this.gson = new Gson();
+        this.tenantId = tenantId;
+        this.principalId = principalId;
+        this.gson = new GsonBuilder()
+                .setFieldNamingPolicy(com.google.gson.FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+                .create();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
@@ -181,6 +195,12 @@ public class HelmClient {
         if (apiKey != null && !apiKey.isEmpty()) {
             b.header("Authorization", "Bearer " + apiKey);
         }
+        if (tenantId != null && !tenantId.isEmpty()) {
+            b.header("X-Helm-Tenant-ID", tenantId);
+        }
+        if (principalId != null && !principalId.isEmpty()) {
+            b.header("X-Helm-Principal-ID", principalId);
+        }
         return b;
     }
 
@@ -240,12 +260,21 @@ public class HelmClient {
         return send(r, ChatCompletionResponse.class);
     }
 
-    /** POST /api/v1/evaluate */
-    public JsonElement evaluateDecision(Object req) {
+    /** POST /api/v1/evaluate using the canonical V5 request and response. */
+    public EvaluateResponse evaluateDecision(EvaluateRequest req) {
+        if (req == null || req.getTool() == null || req.getTool().isBlank()) {
+            throw new IllegalArgumentException("evaluateDecision requires a non-blank tool");
+        }
+        if (req.getEffectLevel() == null || req.getEffectLevel().isBlank()) {
+            throw new IllegalArgumentException("evaluateDecision requires a non-blank effect_level");
+        }
+        if (req.getSessionId() == null || req.getSessionId().isBlank()) {
+            throw new IllegalArgumentException("evaluateDecision requires a non-blank session_id");
+        }
         HttpRequest r = this.req("POST", "/api/v1/evaluate")
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
                 .build();
-        return sendJson(r);
+        return send(r, EvaluateResponse.class);
     }
 
     /** POST /api/v1/kernel/approve */

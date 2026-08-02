@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 func TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash(t *testing.T) {
@@ -131,5 +132,80 @@ func TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash(t *testing.T) 
 	}
 	if _, err := store.GetByReceiptID(ctx, "r-v5-unrecoverable"); err == nil || !strings.Contains(err.Error(), "004_add_receipt_decision_hash.sql") {
 		t.Fatalf("unrecoverable V5 receipt did not fail closed with migration guidance: %v", err)
+	}
+}
+
+func TestPostgresTenantCursorContinuesWithLateSignedSessionGenesisAfterAppendSequenceMigration(t *testing.T) {
+	postgresURL := os.Getenv("HELM_TEST_POSTGRES_URL")
+	if postgresURL == "" {
+		t.Skip("set HELM_TEST_POSTGRES_URL to run the Postgres receipt cursor migration proof")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	schema := fmt.Sprintf("helm_receipt_cursor_v5_migration_%d", time.Now().UnixNano())
+	db, err := sql.Open("postgres", postgresURLWithSearchPath(t, postgresURL, schema))
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS `+schema); err != nil {
+		t.Fatalf("create test schema: %v", err)
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = db.ExecContext(cleanupCtx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+	}()
+
+	receiptStore := NewPostgresReceiptStore(db)
+	if err := receiptStore.Init(ctx); err != nil {
+		t.Fatalf("initialize post-005 receipt store: %v", err)
+	}
+	signer, err := helmcrypto.NewEd25519Signer("postgres-unicode-tenant-cursor")
+	if err != nil {
+		t.Fatalf("new receipt signer: %v", err)
+	}
+
+	const tenantID = "организация-猫"
+	issuedAt := time.Date(2026, 8, 2, 0, 0, 0, 123456000, time.UTC)
+	appendReceipt := func(sessionID, receiptID string, timestamp time.Time) *contracts.Receipt {
+		t.Helper()
+		var issued *contracts.Receipt
+		err := receiptStore.AppendCausalScoped(ctx, tenantID, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+			issued = storeCoverageReceipt(receiptID, "decision-"+receiptID, sessionID, lamport, timestamp)
+			issued.PrevHash = prevHash
+			if err := signer.SignReceipt(issued); err != nil {
+				return nil, err
+			}
+			return issued, nil
+		})
+		if err != nil {
+			t.Fatalf("append %s: %v", receiptID, err)
+		}
+		return issued
+	}
+
+	first := appendReceipt("session-a", "receipt-unicode-a", issuedAt)
+	second := appendReceipt("session-a", "receipt-unicode-b", issuedAt.Add(time.Second))
+	page, err := receiptStore.ListByTenantCursor(ctx, tenantID, TenantReceiptCursor{}, 2)
+	if err != nil || len(page) != 2 || page[0].ReceiptID != first.ReceiptID || page[1].ReceiptID != second.ReceiptID {
+		t.Fatalf("first unicode tenant cursor page = %+v err=%v", page, err)
+	}
+
+	lateGenesis := appendReceipt("session-b", "receipt-unicode-c", issuedAt.Add(-time.Hour))
+	if lateGenesis.LamportClock != 1 || lateGenesis.PrevHash != "" {
+		t.Fatalf("late signed-session genesis = %+v, want Lamport 1 and empty previous hash", lateGenesis)
+	}
+	continued, err := receiptStore.ListByTenantCursor(ctx, tenantID, TenantReceiptCursor{
+		LamportClock: second.LamportClock,
+		Timestamp:    second.Timestamp,
+		ReceiptID:    second.ReceiptID,
+	}, 1)
+	if err != nil || len(continued) != 1 || continued[0].ReceiptID != lateGenesis.ReceiptID {
+		t.Fatalf("unicode tenant cursor omitted late signed-session genesis: receipts=%+v err=%v", continued, err)
+	}
+	if valid, err := signer.VerifyReceipt(continued[0]); err != nil || !valid {
+		t.Fatalf("reloaded late signed-session genesis signature: valid=%v err=%v", valid, err)
 	}
 }

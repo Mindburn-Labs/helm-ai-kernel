@@ -143,7 +143,25 @@ type RateLimit struct {
 	//
 	// Optional and omitted when zero, so envelopes written before this field
 	// existed hash and validate exactly as before.
+	//
+	// MaxPerDay may be lower than MaxPerMinute. That is a conservative policy,
+	// not a contradiction: the minute window simply never binds first.
 	MaxPerDay int `json:"max_per_day,omitempty"`
+
+	// PerInstance gives every concrete instance of the resource its own
+	// window instead of pooling them into one.
+	//
+	// This is what lets a fleet of like things share one declared ceiling: a
+	// pool of outbound numbers is one rate limit at 125 dials per number per
+	// day, not one limit per number. Rotating a number in or out of the pool
+	// then changes no envelope field, so it does not invalidate a signed
+	// envelope.
+	//
+	// An effect that names a per-instance resource without naming which
+	// instance it consumes cannot be counted, and is denied rather than
+	// admitted uncounted. PerInstance is meaningless on the wildcard resource
+	// and is rejected there.
+	PerInstance bool `json:"per_instance,omitempty"`
 }
 
 // RateLimitResourceAny is the reserved rate-limit resource that matches every

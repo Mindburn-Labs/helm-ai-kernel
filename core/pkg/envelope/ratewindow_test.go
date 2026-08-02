@@ -57,7 +57,7 @@ func TestGateEnforcesPerDayWindow(t *testing.T) {
 	})
 	g := bindGate(t, env, &now)
 
-	req := &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"}
+	req := &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}}
 
 	for i := 1; i <= 700; i++ {
 		// Advance a minute per attempt so no minute window could be the cause.
@@ -85,7 +85,7 @@ func TestGateDayWindowRollsOverAtUTCMidnight(t *testing.T) {
 	env := rateLimitedEnvelope(t, contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 2})
 	g := bindGate(t, env, &now)
 
-	req := &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"}
+	req := &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}}
 
 	for i := 1; i <= 2; i++ {
 		if d := g.CheckEffect(context.Background(), req); !d.Allowed {
@@ -110,7 +110,7 @@ func TestGateDayWindowSurvivesRebind(t *testing.T) {
 	env := rateLimitedEnvelope(t, contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 1})
 	g := bindGate(t, env, &now)
 
-	req := &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"}
+	req := &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}}
 	if d := g.CheckEffect(context.Background(), req); !d.Allowed {
 		t.Fatalf("first attempt denied: %s", d.Reason)
 	}
@@ -141,7 +141,7 @@ func TestGateEnforcesPerMinuteWindow(t *testing.T) {
 	})
 	g := bindGate(t, env, &now)
 
-	req := &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"}
+	req := &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}}
 
 	for i := 1; i <= 3; i++ {
 		if d := g.CheckEffect(context.Background(), req); !d.Allowed {
@@ -187,7 +187,7 @@ func TestGateDeniedEffectDoesNotConsumeNarrowerWindow(t *testing.T) {
 		}
 	}
 
-	req := &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"}
+	req := &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}}
 
 	// Spend the daily ceiling one attempt per minute, so no minute window is
 	// ever the binding constraint.
@@ -225,7 +225,7 @@ func TestGateWildcardRateLimitBindsEveryEffect(t *testing.T) {
 	g := bindGate(t, env, &now)
 
 	first := &EffectRequest{EffectClass: "E2", EffectType: "SEND_EMAIL"}
-	second := &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"}
+	second := &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}}
 
 	if d := g.CheckEffect(context.Background(), first); !d.Allowed {
 		t.Fatalf("first effect denied: %s", d.Reason)
@@ -261,7 +261,7 @@ func TestGateUnmatchedResourceIsNotRateLimited(t *testing.T) {
 	env := rateLimitedEnvelope(t, contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 1})
 	g := bindGate(t, env, &now)
 
-	other := &EffectRequest{EffectClass: "E2", Resource: "search.query"}
+	other := &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "search.query"}}}
 	for i := 1; i <= 5; i++ {
 		if d := g.CheckEffect(context.Background(), other); !d.Allowed {
 			t.Fatalf("unrelated effect %d denied by another resource's ceiling: %s", i, d.Reason)
@@ -274,9 +274,12 @@ func TestGateUnmatchedResourceIsNotRateLimited(t *testing.T) {
 func TestGateWithoutRateWindowStoreDeniesRateLimitedEffects(t *testing.T) {
 	now := time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC)
 	env := rateLimitedEnvelope(t, contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 700})
-	g := bindGate(t, env, &now).WithRateWindowStore(nil)
+	g := bindGate(t, env, &now)
+	if err := g.SetRateWindowStore(nil); err != nil {
+		t.Fatalf("SetRateWindowStore() error = %v", err)
+	}
 
-	d := g.CheckEffect(context.Background(), &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"})
+	d := g.CheckEffect(context.Background(), &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}})
 	if d.Allowed {
 		t.Fatal("effect admitted with no rate window store configured")
 	}
@@ -285,7 +288,7 @@ func TestGateWithoutRateWindowStoreDeniesRateLimitedEffects(t *testing.T) {
 	}
 
 	// Effects that match no declared limit are unaffected.
-	if d := g.CheckEffect(context.Background(), &EffectRequest{EffectClass: "E2", Resource: "search.query"}); !d.Allowed {
+	if d := g.CheckEffect(context.Background(), &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "search.query"}}}); !d.Allowed {
 		t.Fatalf("unrelated effect denied without a store: %s (%s)", d.Reason, d.Violation)
 	}
 }
@@ -302,14 +305,132 @@ func (erroringRateWindowStore) Reserve(context.Context, []RateReservation) (Rate
 func TestGateRateWindowStoreErrorDenies(t *testing.T) {
 	now := time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC)
 	env := rateLimitedEnvelope(t, contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 700})
-	g := bindGate(t, env, &now).WithRateWindowStore(erroringRateWindowStore{})
+	g := bindGate(t, env, &now)
+	if err := g.SetRateWindowStore(erroringRateWindowStore{}); err != nil {
+		t.Fatalf("SetRateWindowStore() error = %v", err)
+	}
 
-	d := g.CheckEffect(context.Background(), &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"})
+	d := g.CheckEffect(context.Background(), &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}})
 	if d.Allowed {
 		t.Fatal("effect admitted despite a rate window store error")
 	}
 	if d.Violation != "RATE_LIMIT_STORE_ERROR" {
 		t.Fatalf("violation = %q, want RATE_LIMIT_STORE_ERROR", d.Violation)
+	}
+}
+
+// TestSetRateWindowStoreRefusedAfterReservation proves a spent ceiling cannot
+// be laundered by swapping in a fresh counter store.
+func TestSetRateWindowStoreRefusedAfterReservation(t *testing.T) {
+	now := time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC)
+	env := rateLimitedEnvelope(t, contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 1})
+	g := bindGate(t, env, &now)
+
+	req := &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}}
+	if d := g.CheckEffect(context.Background(), req); !d.Allowed {
+		t.Fatalf("first attempt denied: %s", d.Reason)
+	}
+
+	if err := g.SetRateWindowStore(NewInMemoryRateWindowStore()); err == nil {
+		t.Fatal("store swap accepted after a reservation: the spent ceiling was handed back")
+	}
+	if d := g.CheckEffect(context.Background(), req); d.Allowed {
+		t.Fatal("ceiling was reset by the refused store swap")
+	}
+}
+
+// TestGateReservesEveryApplicableCeiling proves an effect draws down all the
+// ceilings it consumes, not just the first match. A dial spends both the
+// campaign-wide daily allowance and its own number's allowance.
+func TestGateReservesEveryApplicableCeiling(t *testing.T) {
+	now := time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC)
+	env := rateLimitedEnvelope(t,
+		contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 700},
+		contracts.RateLimit{Resource: "outbound.dials.did", MaxPerDay: 2, PerInstance: true},
+	)
+	g := bindGate(t, env, &now)
+
+	store := g.rateWindows.(*InMemoryRateWindowStore)
+	dial := func(did string) *GateDecision {
+		return g.CheckEffect(context.Background(), &EffectRequest{
+			EffectClass: "E2",
+			Resources: []EffectResource{
+				{Name: "outbound.attempts"},
+				{Name: "outbound.dials.did", Instance: did},
+			},
+		})
+	}
+
+	for i := 1; i <= 2; i++ {
+		if d := dial("+15550000001"); !d.Allowed {
+			t.Fatalf("dial %d on the first number denied: %s (%s)", i, d.Reason, d.Violation)
+		}
+	}
+	if d := dial("+15550000001"); d.Allowed {
+		t.Fatal("third dial on a number capped at 2 was admitted")
+	}
+
+	// A different number has its own window under the same declared limit.
+	if d := dial("+15550000002"); !d.Allowed {
+		t.Fatalf("first dial on a second number denied: %s (%s)", d.Reason, d.Violation)
+	}
+
+	// The campaign-wide counter saw all three admitted dials, so it is being
+	// drawn down alongside the per-number ones rather than left untouched.
+	campaign := RateWindowKey{
+		EnvelopeID:  env.EnvelopeID,
+		Resource:    "outbound.attempts",
+		Window:      RateWindowDay,
+		WindowStart: time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC),
+	}
+	if got := store.Usage(campaign); got != 3 {
+		t.Fatalf("campaign-wide daily usage = %d, want 3", got)
+	}
+}
+
+// TestGatePerInstanceLimitRequiresAnInstance proves an effect that cannot be
+// attributed to a counter is denied rather than admitted uncounted.
+func TestGatePerInstanceLimitRequiresAnInstance(t *testing.T) {
+	now := time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC)
+	env := rateLimitedEnvelope(t, contracts.RateLimit{
+		Resource: "outbound.dials.did", MaxPerDay: 125, PerInstance: true,
+	})
+	g := bindGate(t, env, &now)
+
+	d := g.CheckEffect(context.Background(), &EffectRequest{
+		EffectClass: "E2",
+		Resources:   []EffectResource{{Name: "outbound.dials.did"}},
+	})
+	if d.Allowed {
+		t.Fatal("effect naming a per-instance resource without an instance was admitted")
+	}
+	if d.Violation != "RATE_LIMIT_INSTANCE_REQUIRED" {
+		t.Fatalf("violation = %q, want RATE_LIMIT_INSTANCE_REQUIRED", d.Violation)
+	}
+}
+
+// TestGateRepeatedResourceReservesOnce proves a caller that names the same
+// resource twice spends one unit, not two, and does not trip the store's
+// duplicate-key refusal.
+func TestGateRepeatedResourceReservesOnce(t *testing.T) {
+	now := time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC)
+	env := rateLimitedEnvelope(t, contracts.RateLimit{Resource: "outbound.attempts", MaxPerDay: 2})
+	g := bindGate(t, env, &now)
+
+	req := &EffectRequest{
+		EffectClass: "E2",
+		Resources: []EffectResource{
+			{Name: "outbound.attempts"},
+			{Name: "outbound.attempts"},
+		},
+	}
+	for i := 1; i <= 2; i++ {
+		if d := g.CheckEffect(context.Background(), req); !d.Allowed {
+			t.Fatalf("attempt %d denied: %s (%s)", i, d.Reason, d.Violation)
+		}
+	}
+	if d := g.CheckEffect(context.Background(), req); d.Allowed {
+		t.Fatal("third attempt admitted past a ceiling of 2")
 	}
 }
 
@@ -330,7 +451,7 @@ func TestGateRateLimitConcurrentReservationsRespectCeiling(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			d := g.CheckEffect(context.Background(), &EffectRequest{EffectClass: "E2", Resource: "outbound.attempts"})
+			d := g.CheckEffect(context.Background(), &EffectRequest{EffectClass: "E2", Resources: []EffectResource{{Name: "outbound.attempts"}}})
 			if d.Allowed {
 				mu.Lock()
 				allowed++
@@ -407,6 +528,88 @@ func TestInMemoryRateWindowStoreRefusesClosedWindow(t *testing.T) {
 	}
 }
 
+func TestInMemoryRateWindowStoreRejectsDuplicateKeysInOneBatch(t *testing.T) {
+	store := NewInMemoryRateWindowStore()
+	key := RateWindowKey{EnvelopeID: "e", Resource: "r", Window: RateWindowDay,
+		WindowStart: time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)}
+
+	// Both entries would be checked against the same pre-batch count and then
+	// both incremented, admitting two units against a ceiling of one.
+	if _, err := store.Reserve(context.Background(), []RateReservation{
+		{Key: key, Limit: 1},
+		{Key: key, Limit: 1},
+	}); err == nil {
+		t.Fatal("expected a duplicate key in one batch to error")
+	}
+	if got := store.Usage(key); got != 0 {
+		t.Fatalf("usage after a refused batch = %d, want 0", got)
+	}
+}
+
+func TestRateWindowKeyStringHasNoDelimiterCollisions(t *testing.T) {
+	start := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	left := RateWindowKey{EnvelopeID: "a|b", Resource: "c", Window: RateWindowDay, WindowStart: start}
+	right := RateWindowKey{EnvelopeID: "a", Resource: "b|c", Window: RateWindowDay, WindowStart: start}
+
+	if left.String() == right.String() {
+		t.Fatalf("distinct keys share the identifier %q — a durable store keyed on it would merge two counters", left.String())
+	}
+
+	// The same collision must not merge counters inside the store either.
+	store := NewInMemoryRateWindowStore()
+	if _, err := store.Reserve(context.Background(), []RateReservation{{Key: left, Limit: 1}}); err != nil {
+		t.Fatalf("reserve error = %v", err)
+	}
+	outcome, err := store.Reserve(context.Background(), []RateReservation{{Key: right, Limit: 1}})
+	if err != nil {
+		t.Fatalf("reserve error = %v", err)
+	}
+	if !outcome.Granted {
+		t.Fatal("a distinct key was denied by another key's counter")
+	}
+}
+
+func TestInMemoryRateWindowStoreEvictsRetiredEnvelopeCounters(t *testing.T) {
+	store := NewInMemoryRateWindowStore()
+	day := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+
+	// A gate binding a fresh envelope per run would otherwise leave one
+	// permanent counter behind per envelope ever seen.
+	for i := 0; i < rateWindowEvictionThreshold+50; i++ {
+		key := RateWindowKey{
+			EnvelopeID:  fmt.Sprintf("env-%04d", i),
+			Resource:    "r",
+			Window:      RateWindowDay,
+			WindowStart: day,
+		}
+		if _, err := store.Reserve(context.Background(), []RateReservation{{Key: key, Limit: 1}}); err != nil {
+			t.Fatalf("reserve %d error = %v", i, err)
+		}
+	}
+
+	// A reservation well past the retention horizon sweeps the stale set.
+	fresh := RateWindowKey{
+		EnvelopeID:  "env-current",
+		Resource:    "r",
+		Window:      RateWindowDay,
+		WindowStart: day.AddDate(0, 0, 7),
+	}
+	if _, err := store.Reserve(context.Background(), []RateReservation{{Key: fresh, Limit: 1}}); err != nil {
+		t.Fatalf("reserve error = %v", err)
+	}
+
+	store.mu.Lock()
+	remaining := len(store.counters)
+	store.mu.Unlock()
+
+	if remaining != 1 {
+		t.Fatalf("counters after eviction = %d, want 1 (only the live window)", remaining)
+	}
+	if got := store.Usage(fresh); got != 1 {
+		t.Fatalf("live window usage = %d, want 1 — eviction dropped a live counter", got)
+	}
+}
+
 func TestWindowStartAnchorsInUTC(t *testing.T) {
 	// 2026-08-02T23:30:00-05:00 is 2026-08-03T04:30:00Z: the day window must
 	// follow UTC, not the caller's zone.
@@ -475,11 +678,19 @@ func TestValidateRateLimitWindows(t *testing.T) {
 			wantCode:  "INVALID_VALUE",
 		},
 		{
-			name:      "day_below_minute_is_incoherent",
+			// A day allowance below the minute allowance is a conservative
+			// policy, not a contradiction: the minute window simply never
+			// binds first, and the day ceiling still binds on reservation 51.
+			name:      "day_below_minute_is_a_conservative_policy",
 			limit:     contracts.RateLimit{Resource: "r", MaxPerMinute: 100, MaxPerDay: 50},
+			wantValid: true,
+		},
+		{
+			name:      "per_instance_on_wildcard",
+			limit:     contracts.RateLimit{Resource: contracts.RateLimitResourceAny, MaxPerDay: 700, PerInstance: true},
 			wantValid: false,
-			wantField: "budgets.rate_limits[0].max_per_day",
-			wantCode:  "INCOHERENT_WINDOW",
+			wantField: "budgets.rate_limits[0].per_instance",
+			wantCode:  "INVALID_VALUE",
 		},
 		{
 			name:      "missing_resource",

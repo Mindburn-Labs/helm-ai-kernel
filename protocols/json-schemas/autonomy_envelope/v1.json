@@ -219,7 +219,11 @@
               "max_per_day": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "Maximum reservations inside one UTC calendar day; 0 means the day window is not declared. Must be >= max_per_minute when both are declared — that cross-field rule is enforced by the envelope validator, which JSON Schema cannot express."
+                "description": "Maximum reservations inside one UTC calendar day; 0 means the day window is not declared. May be lower than max_per_minute — that is a conservative policy, not a contradiction."
+              },
+              "per_instance": {
+                "type": "boolean",
+                "description": "Give every concrete instance of the resource its own window rather than pooling them into one — one declared ceiling covering a pool of like things, such as dials per number across a number pool. Rejected on the wildcard resource, and an effect naming a per-instance resource without naming its instance is denied rather than admitted uncounted."
               }
             }
           },

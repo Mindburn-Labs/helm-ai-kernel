@@ -262,12 +262,15 @@ func (v *Validator) validateBudgets(result *ValidationResult, b *contracts.Envel
 			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d]", i), "INVALID_VALUE",
 				"at least one of max_per_minute or max_per_day must be positive")
 		}
-		// A day ceiling below the minute ceiling can never bind: the minute
-		// window would exhaust the day inside one minute. Declaring both in
-		// that order means one of the two numbers is wrong.
-		if rl.MaxPerMinute > 0 && rl.MaxPerDay > 0 && rl.MaxPerDay < rl.MaxPerMinute {
-			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].max_per_day", i), "INCOHERENT_WINDOW",
-				fmt.Sprintf("max_per_day (%d) must be >= max_per_minute (%d)", rl.MaxPerDay, rl.MaxPerMinute))
+		// A day ceiling below the minute ceiling is deliberately allowed: it is
+		// a conservative policy in which the minute window never binds first,
+		// not a contradiction. The two windows are enforced independently.
+
+		// The wildcard resource binds every effect, so it has no instances to
+		// partition. Asking for per-instance windows there describes nothing.
+		if rl.PerInstance && rl.Resource == contracts.RateLimitResourceAny {
+			v.addError(result, fmt.Sprintf("budgets.rate_limits[%d].per_instance", i), "INVALID_VALUE",
+				fmt.Sprintf("per_instance is meaningless on the wildcard resource %q", contracts.RateLimitResourceAny))
 		}
 	}
 }

@@ -7,6 +7,7 @@ package envelope
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -22,11 +23,30 @@ type EffectRequest struct {
 	EstimatedCost int64  `json:"estimated_cost"` // Estimated cost in cents
 	BlastRadius   string `json:"blast_radius"`   // Blast radius of this effect
 
-	// Resource names what this effect draws down for rate-limiting purposes.
-	// It is matched against AutonomyEnvelope.budgets.rate_limits[].resource.
+	// Resources names everything this effect draws down for rate-limiting
+	// purposes, matched against AutonomyEnvelope.budgets.rate_limits[].resource.
+	//
+	// One effect commonly consumes several ceilings at once — an outbound dial
+	// spends both a campaign-wide daily attempt allowance and that particular
+	// number's own allowance — so this is a set rather than a single name. A
+	// resource left out here is a ceiling left uncounted, which is why the
+	// caller states the whole set.
+	//
 	// When empty the gate falls back to EffectType, so callers that already
 	// name their effects need not restate them.
-	Resource string `json:"resource,omitempty"`
+	Resources []EffectResource `json:"resources,omitempty"`
+}
+
+// EffectResource names one rate-limited resource an effect consumes, and for a
+// per-instance limit, which concrete member of it.
+type EffectResource struct {
+	// Name matches AutonomyEnvelope.budgets.rate_limits[].resource.
+	Name string `json:"name"`
+
+	// Instance identifies the concrete member consumed — the specific number
+	// dialled, say — and is required by a limit declaring per_instance. It is
+	// ignored by a pooled limit.
+	Instance string `json:"instance,omitempty"`
 }
 
 // GateDecision is the result of an envelope gate check.
@@ -65,6 +85,11 @@ type EnvelopeGate struct {
 	// be a ceiling in name only.
 	rateWindows RateWindowStore
 
+	// rateReservations counts granted reservations made against rateWindows by
+	// this gate. It exists so the store cannot be swapped out from under a
+	// partly-spent ceiling.
+	rateReservations int64
+
 	// Clock for deterministic time
 	clock func() time.Time
 }
@@ -79,17 +104,29 @@ func NewEnvelopeGate() *EnvelopeGate {
 	}
 }
 
-// WithRateWindowStore replaces the process-local rate window store.
+// SetRateWindowStore replaces the process-local rate window store.
 //
 // Pass a durable, shared implementation when a declared window is wider than
 // one process or must survive a restart — a per-day ceiling for a fleet, for
 // example. Passing nil leaves the gate without a store, in which case any
 // effect that matches a declared rate limit is denied rather than admitted.
-func (g *EnvelopeGate) WithRateWindowStore(store RateWindowStore) *EnvelopeGate {
+//
+// This is a configuration step, not a runtime one. Once the gate has reserved
+// against a rate limit, swapping the store would hand back a ceiling that has
+// already been partly spent — the same monotonicity Bind and Unbind
+// deliberately preserve — so a later swap is refused and reported rather than
+// applied quietly.
+func (g *EnvelopeGate) SetRateWindowStore(store RateWindowStore) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
+	if g.rateReservations > 0 {
+		return fmt.Errorf(
+			"cannot replace the rate window store after %d reservation(s): the accumulated ceiling would be discarded",
+			g.rateReservations)
+	}
 	g.rateWindows = store
-	return g
+	return nil
 }
 
 // WithClock overrides the clock for deterministic testing.
@@ -323,37 +360,92 @@ func (g *EnvelopeGate) Snapshot() *GateSnapshot {
 
 // --- Internal helpers ---
 
-// rateLimitResource resolves which rate-limit resource an effect draws down.
-func rateLimitResource(req *EffectRequest) string {
-	if req.Resource != "" {
-		return req.Resource
+// effectResources resolves everything an effect draws down. Callers that name
+// nothing fall back to the effect type, so an envelope can rate-limit an
+// effect type directly.
+func effectResources(req *EffectRequest) []EffectResource {
+	if len(req.Resources) > 0 {
+		return req.Resources
 	}
-	return req.EffectType
+	if req.EffectType != "" {
+		return []EffectResource{{Name: req.EffectType}}
+	}
+	return nil
 }
 
-// matchingRateLimits returns the declared limits that bind this effect, in
-// declaration order. A limit binds when it names the effect's resource or the
-// wildcard resource "*".
-func (g *EnvelopeGate) matchingRateLimits(resource string) []contracts.RateLimit {
-	var matched []contracts.RateLimit
+// rateWindowTargets pairs a declared limit with the counter it applies to for
+// this particular effect.
+type rateWindowTarget struct {
+	limit    contracts.RateLimit
+	instance string
+}
+
+// matchRateLimits returns every (limit, counter) pair that binds this effect.
+//
+// A limit binds when it names one of the effect's resources, or when it is the
+// wildcard limit, which binds every effect exactly once. A per-instance limit
+// produces one target per distinct instance the effect names, so an effect
+// consuming several members of a pool draws each member's own ceiling down
+// rather than only the first.
+//
+// It returns a denial instead when a per-instance limit binds a resource the
+// effect named without an instance: that reservation cannot be attributed to a
+// counter, and admitting it uncounted is exactly the failure the ceiling
+// exists to prevent.
+func (g *EnvelopeGate) matchRateLimits(resources []EffectResource) ([]rateWindowTarget, *GateDecision) {
+	var targets []rateWindowTarget
+	seen := make(map[string]bool)
+
+	add := func(rl contracts.RateLimit, instance string) {
+		id := rl.Resource + "\x00" + instance
+		if seen[id] {
+			return
+		}
+		seen[id] = true
+		targets = append(targets, rateWindowTarget{limit: rl, instance: instance})
+	}
+
 	for _, rl := range g.active.Budgets.RateLimits {
-		if rl.Resource == contracts.RateLimitResourceAny || (resource != "" && rl.Resource == resource) {
-			matched = append(matched, rl)
+		if rl.Resource == contracts.RateLimitResourceAny {
+			add(rl, "")
+			continue
+		}
+		for _, r := range resources {
+			if r.Name != rl.Resource {
+				continue
+			}
+			if !rl.PerInstance {
+				add(rl, "")
+				continue
+			}
+			if r.Instance == "" {
+				return nil, &GateDecision{
+					Allowed: false,
+					Reason: fmt.Sprintf(
+						"resource %q is rate limited per instance but the effect names no instance", rl.Resource),
+					Violation: "RATE_LIMIT_INSTANCE_REQUIRED",
+				}
+			}
+			add(rl, r.Instance)
 		}
 	}
-	return matched
+	return targets, nil
 }
 
 // reserveRateLimits consumes one unit against every window that binds this
 // effect, atomically. It returns nil when the effect fits inside all of them,
 // and a denial otherwise.
 //
-// Fail-closed in three places: a matched limit with no store denies, a store
-// error denies, and an unknown window kind denies.
+// Fail-closed throughout: an unattributable per-instance reservation denies, a
+// matched limit with no store denies, an unknown window kind denies, and a
+// store error denies.
 func (g *EnvelopeGate) reserveRateLimits(ctx context.Context, req *EffectRequest, now time.Time) *GateDecision {
-	resource := rateLimitResource(req)
-	limits := g.matchingRateLimits(resource)
-	if len(limits) == 0 {
+	resources := effectResources(req)
+	targets, denial := g.matchRateLimits(resources)
+	if denial != nil {
+		return denial
+	}
+	if len(targets) == 0 {
 		return nil
 	}
 
@@ -365,14 +457,14 @@ func (g *EnvelopeGate) reserveRateLimits(ctx context.Context, req *EffectRequest
 		}
 	}
 
-	reservations := make([]RateReservation, 0, len(limits)*2)
-	for _, rl := range limits {
+	reservations := make([]RateReservation, 0, len(targets)*2)
+	for _, target := range targets {
 		for _, w := range []struct {
 			window RateWindow
 			limit  int
 		}{
-			{RateWindowMinute, rl.MaxPerMinute},
-			{RateWindowDay, rl.MaxPerDay},
+			{RateWindowMinute, target.limit.MaxPerMinute},
+			{RateWindowDay, target.limit.MaxPerDay},
 		} {
 			if w.limit <= 0 {
 				continue
@@ -388,7 +480,8 @@ func (g *EnvelopeGate) reserveRateLimits(ctx context.Context, req *EffectRequest
 			reservations = append(reservations, RateReservation{
 				Key: RateWindowKey{
 					EnvelopeID:  g.active.EnvelopeID,
-					Resource:    rl.Resource,
+					Resource:    target.limit.Resource,
+					Instance:    target.instance,
 					Window:      w.window,
 					WindowStart: start,
 				},
@@ -403,7 +496,7 @@ func (g *EnvelopeGate) reserveRateLimits(ctx context.Context, req *EffectRequest
 		// was constructed around the gate; deny rather than pass silently.
 		return &GateDecision{
 			Allowed:   false,
-			Reason:    fmt.Sprintf("rate limit for resource %q declares no positive window", resource),
+			Reason:    fmt.Sprintf("rate limit for resource %q declares no positive window", targets[0].limit.Resource),
 			Violation: "RATE_LIMIT_UNDECLARED_WINDOW",
 		}
 	}
@@ -417,6 +510,7 @@ func (g *EnvelopeGate) reserveRateLimits(ctx context.Context, req *EffectRequest
 		}
 	}
 	if outcome.Granted {
+		g.rateReservations++
 		return nil
 	}
 
@@ -424,10 +518,14 @@ func (g *EnvelopeGate) reserveRateLimits(ctx context.Context, req *EffectRequest
 	if outcome.DeniedKey.Window == RateWindowDay {
 		violation = "RATE_LIMIT_DAY_EXCEEDED"
 	}
+	subject := strconv.Quote(outcome.DeniedKey.Resource)
+	if outcome.DeniedKey.Instance != "" {
+		subject += " instance " + strconv.Quote(outcome.DeniedKey.Instance)
+	}
 	return &GateDecision{
 		Allowed: false,
-		Reason: fmt.Sprintf("rate limit for resource %q exceeded: %d already used against a %s ceiling of %d (window opened %s)",
-			outcome.DeniedKey.Resource, outcome.DeniedCount, outcome.DeniedKey.Window,
+		Reason: fmt.Sprintf("rate limit for resource %s exceeded: %d already used against a %s ceiling of %d (window opened %s)",
+			subject, outcome.DeniedCount, outcome.DeniedKey.Window,
 			outcome.DeniedLimit, outcome.DeniedKey.WindowStart.UTC().Format(time.RFC3339)),
 		Violation: violation,
 	}

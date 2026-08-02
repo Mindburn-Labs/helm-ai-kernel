@@ -398,6 +398,12 @@ func TestSchemaAlignment(t *testing.T) {
 			t.Fatalf("two-window envelope should validate: %v", err)
 		}
 
+		// One declared limit covering a pool, each member counted separately.
+		pooled := envelope(contracts.RateLimit{Resource: "outbound.dials.did", MaxPerDay: 125, PerInstance: true})
+		if err := validateAgainstSchema(t, schema, pooled); err != nil {
+			t.Fatalf("per-instance envelope should validate: %v", err)
+		}
+
 		// An undeclared window is not an unlimited window.
 		none := envelope(contracts.RateLimit{Resource: "outbound.attempts"})
 		if err := validateAgainstSchema(t, schema, none); err == nil {

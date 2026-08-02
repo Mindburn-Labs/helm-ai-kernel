@@ -13,6 +13,7 @@ package envelope
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,21 +28,45 @@ const (
 	RateWindowDay RateWindow = "day"
 )
 
-// RateWindowKey identifies exactly one counter: a resource, inside one
-// envelope, inside one occurrence of one window.
+// RateWindowKey identifies exactly one counter: a resource — optionally one
+// concrete instance of it — inside one envelope, inside one occurrence of one
+// window.
 type RateWindowKey struct {
-	EnvelopeID  string     `json:"envelope_id"`
-	Resource    string     `json:"resource"`
+	EnvelopeID string `json:"envelope_id"`
+	Resource   string `json:"resource"`
+
+	// Instance names which concrete member of a per-instance resource this
+	// counter belongs to, and is empty for a pooled resource.
+	Instance string `json:"instance,omitempty"`
+
 	Window      RateWindow `json:"window"`
 	WindowStart time.Time  `json:"window_start"` // UTC, truncated to the window
 }
 
 // String renders the key as a stable identifier suitable for use as a store
-// primary key. WindowStart is rendered in RFC3339 UTC so two callers that
-// computed the same window agree byte-for-byte.
+// primary key.
+//
+// Every component is length-prefixed rather than delimiter-joined, because
+// resource and envelope identifiers are unconstrained strings: joining
+// ("a|b", "c") and ("a", "b|c") on a separator produces one identifier for two
+// different counters, silently merging them. WindowStart is rendered in
+// RFC3339 UTC so two callers that computed the same window agree byte-for-byte.
 func (k RateWindowKey) String() string {
-	return fmt.Sprintf("%s|%s|%s|%s",
-		k.EnvelopeID, k.Resource, k.Window, k.WindowStart.UTC().Format(time.RFC3339))
+	parts := []string{
+		k.EnvelopeID,
+		k.Resource,
+		k.Instance,
+		string(k.Window),
+		k.WindowStart.UTC().Format(time.RFC3339),
+	}
+	var b strings.Builder
+	for i, p := range parts {
+		if i > 0 {
+			b.WriteByte('|')
+		}
+		fmt.Fprintf(&b, "%d:%s", len(p), p)
+	}
+	return b.String()
 }
 
 // RateReservation is one window a single effect must fit inside.
@@ -78,17 +103,28 @@ type RateReservationOutcome struct {
 // ceiling that spans processes and it loses its counters on restart. That is
 // adequate for a ceiling scoped to one run in one process and inadequate for
 // anything wider — a deployment enforcing a fleet-wide daily cap must supply a
-// durable implementation via EnvelopeGate.WithRateWindowStore.
+// durable implementation via EnvelopeGate.SetRateWindowStore.
 type RateWindowStore interface {
 	Reserve(ctx context.Context, reservations []RateReservation) (RateReservationOutcome, error)
 }
 
+// rateWindowRetention is how far behind the newest window a counter may fall
+// before it is evicted. Two days clears yesterday's day windows while leaving
+// today's untouched even when a batch arrives out of order at a boundary.
+const rateWindowRetention = 48 * time.Hour
+
+// rateWindowEvictionThreshold is the counter population above which a
+// reservation also sweeps stale entries. Sweeping on every call would make
+// each reservation O(counters) for no benefit while the map is small.
+const rateWindowEvictionThreshold = 1024
+
 // InMemoryRateWindowStore is the default process-local store.
 //
-// It keeps exactly one counter per (envelope, resource, window): a reservation
-// against a newer window start replaces the previous occurrence rather than
-// accumulating, so memory is bounded by the number of declared limits and not
-// by elapsed time.
+// It keeps one counter per (envelope, resource, instance, window kind): a
+// reservation against a newer window start replaces the previous occurrence
+// rather than accumulating. Counters belonging to envelopes that are no longer
+// reserved against are swept once the population grows past a threshold, so
+// memory tracks the active limits rather than every envelope ever bound.
 type InMemoryRateWindowStore struct {
 	mu       sync.Mutex
 	counters map[string]*rateWindowCounter
@@ -105,9 +141,14 @@ func NewInMemoryRateWindowStore() *InMemoryRateWindowStore {
 }
 
 // counterID omits WindowStart: the counter for a given window *kind* is
-// singular, and a newer start rolls it over.
+// singular, and a newer start rolls it over. Components are length-prefixed
+// for the same reason RateWindowKey.String is.
 func counterID(k RateWindowKey) string {
-	return k.EnvelopeID + "\x00" + k.Resource + "\x00" + string(k.Window)
+	return fmt.Sprintf("%d:%s|%d:%s|%d:%s|%d:%s",
+		len(k.EnvelopeID), k.EnvelopeID,
+		len(k.Resource), k.Resource,
+		len(k.Instance), k.Instance,
+		len(k.Window), k.Window)
 }
 
 // Reserve consumes one unit against every listed window, or none of them.
@@ -134,11 +175,29 @@ func (s *InMemoryRateWindowStore) Reserve(ctx context.Context, reservations []Ra
 		res     RateReservation
 	}
 	batch := make([]pending, 0, len(reservations))
+	seen := make(map[string]bool, len(reservations))
+	newest := time.Time{}
 
 	for _, r := range reservations {
 		if r.Limit <= 0 {
 			return RateReservationOutcome{}, fmt.Errorf(
 				"rate window limit for %s must be positive, got %d", r.Key.String(), r.Limit)
+		}
+
+		// Each window is checked against the count as it stood before the
+		// batch, so a repeated key would be checked twice against the same
+		// number and then incremented twice — admitting two units against a
+		// ceiling of one. Refuse rather than guess whether the caller meant
+		// one unit or two.
+		keyID := r.Key.String()
+		if seen[keyID] {
+			return RateReservationOutcome{}, fmt.Errorf(
+				"duplicate rate window reservation for %s in one batch", keyID)
+		}
+		seen[keyID] = true
+
+		if r.Key.WindowStart.UTC().After(newest) {
+			newest = r.Key.WindowStart.UTC()
 		}
 
 		id := counterID(r.Key)
@@ -169,15 +228,31 @@ func (s *InMemoryRateWindowStore) Reserve(ctx context.Context, reservations []Ra
 	}
 
 	// Pass 2 — every window fits, so consume them together.
-	//
-	// Two reservations in one batch can share a counter only if they carry the
-	// same key, which the gate rejects upstream as a duplicate resource, so a
-	// single increment per entry is correct here.
 	for _, p := range batch {
 		p.counter.count++
 	}
 
+	s.evictStaleLocked(newest)
+
 	return RateReservationOutcome{Granted: true}, nil
+}
+
+// evictStaleLocked drops counters whose window closed long enough ago that
+// nothing can reserve against them again.
+//
+// Without this, a gate that binds a fresh envelope ID per run accumulates one
+// permanent counter set per envelope ever seen — the map would track the whole
+// history rather than the live limits. Callers hold s.mu.
+func (s *InMemoryRateWindowStore) evictStaleLocked(newest time.Time) {
+	if newest.IsZero() || len(s.counters) <= rateWindowEvictionThreshold {
+		return
+	}
+	cutoff := newest.Add(-rateWindowRetention)
+	for id, c := range s.counters {
+		if c.start.Before(cutoff) {
+			delete(s.counters, id)
+		}
+	}
 }
 
 // Usage reports the current count for a window, or zero when the window has

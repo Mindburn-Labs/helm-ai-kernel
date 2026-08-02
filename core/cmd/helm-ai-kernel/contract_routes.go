@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: contract-route evidence export wires existing SHA-256 and
+// configured receipt-signer paths; it adds no standalone post-quantum assurance.
+
 import (
 	"archive/tar"
 	"bytes"

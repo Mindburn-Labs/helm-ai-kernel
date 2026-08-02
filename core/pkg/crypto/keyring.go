@@ -1,5 +1,8 @@
 package crypto
 
+// quantum_posture: KeyRing dispatches configured classical Ed25519, ML-DSA,
+// or hybrid signers by key ID; it adds no independent cryptographic assurance.
+
 import (
 	"fmt"
 	"sort"

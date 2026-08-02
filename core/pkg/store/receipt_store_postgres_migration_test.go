@@ -209,3 +209,84 @@ func TestPostgresTenantCursorContinuesWithLateSignedSessionGenesisAfterAppendSeq
 		t.Fatalf("reloaded late signed-session genesis signature: valid=%v err=%v", valid, err)
 	}
 }
+
+func TestPostgresReceiptChainHashMigrationPreservesIssuedPredecessorAcrossReload(t *testing.T) {
+	postgresURL := os.Getenv("HELM_TEST_POSTGRES_URL")
+	if postgresURL == "" {
+		t.Skip("set HELM_TEST_POSTGRES_URL to run the Postgres receipt chain hash migration proof")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	schema := fmt.Sprintf("helm_receipt_chain_hash_migration_%d", time.Now().UnixNano())
+	db, err := sql.Open("postgres", postgresURLWithSearchPath(t, postgresURL, schema))
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS `+schema); err != nil {
+		t.Fatalf("create test schema: %v", err)
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = db.ExecContext(cleanupCtx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+	}()
+
+	firstStore := NewPostgresReceiptStore(db)
+	if err := firstStore.Init(ctx); err != nil {
+		t.Fatalf("initialize pre-006 receipt store: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `ALTER TABLE receipts DROP COLUMN chain_hash`); err != nil {
+		t.Fatalf("remove chain_hash to model pre-006 store: %v", err)
+	}
+	migration, err := os.ReadFile(filepath.Join("migrations", "006_add_receipt_chain_hash.sql"))
+	if err != nil {
+		t.Fatalf("read 006 receipt migration: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, string(migration)); err != nil {
+		t.Fatalf("apply 006 receipt migration: %v", err)
+	}
+
+	const tenantID = "tenant-chain-hash"
+	const sessionID = "session-chain-hash"
+	issuedAt := time.Date(2026, 8, 2, 0, 0, 0, 123456000, time.UTC)
+	var first *contracts.Receipt
+	if err := firstStore.AppendCausalScoped(ctx, tenantID, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		first = storeCoverageReceipt("receipt-chain-first", "decision-chain-first", sessionID, lamport, issuedAt)
+		first.PrevHash = prevHash
+		return first, nil
+	}); err != nil {
+		t.Fatalf("append first receipt: %v", err)
+	}
+	firstHash, err := contracts.ReceiptChainHash(first)
+	if err != nil {
+		t.Fatalf("hash first receipt at issuance: %v", err)
+	}
+	var storedHash string
+	if err := db.QueryRowContext(ctx, `SELECT chain_hash FROM receipts WHERE receipt_id = $1`, first.ReceiptID).Scan(&storedHash); err != nil {
+		t.Fatalf("read persisted chain hash: %v", err)
+	}
+	if storedHash != firstHash {
+		t.Fatalf("persisted chain hash = %q, want issued hash %q", storedHash, firstHash)
+	}
+
+	secondStore := NewPostgresReceiptStore(db)
+	var second *contracts.Receipt
+	if err := secondStore.AppendCausalScoped(ctx, tenantID, sessionID, func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+		if previous == nil || previous.ReceiptID != first.ReceiptID {
+			t.Fatalf("reloaded predecessor = %+v, want first receipt", previous)
+		}
+		if prevHash != firstHash {
+			t.Fatalf("successor prev_hash = %q, want issued chain hash %q", prevHash, firstHash)
+		}
+		second = storeCoverageReceipt("receipt-chain-second", "decision-chain-second", sessionID, lamport, issuedAt.Add(time.Second))
+		second.PrevHash = prevHash
+		return second, nil
+	}); err != nil {
+		t.Fatalf("append successor after reload: %v", err)
+	}
+	if second == nil || second.PrevHash != firstHash {
+		t.Fatalf("successor = %+v, want prev_hash %q", second, firstHash)
+	}
+}

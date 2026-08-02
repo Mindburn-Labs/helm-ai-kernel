@@ -240,10 +240,6 @@ func ReceiptVerifyPayload(r *contracts.Receipt) ([]byte, error) {
 	}
 }
 
-// CanonicalizeDecisionV2 signs the machine-readable ReasonCode in place of
-// free-text Reason: the exported, keyed-on field is the attested one, and
-// prose (which the telemetry contract prohibits from export) leaves the
-// preimage entirely.
 // decisionV2SigningEnvelope is a fixed, narrow signed view of a decision.
 // Unlike the legacy colon payload, its JCS representation has unambiguous
 // field boundaries even when hashes use a prefix such as "sha256:".
@@ -252,18 +248,39 @@ type decisionV2SigningEnvelope struct {
 	ID                string `json:"id"`
 	Verdict           string `json:"verdict"`
 	ReasonCode        string `json:"reason_code"`
+	ReasonHash        string `json:"reason_hash"`
 	PhenotypeHash     string `json:"phenotype_hash"`
 	PolicyContentHash string `json:"policy_content_hash"`
 	EffectDigest      string `json:"effect_digest"`
 }
 
-func CanonicalizeDecisionV2(id, verdict, reasonCode, phenotypeHash, policyContentHash, effectDigest string) ([]byte, error) {
+// HashReason is the digest under which free-text Reason is attested in the V2
+// decision preimage.
+//
+// V2 promotes ReasonCode into the signed payload, but ReasonCode is empty by
+// contract on ALLOW — the registry in contracts/verdict.go is defined for
+// DENY/ESCALATE — and several producers leave it unset on other verdicts too.
+// Binding the code alone therefore removed attestation that the legacy preimage
+// had: the emitted explanation of an allowed action could be rewritten and the
+// signature still verified. Binding the digest keeps prose out of the preimage,
+// which the telemetry contract prohibits from export, while making any edit to
+// the explanation break the signature.
+func HashReason(reason string) string {
+	sum := sha256.Sum256([]byte(reason))
+	return hex.EncodeToString(sum[:])
+}
+
+// CanonicalizeDecisionV2 binds the machine-readable ReasonCode — the exported,
+// keyed-on field — alongside a digest of the free-text Reason. Prose itself
+// stays out of the preimage, which the telemetry contract prohibits from
+// export; see HashReason for why the digest cannot be dropped.
+func CanonicalizeDecisionV2(id, verdict, reason, reasonCode, phenotypeHash, policyContentHash, effectDigest string) ([]byte, error) {
 	// This fixed all-string envelope has a known JCS key order. Build it
 	// directly instead of sending it through JCS's marshal/decode/map path:
 	// signing a decision is on Guardian's hot path, and that generic path added
 	// 74 allocations to every policy evaluation. appendJCSQuotedString mirrors
 	// the RFC 8785 escaping used by canonicalize.JCS.
-	payload := make([]byte, 0, len(id)+len(verdict)+len(reasonCode)+len(phenotypeHash)+len(policyContentHash)+len(effectDigest)+192)
+	payload := make([]byte, 0, len(id)+len(verdict)+len(reasonCode)+len(phenotypeHash)+len(policyContentHash)+len(effectDigest)+288)
 	payload = append(payload, `{"effect_digest":`...)
 	payload = appendJCSQuotedString(payload, effectDigest)
 	payload = append(payload, `,"id":`...)
@@ -274,6 +291,8 @@ func CanonicalizeDecisionV2(id, verdict, reasonCode, phenotypeHash, policyConten
 	payload = appendJCSQuotedString(payload, policyContentHash)
 	payload = append(payload, `,"reason_code":`...)
 	payload = appendJCSQuotedString(payload, reasonCode)
+	payload = append(payload, `,"reason_hash":`...)
+	payload = appendJCSQuotedString(payload, HashReason(reason))
 	payload = append(payload, `,"signature_version":`...)
 	payload = appendJCSQuotedString(payload, contracts.DecisionRecordSignatureV2)
 	payload = append(payload, `,"verdict":`...)
@@ -330,7 +349,7 @@ func DecisionSigningPayload(d *contracts.DecisionRecord) ([]byte, error) {
 		return nil, fmt.Errorf("decision is nil")
 	}
 	d.SignatureVersion = contracts.DecisionRecordSignatureV2
-	return CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	return CanonicalizeDecisionV2(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
 }
 
 // DecisionVerifyPayload reconstructs the signed payload per the record's
@@ -343,7 +362,7 @@ func DecisionVerifyPayload(d *contracts.DecisionRecord) ([]byte, error) {
 	case "":
 		return []byte(CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)), nil
 	case contracts.DecisionRecordSignatureV2:
-		return CanonicalizeDecisionV2(d.ID, d.Verdict, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+		return CanonicalizeDecisionV2(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
 	default:
 		return nil, fmt.Errorf("unsupported decision signature version %q", d.SignatureVersion)
 	}

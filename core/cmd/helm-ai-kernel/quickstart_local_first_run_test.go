@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -97,6 +98,84 @@ func TestQuickstartDryRunJSONIsPurePreview(t *testing.T) {
 	}
 	if summary["policy_path"] == "" {
 		t.Fatal("policy_path missing")
+	}
+}
+
+func TestQuickstartSourceBuildFromRepoRootUsesDedicatedUserState(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repoRoot := filepath.Clean(filepath.Join(wd, "..", "..", ".."))
+	if _, err := os.Stat(filepath.Join(repoRoot, "data", ".keep")); err != nil {
+		t.Fatalf("tracked repo data marker: %v", err)
+	}
+	binary := filepath.Join(t.TempDir(), "helm-ai-kernel")
+	build := exec.Command("go", "build", "-o", binary, "./core/cmd/helm-ai-kernel")
+	build.Dir = repoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("source build from repo root: %v\n%s", err, out)
+	}
+
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(home, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	wantDataDir, err := resolveQuickstartDataDir(filepath.Join(home, ".helm-ai-kernel", "quickstart"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"quickstart", "--dry-run", "--json"},
+		{"setup", "--quickstart", "--dry-run", "--json"},
+	} {
+		var stdout, stderr bytes.Buffer
+		cmd := exec.Command(binary, args...)
+		cmd.Dir = repoRoot
+		cmd.Env = append(os.Environ(), "HOME="+home)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("%v: %v\nstdout=%s\nstderr=%s", args, err, stdout.String(), stderr.String())
+		}
+		var summary struct {
+			DataDir string `json:"data_dir"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+			t.Fatalf("%v returned invalid JSON: %v\n%s", args, err, stdout.String())
+		}
+		if summary.DataDir != wantDataDir {
+			t.Fatalf("%v data_dir = %q, want %q", args, summary.DataDir, wantDataDir)
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("%v stderr=%s", args, stderr.String())
+		}
+	}
+}
+
+func TestQuickstartExplicitDataDirRemainsExactAcrossFrontDoors(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "explicit-state")
+	resolvedDataDir, err := resolveQuickstartDataDir(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"quickstart", "--data-dir", dataDir, "--dry-run", "--json"},
+		{"setup", "--quickstart", "--data-dir", dataDir, "--dry-run", "--json"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := Run(append([]string{"helm-ai-kernel"}, args...), &stdout, &stderr); code != 0 {
+			t.Fatalf("%v code=%d stdout=%s stderr=%s", args, code, stdout.String(), stderr.String())
+		}
+		var summary struct {
+			DataDir string `json:"data_dir"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+			t.Fatalf("%v returned invalid JSON: %v\n%s", args, err, stdout.String())
+		}
+		if summary.DataDir != resolvedDataDir {
+			t.Fatalf("%v data_dir = %q, want %q", args, summary.DataDir, resolvedDataDir)
+		}
 	}
 }
 

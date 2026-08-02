@@ -150,7 +150,7 @@ func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, in
 	opts := quickstartOptions{
 		Addr:    "127.0.0.1",
 		Port:    7714,
-		DataDir: "data",
+		DataDir: defaultQuickstartDataDir(),
 		Profile: "mcp",
 	}
 	fs := flag.NewFlagSet("quickstart", flag.ContinueOnError)

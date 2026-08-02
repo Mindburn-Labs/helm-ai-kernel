@@ -156,7 +156,7 @@ func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
 	profile := fs.String("profile", "mcp", "First-run profile: claude, codex, mcp, openai-compatible")
 	yes := fs.Bool("yes", false, "Confirm first-run changes without prompting")
 	dryRun := fs.Bool("dry-run", false, "Preview first-run changes without writing local state")
-	dataDir := fs.String("data-dir", "data", "Directory for local first-run state")
+	dataDir := fs.String("data-dir", defaultQuickstartDataDir(), "Directory for local first-run state")
 	console := fs.Bool("console", false, "Start the packaged local Console with Quickstart")
 	consolePort := fs.Int("console-port", 3400, "Local Console port (0 chooses an ephemeral port)")
 	noOpen := fs.Bool("no-open", false, "Do not open the local Console in a browser")
@@ -2261,6 +2261,13 @@ func defaultSetupDataDir() string {
 		return ""
 	}
 	return filepath.Join(home, ".helm-ai-kernel")
+}
+
+func defaultQuickstartDataDir() string {
+	if dataDir := defaultSetupDataDir(); dataDir != "" {
+		return filepath.Join(dataDir, "quickstart")
+	}
+	return ""
 }
 
 func homeDirOrEmpty() string {

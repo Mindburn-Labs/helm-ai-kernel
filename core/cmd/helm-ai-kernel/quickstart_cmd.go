@@ -348,7 +348,7 @@ func preflightQuickstartReset(opts quickstartOptions, prepared quickstartPrepare
 	opts.DataDir = prepared.DataDir
 	if !opts.Reset {
 		if _, err := os.Lstat(opts.DataDir); !os.IsNotExist(err) {
-			if _, err := validateExistingQuickstartDataDirOwnership(opts.DataDir); err != nil {
+			if _, _, err := validateExistingQuickstartDataDirOwnership(opts.DataDir); err != nil {
 				return opts, prepared, err
 			}
 		}
@@ -534,8 +534,8 @@ func isPathSameOrAncestor(target, protected string) bool {
 }
 
 // ensureQuickstartDataDirOwnership creates and marks only a directory that
-// this invocation created. An existing directory must already carry the exact
-// marker, so normal startup cannot turn unrelated files into resettable state.
+// this invocation created or an empty directory. A nonempty existing directory
+// must already carry the exact marker, so startup cannot claim unrelated state.
 func ensureQuickstartDataDirOwnership(dataDir string) error {
 	_, err := os.Lstat(dataDir)
 	if os.IsNotExist(err) {
@@ -552,15 +552,16 @@ func ensureQuickstartDataDirOwnership(dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("inspect quickstart data directory %q: %w", dataDir, err)
 	}
-	legacy, err := validateExistingQuickstartDataDirOwnership(dataDir)
+	legacy, empty, err := validateExistingQuickstartDataDirOwnership(dataDir)
 	if err != nil {
 		return err
 	}
-	if legacy {
+	if legacy || empty {
 		// v0.7 quickstart predates the explicit marker. Its complete, static
-		// layout is a migration proof; arbitrary existing directories fail it.
+		// layout is a migration proof. An empty directory has no foreign state
+		// to overwrite, so it is safe to claim for the first run.
 		if err := writeQuickstartOwnershipMarker(dataDir); err != nil {
-			return fmt.Errorf("migrate legacy quickstart ownership marker: %w", err)
+			return fmt.Errorf("write quickstart ownership marker: %w", err)
 		}
 	}
 	return nil
@@ -568,20 +569,28 @@ func ensureQuickstartDataDirOwnership(dataDir string) error {
 
 // validateExistingQuickstartDataDirOwnership checks the same proof required
 // by normal initialization without writing a marker. It is used by previews
-// so their successful plan is actually applicable.
-func validateExistingQuickstartDataDirOwnership(dataDir string) (legacy bool, err error) {
+// so their successful plan is actually applicable. Empty reports that the
+// directory is safe to claim because it contains no foreign state.
+func validateExistingQuickstartDataDirOwnership(dataDir string) (legacy bool, empty bool, err error) {
 	info, err := os.Lstat(dataDir)
 	if err != nil {
-		return false, fmt.Errorf("inspect quickstart data directory %q: %w", dataDir, err)
+		return false, false, fmt.Errorf("inspect quickstart data directory %q: %w", dataDir, err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return false, fmt.Errorf("refusing non-directory quickstart data target %q", dataDir)
+		return false, false, fmt.Errorf("refusing non-directory quickstart data target %q", dataDir)
 	}
 	legacy, err = validateQuickstartDataDirOwnership(dataDir)
-	if err != nil {
-		return false, fmt.Errorf("refusing to initialize existing data directory %q without a valid HELM quickstart ownership marker: %w", dataDir, err)
+	if err == nil {
+		return legacy, false, nil
 	}
-	return legacy, nil
+	entries, readErr := os.ReadDir(dataDir)
+	if readErr != nil {
+		return false, false, fmt.Errorf("inspect quickstart data directory %q: %w", dataDir, readErr)
+	}
+	if len(entries) == 0 {
+		return false, true, nil
+	}
+	return false, false, fmt.Errorf("refusing to initialize existing data directory %q without a valid HELM quickstart ownership marker: %w", dataDir, err)
 }
 
 // validateQuickstartDataDirOwnership accepts either the current marker or the

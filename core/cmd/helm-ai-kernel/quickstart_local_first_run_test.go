@@ -444,6 +444,44 @@ func TestPrepareQuickstartRefusesToClaimExistingDataDirectory(t *testing.T) {
 	}
 }
 
+func TestPrepareQuickstartClaimsEmptyExistingDataDirectory(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := prepareQuickstart(quickstartOptions{
+		Addr:    "127.0.0.1",
+		Port:    7714,
+		DataDir: dataDir,
+		Profile: "mcp",
+	})
+	if err != nil {
+		t.Fatalf("prepare empty directory: %v", err)
+	}
+	if prepared.Runtime == nil {
+		t.Fatalf("missing prepared runtime: %+v", prepared)
+	}
+	if err := validateQuickstartOwnershipMarker(dataDir); err != nil {
+		t.Fatalf("empty directory was not marked: %v", err)
+	}
+}
+
+func TestQuickstartDryRunAllowsEmptyExistingDataDirectory(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "state")
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := runQuickstartCmd([]string{"--dry-run", "--json", "--data-dir", dataDir}, &stdout, &stderr); code != 0 {
+		t.Fatalf("dry-run code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Lstat(filepath.Join(dataDir, quickstartOwnershipMarker)); !os.IsNotExist(err) {
+		t.Fatalf("dry-run claimed empty directory: %v", err)
+	}
+}
+
 func TestPrepareQuickstartMigratesCompleteLegacyState(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "state")
 	writeLegacyQuickstartFixture(t, dataDir)

@@ -334,7 +334,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 		t.Fatal("expected ListSince rows error")
 	}
 
-	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent-1").WillReturnRows(storePostgresReceiptRows(receipt, nil))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent-1").WillReturnRows(storePostgresReceiptRowsWithChainHash(t, receipt, nil, ""))
 	last, err := store.GetLastForSession(ctx, "agent-1")
 	if err != nil || last == nil || last.ReceiptID != receipt.ReceiptID {
 		t.Fatalf("GetLastForSession got %+v err=%v", last, err)
@@ -598,7 +598,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRows(genesis, nil))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRowsWithChainHash(t, genesis, nil, ""))
 	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	if err := store.AppendCausal(ctx, "agent", func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {

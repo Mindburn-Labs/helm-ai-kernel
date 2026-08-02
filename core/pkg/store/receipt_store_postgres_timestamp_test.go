@@ -52,7 +52,7 @@ func TestPostgresReceiptTimestampStaysStableAcrossReload(t *testing.T) {
 	}
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs(sessionID).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(sessionID).WillReturnRows(storePostgresReceiptRows(&reloaded, metadata))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs(sessionID).WillReturnRows(storePostgresReceiptRowsWithChainHash(t, &reloaded, metadata, firstHash))
 	mock.ExpectExec("INSERT INTO receipts").WithArgs(storeAnySQLArgs(storePostgresReceiptInsertArgCount)...).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	if err := receiptStore.AppendCausal(ctx, sessionID, func(previous *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {

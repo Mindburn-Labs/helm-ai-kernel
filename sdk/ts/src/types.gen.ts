@@ -8522,6 +8522,12 @@ export interface GroundedActionRef {
     grounded_action_id: string;
     /**
      *
+     * @type {Array<string>}
+     * @memberof GroundedActionRef
+     */
+    receipt_refs?: Array<string>;
+    /**
+     *
      * @type {string}
      * @memberof GroundedActionRef
      */
@@ -8650,6 +8656,7 @@ export function GroundedActionRefFromJSONTyped(json: any, ignoreDiscriminator: b
     return {
 
         'grounded_action_id': json['grounded_action_id'],
+        'receipt_refs': json['receipt_refs'] == null ? undefined : json['receipt_refs'],
         'screenshot_hash': json['screenshot_hash'],
         'dom_or_ax_snapshot_hash': json['dom_or_ax_snapshot_hash'],
         'target_ref': json['target_ref'],
@@ -8674,6 +8681,7 @@ export function GroundedActionRefToJSON(value?: GroundedActionRef | null): any {
     return {
 
         'grounded_action_id': value['grounded_action_id'],
+        'receipt_refs': value['receipt_refs'],
         'screenshot_hash': value['screenshot_hash'],
         'dom_or_ax_snapshot_hash': value['dom_or_ax_snapshot_hash'],
         'target_ref': value['target_ref'],
@@ -15701,6 +15709,12 @@ export interface PlanTransaction {
     plan_transaction_id: string;
     /**
      *
+     * @type {Array<string>}
+     * @memberof PlanTransaction
+     */
+    receipt_refs?: Array<string>;
+    /**
+     *
      * @type {string}
      * @memberof PlanTransaction
      */
@@ -15822,6 +15836,7 @@ export function PlanTransactionFromJSONTyped(json: any, ignoreDiscriminator: boo
     return {
 
         'plan_transaction_id': json['plan_transaction_id'],
+        'receipt_refs': json['receipt_refs'] == null ? undefined : json['receipt_refs'],
         'plan_hash': json['plan_hash'],
         'read_set': json['read_set'],
         'write_set': json['write_set'],
@@ -15844,6 +15859,7 @@ export function PlanTransactionToJSON(value?: PlanTransaction | null): any {
     return {
 
         'plan_transaction_id': value['plan_transaction_id'],
+        'receipt_refs': value['receipt_refs'],
         'plan_hash': value['plan_hash'],
         'read_set': value['read_set'],
         'write_set': value['write_set'],
@@ -19183,6 +19199,12 @@ export interface VerificationScope {
     verification_scope_id: string;
     /**
      *
+     * @type {Array<string>}
+     * @memberof VerificationScope
+     */
+    receipt_refs?: Array<string>;
+    /**
+     *
      * @type {string}
      * @memberof VerificationScope
      */
@@ -19292,6 +19314,7 @@ export function VerificationScopeFromJSONTyped(json: any, ignoreDiscriminator: b
     return {
 
         'verification_scope_id': json['verification_scope_id'],
+        'receipt_refs': json['receipt_refs'] == null ? undefined : json['receipt_refs'],
         'subject_hash': json['subject_hash'],
         'risk_class': json['risk_class'] == null ? undefined : json['risk_class'],
         'checks_performed': json['checks_performed'],
@@ -19314,6 +19337,7 @@ export function VerificationScopeToJSON(value?: VerificationScope | null): any {
     return {
 
         'verification_scope_id': value['verification_scope_id'],
+        'receipt_refs': value['receipt_refs'],
         'subject_hash': value['subject_hash'],
         'risk_class': value['risk_class'],
         'checks_performed': value['checks_performed'],

@@ -33,7 +33,10 @@ type PlanSpec struct {
 
 // PlanTransaction records the read/write and verification contract for a plan.
 type PlanTransaction struct {
-	PlanTransactionID            string          `json:"plan_transaction_id,omitempty"`
+	PlanTransactionID string `json:"plan_transaction_id,omitempty"`
+	// ReceiptRefs explicitly bind this transaction to issued receipts. They
+	// remain optional so historical plans can still be loaded.
+	ReceiptRefs                  []string        `json:"receipt_refs,omitempty"`
 	PlanHash                     string          `json:"plan_hash,omitempty"`
 	ReadSet                      []string        `json:"read_set,omitempty"`
 	WriteSet                     []string        `json:"write_set,omitempty"`

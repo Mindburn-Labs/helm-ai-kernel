@@ -27735,6 +27735,7 @@ public static class GovernanceDecision {
  */
 @JsonPropertyOrder({
   GroundedActionRef.JSON_PROPERTY_GROUNDED_ACTION_ID,
+  GroundedActionRef.JSON_PROPERTY_RECEIPT_REFS,
   GroundedActionRef.JSON_PROPERTY_SCREENSHOT_HASH,
   GroundedActionRef.JSON_PROPERTY_DOM_OR_AX_SNAPSHOT_HASH,
   GroundedActionRef.JSON_PROPERTY_TARGET_REF,
@@ -27754,6 +27755,9 @@ public static class GovernanceDecision {
 public static class GroundedActionRef {
   public static final String JSON_PROPERTY_GROUNDED_ACTION_ID = "grounded_action_id";
   private String groundedActionId;
+
+  public static final String JSON_PROPERTY_RECEIPT_REFS = "receipt_refs";
+  private List<String> receiptRefs;
 
   public static final String JSON_PROPERTY_SCREENSHOT_HASH = "screenshot_hash";
   private String screenshotHash;
@@ -27863,6 +27867,39 @@ public static class GroundedActionRef {
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setGroundedActionId(String groundedActionId) {
     this.groundedActionId = groundedActionId;
+  }
+
+
+  public GroundedActionRef receiptRefs(List<String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
+    return this;
+  }
+
+  public GroundedActionRef addReceiptRefsItem(String receiptRefsItem) {
+    if (this.receiptRefs == null) {
+      this.receiptRefs = new ArrayList<>();
+    }
+    this.receiptRefs.add(receiptRefsItem);
+    return this;
+  }
+
+   /**
+   * Get receiptRefs
+   * @return receiptRefs
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getReceiptRefs() {
+    return receiptRefs;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReceiptRefs(List<String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
   }
 
 
@@ -28229,6 +28266,7 @@ public static class GroundedActionRef {
     }
     GroundedActionRef groundedActionRef = (GroundedActionRef) o;
     return Objects.equals(this.groundedActionId, groundedActionRef.groundedActionId) &&
+        Objects.equals(this.receiptRefs, groundedActionRef.receiptRefs) &&
         Objects.equals(this.screenshotHash, groundedActionRef.screenshotHash) &&
         Objects.equals(this.domOrAxSnapshotHash, groundedActionRef.domOrAxSnapshotHash) &&
         Objects.equals(this.targetRef, groundedActionRef.targetRef) &&
@@ -28247,7 +28285,7 @@ public static class GroundedActionRef {
 
   @Override
   public int hashCode() {
-    return Objects.hash(groundedActionId, screenshotHash, domOrAxSnapshotHash, targetRef, bboxOrElementId, actionType, precondition, postcondition, postconditionRef, verificationScopeRef, policyHash, proofGraphNodeRef, sandboxGrantHash, createdAt, groundingHash);
+    return Objects.hash(groundedActionId, receiptRefs, screenshotHash, domOrAxSnapshotHash, targetRef, bboxOrElementId, actionType, precondition, postcondition, postconditionRef, verificationScopeRef, policyHash, proofGraphNodeRef, sandboxGrantHash, createdAt, groundingHash);
   }
 
   @Override
@@ -28255,6 +28293,7 @@ public static class GroundedActionRef {
     StringBuilder sb = new StringBuilder();
     sb.append("class GroundedActionRef {\n");
     sb.append("    groundedActionId: ").append(toIndentedString(groundedActionId)).append("\n");
+    sb.append("    receiptRefs: ").append(toIndentedString(receiptRefs)).append("\n");
     sb.append("    screenshotHash: ").append(toIndentedString(screenshotHash)).append("\n");
     sb.append("    domOrAxSnapshotHash: ").append(toIndentedString(domOrAxSnapshotHash)).append("\n");
     sb.append("    targetRef: ").append(toIndentedString(targetRef)).append("\n");
@@ -28301,6 +28340,8 @@ public static class GroundedActionRef {
    */
   public String toUrlQueryString(String prefix) {
     String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
     if (prefix == null) {
       // style=form, explode=true, e.g. /pet?name=cat&type=manx
       prefix = "";
@@ -28308,6 +28349,8 @@ public static class GroundedActionRef {
       // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
       prefix = prefix + "[";
       suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
     }
 
     StringJoiner joiner = new StringJoiner("&");
@@ -28315,6 +28358,15 @@ public static class GroundedActionRef {
     // add `grounded_action_id` to the URL query string
     if (getGroundedActionId() != null) {
       joiner.add(String.format("%sgrounded_action_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getGroundedActionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `receipt_refs` to the URL query string
+    if (getReceiptRefs() != null) {
+      for (int i = 0; i < getReceiptRefs().size(); i++) {
+        joiner.add(String.format("%sreceipt_refs%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getReceiptRefs().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
     }
 
     // add `screenshot_hash` to the URL query string
@@ -52844,6 +52896,7 @@ public static class PDPResponse {
  */
 @JsonPropertyOrder({
   PlanTransaction.JSON_PROPERTY_PLAN_TRANSACTION_ID,
+  PlanTransaction.JSON_PROPERTY_RECEIPT_REFS,
   PlanTransaction.JSON_PROPERTY_PLAN_HASH,
   PlanTransaction.JSON_PROPERTY_READ_SET,
   PlanTransaction.JSON_PROPERTY_WRITE_SET,
@@ -52861,6 +52914,9 @@ public static class PDPResponse {
 public static class PlanTransaction {
   public static final String JSON_PROPERTY_PLAN_TRANSACTION_ID = "plan_transaction_id";
   private String planTransactionId;
+
+  public static final String JSON_PROPERTY_RECEIPT_REFS = "receipt_refs";
+  private List<String> receiptRefs;
 
   public static final String JSON_PROPERTY_PLAN_HASH = "plan_hash";
   private String planHash;
@@ -53001,6 +53057,39 @@ public static class PlanTransaction {
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setPlanTransactionId(String planTransactionId) {
     this.planTransactionId = planTransactionId;
+  }
+
+
+  public PlanTransaction receiptRefs(List<String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
+    return this;
+  }
+
+  public PlanTransaction addReceiptRefsItem(String receiptRefsItem) {
+    if (this.receiptRefs == null) {
+      this.receiptRefs = new ArrayList<>();
+    }
+    this.receiptRefs.add(receiptRefsItem);
+    return this;
+  }
+
+   /**
+   * Get receiptRefs
+   * @return receiptRefs
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getReceiptRefs() {
+    return receiptRefs;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReceiptRefs(List<String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
   }
 
 
@@ -53365,6 +53454,7 @@ public static class PlanTransaction {
     }
     PlanTransaction planTransaction = (PlanTransaction) o;
     return Objects.equals(this.planTransactionId, planTransaction.planTransactionId) &&
+        Objects.equals(this.receiptRefs, planTransaction.receiptRefs) &&
         Objects.equals(this.planHash, planTransaction.planHash) &&
         Objects.equals(this.readSet, planTransaction.readSet) &&
         Objects.equals(this.writeSet, planTransaction.writeSet) &&
@@ -53381,7 +53471,7 @@ public static class PlanTransaction {
 
   @Override
   public int hashCode() {
-    return Objects.hash(planTransactionId, planHash, readSet, writeSet, assumptionSet, versionDependencies, verificationObligations, conflictPolicy, rollbackPolicy, rollbackOrCompensationPolicy, approvalState, humanReviewState, transactionHash);
+    return Objects.hash(planTransactionId, receiptRefs, planHash, readSet, writeSet, assumptionSet, versionDependencies, verificationObligations, conflictPolicy, rollbackPolicy, rollbackOrCompensationPolicy, approvalState, humanReviewState, transactionHash);
   }
 
   @Override
@@ -53389,6 +53479,7 @@ public static class PlanTransaction {
     StringBuilder sb = new StringBuilder();
     sb.append("class PlanTransaction {\n");
     sb.append("    planTransactionId: ").append(toIndentedString(planTransactionId)).append("\n");
+    sb.append("    receiptRefs: ").append(toIndentedString(receiptRefs)).append("\n");
     sb.append("    planHash: ").append(toIndentedString(planHash)).append("\n");
     sb.append("    readSet: ").append(toIndentedString(readSet)).append("\n");
     sb.append("    writeSet: ").append(toIndentedString(writeSet)).append("\n");
@@ -53451,6 +53542,15 @@ public static class PlanTransaction {
     // add `plan_transaction_id` to the URL query string
     if (getPlanTransactionId() != null) {
       joiner.add(String.format("%splan_transaction_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPlanTransactionId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `receipt_refs` to the URL query string
+    if (getReceiptRefs() != null) {
+      for (int i = 0; i < getReceiptRefs().size(); i++) {
+        joiner.add(String.format("%sreceipt_refs%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getReceiptRefs().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
     }
 
     // add `plan_hash` to the URL query string
@@ -64176,6 +64276,7 @@ public static class VerificationResultRoots {
  */
 @JsonPropertyOrder({
   VerificationScope.JSON_PROPERTY_VERIFICATION_SCOPE_ID,
+  VerificationScope.JSON_PROPERTY_RECEIPT_REFS,
   VerificationScope.JSON_PROPERTY_SUBJECT_HASH,
   VerificationScope.JSON_PROPERTY_RISK_CLASS,
   VerificationScope.JSON_PROPERTY_CHECKS_PERFORMED,
@@ -64193,6 +64294,9 @@ public static class VerificationResultRoots {
 public static class VerificationScope {
   public static final String JSON_PROPERTY_VERIFICATION_SCOPE_ID = "verification_scope_id";
   private String verificationScopeId;
+
+  public static final String JSON_PROPERTY_RECEIPT_REFS = "receipt_refs";
+  private List<String> receiptRefs;
 
   public static final String JSON_PROPERTY_SUBJECT_HASH = "subject_hash";
   private String subjectHash;
@@ -64294,6 +64398,39 @@ public static class VerificationScope {
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
   public void setVerificationScopeId(String verificationScopeId) {
     this.verificationScopeId = verificationScopeId;
+  }
+
+
+  public VerificationScope receiptRefs(List<String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
+    return this;
+  }
+
+  public VerificationScope addReceiptRefsItem(String receiptRefsItem) {
+    if (this.receiptRefs == null) {
+      this.receiptRefs = new ArrayList<>();
+    }
+    this.receiptRefs.add(receiptRefsItem);
+    return this;
+  }
+
+   /**
+   * Get receiptRefs
+   * @return receiptRefs
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<String> getReceiptRefs() {
+    return receiptRefs;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RECEIPT_REFS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReceiptRefs(List<String> receiptRefs) {
+    this.receiptRefs = receiptRefs;
   }
 
 
@@ -64658,6 +64795,7 @@ public static class VerificationScope {
     }
     VerificationScope verificationScope = (VerificationScope) o;
     return Objects.equals(this.verificationScopeId, verificationScope.verificationScopeId) &&
+        Objects.equals(this.receiptRefs, verificationScope.receiptRefs) &&
         Objects.equals(this.subjectHash, verificationScope.subjectHash) &&
         Objects.equals(this.riskClass, verificationScope.riskClass) &&
         Objects.equals(this.checksPerformed, verificationScope.checksPerformed) &&
@@ -64674,7 +64812,7 @@ public static class VerificationScope {
 
   @Override
   public int hashCode() {
-    return Objects.hash(verificationScopeId, subjectHash, riskClass, checksPerformed, assumptions, untestedRegions, knownLimits, remainingRisks, requiredFollowup, verifierHash, policyHash, createdAt, scopeHash);
+    return Objects.hash(verificationScopeId, receiptRefs, subjectHash, riskClass, checksPerformed, assumptions, untestedRegions, knownLimits, remainingRisks, requiredFollowup, verifierHash, policyHash, createdAt, scopeHash);
   }
 
   @Override
@@ -64682,6 +64820,7 @@ public static class VerificationScope {
     StringBuilder sb = new StringBuilder();
     sb.append("class VerificationScope {\n");
     sb.append("    verificationScopeId: ").append(toIndentedString(verificationScopeId)).append("\n");
+    sb.append("    receiptRefs: ").append(toIndentedString(receiptRefs)).append("\n");
     sb.append("    subjectHash: ").append(toIndentedString(subjectHash)).append("\n");
     sb.append("    riskClass: ").append(toIndentedString(riskClass)).append("\n");
     sb.append("    checksPerformed: ").append(toIndentedString(checksPerformed)).append("\n");
@@ -64744,6 +64883,15 @@ public static class VerificationScope {
     // add `verification_scope_id` to the URL query string
     if (getVerificationScopeId() != null) {
       joiner.add(String.format("%sverification_scope_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerificationScopeId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `receipt_refs` to the URL query string
+    if (getReceiptRefs() != null) {
+      for (int i = 0; i < getReceiptRefs().size(); i++) {
+        joiner.add(String.format("%sreceipt_refs%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
+            URLEncoder.encode(String.valueOf(getReceiptRefs().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
     }
 
     // add `subject_hash` to the URL query string

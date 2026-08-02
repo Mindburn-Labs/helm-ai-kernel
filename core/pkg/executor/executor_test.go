@@ -19,10 +19,12 @@ import (
 // MockDriver implements ToolDriver
 type MockDriver struct {
 	Called bool
+	Calls  int
 }
 
 func (m *MockDriver) Execute(ctx context.Context, toolName string, params map[string]any) (any, error) {
 	m.Called = true
+	m.Calls++
 	return "result", nil
 }
 
@@ -134,6 +136,34 @@ func (s *tenantScopedReceiptStore) AppendCausalScoped(ctx context.Context, tenan
 	}
 	s.tenantReceipts[tenantID][receipt.DecisionID] = receipt
 	return s.Store(ctx, receipt)
+}
+
+// collisionCheckingTenantReceiptStore models the receipt_id primary key that
+// durable stores enforce, rather than allowing a test map to overwrite it.
+type collisionCheckingTenantReceiptStore struct {
+	*tenantScopedReceiptStore
+	persistCalls int
+}
+
+func (s *collisionCheckingTenantReceiptStore) AppendCausalScoped(ctx context.Context, tenantID, sessionID string, build func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error)) error {
+	s.tenantID = tenantID
+	s.sessionID = sessionID
+	receipt, err := build(nil, 1, "")
+	if err != nil {
+		return err
+	}
+	if s.receipts[receipt.ReceiptID] != nil {
+		return errors.New("global receipt id collision")
+	}
+	if s.tenantReceipts == nil {
+		s.tenantReceipts = make(map[string]map[string]*contracts.Receipt)
+	}
+	if s.tenantReceipts[tenantID] == nil {
+		s.tenantReceipts[tenantID] = make(map[string]*contracts.Receipt)
+	}
+	s.tenantReceipts[tenantID][receipt.DecisionID] = receipt
+	s.persistCalls++
+	return s.MemoryReceiptStore.Store(ctx, receipt)
 }
 
 // causalReceiptStore models the optional atomic append capability provided by
@@ -511,6 +541,67 @@ func TestSafeExecutorScopesIdempotencyToAuthenticatedTenant(t *testing.T) {
 	}
 	if got := strings.Join(store.idempotencyTenantIDs, ","); got != "tenant-a,tenant-b" {
 		t.Fatalf("idempotency tenant scopes = %q, want tenant-a,tenant-b", got)
+	}
+}
+
+func TestSafeExecutorTenantQualifiedReceiptIdentityAvoidsCollisionAndRetriesIdempotently(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("tenant-receipt-id-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Unix(1700000000, 0).UTC()
+	store := &collisionCheckingTenantReceiptStore{tenantScopedReceiptStore: &tenantScopedReceiptStore{MemoryReceiptStore: NewMemoryReceiptStore()}}
+	driver := &MockDriver{}
+	outbox := &recordingOutboxStore{}
+	executor := NewSafeExecutor(signer, signer, driver, store, nil, outbox, "", nil, nil, nil, func() time.Time { return clock })
+	effect := &contracts.Effect{
+		EffectID:   "effect-shared-decision",
+		EffectType: "EXECUTE_TOOL",
+		ArgsHash:   "sha256:shared-decision",
+		Params:     map[string]any{"tool_name": "ls"},
+	}
+	decision := &contracts.DecisionRecord{
+		ID:                "decision-shared-across-tenants",
+		Verdict:           string(contracts.VerdictAllow),
+		ReasonCode:        "ALLOW_BY_POLICY",
+		PolicyContentHash: "sha256:policy",
+		EffectDigest:      testEffectDigest(t, effect),
+		InputContext:      map[string]any{"session_id": "shared-session"},
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:       decision.ID,
+		EffectDigestHash: decision.EffectDigest,
+		AllowedTool:      "ls",
+		ExpiresAt:        clock.Add(time.Hour),
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+	execute := func(tenantID string) *contracts.Receipt {
+		t.Helper()
+		ctx := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "operator-" + tenantID, TenantID: tenantID})
+		receipt, _, err := executor.Execute(ctx, effect, decision, intent)
+		if err != nil {
+			t.Fatalf("execute for %s: %v", tenantID, err)
+		}
+		return receipt
+	}
+
+	tenantA := execute("tenant-a")
+	tenantB := execute("tenant-b")
+	if tenantA.ReceiptID == tenantB.ReceiptID || len(store.receipts) != 2 {
+		t.Fatalf("tenant-scoped receipts collided: a=%q b=%q stored=%d", tenantA.ReceiptID, tenantB.ReceiptID, len(store.receipts))
+	}
+	if driver.Calls != 2 || store.persistCalls != 2 || outbox.scheduleCalls != 2 {
+		t.Fatalf("distinct tenant executions = driver:%d persist:%d schedule:%d, want 2 each", driver.Calls, store.persistCalls, outbox.scheduleCalls)
+	}
+
+	retry := execute("tenant-b")
+	if retry != tenantB || driver.Calls != 2 || store.persistCalls != 2 || outbox.scheduleCalls != 2 {
+		t.Fatalf("tenant-b retry dispatched or persisted: receipt=%p want=%p driver=%d persist=%d schedule=%d", retry, tenantB, driver.Calls, store.persistCalls, outbox.scheduleCalls)
 	}
 }
 

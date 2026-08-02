@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -164,6 +165,47 @@ func TestSQLiteTenantCursorContinuesWithLateSessionGenesis(t *testing.T) {
 	continued, err := receiptStore.ListByTenantCursor(ctx, "tenant-a", cursor, 1)
 	if err != nil || len(continued) != 1 || continued[0].ReceiptID != lateGenesis.ReceiptID {
 		t.Fatalf("tenant cursor omitted late session genesis: receipts=%+v err=%v", continued, err)
+	}
+}
+
+func TestSQLiteTenantCursorRejectsStaleOrCrossTenantReceipt(t *testing.T) {
+	receiptStore, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	issuedAt := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	issue := func(tenantID, receiptID string) *contracts.Receipt {
+		t.Helper()
+		var issued *contracts.Receipt
+		err := receiptStore.AppendCausalScoped(ctx, tenantID, "cursor-session", func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+			issued = &contracts.Receipt{
+				ReceiptID:        receiptID,
+				DecisionID:       "decision-" + receiptID,
+				EffectID:         "effect-" + receiptID,
+				Status:           "SUCCESS",
+				Timestamp:        issuedAt,
+				OutputHash:       "output-" + receiptID,
+				DecisionHash:     "decision-hash-" + receiptID,
+				ArgsHash:         "args-" + receiptID,
+				SignatureVersion: contracts.ReceiptSignatureV5,
+				SessionID:        "cursor-session",
+				PrevHash:         prevHash,
+				LamportClock:     lamport,
+				Verdict:          string(contracts.VerdictAllow),
+			}
+			return issued, nil
+		})
+		if err != nil {
+			t.Fatalf("append %s: %v", receiptID, err)
+		}
+		return issued
+	}
+	foreign := issue("tenant-b", "receipt-tenant-b")
+	for _, cursorID := range []string{"receipt-deleted-or-stale", foreign.ReceiptID} {
+		_, err := receiptStore.ListByTenantCursor(ctx, "tenant-a", TenantReceiptCursor{ReceiptID: cursorID, Timestamp: issuedAt}, 10)
+		if err == nil || !strings.Contains(err.Error(), "invalid for authenticated tenant") {
+			t.Fatalf("cursor %q error = %v, want authenticated-scope validation", cursorID, err)
+		}
 	}
 }
 
@@ -376,8 +418,11 @@ func TestPostgresListByTenantCursorUsesAppendSequence(t *testing.T) {
 	prefix := causalReceiptTenantScopePrefix(tenantID)
 	receipt := storeCoverageReceipt("receipt-b", "decision-b", "session-b", 1, timestamp)
 
-	mock.ExpectQuery(`left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*append_sequence >[\s\S]*cursor_receipt\.receipt_id = \$3[\s\S]*ORDER BY append_sequence ASC LIMIT \$4`).
-		WithArgs(contracts.ReceiptSignatureV5, prefix, "receipt-a", 1).
+	mock.ExpectQuery(`SELECT append_sequence FROM receipts[\s\S]*receipt_id = \$1[\s\S]*left\(causal_session_id, char_length\(\$3\)\) = \$3`).
+		WithArgs("receipt-a", contracts.ReceiptSignatureV5, prefix).
+		WillReturnRows(sqlmock.NewRows([]string{"append_sequence"}).AddRow(17))
+	mock.ExpectQuery(`left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*append_sequence > \$3[\s\S]*ORDER BY append_sequence ASC LIMIT \$4`).
+		WithArgs(contracts.ReceiptSignatureV5, prefix, int64(17), 1).
 		WillReturnRows(storePostgresReceiptRows(receipt, nil))
 	got, err := receiptStore.ListByTenantCursor(ctx, tenantID, TenantReceiptCursor{
 		LamportClock: 1,
@@ -386,5 +431,25 @@ func TestPostgresListByTenantCursorUsesAppendSequence(t *testing.T) {
 	}, 1)
 	if err != nil || len(got) != 1 || got[0].ReceiptID != "receipt-b" {
 		t.Fatalf("Postgres tenant keyset page = %+v err=%v", got, err)
+	}
+}
+
+func TestPostgresListByTenantCursorRejectsUnresolvableReceipt(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+	receiptStore := NewPostgresReceiptStore(db)
+	const tenantID = "tenant-a"
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+
+	mock.ExpectQuery(`SELECT append_sequence FROM receipts[\s\S]*receipt_id = \$1[\s\S]*left\(causal_session_id, char_length\(\$3\)\) = \$3`).
+		WithArgs("foreign-or-deleted-receipt", contracts.ReceiptSignatureV5, prefix).
+		WillReturnRows(sqlmock.NewRows([]string{"append_sequence"}))
+	_, err := receiptStore.ListByTenantCursor(ctx, tenantID, TenantReceiptCursor{
+		Timestamp: time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC),
+		ReceiptID: "foreign-or-deleted-receipt",
+	}, 1)
+	if err == nil || !strings.Contains(err.Error(), "invalid for authenticated tenant") {
+		t.Fatalf("unresolvable tenant cursor error = %v", err)
 	}
 }

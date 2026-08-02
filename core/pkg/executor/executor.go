@@ -2,6 +2,8 @@ package executor
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"reflect"
@@ -428,6 +430,18 @@ func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
 
 const standaloneReceiptSessionPrefix = "standalone:decision:"
 
+// ReceiptIDForDecision returns the deterministic receipt identity for a
+// decision. Authenticated tenant executions must not share a globally unique
+// receipt ID merely because their decision IDs happen to match.
+func ReceiptIDForDecision(tenantID, decisionID string) string {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return "rcpt-" + decisionID
+	}
+	digest := sha256.Sum256([]byte(fmt.Sprintf("%d:%s%d:%s", len(tenantID), tenantID, len(decisionID), decisionID)))
+	return "rcpt-" + hex.EncodeToString(digest[:])
+}
+
 // receiptSessionID returns the signed chain identity for an execution. A
 // decision with no caller session is deliberately a standalone receipt group,
 // keyed by its already-signed decision ID rather than the shared empty string.
@@ -499,7 +513,7 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 
 	buildReceipt := func(lamportClock uint64, prevHash string, causal bool) (*contracts.Receipt, error) {
 		receipt := &contracts.Receipt{
-			ReceiptID:     "rcpt-" + decision.ID,
+			ReceiptID:     ReceiptIDForDecision(tenantID, decision.ID),
 			DecisionID:    decision.ID,
 			CorrelationID: decision.CorrelationID,
 			EffectID:      effect.EffectID,

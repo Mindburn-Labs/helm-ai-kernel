@@ -219,10 +219,14 @@ func TestTenantEvidenceExportIncludesReferencedSurfaceArtifactsOnly(t *testing.T
 		DecisionHash: "sha256:evidence-decision",
 		ArgsHash:     "args-evidence",
 		ScopeHash:    scope.ScopeHash,
+		Evidence: map[string]string{
+			"scope_ref": scope.ScopeHash,
+		},
 		Metadata: map[string]any{
-			"risk_class":     "T2",
-			"side_effectful": true,
-			"scope_hash":     scope.ScopeHash,
+			"risk_class":             "T2",
+			"side_effectful":         true,
+			"scope_hash":             scope.ScopeHash,
+			"verification_scope_ref": scope.ScopeHash,
 		},
 	}, svc.ReceiptSigner)
 	svc.BoundarySurfaces = registry
@@ -270,6 +274,161 @@ func TestTenantEvidenceExportIncludesReferencedSurfaceArtifactsOnly(t *testing.T
 	}
 	if verifyRec.Code != http.StatusOK || result["verdict"] != "PASS" {
 		t.Fatalf("referenced evidence verification status=%d result=%+v", verifyRec.Code, result)
+	}
+}
+
+func TestArtifactReceiptRefsRequireCanonicalTenantOwnership(t *testing.T) {
+	svc, cleanup := newVerifiedEvidenceRouteTestServices(t)
+	defer cleanup()
+	bindingStore, cleanupBindings := newRouteAuthTestBindingStore(t)
+	defer cleanupBindings()
+	if err := bindingStore.Upsert(context.Background(), store.PrincipalBinding{
+		TenantID:    "tenant-b",
+		PrincipalID: "operator-tenant-b",
+	}); err != nil {
+		t.Fatalf("seed tenant-b principal binding: %v", err)
+	}
+	SetPrincipalBindingStore(bindingStore)
+	t.Cleanup(func() { SetPrincipalBindingStore(nil) })
+
+	const sessionID = "artifact-ownership-session"
+	const receiptID = "rcpt-artifact-owned"
+	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), defaultRuntimeTenantID, sessionID, &contracts.Receipt{
+		ReceiptID:    receiptID,
+		DecisionID:   "dec-artifact-owned",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 5, 0, 0, 1, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		DecisionHash: "sha256:artifact-owned-decision",
+		ArgsHash:     "args-artifact-owned",
+		Metadata: map[string]any{
+			"risk_class": "T2",
+		},
+	}, svc.ReceiptSigner)
+
+	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC) })
+	svc.BoundarySurfaces = registry
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+	postScope := func(tenantID, scopeID string) *httptest.ResponseRecorder {
+		body := fmt.Sprintf(`{"verification_scope_id":%q,"receipt_refs":[%q],"subject_hash":"sha256:subject","risk_class":"T2","checks_performed":["hash"],"verifier_hash":"sha256:verifier","policy_hash":"sha256:policy"}`, scopeID, receiptID)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/verification-scopes", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+		req.Header.Set(tenantHeader, tenantID)
+		principalID := "operator-" + tenantID
+		if tenantID == defaultRuntimeTenantID {
+			principalID = "system-admin"
+		}
+		req.Header.Set(principalHeader, principalID)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := postScope("tenant-b", "scope-forged-by-tenant-b"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("cross-tenant artifact reference status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, ok := registry.GetVerificationScope("scope-forged-by-tenant-b"); ok {
+		t.Fatal("cross-tenant artifact reference reached the shared registry")
+	}
+	if rec := postScope(defaultRuntimeTenantID, "scope-owned-by-tenant-a"); rec.Code != http.StatusCreated {
+		t.Fatalf("same-tenant artifact reference status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	exportReq := httptest.NewRequest(http.MethodPost, "/api/v1/evidence/export", strings.NewReader(`{"session_id":"`+sessionID+`","format":"tar.gz"}`))
+	authorizeTestRequest(exportReq)
+	exportRec := httptest.NewRecorder()
+	mux.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("same-tenant evidence export status=%d body=%s", exportRec.Code, exportRec.Body.String())
+	}
+	bundle, err := readEvidenceBundle(exportRec.Body.Bytes())
+	if err != nil {
+		t.Fatalf("read evidence bundle: %v", err)
+	}
+	if _, ok := bundle.Files["verification_scopes/scope-forged-by-tenant-b.json"]; ok {
+		t.Fatal("tenant evidence export included rejected cross-tenant artifact")
+	}
+	if _, ok := bundle.Files["verification_scopes/scope-owned-by-tenant-a.json"]; !ok {
+		t.Fatal("tenant evidence export omitted authorized same-tenant artifact")
+	}
+}
+
+func TestVerificationScopeArtifactRequiresExplicitReceiptEvidenceRef(t *testing.T) {
+	scope := contracts.VerificationScope{
+		VerificationScopeID: "rcpt-not-a-scope-reference",
+		ScopeHash:           "sha256:scope-reference",
+	}
+	data, err := json.Marshal(scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := &contracts.Receipt{
+		ReceiptID:         scope.VerificationScopeID,
+		ScopeHash:         scope.ScopeHash,
+		Signature:         scope.ScopeHash,
+		MerkleRoot:        scope.ScopeHash,
+		EffectGraphNodeID: scope.ScopeHash,
+		Metadata: map[string]any{
+			"risk_class":            "T2",
+			"verification_scope_id": scope.VerificationScopeID,
+			"scope_hash":            scope.ScopeHash,
+		},
+	}
+	if evidenceArtifactReferencesReceipt("verification_scopes/", data, receipt) {
+		t.Fatal("intrinsic receipt fields or metadata must not reference a verification scope")
+	}
+	receipt.Evidence = map[string]string{"scope_ref": scope.ScopeHash}
+	if !evidenceArtifactReferencesReceipt("verification_scopes/", data, receipt) {
+		t.Fatal("explicit receipt evidence reference did not link the verification scope")
+	}
+}
+
+func TestSealedSurfaceArtifactReceiptRefsLinkEvidence(t *testing.T) {
+	receipt := &contracts.Receipt{ReceiptID: "rcpt-sealed-link"}
+	cases := []struct {
+		name     string
+		prefix   string
+		artifact any
+		metadata map[string]any
+	}{
+		{
+			name:     "verification scope",
+			prefix:   "verification_scopes/",
+			artifact: contracts.VerificationScope{ReceiptRefs: []string{receipt.ReceiptID}},
+			metadata: map[string]any{
+				"risk_class": "T2",
+			},
+		},
+		{
+			name:     "plan transaction",
+			prefix:   "plan_transactions/",
+			artifact: contracts.PlanTransaction{ReceiptRefs: []string{receipt.ReceiptID}},
+			metadata: map[string]any{
+				"requires_plan_transaction": true,
+			},
+		},
+		{
+			name:     "grounded action",
+			prefix:   "grounded_action_refs/",
+			artifact: contracts.GroundedActionRef{ReceiptRefs: []string{receipt.ReceiptID}},
+			metadata: map[string]any{
+				"requires_grounded_action_ref": true,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := json.Marshal(tc.artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			receipt.Metadata = tc.metadata
+			if !evidenceArtifactReferencesReceipt(tc.prefix, data, receipt) {
+				t.Fatal("sealed artifact receipt_refs did not link the receipt")
+			}
+		})
 	}
 }
 
@@ -1269,7 +1428,8 @@ func TestWriteEvidenceBundlePackFilesRejectsUnsafeDerivedNames(t *testing.T) {
 		LamportClock: 1,
 		ArgsHash:     "args-unsafe",
 		Metadata: map[string]any{
-			"risk_class": "T2",
+			"risk_class":             "T2",
+			"verification_scope_ref": scope.ScopeHash,
 		},
 	}}, registry)
 	if err != nil {
@@ -1325,7 +1485,8 @@ func TestWriteEvidenceBundlePackFilesRejectsBackslashDerivedNames(t *testing.T) 
 		LamportClock: 1,
 		ArgsHash:     "args-unsafe",
 		Metadata: map[string]any{
-			"risk_class": "T2",
+			"risk_class":             "T2",
+			"verification_scope_ref": scope.ScopeHash,
 		},
 	}}, registry)
 	if err != nil {
@@ -1385,7 +1546,8 @@ func TestBuildTrustedEvidenceBundleWithSurfaceArtifactsAllowsSafeNames(t *testin
 		LamportClock: 1,
 		ArgsHash:     "args-safe",
 		Metadata: map[string]any{
-			"risk_class": "T2",
+			"risk_class":             "T2",
+			"verification_scope_ref": scope.ScopeHash,
 		},
 	}
 	if err := signer.SignReceipt(receipt); err != nil {
@@ -1660,6 +1822,10 @@ func (s *overflowReceiptStore) ListSince(_ context.Context, since uint64, limit 
 
 func (s *overflowReceiptStore) GetByReceiptIDForTenant(ctx context.Context, _ string, receiptID string) (*contracts.Receipt, error) {
 	return s.GetByReceiptID(ctx, receiptID)
+}
+
+func (s *overflowReceiptStore) GetCanonicalReceiptByIDForTenant(_ context.Context, _ string, receiptID string) (*contracts.Receipt, error) {
+	return &contracts.Receipt{ReceiptID: receiptID}, nil
 }
 
 func (s *overflowReceiptStore) ListByTenant(_ context.Context, _ string, since uint64, limit int) ([]*contracts.Receipt, error) {

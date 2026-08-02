@@ -7629,6 +7629,7 @@ class GroundedActionRef(BaseModel):
     GroundedActionRef
     """ # noqa: E501
     grounded_action_id: StrictStr
+    receipt_refs: Optional[List[StrictStr]] = None
     screenshot_hash: StrictStr
     dom_or_ax_snapshot_hash: StrictStr
     target_ref: StrictStr
@@ -7643,7 +7644,7 @@ class GroundedActionRef(BaseModel):
     sandbox_grant_hash: Optional[StrictStr] = None
     created_at: Optional[datetime] = None
     grounding_hash: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["grounded_action_id", "screenshot_hash", "dom_or_ax_snapshot_hash", "target_ref", "bbox_or_element_id", "action_type", "precondition", "postcondition", "postcondition_ref", "verification_scope_ref", "policy_hash", "proof_graph_node_ref", "sandbox_grant_hash", "created_at", "grounding_hash"]
+    __properties: ClassVar[List[str]] = ["grounded_action_id", "receipt_refs", "screenshot_hash", "dom_or_ax_snapshot_hash", "target_ref", "bbox_or_element_id", "action_type", "precondition", "postcondition", "postcondition_ref", "verification_scope_ref", "policy_hash", "proof_graph_node_ref", "sandbox_grant_hash", "created_at", "grounding_hash"]
 
     @field_validator('action_type')
     @classmethod
@@ -7705,6 +7706,7 @@ class GroundedActionRef(BaseModel):
 
         _obj = cls.model_validate({
             "grounded_action_id": obj.get("grounded_action_id"),
+            "receipt_refs": obj.get("receipt_refs"),
             "screenshot_hash": obj.get("screenshot_hash"),
             "dom_or_ax_snapshot_hash": obj.get("dom_or_ax_snapshot_hash"),
             "target_ref": obj.get("target_ref"),
@@ -14345,6 +14347,7 @@ class PlanTransaction(BaseModel):
     PlanTransaction
     """ # noqa: E501
     plan_transaction_id: StrictStr
+    receipt_refs: Optional[List[StrictStr]] = None
     plan_hash: StrictStr
     read_set: List[StrictStr]
     write_set: List[StrictStr]
@@ -14357,7 +14360,7 @@ class PlanTransaction(BaseModel):
     approval_state: Optional[StrictStr] = None
     human_review_state: Optional[StrictStr] = None
     transaction_hash: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["plan_transaction_id", "plan_hash", "read_set", "write_set", "assumption_set", "version_dependencies", "verification_obligations", "conflict_policy", "rollback_policy", "rollback_or_compensation_policy", "approval_state", "human_review_state", "transaction_hash"]
+    __properties: ClassVar[List[str]] = ["plan_transaction_id", "receipt_refs", "plan_hash", "read_set", "write_set", "assumption_set", "version_dependencies", "verification_obligations", "conflict_policy", "rollback_policy", "rollback_or_compensation_policy", "approval_state", "human_review_state", "transaction_hash"]
 
     @field_validator('conflict_policy')
     @classmethod
@@ -14430,6 +14433,7 @@ class PlanTransaction(BaseModel):
 
         _obj = cls.model_validate({
             "plan_transaction_id": obj.get("plan_transaction_id"),
+            "receipt_refs": obj.get("receipt_refs"),
             "plan_hash": obj.get("plan_hash"),
             "read_set": obj.get("read_set"),
             "write_set": obj.get("write_set"),
@@ -17522,6 +17526,7 @@ class VerificationScope(BaseModel):
     VerificationScope
     """ # noqa: E501
     verification_scope_id: StrictStr
+    receipt_refs: Optional[List[StrictStr]] = None
     subject_hash: StrictStr
     risk_class: Optional[StrictStr] = None
     checks_performed: List[StrictStr]
@@ -17534,7 +17539,7 @@ class VerificationScope(BaseModel):
     policy_hash: StrictStr
     created_at: datetime
     scope_hash: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["verification_scope_id", "subject_hash", "risk_class", "checks_performed", "assumptions", "untested_regions", "known_limits", "remaining_risks", "required_followup", "verifier_hash", "policy_hash", "created_at", "scope_hash"]
+    __properties: ClassVar[List[str]] = ["verification_scope_id", "receipt_refs", "subject_hash", "risk_class", "checks_performed", "assumptions", "untested_regions", "known_limits", "remaining_risks", "required_followup", "verifier_hash", "policy_hash", "created_at", "scope_hash"]
 
     @field_validator('risk_class')
     @classmethod
@@ -17599,6 +17604,7 @@ class VerificationScope(BaseModel):
 
         _obj = cls.model_validate({
             "verification_scope_id": obj.get("verification_scope_id"),
+            "receipt_refs": obj.get("receipt_refs"),
             "subject_hash": obj.get("subject_hash"),
             "risk_class": obj.get("risk_class"),
             "checks_performed": obj.get("checks_performed"),

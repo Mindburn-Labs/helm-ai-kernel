@@ -18,6 +18,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
@@ -140,7 +141,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteInternal(w, err)
 			return
 		}
-		receiptID := "rcpt_" + decision.ID
+		receiptID := executor.ReceiptIDForDecision(tenantID, decision.ID)
 		receipt, err := receiptForTenant(r.Context(), svc, tenantID, receiptID)
 		if err != nil {
 			api.WriteInternal(w, fmt.Errorf("load persisted receipt %s: %w", receiptID, err))
@@ -534,6 +535,9 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 		}
 	}
 	receiptID := "rcpt_" + decision.ID
+	if tenantID := strings.TrimSpace(authenticatedTenantID); tenantID != "" {
+		receiptID = executor.ReceiptIDForDecision(tenantID, decision.ID)
+	}
 	effectID := decision.Action
 	if effectID == "" {
 		if action, ok := metadata["action"].(string); ok {

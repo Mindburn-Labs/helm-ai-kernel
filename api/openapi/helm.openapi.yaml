@@ -4329,6 +4329,9 @@ components:
       required: [verification_scope_id, subject_hash, checks_performed, verifier_hash, policy_hash, created_at]
       properties:
         verification_scope_id: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
         subject_hash: { type: string }
         risk_class:
           type: string
@@ -4402,6 +4405,9 @@ components:
       required: [plan_transaction_id, plan_hash, read_set, write_set, assumption_set, verification_obligations, conflict_policy]
       properties:
         plan_transaction_id: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
         plan_hash: { type: string }
         read_set:
           type: array
@@ -4469,6 +4475,9 @@ components:
       required: [grounded_action_id, screenshot_hash, dom_or_ax_snapshot_hash, target_ref, bbox_or_element_id, action_type, precondition, postcondition, postcondition_ref, verification_scope_ref, policy_hash, proof_graph_node_ref]
       properties:
         grounded_action_id: { type: string }
+        receipt_refs:
+          type: array
+          items: { type: string }
         screenshot_hash: { type: string }
         dom_or_ax_snapshot_hash: { type: string }
         target_ref: { type: string }

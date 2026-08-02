@@ -380,9 +380,10 @@ reason.
 `005_add_receipt_append_sequence.sql` adds a durable, globally monotonic
 append sequence for tenant-wide receipt cursors. It backfills historical rows
 with the former timestamp/receipt-ID order, advances future inserts through a
-database sequence, and makes the value unique. This keeps a newly opened
-signed session (whose Lamport clock restarts at one) visible after a tenant
-cursor has advanced.
+database sequence, and makes the value unique. Startup repairs the sequence
+under the receipt-writer lock without rewinding a sequence that another
+instance has advanced. This keeps a newly opened signed session (whose Lamport
+clock restarts at one) visible after a tenant cursor has advanced.
 
 `006_add_receipt_chain_hash.sql` persists each newly issued receipt's canonical
 chain hash beside its durable projection. Future causal appends use that stored
@@ -394,6 +395,15 @@ Durable stores preflight that known state before external dispatch; their final
 locked append remains authoritative for concurrency. The Kernel does not
 synthesize a replacement predecessor hash or present that history as losslessly
 reconstructed.
+
+`007_add_receipt_envelope.sql` persists the complete issued receipt envelope
+alongside its chain hash. New proof and evidence reads rehash that stored
+envelope before returning it. On upgrade, a legacy projection is backfilled
+only when it exactly reproduces the already durable chain hash. A projection
+that cannot do so remains available for ordinary operations and causal-chain
+continuation using the durable predecessor hash, but it cannot cross the
+canonical evidence/proof boundary. The Kernel does not synthesize missing
+receipt fields or call a lossy projection verified evidence.
 
 This is deliberately **not** a claim that the whole receipt is signed: fields
 outside the durable V5 envelope, including post-sign transparency anchoring,

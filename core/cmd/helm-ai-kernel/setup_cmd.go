@@ -291,7 +291,11 @@ func runSetupQuickstart(request setupQuickstartRequest, stdout, stderr io.Writer
 		if request.Reset && !request.Yes {
 			previewArgs = append(previewArgs, "--yes")
 		}
-		return setupRunFirstRun(append(previewArgs, "--dry-run"), stdout, stderr)
+		previewArgs = append(previewArgs, "--dry-run")
+		if request.JSON {
+			previewArgs = append(previewArgs, "--json")
+		}
+		return setupRunFirstRun(previewArgs, stdout, stderr)
 	}
 	if !request.Yes {
 		previewArgs := append([]string(nil), args...)

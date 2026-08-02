@@ -133,6 +133,22 @@ func TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash(t *testing.T) 
 	if _, err := store.GetByReceiptID(ctx, "r-v5-unrecoverable"); err == nil || !strings.Contains(err.Error(), "004_add_receipt_decision_hash.sql") {
 		t.Fatalf("unrecoverable V5 receipt did not fail closed with migration guidance: %v", err)
 	}
+	if _, err := db.ExecContext(ctx, `SELECT setval('receipts_append_sequence_seq', 42, true)`); err != nil {
+		t.Fatalf("advance append sequence before restart: %v", err)
+	}
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("initialize receipt store after advanced sequence: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO receipts (receipt_id, decision_id, status, timestamp) VALUES ($1, $2, $3, $4)`, "r-after-sequence-restart", "d-after-sequence-restart", "ALLOW", timestamp); err != nil {
+		t.Fatalf("insert after sequence restart: %v", err)
+	}
+	var afterRestartSequence int64
+	if err := db.QueryRowContext(ctx, `SELECT append_sequence FROM receipts WHERE receipt_id = $1`, "r-after-sequence-restart").Scan(&afterRestartSequence); err != nil {
+		t.Fatalf("read append sequence after restart: %v", err)
+	}
+	if afterRestartSequence != 43 {
+		t.Fatalf("append sequence after restart = %d, want 43 without rewind", afterRestartSequence)
+	}
 }
 
 func TestPostgresTenantCursorContinuesWithLateSignedSessionGenesisAfterAppendSequenceMigration(t *testing.T) {
@@ -269,6 +285,17 @@ func TestPostgresReceiptChainHashMigrationPreservesIssuedPredecessorAcrossReload
 	}
 	if storedHash != firstHash {
 		t.Fatalf("persisted chain hash = %q, want issued hash %q", storedHash, firstHash)
+	}
+	reloaded, err := firstStore.GetByReceiptID(ctx, first.ReceiptID)
+	if err != nil {
+		t.Fatalf("reload persisted receipt: %v", err)
+	}
+	reloadedHash, err := contracts.ReceiptChainHash(reloaded)
+	if err != nil || reloadedHash != firstHash {
+		t.Fatalf("reloaded receipt chain hash = %q err=%v, want %q", reloadedHash, err, firstHash)
+	}
+	if reloaded.EmergencyActivationID != first.EmergencyActivationID || reloaded.SafeDepState != first.SafeDepState {
+		t.Fatalf("reloaded receipt lost hash-bound safe-deprecation fields: %+v", reloaded)
 	}
 
 	secondStore := NewPostgresReceiptStore(db)

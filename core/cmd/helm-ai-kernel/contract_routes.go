@@ -212,7 +212,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteForbidden(w, "ProofGraph route requires authenticated tenant principal context")
 			return
 		}
-		receipts, err := contractReceipts(r.Context(), svc, tenantID, "", parseLimit(r.URL.Query().Get("limit"), 50, 1000))
+		receipts, err := canonicalContractReceipts(r.Context(), svc, tenantID, "", parseLimit(r.URL.Query().Get("limit"), 50, 1000))
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -241,7 +241,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteForbidden(w, "ProofGraph route requires authenticated tenant principal context")
 			return
 		}
-		receipts, err := contractReceipts(r.Context(), svc, tenantID, sessionID, parseLimit(r.URL.Query().Get("limit"), 100, 1000))
+		receipts, err := canonicalContractReceipts(r.Context(), svc, tenantID, sessionID, parseLimit(r.URL.Query().Get("limit"), 100, 1000))
 		if err != nil {
 			api.WriteInternal(w, err)
 			return
@@ -341,6 +341,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				api.WriteBadRequest(w, "Invalid verification scope JSON")
 				return
 			}
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, scope.ReceiptRefs...); err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
 			sealed, err := surfaces.PutVerificationScope(scope)
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
@@ -385,6 +394,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			var trace contracts.HarnessTrace
 			if err := json.NewDecoder(r.Body).Decode(&trace); err != nil {
 				api.WriteBadRequest(w, "Invalid harness trace JSON")
+				return
+			}
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, trace.ReceiptRefs...); err != nil {
+				api.WriteBadRequest(w, err.Error())
 				return
 			}
 			sealed, err := surfaces.PutHarnessTrace(trace)
@@ -433,6 +451,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				api.WriteBadRequest(w, "Invalid plan transaction JSON")
 				return
 			}
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, tx.ReceiptRefs...); err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
 			sealed, err := surfaces.PutPlanTransaction(tx)
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
@@ -479,6 +506,17 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				api.WriteBadRequest(w, "Invalid harness change contract JSON")
 				return
 			}
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if receiptRef := strings.TrimSpace(contract.ActivationReceiptRef); receiptRef != "" {
+				if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, receiptRef); err != nil {
+					api.WriteBadRequest(w, err.Error())
+					return
+				}
+			}
 			sealed, err := surfaces.PutHarnessChange(contract)
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
@@ -510,6 +548,15 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				ReceiptRef string `json:"receipt_ref"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
+			tenantID, err := authenticatedReceiptTenantID(r.Context())
+			if err != nil {
+				api.WriteForbidden(w, "Artifact receipt references require authenticated tenant principal context")
+				return
+			}
+			if err := authorizeArtifactReceiptReferences(r.Context(), svc, tenantID, req.ReceiptRef); err != nil {
+				api.WriteBadRequest(w, err.Error())
+				return
+			}
 			contract, err := surfaces.ApproveHarnessChange(id, req.ReceiptRef)
 			if err != nil {
 				api.WriteBadRequest(w, err.Error())
@@ -1431,6 +1478,68 @@ func contractReceipts(ctx context.Context, svc *Services, tenantID, sessionID st
 	return listReceiptsForCursor(ctx, svc, tenantID, sessionID, store.TenantReceiptCursor{}, limit)
 }
 
+func canonicalContractReceipts(ctx context.Context, svc *Services, tenantID, sessionID string, limit int) ([]*contracts.Receipt, error) {
+	receipts, err := contractReceipts(ctx, svc, tenantID, sessionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalReceiptsForTenant(ctx, svc, tenantID, receipts)
+}
+
+func canonicalReceiptsForTenant(ctx context.Context, svc *Services, tenantID string, receipts []*contracts.Receipt) ([]*contracts.Receipt, error) {
+	canonical := make([]*contracts.Receipt, 0, len(receipts))
+	for _, receipt := range receipts {
+		if receipt == nil {
+			return nil, fmt.Errorf("receipt store returned nil receipt")
+		}
+		verified, err := canonicalReceiptForTenant(ctx, svc, tenantID, receipt.ReceiptID)
+		if err != nil {
+			return nil, err
+		}
+		canonical = append(canonical, verified)
+	}
+	return canonical, nil
+}
+
+func canonicalReceiptForTenant(ctx context.Context, svc *Services, tenantID, receiptID string) (*contracts.Receipt, error) {
+	if svc == nil || svc.ReceiptStore == nil {
+		return nil, fmt.Errorf("receipt store unavailable")
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedCanonicalReceiptReader)
+	if !ok {
+		return nil, fmt.Errorf("receipt store lacks canonical evidence reader capability")
+	}
+	return reader.GetCanonicalReceiptByIDForTenant(ctx, tenantID, receiptID)
+}
+
+// authorizeArtifactReceiptReferences ensures a shared boundary artifact cannot
+// claim a receipt owned by a different tenant. The registry seals artifact
+// content, but tenant-scoped canonical receipt lookup is the authority for
+// whether that content may name a receipt at all.
+func authorizeArtifactReceiptReferences(ctx context.Context, svc *Services, tenantID string, receiptRefs ...string) error {
+	if len(receiptRefs) == 0 {
+		return nil
+	}
+	if svc == nil || svc.ReceiptStore == nil {
+		return errors.New("receipt store unavailable for artifact receipt references")
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedCanonicalReceiptReader)
+	if !ok {
+		return errors.New("receipt store lacks canonical tenant receipt reader capability")
+	}
+	for _, receiptRef := range receiptRefs {
+		receiptRef = strings.TrimSpace(receiptRef)
+		if receiptRef == "" {
+			return errors.New("artifact receipt references must not contain empty values")
+		}
+		receipt, err := reader.GetCanonicalReceiptByIDForTenant(ctx, tenantID, receiptRef)
+		if err != nil || receipt == nil || strings.TrimSpace(receipt.ReceiptID) != receiptRef {
+			return fmt.Errorf("artifact receipt reference %q is not available to authenticated tenant", receiptRef)
+		}
+	}
+	return nil
+}
+
 func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegistry, records []mcppkg.ServerQuarantineRecord) {
 	for _, record := range records {
 		_, _ = registry.Discover(ctx, mcppkg.DiscoverServerRequest{
@@ -1539,7 +1648,11 @@ func contractReceiptsForExportWithPageSize(ctx context.Context, svc *Services, t
 		if len(page) > remaining {
 			return nil, errEvidenceExportTooLarge
 		}
-		receipts = append(receipts, page...)
+		canonicalPage, err := canonicalReceiptsForTenant(ctx, svc, tenantID, page)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, canonicalPage...)
 		nextCursor, err := receiptCursorForReceipt(sessionID, page[len(page)-1])
 		if err != nil {
 			return nil, err
@@ -1590,7 +1703,7 @@ func findReceiptByReference(ctx context.Context, svc *Services, tenantID, ref st
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
-	if receipt, err := receiptForTenant(ctx, svc, tenantID, ref); err == nil {
+	if receipt, err := canonicalReceiptForTenant(ctx, svc, tenantID, ref); err == nil {
 		return receipt, nil
 	}
 	receipts, err := contractReceipts(ctx, svc, tenantID, "", 1000)
@@ -1599,7 +1712,7 @@ func findReceiptByReference(ctx context.Context, svc *Services, tenantID, ref st
 	}
 	for _, receipt := range receipts {
 		if receiptLinkHash(receipt) == ref || receipt.Signature == ref || receipt.MerkleRoot == ref {
-			return receipt, nil
+			return canonicalReceiptForTenant(ctx, svc, tenantID, receipt.ReceiptID)
 		}
 	}
 	return nil, fmt.Errorf("receipt not found")
@@ -2237,76 +2350,67 @@ func evidenceArtifactReferencesReceipt(prefix string, data []byte, receipt *cont
 	switch prefix {
 	case "verification_scopes/":
 		var scope contracts.VerificationScope
-		return json.Unmarshal(data, &scope) == nil && receiptRequiresVerificationScope(receipt) && receiptReferencesArtifact(receipt, scope.VerificationScopeID, scope.ScopeHash)
+		return json.Unmarshal(data, &scope) == nil && receiptRequiresVerificationScope(receipt) && (receiptReferencesArtifact(receipt, scope.VerificationScopeID, scope.ScopeHash) || receiptMetadataReferencesArtifact(receipt, "verification_scope_ref", scope.VerificationScopeID, scope.ScopeHash) || artifactReferencesReceipt(receipt, scope.ReceiptRefs...))
 	case "harness_traces/":
 		var trace contracts.HarnessTrace
 		if json.Unmarshal(data, &trace) != nil || !receiptRequiresHarnessTrace(receipt) {
 			return false
 		}
-		return receiptReferencesArtifact(receipt, append([]string{trace.TraceID, trace.TraceHash}, trace.ReceiptRefs...)...)
+		return receiptReferencesArtifact(receipt, trace.TraceID, trace.TraceHash) || receiptMetadataReferencesArtifact(receipt, "harness_trace_ref", trace.TraceID, trace.TraceHash) || artifactReferencesReceipt(receipt, trace.ReceiptRefs...)
 	case "plan_transactions/":
 		var tx contracts.PlanTransaction
-		return json.Unmarshal(data, &tx) == nil && receiptRequiresPlanTransaction(receipt) && receiptReferencesArtifact(receipt, tx.PlanTransactionID, tx.PlanHash, tx.TransactionHash)
+		return json.Unmarshal(data, &tx) == nil && receiptRequiresPlanTransaction(receipt) && (receiptReferencesArtifact(receipt, tx.PlanTransactionID, tx.PlanHash, tx.TransactionHash) || receiptMetadataReferencesArtifact(receipt, "plan_transaction_ref", tx.PlanTransactionID, tx.PlanHash, tx.TransactionHash) || artifactReferencesReceipt(receipt, tx.ReceiptRefs...))
 	case "harness_change_contracts/":
 		var change contracts.HarnessChangeContract
-		return json.Unmarshal(data, &change) == nil && receiptRequiresHarnessChange(receipt) && receiptReferencesArtifact(receipt, change.ChangeContractID, change.ContractHash, change.ActivationReceiptRef)
+		return json.Unmarshal(data, &change) == nil && receiptRequiresHarnessChange(receipt) && (receiptReferencesArtifact(receipt, change.ChangeContractID, change.ContractHash) || receiptMetadataReferencesArtifact(receipt, "harness_change_contract_ref", change.ChangeContractID, change.ContractHash) || artifactReferencesReceipt(receipt, change.ActivationReceiptRef))
 	case "grounded_action_refs/":
 		var action contracts.GroundedActionRef
-		return json.Unmarshal(data, &action) == nil && receiptRequiresGroundedAction(receipt) && receiptReferencesArtifact(receipt, action.GroundedActionID, action.GroundingHash, action.ProofGraphNodeRef, action.VerificationScopeRef)
+		return json.Unmarshal(data, &action) == nil && receiptRequiresGroundedAction(receipt) && (receiptReferencesArtifact(receipt, action.GroundedActionID, action.GroundingHash, action.ProofGraphNodeRef, action.VerificationScopeRef) || receiptMetadataReferencesArtifact(receipt, "grounded_action_ref", action.GroundedActionID, action.GroundingHash, action.ProofGraphNodeRef, action.VerificationScopeRef) || artifactReferencesReceipt(receipt, action.ReceiptRefs...))
 	case "gui_action_receipts/":
 		var actionReceipt contracts.GUIActionReceipt
-		return json.Unmarshal(data, &actionReceipt) == nil && receiptRequiresGroundedAction(receipt) && receiptReferencesArtifact(receipt, actionReceipt.ReceiptID, actionReceipt.GroundedActionRef, actionReceipt.ReceiptHash)
+		return json.Unmarshal(data, &actionReceipt) == nil && receiptRequiresGroundedAction(receipt) && (receiptReferencesArtifact(receipt, actionReceipt.GroundedActionRef, actionReceipt.ReceiptHash) || receiptMetadataReferencesArtifact(receipt, "gui_action_receipt_ref", actionReceipt.GroundedActionRef, actionReceipt.ReceiptHash) || artifactReferencesReceipt(receipt, actionReceipt.ReceiptID))
 	default:
 		return false
 	}
 }
 
 func receiptReferencesArtifact(receipt *contracts.Receipt, artifactRefs ...string) bool {
+	if receipt == nil || len(receipt.Evidence) == 0 {
+		return false
+	}
+	for _, value := range receipt.Evidence {
+		for _, ref := range artifactRefs {
+			if strings.TrimSpace(value) != "" && strings.TrimSpace(value) == strings.TrimSpace(ref) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func receiptMetadataReferencesArtifact(receipt *contracts.Receipt, key string, artifactRefs ...string) bool {
+	return artifactReferenceMatches(receiptMetadataString(receipt, key), artifactRefs...)
+}
+
+func artifactReferencesReceipt(receipt *contracts.Receipt, artifactRefs ...string) bool {
 	if receipt == nil {
 		return false
 	}
-	receiptRefs := map[string]struct{}{}
-	for _, value := range []string{
-		receipt.ReceiptID,
-		receiptLinkHash(receipt),
-		receipt.Signature,
-		receipt.MerkleRoot,
-		receipt.ScopeHash,
-		receipt.EffectGraphNodeID,
-	} {
-		if value = strings.TrimSpace(value); value != "" {
-			receiptRefs[value] = struct{}{}
+	for _, ref := range artifactRefs {
+		if strings.TrimSpace(receipt.ReceiptID) != "" && strings.TrimSpace(receipt.ReceiptID) == strings.TrimSpace(ref) {
+			return true
 		}
 	}
-	for _, value := range receipt.Evidence {
-		if value = strings.TrimSpace(value); value != "" {
-			receiptRefs[value] = struct{}{}
-		}
-	}
-	for _, value := range receipt.Metadata {
-		switch value := value.(type) {
-		case string:
-			if value = strings.TrimSpace(value); value != "" {
-				receiptRefs[value] = struct{}{}
-			}
-		case []string:
-			for _, ref := range value {
-				if ref = strings.TrimSpace(ref); ref != "" {
-					receiptRefs[ref] = struct{}{}
-				}
-			}
-		case []any:
-			for _, ref := range value {
-				if ref, ok := ref.(string); ok {
-					if ref = strings.TrimSpace(ref); ref != "" {
-						receiptRefs[ref] = struct{}{}
-					}
-				}
-			}
-		}
+	return false
+}
+
+func artifactReferenceMatches(value string, artifactRefs ...string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
 	}
 	for _, ref := range artifactRefs {
-		if _, ok := receiptRefs[strings.TrimSpace(ref)]; ok && strings.TrimSpace(ref) != "" {
+		if value == strings.TrimSpace(ref) {
 			return true
 		}
 	}

@@ -3609,6 +3609,8 @@ impl Default for GovernanceDecisionVerdict {
 pub struct GroundedActionRef {
     #[serde(rename = "grounded_action_id")]
     pub grounded_action_id: String,
+    #[serde(rename = "receipt_refs", skip_serializing_if = "Option::is_none")]
+    pub receipt_refs: Option<Vec<String>>,
     #[serde(rename = "screenshot_hash")]
     pub screenshot_hash: String,
     #[serde(rename = "dom_or_ax_snapshot_hash")]
@@ -3643,6 +3645,7 @@ impl GroundedActionRef {
     pub fn new(grounded_action_id: String, screenshot_hash: String, dom_or_ax_snapshot_hash: String, target_ref: String, bbox_or_element_id: String, action_type: GroundedActionRefActionType, precondition: String, postcondition: String, postcondition_ref: String, verification_scope_ref: String, policy_hash: String, proof_graph_node_ref: String) -> GroundedActionRef {
         GroundedActionRef {
             grounded_action_id,
+            receipt_refs: None,
             screenshot_hash,
             dom_or_ax_snapshot_hash,
             target_ref,
@@ -6811,6 +6814,8 @@ impl PdpResponse {
 pub struct PlanTransaction {
     #[serde(rename = "plan_transaction_id")]
     pub plan_transaction_id: String,
+    #[serde(rename = "receipt_refs", skip_serializing_if = "Option::is_none")]
+    pub receipt_refs: Option<Vec<String>>,
     #[serde(rename = "plan_hash")]
     pub plan_hash: String,
     #[serde(rename = "read_set")]
@@ -6841,6 +6846,7 @@ impl PlanTransaction {
     pub fn new(plan_transaction_id: String, plan_hash: String, read_set: Vec<String>, write_set: Vec<String>, assumption_set: Vec<String>, verification_obligations: Vec<String>, conflict_policy: PlanTransactionConflictPolicy) -> PlanTransaction {
         PlanTransaction {
             plan_transaction_id,
+            receipt_refs: None,
             plan_hash,
             read_set,
             write_set,
@@ -8350,6 +8356,8 @@ impl VerificationResultRoots {
 pub struct VerificationScope {
     #[serde(rename = "verification_scope_id")]
     pub verification_scope_id: String,
+    #[serde(rename = "receipt_refs", skip_serializing_if = "Option::is_none")]
+    pub receipt_refs: Option<Vec<String>>,
     #[serde(rename = "subject_hash")]
     pub subject_hash: String,
     #[serde(rename = "risk_class", skip_serializing_if = "Option::is_none")]
@@ -8380,6 +8388,7 @@ impl VerificationScope {
     pub fn new(verification_scope_id: String, subject_hash: String, checks_performed: Vec<String>, verifier_hash: String, policy_hash: String, created_at: String) -> VerificationScope {
         VerificationScope {
             verification_scope_id,
+            receipt_refs: None,
             subject_hash,
             risk_class: None,
             checks_performed,

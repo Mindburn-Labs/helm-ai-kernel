@@ -242,6 +242,37 @@ func TestFileBackedSurfaceRegistryPersistsRecords(t *testing.T) {
 	}
 }
 
+func TestFileBackedSurfaceRegistryPersistsExplicitReceiptRefs(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	path := filepath.Join(t.TempDir(), "surfaces.json")
+	registry, err := NewFileBackedSurfaceRegistry(path, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.PutVerificationScope(contracts.VerificationScope{VerificationScopeID: "scope-refs", ReceiptRefs: []string{"rcpt-scope"}, SubjectHash: "sha256:subject", ChecksPerformed: []string{"hash"}, VerifierHash: "sha256:verifier", PolicyHash: "sha256:policy"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.PutPlanTransaction(contracts.PlanTransaction{PlanTransactionID: "tx-refs", ReceiptRefs: []string{"rcpt-tx"}, PlanHash: "sha256:plan", ReadSet: []string{"artifact:read"}, WriteSet: []string{"artifact:write"}, AssumptionSet: []string{"assumption"}, VerificationObligations: []string{"verify"}, ConflictPolicy: "deny"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.PutGroundedAction(contracts.GroundedActionRef{GroundedActionID: "action-refs", ReceiptRefs: []string{"rcpt-action"}, ScreenshotHash: "sha256:screenshot", DOMOrAXSnapshotHash: "sha256:dom", TargetRef: "button#save", BBoxOrElementID: "button#save", ActionType: "click", Precondition: "form dirty", Postcondition: "saved", PostconditionRef: "proof:save", ProofGraphNodeRef: "proofgraph:save", VerificationScopeRef: "scope-refs", PolicyHash: "sha256:policy"}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := NewFileBackedSurfaceRegistry(path, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := reloaded.GetVerificationScope("scope-refs"); !ok || len(got.ReceiptRefs) != 1 || got.ReceiptRefs[0] != "rcpt-scope" {
+		t.Fatalf("persisted scope refs = %+v, found=%v", got.ReceiptRefs, ok)
+	}
+	if got, ok := reloaded.GetPlanTransaction("tx-refs"); !ok || len(got.ReceiptRefs) != 1 || got.ReceiptRefs[0] != "rcpt-tx" {
+		t.Fatalf("persisted transaction refs = %+v, found=%v", got.ReceiptRefs, ok)
+	}
+	if got, ok := reloaded.GetGroundedAction("action-refs"); !ok || len(got.ReceiptRefs) != 1 || got.ReceiptRefs[0] != "rcpt-action" {
+		t.Fatalf("persisted action refs = %+v, found=%v", got.ReceiptRefs, ok)
+	}
+}
+
 func TestSQLSurfaceRegistryPersistsRecords(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "surfaces.db"))

@@ -42,7 +42,7 @@ func (v storeCoverageVerifier) VerifyReceipt(*contracts.Receipt) (bool, error) {
 
 type storeRoundTripFunc func(*http.Request) (*http.Response, error)
 
-const storePostgresReceiptInsertArgCount = 32
+const storePostgresReceiptInsertArgCount = 33
 
 func (f storeRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
@@ -242,12 +242,16 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	receipt := storeCoverageReceipt("receipt-1", "decision-1", "agent-1", 7, now)
 
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS receipts").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectBegin()
+	mock.ExpectExec("LOCK TABLE receipts IN SHARE ROW EXCLUSIVE MODE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("UPDATE receipts").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("UPDATE receipts").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`FROM receipts[\s\S]*receipt_envelope`).WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumnsWithChainHash()))
 	mock.ExpectExec("WITH missing").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("SELECT setval").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("ALTER TABLE receipts ALTER COLUMN append_sequence SET NOT NULL").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_receipts_executor_id").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
 	if err := store.Init(ctx); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
@@ -276,6 +280,11 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	if got.ReceiptID != receipt.ReceiptID || got.Metadata["k"] != "v" || got.DecisionHash != receipt.DecisionHash || got.SignatureVersion != contracts.ReceiptSignatureV5 || got.Verdict != "ALLOW" || got.ReasonCode != "POLICY_VIOLATION" || got.PolicyHash != "policy-hash" || got.SessionID != receipt.SessionID {
 		t.Fatalf("unexpected receipt: %+v", got)
 	}
+	mock.ExpectQuery("FROM receipts WHERE receipt_id").WithArgs(receipt.ReceiptID).WillReturnRows(storePostgresReceiptRowsWithChainHash(t, receipt, []byte(`{"k":"v"}`), ""))
+	canonical, err := store.GetCanonicalReceiptByID(ctx, receipt.ReceiptID)
+	if err != nil || canonical.ReceiptID != receipt.ReceiptID {
+		t.Fatalf("canonical receipt = %+v err=%v", canonical, err)
+	}
 	mock.ExpectQuery("FROM receipts WHERE decision_id").WithArgs("missing").WillReturnError(sql.ErrNoRows)
 	if _, err := store.Get(ctx, "missing"); err == nil || !strings.Contains(err.Error(), "receipt not found") {
 		t.Fatalf("expected receipt not found, got %v", err)
@@ -287,7 +296,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 
 	mock.ExpectQuery("FROM receipts ORDER BY timestamp DESC").WithArgs(2).
 		WillReturnRows(storePostgresReceiptRows(receipt, []byte(`null`)).
-			AddRow("receipt-2", "decision-2", "effect", "", "OK", "blob", "output", "decision-hash-2", now.Add(time.Second), "agent-2", []byte(`{"x":1}`), nil, nil, "", int64(8), "args", "receipt.v5", "ALLOW", "POLICY_VIOLATION", "policy-hash", "session-2", "", int64(0), nil, "", nil, "", "", ""))
+			AddRow("receipt-2", "decision-2", "effect", "", "OK", "blob", "output", "decision-hash-2", now.Add(time.Second), "agent-2", []byte(`{"x":1}`), nil, nil, "", int64(8), "args", "receipt.v5", "ALLOW", "POLICY_VIOLATION", "policy-hash", "session-2", "", int64(0), nil, "", nil, "", "", "", nil, ""))
 	list, err := store.List(ctx, 2)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -301,7 +310,7 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	}
 	mock.ExpectQuery("FROM receipts ORDER BY timestamp DESC").
 		WillReturnRows(sqlmock.NewRows(storePostgresReceiptColumns()).
-			AddRow("receipt-bad", "decision-bad", "effect", "", "OK", "blob", "output", "decision-hash", "not-time", "agent", []byte(`null`), nil, nil, "", int64(1), "args", "receipt.v5", "ALLOW", "POLICY_VIOLATION", "policy-hash", "session-2", "", int64(0), nil, "", nil, "", "", ""))
+			AddRow("receipt-bad", "decision-bad", "effect", "", "OK", "blob", "output", "decision-hash", "not-time", "agent", []byte(`null`), nil, nil, "", int64(1), "args", "receipt.v5", "ALLOW", "POLICY_VIOLATION", "policy-hash", "session-2", "", int64(0), nil, "", nil, "", "", "", nil, ""))
 	if _, err := store.List(ctx, 1); err == nil {
 		t.Fatal("expected list scan error")
 	}
@@ -343,6 +352,61 @@ func TestCoveragePostgresReceiptStoreQueries(t *testing.T) {
 	last, err = store.GetLastForSession(ctx, "missing")
 	if err != nil || last != nil {
 		t.Fatalf("expected missing last receipt to be nil, got %+v err=%v", last, err)
+	}
+}
+
+func TestPostgresReceiptEnvelopeBackfillOnlyWritesHashEqualProjection(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+
+	matching := &contracts.Receipt{
+		ReceiptID:    "r-backfill-hash-equal",
+		DecisionID:   "d-backfill-hash-equal",
+		EffectID:     "effect",
+		Status:       "OK",
+		BlobHash:     "blob",
+		OutputHash:   "output",
+		Timestamp:    time.Unix(1700000000, 0).UTC(),
+		ExecutorID:   "legacy-session",
+		Signature:    "legacy-signature",
+		PrevHash:     "prior-hash",
+		LamportClock: 1,
+		ArgsHash:     "args",
+	}
+	matchingHash, err := contracts.ReceiptChainHash(matching)
+	if err != nil {
+		t.Fatalf("hash matching legacy projection: %v", err)
+	}
+	mismatched := storeCoverageReceipt("r-backfill-projection-only", "d-backfill-projection-only", "legacy-session", 2, time.Unix(1700000001, 0).UTC())
+	mismatchedHash, err := contracts.ReceiptChainHash(mismatched)
+	if err != nil {
+		t.Fatalf("hash projection-only legacy receipt: %v", err)
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT receipt_id FROM receipts[\s\S]*receipt_envelope`).
+		WillReturnRows(sqlmock.NewRows([]string{"receipt_id"}).AddRow(mismatched.ReceiptID).AddRow(matching.ReceiptID))
+	mock.ExpectQuery(`SELECT [\s\S]* FROM receipts WHERE receipt_id = \$1`).
+		WithArgs(mismatched.ReceiptID).
+		WillReturnRows(storePostgresReceiptProjectionRowsWithStoredChainHash(mismatched, nil, mismatchedHash))
+	mock.ExpectQuery(`SELECT [\s\S]* FROM receipts WHERE receipt_id = \$1`).
+		WithArgs(matching.ReceiptID).
+		WillReturnRows(storePostgresReceiptProjectionRowsWithStoredChainHash(matching, nil, matchingHash))
+	mock.ExpectExec(`UPDATE receipts[\s\S]*receipt_envelope`).
+		WithArgs(sqlmock.AnyArg(), matching.ReceiptID, matchingHash).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin receipt backfill test transaction: %v", err)
+	}
+	if err := backfillPostgresReceiptEnvelopes(ctx, tx); err != nil {
+		t.Fatalf("backfill receipt envelopes: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit receipt backfill test transaction: %v", err)
 	}
 }
 
@@ -614,7 +678,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRowsWithStoredChainHash(genesis, nil, ""))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRowsWithStoredChainHash(t, genesis, nil, ""))
 	mock.ExpectRollback()
 	if err := store.PreflightCausalAppend(ctx, "agent"); err == nil || !strings.Contains(err.Error(), "no persisted chain hash") {
 		t.Fatalf("expected legacy chain preflight rejection, got %v", err)
@@ -622,7 +686,7 @@ func TestCoveragePostgresReceiptStoreAppendCausal(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").WithArgs("agent").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRowsWithStoredChainHash(genesis, nil, ""))
+	mock.ExpectQuery("FROM receipts WHERE causal_session_id").WithArgs("agent").WillReturnRows(storePostgresReceiptRowsWithStoredChainHash(t, genesis, nil, ""))
 	mock.ExpectRollback()
 	builderCalled := false
 	err := store.AppendCausal(ctx, "agent", func(*contracts.Receipt, uint64, string) (*contracts.Receipt, error) {
@@ -856,12 +920,13 @@ func storePostgresReceiptColumns() []string {
 		"signature_profile",
 		"signature_algorithm",
 		"correlation_id",
+		"receipt_envelope",
+		"chain_hash",
 	}
 }
 
 func storePostgresReceiptColumnsWithChainHash() []string {
-	columns := append([]string{}, storePostgresReceiptColumns()...)
-	return append(columns, "chain_hash")
+	return storePostgresReceiptColumns()
 }
 
 func storePostgresReceiptRows(receipt *contracts.Receipt, metadata []byte) *sqlmock.Rows {
@@ -899,6 +964,8 @@ func storePostgresReceiptRows(receipt *contracts.Receipt, metadata []byte) *sqlm
 			receipt.SignatureProfile,
 			receipt.SignatureAlgorithm,
 			receipt.CorrelationID,
+			nil,
+			"",
 		)
 }
 
@@ -911,12 +978,17 @@ func storePostgresReceiptRowsWithChainHash(t *testing.T, receipt *contracts.Rece
 			t.Fatalf("compute chain hash for %s: %v", receipt.ReceiptID, err)
 		}
 	}
-	return storePostgresReceiptRowsWithStoredChainHash(receipt, metadata, chainHash)
+	return storePostgresReceiptRowsWithStoredChainHash(t, receipt, metadata, chainHash)
 }
 
-func storePostgresReceiptRowsWithStoredChainHash(receipt *contracts.Receipt, metadata []byte, chainHash string) *sqlmock.Rows {
+func storePostgresReceiptRowsWithStoredChainHash(t *testing.T, receipt *contracts.Receipt, metadata []byte, chainHash string) *sqlmock.Rows {
+	t.Helper()
 	if metadata == nil {
 		metadata = []byte(`null`)
+	}
+	envelope, err := durableReceiptEnvelope(receipt)
+	if err != nil {
+		t.Fatalf("marshal receipt envelope for %s: %v", receipt.ReceiptID, err)
 	}
 	return sqlmock.NewRows(storePostgresReceiptColumnsWithChainHash()).
 		AddRow(
@@ -949,6 +1021,47 @@ func storePostgresReceiptRowsWithStoredChainHash(receipt *contracts.Receipt, met
 			receipt.SignatureProfile,
 			receipt.SignatureAlgorithm,
 			receipt.CorrelationID,
+			envelope,
+			chainHash,
+		)
+}
+
+func storePostgresReceiptProjectionRowsWithStoredChainHash(receipt *contracts.Receipt, metadata []byte, chainHash string) *sqlmock.Rows {
+	if metadata == nil {
+		metadata = []byte(`null`)
+	}
+	return sqlmock.NewRows(storePostgresReceiptColumnsWithChainHash()).
+		AddRow(
+			receipt.ReceiptID,
+			receipt.DecisionID,
+			receipt.EffectID,
+			receipt.ExternalReferenceID,
+			receipt.Status,
+			receipt.BlobHash,
+			receipt.OutputHash,
+			receipt.DecisionHash,
+			receipt.Timestamp,
+			receipt.ExecutorID,
+			metadata,
+			receipt.Signature,
+			receipt.MerkleRoot,
+			receipt.PrevHash,
+			receipt.LamportClock,
+			receipt.ArgsHash,
+			receipt.SignatureVersion,
+			receipt.Verdict,
+			receipt.ReasonCode,
+			receipt.PolicyHash,
+			receipt.SessionID,
+			receipt.LogID,
+			receipt.LeafIndex,
+			storePostgresTransparencyValue(receipt),
+			receipt.KeyID,
+			storePostgresPublicKeySetValue(receipt),
+			receipt.SignatureProfile,
+			receipt.SignatureAlgorithm,
+			receipt.CorrelationID,
+			nil,
 			chainHash,
 		)
 }

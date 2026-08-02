@@ -18804,6 +18804,7 @@ var _ MappedNullable = &GroundedActionRef{}
 // GroundedActionRef struct for GroundedActionRef
 type GroundedActionRef struct {
 	GroundedActionId     string     `json:"grounded_action_id"`
+	ReceiptRefs          []string   `json:"receipt_refs,omitempty"`
 	ScreenshotHash       string     `json:"screenshot_hash"`
 	DomOrAxSnapshotHash  string     `json:"dom_or_ax_snapshot_hash"`
 	TargetRef            string     `json:"target_ref"`
@@ -18873,6 +18874,38 @@ func (o *GroundedActionRef) GetGroundedActionIdOk() (*string, bool) {
 // SetGroundedActionId sets field value
 func (o *GroundedActionRef) SetGroundedActionId(v string) {
 	o.GroundedActionId = v
+}
+
+// GetReceiptRefs returns the ReceiptRefs field value if set, zero value otherwise.
+func (o *GroundedActionRef) GetReceiptRefs() []string {
+	if o == nil || IsNil(o.ReceiptRefs) {
+		var ret []string
+		return ret
+	}
+	return o.ReceiptRefs
+}
+
+// GetReceiptRefsOk returns a tuple with the ReceiptRefs field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *GroundedActionRef) GetReceiptRefsOk() ([]string, bool) {
+	if o == nil || IsNil(o.ReceiptRefs) {
+		return nil, false
+	}
+	return o.ReceiptRefs, true
+}
+
+// HasReceiptRefs returns a boolean if a field has been set.
+func (o *GroundedActionRef) HasReceiptRefs() bool {
+	if o != nil && !IsNil(o.ReceiptRefs) {
+		return true
+	}
+
+	return false
+}
+
+// SetReceiptRefs gets a reference to the given []string and assigns it to the ReceiptRefs field.
+func (o *GroundedActionRef) SetReceiptRefs(v []string) {
+	o.ReceiptRefs = v
 }
 
 // GetScreenshotHash returns the ScreenshotHash field value
@@ -19246,6 +19279,9 @@ func (o GroundedActionRef) MarshalJSON() ([]byte, error) {
 func (o GroundedActionRef) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["grounded_action_id"] = o.GroundedActionId
+	if !IsNil(o.ReceiptRefs) {
+		toSerialize["receipt_refs"] = o.ReceiptRefs
+	}
 	toSerialize["screenshot_hash"] = o.ScreenshotHash
 	toSerialize["dom_or_ax_snapshot_hash"] = o.DomOrAxSnapshotHash
 	toSerialize["target_ref"] = o.TargetRef
@@ -38118,6 +38154,7 @@ var _ MappedNullable = &PlanTransaction{}
 // PlanTransaction struct for PlanTransaction
 type PlanTransaction struct {
 	PlanTransactionId            string                 `json:"plan_transaction_id"`
+	ReceiptRefs                  []string               `json:"receipt_refs,omitempty"`
 	PlanHash                     string                 `json:"plan_hash"`
 	ReadSet                      []string               `json:"read_set"`
 	WriteSet                     []string               `json:"write_set"`
@@ -38180,6 +38217,38 @@ func (o *PlanTransaction) GetPlanTransactionIdOk() (*string, bool) {
 // SetPlanTransactionId sets field value
 func (o *PlanTransaction) SetPlanTransactionId(v string) {
 	o.PlanTransactionId = v
+}
+
+// GetReceiptRefs returns the ReceiptRefs field value if set, zero value otherwise.
+func (o *PlanTransaction) GetReceiptRefs() []string {
+	if o == nil || IsNil(o.ReceiptRefs) {
+		var ret []string
+		return ret
+	}
+	return o.ReceiptRefs
+}
+
+// GetReceiptRefsOk returns a tuple with the ReceiptRefs field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *PlanTransaction) GetReceiptRefsOk() ([]string, bool) {
+	if o == nil || IsNil(o.ReceiptRefs) {
+		return nil, false
+	}
+	return o.ReceiptRefs, true
+}
+
+// HasReceiptRefs returns a boolean if a field has been set.
+func (o *PlanTransaction) HasReceiptRefs() bool {
+	if o != nil && !IsNil(o.ReceiptRefs) {
+		return true
+	}
+
+	return false
+}
+
+// SetReceiptRefs gets a reference to the given []string and assigns it to the ReceiptRefs field.
+func (o *PlanTransaction) SetReceiptRefs(v []string) {
+	o.ReceiptRefs = v
 }
 
 // GetPlanHash returns the PlanHash field value
@@ -38529,6 +38598,9 @@ func (o PlanTransaction) MarshalJSON() ([]byte, error) {
 func (o PlanTransaction) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["plan_transaction_id"] = o.PlanTransactionId
+	if !IsNil(o.ReceiptRefs) {
+		toSerialize["receipt_refs"] = o.ReceiptRefs
+	}
 	toSerialize["plan_hash"] = o.PlanHash
 	toSerialize["read_set"] = o.ReadSet
 	toSerialize["write_set"] = o.WriteSet
@@ -45832,6 +45904,7 @@ var _ MappedNullable = &VerificationScope{}
 // VerificationScope struct for VerificationScope
 type VerificationScope struct {
 	VerificationScopeId string    `json:"verification_scope_id"`
+	ReceiptRefs         []string  `json:"receipt_refs,omitempty"`
 	SubjectHash         string    `json:"subject_hash"`
 	RiskClass           *string   `json:"risk_class,omitempty"`
 	ChecksPerformed     []string  `json:"checks_performed"`
@@ -45893,6 +45966,38 @@ func (o *VerificationScope) GetVerificationScopeIdOk() (*string, bool) {
 // SetVerificationScopeId sets field value
 func (o *VerificationScope) SetVerificationScopeId(v string) {
 	o.VerificationScopeId = v
+}
+
+// GetReceiptRefs returns the ReceiptRefs field value if set, zero value otherwise.
+func (o *VerificationScope) GetReceiptRefs() []string {
+	if o == nil || IsNil(o.ReceiptRefs) {
+		var ret []string
+		return ret
+	}
+	return o.ReceiptRefs
+}
+
+// GetReceiptRefsOk returns a tuple with the ReceiptRefs field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *VerificationScope) GetReceiptRefsOk() ([]string, bool) {
+	if o == nil || IsNil(o.ReceiptRefs) {
+		return nil, false
+	}
+	return o.ReceiptRefs, true
+}
+
+// HasReceiptRefs returns a boolean if a field has been set.
+func (o *VerificationScope) HasReceiptRefs() bool {
+	if o != nil && !IsNil(o.ReceiptRefs) {
+		return true
+	}
+
+	return false
+}
+
+// SetReceiptRefs gets a reference to the given []string and assigns it to the ReceiptRefs field.
+func (o *VerificationScope) SetReceiptRefs(v []string) {
+	o.ReceiptRefs = v
 }
 
 // GetSubjectHash returns the SubjectHash field value
@@ -46250,6 +46355,9 @@ func (o VerificationScope) MarshalJSON() ([]byte, error) {
 func (o VerificationScope) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["verification_scope_id"] = o.VerificationScopeId
+	if !IsNil(o.ReceiptRefs) {
+		toSerialize["receipt_refs"] = o.ReceiptRefs
+	}
 	toSerialize["subject_hash"] = o.SubjectHash
 	if !IsNil(o.RiskClass) {
 		toSerialize["risk_class"] = o.RiskClass

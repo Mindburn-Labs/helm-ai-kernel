@@ -16,6 +16,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
@@ -206,6 +207,9 @@ func TestPersistDecisionReceiptUsesTenantScopedCausalStorageAndNormalizesBeforeS
 	}
 	if base.stored == nil || base.stored.SessionID != "external-session" {
 		t.Fatalf("scoped append changed signed external session: %+v", base.stored)
+	}
+	if want := executor.ReceiptIDForDecision("tenant-trusted", decision.ID); base.stored.ReceiptID != want {
+		t.Fatalf("scoped receipt id = %q, want %q", base.stored.ReceiptID, want)
 	}
 	wantTimestamp := timestamp.Truncate(time.Microsecond)
 	if !base.stored.Timestamp.Equal(wantTimestamp) {

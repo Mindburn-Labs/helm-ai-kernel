@@ -26,6 +26,23 @@ type ReceiptStore interface {
 	GetLastForSession(ctx context.Context, sessionID string) (*contracts.Receipt, error)
 }
 
+// CanonicalReceiptReader returns a receipt only when its persisted canonical
+// envelope independently reproduces the durable chain hash. Evidence, export,
+// and proof paths must require this additive capability rather than treating an
+// indexed compatibility projection as verified evidence. It verifies envelope
+// integrity only; callers must still verify the receipt signature against their
+// applicable trust anchor.
+type CanonicalReceiptReader interface {
+	GetCanonicalReceiptByID(ctx context.Context, receiptID string) (*contracts.Receipt, error)
+}
+
+// TenantScopedCanonicalReceiptReader is the authenticated-scope form of
+// CanonicalReceiptReader. Public evidence routes should prefer it when the
+// receipt reference did not already come from a tenant-constrained query.
+type TenantScopedCanonicalReceiptReader interface {
+	GetCanonicalReceiptByIDForTenant(ctx context.Context, tenantID, receiptID string) (*contracts.Receipt, error)
+}
+
 // ReceiptCounter returns the total number of durably stored receipts without
 // materializing them. Global checkpointing uses this additive capability.
 type ReceiptCounter interface {
@@ -172,9 +189,13 @@ const backfillReceiptAppendSequenceSQL = `
 const syncReceiptAppendSequenceSQL = `
 	SELECT setval(
 		'receipts_append_sequence_seq',
-		COALESCE((SELECT MAX(append_sequence) + 1 FROM receipts), 1),
-		false
-	);
+		GREATEST(
+			COALESCE((SELECT MAX(append_sequence) FROM receipts), 0),
+			(SELECT last_value FROM receipts_append_sequence_seq)
+		),
+		true
+	)
+	WHERE EXISTS (SELECT 1 FROM receipts);
 `
 
 func durableReceiptChainHash(r *contracts.Receipt) (string, error) {
@@ -186,6 +207,20 @@ func durableReceiptChainHash(r *contracts.Receipt) (string, error) {
 		return "", fmt.Errorf("canonical receipt chain hash: %w", err)
 	}
 	return hash, nil
+}
+
+// durableReceiptEnvelope preserves every field that participates in the
+// canonical chain hash. The indexed projection remains useful for queries,
+// but it cannot reconstruct the full receipt envelope on its own.
+func durableReceiptEnvelope(r *contracts.Receipt) ([]byte, error) {
+	if r == nil {
+		return nil, fmt.Errorf("receipt is nil")
+	}
+	envelope, err := json.Marshal(r)
+	if err != nil {
+		return nil, fmt.Errorf("marshal canonical receipt envelope: %w", err)
+	}
+	return envelope, nil
 }
 
 // PostgresReceiptStore is a durable SQL-based implementation.
@@ -233,6 +268,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 			signature_profile TEXT DEFAULT '',
 			signature_algorithm TEXT DEFAULT '',
 			correlation_id TEXT DEFAULT '',
+			receipt_envelope JSONB,
 			chain_hash TEXT DEFAULT '',
 			append_sequence BIGINT NOT NULL DEFAULT nextval('receipts_append_sequence_seq')
 		);
@@ -256,6 +292,7 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_profile TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS signature_algorithm TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS correlation_id TEXT DEFAULT '';
+		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS receipt_envelope JSONB;
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS chain_hash TEXT DEFAULT '';
 		ALTER TABLE receipts ADD COLUMN IF NOT EXISTS append_sequence BIGINT;
 		ALTER TABLE receipts ALTER COLUMN append_sequence SET DEFAULT nextval('receipts_append_sequence_seq');
@@ -267,19 +304,33 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, schemaQuery); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, backfillReceiptDecisionHashSQL); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin receipt initialization transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	// The lock blocks receipt inserts while backfill and sequence repair share
+	// one stable view. Without it, setval can move behind a writer that already
+	// obtained the next default value.
+	if _, err := tx.ExecContext(ctx, `LOCK TABLE receipts IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return fmt.Errorf("lock receipts during initialization: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, backfillReceiptDecisionHashSQL); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, backfillCausalReceiptSessionsSQL); err != nil {
+	if _, err := tx.ExecContext(ctx, backfillCausalReceiptSessionsSQL); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, backfillReceiptAppendSequenceSQL); err != nil {
+	if err := backfillPostgresReceiptEnvelopes(ctx, tx); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, syncReceiptAppendSequenceSQL); err != nil {
+	if _, err := tx.ExecContext(ctx, backfillReceiptAppendSequenceSQL); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `ALTER TABLE receipts ALTER COLUMN append_sequence SET NOT NULL`); err != nil {
+	if _, err := tx.ExecContext(ctx, syncReceiptAppendSequenceSQL); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE receipts ALTER COLUMN append_sequence SET NOT NULL`); err != nil {
 		return err
 	}
 	indexQuery := `
@@ -297,12 +348,17 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_append_sequence_unique ON receipts(append_sequence);
 	`
-	_, err := s.db.ExecContext(ctx, indexQuery)
-	return err
+	if _, err := tx.ExecContext(ctx, indexQuery); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit receipt initialization: %w", err)
+	}
+	return nil
 }
 
 // receiptColumns is the canonical column list for receipt queries.
-const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, COALESCE(decision_hash, '') AS decision_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(signature_version, '') AS signature_version, COALESCE(verdict, '') AS verdict, COALESCE(reason_code, '') AS reason_code, COALESCE(policy_hash, '') AS policy_hash, COALESCE(session_id, '') AS session_id, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id`
+const receiptColumns = `receipt_id, decision_id, COALESCE(effect_id, execution_intent_id, '') AS effect_id, COALESCE(external_reference_id, '') AS external_reference_id, status, blob_hash, output_hash, COALESCE(decision_hash, '') AS decision_hash, timestamp, COALESCE(executor_id, '') AS executor_id, metadata, signature, merkle_root, COALESCE(prev_hash, '') AS prev_hash, COALESCE(lamport_clock, 0) AS lamport_clock, args_hash, COALESCE(signature_version, '') AS signature_version, COALESCE(verdict, '') AS verdict, COALESCE(reason_code, '') AS reason_code, COALESCE(policy_hash, '') AS policy_hash, COALESCE(session_id, '') AS session_id, COALESCE(log_id, '') AS log_id, COALESCE(leaf_index, 0) AS leaf_index, transparency, COALESCE(key_id, '') AS key_id, public_key_set, COALESCE(signature_profile, '') AS signature_profile, COALESCE(signature_algorithm, '') AS signature_algorithm, COALESCE(correlation_id, '') AS correlation_id, receipt_envelope, COALESCE(chain_hash, '') AS chain_hash`
 
 func (s *PostgresReceiptStore) Get(ctx context.Context, decisionID string) (*contracts.Receipt, error) {
 	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE decision_id = $1`
@@ -334,6 +390,16 @@ func (s *PostgresReceiptStore) GetByReceiptID(ctx context.Context, receiptID str
 	return s.queryOne(ctx, query, receiptID)
 }
 
+// GetCanonicalReceiptByID returns a complete receipt envelope only after its
+// canonical chain hash is reproduced from the stored envelope. It deliberately
+// rejects historical projection-only rows whose missing fields cannot be
+// reconstructed, while GetByReceiptID continues to expose those projections
+// for operational compatibility.
+func (s *PostgresReceiptStore) GetCanonicalReceiptByID(ctx context.Context, receiptID string) (*contracts.Receipt, error) {
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE receipt_id = $1`
+	return s.queryCanonicalOne(ctx, query, receiptID)
+}
+
 // GetByReceiptIDForTenant returns only a V5 receipt persisted through the
 // authenticated tenant scope. Legacy/unscoped receipts fail closed rather than
 // being guessed into a tenant from caller-controlled data.
@@ -349,6 +415,23 @@ func (s *PostgresReceiptStore) GetByReceiptIDForTenant(ctx context.Context, tena
 		  AND COALESCE(session_id, '') <> ''
 		  AND left(causal_session_id, char_length($3)) = $3`
 	return s.queryOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, prefix)
+}
+
+// GetCanonicalReceiptByIDForTenant is the authenticated-scope form of
+// GetCanonicalReceiptByID. It never promotes an unscoped legacy row into
+// tenant evidence.
+func (s *PostgresReceiptStore) GetCanonicalReceiptByIDForTenant(ctx context.Context, tenantID, receiptID string) (*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `SELECT ` + receiptColumns + ` FROM receipts
+		WHERE receipt_id = $1
+		  AND signature_version = $2
+		  AND COALESCE(session_id, '') <> ''
+		  AND left(causal_session_id, char_length($3)) = $3`
+	return s.queryCanonicalOne(ctx, query, receiptID, contracts.ReceiptSignatureV5, prefix)
 }
 
 // CountReceipts returns the total number of durably stored receipts.
@@ -435,6 +518,20 @@ func (s *PostgresReceiptStore) ListByTenantCursor(ctx context.Context, tenantID 
 		return nil, fmt.Errorf("tenant receipt cursor timestamp is required")
 	}
 	prefix := causalReceiptTenantScopePrefix(tenantID)
+	var appendSequence int64
+	if cursor.ReceiptID != "" {
+		cursorQuery := `SELECT append_sequence FROM receipts
+			WHERE receipt_id = $1
+			  AND signature_version = $2
+			  AND COALESCE(session_id, '') <> ''
+			  AND left(causal_session_id, char_length($3)) = $3`
+		if err := s.db.QueryRowContext(ctx, cursorQuery, cursor.ReceiptID, contracts.ReceiptSignatureV5, prefix).Scan(&appendSequence); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("tenant receipt cursor %q is invalid for authenticated tenant", cursor.ReceiptID)
+			}
+			return nil, fmt.Errorf("resolve tenant receipt cursor: %w", err)
+		}
+	}
 	query := `SELECT ` + receiptColumns + ` FROM receipts
 		WHERE signature_version = $1
 		  AND COALESCE(session_id, '') <> ''
@@ -442,15 +539,8 @@ func (s *PostgresReceiptStore) ListByTenantCursor(ctx context.Context, tenantID 
 	args := []any{contracts.ReceiptSignatureV5, prefix}
 	if cursor.ReceiptID != "" {
 		query += `
-		  AND append_sequence > (
-			SELECT cursor_receipt.append_sequence
-			FROM receipts AS cursor_receipt
-			WHERE cursor_receipt.receipt_id = $3
-			  AND cursor_receipt.signature_version = $1
-			  AND COALESCE(cursor_receipt.session_id, '') <> ''
-			  AND left(cursor_receipt.causal_session_id, char_length($2)) = $2
-		)`
-		args = append(args, cursor.ReceiptID)
+		  AND append_sequence > $3`
+		args = append(args, appendSequence)
 	}
 	query += fmt.Sprintf("\n\t\tORDER BY append_sequence ASC LIMIT $%d", len(args)+1)
 	args = append(args, limit)
@@ -526,46 +616,21 @@ type scanner interface {
 }
 
 func scanReceipt(s scanner) (*contracts.Receipt, error) {
-	var r contracts.Receipt
-	var metadata []byte
-	var signature sql.NullString
-	var merkleRoot sql.NullString
-	var transparency []byte
-	var publicKeySet []byte
-	err := s.Scan(
-		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
-		&r.BlobHash, &r.OutputHash, &r.DecisionHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
-		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.SignatureVersion, &r.Verdict, &r.ReasonCode, &r.PolicyHash, &r.SessionID, &r.LogID, &r.LeafIndex, &transparency,
-		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if len(metadata) > 0 && string(metadata) != "null" {
-		if err := json.Unmarshal(metadata, &r.Metadata); err != nil {
-			return nil, fmt.Errorf("decode receipt metadata: %w", err)
-		}
-	}
-	if err := decodeTransparencyAnchor(transparency, &r); err != nil {
-		return nil, err
-	}
-	// The signer's own identity must survive persistence: without these columns
-	// a signature covering them could never match a reloaded receipt, which is
-	// what blocked the v5 envelope (F-05).
-	if len(publicKeySet) > 0 && string(publicKeySet) != "null" {
-		if err := json.Unmarshal(publicKeySet, &r.PublicKeySet); err != nil {
-			return nil, fmt.Errorf("decode receipt public_key_set: %w", err)
-		}
-	}
-	r.Signature = signature.String
-	r.MerkleRoot = merkleRoot.String
-	if err := restoreOrRejectV5DecisionHash(&r); err != nil {
-		return nil, err
-	}
-	return &r, nil
+	r, _, err := scanReceiptWithChainHash(s)
+	return r, err
 }
 
 func scanReceiptWithChainHash(s scanner) (*contracts.Receipt, string, error) {
+	return scanReceiptWithChainHashMode(s, false)
+}
+
+func scanCanonicalReceipt(s scanner) (*contracts.Receipt, error) {
+	r, _, err := scanReceiptWithChainHashMode(s, true)
+	return r, err
+}
+
+func scanReceiptWithChainHashMode(s scanner, requireCanonicalEnvelope bool) (*contracts.Receipt, string, error) {
+	var receiptEnvelope []byte
 	var chainHash sql.NullString
 	var r contracts.Receipt
 	var metadata []byte
@@ -577,7 +642,7 @@ func scanReceiptWithChainHash(s scanner) (*contracts.Receipt, string, error) {
 		&r.ReceiptID, &r.DecisionID, &r.EffectID, &r.ExternalReferenceID, &r.Status,
 		&r.BlobHash, &r.OutputHash, &r.DecisionHash, &r.Timestamp, &r.ExecutorID, &metadata, &signature,
 		&merkleRoot, &r.PrevHash, &r.LamportClock, &r.ArgsHash, &r.SignatureVersion, &r.Verdict, &r.ReasonCode, &r.PolicyHash, &r.SessionID, &r.LogID, &r.LeafIndex, &transparency,
-		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID, &chainHash,
+		&r.KeyID, &publicKeySet, &r.SignatureProfile, &r.SignatureAlgorithm, &r.CorrelationID, &receiptEnvelope, &chainHash,
 	)
 	if err != nil {
 		return nil, "", err
@@ -590,6 +655,9 @@ func scanReceiptWithChainHash(s scanner) (*contracts.Receipt, string, error) {
 	if err := decodeTransparencyAnchor(transparency, &r); err != nil {
 		return nil, "", err
 	}
+	// The signer's own identity must survive persistence: without these columns
+	// a signature covering them could never match a reloaded receipt, which is
+	// what blocked the v5 envelope (F-05).
 	if len(publicKeySet) > 0 && string(publicKeySet) != "null" {
 		if err := json.Unmarshal(publicKeySet, &r.PublicKeySet); err != nil {
 			return nil, "", fmt.Errorf("decode receipt public_key_set: %w", err)
@@ -600,7 +668,172 @@ func scanReceiptWithChainHash(s scanner) (*contracts.Receipt, string, error) {
 	if err := restoreOrRejectV5DecisionHash(&r); err != nil {
 		return nil, "", err
 	}
-	return &r, strings.TrimSpace(chainHash.String), nil
+	var (
+		restored   *contracts.Receipt
+		restoreErr error
+	)
+	if requireCanonicalEnvelope {
+		restored, restoreErr = restoreCanonicalReceiptEnvelope(&r, receiptEnvelope, chainHash.String)
+	} else {
+		restored, restoreErr = restoreReceiptEnvelope(&r, receiptEnvelope, chainHash.String)
+	}
+	if restoreErr != nil {
+		return nil, "", restoreErr
+	}
+	return restored, strings.TrimSpace(chainHash.String), nil
+}
+
+// restoreReceiptEnvelope keeps legacy projection reads available. A legacy
+// projection with a mismatched persisted hash is intentionally not presented
+// as canonical evidence; proof callers use restoreCanonicalReceiptEnvelope.
+func restoreReceiptEnvelope(projected *contracts.Receipt, raw []byte, storedChainHash string) (*contracts.Receipt, error) {
+	receipt, _, err := restoreReceiptEnvelopeWithIntegrity(projected, raw, storedChainHash)
+	return receipt, err
+}
+
+// restoreCanonicalReceiptEnvelope is the strict proof boundary. It accepts a
+// current durable envelope, or a legacy projection only when that projection
+// itself exactly reproduces the persisted hash and can therefore be safely
+// backfilled without inventing any fields.
+func restoreCanonicalReceiptEnvelope(projected *contracts.Receipt, raw []byte, storedChainHash string) (*contracts.Receipt, error) {
+	receipt, integrity, err := restoreReceiptEnvelopeWithIntegrity(projected, raw, storedChainHash)
+	if err != nil {
+		return nil, err
+	}
+	if integrity != receiptEnvelopeHashVerified {
+		return nil, fmt.Errorf("receipt %q has no canonical envelope matching its persisted chain hash and cannot be used as verified evidence", projected.ReceiptID)
+	}
+	return receipt, nil
+}
+
+type receiptEnvelopeIntegrity uint8
+
+const (
+	receiptEnvelopeProjectionOnly receiptEnvelopeIntegrity = iota
+	receiptEnvelopeHashVerified
+)
+
+func restoreReceiptEnvelopeWithIntegrity(projected *contracts.Receipt, raw []byte, storedChainHash string) (*contracts.Receipt, receiptEnvelopeIntegrity, error) {
+	if projected == nil {
+		return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt is nil")
+	}
+	storedChainHash = strings.TrimSpace(storedChainHash)
+	if rawText := strings.TrimSpace(string(raw)); rawText != "" && rawText != "null" {
+		var receipt contracts.Receipt
+		if err := json.Unmarshal(raw, &receipt); err != nil {
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("decode canonical receipt envelope: %w", err)
+		}
+		if receipt.ReceiptID != projected.ReceiptID {
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt envelope id %q does not match stored receipt %q", receipt.ReceiptID, projected.ReceiptID)
+		}
+		if err := restoreOrRejectV5DecisionHash(&receipt); err != nil {
+			return nil, receiptEnvelopeProjectionOnly, err
+		}
+		if storedChainHash == "" {
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt %q has a canonical envelope but no persisted chain hash", receipt.ReceiptID)
+		}
+		hash, err := durableReceiptChainHash(&receipt)
+		if err != nil {
+			return nil, receiptEnvelopeProjectionOnly, err
+		}
+		if hash != storedChainHash {
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt %q canonical envelope hash %q does not match stored chain hash %q", receipt.ReceiptID, hash, storedChainHash)
+		}
+		return &receipt, receiptEnvelopeHashVerified, nil
+	}
+	if storedChainHash == "" {
+		return projected, receiptEnvelopeProjectionOnly, nil
+	}
+	hash, err := durableReceiptChainHash(projected)
+	if err != nil {
+		return nil, receiptEnvelopeProjectionOnly, err
+	}
+	if hash != storedChainHash {
+		return projected, receiptEnvelopeProjectionOnly, nil
+	}
+	return projected, receiptEnvelopeHashVerified, nil
+}
+
+type receiptEnvelopeBackfill struct {
+	receiptID string
+	envelope  []byte
+	chainHash string
+}
+
+// receiptEnvelopeBackfillForProjection creates an envelope only after the
+// legacy projection proves byte-for-byte equivalent in the canonical chain
+// hash domain. A mismatch means the projection lost hash-bound fields and must
+// remain readable-but-unverified until the original receipt is recovered.
+func receiptEnvelopeBackfillForProjection(receipt *contracts.Receipt, chainHash string) (receiptEnvelopeBackfill, bool) {
+	chainHash = strings.TrimSpace(chainHash)
+	if receipt == nil || chainHash == "" {
+		return receiptEnvelopeBackfill{}, false
+	}
+	computed, err := durableReceiptChainHash(receipt)
+	if err != nil || computed != chainHash {
+		return receiptEnvelopeBackfill{}, false
+	}
+	envelope, err := durableReceiptEnvelope(receipt)
+	if err != nil {
+		return receiptEnvelopeBackfill{}, false
+	}
+	return receiptEnvelopeBackfill{
+		receiptID: receipt.ReceiptID,
+		envelope:  envelope,
+		chainHash: chainHash,
+	}, true
+}
+
+// backfillPostgresReceiptEnvelopes performs only provable envelope recovery.
+// It deliberately skips malformed, incomplete, or hash-mismatched historical
+// rows; those remain available through ordinary projection reads but cannot be
+// used as verified evidence.
+func backfillPostgresReceiptEnvelopes(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `SELECT receipt_id FROM receipts
+		WHERE (receipt_envelope IS NULL OR receipt_envelope = 'null'::jsonb)
+		  AND COALESCE(chain_hash, '') <> ''`)
+	if err != nil {
+		return fmt.Errorf("select receipt envelope backfill candidates: %w", err)
+	}
+	var receiptIDs []string
+	for rows.Next() {
+		var receiptID string
+		if scanErr := rows.Scan(&receiptID); scanErr != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan receipt envelope backfill candidate: %w", scanErr)
+		}
+		receiptIDs = append(receiptIDs, receiptID)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate receipt envelope backfill candidates: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close receipt envelope backfill candidates: %w", err)
+	}
+	var candidates []receiptEnvelopeBackfill
+	for _, receiptID := range receiptIDs {
+		receipt, chainHash, scanErr := scanReceiptWithChainHash(tx.QueryRowContext(ctx, `SELECT `+receiptColumns+` FROM receipts WHERE receipt_id = $1`, receiptID))
+		if scanErr != nil {
+			// Best-effort recovery must not convert an unrelated legacy data gap
+			// into an initialization outage. The strict proof reader will reject
+			// this row if a caller ever tries to use it as evidence.
+			continue
+		}
+		if candidate, ok := receiptEnvelopeBackfillForProjection(receipt, chainHash); ok {
+			candidates = append(candidates, candidate)
+		}
+	}
+	for _, candidate := range candidates {
+		if _, err := tx.ExecContext(ctx, `UPDATE receipts
+			SET receipt_envelope = $1::jsonb
+			WHERE receipt_id = $2
+			  AND (receipt_envelope IS NULL OR receipt_envelope = 'null'::jsonb)
+			  AND chain_hash = $3`, string(candidate.envelope), candidate.receiptID, candidate.chainHash); err != nil {
+			return fmt.Errorf("backfill canonical receipt envelope %q: %w", candidate.receiptID, err)
+		}
+	}
+	return nil
 }
 
 // restoreOrRejectV5DecisionHash makes the V5 semantic decision hash durable
@@ -675,6 +908,18 @@ func (s *PostgresReceiptStore) queryOne(ctx context.Context, query string, args 
 	return r, nil
 }
 
+func (s *PostgresReceiptStore) queryCanonicalOne(ctx context.Context, query string, args ...any) (*contracts.Receipt, error) {
+	row := s.db.QueryRowContext(ctx, query, args...)
+	r, err := scanCanonicalReceipt(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("receipt not found")
+		}
+		return nil, err
+	}
+	return r, nil
+}
+
 func (s *PostgresReceiptStore) Store(ctx context.Context, r *contracts.Receipt) error {
 	s.normalizeReceiptTimestamp(r)
 	if err := insertPostgresReceipt(ctx, s.db, r); err != nil {
@@ -700,16 +945,20 @@ func insertPostgresReceiptWithCausalSession(ctx context.Context, execer sqlExece
 			receipt_id, decision_id, effect_id, external_reference_id, status, result, timestamp, executor_id,
 			metadata, signature, merkle_root, prev_hash, lamport_clock, output_hash, decision_hash, args_hash, blob_hash,
 			signature_version, verdict, reason_code, policy_hash, session_id, causal_session_id, log_id, leaf_index, transparency,
-			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, chain_hash
+			key_id, public_key_set, signature_profile, signature_algorithm, correlation_id, receipt_envelope, chain_hash
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb,
-			$27, $28::jsonb, $29, $30, $31, $32)
+			$27, $28::jsonb, $29, $30, $31, $32::jsonb, $33)
 	`
 	metaJSON, err := json.Marshal(r.Metadata)
 	if err != nil {
 		return fmt.Errorf("marshal receipt metadata: %w", err)
 	}
 	chainHash, err := durableReceiptChainHash(r)
+	if err != nil {
+		return err
+	}
+	receiptEnvelope, err := durableReceiptEnvelope(r)
 	if err != nil {
 		return err
 	}
@@ -753,6 +1002,7 @@ func insertPostgresReceiptWithCausalSession(ctx context.Context, execer sqlExece
 		r.SignatureProfile,
 		r.SignatureAlgorithm,
 		r.CorrelationID,
+		string(receiptEnvelope),
 		chainHash,
 	)
 	if err != nil {
@@ -888,7 +1138,7 @@ func queryLastPostgresReceipt(ctx context.Context, queryer sqlQueryer, sessionID
 }
 
 func queryLastPostgresReceiptWithChainHash(ctx context.Context, queryer sqlQueryer, sessionID string) (*contracts.Receipt, string, error) {
-	query := `SELECT ` + receiptColumns + `, COALESCE(chain_hash, '') AS chain_hash FROM receipts WHERE causal_session_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
+	query := `SELECT ` + receiptColumns + ` FROM receipts WHERE causal_session_id = $1 ORDER BY lamport_clock DESC LIMIT 1`
 	row := queryer.QueryRowContext(ctx, query, sessionID)
 	r, chainHash, err := scanReceiptWithChainHash(row)
 	if err != nil {

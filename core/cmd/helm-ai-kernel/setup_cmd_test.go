@@ -164,8 +164,27 @@ func TestSetupQuickstartResetPreviewIsAuthorizedAndRerunPreservesOptions(t *test
 	if code := Run(append(args, "--dry-run"), &stdout, &stderr); code != 0 {
 		t.Fatalf("explicit reset preview exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if len(calls) != 1 || !reflect.DeepEqual(calls[0], wantPreview) {
-		t.Fatalf("explicit reset preview calls=%#v, want %#v", calls, wantPreview)
+	wantDryRunPreview := append(append([]string(nil), wantPreview...), "--json")
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], wantDryRunPreview) {
+		t.Fatalf("explicit reset preview calls=%#v, want %#v", calls, wantDryRunPreview)
+	}
+}
+
+func TestSetupQuickstartDryRunForwardsJSON(t *testing.T) {
+	original := setupRunFirstRun
+	t.Cleanup(func() { setupRunFirstRun = original })
+	var calls [][]string
+	setupRunFirstRun = func(args []string, _, _ io.Writer) int {
+		calls = append(calls, append([]string(nil), args...))
+		return 0
+	}
+
+	if code := Run([]string{"helm-ai-kernel", "setup", "--quickstart", "--profile", "codex", "--dry-run", "--json"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("setup quickstart preview exit=%d", code)
+	}
+	want := []string{"--profile", "codex", "--data-dir", defaultQuickstartDataDir(), "--dry-run", "--json"}
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], want) {
+		t.Fatalf("preview calls=%#v, want %#v", calls, want)
 	}
 }
 

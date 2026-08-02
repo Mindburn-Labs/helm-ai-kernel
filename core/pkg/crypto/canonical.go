@@ -363,15 +363,10 @@ func DecisionContentHash(d *contracts.DecisionRecord) (string, error) {
 	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
 
-// DecisionSemanticHash prefers the hash emitted by the active policy decision
-// source. When that source is absent, it derives the value from the existing
-// canonical signed-decision payload rather than substituting an execution
-// output hash or inventing a second decision representation.
+// DecisionSemanticHash derives the receipt-facing decision hash from the
+// signed decision payload itself. PolicyDecisionHash is not part of any
+// current decision signing preimage, so trusting it here would let a caller
+// rewrite receipt semantics without invalidating the decision signature.
 func DecisionSemanticHash(d *contracts.DecisionRecord) (string, error) {
-	if d != nil {
-		if hash := strings.TrimSpace(d.PolicyDecisionHash); hash != "" {
-			return hash, nil
-		}
-	}
 	return DecisionContentHash(d)
 }

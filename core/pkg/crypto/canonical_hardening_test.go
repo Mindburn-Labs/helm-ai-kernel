@@ -118,3 +118,42 @@ func TestCanonicalizeDecisionV2_ReasonNotBound(t *testing.T) {
 		t.Fatalf("Reason mutation must not invalidate a V2 signature (ok=%v err=%v)", ok, err)
 	}
 }
+
+func TestDecisionSemanticHashIgnoresUnsignedPolicyDecisionHash(t *testing.T) {
+	signer, err := NewEd25519Signer("decision-semantic-hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := &contracts.DecisionRecord{
+		ID:                 "dec-semantic",
+		Verdict:            string(contracts.VerdictAllow),
+		ReasonCode:         "POLICY_ALLOW",
+		PhenotypeHash:      "sha256:phenotype",
+		PolicyContentHash:  "sha256:policy",
+		EffectDigest:       "sha256:effect",
+		PolicyDecisionHash: "sha256:trusted-source",
+	}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	decision.PolicyDecisionHash = "sha256:attacker-chosen"
+	ok, err := signer.VerifyDecision(decision)
+	if err != nil || !ok {
+		t.Fatalf("policy_decision_hash is outside the current signed payload: ok=%v err=%v", ok, err)
+	}
+
+	got, err := DecisionSemanticHash(decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := DecisionContentHash(decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("semantic decision hash = %q, want signed payload hash %q", got, want)
+	}
+	if got == decision.PolicyDecisionHash {
+		t.Fatalf("semantic decision hash trusted unsigned policy_decision_hash %q", got)
+	}
+}

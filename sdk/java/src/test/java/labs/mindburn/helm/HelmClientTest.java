@@ -3,11 +3,11 @@ package labs.mindburn.helm;
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.sun.net.httpserver.HttpServer;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -17,8 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * quantum_posture: HTTP compatibility tests do not implement or assert a cryptographic primitive.
  */
 public class HelmClientTest {
-    private static final ObjectMapper mapper = new ObjectMapper()
-        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private static final ObjectMapper mapper = HelmClient.createObjectMapper();
 
     @Test
     @DisplayName("Client construction with base URL")
@@ -45,8 +44,8 @@ public class HelmClientTest {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             tenant.set(exchange.getRequestHeaders().getFirst("X-Helm-Tenant-ID"));
             principal.set(exchange.getRequestHeaders().getFirst("X-Helm-Principal-ID"));
-            byte[] response = "\"ok\"".getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            byte[] response = "ok".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/plain");
             exchange.sendResponseHeaders(200, response.length);
             exchange.getResponseBody().write(response);
             exchange.close();
@@ -171,10 +170,8 @@ public class HelmClientTest {
             assertTrue(body.get().contains("\"effect_level\":\"read\""));
             assertTrue(body.get().contains("\"session_id\":\"session-test\""));
 
-            com.google.gson.JsonElement legacy = client.evaluateDecision(java.util.Map.of(
-                    "action", "legacy-read",
-                    "resource", "legacy-resource",
-                    "context", java.util.Map.of("session_id", "legacy-session")));
+            com.google.gson.JsonElement legacy = client.evaluateDecision(
+                    com.google.gson.JsonParser.parseString("{\"action\":\"legacy-read\",\"resource\":\"legacy-resource\",\"context\":{\"session_id\":\"legacy-session\"}}"));
             assertEquals("receipt-evaluate", legacy.getAsJsonObject().get("receipt_id").getAsString());
             assertTrue(body.get().contains("\"action\":\"legacy-read\""));
         } finally {
@@ -237,5 +234,95 @@ public class HelmClientTest {
             HelmClient.SandboxGrant.class
         );
         assertEquals("grant1", grant.grant_id);
+    }
+
+    @Test
+    @DisplayName("Typed client honors generated wire names and response getters")
+    void testTypedClientJsonMapping() throws Exception {
+        AtomicReference<String> body = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = ("{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"created\":1784900000,"
+                    + "\"model\":\"gpt-4\",\"choices\":[{\"index\":0,"
+                    + "\"message\":{\"role\":\"assistant\",\"content\":\"hello back\"},"
+                    + "\"finish_reason\":\"stop\"}],"
+                    + "\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            HelmClient client = new HelmClient("http://127.0.0.1:" + server.getAddress().getPort());
+            TypesGen.ChatCompletionResponse response = client.chatCompletions(new TypesGen.ChatCompletionRequest()
+                    .model("gpt-4")
+                    .messages(java.util.List.of(new TypesGen.ChatCompletionRequestMessagesInner()
+                            .role(TypesGen.ChatCompletionRequestMessagesInner.RoleEnum.USER)
+                            .content("hello")))
+                    .maxTokens(256));
+
+            assertTrue(body.get().contains("\"max_tokens\":256"));
+            assertFalse(body.get().contains("maxTokens"));
+            assertEquals("chatcmpl-1", response.getId());
+            assertEquals("hello back", response.getChoices().get(0).getMessage().getContent());
+            assertEquals(Integer.valueOf(5), response.getUsage().getTotalTokens());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("Additional-properties models remain typed beans")
+    void testAdditionalPropertiesModelsAreTypedBeans() throws Exception {
+        TypesGen.CapabilityGraph graph = new TypesGen.CapabilityGraph()
+                .capabilities(java.util.List.of("fs.read", "net.http"))
+                .confidence(new java.math.BigDecimal("0.9"))
+                .confidenceReason("test");
+        graph.putAdditionalProperty("undeclared_extension", "kept");
+
+        assertFalse(graph instanceof java.util.Map);
+        String json = mapper.writeValueAsString(graph);
+        assertTrue(json.contains("\"confidence_reason\":\"test\""));
+        assertTrue(json.contains("\"undeclared_extension\":\"kept\""));
+        assertFalse(json.contains("additionalProperties"));
+
+        TypesGen.CapabilityGraph decoded = mapper.readValue(json, TypesGen.CapabilityGraph.class);
+        assertEquals(java.util.List.of("fs.read", "net.http"), decoded.getCapabilities());
+        assertEquals(new java.math.BigDecimal("0.9"), decoded.getConfidence());
+        assertEquals("kept", decoded.getAdditionalProperty("undeclared_extension"));
+    }
+
+    @Test
+    @DisplayName("Client mapper writes OffsetDateTime as ISO-8601")
+    void testClientMapperWritesIsoDateTime() throws Exception {
+        String json = mapper.writeValueAsString(new TypesGen.Session()
+                .createdAt(OffsetDateTime.parse("2026-07-24T00:00:00Z")));
+        assertTrue(json.contains("\"created_at\":\"2026-07-24T00:00:00Z\""));
+    }
+
+    @Test
+    @DisplayName("Missing API reason code defaults to ERROR_INTERNAL")
+    void testMissingApiReasonCode() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/kernel/approve", exchange -> {
+            byte[] response = "{\"error\":{\"message\":\"approval failed\"}}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(500, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            HelmClient client = new HelmClient("http://127.0.0.1:" + server.getAddress().getPort());
+            HelmClient.HelmApiException exception = assertThrows(HelmClient.HelmApiException.class,
+                    () -> client.approveIntent(new TypesGen.ApprovalRequest().intentHash("sha256:intent")));
+            assertEquals("approval failed", exception.getMessage());
+            assertEquals("ERROR_INTERNAL", exception.reasonCode);
+        } finally {
+            server.stop(0);
+        }
     }
 }

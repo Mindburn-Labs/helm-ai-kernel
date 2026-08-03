@@ -15,6 +15,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	githubconnector "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/github"
+	linearconnector "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/linear"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcpcore "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
@@ -489,6 +490,57 @@ func TestGovernedBridgeDispatchesThroughConnector(t *testing.T) {
 	}
 	if resp.Result == nil {
 		t.Error("expected dispatched output in Result")
+	}
+}
+
+func TestGovernedBridgeMintsLinearScopedReadPermits(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if payload.Query == "" {
+			http.Error(w, "missing query", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"issue":{"id":"issue-1","title":"Bug","description":"Fix it","priorityLabel":"High","state":{"name":"Todo"},"assignee":null,"createdAt":"2026-08-03T12:00:00Z","updatedAt":"2026-08-03T12:00:00Z"}}}`))
+	}))
+	defer server.Close()
+
+	connector := linearconnector.NewConnector(linearconnector.Config{BaseURL: server.URL, Token: "lin_api_test"})
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{
+		Profile: operateProfile(), Connector: connector, Now: func() time.Time { return time.Now().UTC() },
+	}))
+	adapter, err := NewMCPAdapter(Config{Graph: proofgraph.NewGraph(), Bridge: bridge})
+	if err != nil {
+		t.Fatalf("new adapter: %v", err)
+	}
+	req := &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "linear.get_issue",
+		Arguments: map[string]any{"issue_id": "issue-1"}, PrincipalID: "ve-assistant",
+	}
+	for i := 0; i < 2; i++ {
+		response, err := adapter.Intercept(context.Background(), req)
+		if err != nil || !response.Allowed || response.Result == nil {
+			t.Fatalf("read attempt %d = %+v, %v", i+1, response, err)
+		}
+	}
+	if requests != 2 {
+		t.Fatalf("Linear requests = %d, want 2", requests)
+	}
+}
+
+func TestGovernedBridgeClampsConnectorPermitTTL(t *testing.T) {
+	connector := linearconnector.NewConnector(linearconnector.Config{})
+	bridge := NewGovernedBridge(BridgeConfig{Connector: connector, PermitTTL: 2 * time.Hour})
+	if bridge.permitTTL != time.Hour {
+		t.Fatalf("permit TTL = %s, want %s", bridge.permitTTL, time.Hour)
 	}
 }
 

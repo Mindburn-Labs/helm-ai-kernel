@@ -26,6 +26,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -384,9 +385,11 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("linear api: %d: %s", e.StatusCode, e.Messages[0])
 }
 
-// doGraphQL posts a GraphQL query or mutation to Linear with auth, retry on
-// transient failures, and structured error parsing.
+// doGraphQL posts a GraphQL query or mutation to Linear with auth and
+// structured error parsing. Only queries are retried; mutation failures are
+// ambiguous after a transport or transient response failure.
 func (c *Client) doGraphQL(ctx context.Context, query string, variables map[string]any, out any) error {
+	retryable := strings.HasPrefix(strings.TrimSpace(query), "query")
 	payload := map[string]any{
 		"query":     query,
 		"variables": variables,
@@ -417,7 +420,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("transport error: %w", err)
-			if !shouldRetry(attempt) {
+			if !retryable || !shouldRetry(attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))
@@ -427,7 +430,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 		resp.Body.Close()
 		if readErr != nil {
 			lastErr = fmt.Errorf("read response body: %w", readErr)
-			if !shouldRetry(attempt) {
+			if !retryable || !shouldRetry(attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))
@@ -443,7 +446,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 				RetryAfter: wait,
 				RawBody:    string(respBody),
 			}
-			if !shouldRetry(attempt) {
+			if !retryable || !shouldRetry(attempt) {
 				return lastErr
 			}
 			if wait > 60*time.Second {
@@ -464,7 +467,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 				Messages:   []string{"server error"},
 				RawBody:    string(respBody),
 			}
-			if !shouldRetry(attempt) {
+			if !retryable || !shouldRetry(attempt) {
 				return lastErr
 			}
 			time.Sleep(backoff(attempt))

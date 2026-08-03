@@ -2,12 +2,12 @@
   "artifact_hashes": {
     "constraint_set": "sha256:ef0ee0df2951ac7719cf2db431a995ec636cc349cb1dbe6cb39397baa54baac9",
     "offer_snapshot": "sha256:042ca6a9fc9ba1619bcab69e0b201d0d3cee2dc610e4ee8ed3c91458775c8ada",
-    "provider_capability_profile": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
-    "provider_certification": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
-    "provider_payload_set": "sha256:27f518230eff3b56ae7002e0680d29c7171596ce465116c1342b7ea594165524",
+    "provider_capability_profile": "sha256:4d9f8e4336bb9ffa8c09cbe9d62e19136afae3ec9e0a2f1f40aa30793ecb5fb8",
+    "provider_certification": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
+    "provider_payload_set": "sha256:90e572030f7453573dd3322e2e4f81272d90fb0ab877bf5fdc006f464f0a7e88",
     "repository_analysis": "sha256:2911b337b3b27f2ca0f9520ba12794256909b226a59d428e6e3fe7a48ae5262a",
     "resource_graph": "sha256:8281f465a126d454b4c62c0a94980399ebef98c1fc6ca820c792602b7c0b6ca5",
-    "route_binding": "sha256:19502ab54d02592763f8821b19e5feecd77af92759f2b820f9f2e8d77eccf733",
+    "route_binding": "sha256:c1a048e7f1b56e4b542486d5295fe0e6db81ba2c02373c259a8d68e7fc44a46f",
     "route_quote": "sha256:d813f9b830afbc77b5777cb49de8ffe2d978ef68f05d2575fdd76e4344b69461",
     "workload_graph": "sha256:7938f84388d3ec7f77767605e1a9765a9011000d03e5473801991e8ac62267a9"
   },
@@ -92,6 +92,7 @@
         {
           "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
           "action_urn": "urn:helm:connector:digitalocean:apps:activate",
+          "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
           "reconciliation_mode": "OPERATION_POLL",
           "idempotency_mode": "RECONCILE_BEFORE_RETRY",
           "supported_transition_classes": [
@@ -103,6 +104,7 @@
         {
           "effect_id": "PROVIDER_PROVISION",
           "action_urn": "urn:helm:connector:digitalocean:apps:create",
+          "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
           "reconciliation_mode": "OPERATION_POLL",
           "idempotency_mode": "RECONCILE_BEFORE_RETRY",
           "supported_transition_classes": [],
@@ -111,6 +113,7 @@
         {
           "effect_id": "PROVIDER_ROLLBACK",
           "action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
+          "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
           "reconciliation_mode": "OPERATION_POLL",
           "idempotency_mode": "COMPARE_AND_SET",
           "supported_transition_classes": [],
@@ -122,6 +125,7 @@
         {
           "effect_id": "PROVIDER_TEARDOWN",
           "action_urn": "urn:helm:connector:digitalocean:apps:delete",
+          "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
           "reconciliation_mode": "READ_AFTER_WRITE",
           "idempotency_mode": "RECONCILE_BEFORE_RETRY",
           "supported_transition_classes": [],
@@ -139,7 +143,7 @@
       "schema_version": "launch_provider_certification.v1",
       "certification_id": "certification-1",
       "profile_ref": "digitalocean-candidate",
-      "profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+      "profile_hash": "sha256:4d9f8e4336bb9ffa8c09cbe9d62e19136afae3ec9e0a2f1f40aa30793ecb5fb8",
       "provider_id": "digitalocean",
       "connector_id": "digitalocean-app-platform",
       "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -150,8 +154,8 @@
       "issued_at": "2026-07-19T00:00:00Z",
       "expires_at": "2026-07-20T00:00:00Z",
       "signer_key_id": "cert-root-1",
-      "record_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
-      "signature": "ed25519:7cf2483dd8147012ed13047771ae33e661d3cb0cf388a46198d5c3d909387432a7ad5d3d3de7c1d7838c4e39b05d96f61911f79a2f354e47e64d7e886a60a10b"
+      "record_hash": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
+      "signature": "ed25519:c09d32470e8555f356964bc10e9ce6e5bce942c8176d40d22e2be9b70f7bf039c78b45bdedd1abb49eb9fd80934a6185c24f2235c8999bbf66b52d256ae80d0c"
     },
     "provider_payload_set": {
       "schema_version": "launch_provider_payload_set.v1",
@@ -164,25 +168,29 @@
           "placement_id": "placement-1",
           "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
           "provider_action_urn": "urn:helm:connector:digitalocean:apps:activate",
-          "payload_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+          "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+          "payload_hash": "sha256:684726681f8b13d31c792e778bba0d24be786c22443fcfb7fc567680c838125b"
         },
         {
           "placement_id": "placement-1",
           "effect_id": "PROVIDER_PROVISION",
           "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
-          "payload_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+          "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+          "payload_hash": "sha256:359f7e0398079dfa24d23adebdac9487129130d0f9d84c7cab0721aa283f0cdf"
         },
         {
           "placement_id": "placement-1",
           "effect_id": "PROVIDER_ROLLBACK",
           "provider_action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
-          "payload_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+          "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+          "payload_hash": "sha256:a65cdf02e473fedbffba0fafb54396f6cb1ebe4e8051a315ca149cb88beda8fa"
         },
         {
           "placement_id": "placement-1",
           "effect_id": "PROVIDER_TEARDOWN",
           "provider_action_urn": "urn:helm:connector:digitalocean:apps:delete",
-          "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+          "payload_hash": "sha256:5113046c38d6e58d86ea717a8d90bd530c261c9bf3f399ebb081b120e1390751"
         }
       ]
     },
@@ -237,7 +245,7 @@
       "resource_graph_ref": "resource-graph-1",
       "resource_graph_hash": "sha256:8281f465a126d454b4c62c0a94980399ebef98c1fc6ca820c792602b7c0b6ca5",
       "provider_payload_set_ref": "payload-set-1",
-      "provider_payload_set_hash": "sha256:27f518230eff3b56ae7002e0680d29c7171596ce465116c1342b7ea594165524",
+      "provider_payload_set_hash": "sha256:90e572030f7453573dd3322e2e4f81272d90fb0ab877bf5fdc006f464f0a7e88",
       "generated_spec_ref": "generated-spec-1",
       "generated_spec_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "placements": [
@@ -247,9 +255,9 @@
             "api"
           ],
           "provider_profile_ref": "digitalocean-candidate",
-          "provider_profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+          "provider_profile_hash": "sha256:4d9f8e4336bb9ffa8c09cbe9d62e19136afae3ec9e0a2f1f40aa30793ecb5fb8",
           "provider_certification_ref": "certification-1",
-          "provider_certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+          "provider_certification_hash": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
           "provider_id": "digitalocean",
           "provider_account_ref": "account:1",
           "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -262,26 +270,30 @@
             {
               "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
               "provider_action_urn": "urn:helm:connector:digitalocean:apps:activate",
-              "provider_payload_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+              "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+              "provider_payload_hash": "sha256:684726681f8b13d31c792e778bba0d24be786c22443fcfb7fc567680c838125b"
             },
             {
               "effect_id": "PROVIDER_PROVISION",
               "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
-              "provider_payload_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+              "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+              "provider_payload_hash": "sha256:359f7e0398079dfa24d23adebdac9487129130d0f9d84c7cab0721aa283f0cdf"
             },
             {
               "effect_id": "PROVIDER_ROLLBACK",
               "provider_action_urn": "urn:helm:connector:digitalocean:deployments:rollback",
-              "provider_payload_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+              "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+              "provider_payload_hash": "sha256:a65cdf02e473fedbffba0fafb54396f6cb1ebe4e8051a315ca149cb88beda8fa"
             },
             {
               "effect_id": "PROVIDER_TEARDOWN",
               "provider_action_urn": "urn:helm:connector:digitalocean:apps:delete",
-              "provider_payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+              "provider_payload_hash": "sha256:5113046c38d6e58d86ea717a8d90bd530c261c9bf3f399ebb081b120e1390751"
             }
           ],
           "resource_subset_hash": "sha256:43da036abfec765bc3b47a88021f04560cd8a56226dc323fc3c27b8fb65fcd42",
-          "provider_payload_subset_hash": "sha256:329cdaba27a27f2d1d0eb07843cf469ecff5770f37bdc3b227640296c27753c1"
+          "provider_payload_subset_hash": "sha256:cc4b7eaf25f2108c5920480337108f9414c969d9ef34e3620d9e8ff9c56cf128"
         }
       ],
       "placement_dependencies": [],
@@ -383,14 +395,14 @@
           "pack_manifest_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "action": "install",
           "connector_action": "urn:helm:connector:digitalocean:apps:create",
-          "effect_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+          "effect_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
           "policy_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
           "connector_id": "digitalocean-app-platform",
           "connector_version": "1.0.0",
           "release_scope_kind": "global",
           "release_authority_id": "launch-release-authority-PROVIDER_PROVISION",
           "release_registry_revision": 1,
-          "release_authority_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "release_authority_hash": "sha256:1c38cf91d8b007c8992a2b68d23d1ae8453874de70642880a83ef867fd9edfd1",
           "connector_executor_kind": "digital",
           "connector_binary_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "connector_signature_ref": "sigstore://launch/connector/1.0.0",
@@ -399,12 +411,12 @@
           "connector_sandbox_profile": "launch-provider-route-v1",
           "connector_drift_policy_ref": "policy://launch/connector-drift/v1",
           "certification_ref": "certification-1",
-          "certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+          "certification_hash": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
           "certification_authority": "spiffe://helm/certification-service",
-          "authority_hash": "sha256:bf4953de160d86717cc3361f75dd7c71b72d22fa6c38ec86f86f8843113b22e7"
+          "authority_hash": "sha256:333a0247aee8be55103e58e1b9deddb986e50d312d04261e3352f2e58c55f54d"
         },
         "intent_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "effect_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+        "effect_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
         "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "decision": "ALLOW",
         "policy_version": "policy-v1",
@@ -419,16 +431,16 @@
         "issued_at": "2026-07-19T00:58:00Z",
         "expires_at": "2026-07-19T01:06:00Z",
         "nonce": "1111111111111111111111111111111111111111111111111111111111111111",
-        "grant_hash": "sha256:23976fecac9c221a43f449c0103908c54cbeebcdba75986b5f3f16b95ea198b9"
+        "grant_hash": "sha256:c176e496c6416b38363b41410600d9b86914bd41d09720fa6030d71ac02c6178"
       },
       "grant_signature_algorithm": "ed25519",
-      "grant_signature": "fdd0246c70025ce6d68359bade52f8b9528c8f48e50e3a225da9fef91d809a8527960acec62c7f7ac8e703d09cec0e104c86e6ed85462c97e9f8a6b84869b30b",
+      "grant_signature": "36254ccd997350d5f6fbdf8d6a580bcd3595e652d0b677729f2409c5a60bdcdab82e6913d7b0f9644113d7ea636cd6cc915d407639dd6966036ab4069e857706",
       "consumption": {
         "schema_version": "approval-grant-consumption.v1",
         "contract_version": "2026-07-17",
         "approval_id": "launch-approval-PROVIDER_PROVISION",
         "grant_id": "launch-grant-PROVIDER_PROVISION",
-        "grant_hash": "sha256:23976fecac9c221a43f449c0103908c54cbeebcdba75986b5f3f16b95ea198b9",
+        "grant_hash": "sha256:c176e496c6416b38363b41410600d9b86914bd41d09720fa6030d71ac02c6178",
         "tenant_id": "tenant-1",
         "workspace_id": "workspace-1",
         "audience": "launch.dispatch",
@@ -449,14 +461,14 @@
           "pack_manifest_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "action": "install",
           "connector_action": "urn:helm:connector:digitalocean:apps:create",
-          "effect_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+          "effect_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
           "policy_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
           "connector_id": "digitalocean-app-platform",
           "connector_version": "1.0.0",
           "release_scope_kind": "global",
           "release_authority_id": "launch-release-authority-PROVIDER_PROVISION",
           "release_registry_revision": 1,
-          "release_authority_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "release_authority_hash": "sha256:1c38cf91d8b007c8992a2b68d23d1ae8453874de70642880a83ef867fd9edfd1",
           "connector_executor_kind": "digital",
           "connector_binary_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "connector_signature_ref": "sigstore://launch/connector/1.0.0",
@@ -465,12 +477,12 @@
           "connector_sandbox_profile": "launch-provider-route-v1",
           "connector_drift_policy_ref": "policy://launch/connector-drift/v1",
           "certification_ref": "certification-1",
-          "certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+          "certification_hash": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
           "certification_authority": "spiffe://helm/certification-service",
-          "authority_hash": "sha256:bf4953de160d86717cc3361f75dd7c71b72d22fa6c38ec86f86f8843113b22e7"
+          "authority_hash": "sha256:333a0247aee8be55103e58e1b9deddb986e50d312d04261e3352f2e58c55f54d"
         },
         "intent_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "effect_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+        "effect_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
         "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "policy_version": "policy-v1",
         "policy_epoch": "epoch-1",
@@ -481,10 +493,10 @@
         "grant_issued_at": "2026-07-19T00:58:00Z",
         "grant_expires_at": "2026-07-19T01:06:00Z",
         "consumed_at": "2026-07-19T00:59:30Z",
-        "consumption_hash": "sha256:5d4ff1c4cae669371a07175edc0e137897884cac5316c6d942bbd8b90f71936e"
+        "consumption_hash": "sha256:d1879035ea565160357110a3a6623bf48ea82ffc7659bd5488dc81662ef9f466"
       },
       "consumption_signature_algorithm": "ed25519",
-      "consumption_signature": "becfe34a08ec460fb32af6ba92e0cd1dfed0f65eac10113c16e1e2a5f0755906d420f62134fb55f87da8d074f2c07518d92487a4f71e8cbfca9baa3808dd6908",
+      "consumption_signature": "987bd07299b0c2ad9b5c08f3e5d0f17957e73f1063f6cc794302e17feff3029047089369c76578c08a6894eef5ccff4bd69cb2b391de48a02ff5dc6e26e60904",
       "dispatch_admission": {
         "schema_version": "approval-dispatch-admission.v1",
         "contract_version": "2026-07-17.1",
@@ -494,14 +506,14 @@
         "state": "NOT_STARTED",
         "approval_id": "launch-approval-PROVIDER_PROVISION",
         "grant_id": "launch-grant-PROVIDER_PROVISION",
-        "grant_hash": "sha256:23976fecac9c221a43f449c0103908c54cbeebcdba75986b5f3f16b95ea198b9",
-        "consumption_hash": "sha256:5d4ff1c4cae669371a07175edc0e137897884cac5316c6d942bbd8b90f71936e",
+        "grant_hash": "sha256:c176e496c6416b38363b41410600d9b86914bd41d09720fa6030d71ac02c6178",
+        "consumption_hash": "sha256:d1879035ea565160357110a3a6623bf48ea82ffc7659bd5488dc81662ef9f466",
         "tenant_id": "tenant-1",
         "workspace_id": "workspace-1",
         "audience": "launch.dispatch",
         "admitted_by": "spiffe://helm/data-plane-1",
-        "idempotency_key_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
-        "effect_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+        "idempotency_key_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
+        "effect_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
         "action": "install",
         "connector_authority": {
           "schema_version": "approval-connector-authority.v1",
@@ -515,14 +527,14 @@
           "pack_manifest_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "action": "install",
           "connector_action": "urn:helm:connector:digitalocean:apps:create",
-          "effect_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+          "effect_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
           "policy_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
           "connector_id": "digitalocean-app-platform",
           "connector_version": "1.0.0",
           "release_scope_kind": "global",
           "release_authority_id": "launch-release-authority-PROVIDER_PROVISION",
           "release_registry_revision": 1,
-          "release_authority_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "release_authority_hash": "sha256:1c38cf91d8b007c8992a2b68d23d1ae8453874de70642880a83ef867fd9edfd1",
           "connector_executor_kind": "digital",
           "connector_binary_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "connector_signature_ref": "sigstore://launch/connector/1.0.0",
@@ -531,18 +543,18 @@
           "connector_sandbox_profile": "launch-provider-route-v1",
           "connector_drift_policy_ref": "policy://launch/connector-drift/v1",
           "certification_ref": "certification-1",
-          "certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+          "certification_hash": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
           "certification_authority": "spiffe://helm/certification-service",
-          "authority_hash": "sha256:bf4953de160d86717cc3361f75dd7c71b72d22fa6c38ec86f86f8843113b22e7"
+          "authority_hash": "sha256:333a0247aee8be55103e58e1b9deddb986e50d312d04261e3352f2e58c55f54d"
         },
         "kernel_trust_root_id": "kernel-root-1",
         "signing_key_ref": "approval-key-1",
         "issued_at": "2026-07-19T00:59:45Z",
         "expires_at": "2026-07-19T01:00:45Z",
-        "admission_hash": "sha256:e3adbd88746d6a0048461da551e04e521865bfee045336ce2d1896f675b3caf2"
+        "admission_hash": "sha256:f2da11e259b73c4fd75f0e2c8389cc36aefc7cbdf565d7b9a2edae82cbce81c3"
       },
       "dispatch_signature_algorithm": "ed25519",
-      "dispatch_signature": "ec223dd23337463f1c30bbffaaa8718e4e6dddfb3452f8f779b72fed52dfae1f5c4cd971c37a55807d35a2121c97a93abaea3ac7f4ea9541e06f8b56faacbb0c"
+      "dispatch_signature": "4efbf47b5c815668a18530bce125328a16318447dc7c19175d21ddb1c6b50bc167913b049d77dcb7ebc418cc7f1e1d3f0d66c9c124c48fb610183902de3ef800"
     },
     "approval_public_key": "ed25519:25586bb1c991c266f0baa1b56df4dba0c535b79a951d777dd1dbf08c0a067b5b",
     "envelope": {
@@ -556,7 +568,7 @@
       "kernel_trust_root_id": "kernel-root-1",
       "effect_ordinal": 1,
       "input_schema_ref": "effects/launch/provider_provision.v1.json",
-      "input_schema_hash": "sha256:366126ae4e96bf9b3d76c7e68a921e51bb449eea2aa225555e2bbe5c01465d91",
+      "input_schema_hash": "sha256:9192b7ed5c60ba69c0b5c37042efddb3ece094e554ef70bb5bd8930d7bf5e3ee",
       "input": {
         "billing_cadence": "MONTHLY",
         "budget_reservation_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
@@ -580,19 +592,21 @@
         "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "provider_account_ref": "account:1",
         "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
-        "provider_capability_profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+        "provider_capability_profile_hash": "sha256:4d9f8e4336bb9ffa8c09cbe9d62e19136afae3ec9e0a2f1f40aa30793ecb5fb8",
         "provider_capability_profile_ref": "digitalocean-candidate",
-        "provider_certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+        "provider_certification_hash": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
         "provider_certification_ref": "certification-1",
         "provider_connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "provider_connector_id": "digitalocean-app-platform",
-        "provider_payload_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "provider_destination_hash": "sha256:5d18844ff37958ca96d86a9b433c393fac47fd040095375c4026b3bc99870cf3",
+        "provider_offering_id": "app-platform",
+        "provider_payload_hash": "sha256:359f7e0398079dfa24d23adebdac9487129130d0f9d84c7cab0721aa283f0cdf",
         "provider_terms_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "region": "fra",
         "repository_analysis_hash": "sha256:2911b337b3b27f2ca0f9520ba12794256909b226a59d428e6e3fe7a48ae5262a",
         "repository_analysis_ref": "analysis-1",
         "resource_graph_hash": "sha256:8281f465a126d454b4c62c0a94980399ebef98c1fc6ca820c792602b7c0b6ca5",
-        "route_binding_hash": "sha256:19502ab54d02592763f8821b19e5feecd77af92759f2b820f9f2e8d77eccf733",
+        "route_binding_hash": "sha256:c1a048e7f1b56e4b542486d5295fe0e6db81ba2c02373c259a8d68e7fc44a46f",
         "route_binding_ref": "route-1",
         "route_placement_id": "placement-1",
         "route_quote_hash": "sha256:d813f9b830afbc77b5777cb49de8ffe2d978ef68f05d2575fdd76e4344b69461",
@@ -606,15 +620,15 @@
         "workload_graph_ref": "workload-graph-http",
         "workspace_id": "workspace-1"
       },
-      "input_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
-      "idempotency_key": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+      "input_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
+      "idempotency_key": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
       "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "approval_artifact_ref": "launch-grant-PROVIDER_PROVISION",
-      "approval_artifact_hash": "sha256:23976fecac9c221a43f449c0103908c54cbeebcdba75986b5f3f16b95ea198b9",
+      "approval_artifact_hash": "sha256:c176e496c6416b38363b41410600d9b86914bd41d09720fa6030d71ac02c6178",
       "approval_consumption_ref": "approval-consumption:launch-grant-PROVIDER_PROVISION",
-      "approval_consumption_hash": "sha256:5d4ff1c4cae669371a07175edc0e137897884cac5316c6d942bbd8b90f71936e",
+      "approval_consumption_hash": "sha256:d1879035ea565160357110a3a6623bf48ea82ffc7659bd5488dc81662ef9f466",
       "dispatch_admission_ref": "launch-dispatch-PROVIDER_PROVISION",
-      "dispatch_admission_hash": "sha256:e3adbd88746d6a0048461da551e04e521865bfee045336ce2d1896f675b3caf2",
+      "dispatch_admission_hash": "sha256:f2da11e259b73c4fd75f0e2c8389cc36aefc7cbdf565d7b9a2edae82cbce81c3",
       "dependency_set_ref": "dependency-set-1",
       "dependency_set_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
       "policy_epoch": "epoch-1",
@@ -624,8 +638,8 @@
       "kernel_verdict_issued_at": "2026-07-19T00:59:00Z",
       "kernel_verdict_expiry": "2026-07-19T01:02:00Z",
       "kernel_verdict_signer_key_id": "kernel-key-1",
-      "kernel_verdict_hash": "sha256:3c25da9dd9ac006c0d14ea6d6563f3733ff60276adb114689c20d4a3a254e5d6",
-      "kernel_verdict_signature": "ed25519:0424ab282768263a3d7247041a1e566d5177b3029488b7be73b64aa4b89bee125773efc0b99aae8f92078da18fc9c661c9ecbcd458f11e65b87ef6c7c4890e0a",
+      "kernel_verdict_hash": "sha256:05ee191a24158900e59080084d6b75be3e5f87275d3171fcd42180b5e621b29a",
+      "kernel_verdict_signature": "ed25519:b42862e4496f3f51844618a6945c986f55cfb3c0d3149fbdaf2057d84d000435eb607d4f34d0dca70d2e8400a023910fe703e6b732289f4abb20a9edf42f7e05",
       "effect_permit_ref": "permit-1",
       "effect_permit_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
       "permit_nonce": "0123456789abcdefABCDEF",
@@ -636,10 +650,10 @@
       "connector_id": "helm-provider-route",
       "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "connector_authority_ref": "launch-connector-authority-PROVIDER_PROVISION",
-      "connector_authority_hash": "sha256:bf4953de160d86717cc3361f75dd7c71b72d22fa6c38ec86f86f8843113b22e7",
+      "connector_authority_hash": "sha256:333a0247aee8be55103e58e1b9deddb986e50d312d04261e3352f2e58c55f54d",
       "action_urn": "urn:helm:provider-route:provision",
-      "request_body_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-      "args_c14n_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "request_body_hash": "sha256:7e75508abecea8309de6a42b1434782337642d8fdf5e5ed851be3967313132ff",
+      "args_c14n_hash": "sha256:80cf2ca8cb64e5219996ad67a5c64bfe0492ab679b17e3c084d488b9f6758497",
       "dispatch_deadline": "2026-07-19T01:00:40Z",
       "replay_hint": "single_use_permit"
     },
@@ -651,7 +665,7 @@
   "effect_inputs": [
     {
       "effect_id": "PROVIDER_PROVISION",
-      "idempotency_key": "sha256:f921f17d52f89b73f421fe1e0e916ac7f60ee9c658c5cca9c580f8643cbf6f9e",
+      "idempotency_key": "sha256:4d0f9f802ce906ec6cf444457b19aa2afcbb45ff028c3c4bd20930c266be6b2c",
       "input": {
         "billing_cadence": "MONTHLY",
         "budget_reservation_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
@@ -681,6 +695,8 @@
         "provider_certification_ref": "do-certification-1",
         "provider_connector_contract_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
         "provider_connector_id": "digitalocean-app-platform",
+        "provider_destination_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "provider_offering_id": "app-platform",
         "provider_payload_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
         "provider_terms_profile_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
         "region": "fra",
@@ -704,7 +720,7 @@
     },
     {
       "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
-      "idempotency_key": "sha256:ede0de2921f564f59eea19913fc8f1eb2dc9e2a199ccf0ed55067306e5c6715c",
+      "idempotency_key": "sha256:503807511de64e5e0584d5d42b534b1b540eb48033e1f9f56fb41ecd21b49a1d",
       "input": {
         "activation_class": "RELEASE_CUTOVER",
         "activation_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -738,6 +754,8 @@
         "provider_certification_ref": "do-certification-1",
         "provider_connector_contract_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
         "provider_connector_id": "digitalocean-app-platform",
+        "provider_destination_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "provider_offering_id": "app-platform",
         "provider_payload_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
         "provision_receipt_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
         "provision_receipt_ref": "provision-receipt-1",
@@ -825,7 +843,7 @@
     },
     {
       "effect_id": "PROVIDER_ROLLBACK",
-      "idempotency_key": "sha256:82defc4ae5cc59802de3bd2d5825fc23b5641196ea330ffae0c1bc03f7b5aa84",
+      "idempotency_key": "sha256:316a4cd6253bacbb3a61bb29dd8d283a0f743f9ecd10260e0e435db9b0036701",
       "input": {
         "compensation_class": "RELEASE_ROLLBACK",
         "compensation_plan_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
@@ -848,6 +866,8 @@
         "provider_certification_ref": "do-certification-1",
         "provider_connector_contract_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
         "provider_connector_id": "digitalocean-app-platform",
+        "provider_destination_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "provider_offering_id": "app-platform",
         "provider_payload_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
         "provision_receipt_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
         "provision_receipt_ref": "provision-receipt-1",
@@ -883,7 +903,7 @@
     },
     {
       "effect_id": "PROVIDER_TEARDOWN",
-      "idempotency_key": "sha256:e69036f831cbb2cf2b5886a84001b1c743de1ea42a0b35b2d16b482d1f755040",
+      "idempotency_key": "sha256:262e39c8119b6930f4b5f68cab9c9fa06876367c0d577b5724434c375ebb8bcd",
       "input": {
         "backup_clearance_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
         "billing_exposure_snapshot_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
@@ -908,6 +928,8 @@
         "provider_certification_ref": "do-certification-1",
         "provider_connector_contract_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
         "provider_connector_id": "digitalocean-app-platform",
+        "provider_destination_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "provider_offering_id": "app-platform",
         "provider_payload_hash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
         "provision_receipt_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
         "provision_receipt_ref": "provision-receipt-1",
@@ -1018,20 +1040,20 @@
       "audience": "launch.dispatch",
       "kernel_trust_root_id": "kernel-root-1",
       "effect_ordinal": 1,
-      "input_schema_hash": "sha256:366126ae4e96bf9b3d76c7e68a921e51bb449eea2aa225555e2bbe5c01465d91",
-      "input_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
-      "idempotency_key": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+      "input_schema_hash": "sha256:9192b7ed5c60ba69c0b5c37042efddb3ece094e554ef70bb5bd8930d7bf5e3ee",
+      "input_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
+      "idempotency_key": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
       "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "request_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-      "args_c14n_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "request_hash": "sha256:7e75508abecea8309de6a42b1434782337642d8fdf5e5ed851be3967313132ff",
+      "args_c14n_hash": "sha256:80cf2ca8cb64e5219996ad67a5c64bfe0492ab679b17e3c084d488b9f6758497",
       "kernel_verdict_ref": "verdict-1",
-      "kernel_verdict_hash": "sha256:3c25da9dd9ac006c0d14ea6d6563f3733ff60276adb114689c20d4a3a254e5d6",
+      "kernel_verdict_hash": "sha256:05ee191a24158900e59080084d6b75be3e5f87275d3171fcd42180b5e621b29a",
       "approval_artifact_ref": "launch-grant-PROVIDER_PROVISION",
-      "approval_artifact_hash": "sha256:23976fecac9c221a43f449c0103908c54cbeebcdba75986b5f3f16b95ea198b9",
+      "approval_artifact_hash": "sha256:c176e496c6416b38363b41410600d9b86914bd41d09720fa6030d71ac02c6178",
       "approval_consumption_ref": "approval-consumption:launch-grant-PROVIDER_PROVISION",
-      "approval_consumption_hash": "sha256:5d4ff1c4cae669371a07175edc0e137897884cac5316c6d942bbd8b90f71936e",
+      "approval_consumption_hash": "sha256:d1879035ea565160357110a3a6623bf48ea82ffc7659bd5488dc81662ef9f466",
       "dispatch_admission_ref": "launch-dispatch-PROVIDER_PROVISION",
-      "dispatch_admission_hash": "sha256:e3adbd88746d6a0048461da551e04e521865bfee045336ce2d1896f675b3caf2",
+      "dispatch_admission_hash": "sha256:f2da11e259b73c4fd75f0e2c8389cc36aefc7cbdf565d7b9a2edae82cbce81c3",
       "effect_permit_ref": "permit-1",
       "effect_permit_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
       "permit_nonce": "0123456789abcdefABCDEF",
@@ -1044,12 +1066,12 @@
       "connector_id": "helm-provider-route",
       "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "connector_authority_ref": "launch-connector-authority-PROVIDER_PROVISION",
-      "connector_authority_hash": "sha256:bf4953de160d86717cc3361f75dd7c71b72d22fa6c38ec86f86f8843113b22e7",
+      "connector_authority_hash": "sha256:333a0247aee8be55103e58e1b9deddb986e50d312d04261e3352f2e58c55f54d",
       "action_urn": "urn:helm:provider-route:provision",
       "dependency_set_ref": "dependency-set-1",
       "dependency_set_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
       "route_binding_ref": "route-1",
-      "route_binding_hash": "sha256:19502ab54d02592763f8821b19e5feecd77af92759f2b820f9f2e8d77eccf733",
+      "route_binding_hash": "sha256:c1a048e7f1b56e4b542486d5295fe0e6db81ba2c02373c259a8d68e7fc44a46f",
       "route_placement_id": "placement-1",
       "provider_id": "digitalocean",
       "provider_account_ref": "account:1",
@@ -1059,11 +1081,11 @@
       "provider_connector_id": "digitalocean-app-platform",
       "provider_connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
-      "provider_payload_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      "provider_payload_hash": "sha256:359f7e0398079dfa24d23adebdac9487129130d0f9d84c7cab0721aa283f0cdf",
       "provider_capability_profile_ref": "digitalocean-candidate",
-      "provider_capability_profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+      "provider_capability_profile_hash": "sha256:4d9f8e4336bb9ffa8c09cbe9d62e19136afae3ec9e0a2f1f40aa30793ecb5fb8",
       "provider_certification_ref": "certification-1",
-      "provider_certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+      "provider_certification_hash": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
       "offer_snapshot_ref": "offer-snapshot-1",
       "offer_snapshot_hash": "sha256:042ca6a9fc9ba1619bcab69e0b201d0d3cee2dc610e4ee8ed3c91458775c8ada",
       "price_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -1088,8 +1110,8 @@
       "schema_version": "launch_effect_receipt.v1",
       "receipt_version": "1.0",
       "kind": "helm_native_receipt",
-      "receipt_id": "aa9dbbd6a904cae0129bb616da561d87da28113f326ec4eb3cf64ca121313769",
-      "receipt_chain_id": "sha256:6ffcdbe1f85602dfb03681eb1b07bad1f5b7b734add088fc541ef0ade667a0e0",
+      "receipt_id": "5823edb187c3bc7bd6266bd95050b0b0c851ee602dc5731a32c26762ebafc81e",
+      "receipt_chain_id": "sha256:c930f8ead5b64676bfea2e4e358ddf770e6df676393966f16d53c055d3a66c42",
       "receipt_revision": 1,
       "reconciliation_revision": 0,
       "decision_id": "verdict-1",
@@ -1104,7 +1126,7 @@
       "lamport": 2,
       "proofgraph_node": "sha256:0b66746074e07926d2c4e82e1ef0b48eed7557c2634234269efb5886ecc08b5c",
       "signer_key_id": "kernel-key-1",
-      "payload_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "payload_hash": "sha256:7e75508abecea8309de6a42b1434782337642d8fdf5e5ed851be3967313132ff",
       "metadata": {
         "profile": "launch_effect_receipt.v1",
         "redaction_profile_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
@@ -1113,21 +1135,21 @@
       "workspace_id": "workspace-1",
       "mission_id": "mission-1",
       "effect_ordinal": 1,
-      "input_schema_hash": "sha256:366126ae4e96bf9b3d76c7e68a921e51bb449eea2aa225555e2bbe5c01465d91",
-      "input_hash": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
-      "idempotency_key": "sha256:e0d8cfdabe3e3f2be5a91d8736d59bfaeccb13136d79674cf30b87171ffc60fb",
+      "input_schema_hash": "sha256:9192b7ed5c60ba69c0b5c37042efddb3ece094e554ef70bb5bd8930d7bf5e3ee",
+      "input_hash": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
+      "idempotency_key": "sha256:ed0745a26f283867686830347210b810c1f3f409565cf2a0650f71931cea333e",
       "plan_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "request_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-      "args_c14n_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "request_hash": "sha256:7e75508abecea8309de6a42b1434782337642d8fdf5e5ed851be3967313132ff",
+      "args_c14n_hash": "sha256:80cf2ca8cb64e5219996ad67a5c64bfe0492ab679b17e3c084d488b9f6758497",
       "result_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
       "kernel_verdict_ref": "verdict-1",
-      "kernel_verdict_hash": "sha256:3c25da9dd9ac006c0d14ea6d6563f3733ff60276adb114689c20d4a3a254e5d6",
+      "kernel_verdict_hash": "sha256:05ee191a24158900e59080084d6b75be3e5f87275d3171fcd42180b5e621b29a",
       "approval_artifact_ref": "launch-grant-PROVIDER_PROVISION",
-      "approval_artifact_hash": "sha256:23976fecac9c221a43f449c0103908c54cbeebcdba75986b5f3f16b95ea198b9",
+      "approval_artifact_hash": "sha256:c176e496c6416b38363b41410600d9b86914bd41d09720fa6030d71ac02c6178",
       "approval_consumption_ref": "approval-consumption:launch-grant-PROVIDER_PROVISION",
-      "approval_consumption_hash": "sha256:5d4ff1c4cae669371a07175edc0e137897884cac5316c6d942bbd8b90f71936e",
+      "approval_consumption_hash": "sha256:d1879035ea565160357110a3a6623bf48ea82ffc7659bd5488dc81662ef9f466",
       "dispatch_admission_ref": "launch-dispatch-PROVIDER_PROVISION",
-      "dispatch_admission_hash": "sha256:e3adbd88746d6a0048461da551e04e521865bfee045336ce2d1896f675b3caf2",
+      "dispatch_admission_hash": "sha256:f2da11e259b73c4fd75f0e2c8389cc36aefc7cbdf565d7b9a2edae82cbce81c3",
       "effect_reservation_ref": "effect-reservation:launch-dispatch-PROVIDER_PROVISION:2",
       "effect_reservation_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "effect_permit_ref": "permit-1",
@@ -1141,7 +1163,7 @@
       "emergency_fence_epoch": 4,
       "connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "connector_authority_ref": "launch-connector-authority-PROVIDER_PROVISION",
-      "connector_authority_hash": "sha256:bf4953de160d86717cc3361f75dd7c71b72d22fa6c38ec86f86f8843113b22e7",
+      "connector_authority_hash": "sha256:333a0247aee8be55103e58e1b9deddb986e50d312d04261e3352f2e58c55f54d",
       "reconciliation_locator_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
       "outcome": "UNKNOWN",
       "reconciliation_status": "PENDING",
@@ -1150,7 +1172,7 @@
       "dependency_set_hash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
       "dependency_state_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
       "route_binding_ref": "route-1",
-      "route_binding_hash": "sha256:19502ab54d02592763f8821b19e5feecd77af92759f2b820f9f2e8d77eccf733",
+      "route_binding_hash": "sha256:c1a048e7f1b56e4b542486d5295fe0e6db81ba2c02373c259a8d68e7fc44a46f",
       "route_placement_id": "placement-1",
       "provider_id": "digitalocean",
       "provider_account_ref": "account:1",
@@ -1160,16 +1182,16 @@
       "provider_connector_id": "digitalocean-app-platform",
       "provider_connector_contract_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "provider_action_urn": "urn:helm:connector:digitalocean:apps:create",
-      "provider_payload_hash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      "provider_payload_hash": "sha256:359f7e0398079dfa24d23adebdac9487129130d0f9d84c7cab0721aa283f0cdf",
       "provider_capability_profile_ref": "digitalocean-candidate",
-      "provider_capability_profile_hash": "sha256:5e19d8347d78a38ca6f49c604d0cfacaa0ea5df72bfaf32111afc83f1e86621a",
+      "provider_capability_profile_hash": "sha256:4d9f8e4336bb9ffa8c09cbe9d62e19136afae3ec9e0a2f1f40aa30793ecb5fb8",
       "provider_certification_ref": "certification-1",
-      "provider_certification_hash": "sha256:273ab92b68e2038b72a4575cfca6c7df71d360470bfb7fb7f61589c2d767344c",
+      "provider_certification_hash": "sha256:0a5fc29d70fdeb61396e7707b27b237000d745aa71ca9fdbff51c1c819dde0a9",
       "offer_snapshot_ref": "offer-snapshot-1",
       "offer_snapshot_hash": "sha256:042ca6a9fc9ba1619bcab69e0b201d0d3cee2dc610e4ee8ed3c91458775c8ada",
       "price_evidence_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "terms_evidence_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "signature": "3JnD2CwTF/lyTiXJ/CssDKI3TE11SILU4DIyYVvVX/0gp6qT5BcmLiXJzyBL+C5T1UPJUrTZr2M4C+kuqHPsAA=="
+      "signature": "hRUAyMWRTdxyqhbc9Fcx3VFVjF1aCw/+UXnf40gwYyqnI2RJCeFJA7dWpd5+3NlBAalMjICfwab25NtN6MDGBw=="
     }
   },
   "schema_version": "launch-mission-reference-v1",
@@ -1181,13 +1203,13 @@
         "offer-edge": "sha256:35338ab02bd9409dc31b52ae731a615898d2e2ce13662ac90a03d729143d3f3f"
       },
       "provider_capability_profiles": {
-        "data-cloud-candidate": "sha256:ff581f570e0c10c585ed91ab3000073d01720c1cb61e71b55de264282dd68339",
-        "edge-cloud-candidate": "sha256:2cb87cf20c3ecb61dd4be3ffa1fe704281b51bbd882020f3a801521b39b89b8a"
+        "data-cloud-candidate": "sha256:a134d6d011b441bb167f30f4037a76bbcf0ee6e51097ea1819b06b5d47afbb06",
+        "edge-cloud-candidate": "sha256:649b745acab1132403baaf47e304560f1b01cd3e9eb157742f48a19669c2c253"
       },
-      "provider_payload_set": "sha256:5730f1a725245935e84770d8cd6083796fd8d0a0f6253261b967c16e913d1bba",
+      "provider_payload_set": "sha256:f3c427757f396ffc5b44609ce774294afbe721c59107548bfd232aff63c2a7ac",
       "repository_analysis": "sha256:07e87c754013eebf32409057b32d5e3baa809b964fb2953d71603bc3e0d8fa6c",
       "resource_graph": "sha256:737a8077765eae261e4d8ded96aa44a991c2e66517d649193e0cac9ffff34c8d",
-      "route_binding": "sha256:18e816cf0ea35548e16cc537cb27a59ead3c4053f44a319be2ac0521873d8353",
+      "route_binding": "sha256:2ce270a812e79bb43c92a2bab9ea991771f20cf75c39db23ecdd0f19ec60e388",
       "route_quote": "sha256:8fc9075eb790ce72b9a6d45d5c401e8efc9f9b805eedeb9b5606f33087167df6",
       "workload_graph": "sha256:bde688c74edfbb4c2d24619379c231ff227667039fc0b28fe3fa6ee9723d342d"
     },
@@ -1294,6 +1316,7 @@
             {
               "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
               "action_urn": "urn:test:data:activate",
+              "provider_destination_hash": "sha256:19faeff0c0a3498c1a09788c2a9f3b38226252efe6123598f7d0da1bb3d356b3",
               "reconciliation_mode": "OPERATION_POLL",
               "idempotency_mode": "RECONCILE_BEFORE_RETRY",
               "supported_transition_classes": [
@@ -1305,6 +1328,7 @@
             {
               "effect_id": "PROVIDER_PROVISION",
               "action_urn": "urn:test:data:provision",
+              "provider_destination_hash": "sha256:19faeff0c0a3498c1a09788c2a9f3b38226252efe6123598f7d0da1bb3d356b3",
               "reconciliation_mode": "OPERATION_POLL",
               "idempotency_mode": "RECONCILE_BEFORE_RETRY",
               "supported_transition_classes": [],
@@ -1313,6 +1337,7 @@
             {
               "effect_id": "PROVIDER_ROLLBACK",
               "action_urn": "urn:test:data:rollback",
+              "provider_destination_hash": "sha256:19faeff0c0a3498c1a09788c2a9f3b38226252efe6123598f7d0da1bb3d356b3",
               "reconciliation_mode": "OPERATION_POLL",
               "idempotency_mode": "COMPARE_AND_SET",
               "supported_transition_classes": [],
@@ -1324,6 +1349,7 @@
             {
               "effect_id": "PROVIDER_TEARDOWN",
               "action_urn": "urn:test:data:teardown",
+              "provider_destination_hash": "sha256:19faeff0c0a3498c1a09788c2a9f3b38226252efe6123598f7d0da1bb3d356b3",
               "reconciliation_mode": "READ_AFTER_WRITE",
               "idempotency_mode": "RECONCILE_BEFORE_RETRY",
               "supported_transition_classes": [],
@@ -1373,6 +1399,7 @@
             {
               "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
               "action_urn": "urn:test:edge:activate",
+              "provider_destination_hash": "sha256:e8d3043b2234261c03dc1d4ca2eacca334c633f765dd8d1e547a64c0b557c66e",
               "reconciliation_mode": "OPERATION_POLL",
               "idempotency_mode": "RECONCILE_BEFORE_RETRY",
               "supported_transition_classes": [
@@ -1384,6 +1411,7 @@
             {
               "effect_id": "PROVIDER_PROVISION",
               "action_urn": "urn:test:edge:provision",
+              "provider_destination_hash": "sha256:e8d3043b2234261c03dc1d4ca2eacca334c633f765dd8d1e547a64c0b557c66e",
               "reconciliation_mode": "OPERATION_POLL",
               "idempotency_mode": "RECONCILE_BEFORE_RETRY",
               "supported_transition_classes": [],
@@ -1392,6 +1420,7 @@
             {
               "effect_id": "PROVIDER_ROLLBACK",
               "action_urn": "urn:test:edge:rollback",
+              "provider_destination_hash": "sha256:e8d3043b2234261c03dc1d4ca2eacca334c633f765dd8d1e547a64c0b557c66e",
               "reconciliation_mode": "OPERATION_POLL",
               "idempotency_mode": "COMPARE_AND_SET",
               "supported_transition_classes": [],
@@ -1403,6 +1432,7 @@
             {
               "effect_id": "PROVIDER_TEARDOWN",
               "action_urn": "urn:test:edge:teardown",
+              "provider_destination_hash": "sha256:e8d3043b2234261c03dc1d4ca2eacca334c633f765dd8d1e547a64c0b557c66e",
               "reconciliation_mode": "READ_AFTER_WRITE",
               "idempotency_mode": "RECONCILE_BEFORE_RETRY",
               "supported_transition_classes": [],
@@ -1428,24 +1458,28 @@
             "placement_id": "placement-a",
             "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
             "provider_action_urn": "urn:test:edge:activate",
+            "provider_destination_hash": "sha256:e8d3043b2234261c03dc1d4ca2eacca334c633f765dd8d1e547a64c0b557c66e",
             "payload_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           },
           {
             "placement_id": "placement-a",
             "effect_id": "PROVIDER_PROVISION",
             "provider_action_urn": "urn:test:edge:provision",
+            "provider_destination_hash": "sha256:e8d3043b2234261c03dc1d4ca2eacca334c633f765dd8d1e547a64c0b557c66e",
             "payload_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
           },
           {
             "placement_id": "placement-b",
             "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
             "provider_action_urn": "urn:test:data:activate",
+            "provider_destination_hash": "sha256:19faeff0c0a3498c1a09788c2a9f3b38226252efe6123598f7d0da1bb3d356b3",
             "payload_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
           },
           {
             "placement_id": "placement-b",
             "effect_id": "PROVIDER_PROVISION",
             "provider_action_urn": "urn:test:data:provision",
+            "provider_destination_hash": "sha256:19faeff0c0a3498c1a09788c2a9f3b38226252efe6123598f7d0da1bb3d356b3",
             "payload_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
           }
         ]
@@ -1516,7 +1550,7 @@
         "resource_graph_ref": "resources-multi",
         "resource_graph_hash": "sha256:737a8077765eae261e4d8ded96aa44a991c2e66517d649193e0cac9ffff34c8d",
         "provider_payload_set_ref": "payloads-multi",
-        "provider_payload_set_hash": "sha256:5730f1a725245935e84770d8cd6083796fd8d0a0f6253261b967c16e913d1bba",
+        "provider_payload_set_hash": "sha256:f3c427757f396ffc5b44609ce774294afbe721c59107548bfd232aff63c2a7ac",
         "generated_spec_ref": "generated-spec-multi",
         "generated_spec_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "placements": [
@@ -1526,7 +1560,7 @@
               "api"
             ],
             "provider_profile_ref": "edge-cloud-candidate",
-            "provider_profile_hash": "sha256:2cb87cf20c3ecb61dd4be3ffa1fe704281b51bbd882020f3a801521b39b89b8a",
+            "provider_profile_hash": "sha256:649b745acab1132403baaf47e304560f1b01cd3e9eb157742f48a19669c2c253",
             "provider_id": "edge-cloud",
             "provider_account_ref": "account:web",
             "provider_account_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -1539,16 +1573,18 @@
               {
                 "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
                 "provider_action_urn": "urn:test:edge:activate",
+                "provider_destination_hash": "sha256:e8d3043b2234261c03dc1d4ca2eacca334c633f765dd8d1e547a64c0b557c66e",
                 "provider_payload_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
               },
               {
                 "effect_id": "PROVIDER_PROVISION",
                 "provider_action_urn": "urn:test:edge:provision",
+                "provider_destination_hash": "sha256:e8d3043b2234261c03dc1d4ca2eacca334c633f765dd8d1e547a64c0b557c66e",
                 "provider_payload_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
               }
             ],
             "resource_subset_hash": "sha256:c2923dbe96130f57f515ef4d84f1dfb8b0b15ed285780aa6e5ff1c007cdd665c",
-            "provider_payload_subset_hash": "sha256:077426d91f5a810cd27a3810dc11395844fe2fa5492efe65a35100eca1910903"
+            "provider_payload_subset_hash": "sha256:1b35a3f723d1d105831db0ef64b5fe9570fd2d1348f2203f4ff4ae3331eb7f54"
           },
           {
             "placement_id": "placement-b",
@@ -1556,7 +1592,7 @@
               "database"
             ],
             "provider_profile_ref": "data-cloud-candidate",
-            "provider_profile_hash": "sha256:ff581f570e0c10c585ed91ab3000073d01720c1cb61e71b55de264282dd68339",
+            "provider_profile_hash": "sha256:a134d6d011b441bb167f30f4037a76bbcf0ee6e51097ea1819b06b5d47afbb06",
             "provider_id": "data-cloud",
             "provider_account_ref": "account:data",
             "provider_account_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
@@ -1569,16 +1605,18 @@
               {
                 "effect_id": "DEPLOY_PRODUCTION_ACTIVATE",
                 "provider_action_urn": "urn:test:data:activate",
+                "provider_destination_hash": "sha256:19faeff0c0a3498c1a09788c2a9f3b38226252efe6123598f7d0da1bb3d356b3",
                 "provider_payload_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
               },
               {
                 "effect_id": "PROVIDER_PROVISION",
                 "provider_action_urn": "urn:test:data:provision",
+                "provider_destination_hash": "sha256:19faeff0c0a3498c1a09788c2a9f3b38226252efe6123598f7d0da1bb3d356b3",
                 "provider_payload_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
               }
             ],
             "resource_subset_hash": "sha256:6637fc4de7d0ffb3c6b7c555c812f188cd495a697a160f994aedeb648d87c57e",
-            "provider_payload_subset_hash": "sha256:58185691d48b87d97408e54702a25c1946a32d81c43bb1708a19252a6c889c0a"
+            "provider_payload_subset_hash": "sha256:d5c70e85ab653770d9963e78a4791accab680ded9e8043945b3f41cb99daa875"
           }
         ],
         "placement_dependencies": [

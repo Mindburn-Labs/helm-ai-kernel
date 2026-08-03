@@ -77,6 +77,36 @@
       "id": "grant_nonce_tamper",
       "mutation": "set_grant_nonce_and_reseal",
       "expected_error": "signature_rejected"
+    },
+    {
+      "id": "approvers_must_be_sorted",
+      "mutation": "set_grant_approvers_unsorted_and_reseal",
+      "expected_error": "contract_mismatch"
+    },
+    {
+      "id": "challenge_timestamp_must_be_utc",
+      "mutation": "set_challenge_issued_at_non_utc_and_reseal",
+      "expected_error": "contract_mismatch"
+    },
+    {
+      "id": "grant_timestamp_must_be_utc",
+      "mutation": "set_grant_issued_at_non_utc_and_reseal",
+      "expected_error": "contract_mismatch"
+    },
+    {
+      "id": "consumption_timestamp_must_be_utc",
+      "mutation": "set_consumption_consumed_at_non_utc_and_reseal",
+      "expected_error": "contract_mismatch"
+    },
+    {
+      "id": "challenge_nonce_must_be_canonical",
+      "mutation": "set_challenge_nonce_invalid_and_reseal",
+      "expected_error": "contract_mismatch"
+    },
+    {
+      "id": "grant_nonce_must_be_canonical",
+      "mutation": "set_grant_nonce_invalid_and_reseal",
+      "expected_error": "contract_mismatch"
     }
   ]
 }

@@ -172,6 +172,12 @@ func buildGeneratedSpecApprovalCeremonyReferencePack(t *testing.T) map[string][]
 			{ID: "quorum_not_verified", Mutation: "set_challenge_quorum_above_approvers_and_reseal", ExpectedError: "quorum_not_verified"},
 			{ID: "duplicate_approver", Mutation: "duplicate_grant_approver_and_reseal", ExpectedError: "contract_mismatch"},
 			{ID: "grant_nonce_tamper", Mutation: "set_grant_nonce_and_reseal", ExpectedError: "signature_rejected"},
+			{ID: "approvers_must_be_sorted", Mutation: "set_grant_approvers_unsorted_and_reseal", ExpectedError: "contract_mismatch"},
+			{ID: "challenge_timestamp_must_be_utc", Mutation: "set_challenge_issued_at_non_utc_and_reseal", ExpectedError: "contract_mismatch"},
+			{ID: "grant_timestamp_must_be_utc", Mutation: "set_grant_issued_at_non_utc_and_reseal", ExpectedError: "contract_mismatch"},
+			{ID: "consumption_timestamp_must_be_utc", Mutation: "set_consumption_consumed_at_non_utc_and_reseal", ExpectedError: "contract_mismatch"},
+			{ID: "challenge_nonce_must_be_canonical", Mutation: "set_challenge_nonce_invalid_and_reseal", ExpectedError: "contract_mismatch"},
+			{ID: "grant_nonce_must_be_canonical", Mutation: "set_grant_nonce_invalid_and_reseal", ExpectedError: "contract_mismatch"},
 		},
 	}
 	indexJSON, err := json.MarshalIndent(index, "", "  ")

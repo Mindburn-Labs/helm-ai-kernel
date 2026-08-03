@@ -10,6 +10,7 @@ quantum_posture: classical Ed25519 only; no hybrid or post-quantum claim.
 import copy
 import json
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -118,6 +119,45 @@ def require_hash(value, field, error_code):
         raise VectorError(error_code, f"{field} does not match canonical content")
 
 
+def require_token(value, field):
+    if not isinstance(value, str) or not value or any(character.isspace() for character in value):
+        raise VectorError("contract_mismatch", f"{field} is required and must not contain whitespace")
+
+
+def require_utc_time(value, field):
+    try:
+        parsed = parse_time(value)
+    except (AttributeError, TypeError, ValueError) as error:
+        raise VectorError("contract_mismatch", f"{field} must be a timestamp") from error
+    if parsed.utcoffset() != timedelta(0):
+        raise VectorError("contract_mismatch", f"{field} must use UTC")
+    return parsed
+
+
+def require_nonce(value, field):
+    if not isinstance(value, str) or len(value) != 64 or value.lower() != value:
+        raise VectorError("contract_mismatch", f"{field} must be 32 lowercase hexadecimal bytes")
+    try:
+        raw = bytes.fromhex(value)
+    except ValueError as error:
+        raise VectorError("contract_mismatch", f"{field} must be 32 lowercase hexadecimal bytes") from error
+    if len(raw) != 32:
+        raise VectorError("contract_mismatch", f"{field} must be 32 lowercase hexadecimal bytes")
+
+
+def require_approvers(requester, approvers):
+    if not isinstance(approvers, list) or not approvers or not all(isinstance(approver, str) for approver in approvers):
+        raise VectorError("contract_mismatch", "grant approvers are invalid")
+    if approvers != sorted(approvers):
+        raise VectorError("contract_mismatch", "grant approvers must be sorted")
+    for approver in approvers:
+        require_token(approver, "approver_principal_ids")
+    if requester in approvers:
+        raise VectorError("contract_mismatch", "grant approvers are invalid")
+    if len(set(approvers)) != len(approvers):
+        raise VectorError("contract_mismatch", "grant approvers must be unique")
+
+
 def verify_challenge(challenge):
     require_contract(
         challenge,
@@ -130,12 +170,13 @@ def verify_challenge(challenge):
     for field in HASH_FIELDS:
         prefixed_bytes(challenge.get(field), "sha256:", 32)
     require_hash(challenge, "challenge_hash", "challenge_hash_mismatch")
-    hold_started_at = parse_time(challenge["hold_started_at"])
-    eligible_at = parse_time(challenge["eligible_at"])
-    issued_at = parse_time(challenge["issued_at"])
-    expires_at = parse_time(challenge["expires_at"])
+    hold_started_at = require_utc_time(challenge.get("hold_started_at"), "hold_started_at")
+    eligible_at = require_utc_time(challenge.get("eligible_at"), "eligible_at")
+    issued_at = require_utc_time(challenge.get("issued_at"), "issued_at")
+    expires_at = require_utc_time(challenge.get("expires_at"), "expires_at")
     if not hold_started_at < eligible_at <= issued_at < expires_at:
         raise VectorError("contract_mismatch", "challenge lifetime is invalid")
+    require_nonce(challenge.get("nonce"), "challenge nonce")
 
 
 def verify_grant(grant, challenge):
@@ -148,18 +189,14 @@ def verify_grant(grant, challenge):
         prefixed_bytes(grant.get(field), "sha256:", 32)
     require_hash(grant, "grant_hash", "grant_hash_mismatch")
     approvers = grant.get("approver_principal_ids")
-    if not isinstance(approvers, list) or not approvers or not all(isinstance(a, str) for a in approvers):
-        raise VectorError("contract_mismatch", "grant approvers are invalid")
-    if grant["requesting_principal_id"] in approvers:
-        raise VectorError("contract_mismatch", "grant approvers are invalid")
-    if len(set(grant["approver_principal_ids"])) != len(grant["approver_principal_ids"]):
-        raise VectorError("contract_mismatch", "grant approvers must be unique")
-    if len(grant["approver_principal_ids"]) < challenge["quorum"]:
+    require_approvers(grant.get("requesting_principal_id"), approvers)
+    if len(approvers) < challenge["quorum"]:
         raise VectorError("quorum_not_verified", "grant approver count is below challenge quorum")
-    issued_at = parse_time(grant["issued_at"])
-    expires_at = parse_time(grant["expires_at"])
-    if not issued_at < expires_at or expires_at > parse_time(challenge["expires_at"]):
+    issued_at = require_utc_time(grant.get("issued_at"), "grant issued_at")
+    expires_at = require_utc_time(grant.get("expires_at"), "grant expires_at")
+    if not issued_at < expires_at or expires_at > require_utc_time(challenge.get("expires_at"), "challenge expires_at"):
         raise VectorError("contract_mismatch", "grant lifetime is invalid")
+    require_nonce(grant.get("nonce"), "grant nonce")
     for field in GRANT_BINDING_FIELDS:
         if field not in grant or field not in challenge:
             raise VectorError("grant_binding_rejected", f"grant binding field {field} is missing")
@@ -186,18 +223,21 @@ def verify_consumption(consumption, grant):
         prefixed_bytes(consumption.get(field), "sha256:", 32)
     require_hash(consumption, "consumption_hash", "consumption_hash_mismatch")
     for field in CONSUMPTION_BINDING_FIELDS:
-        if consumption.get(field) != grant.get(field):
+        if field not in consumption or field not in grant:
+            raise VectorError("consumption_binding_rejected", f"consumption {field} is missing")
+        if consumption[field] != grant[field]:
             raise VectorError("consumption_binding_rejected", f"consumption {field} does not match grant")
     if (
         consumption.get("grant_issued_at") != grant.get("issued_at")
         or consumption.get("grant_expires_at") != grant.get("expires_at")
     ):
         raise VectorError("consumption_binding_rejected", "consumption grant lifetime does not match")
-    consumed_at = parse_time(consumption["consumed_at"])
-    if consumed_at < parse_time(grant["issued_at"]) or consumed_at >= parse_time(grant["expires_at"]):
+    grant_issued_at = require_utc_time(consumption.get("grant_issued_at"), "consumption grant_issued_at")
+    grant_expires_at = require_utc_time(consumption.get("grant_expires_at"), "consumption grant_expires_at")
+    consumed_at = require_utc_time(consumption.get("consumed_at"), "consumed_at")
+    if consumed_at < grant_issued_at or consumed_at >= grant_expires_at:
         raise VectorError("consumption_binding_rejected", "consumption is outside grant lifetime")
-    if not consumption.get("consumed_by"):
-        raise VectorError("consumption_binding_rejected", "consuming workload is required")
+    require_token(consumption.get("consumed_by"), "consumed_by")
 
 
 def verify_signature(root, descriptor, value, kind, signature):
@@ -218,7 +258,7 @@ def verify_signature(root, descriptor, value, kind, signature):
         raise VectorError("signature_rejected", f"{kind.lower()} Ed25519 signature rejected")
 
 
-def verify_lifecycle(lifecycle, replay=False, approval_id=None):
+def verify_lifecycle(lifecycle, approval_id=None):
     if approval_id is not None and lifecycle.get("approval_id") != approval_id:
         raise VectorError("contract_mismatch", "lifecycle approval_id does not match the ceremony")
     if lifecycle.get("states") != [
@@ -233,8 +273,6 @@ def verify_lifecycle(lifecycle, replay=False, approval_id=None):
         raise VectorError("transition_conflict", "single-use lifecycle contract drifted")
     if lifecycle.get("recovery_matches_consumption") is not True:
         raise VectorError("transition_conflict", "recovery contract drifted")
-    if replay:
-        raise VectorError("transition_conflict", "second consume after CONSUMED is rejected")
 
 
 def reseal(value, field):
@@ -251,9 +289,9 @@ def verify_vector(index, root, mutation=None):
     challenge = copy.deepcopy(challenge)
     grant = copy.deepcopy(grant)
     consumption = copy.deepcopy(consumption)
+    lifecycle = copy.deepcopy(lifecycle)
     grant_signature = index["grant"]["signature"]
     verification_time = parse_time(index["verification_time"])
-    replay = False
 
     if mutation == "set_challenge_policy_epoch_to_tampered":
         challenge["policy_epoch"] = "epoch-tampered"
@@ -267,7 +305,7 @@ def verify_vector(index, root, mutation=None):
     elif mutation == "flip_grant_signature_last_bit":
         grant_signature = flipped_signature(grant_signature)
     elif mutation == "replay_second_consume":
-        replay = True
+        lifecycle["states"] = lifecycle["states"] + ["CONSUMED"]
     elif mutation == "set_challenge_quorum_above_approvers_and_reseal":
         challenge["quorum"] = len(grant["approver_principal_ids"]) + 1
         reseal(challenge, "challenge_hash")
@@ -276,6 +314,24 @@ def verify_vector(index, root, mutation=None):
         reseal(grant, "grant_hash")
     elif mutation == "set_grant_nonce_and_reseal":
         grant["nonce"] = "f" * 64
+        reseal(grant, "grant_hash")
+    elif mutation == "set_grant_approvers_unsorted_and_reseal":
+        grant["approver_principal_ids"] = ["user:approver-z", "user:approver-a"]
+        reseal(grant, "grant_hash")
+    elif mutation == "set_challenge_issued_at_non_utc_and_reseal":
+        challenge["issued_at"] = "2026-07-23T13:01:00+01:00"
+        reseal(challenge, "challenge_hash")
+    elif mutation == "set_grant_issued_at_non_utc_and_reseal":
+        grant["issued_at"] = "2026-07-23T13:01:00+01:00"
+        reseal(grant, "grant_hash")
+    elif mutation == "set_consumption_consumed_at_non_utc_and_reseal":
+        consumption["consumed_at"] = "2026-07-23T13:01:01+01:00"
+        reseal(consumption, "consumption_hash")
+    elif mutation == "set_challenge_nonce_invalid_and_reseal":
+        challenge["nonce"] = "g" * 64
+        reseal(challenge, "challenge_hash")
+    elif mutation == "set_grant_nonce_invalid_and_reseal":
+        grant["nonce"] = "g" * 64
         reseal(grant, "grant_hash")
     elif mutation is not None:
         raise VectorError("unknown_mutation", mutation)
@@ -286,7 +342,7 @@ def verify_vector(index, root, mutation=None):
     verify_signature(root, index["grant"], grant, "Grant", grant_signature)
     verify_consumption(consumption, grant)
     verify_signature(root, index["consumption"], consumption, "Consumption", index["consumption"]["signature"])
-    verify_lifecycle(lifecycle, replay, challenge["approval_id"])
+    verify_lifecycle(lifecycle, challenge["approval_id"])
 
 
 def main():

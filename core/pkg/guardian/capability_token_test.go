@@ -14,9 +14,10 @@ import (
 )
 
 type tokenTestRig struct {
-	registry  *capability.Registry
-	authority *capability.TokenAuthority
-	verifier  *capability.TokenVerifier
+	registry      *capability.Registry
+	rollbackPlans capability.RollbackPlanStore
+	authority     *capability.TokenAuthority
+	verifier      *capability.TokenVerifier
 }
 
 func newTokenTestRig(t *testing.T) tokenTestRig {
@@ -28,7 +29,12 @@ func newTokenTestRig(t *testing.T) tokenTestRig {
 	store := capability.NewInMemoryTokenStore()
 	authority := capability.NewTokenAuthority(signer, reg, store, clock)
 	verifier := capability.NewTokenVerifier(authority.PubKeyHex(), reg, store, clock)
-	return tokenTestRig{registry: reg, authority: authority, verifier: verifier}
+	return tokenTestRig{
+		registry:      reg,
+		rollbackPlans: loadTestRollbackPlans(t, reg),
+		authority:     authority,
+		verifier:      verifier,
+	}
 }
 
 func tokenAsMap(t *testing.T, token *capability.Token) map[string]interface{} {
@@ -44,6 +50,7 @@ func TestCapabilityGate_ValidTokenEnrichesAndConsumes(t *testing.T) {
 	rig := newTokenTestRig(t)
 	g := NewGuardian(&MockSigner{}, nil, nil,
 		WithCapabilityRegistry(rig.registry),
+		WithRollbackPlanStore(rig.rollbackPlans),
 		WithCapabilityTokenVerifier(rig.verifier),
 	)
 	token, err := rig.authority.Mint(capability.MintRequest{
@@ -79,6 +86,7 @@ func TestEvaluateDecision_TokenTaskMismatchDeniesWithoutLeak(t *testing.T) {
 	rig := newTokenTestRig(t)
 	g := NewGuardian(&MockSigner{}, nil, nil,
 		WithCapabilityRegistry(rig.registry),
+		WithRollbackPlanStore(rig.rollbackPlans),
 		WithCapabilityTokenVerifier(rig.verifier),
 	)
 	token, err := rig.authority.Mint(capability.MintRequest{
@@ -108,6 +116,7 @@ func TestEvaluateDecision_RevokedAndMalformedTokensDeny(t *testing.T) {
 	rig := newTokenTestRig(t)
 	g := NewGuardian(&MockSigner{}, nil, nil,
 		WithCapabilityRegistry(rig.registry),
+		WithRollbackPlanStore(rig.rollbackPlans),
 		WithCapabilityTokenVerifier(rig.verifier),
 	)
 	token, err := rig.authority.Mint(capability.MintRequest{
@@ -145,7 +154,10 @@ func TestCapabilityGate_PresentedTokenWithoutVerifierDenies(t *testing.T) {
 		CapabilityID: "helm.cap.gui.gelab.tap",
 	})
 	require.NoError(t, err)
-	g := NewGuardian(&MockSigner{}, nil, nil, WithCapabilityRegistry(rig.registry))
+	g := NewGuardian(&MockSigner{}, nil, nil,
+		WithCapabilityRegistry(rig.registry),
+		WithRollbackPlanStore(rig.rollbackPlans),
+	)
 
 	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
 		Action: "dispatch",

@@ -751,6 +751,20 @@
       "domain": "capability",
       "description": "Task capability token is malformed, expired, revoked, exhausted, out of scope, or fails signature/binding verification",
       "since": "1.7.0"
+    },
+    {
+      "code": "CAPABILITY_ROLLBACK_PLAN_INVALID",
+      "applies_to": ["DENY"],
+      "domain": "capability",
+      "description": "Reversible non-read-only capability lacks a loadable, matching, valid rollback plan",
+      "since": "1.7.0"
+    },
+    {
+      "code": "CAPABILITY_IRREVERSIBLE",
+      "applies_to": ["DENY"],
+      "domain": "capability",
+      "description": "Irreversible effect class cannot dispatch without an authoritative approval integration",
+      "since": "1.7.0"
     }
   ]
 }

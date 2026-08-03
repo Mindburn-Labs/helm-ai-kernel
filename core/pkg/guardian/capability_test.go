@@ -68,7 +68,10 @@ func TestEvaluateDecision_ManifestDrift_Denies(t *testing.T) {
 
 func TestResolveCapabilityGate_EnrichesContext(t *testing.T) {
 	reg := loadTestCapabilityRegistry(t)
-	g := NewGuardian(&MockSigner{}, nil, nil, WithCapabilityRegistry(reg))
+	g := NewGuardian(&MockSigner{}, nil, nil,
+		WithCapabilityRegistry(reg),
+		WithRollbackPlanStore(loadTestRollbackPlans(t, reg)),
+	)
 	entry := reg.Resolve("helm.cap.gui.gelab.tap")
 	require.NotNil(t, entry)
 

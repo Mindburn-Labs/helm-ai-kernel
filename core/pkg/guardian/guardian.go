@@ -203,6 +203,7 @@ type Guardian struct {
 	complianceChecker  ComplianceChecker            // Optional compliance pre-check
 	capabilityRegistry *capability.Registry         // Hash-pinned capability authority
 	capabilityVerifier *capability.TokenVerifier    // Task-scoped capability token gate
+	rollbackPlans      capability.RollbackPlanStore // Verified rollback-plan gate
 	freezeCtrl         *kernel.FreezeController     // Global kill-switch
 	scopedStopReader   kernel.ScopedStopReader      // Tenant/workspace dispatch fence
 	agentKillSwitch    *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)

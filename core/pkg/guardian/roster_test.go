@@ -17,6 +17,7 @@ var gateFieldByID = map[GateID]string{
 	GateBudget:             "tracker",
 	GateCapabilityRegistry: "capabilityRegistry",
 	GateCapabilityToken:    "capabilityVerifier",
+	GateCapabilityRollback: "rollbackPlans",
 	GateCompliance:         "complianceChecker",
 	GateContext:            "contextGuard",
 	GateDelegation:         "delegationStore",

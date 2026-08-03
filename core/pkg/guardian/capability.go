@@ -62,6 +62,20 @@ func (g *Guardian) SetCapabilityTokenVerifier(verifier *capability.TokenVerifier
 	g.capabilityVerifier = verifier
 }
 
+// WithRollbackPlanStore attaches the validated rollback-plan store.
+// Reversible non-read-only capabilities refuse dispatch unless their manifest
+// plan resolves, binds to the capability, and remains within its guarantee.
+func WithRollbackPlanStore(store capability.RollbackPlanStore) GuardianOption {
+	return func(g *Guardian) { g.rollbackPlans = store }
+}
+
+// SetRollbackPlanStore replaces the rollback-plan store.
+// Deprecated: configure WithRollbackPlanStore at construction so the roster
+// hash accurately describes the running gate composition.
+func (g *Guardian) SetRollbackPlanStore(store capability.RollbackPlanStore) {
+	g.rollbackPlans = store
+}
+
 // resolveCapabilityGate resolves the registry entry and enriches req.Context
 // for the downstream policy/PDP path. A non-nil decision is a signed,
 // fail-closed terminal result; a nil decision lets the normal pipeline
@@ -72,7 +86,18 @@ func (g *Guardian) resolveCapabilityGate(
 	activeSnapshot *policyreconcile.EffectivePolicySnapshot,
 	policyVersion string,
 ) (*contracts.DecisionRecord, error) {
-	if g.capabilityRegistry == nil || req.Context == nil {
+	if req.Context == nil {
+		return nil, nil
+	}
+
+	// Capability tokens are bearer credentials. Remove the raw value before
+	// any possible short-circuit so it cannot enter a signed DecisionRecord or
+	// audit entry, including for an invalid capability or rollback-plan denial.
+	rawToken, tokenPresented := req.Context[ContextKeyCapabilityToken]
+	if tokenPresented {
+		delete(req.Context, ContextKeyCapabilityToken)
+	}
+	if g.capabilityRegistry == nil {
 		return nil, nil
 	}
 
@@ -144,10 +169,11 @@ func (g *Guardian) resolveCapabilityGate(
 		req.Context["capability_min_model_tier"] = entry.Manifest.Routing.MinModelTier
 	}
 
-	if rawToken, presented := req.Context[ContextKeyCapabilityToken]; presented {
-		// Capability tokens are bearer credentials. Never bind the raw token
-		// into a signed DecisionRecord or an audit entry, including on denial.
-		delete(req.Context, ContextKeyCapabilityToken)
+	if decision, err := g.applyReversibilityPolicy(span, req, entry, activeSnapshot, policyVersion); err != nil || decision != nil {
+		return decision, err
+	}
+
+	if tokenPresented {
 		if g.capabilityVerifier == nil {
 			return g.capabilityShortCircuit(
 				span,
@@ -201,6 +227,114 @@ func (g *Guardian) resolveCapabilityGate(
 		span.SetAttributes(
 			attribute.Bool("capability.token_valid", true),
 			attribute.String("capability.token_id", token.TokenID),
+		)
+	}
+	return nil, nil
+}
+
+// applyReversibilityPolicy enforces reversibility-classes.md before token use
+// consumption. A raw approval reference is not trusted authority here: the
+// Guardian has no approval-receipt verifier in this path, so external and
+// irreversible effects remain DENY/ESCALATE until an authoritative approval
+// integration is supplied.
+func (g *Guardian) applyReversibilityPolicy(
+	span trace.Span,
+	req *DecisionRequest,
+	entry *capability.Entry,
+	activeSnapshot *policyreconcile.EffectivePolicySnapshot,
+	policyVersion string,
+) (*contracts.DecisionRecord, error) {
+	manifest := entry.Manifest
+	if manifest.EffectClass == capability.EffectReadOnly {
+		return nil, nil
+	}
+	if manifest.EffectClass == capability.EffectIrreversible {
+		return g.capabilityShortCircuit(
+			span,
+			req,
+			activeSnapshot,
+			policyVersion,
+			contracts.VerdictDeny,
+			contracts.ReasonCapabilityIrreversible,
+			fmt.Sprintf("%s: irreversible effect class cannot dispatch without an authoritative approval integration", contracts.ReasonCapabilityIrreversible),
+			"CAPABILITY_IRREVERSIBLE_DENY",
+		)
+	}
+	if manifest.Reversibility == capability.ReversibilityNone {
+		return g.capabilityShortCircuit(
+			span,
+			req,
+			activeSnapshot,
+			policyVersion,
+			contracts.VerdictEscalate,
+			contracts.ReasonApprovalRequired,
+			fmt.Sprintf("%s: non-reversible capability %q requires the permit flow", contracts.ReasonApprovalRequired, manifest.CapabilityID),
+			"CAPABILITY_NON_REVERSIBLE_ESCALATE",
+		)
+	}
+	if !manifest.Rollback.Required || manifest.Rollback.PlanRef == "" {
+		return g.capabilityShortCircuit(
+			span,
+			req,
+			activeSnapshot,
+			policyVersion,
+			contracts.VerdictDeny,
+			contracts.ReasonCapabilityRollbackPlanInvalid,
+			fmt.Sprintf("%s: reversible capability %q has no required rollback plan", contracts.ReasonCapabilityRollbackPlanInvalid, manifest.CapabilityID),
+			"CAPABILITY_ROLLBACK_PLAN_INVALID_DENY",
+		)
+	}
+	if g.rollbackPlans == nil {
+		return g.capabilityShortCircuit(
+			span,
+			req,
+			activeSnapshot,
+			policyVersion,
+			contracts.VerdictDeny,
+			contracts.ReasonCapabilityRollbackPlanInvalid,
+			fmt.Sprintf("%s: rollback-plan store is not configured (no plan, no dispatch)", contracts.ReasonCapabilityRollbackPlanInvalid),
+			"CAPABILITY_ROLLBACK_PLAN_INVALID_DENY",
+		)
+	}
+	plan := g.rollbackPlans.ResolvePlan(manifest.Rollback.PlanRef)
+	if plan == nil || !plan.Plan.AppliesToCapability(manifest.CapabilityID) {
+		return g.capabilityShortCircuit(
+			span,
+			req,
+			activeSnapshot,
+			policyVersion,
+			contracts.VerdictDeny,
+			contracts.ReasonCapabilityRollbackPlanInvalid,
+			fmt.Sprintf("%s: rollback plan %q does not bind capability %q", contracts.ReasonCapabilityRollbackPlanInvalid, manifest.Rollback.PlanRef, manifest.CapabilityID),
+			"CAPABILITY_ROLLBACK_PLAN_INVALID_DENY",
+		)
+	}
+	if plan.Plan.Expired(g.clock.Now()) {
+		return g.capabilityShortCircuit(
+			span,
+			req,
+			activeSnapshot,
+			policyVersion,
+			contracts.VerdictDeny,
+			contracts.ReasonCapabilityRollbackPlanInvalid,
+			fmt.Sprintf("%s: rollback plan %q guarantee expired", contracts.ReasonCapabilityRollbackPlanInvalid, plan.Plan.PlanID),
+			"CAPABILITY_ROLLBACK_PLAN_EXPIRED_DENY",
+		)
+	}
+	req.Context["capability_rollback_plan_id"] = plan.Plan.PlanID
+	req.Context["capability_rollback_plan_hash"] = plan.Hash
+	span.SetAttributes(attribute.String("capability.rollback_plan", plan.Plan.PlanID))
+
+	if manifest.DataBoundary == capability.BoundaryOrg || manifest.DataBoundary == capability.BoundaryExternal {
+		return g.capabilityShortCircuit(
+			span,
+			req,
+			activeSnapshot,
+			policyVersion,
+			contracts.VerdictEscalate,
+			contracts.ReasonApprovalRequired,
+			fmt.Sprintf("%s: reversible external capability %q requires the permit flow", contracts.ReasonApprovalRequired, manifest.CapabilityID),
+			"CAPABILITY_REVERSIBLE_EXTERNAL_ESCALATE",
 		)
 	}
 	return nil, nil

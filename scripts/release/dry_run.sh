@@ -7,14 +7,70 @@ cd "$ROOT"
 VERSION="$(cat VERSION)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-release-dry-run.XXXXXX")"
 ASSETS_DIR="$TMP_DIR/assets"
+SENTINEL_PATH="$ROOT/bin/helm-ai-kernel-linux-amd64"
+SENTINEL_BACKUP="$TMP_DIR/root-linux-amd64.backup"
+SENTINEL_CONTENT="HELM_RELEASE_DRY_RUN_ROOT_BINARY_SENTINEL"
+SENTINEL_STATE="absent"
+SENTINEL_LINK_TARGET=""
+
+restore_sentinel() {
+  case "$SENTINEL_STATE" in
+    absent)
+      rm -f "$SENTINEL_PATH"
+      ;;
+    file)
+      rm -f "$SENTINEL_PATH"
+      cp -p "$SENTINEL_BACKUP" "$SENTINEL_PATH"
+      ;;
+    symlink)
+      rm -f "$SENTINEL_PATH"
+      ln -s "$SENTINEL_LINK_TARGET" "$SENTINEL_PATH"
+      ;;
+    restored)
+      return 0
+      ;;
+  esac
+  SENTINEL_STATE="restored"
+}
 
 cleanup() {
+  local status=$?
+  restore_sentinel || true
   rm -rf "$TMP_DIR"
+  return "$status"
 }
 trap cleanup EXIT
 
 echo "==> HELM Release Asset Dry Run v$VERSION"
-RELEASE_ASSETS_DIR="$ASSETS_DIR" make release-assets >/dev/null
+if [[ -L "$SENTINEL_PATH" ]]; then
+  SENTINEL_STATE="symlink"
+  SENTINEL_LINK_TARGET="$(readlink "$SENTINEL_PATH")"
+elif [[ -e "$SENTINEL_PATH" ]]; then
+  if [[ -d "$SENTINEL_PATH" ]]; then
+    echo "cannot install root-binary sentinel over directory: $SENTINEL_PATH" >&2
+    exit 1
+  fi
+  SENTINEL_STATE="file"
+  cp -p "$SENTINEL_PATH" "$SENTINEL_BACKUP"
+fi
+
+mkdir -p "$(dirname "$SENTINEL_PATH")"
+if [[ "$SENTINEL_STATE" == "symlink" ]]; then
+  # Shell redirection follows a symlink. Remove the link first so the
+  # sentinel never mutates its pre-existing target; cleanup recreates it.
+  rm -f "$SENTINEL_PATH"
+fi
+printf '%s\n' "$SENTINEL_CONTENT" > "$SENTINEL_PATH"
+chmod 700 "$SENTINEL_PATH"
+
+# Invoke the stage script directly: a matching ignored root binary must never
+# become a release asset because every build input comes from its snapshot.
+RELEASE_ASSETS_DIR="$ASSETS_DIR" bash "$ROOT/scripts/release/stage_release_assets.sh" >/dev/null
+if cmp -s "$SENTINEL_PATH" "$ASSETS_DIR/helm-ai-kernel-linux-amd64"; then
+  echo "release stage consumed the ignored root binary sentinel" >&2
+  exit 1
+fi
+restore_sentinel
 
 required=(
   helm-ai-kernel-linux-amd64
@@ -42,20 +98,90 @@ for artifact in "${required[@]}"; do
 done
 
 (cd "$ASSETS_DIR" && shasum -a 256 -c SHA256SUMS.txt >/dev/null)
-"$ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
+host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+host_arch="$(uname -m)"
+case "$host_arch" in
+  x86_64|amd64) host_arch="amd64" ;;
+  arm64|aarch64) host_arch="arm64" ;;
+  *)
+    echo "unsupported dry-run verifier architecture: $host_arch" >&2
+    exit 1
+    ;;
+esac
+case "$host_os" in
+  darwin|linux) ;;
+  *)
+    echo "unsupported dry-run verifier platform: $host_os" >&2
+    exit 1
+    ;;
+esac
+staged_verifier="$ASSETS_DIR/helm-ai-kernel-${host_os}-${host_arch}"
+if [[ ! -x "$staged_verifier" ]]; then
+  echo "missing executable staged verifier: $staged_verifier" >&2
+  exit 1
+fi
+"$staged_verifier" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
 
-python3 - "$ASSETS_DIR" "$VERSION" <<'PY'
+python3 - "$ASSETS_DIR" "$VERSION" "$ROOT" <<'PY'
+import hashlib
 import json
 import pathlib
+import re
+import subprocess
 import sys
 import tarfile
 
 assets = pathlib.Path(sys.argv[1])
 version = sys.argv[2]
+root = pathlib.Path(sys.argv[3])
 
 attestation = json.loads((assets / "release-attestation.json").read_text(encoding="utf-8"))
 if attestation.get("version") != version:
     raise SystemExit("release attestation version mismatch")
+if not re.fullmatch(r"[0-9a-f]{40}", str(attestation.get("source_commit") or "")):
+    raise SystemExit("release attestation source commit is invalid")
+if not re.fullmatch(r"[0-9a-f]{40}", str(attestation.get("source_tree_git_oid") or "")):
+    raise SystemExit("release attestation source tree is invalid")
+
+def git_text(*args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+
+def git_bytes(revision: str) -> bytes:
+    return subprocess.check_output(["git", "show", revision], cwd=root)
+
+source_commit = attestation["source_commit"]
+if git_text("rev-parse", "--verify", f"{source_commit}^{{tree}}") != attestation["source_tree_git_oid"]:
+    raise SystemExit("release attestation source tree does not resolve from source commit")
+public_docs_contract = attestation.get("public_docs_contract")
+if not isinstance(public_docs_contract, dict):
+    raise SystemExit("release attestation is missing public_docs_contract")
+if public_docs_contract.get("manifest_path") != "docs/public-docs.manifest.json":
+    raise SystemExit("release attestation public docs manifest path mismatch")
+if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(public_docs_contract.get("manifest_sha256") or "")):
+    raise SystemExit("release attestation public docs manifest SHA-256 is invalid")
+api_contract = public_docs_contract.get("api_contract")
+if not isinstance(api_contract, dict):
+    raise SystemExit("release attestation public docs API contract is missing")
+if api_contract.get("schema_version") != 1:
+    raise SystemExit("release attestation public docs API contract schema version mismatch")
+if api_contract.get("source_path") != "api/openapi/helm.openapi.yaml":
+    raise SystemExit("release attestation public docs API contract source path mismatch")
+if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(api_contract.get("content_sha256") or "")):
+    raise SystemExit("release attestation public docs API contract SHA-256 is invalid")
+if not re.fullmatch(r"[0-9a-f]{40}", str(api_contract.get("git_blob_sha1") or "")):
+    raise SystemExit("release attestation public docs API contract Git blob is invalid")
+if not isinstance(api_contract.get("public_operations"), list) or not api_contract["public_operations"]:
+    raise SystemExit("release attestation public docs API contract has no public operations")
+manifest_bytes = git_bytes(f"{source_commit}:{public_docs_contract['manifest_path']}")
+if public_docs_contract["manifest_sha256"] != "sha256:" + hashlib.sha256(manifest_bytes).hexdigest():
+    raise SystemExit("release attestation public docs manifest is not bound to source commit")
+source_manifest = json.loads(manifest_bytes)
+if source_manifest.get("api_contract") != api_contract:
+    raise SystemExit("release attestation public docs API contract drifted from source commit")
+if git_text("rev-parse", "--verify", f"{source_commit}:{api_contract['source_path']}") != api_contract["git_blob_sha1"]:
+    raise SystemExit("release attestation public docs OpenAPI blob is not bound to source commit")
+if api_contract["content_sha256"] != "sha256:" + hashlib.sha256(git_bytes(f"{source_commit}:{api_contract['source_path']}")).hexdigest():
+    raise SystemExit("release attestation public docs OpenAPI digest is not bound to source commit")
 names = {artifact["name"] for artifact in attestation.get("artifacts", [])}
 required_names = {
     "helm-ai-kernel-linux-amd64",

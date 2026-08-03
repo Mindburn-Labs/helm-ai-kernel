@@ -387,6 +387,14 @@
       "finality": "instance_context"
     },
     {
+      "code": "SEMANTIC_THREAT_REVIEW_REQUIRED",
+      "applies_to": ["ESCALATE"],
+      "domain": "threat",
+      "description": "Configured deterministic semantic advisory requires human review",
+      "since": "1.7.0",
+      "finality": "instance_context"
+    },
+    {
       "code": "ERR_TON_ACTON_UNKNOWN_COMMAND",
       "applies_to": ["DENY"],
       "domain": "connector.ton.acton",

@@ -12,11 +12,21 @@ func TestSemanticParaphraseGap(t *testing.T) {
 
 	result := newTestScanner().ScanInput(payload, contracts.SourceChannelGitHubIssue, contracts.InputTrustExternalUntrusted)
 
-	if result.FindingCount != 0 {
-		t.Fatalf("expected the known semantic gap to pass the current literal scanner, got %d findings: %+v", result.FindingCount, result.Findings)
+	semantic := FindingsByClass(result, contracts.ThreatClassSemanticSimilarity)
+	if len(semantic) != 1 {
+		t.Fatalf("expected exactly one semantic advisory finding, got %d: %+v", len(semantic), result.Findings)
+	}
+	if semantic[0].Severity != contracts.ThreatSeverityInfo {
+		t.Fatalf("semantic advisory must stay INFO at EXTERNAL_UNTRUSTED, got %s", semantic[0].Severity)
+	}
+	if result.FindingCount != len(semantic) {
+		t.Fatalf("expected the semantic advisory to be the only finding, got %d: %+v", result.FindingCount, result.Findings)
+	}
+	if ContainsHighRiskFindings(result) {
+		t.Fatalf("semantic-only result gained deny authority: %+v", result)
 	}
 	if result.MaxSeverity != contracts.ThreatSeverityInfo {
-		t.Fatalf("expected INFO for an unflagged payload, got %s", result.MaxSeverity)
+		t.Fatalf("expected INFO for an advisory-only result, got %s", result.MaxSeverity)
 	}
 	if result.RawInputHash != expectedHash || result.NormalizedInputHash != expectedHash {
 		t.Fatalf("fixture hash drifted: raw=%s normalized=%s", result.RawInputHash, result.NormalizedInputHash)

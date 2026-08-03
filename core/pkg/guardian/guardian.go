@@ -16,6 +16,7 @@ import (
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capability"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
@@ -200,6 +201,9 @@ type Guardian struct {
 	snapshotStore      policyreconcile.PolicySnapshotStore
 	snapshotScope      policyreconcile.PolicyScope
 	complianceChecker  ComplianceChecker            // Optional compliance pre-check
+	capabilityRegistry *capability.Registry         // Hash-pinned capability authority
+	capabilityVerifier *capability.TokenVerifier    // Task-scoped capability token gate
+	rollbackPlans      capability.RollbackPlanStore // Verified rollback-plan gate
 	freezeCtrl         *kernel.FreezeController     // Global kill-switch
 	scopedStopReader   kernel.ScopedStopReader      // Tenant/workspace dispatch fence
 	agentKillSwitch    *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
@@ -918,6 +922,12 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				return decision, nil
 			}
 		}
+	}
+
+	if decision, capErr := g.resolveCapabilityGate(span, &req, activeSnapshot, policyVersion); capErr != nil {
+		return nil, capErr
+	} else if decision != nil {
+		return decision, nil
 	}
 
 	// ── Session history enrichment (arXiv 2603.16586: path-aware policies) ──

@@ -1,0 +1,18 @@
+{
+  "schema_version": "capability-manifest/v1",
+  "capability_id": "helm.cap.gui.gelab.tap",
+  "name": "gelab-tap",
+  "version": "1.0.0",
+  "description": "Tap at screen coordinates on a paired device.",
+  "protocol": "gui-action",
+  "binding": { "kind": "gui_action_primitive", "ref": "tap" },
+  "effect_class": "write_external",
+  "reversibility": "compensating_action",
+  "data_boundary": "device_boundary",
+  "risk_score": 40,
+  "required_permit_level": "none",
+  "rollback": { "required": true, "plan_ref": "plans/gui-navigate-back.v1" },
+  "receipts": { "required": true },
+  "memory_access": { "user_domain": "none", "agent_domain": "write", "cross_domain_read": false },
+  "routing": { "min_model_tier": "fast_edge" }
+}

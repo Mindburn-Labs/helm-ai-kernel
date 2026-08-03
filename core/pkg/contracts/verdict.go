@@ -160,6 +160,13 @@ const (
 	ReasonHardwareQuorumUnbound     ReasonCode = "ERR_HARDWARE_QUORUM_UNBOUND"
 	ReasonAttestationResultRequired ReasonCode = "ERR_ATTESTATION_RESULT_REQUIRED"
 	ReasonDevFallbackPresent        ReasonCode = "ERR_DEV_FALLBACK_PRESENT"
+
+	// ── Capability Registry Reasons (capability-manifest/v1) ──────────────
+	ReasonCapabilityUnknown             ReasonCode = "CAPABILITY_UNKNOWN"
+	ReasonCapabilityManifestDrift       ReasonCode = "CAPABILITY_MANIFEST_DRIFT"
+	ReasonCapabilityTokenInvalid        ReasonCode = "CAPABILITY_TOKEN_INVALID"
+	ReasonCapabilityRollbackPlanInvalid ReasonCode = "CAPABILITY_ROLLBACK_PLAN_INVALID"
+	ReasonCapabilityIrreversible        ReasonCode = "CAPABILITY_IRREVERSIBLE"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.
@@ -270,6 +277,11 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonHardwareQuorumUnbound,
 		ReasonAttestationResultRequired,
 		ReasonDevFallbackPresent,
+		ReasonCapabilityUnknown,
+		ReasonCapabilityManifestDrift,
+		ReasonCapabilityTokenInvalid,
+		ReasonCapabilityRollbackPlanInvalid,
+		ReasonCapabilityIrreversible,
 	}
 }
 

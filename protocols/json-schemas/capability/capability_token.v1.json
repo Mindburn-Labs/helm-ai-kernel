@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "helm://schemas/capability/capability_token.v1.json",
   "title": "HELM Task Capability Token v1",
-  "description": "Short-lived, task-bound authorization token implementing grant-on-demand / auto-revoke least privilege (docs/governance/task-capability-tokens.md). The guardian refuses dispatch for expired, exhausted, out-of-scope, or revoked tokens. Status: preview — schema only.",
+  "description": "Short-lived, task-bound authorization token implementing grant-on-demand / auto-revoke least privilege (docs/governance/task-capability-tokens.md). The Guardian refuses dispatch for expired, exhausted, out-of-scope, or revoked tokens. Status: preview schema with core in-process mint/verify enforcement; durable shared token state remains follow-up.",
   "type": "object",
   "additionalProperties": false,
   "required": [

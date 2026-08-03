@@ -7,7 +7,7 @@ model routing) as executable rules, then checks every vector's expected
 decision against the rule output.
 
 Scope honesty: this verifies vector <-> policy-table consistency. It does NOT
-drive the Go guardian; guardian-wired replay is follow-up work.
+execute the Go Guardian, so it is not Guardian replay evidence.
 
 Exit 0 = all vectors consistent. Exit 1 = at least one violation.
 """
@@ -45,6 +45,36 @@ def decide(inputs: dict) -> tuple[str, str]:
     if not inputs.get("capability_registered", False):
         return "ESCALATE", "unknown_capability_quarantine"
 
+    # reversibility-classes.md rule 1: no plan, no dispatch
+    if (
+        inputs.get("reversibility") in ("compensating_action", "exact_undo")
+        and inputs.get("effect_class") in NON_READ_ONLY
+        and not inputs.get("rollback_plan_present", True)
+    ):
+        return "DENY", "rollback_plan_required"
+
+    # reversibility-classes.md: an intrinsically irreversible effect cannot
+    # turn a rollback claim into dispatch authority.
+    if inputs.get("effect_class") == "irreversible":
+        return "DENY", "capability_irreversible"
+
+    # Non-read-only capabilities with no reversible path require the permit
+    # flow. This check intentionally precedes task-token processing.
+    if (
+        inputs.get("reversibility") == "none"
+        and inputs.get("effect_class") in NON_READ_ONLY
+    ):
+        return "ESCALATE", "non_reversible_permit_required"
+
+    # A verified plan alone is insufficient to authorize an org/external
+    # effect. The Guardian escalates before consuming a task token.
+    if (
+        inputs.get("reversibility") in ("compensating_action", "exact_undo")
+        and inputs.get("effect_class") in NON_READ_ONLY
+        and inputs.get("data_boundary") in ("org_boundary", "external")
+    ):
+        return "ESCALATE", "reversible_external_permit_required"
+
     # task-capability-tokens.md: manifest drift invalidates tokens, fail closed
     if inputs.get("token_status") not in (None, "none") and not inputs.get(
         "manifest_hash_match", True
@@ -58,21 +88,6 @@ def decide(inputs: dict) -> tuple[str, str]:
     # task binding: effects outside the task scope fail closed
     if not inputs.get("task_bound", False):
         return "DENY", "effect_outside_task_scope"
-
-    # reversibility-classes.md rule 1: no plan, no dispatch
-    if (
-        inputs.get("reversibility") in ("compensating_action", "exact_undo")
-        and inputs.get("effect_class") in NON_READ_ONLY
-        and not inputs.get("rollback_plan_present", True)
-    ):
-        return "DENY", "rollback_plan_required"
-
-    # reversibility-classes.md rule 3: rollback claims on irreversible effects
-    # are unverifiable and must not be silently honored
-    if inputs.get("reversibility") == "none" and inputs.get(
-        "rollback_plan_present", False
-    ):
-        return "ESCALATE", "rollback_claim_unverifiable"
 
     # memory-governance.md rule: cross-domain reads are deny by default
     if inputs.get("cross_domain_read") and not inputs.get(

@@ -1,0 +1,17 @@
+{
+  "schema_version": "capability-manifest/v1",
+  "capability_id": "helm.cap.gui.gelab.swipe",
+  "name": "gelab-swipe",
+  "version": "1.0.0",
+  "description": "Reversible non-read-only capability missing its rollback plan ref (must fail validation).",
+  "protocol": "gui-action",
+  "binding": { "kind": "gui_action_primitive", "ref": "swipe" },
+  "effect_class": "write_external",
+  "reversibility": "compensating_action",
+  "data_boundary": "device_boundary",
+  "risk_score": 40,
+  "required_permit_level": "none",
+  "rollback": { "required": true },
+  "receipts": { "required": true },
+  "memory_access": { "user_domain": "none", "agent_domain": "write", "cross_domain_read": false }
+}

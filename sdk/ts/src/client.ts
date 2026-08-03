@@ -13,6 +13,7 @@ import type {
   VersionInfo,
   HelmError,
   ReasonCode,
+  DecisionRequest,
   EvaluateRequest,
   EvaluateResponse,
 } from './types.gen.js';
@@ -294,8 +295,13 @@ export class HelmClient {
   }
 
   // ── Decision Evaluation ──────────────────────────
-  async evaluateDecision(req: EvaluateDecisionRequest): Promise<EvaluateDecisionResponse> {
-	validateEvaluateDecisionRequest(req);
+  /** @deprecated Use evaluateDecisionV5 for the typed V5 contract. */
+  async evaluateDecision(req: DecisionRequest | SurfaceRecord): Promise<SurfaceRecord> {
+    return this.request<SurfaceRecord>('POST', '/api/v1/evaluate', req);
+  }
+
+  async evaluateDecisionV5(req: EvaluateDecisionRequest): Promise<EvaluateDecisionResponse> {
+    validateEvaluateDecisionRequest(req);
     return this.request<EvaluateDecisionResponse>('POST', '/api/v1/evaluate', req);
   }
 

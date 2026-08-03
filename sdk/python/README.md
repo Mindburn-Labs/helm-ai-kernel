@@ -31,7 +31,7 @@ been run.
 from helm_sdk import EvaluateRequest, HelmClient
 
 client = HelmClient(base_url="http://127.0.0.1:7714")
-decision = client.evaluate_decision(EvaluateRequest(
+decision = client.evaluate_decision_v5(EvaluateRequest(
     tool="read-ticket",
     effect_level="ticket:123",
     session_id="example-session",

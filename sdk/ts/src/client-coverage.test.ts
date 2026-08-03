@@ -44,7 +44,8 @@ describe("HelmClient coverage matrix", () => {
 
   it("exercises every JSON endpoint wrapper", async () => {
     const calls: Array<[string, unknown[]]> = [
-      ["evaluateDecision", [{ tool: "read_file", effect_level: "read_file", session_id: "current-session" }]],
+      ["evaluateDecision", [{ action: "read_file", resource: "read_file", context: { session_id: "legacy-session" } }]],
+      ["evaluateDecisionV5", [{ tool: "read_file", effect_level: "read_file", session_id: "current-session" }]],
       ["runPublicDemo", ["read_ticket", { id: 1 }]],
       ["verifyPublicDemoReceipt", [{ receipt_id: "r1" }, "hash"]],
       ["approveIntent", [{ intent_hash: "h", signature_b64: "sig", public_key_b64: "pk" }]],
@@ -149,6 +150,23 @@ describe("HelmClient coverage matrix", () => {
     });
   });
 
+  it("retains the legacy dynamic evaluate request and response", async () => {
+    const response = { decision_id: "decision-legacy" };
+    fetchSpy.mockResolvedValueOnce(jsonResponse(response));
+
+    const result = await client.evaluateDecision({
+      action: "read_file",
+      resource: "read_file",
+      context: { session_id: "legacy-session" },
+    });
+    expect(result.decision_id).toBe("decision-legacy");
+    expect(JSON.parse(String((fetchSpy.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+      action: "read_file",
+      resource: "read_file",
+      context: { session_id: "legacy-session" },
+    });
+  });
+
   it("uses the canonical V5 evaluate request and response", async () => {
     const response = {
       allow: true,
@@ -162,7 +180,7 @@ describe("HelmClient coverage matrix", () => {
     };
     fetchSpy.mockResolvedValueOnce(jsonResponse(response));
 
-    const result = await client.evaluateDecision({
+    const result = await client.evaluateDecisionV5({
       tool: "read_file",
       effect_level: "read_file",
       session_id: "current-session",
@@ -176,7 +194,7 @@ describe("HelmClient coverage matrix", () => {
   });
 
   it("rejects blank canonical evaluate fields before making a request", async () => {
-    await expect(client.evaluateDecision({
+    await expect(client.evaluateDecisionV5({
       tool: "read_file",
       effect_level: "read_file",
       session_id: "  ",

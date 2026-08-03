@@ -60,7 +60,7 @@ def main() -> None:
     tenant_id = os.environ.get("HELM_TENANT_ID", "sdk-python-example")
     principal_id = os.environ.get("HELM_PRINCIPAL_ID", "system-admin")
     with HelmClient(base_url=helm_url, api_key=admin_key, tenant_id=tenant_id, principal_id=principal_id) as helm:
-        allowed = helm.evaluate_decision(
+        allowed = helm.evaluate_decision_v5(
             EvaluateRequest(
                 tool="read-ticket",
                 effect_level="ticket:SDK-100",
@@ -68,7 +68,7 @@ def main() -> None:
                 args={"example": "python-sdk"},
             )
         ).to_dict()
-        denied = helm.evaluate_decision(
+        denied = helm.evaluate_decision_v5(
             EvaluateRequest(
                 tool="dangerous-shell",
                 effect_level="system:shell",

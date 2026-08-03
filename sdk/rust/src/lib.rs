@@ -422,8 +422,17 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/evaluate
-    pub fn evaluate_decision(
+    /// POST /api/v1/evaluate using the legacy dynamic contract.
+    #[deprecated(note = "use evaluate_decision_v5 for the typed V5 contract")]
+    pub fn evaluate_decision<T: Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<serde_json::Value, HelmApiError> {
+        self.post_value("/api/v1/evaluate", req)
+    }
+
+    /// POST /api/v1/evaluate using the canonical V5 request and response.
+    pub fn evaluate_decision_v5(
         &self,
         req: &EvaluateRequest,
     ) -> Result<EvaluateResponse, HelmApiError> {
@@ -435,7 +444,7 @@ impl HelmClient {
             if value.map(str::trim).is_none_or(str::is_empty) {
                 return Err(HelmApiError {
                     status: 0,
-                    message: format!("evaluate_decision requires a non-blank {field}"),
+                    message: format!("evaluate_decision_v5 requires a non-blank {field}"),
                     reason_code: ReasonCode::ErrorInternal,
                 });
             }
@@ -1201,7 +1210,7 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluate_decision_requires_canonical_v5_request() {
+    fn test_evaluate_decision_v5_requires_canonical_request() {
         let request = EvaluateRequest {
             tool: Some("read_file".to_string()),
             effect_level: Some("read".to_string()),
@@ -1220,9 +1229,23 @@ mod tests {
             session_id: Some(" ".to_string()),
             ..EvaluateRequest::new()
         };
-        let err = client.evaluate_decision(&blank).unwrap_err();
+        let err = client.evaluate_decision_v5(&blank).unwrap_err();
         assert_eq!(err.status, 0);
         assert!(err.message.contains("non-blank session_id"));
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn test_legacy_evaluate_decision_accepts_dynamic_request() {
+        let client = HelmClient::new("http://127.0.0.1:1");
+        let err = client
+            .evaluate_decision(&serde_json::json!({
+                "action": "read_file",
+                "resource": "read",
+                "context": {"session_id": "legacy-session"},
+            }))
+            .unwrap_err();
+        assert_eq!(err.status, 0);
     }
 
     #[test]

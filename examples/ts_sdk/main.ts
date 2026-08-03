@@ -58,13 +58,13 @@ const helm = new HelmClient({
   principalId: process.env.HELM_PRINCIPAL_ID ?? 'system-admin',
 });
 
-const allowed = await helm.evaluateDecision({
+const allowed = await helm.evaluateDecisionV5({
   tool: 'read-ticket',
   effect_level: 'ticket:SDK-200',
   session_id: 'ts-sdk-example',
   args: { example: 'ts-sdk' },
 });
-const denied = await helm.evaluateDecision({
+const denied = await helm.evaluateDecisionV5({
   tool: 'dangerous-shell',
   effect_level: 'system:shell',
   session_id: 'ts-sdk-example',

@@ -467,7 +467,7 @@ func verifyLaunchProviderRouteBinding(envelope LaunchEffectAuthorizationEnvelope
 		return errors.New("launch provider input route placement is absent from route")
 	}
 	if placement.ProviderCertificationRef == "" || !validLaunchSHA256(placement.ProviderCertificationHash) {
-		return errors.New("launch provider route placement has no certified connector authority")
+		return errors.New("launch provider route placement has no provider certification authority")
 	}
 	for field, expected := range map[string]string{
 		"provider":                         placement.ProviderID,

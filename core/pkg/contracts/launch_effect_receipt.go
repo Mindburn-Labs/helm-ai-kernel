@@ -326,10 +326,14 @@ func DeriveLaunchEffectReceiptChainID(receipt LaunchEffectReceipt) (string, erro
 // Terminal revisions must use SignLaunchEffectReceiptRevision so they cannot be
 // created without presenting the exact sealed predecessor they close.
 func SignLaunchEffectReceipt(receipt LaunchEffectReceipt, privateKey ed25519.PrivateKey) (LaunchEffectReceipt, error) {
-	if receipt.Outcome != "UNKNOWN" {
+	switch receipt.Outcome {
+	case "UNKNOWN":
+		return signLaunchEffectReceipt(receipt, privateKey)
+	case "SUCCEEDED", "FAILED":
 		return receipt, errors.New("terminal launch effect receipt must be signed as a verified revision")
+	default:
+		return receipt, errors.New("launch effect receipt outcome is invalid")
 	}
-	return signLaunchEffectReceipt(receipt, privateKey)
 }
 
 // SignLaunchEffectReceiptRevision seals a revision only after its exact
@@ -735,7 +739,7 @@ func ComputeLaunchEvidenceNodeHash(node LaunchEffectEvidenceNode) (string, error
 
 func launchEvidenceRefDependsOnReceipt(receipt LaunchEffectReceipt, ref string) bool {
 	lower := strings.ToLower(ref)
-	if strings.HasPrefix(lower, "receipt:") || strings.HasPrefix(lower, "evidencepack:") || validLaunchReceiptID(ref) {
+	if strings.HasPrefix(lower, "receipt:") || strings.HasPrefix(lower, "evidencepack:") || validLaunchReceiptID(lower) {
 		return true
 	}
 	for _, forbidden := range []string{

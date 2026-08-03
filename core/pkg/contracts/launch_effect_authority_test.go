@@ -653,6 +653,11 @@ func TestLaunchEffectReceiptRejectsNoncanonicalAndUntrustedProof(t *testing.T) {
 	if _, err := contracts.SignLaunchEffectReceipt(uppercaseHash, privateKey); err == nil {
 		t.Fatal("receipt signed an uppercase digest")
 	}
+	invalidOutcome := launchUnknownReceiptFixture()
+	invalidOutcome.Outcome = ""
+	if _, err := contracts.SignLaunchEffectReceipt(invalidOutcome, privateKey); err == nil || !strings.Contains(err.Error(), "outcome is invalid") {
+		t.Fatalf("receipt returned the wrong invalid-outcome error: %v", err)
+	}
 
 	unsafeSignedInteger := int64(9_007_199_254_740_992)
 	type receiptMutationTest struct {
@@ -1489,6 +1494,8 @@ func launchMissionReferencePackBytes(t *testing.T) []byte {
 			{"id": "verdict_signature_tamper", "expected_error": "signature_rejected"},
 			{"id": "receipt_result_tamper", "expected_error": "receipt_id_mismatch"},
 			{"id": "receipt_authority_tamper", "expected_error": "binding_mismatch"},
+			{"id": "receipt_missing_chain_field", "expected_error": "binding_mismatch"},
+			{"id": "receipt_missing_authority_field", "expected_error": "binding_mismatch"},
 			{"id": "receipt_raw_id_evidence_cycle", "expected_error": "evidence_cycle"},
 			{"id": "receipt_case_ref_evidence_cycle", "expected_error": "evidence_cycle"},
 			{"id": "receipt_evidence_cycle", "expected_error": "binding_mismatch"},

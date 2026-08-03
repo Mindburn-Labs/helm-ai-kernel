@@ -391,6 +391,24 @@ RECEIPT_CHAIN_FIELDS = (
 RECEIPT_AUTHORITY_FIELDS = RECEIPT_CHAIN_FIELDS
 
 
+def receipt_chain_id(receipt):
+    missing = [field for field in RECEIPT_CHAIN_FIELDS if field not in receipt]
+    if missing:
+        raise VectorError("binding_mismatch", f"receipt is missing immutable dispatch-chain fields: {', '.join(missing)}")
+    return sha256_ref(canonical_bytes({field: receipt[field] for field in RECEIPT_CHAIN_FIELDS}))
+
+
+def verify_receipt_authority_binding(receipt, authority):
+    field_map = {field: field for field in RECEIPT_AUTHORITY_FIELDS}
+    field_map["tool"] = "connector_id"
+    field_map["action"] = "action_urn"
+    for receipt_field, authority_field in field_map.items():
+        if receipt_field not in receipt or authority_field not in authority:
+            raise VectorError("binding_mismatch", f"receipt authority field {receipt_field} is missing")
+        if receipt[receipt_field] != authority[authority_field]:
+            raise VectorError("binding_mismatch", f"receipt authority field {receipt_field} mismatch")
+
+
 def canonical_ref_list(refs, field):
     if not isinstance(refs, list) or any(not isinstance(ref, str) for ref in refs):
         raise VectorError("invalid_encoding", f"{field} must be an array of strings")
@@ -451,7 +469,7 @@ def verify_receipt_evidence(receipt, dag):
         }
         for artifact in artifacts:
             lowered = artifact.lower()
-            raw_receipt_id = len(artifact) == 64 and all(character in "0123456789abcdef" for character in artifact)
+            raw_receipt_id = len(lowered) == 64 and all(character in "0123456789abcdef" for character in lowered)
             if lowered in forbidden or lowered.startswith("receipt:") or lowered.startswith("evidencepack:") or raw_receipt_id:
                 raise VectorError("evidence_cycle", "receipt evidence depends on a receipt or EvidencePack")
         by_hash[node_hash] = node
@@ -497,20 +515,14 @@ def verify_receipt(index, receipt_override=None, authority_override=None, eviden
     if not verify_ed25519(public_key, claimed_id.encode("ascii"), signature):
         raise VectorError("signature_rejected", "receipt signature rejected")
     receipt = sealed_receipt
-    chain_projection = {field: receipt[field] for field in RECEIPT_CHAIN_FIELDS if field in receipt}
-    expected_chain_id = sha256_ref(canonical_bytes(chain_projection))
+    expected_chain_id = receipt_chain_id(receipt)
     if receipt.get("receipt_chain_id") != expected_chain_id:
         raise VectorError("hash_mismatch", "receipt immutable dispatch chain ID mismatch")
     if receipt["payload_hash"] != receipt["request_hash"] or receipt["decision_id"] != receipt["kernel_verdict_ref"]:
         raise VectorError("binding_mismatch", "receipt payload or decision differs from dispatched authority")
 
     authority = copy.deepcopy(authority_override or descriptor["authority_binding"])
-    field_map = {field: field for field in RECEIPT_AUTHORITY_FIELDS}
-    field_map["tool"] = "connector_id"
-    field_map["action"] = "action_urn"
-    for receipt_field, authority_field in field_map.items():
-        if receipt.get(receipt_field, "") != authority.get(authority_field, ""):
-            raise VectorError("binding_mismatch", f"receipt authority field {receipt_field} mismatch")
+    verify_receipt_authority_binding(receipt, authority)
 
     reservation_hash = receipt.get("effect_reservation_hash", "")
     if not reservation_hash.startswith("sha256:"):
@@ -546,10 +558,12 @@ def verify_negative_vectors(index):
     expected = {item["id"]: item["expected_error"] for item in index["negative_vectors"]}
     observed = {}
 
-    route = copy.deepcopy(index["artifacts"]["route_binding"])
-    route["mission_id"] = "mission-tampered"
-    if sha256_ref(canonical_bytes(route)) != index["artifact_hashes"]["route_binding"]:
-        observed["route_hash_tamper"] = "hash_mismatch"
+    tampered_route_index = copy.deepcopy(index)
+    tampered_route_index["artifacts"]["route_binding"]["mission_id"] = "mission-tampered"
+    try:
+        verify_artifacts(tampered_route_index)
+    except VectorError as error:
+        observed["route_hash_tamper"] = error.code
 
     try:
         verify_authorization(index, flipped_ed25519(index["authorization"]["envelope"]["kernel_verdict_signature"]))
@@ -570,6 +584,20 @@ def verify_negative_vectors(index):
     except VectorError as error:
         observed["receipt_authority_tamper"] = error.code
 
+    receipt = copy.deepcopy(index["receipt"]["value"])
+    receipt.pop("plan_hash")
+    try:
+        receipt_chain_id(receipt)
+    except VectorError as error:
+        observed["receipt_missing_chain_field"] = error.code
+
+    authority = copy.deepcopy(index["receipt"]["authority_binding"])
+    authority.pop("provider_account_ref")
+    try:
+        verify_receipt(index, authority_override=authority)
+    except VectorError as error:
+        observed["receipt_missing_authority_field"] = error.code
+
     evidence = copy.deepcopy(index["receipt"]["evidence_dag"])
     raw_id_node = copy.deepcopy(evidence["nodes"][0])
     raw_id_node["artifact_refs"] = ["0" * 64]
@@ -582,7 +610,9 @@ def verify_negative_vectors(index):
 
     evidence = copy.deepcopy(index["receipt"]["evidence_dag"])
     case_ref_node = copy.deepcopy(evidence["nodes"][0])
-    case_ref_node["artifact_refs"] = ["SHA256:" + index["receipt"]["value"]["receipt_id"]]
+    case_ref_node["artifact_refs"] = sorted(
+        ["SHA256:" + index["receipt"]["value"]["receipt_id"], index["receipt"]["value"]["receipt_id"].upper()]
+    )
     case_ref_node["node_hash"] = evidence_node_hash(case_ref_node)
     evidence["nodes"].append(case_ref_node)
     try:
@@ -653,7 +683,8 @@ def main():
     print(
         "verified Launch Mission v1 reference pack: "
         "10 authority artifact hashes, a multi-provider/stateful universal route, 6 effect inputs, provider certification, canonical approval, "
-        "Kernel verdict, receipt, and 9 negative mutations; exact Go/Python parity"
+        "Kernel verdict, receipt, and "
+        f"{len(index['negative_vectors'])} negative mutations; exact Go/Python parity"
     )
 
 

@@ -977,6 +977,14 @@
       "id": "receipt_authority_tamper"
     },
     {
+      "expected_error": "binding_mismatch",
+      "id": "receipt_missing_chain_field"
+    },
+    {
+      "expected_error": "binding_mismatch",
+      "id": "receipt_missing_authority_field"
+    },
+    {
       "expected_error": "evidence_cycle",
       "id": "receipt_raw_id_evidence_cycle"
     },

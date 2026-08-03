@@ -23,6 +23,7 @@ func TestLaunchEvidenceRefDependsOnReceiptRejectsCaseVariantSchemes(t *testing.T
 		"RECEIPT:" + receipt.ReceiptID,
 		"EvidencePack://helm/pack-a",
 		receipt.ReceiptID,
+		strings.ToUpper(receipt.ReceiptID),
 		receipt.ReceiptChainID,
 		receipt.EvidencePackHash,
 	} {

@@ -11,6 +11,49 @@ pub struct Effect {
     #[prost(string, tag = "4")]
     pub budget_id: ::prost::alloc::string::String,
 }
+/// Deterministic advisory-classifier evidence. This is informational by
+/// default; a Guardian policy may only escalate an explicitly configured score,
+/// coverage, or availability condition.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SemanticThreatAssessment {
+    #[prost(bool, tag = "1")]
+    pub available: bool,
+    #[prost(string, tag = "2")]
+    pub model_version: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub model_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub expected_model_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub failure_reason: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "6")]
+    pub threshold_bp: u32,
+    #[prost(uint32, tag = "7")]
+    pub max_bp: u32,
+    #[prost(string, tag = "8")]
+    pub nearest_class: ::prost::alloc::string::String,
+    #[prost(bool, tag = "9")]
+    pub flagged: bool,
+    #[prost(bool, tag = "10")]
+    pub input_truncated: bool,
+}
+/// Guardian-owned threat evidence bound by decision_record.v3 whenever it is
+/// present. The input hash is a reference, never caller-controlled policy data.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ThreatScanReference {
+    #[prost(string, tag = "1")]
+    pub scan_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub max_severity: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub finding_count: u32,
+    #[prost(string, tag = "4")]
+    pub trust_level: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub input_hash: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub semantic: ::core::option::Option<SemanticThreatAssessment>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DecisionRecord {
     #[prost(string, tag = "1")]
@@ -42,13 +85,15 @@ pub struct DecisionRecord {
     /// evidence. Optional; outside the decision signature until HELM-303.
     #[prost(string, tag = "13")]
     pub correlation_id: ::prost::alloc::string::String,
-    /// HELM-303 decision.v2 signing envelope fields.
+    /// HELM-303 decision.v2 / decision.v3 signing envelope fields.
     #[prost(string, tag = "14")]
     pub signature_version: ::prost::alloc::string::String,
     #[prost(string, tag = "15")]
     pub phenotype_hash: ::prost::alloc::string::String,
     #[prost(string, tag = "16")]
     pub policy_content_hash: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "17")]
+    pub threat_scan: ::core::option::Option<ThreatScanReference>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizedExecutionIntent {
@@ -278,6 +323,7 @@ pub enum ReasonCode {
     VerificationFailure = 15,
     TenantIsolation = 16,
     JurisdictionViolation = 17,
+    SemanticThreatReviewRequired = 18,
 }
 impl ReasonCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -304,6 +350,9 @@ impl ReasonCode {
             Self::VerificationFailure => "REASON_CODE_VERIFICATION_FAILURE",
             Self::TenantIsolation => "REASON_CODE_TENANT_ISOLATION",
             Self::JurisdictionViolation => "REASON_CODE_JURISDICTION_VIOLATION",
+            Self::SemanticThreatReviewRequired => {
+                "REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -327,6 +376,9 @@ impl ReasonCode {
             "REASON_CODE_VERIFICATION_FAILURE" => Some(Self::VerificationFailure),
             "REASON_CODE_TENANT_ISOLATION" => Some(Self::TenantIsolation),
             "REASON_CODE_JURISDICTION_VIOLATION" => Some(Self::JurisdictionViolation),
+            "REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED" => {
+                Some(Self::SemanticThreatReviewRequired)
+            }
             _ => None,
         }
     }

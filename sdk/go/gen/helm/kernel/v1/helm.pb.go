@@ -85,24 +85,25 @@ func (Verdict) EnumDescriptor() ([]byte, []int) {
 type ReasonCode int32
 
 const (
-	ReasonCode_REASON_CODE_UNSPECIFIED            ReasonCode = 0
-	ReasonCode_REASON_CODE_POLICY_VIOLATION       ReasonCode = 1
-	ReasonCode_REASON_CODE_NO_POLICY_DEFINED      ReasonCode = 2
-	ReasonCode_REASON_CODE_PRG_EVALUATION_ERROR   ReasonCode = 3
-	ReasonCode_REASON_CODE_MISSING_REQUIREMENT    ReasonCode = 4
-	ReasonCode_REASON_CODE_PDP_DENY               ReasonCode = 5
-	ReasonCode_REASON_CODE_PDP_ERROR              ReasonCode = 6
-	ReasonCode_REASON_CODE_BUDGET_EXCEEDED        ReasonCode = 7
-	ReasonCode_REASON_CODE_BUDGET_ERROR           ReasonCode = 8
-	ReasonCode_REASON_CODE_ENVELOPE_INVALID       ReasonCode = 9
-	ReasonCode_REASON_CODE_SCHEMA_VIOLATION       ReasonCode = 10
-	ReasonCode_REASON_CODE_TEMPORAL_INTERVENTION  ReasonCode = 11
-	ReasonCode_REASON_CODE_TEMPORAL_THROTTLE      ReasonCode = 12
-	ReasonCode_REASON_CODE_SANDBOX_VIOLATION      ReasonCode = 13
-	ReasonCode_REASON_CODE_PROVENANCE_FAILURE     ReasonCode = 14
-	ReasonCode_REASON_CODE_VERIFICATION_FAILURE   ReasonCode = 15
-	ReasonCode_REASON_CODE_TENANT_ISOLATION       ReasonCode = 16
-	ReasonCode_REASON_CODE_JURISDICTION_VIOLATION ReasonCode = 17
+	ReasonCode_REASON_CODE_UNSPECIFIED                     ReasonCode = 0
+	ReasonCode_REASON_CODE_POLICY_VIOLATION                ReasonCode = 1
+	ReasonCode_REASON_CODE_NO_POLICY_DEFINED               ReasonCode = 2
+	ReasonCode_REASON_CODE_PRG_EVALUATION_ERROR            ReasonCode = 3
+	ReasonCode_REASON_CODE_MISSING_REQUIREMENT             ReasonCode = 4
+	ReasonCode_REASON_CODE_PDP_DENY                        ReasonCode = 5
+	ReasonCode_REASON_CODE_PDP_ERROR                       ReasonCode = 6
+	ReasonCode_REASON_CODE_BUDGET_EXCEEDED                 ReasonCode = 7
+	ReasonCode_REASON_CODE_BUDGET_ERROR                    ReasonCode = 8
+	ReasonCode_REASON_CODE_ENVELOPE_INVALID                ReasonCode = 9
+	ReasonCode_REASON_CODE_SCHEMA_VIOLATION                ReasonCode = 10
+	ReasonCode_REASON_CODE_TEMPORAL_INTERVENTION           ReasonCode = 11
+	ReasonCode_REASON_CODE_TEMPORAL_THROTTLE               ReasonCode = 12
+	ReasonCode_REASON_CODE_SANDBOX_VIOLATION               ReasonCode = 13
+	ReasonCode_REASON_CODE_PROVENANCE_FAILURE              ReasonCode = 14
+	ReasonCode_REASON_CODE_VERIFICATION_FAILURE            ReasonCode = 15
+	ReasonCode_REASON_CODE_TENANT_ISOLATION                ReasonCode = 16
+	ReasonCode_REASON_CODE_JURISDICTION_VIOLATION          ReasonCode = 17
+	ReasonCode_REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED ReasonCode = 18
 )
 
 // Enum value maps for ReasonCode.
@@ -126,26 +127,28 @@ var (
 		15: "REASON_CODE_VERIFICATION_FAILURE",
 		16: "REASON_CODE_TENANT_ISOLATION",
 		17: "REASON_CODE_JURISDICTION_VIOLATION",
+		18: "REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED",
 	}
 	ReasonCode_value = map[string]int32{
-		"REASON_CODE_UNSPECIFIED":            0,
-		"REASON_CODE_POLICY_VIOLATION":       1,
-		"REASON_CODE_NO_POLICY_DEFINED":      2,
-		"REASON_CODE_PRG_EVALUATION_ERROR":   3,
-		"REASON_CODE_MISSING_REQUIREMENT":    4,
-		"REASON_CODE_PDP_DENY":               5,
-		"REASON_CODE_PDP_ERROR":              6,
-		"REASON_CODE_BUDGET_EXCEEDED":        7,
-		"REASON_CODE_BUDGET_ERROR":           8,
-		"REASON_CODE_ENVELOPE_INVALID":       9,
-		"REASON_CODE_SCHEMA_VIOLATION":       10,
-		"REASON_CODE_TEMPORAL_INTERVENTION":  11,
-		"REASON_CODE_TEMPORAL_THROTTLE":      12,
-		"REASON_CODE_SANDBOX_VIOLATION":      13,
-		"REASON_CODE_PROVENANCE_FAILURE":     14,
-		"REASON_CODE_VERIFICATION_FAILURE":   15,
-		"REASON_CODE_TENANT_ISOLATION":       16,
-		"REASON_CODE_JURISDICTION_VIOLATION": 17,
+		"REASON_CODE_UNSPECIFIED":                     0,
+		"REASON_CODE_POLICY_VIOLATION":                1,
+		"REASON_CODE_NO_POLICY_DEFINED":               2,
+		"REASON_CODE_PRG_EVALUATION_ERROR":            3,
+		"REASON_CODE_MISSING_REQUIREMENT":             4,
+		"REASON_CODE_PDP_DENY":                        5,
+		"REASON_CODE_PDP_ERROR":                       6,
+		"REASON_CODE_BUDGET_EXCEEDED":                 7,
+		"REASON_CODE_BUDGET_ERROR":                    8,
+		"REASON_CODE_ENVELOPE_INVALID":                9,
+		"REASON_CODE_SCHEMA_VIOLATION":                10,
+		"REASON_CODE_TEMPORAL_INTERVENTION":           11,
+		"REASON_CODE_TEMPORAL_THROTTLE":               12,
+		"REASON_CODE_SANDBOX_VIOLATION":               13,
+		"REASON_CODE_PROVENANCE_FAILURE":              14,
+		"REASON_CODE_VERIFICATION_FAILURE":            15,
+		"REASON_CODE_TENANT_ISOLATION":                16,
+		"REASON_CODE_JURISDICTION_VIOLATION":          17,
+		"REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED": 18,
 	}
 )
 
@@ -244,6 +247,211 @@ func (x *Effect) GetBudgetId() string {
 	return ""
 }
 
+// Deterministic advisory-classifier evidence. This is informational by
+// default; a Guardian policy may only escalate an explicitly configured score,
+// coverage, or availability condition.
+type SemanticThreatAssessment struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Available         bool                   `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	ModelVersion      string                 `protobuf:"bytes,2,opt,name=model_version,json=modelVersion,proto3" json:"model_version,omitempty"`
+	ModelHash         string                 `protobuf:"bytes,3,opt,name=model_hash,json=modelHash,proto3" json:"model_hash,omitempty"`
+	ExpectedModelHash string                 `protobuf:"bytes,4,opt,name=expected_model_hash,json=expectedModelHash,proto3" json:"expected_model_hash,omitempty"`
+	FailureReason     string                 `protobuf:"bytes,5,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	ThresholdBp       uint32                 `protobuf:"varint,6,opt,name=threshold_bp,json=thresholdBp,proto3" json:"threshold_bp,omitempty"`
+	MaxBp             uint32                 `protobuf:"varint,7,opt,name=max_bp,json=maxBp,proto3" json:"max_bp,omitempty"`
+	NearestClass      string                 `protobuf:"bytes,8,opt,name=nearest_class,json=nearestClass,proto3" json:"nearest_class,omitempty"`
+	Flagged           bool                   `protobuf:"varint,9,opt,name=flagged,proto3" json:"flagged,omitempty"`
+	InputTruncated    bool                   `protobuf:"varint,10,opt,name=input_truncated,json=inputTruncated,proto3" json:"input_truncated,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *SemanticThreatAssessment) Reset() {
+	*x = SemanticThreatAssessment{}
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SemanticThreatAssessment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SemanticThreatAssessment) ProtoMessage() {}
+
+func (x *SemanticThreatAssessment) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SemanticThreatAssessment.ProtoReflect.Descriptor instead.
+func (*SemanticThreatAssessment) Descriptor() ([]byte, []int) {
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SemanticThreatAssessment) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+func (x *SemanticThreatAssessment) GetModelVersion() string {
+	if x != nil {
+		return x.ModelVersion
+	}
+	return ""
+}
+
+func (x *SemanticThreatAssessment) GetModelHash() string {
+	if x != nil {
+		return x.ModelHash
+	}
+	return ""
+}
+
+func (x *SemanticThreatAssessment) GetExpectedModelHash() string {
+	if x != nil {
+		return x.ExpectedModelHash
+	}
+	return ""
+}
+
+func (x *SemanticThreatAssessment) GetFailureReason() string {
+	if x != nil {
+		return x.FailureReason
+	}
+	return ""
+}
+
+func (x *SemanticThreatAssessment) GetThresholdBp() uint32 {
+	if x != nil {
+		return x.ThresholdBp
+	}
+	return 0
+}
+
+func (x *SemanticThreatAssessment) GetMaxBp() uint32 {
+	if x != nil {
+		return x.MaxBp
+	}
+	return 0
+}
+
+func (x *SemanticThreatAssessment) GetNearestClass() string {
+	if x != nil {
+		return x.NearestClass
+	}
+	return ""
+}
+
+func (x *SemanticThreatAssessment) GetFlagged() bool {
+	if x != nil {
+		return x.Flagged
+	}
+	return false
+}
+
+func (x *SemanticThreatAssessment) GetInputTruncated() bool {
+	if x != nil {
+		return x.InputTruncated
+	}
+	return false
+}
+
+// Guardian-owned threat evidence bound by decision_record.v3 whenever it is
+// present. The input hash is a reference, never caller-controlled policy data.
+type ThreatScanReference struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	ScanId        string                    `protobuf:"bytes,1,opt,name=scan_id,json=scanId,proto3" json:"scan_id,omitempty"`
+	MaxSeverity   string                    `protobuf:"bytes,2,opt,name=max_severity,json=maxSeverity,proto3" json:"max_severity,omitempty"`
+	FindingCount  uint32                    `protobuf:"varint,3,opt,name=finding_count,json=findingCount,proto3" json:"finding_count,omitempty"`
+	TrustLevel    string                    `protobuf:"bytes,4,opt,name=trust_level,json=trustLevel,proto3" json:"trust_level,omitempty"`
+	InputHash     string                    `protobuf:"bytes,5,opt,name=input_hash,json=inputHash,proto3" json:"input_hash,omitempty"`
+	Semantic      *SemanticThreatAssessment `protobuf:"bytes,6,opt,name=semantic,proto3" json:"semantic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ThreatScanReference) Reset() {
+	*x = ThreatScanReference{}
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ThreatScanReference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ThreatScanReference) ProtoMessage() {}
+
+func (x *ThreatScanReference) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ThreatScanReference.ProtoReflect.Descriptor instead.
+func (*ThreatScanReference) Descriptor() ([]byte, []int) {
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ThreatScanReference) GetScanId() string {
+	if x != nil {
+		return x.ScanId
+	}
+	return ""
+}
+
+func (x *ThreatScanReference) GetMaxSeverity() string {
+	if x != nil {
+		return x.MaxSeverity
+	}
+	return ""
+}
+
+func (x *ThreatScanReference) GetFindingCount() uint32 {
+	if x != nil {
+		return x.FindingCount
+	}
+	return 0
+}
+
+func (x *ThreatScanReference) GetTrustLevel() string {
+	if x != nil {
+		return x.TrustLevel
+	}
+	return ""
+}
+
+func (x *ThreatScanReference) GetInputHash() string {
+	if x != nil {
+		return x.InputHash
+	}
+	return ""
+}
+
+func (x *ThreatScanReference) GetSemantic() *SemanticThreatAssessment {
+	if x != nil {
+		return x.Semantic
+	}
+	return nil
+}
+
 type DecisionRecord struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -262,17 +470,18 @@ type DecisionRecord struct {
 	// for — the stable join key across lifecycle events, receipts, and
 	// evidence. Optional; outside the decision signature until HELM-303.
 	CorrelationId string `protobuf:"bytes,13,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	// HELM-303 decision.v2 signing envelope fields.
-	SignatureVersion  string `protobuf:"bytes,14,opt,name=signature_version,json=signatureVersion,proto3" json:"signature_version,omitempty"`
-	PhenotypeHash     string `protobuf:"bytes,15,opt,name=phenotype_hash,json=phenotypeHash,proto3" json:"phenotype_hash,omitempty"`
-	PolicyContentHash string `protobuf:"bytes,16,opt,name=policy_content_hash,json=policyContentHash,proto3" json:"policy_content_hash,omitempty"`
+	// HELM-303 decision.v2 / decision.v3 signing envelope fields.
+	SignatureVersion  string               `protobuf:"bytes,14,opt,name=signature_version,json=signatureVersion,proto3" json:"signature_version,omitempty"`
+	PhenotypeHash     string               `protobuf:"bytes,15,opt,name=phenotype_hash,json=phenotypeHash,proto3" json:"phenotype_hash,omitempty"`
+	PolicyContentHash string               `protobuf:"bytes,16,opt,name=policy_content_hash,json=policyContentHash,proto3" json:"policy_content_hash,omitempty"`
+	ThreatScan        *ThreatScanReference `protobuf:"bytes,17,opt,name=threat_scan,json=threatScan,proto3" json:"threat_scan,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *DecisionRecord) Reset() {
 	*x = DecisionRecord{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[1]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -284,7 +493,7 @@ func (x *DecisionRecord) String() string {
 func (*DecisionRecord) ProtoMessage() {}
 
 func (x *DecisionRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[1]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -297,7 +506,7 @@ func (x *DecisionRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DecisionRecord.ProtoReflect.Descriptor instead.
 func (*DecisionRecord) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{1}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DecisionRecord) GetId() string {
@@ -412,6 +621,13 @@ func (x *DecisionRecord) GetPolicyContentHash() string {
 	return ""
 }
 
+func (x *DecisionRecord) GetThreatScan() *ThreatScanReference {
+	if x != nil {
+		return x.ThreatScan
+	}
+	return nil
+}
+
 type AuthorizedExecutionIntent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IntentId      string                 `protobuf:"bytes,1,opt,name=intent_id,json=intentId,proto3" json:"intent_id,omitempty"`
@@ -428,7 +644,7 @@ type AuthorizedExecutionIntent struct {
 
 func (x *AuthorizedExecutionIntent) Reset() {
 	*x = AuthorizedExecutionIntent{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[2]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -440,7 +656,7 @@ func (x *AuthorizedExecutionIntent) String() string {
 func (*AuthorizedExecutionIntent) ProtoMessage() {}
 
 func (x *AuthorizedExecutionIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[2]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -453,7 +669,7 @@ func (x *AuthorizedExecutionIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizedExecutionIntent.ProtoReflect.Descriptor instead.
 func (*AuthorizedExecutionIntent) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{2}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *AuthorizedExecutionIntent) GetIntentId() string {
@@ -548,7 +764,7 @@ type Receipt struct {
 
 func (x *Receipt) Reset() {
 	*x = Receipt{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[3]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -560,7 +776,7 @@ func (x *Receipt) String() string {
 func (*Receipt) ProtoMessage() {}
 
 func (x *Receipt) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[3]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -573,7 +789,7 @@ func (x *Receipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Receipt.ProtoReflect.Descriptor instead.
 func (*Receipt) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{3}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Receipt) GetReceiptVersion() string {
@@ -755,7 +971,7 @@ type PDPRequest struct {
 
 func (x *PDPRequest) Reset() {
 	*x = PDPRequest{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[4]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +983,7 @@ func (x *PDPRequest) String() string {
 func (*PDPRequest) ProtoMessage() {}
 
 func (x *PDPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[4]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +996,7 @@ func (x *PDPRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PDPRequest.ProtoReflect.Descriptor instead.
 func (*PDPRequest) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{4}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PDPRequest) GetEffect() *Effect {
@@ -815,7 +1031,7 @@ type SubjectDescriptor struct {
 
 func (x *SubjectDescriptor) Reset() {
 	*x = SubjectDescriptor{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[5]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -827,7 +1043,7 @@ func (x *SubjectDescriptor) String() string {
 func (*SubjectDescriptor) ProtoMessage() {}
 
 func (x *SubjectDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[5]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -840,7 +1056,7 @@ func (x *SubjectDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubjectDescriptor.ProtoReflect.Descriptor instead.
 func (*SubjectDescriptor) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{5}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SubjectDescriptor) GetPrincipal() string {
@@ -876,7 +1092,7 @@ type ContextDescriptor struct {
 
 func (x *ContextDescriptor) Reset() {
 	*x = ContextDescriptor{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[6]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -888,7 +1104,7 @@ func (x *ContextDescriptor) String() string {
 func (*ContextDescriptor) ProtoMessage() {}
 
 func (x *ContextDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[6]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -901,7 +1117,7 @@ func (x *ContextDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContextDescriptor.ProtoReflect.Descriptor instead.
 func (*ContextDescriptor) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{6}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ContextDescriptor) GetJurisdiction() string {
@@ -945,7 +1161,7 @@ type PDPResponse struct {
 
 func (x *PDPResponse) Reset() {
 	*x = PDPResponse{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[7]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -957,7 +1173,7 @@ func (x *PDPResponse) String() string {
 func (*PDPResponse) ProtoMessage() {}
 
 func (x *PDPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[7]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -970,7 +1186,7 @@ func (x *PDPResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PDPResponse.ProtoReflect.Descriptor instead.
 func (*PDPResponse) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{7}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PDPResponse) GetAllow() bool {
@@ -1020,7 +1236,7 @@ type Obligation struct {
 
 func (x *Obligation) Reset() {
 	*x = Obligation{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[8]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1032,7 +1248,7 @@ func (x *Obligation) String() string {
 func (*Obligation) ProtoMessage() {}
 
 func (x *Obligation) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[8]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1045,7 +1261,7 @@ func (x *Obligation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Obligation.ProtoReflect.Descriptor instead.
 func (*Obligation) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{8}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Obligation) GetId() string {
@@ -1087,7 +1303,7 @@ type EffectRequest struct {
 
 func (x *EffectRequest) Reset() {
 	*x = EffectRequest{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[9]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1099,7 +1315,7 @@ func (x *EffectRequest) String() string {
 func (*EffectRequest) ProtoMessage() {}
 
 func (x *EffectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[9]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1112,7 +1328,7 @@ func (x *EffectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EffectRequest.ProtoReflect.Descriptor instead.
 func (*EffectRequest) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{9}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *EffectRequest) GetEffect() *Effect {
@@ -1149,7 +1365,7 @@ type EffectResponse struct {
 
 func (x *EffectResponse) Reset() {
 	*x = EffectResponse{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[10]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1161,7 +1377,7 @@ func (x *EffectResponse) String() string {
 func (*EffectResponse) ProtoMessage() {}
 
 func (x *EffectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[10]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1174,7 +1390,7 @@ func (x *EffectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EffectResponse.ProtoReflect.Descriptor instead.
 func (*EffectResponse) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{10}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *EffectResponse) GetVerdict() Verdict {
@@ -1225,7 +1441,7 @@ type ExecutionResult struct {
 
 func (x *ExecutionResult) Reset() {
 	*x = ExecutionResult{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[11]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1237,7 +1453,7 @@ func (x *ExecutionResult) String() string {
 func (*ExecutionResult) ProtoMessage() {}
 
 func (x *ExecutionResult) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[11]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1250,7 +1466,7 @@ func (x *ExecutionResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionResult.ProtoReflect.Descriptor instead.
 func (*ExecutionResult) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{11}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ExecutionResult) GetIntentId() string {
@@ -1298,7 +1514,7 @@ type CompletionReceipt struct {
 
 func (x *CompletionReceipt) Reset() {
 	*x = CompletionReceipt{}
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[12]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1310,7 +1526,7 @@ func (x *CompletionReceipt) String() string {
 func (*CompletionReceipt) ProtoMessage() {}
 
 func (x *CompletionReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_kernel_v1_helm_proto_msgTypes[12]
+	mi := &file_helm_kernel_v1_helm_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1323,7 +1539,7 @@ func (x *CompletionReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompletionReceipt.ProtoReflect.Descriptor instead.
 func (*CompletionReceipt) Descriptor() ([]byte, []int) {
-	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{12}
+	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CompletionReceipt) GetReceipt() *Receipt {
@@ -1350,7 +1566,29 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"effectType\x12\x1b\n" +
 	"\teffect_id\x18\x02 \x01(\tR\beffectId\x12\x16\n" +
 	"\x06params\x18\x03 \x01(\fR\x06params\x12\x1b\n" +
-	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\x9c\x05\n" +
+	"\tbudget_id\x18\x04 \x01(\tR\bbudgetId\"\xf5\x02\n" +
+	"\x18SemanticThreatAssessment\x12\x1c\n" +
+	"\tavailable\x18\x01 \x01(\bR\tavailable\x12#\n" +
+	"\rmodel_version\x18\x02 \x01(\tR\fmodelVersion\x12\x1d\n" +
+	"\n" +
+	"model_hash\x18\x03 \x01(\tR\tmodelHash\x12.\n" +
+	"\x13expected_model_hash\x18\x04 \x01(\tR\x11expectedModelHash\x12%\n" +
+	"\x0efailure_reason\x18\x05 \x01(\tR\rfailureReason\x12!\n" +
+	"\fthreshold_bp\x18\x06 \x01(\rR\vthresholdBp\x12\x15\n" +
+	"\x06max_bp\x18\a \x01(\rR\x05maxBp\x12#\n" +
+	"\rnearest_class\x18\b \x01(\tR\fnearestClass\x12\x18\n" +
+	"\aflagged\x18\t \x01(\bR\aflagged\x12'\n" +
+	"\x0finput_truncated\x18\n" +
+	" \x01(\bR\x0einputTruncated\"\xfc\x01\n" +
+	"\x13ThreatScanReference\x12\x17\n" +
+	"\ascan_id\x18\x01 \x01(\tR\x06scanId\x12!\n" +
+	"\fmax_severity\x18\x02 \x01(\tR\vmaxSeverity\x12#\n" +
+	"\rfinding_count\x18\x03 \x01(\rR\ffindingCount\x12\x1f\n" +
+	"\vtrust_level\x18\x04 \x01(\tR\n" +
+	"trustLevel\x12\x1d\n" +
+	"\n" +
+	"input_hash\x18\x05 \x01(\tR\tinputHash\x12D\n" +
+	"\bsemantic\x18\x06 \x01(\v2(.helm.kernel.v1.SemanticThreatAssessmentR\bsemantic\"\xe2\x05\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1370,7 +1608,9 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\x12+\n" +
 	"\x11signature_version\x18\x0e \x01(\tR\x10signatureVersion\x12%\n" +
 	"\x0ephenotype_hash\x18\x0f \x01(\tR\rphenotypeHash\x12.\n" +
-	"\x13policy_content_hash\x18\x10 \x01(\tR\x11policyContentHash\"\xca\x02\n" +
+	"\x13policy_content_hash\x18\x10 \x01(\tR\x11policyContentHash\x12D\n" +
+	"\vthreat_scan\x18\x11 \x01(\v2#.helm.kernel.v1.ThreatScanReferenceR\n" +
+	"threatScan\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +
@@ -1472,7 +1712,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\x13VERDICT_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rVERDICT_ALLOW\x10\x01\x12\x10\n" +
 	"\fVERDICT_DENY\x10\x02\x12\x14\n" +
-	"\x10VERDICT_ESCALATE\x10\x03*\xf2\x04\n" +
+	"\x10VERDICT_ESCALATE\x10\x03*\xa3\x05\n" +
 	"\n" +
 	"ReasonCode\x12\x1b\n" +
 	"\x17REASON_CODE_UNSPECIFIED\x10\x00\x12 \n" +
@@ -1493,7 +1733,8 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\x1eREASON_CODE_PROVENANCE_FAILURE\x10\x0e\x12$\n" +
 	" REASON_CODE_VERIFICATION_FAILURE\x10\x0f\x12 \n" +
 	"\x1cREASON_CODE_TENANT_ISOLATION\x10\x10\x12&\n" +
-	"\"REASON_CODE_JURISDICTION_VIOLATION\x10\x112a\n" +
+	"\"REASON_CODE_JURISDICTION_VIOLATION\x10\x11\x12/\n" +
+	"+REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED\x10\x122a\n" +
 	"\x1aPolicyDecisionPointService\x12C\n" +
 	"\bEvaluate\x12\x1a.helm.kernel.v1.PDPRequest\x1a\x1b.helm.kernel.v1.PDPResponse2\xb0\x01\n" +
 	"\x15EffectBoundaryService\x12G\n" +
@@ -1513,64 +1754,68 @@ func file_helm_kernel_v1_helm_proto_rawDescGZIP() []byte {
 }
 
 var file_helm_kernel_v1_helm_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_helm_kernel_v1_helm_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_helm_kernel_v1_helm_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_helm_kernel_v1_helm_proto_goTypes = []any{
 	(Verdict)(0),                      // 0: helm.kernel.v1.Verdict
 	(ReasonCode)(0),                   // 1: helm.kernel.v1.ReasonCode
 	(*Effect)(nil),                    // 2: helm.kernel.v1.Effect
-	(*DecisionRecord)(nil),            // 3: helm.kernel.v1.DecisionRecord
-	(*AuthorizedExecutionIntent)(nil), // 4: helm.kernel.v1.AuthorizedExecutionIntent
-	(*Receipt)(nil),                   // 5: helm.kernel.v1.Receipt
-	(*PDPRequest)(nil),                // 6: helm.kernel.v1.PDPRequest
-	(*SubjectDescriptor)(nil),         // 7: helm.kernel.v1.SubjectDescriptor
-	(*ContextDescriptor)(nil),         // 8: helm.kernel.v1.ContextDescriptor
-	(*PDPResponse)(nil),               // 9: helm.kernel.v1.PDPResponse
-	(*Obligation)(nil),                // 10: helm.kernel.v1.Obligation
-	(*EffectRequest)(nil),             // 11: helm.kernel.v1.EffectRequest
-	(*EffectResponse)(nil),            // 12: helm.kernel.v1.EffectResponse
-	(*ExecutionResult)(nil),           // 13: helm.kernel.v1.ExecutionResult
-	(*CompletionReceipt)(nil),         // 14: helm.kernel.v1.CompletionReceipt
-	nil,                               // 15: helm.kernel.v1.Receipt.MetadataEntry
-	nil,                               // 16: helm.kernel.v1.EffectRequest.ContextEntry
-	(*timestamppb.Timestamp)(nil),     // 17: google.protobuf.Timestamp
+	(*SemanticThreatAssessment)(nil),  // 3: helm.kernel.v1.SemanticThreatAssessment
+	(*ThreatScanReference)(nil),       // 4: helm.kernel.v1.ThreatScanReference
+	(*DecisionRecord)(nil),            // 5: helm.kernel.v1.DecisionRecord
+	(*AuthorizedExecutionIntent)(nil), // 6: helm.kernel.v1.AuthorizedExecutionIntent
+	(*Receipt)(nil),                   // 7: helm.kernel.v1.Receipt
+	(*PDPRequest)(nil),                // 8: helm.kernel.v1.PDPRequest
+	(*SubjectDescriptor)(nil),         // 9: helm.kernel.v1.SubjectDescriptor
+	(*ContextDescriptor)(nil),         // 10: helm.kernel.v1.ContextDescriptor
+	(*PDPResponse)(nil),               // 11: helm.kernel.v1.PDPResponse
+	(*Obligation)(nil),                // 12: helm.kernel.v1.Obligation
+	(*EffectRequest)(nil),             // 13: helm.kernel.v1.EffectRequest
+	(*EffectResponse)(nil),            // 14: helm.kernel.v1.EffectResponse
+	(*ExecutionResult)(nil),           // 15: helm.kernel.v1.ExecutionResult
+	(*CompletionReceipt)(nil),         // 16: helm.kernel.v1.CompletionReceipt
+	nil,                               // 17: helm.kernel.v1.Receipt.MetadataEntry
+	nil,                               // 18: helm.kernel.v1.EffectRequest.ContextEntry
+	(*timestamppb.Timestamp)(nil),     // 19: google.protobuf.Timestamp
 }
 var file_helm_kernel_v1_helm_proto_depIdxs = []int32{
-	17, // 0: helm.kernel.v1.DecisionRecord.timestamp:type_name -> google.protobuf.Timestamp
-	0,  // 1: helm.kernel.v1.DecisionRecord.verdict:type_name -> helm.kernel.v1.Verdict
-	1,  // 2: helm.kernel.v1.DecisionRecord.reason_code:type_name -> helm.kernel.v1.ReasonCode
-	17, // 3: helm.kernel.v1.AuthorizedExecutionIntent.issued_at:type_name -> google.protobuf.Timestamp
-	17, // 4: helm.kernel.v1.AuthorizedExecutionIntent.expires_at:type_name -> google.protobuf.Timestamp
-	0,  // 5: helm.kernel.v1.Receipt.verdict:type_name -> helm.kernel.v1.Verdict
-	17, // 6: helm.kernel.v1.Receipt.timestamp:type_name -> google.protobuf.Timestamp
-	1,  // 7: helm.kernel.v1.Receipt.reason_code:type_name -> helm.kernel.v1.ReasonCode
-	15, // 8: helm.kernel.v1.Receipt.metadata:type_name -> helm.kernel.v1.Receipt.MetadataEntry
-	2,  // 9: helm.kernel.v1.PDPRequest.effect:type_name -> helm.kernel.v1.Effect
-	7,  // 10: helm.kernel.v1.PDPRequest.subject:type_name -> helm.kernel.v1.SubjectDescriptor
-	8,  // 11: helm.kernel.v1.PDPRequest.context:type_name -> helm.kernel.v1.ContextDescriptor
-	17, // 12: helm.kernel.v1.ContextDescriptor.time_window_start:type_name -> google.protobuf.Timestamp
-	17, // 13: helm.kernel.v1.ContextDescriptor.time_window_end:type_name -> google.protobuf.Timestamp
-	1,  // 14: helm.kernel.v1.PDPResponse.reason_code:type_name -> helm.kernel.v1.ReasonCode
-	10, // 15: helm.kernel.v1.PDPResponse.obligations:type_name -> helm.kernel.v1.Obligation
-	17, // 16: helm.kernel.v1.Obligation.deadline:type_name -> google.protobuf.Timestamp
-	2,  // 17: helm.kernel.v1.EffectRequest.effect:type_name -> helm.kernel.v1.Effect
-	16, // 18: helm.kernel.v1.EffectRequest.context:type_name -> helm.kernel.v1.EffectRequest.ContextEntry
-	0,  // 19: helm.kernel.v1.EffectResponse.verdict:type_name -> helm.kernel.v1.Verdict
-	1,  // 20: helm.kernel.v1.EffectResponse.reason_code:type_name -> helm.kernel.v1.ReasonCode
-	5,  // 21: helm.kernel.v1.EffectResponse.receipt:type_name -> helm.kernel.v1.Receipt
-	4,  // 22: helm.kernel.v1.EffectResponse.intent:type_name -> helm.kernel.v1.AuthorizedExecutionIntent
-	17, // 23: helm.kernel.v1.ExecutionResult.completed_at:type_name -> google.protobuf.Timestamp
-	5,  // 24: helm.kernel.v1.CompletionReceipt.receipt:type_name -> helm.kernel.v1.Receipt
-	6,  // 25: helm.kernel.v1.PolicyDecisionPointService.Evaluate:input_type -> helm.kernel.v1.PDPRequest
-	11, // 26: helm.kernel.v1.EffectBoundaryService.Submit:input_type -> helm.kernel.v1.EffectRequest
-	13, // 27: helm.kernel.v1.EffectBoundaryService.Complete:input_type -> helm.kernel.v1.ExecutionResult
-	9,  // 28: helm.kernel.v1.PolicyDecisionPointService.Evaluate:output_type -> helm.kernel.v1.PDPResponse
-	12, // 29: helm.kernel.v1.EffectBoundaryService.Submit:output_type -> helm.kernel.v1.EffectResponse
-	14, // 30: helm.kernel.v1.EffectBoundaryService.Complete:output_type -> helm.kernel.v1.CompletionReceipt
-	28, // [28:31] is the sub-list for method output_type
-	25, // [25:28] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	3,  // 0: helm.kernel.v1.ThreatScanReference.semantic:type_name -> helm.kernel.v1.SemanticThreatAssessment
+	19, // 1: helm.kernel.v1.DecisionRecord.timestamp:type_name -> google.protobuf.Timestamp
+	0,  // 2: helm.kernel.v1.DecisionRecord.verdict:type_name -> helm.kernel.v1.Verdict
+	1,  // 3: helm.kernel.v1.DecisionRecord.reason_code:type_name -> helm.kernel.v1.ReasonCode
+	4,  // 4: helm.kernel.v1.DecisionRecord.threat_scan:type_name -> helm.kernel.v1.ThreatScanReference
+	19, // 5: helm.kernel.v1.AuthorizedExecutionIntent.issued_at:type_name -> google.protobuf.Timestamp
+	19, // 6: helm.kernel.v1.AuthorizedExecutionIntent.expires_at:type_name -> google.protobuf.Timestamp
+	0,  // 7: helm.kernel.v1.Receipt.verdict:type_name -> helm.kernel.v1.Verdict
+	19, // 8: helm.kernel.v1.Receipt.timestamp:type_name -> google.protobuf.Timestamp
+	1,  // 9: helm.kernel.v1.Receipt.reason_code:type_name -> helm.kernel.v1.ReasonCode
+	17, // 10: helm.kernel.v1.Receipt.metadata:type_name -> helm.kernel.v1.Receipt.MetadataEntry
+	2,  // 11: helm.kernel.v1.PDPRequest.effect:type_name -> helm.kernel.v1.Effect
+	9,  // 12: helm.kernel.v1.PDPRequest.subject:type_name -> helm.kernel.v1.SubjectDescriptor
+	10, // 13: helm.kernel.v1.PDPRequest.context:type_name -> helm.kernel.v1.ContextDescriptor
+	19, // 14: helm.kernel.v1.ContextDescriptor.time_window_start:type_name -> google.protobuf.Timestamp
+	19, // 15: helm.kernel.v1.ContextDescriptor.time_window_end:type_name -> google.protobuf.Timestamp
+	1,  // 16: helm.kernel.v1.PDPResponse.reason_code:type_name -> helm.kernel.v1.ReasonCode
+	12, // 17: helm.kernel.v1.PDPResponse.obligations:type_name -> helm.kernel.v1.Obligation
+	19, // 18: helm.kernel.v1.Obligation.deadline:type_name -> google.protobuf.Timestamp
+	2,  // 19: helm.kernel.v1.EffectRequest.effect:type_name -> helm.kernel.v1.Effect
+	18, // 20: helm.kernel.v1.EffectRequest.context:type_name -> helm.kernel.v1.EffectRequest.ContextEntry
+	0,  // 21: helm.kernel.v1.EffectResponse.verdict:type_name -> helm.kernel.v1.Verdict
+	1,  // 22: helm.kernel.v1.EffectResponse.reason_code:type_name -> helm.kernel.v1.ReasonCode
+	7,  // 23: helm.kernel.v1.EffectResponse.receipt:type_name -> helm.kernel.v1.Receipt
+	6,  // 24: helm.kernel.v1.EffectResponse.intent:type_name -> helm.kernel.v1.AuthorizedExecutionIntent
+	19, // 25: helm.kernel.v1.ExecutionResult.completed_at:type_name -> google.protobuf.Timestamp
+	7,  // 26: helm.kernel.v1.CompletionReceipt.receipt:type_name -> helm.kernel.v1.Receipt
+	8,  // 27: helm.kernel.v1.PolicyDecisionPointService.Evaluate:input_type -> helm.kernel.v1.PDPRequest
+	13, // 28: helm.kernel.v1.EffectBoundaryService.Submit:input_type -> helm.kernel.v1.EffectRequest
+	15, // 29: helm.kernel.v1.EffectBoundaryService.Complete:input_type -> helm.kernel.v1.ExecutionResult
+	11, // 30: helm.kernel.v1.PolicyDecisionPointService.Evaluate:output_type -> helm.kernel.v1.PDPResponse
+	14, // 31: helm.kernel.v1.EffectBoundaryService.Submit:output_type -> helm.kernel.v1.EffectResponse
+	16, // 32: helm.kernel.v1.EffectBoundaryService.Complete:output_type -> helm.kernel.v1.CompletionReceipt
+	30, // [30:33] is the sub-list for method output_type
+	27, // [27:30] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_helm_kernel_v1_helm_proto_init() }
@@ -1584,7 +1829,7 @@ func file_helm_kernel_v1_helm_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_helm_kernel_v1_helm_proto_rawDesc), len(file_helm_kernel_v1_helm_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

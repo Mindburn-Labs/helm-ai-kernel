@@ -35,9 +35,10 @@ helm-ai-kernel setup claude-code --dry-run --json
 The JSON summary includes the binary path, client config path, hook config path,
 data dir, Kernel URL, draft policy path, and uninstall command.
 
-## Verify A Denial
+## Verify a Hook Decision
 
-Denied hook decisions write signed receipts under:
+Every classified PreToolUse decision, whether allowed or denied, writes a
+signed receipt under:
 
 ```text
 ~/.helm-ai-kernel/receipts/hooks/
@@ -83,7 +84,8 @@ HELM denied <class>: <KERNEL_REASON_CODE> (receipt: <path>) [INBOX_KERNEL_POLICY
   boundary. Payloads without a session ID are not tracked, so unrelated
   sessionless invocations can never false-trip each other.
 - Fail-closed infrastructure denials carry their own codes:
-  `[INBOX_SIGNER_UNAVAILABLE]`, `[INBOX_RECEIPT_PERSISTENCE_UNAVAILABLE]`.
+  `[INBOX_SIGNER_UNAVAILABLE]`, `[INBOX_POLICY_PROFILE_UNAVAILABLE]`,
+  `[INBOX_RECEIPT_PERSISTENCE_UNAVAILABLE]`.
 
 ## MCP Configuration
 

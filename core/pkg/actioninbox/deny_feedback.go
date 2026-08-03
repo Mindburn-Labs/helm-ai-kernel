@@ -27,6 +27,9 @@ const (
 	// ReasonSignerUnavailable marks a fail-closed denial emitted when the
 	// local receipt signer cannot be loaded.
 	ReasonSignerUnavailable = "INBOX_SIGNER_UNAVAILABLE"
+	// ReasonPolicyProfileUnavailable marks a fail-closed denial emitted when
+	// the selected workstation policy profile cannot be loaded or verified.
+	ReasonPolicyProfileUnavailable = "INBOX_POLICY_PROFILE_UNAVAILABLE"
 	// ReasonReceiptPersistence marks a fail-closed denial emitted when the
 	// decision receipt cannot be persisted.
 	ReasonReceiptPersistence = "INBOX_RECEIPT_PERSISTENCE_UNAVAILABLE"

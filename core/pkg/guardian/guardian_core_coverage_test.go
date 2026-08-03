@@ -59,6 +59,25 @@ func (s *guardianCoverageSnapshotStore) Swap(scope policyreconcile.PolicyScope, 
 	return nil
 }
 
+func (s *guardianCoverageSnapshotStore) Invalidate(scope policyreconcile.PolicyScope, reason string) (*policyreconcile.EffectivePolicySnapshot, bool) {
+	if s.snapshots == nil {
+		return nil, false
+	}
+	key := scope.Normalize().Key()
+	snapshot, ok := s.snapshots[key]
+	if !ok || snapshot == nil {
+		return nil, false
+	}
+	invalidated := *snapshot
+	invalidated.Validation.Status = policyreconcile.StatusInvalid
+	invalidated.Validation.Reason = strings.TrimSpace(reason)
+	invalidated.Graph = nil
+	invalidated.PDP = nil
+	invalidated.PolicyLayers = nil
+	s.snapshots[key] = &invalidated
+	return &invalidated, true
+}
+
 type guardianCoverageSignOnly struct {
 	failIntent bool
 }

@@ -284,6 +284,9 @@ func (failingStore) Get(PolicyScope) (*EffectivePolicySnapshot, bool) { return n
 func (failingStore) Swap(PolicyScope, *EffectivePolicySnapshot) error {
 	return errors.New("swap failed")
 }
+func (failingStore) Invalidate(PolicyScope, string) (*EffectivePolicySnapshot, bool) {
+	return nil, false
+}
 
 func TestScopeAndHelperBranches(t *testing.T) {
 	if DefaultScope != (*EffectivePolicySnapshot)(nil).Scope() {

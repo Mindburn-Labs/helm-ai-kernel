@@ -212,6 +212,13 @@ type ServiceConfig struct {
 	SigningKeyRef        string
 }
 
+// maxChallengeLifetimeSetter lets a durable store commit the same deadline
+// that Service uses to prevent a never-challenged hold from remaining live.
+// It is package-private so Store remains a narrow persistence seam.
+type maxChallengeLifetimeSetter interface {
+	setMaxChallengeLifetime(time.Duration)
+}
+
 // Service is the only authority-bearing API in this package. It sources the
 // binding, authority snapshot, and identities server-side before transitions.
 type Service struct {
@@ -240,6 +247,9 @@ func newService(store Store, bindings BindingProvider, authority AuthorityProvid
 	}
 	if config.ChallengeTTL > config.MaxChallengeLifetime-config.MinHoldDuration || !validToken(config.ServerIdentity) || !validToken(config.KernelTrustRootID) || !validToken(config.SigningKeyRef) {
 		return nil, errors.New("generated spec approval ceremony authority configuration is invalid")
+	}
+	if configured, ok := store.(maxChallengeLifetimeSetter); ok {
+		configured.setMaxChallengeLifetime(config.MaxChallengeLifetime)
 	}
 	return &Service{store: store, bindings: bindings, authority: authority, control: control, consumer: consumer, signer: signer, verifier: verifier, clock: clock, random: random, config: config}, nil
 }

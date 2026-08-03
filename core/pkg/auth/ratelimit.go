@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 )
 
@@ -39,7 +39,7 @@ func RateLimitMiddleware(store kernel.LimiterStore, policy kernel.BackpressurePo
 				if retryAfter < 1 {
 					retryAfter = 1
 				}
-				api.WriteTooManyRequests(w, retryAfter)
+				httperr.WriteTooManyRequests(w, retryAfter)
 				return
 			}
 

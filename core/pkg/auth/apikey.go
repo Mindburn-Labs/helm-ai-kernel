@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 )
 
 const (
@@ -41,7 +41,7 @@ func AdminAPIKeyMiddleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			principal, detail, ok := AdminPrincipalFromRequest(r, adminKey)
 			if !ok {
-				api.WriteUnauthorized(w, detail)
+				httperr.WriteUnauthorized(w, detail)
 				return
 			}
 			ctx := WithPrincipal(r.Context(), principal)

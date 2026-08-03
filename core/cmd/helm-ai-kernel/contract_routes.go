@@ -29,6 +29,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
@@ -1380,7 +1381,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		principal, err := helmauth.GetPrincipal(r.Context())
 		if err != nil || principal == nil || strings.TrimSpace(principal.GetID()) == "" {
-			api.WriteUnauthorized(w, "Authenticated principal is required for approval transition")
+			httperr.WriteUnauthorized(w, "Authenticated principal is required for approval transition")
 			return
 		}
 		approval, err := surfaces.TransitionApprovalIfCurrent(approvalID, state, principal.GetID(), req.ReceiptID, req.Reason, req.ExpectedCeremonyHash)

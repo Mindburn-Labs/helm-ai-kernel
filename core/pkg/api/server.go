@@ -29,6 +29,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
@@ -654,18 +655,18 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) requireAuthenticated(w http.ResponseWriter, r *http.Request) (AuthenticatedPrincipal, bool) {
 	if s.authenticator == nil {
-		WriteUnauthorized(w, "Authentication not configured")
+		httperr.WriteUnauthorized(w, "Authentication not configured")
 		return AuthenticatedPrincipal{}, false
 	}
 	principal, err := s.authenticator(r)
 	if err != nil {
-		WriteUnauthorized(w, err.Error())
+		httperr.WriteUnauthorized(w, err.Error())
 		return AuthenticatedPrincipal{}, false
 	}
 	principal.ID = strings.TrimSpace(principal.ID)
 	principal.TenantID = strings.TrimSpace(principal.TenantID)
 	if principal.ID == "" || principal.TenantID == "" {
-		WriteUnauthorized(w, "Authenticated principal and tenant are required")
+		httperr.WriteUnauthorized(w, "Authenticated principal and tenant are required")
 		return AuthenticatedPrincipal{}, false
 	}
 	return principal, true

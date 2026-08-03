@@ -17,6 +17,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
@@ -486,7 +487,7 @@ func writeApprovalConsumerUnauthorized(w http.ResponseWriter, detail string) {
 
 func writeApprovalWorkloadUnauthorized(w http.ResponseWriter, realm, detail string) {
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, realm))
-	api.WriteUnauthorized(w, detail)
+	httperr.WriteUnauthorized(w, detail)
 }
 
 func validSHA256Reference(value string) bool {

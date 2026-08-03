@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/a2a"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
@@ -41,23 +43,23 @@ type mcpRPCError struct {
 	Message string `json:"message"`
 }
 
-func newLocalMCPRuntime() (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntime() (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	return newLocalMCPRuntimeWithDataDir("data")
 }
 
-func newLocalMCPRuntimeWithDataDir(dataDir string) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithDataDir(dataDir string) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	return newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, nil)
 }
 
-func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, mcppkg.GovernedExecutor{}, err
 	}
 	return newLocalMCPRuntimeWithSignerAndPolicy(signer, policyGraph)
 }
 
-func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	return newLocalMCPRuntimeWithSignerAndPolicy(signer, nil)
 }
 
@@ -66,20 +68,31 @@ func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog
 // fail-closed default: the catalog stays discoverable but every execution is
 // denied, because an empty graph carries no allow rule. Pass a compiled graph
 // (see `mcp serve --policy`) to authorize the actions it declares.
-func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.ToolExecutor, error) {
+func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if signer == nil {
-		return nil, nil, fmt.Errorf("mcp signer is required")
+		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp signer is required")
 	}
 	if policyGraph == nil {
 		policyGraph = prg.NewGraph()
 	}
+	return newLocalMCPRuntimeWithEvaluator(guardian.NewGuardian(signer, policyGraph, nil))
+}
+
+// newLocalMCPRuntimeWithEvaluator builds the local MCP runtime whose governance
+// decisions come from evaluator. Wiring the kernel's snapshot-bound Guardian
+// lets the deployed gateway enforce the currently reconciled policy authority
+// (including reference-pack runtime_actions) instead of a static boot-time
+// graph that never sees reconciler updates.
+func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
+	if evaluator == nil {
+		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp policy evaluator is required")
+	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
 	catalog.RegisterGovernanceTools()
-	guard := guardian.NewGuardian(signer, policyGraph, nil)
-	firewall := mcppkg.NewGovernanceFirewall(guard, catalog)
+	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog)
 
-	return catalog, mcppkg.ToolExecutor(firewall.WrapToolHandler(runLocalMCPTool)), nil
+	return catalog, firewall.GovernedExecutor(localMCPToolHandler(evaluator)), nil
 }
 
 func newLocalMCPGateway() (*mcppkg.Gateway, error) {
@@ -92,7 +105,7 @@ func newConfiguredLocalMCPGateway(cfg mcppkg.GatewayConfig) (*mcppkg.Gateway, er
 		return nil, err
 	}
 
-	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithGovernedExecutor(executor)), nil
 }
 
 func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer helmcrypto.Signer) (*mcppkg.Gateway, error) {
@@ -101,11 +114,105 @@ func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer hel
 		return nil, err
 	}
 
-	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithExecutor(executor)), nil
+	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithGovernedExecutor(executor)), nil
 }
 
-func runLocalMCPTool(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+// newLocalMCPGatewayWithEvaluator builds the MCP gateway on an existing
+// governance evaluator (typically the kernel Guardian bound to the reconciled
+// policy snapshot store).
+func newLocalMCPGatewayWithEvaluator(cfg mcppkg.GatewayConfig, evaluator mcppkg.PolicyEvaluator) (*mcppkg.Gateway, error) {
+	catalog, executor, err := newLocalMCPRuntimeWithEvaluator(evaluator)
+	if err != nil {
+		return nil, err
+	}
+
+	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithGovernedExecutor(executor)), nil
+}
+
+// receiptPersistingEvaluator persists a signed, queryable receipt for every
+// governed MCP gateway decision — ALLOW and DENY — into the kernel receipt
+// store that /api/v1/receipts reads. Persistence is fail-closed: a decision
+// that cannot be receipted surfaces as a governance error and blocks the
+// call, matching the /api/v1/evaluate route and the transparency-anchor
+// posture.
+type receiptPersistingEvaluator struct {
+	svc   *Services
+	inner mcppkg.PolicyEvaluator
+}
+
+func (e *receiptPersistingEvaluator) EvaluateDecision(ctx context.Context, req guardian.DecisionRequest) (*contracts.DecisionRecord, error) {
+	decision, err := e.inner.EvaluateDecision(ctx, req)
+	if err != nil || decision == nil {
+		return decision, err
+	}
+	body, err := canonicalize.JCS(req)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize gateway decision request: %w", err)
+	}
+	if err := persistDecisionReceipt(ctx, e.svc, decision, req.Principal, body, map[string]any{
+		"source":   "mcp.gateway",
+		"action":   req.Action,
+		"resource": req.Resource,
+		"reason":   decision.Reason,
+	}); err != nil {
+		return nil, fmt.Errorf("persist gateway decision receipt: %w", err)
+	}
+	return decision, nil
+}
+
+func localMCPToolHandler(evaluator mcppkg.PolicyEvaluator) mcppkg.ToolHandler {
+	return func(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+		return runLocalMCPTool(ctx, evaluator, req)
+	}
+}
+
+func runLocalMCPTool(ctx context.Context, evaluator mcppkg.PolicyEvaluator, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
 	switch req.ToolName {
+	case "helm.verify":
+		decision, err := evaluator.EvaluateDecision(ctx, guardian.DecisionRequest{
+			Principal: stringArgument(req.Arguments, "principal"),
+			Action:    stringArgument(req.Arguments, "action"),
+			Resource:  stringArgument(req.Arguments, "resource"),
+			Context: map[string]any{
+				"args_hash": stringArgument(req.Arguments, "args_hash"),
+			},
+		})
+		if err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("evaluate governance action: %w", err)
+		}
+		if decision == nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("evaluate governance action: empty decision")
+		}
+		return structuredLocalMCPResponse(map[string]any{
+			"verdict":         decision.Verdict,
+			"receipt_id":      decision.ID,
+			"reason_code":     decision.ReasonCode,
+			"proofgraph_node": decision.RequirementSetHash,
+		})
+
+	case "helm.evaluate":
+		envelopeJSON, err := json.Marshal(req.Arguments["envelope"])
+		if err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("encode A2A envelope: %w", err)
+		}
+		var envelope a2a.Envelope
+		if err := json.Unmarshal(envelopeJSON, &envelope); err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("decode A2A envelope: %w", err)
+		}
+		featuresJSON, err := json.Marshal(req.Arguments["local_features"])
+		if err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("encode local A2A features: %w", err)
+		}
+		var localFeatures []a2a.Feature
+		if err := json.Unmarshal(featuresJSON, &localFeatures); err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("decode local A2A features: %w", err)
+		}
+		result, err := a2a.NewDefaultVerifier().Negotiate(ctx, &envelope, localFeatures)
+		if err != nil {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("evaluate A2A envelope: %w", err)
+		}
+		return structuredLocalMCPResponse(result)
+
 	case "file_read":
 		path, _ := req.Arguments["path"].(string)
 		resolvedPath, err := resolveLocalMCPPath(path)
@@ -198,6 +305,27 @@ func runLocalMCPTool(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcpp
 	}
 }
 
+func stringArgument(arguments map[string]any, name string) string {
+	value, _ := arguments[name].(string)
+	return value
+}
+
+func structuredLocalMCPResponse(value any) (mcppkg.ToolExecutionResponse, error) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		return mcppkg.ToolExecutionResponse{}, fmt.Errorf("encode MCP tool result: %w", err)
+	}
+	var structured map[string]any
+	if err := json.Unmarshal(body, &structured); err != nil {
+		return mcppkg.ToolExecutionResponse{}, fmt.Errorf("normalize MCP tool result: %w", err)
+	}
+	return mcppkg.ToolExecutionResponse{
+		Content:           string(body),
+		ContentItems:      mcppkg.StructuredTextContent(structured, string(body)),
+		StructuredContent: structured,
+	}, nil
+}
+
 func resolveLocalMCPPath(rawPath string) (string, error) {
 	if strings.TrimSpace(rawPath) == "" {
 		return "", fmt.Errorf("path is required")
@@ -239,7 +367,7 @@ func serveLocalMCPStdioWithDataDirAndPolicy(stdin io.Reader, stdout io.Writer, d
 			return err
 		}
 
-		resp, err := handleMCPRPCRequest(req, catalog, executor)
+		resp, err := handleMCPRPCRequest(req, catalog, executor.Execute)
 		if err != nil {
 			return err
 		}
@@ -447,7 +575,7 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 	gateway := mcppkg.NewGateway(catalog, mcppkg.GatewayConfig{
 		BaseURL:  baseURL,
 		AuthMode: authMode,
-	}, mcppkg.WithExecutor(executor))
+	}, mcppkg.WithGovernedExecutor(executor))
 
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)

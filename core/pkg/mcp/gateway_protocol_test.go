@@ -230,6 +230,137 @@ func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "ok")
 }
 
+func TestGateway_AnonymousRawExecutorCannotReachScopedTool(t *testing.T) {
+	called := false
+	exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		called = true
+		return ToolExecutionResponse{Content: "ok"}, nil
+	}
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Description:    "requires an OAuth scope when OAuth is the auth channel",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	gw := NewGateway(catalog, GatewayConfig{}, WithExecutor(exec))
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      22,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "scoped_tool"},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "requires OAuth scopes")
+	assert.False(t, called)
+}
+
+// HELM-364: anonymous local mode has no scope-bearing identity, so an explicit
+// GovernanceFirewall boundary is required for scoped execution.
+func TestGateway_AnonymousGovernedExecutorReachesScopedTool(t *testing.T) {
+	handler := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		assert.Equal(t, "scoped_tool", req.ToolName)
+		return ToolExecutionResponse{Content: "ok", Evaluated: true}, nil
+	}
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	firewall := NewGovernanceFirewall(&mockEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	gw := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(handler)))
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      23,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "scoped_tool"},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "ok")
+}
+
+func TestGateway_RawExecutorReplacementClearsGovernedScopeExemption(t *testing.T) {
+	called := false
+	handler := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{Content: "governed"}, nil
+	}
+	raw := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		called = true
+		return ToolExecutionResponse{Content: "unsafe"}, nil
+	}
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	firewall := NewGovernanceFirewall(&mockEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	gw := NewGateway(
+		catalog,
+		GatewayConfig{},
+		WithGovernedExecutor(firewall.GovernedExecutor(handler)),
+		WithExecutor(raw),
+	)
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      24,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "scoped_tool"},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "requires OAuth scopes")
+	assert.False(t, called)
+}
+
+func TestGateway_StaticHeaderDoesNotGrantRequiredOAuthScopes(t *testing.T) {
+	called := false
+	exec := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		called = true
+		return ToolExecutionResponse{Content: "unsafe"}, nil
+	}
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:           "scoped_tool",
+		Schema:         map[string]any{"type": "object"},
+		RequiredScopes: []string{"mcp:tool:scoped"},
+	}))
+	gw := NewGateway(catalog, GatewayConfig{AuthMode: "static-header"}, WithExecutor(exec))
+	mux := http.NewServeMux()
+	gw.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      23,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "scoped_tool"},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "requires OAuth scopes")
+	assert.False(t, called)
+
+	require.True(t, gw.hasRequiredScopes(context.Background(), ToolRef{}))
+}
+
+func TestGateway_UnknownAuthModeFailsClosedForScopedTool(t *testing.T) {
+	gw := NewGateway(NewInMemoryCatalog(), GatewayConfig{AuthMode: "oath"})
+	tool := ToolRef{RequiredScopes: []string{"mcp:tool:scoped"}}
+	require.False(t, gw.hasRequiredScopes(context.Background(), tool))
+}
+
 func TestGateway_UnsupportedProtocolVersionRejected(t *testing.T) {
 	mux := newProtocolTestMux(t, GatewayConfig{}, nil)
 
@@ -293,7 +424,7 @@ func newScopedProtocolTestMux(t *testing.T, exec ToolExecutor) *http.ServeMux {
 		RequiredScopes: []string{"mcp:tool:scoped"},
 	}))
 
-	gw := NewGateway(catalog, GatewayConfig{})
+	gw := NewGateway(catalog, GatewayConfig{AuthMode: "oauth"})
 	if exec != nil {
 		WithExecutor(exec)(gw)
 	}
@@ -458,7 +589,7 @@ func TestGateway_JSONRPCAndSchemaFallbackEdges(t *testing.T) {
 		Schema:         map[string]any{"type": "object"},
 		RequiredScopes: []string{"mcp:tool:scoped"},
 	}))
-	execGateway := NewGateway(catalog, GatewayConfig{}, WithExecutor(func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+	execGateway := NewGateway(catalog, GatewayConfig{AuthMode: "oauth"}, WithExecutor(func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
 		assert.Equal(t, []string{"mcp:tool:scoped"}, req.RequiredScopes)
 		assert.Equal(t, []string{"mcp:tool:scoped"}, req.OAuthScopes)
 		assert.Equal(t, []string{"https://resource.example/mcp"}, req.OAuthResources)

@@ -235,19 +235,11 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	mux.Handle("/api/v1/trust/keys/revoke", auth.RequireAdminAuth(trustKeys.HandleRevokeKey))
 
 	// --- MCP Gateway ---
-	var (
-		mcpGateway *mcppkg.Gateway
-		err        error
-	)
-	if svc.ReceiptSigner != nil {
-		mcpGateway, err = newConfiguredLocalMCPGatewayWithSigner(mcppkg.GatewayConfig{}, svc.ReceiptSigner)
-	} else {
-		mcpGateway, err = newLocalMCPGateway()
-	}
+	mcpGateway, err := newDeployedMCPGateway(svc)
 	if err != nil {
 		log.Printf("[helm] routes: MCP gateway unavailable: %v", err)
 	} else {
-		mcpGateway.RegisterRoutes(mux)
+		registerDeployedMCPRoutes(mux, mcpGateway)
 		log.Println("[helm] routes: MCP gateway routes registered")
 	}
 
@@ -338,6 +330,35 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	_ = ctx
 
 	log.Println("[helm] routes: All subsystem routes registered")
+}
+
+func newDeployedMCPGateway(svc *Services) (*mcppkg.Gateway, error) {
+	switch {
+	case svc.Guardian != nil && svc.ReceiptStore == nil:
+		return nil, errors.New("governed MCP gateway requires a receipt store")
+	case svc.Guardian != nil && svc.ReceiptSigner == nil:
+		return nil, errors.New("governed MCP gateway requires a receipt signer")
+	case svc.Guardian != nil:
+		// Bind the reconciled policy authority and receipt every decision.
+		evaluator := &receiptPersistingEvaluator{svc: svc, inner: svc.Guardian}
+		return newLocalMCPGatewayWithEvaluator(mcppkg.GatewayConfig{}, evaluator)
+	case svc.ReceiptSigner != nil:
+		return newConfiguredLocalMCPGatewayWithSigner(mcppkg.GatewayConfig{}, svc.ReceiptSigner)
+	default:
+		return newLocalMCPGateway()
+	}
+}
+
+func registerDeployedMCPRoutes(mux *http.ServeMux, gateway *mcppkg.Gateway) {
+	gatewayMux := http.NewServeMux()
+	gateway.RegisterRoutes(gatewayMux)
+	protected := protectRuntimeHandler(RouteAuthAdmin, gatewayMux.ServeHTTP)
+	for _, route := range []string{"/mcp", "/mcp/v1/capabilities", "/mcp/v1/execute"} {
+		mux.HandleFunc(route, protected)
+	}
+	for _, route := range []string{"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
+		mux.Handle(route, gatewayMux)
+	}
 }
 
 func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Services) {

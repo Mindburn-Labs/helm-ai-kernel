@@ -30,21 +30,44 @@ func supportMatrix() cliSupportMatrix {
 
 func printFrontDoor(out io.Writer) {
 	fmt.Fprintf(out, "%s %s (%s)\n\n", terminalTitle(out, "HELM AI Kernel"), displayVersion(), displayCommit())
-	fmt.Fprintln(out, "Start:")
-	fmt.Fprintln(out, "  helm-ai-kernel quickstart")
-	fmt.Fprintln(out, "  helm-ai-kernel setup claude-code --yes")
-	fmt.Fprintln(out, "  helm-ai-kernel setup codex --yes")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Inspect:")
-	fmt.Fprintln(out, "  helm-ai-kernel scan --path . --preview out.md")
-	fmt.Fprintln(out, "  helm-ai-kernel receipts tail --agent <id>")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "Operate:")
-	fmt.Fprintln(out, "  helm-ai-kernel mcp authorize-call --server-id <id> --tool-name <tool>")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "More:")
-	fmt.Fprintln(out, "  helm-ai-kernel help --all")
-	fmt.Fprintln(out, "  helm-ai-kernel help --json")
+	renderer := ui.NewRenderer(out, frontDoorCapabilities(out))
+	renderer.WriteTimeline("Your first governed-agent run", []ui.Step{
+		{
+			Status: ui.StatusWait,
+			Title:  "Launch local Kernel and browser Console",
+			Detail: "helm-ai-kernel quickstart --console (requires a Console-including package; it stays loopback-only).",
+		},
+		{
+			Status: ui.StatusWait,
+			Title:  "Connect the coding agent you use",
+			Detail: "helm-ai-kernel setup codex or helm-ai-kernel setup claude-code. Interactive terminals show the scoped change before confirmation.",
+		},
+		{
+			Status: ui.StatusWait,
+			Title:  "Review live decisions when they need you",
+			Detail: "helm-ai-kernel watch. Approve or deny only after the complete server-derived ceremony is shown.",
+		},
+	})
+	renderer.WriteCompletion(ui.CompletionCard{
+		Title: "Useful next commands",
+		Fields: []ui.KeyValue{
+			{Key: "Inspect", Value: "helm-ai-kernel scan --path . --preview out.md"},
+			{Key: "Receipts", Value: "helm-ai-kernel receipts tail --agent <id>"},
+			{Key: "Automation", Value: "helm-ai-kernel help --json"},
+		},
+		NextAction: "Run helm-ai-kernel help --all for every command.",
+	})
+}
+
+func frontDoorCapabilities(out io.Writer) ui.Capabilities {
+	file, ok := out.(*os.File)
+	if !ok {
+		return ui.Capabilities{Width: ui.DefaultTerminalWidth}
+	}
+	return ui.DetectCapabilities(os.Stdin, file, ui.TerminalOptions{
+		Format: ui.FormatText,
+		Color:  ui.ColorAuto,
+	})
 }
 
 func printSupportMatrix(out io.Writer) {

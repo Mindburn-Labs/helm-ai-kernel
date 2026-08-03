@@ -50,9 +50,9 @@ func TestRun_Help(t *testing.T) {
 	exitCode := Run(args, &stdout, &stderr)
 
 	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout.String(), "Start:")
-	assert.Contains(t, stdout.String(), "Inspect:")
-	assert.Contains(t, stdout.String(), "Operate:")
+	assert.Contains(t, stdout.String(), "Your first governed-agent run")
+	assert.Contains(t, stdout.String(), "Launch local Kernel and browser Console")
+	assert.Contains(t, stdout.String(), "Review live decisions when they need you")
 	assert.Contains(t, stdout.String(), "helm-ai-kernel help --all")
 }
 
@@ -61,10 +61,12 @@ func TestRunNoArgsPrintsFrontDoor(t *testing.T) {
 	exitCode := Run([]string{"helm"}, &stdout, &stderr)
 
 	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout.String(), "helm-ai-kernel quickstart")
-	assert.Contains(t, stdout.String(), "helm-ai-kernel setup claude-code --yes")
-	assert.Contains(t, stdout.String(), "helm-ai-kernel mcp authorize-call")
-	assert.NotContains(t, stdout.String(), "watch")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel quickstart --console")
+	assert.Contains(t, stdout.String(), "requires a Console-including package")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel setup claude-code")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel setup codex")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel watch")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel help --json")
 	assert.Empty(t, stderr.String())
 }
 

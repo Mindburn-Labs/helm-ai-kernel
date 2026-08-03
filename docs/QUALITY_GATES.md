@@ -39,7 +39,7 @@ make quality-impact
 | --- | --- | --- |
 | PR | `make quality-pr` | Fast documentation, hygiene, Go, TCB, boundary, fixture, and impacted SDK/UI checks. |
 | Merge | `make quality-merge` | Full retained-surface gate with race tests, SDKs, contracts, deployment smoke, and release smoke. |
-| Release | `make quality-release` | Release-readiness gate plus reproducible binaries, SBOM, VEX, Cosign bundle verification when available, and release smoke. |
+| Release | `make quality-release` | Release-readiness gate plus prior-release OpenAPI and Proto compatibility checks, reproducible binaries, SBOM, VEX, Cosign bundle verification when available, and release smoke. |
 | Nightly | `make quality-nightly` | Advisory mutation, flake, vulnerability, runbook, migration, dependency hygiene, schema, and benchmark checks. |
 
 `make quality-pr` runs path-scoped package gates only when changed files impact

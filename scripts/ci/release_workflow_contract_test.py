@@ -45,6 +45,14 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("needs: release-preflight", self.job("validate"))
         self.assertIn("release-preflight", self.job("github-release"))
 
+    def test_release_validation_has_the_prior_release_contract_toolchain(self) -> None:
+        validate = self.job("validate")
+        self.assertIn("fetch-depth: 0", validate)
+        self.assertIn("Install oasdiff (prior-release contract breaking-change gate)", validate)
+        self.assertIn("sha256sum --check --strict", validate)
+        self.assertIn("make quality-release", validate)
+        self.assertNotIn("Fetch main ref for proto compatibility checks", validate)
+
     def test_release_never_creates_a_catalog_pr_or_bypasses_tap_policy(self) -> None:
         self.assertNotIn("downstream-fanout:", self.workflow)
         homebrew = self.job("homebrew")

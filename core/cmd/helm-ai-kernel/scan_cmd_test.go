@@ -161,8 +161,42 @@ func TestScanCommandDoesNotExportOnIncompleteCoverage(t *testing.T) {
 	}
 }
 
+func TestScanCommandCanExcludeUserConfig(t *testing.T) {
+	root := scanFixtureRoot(t)
+	home := os.Getenv("HOME")
+	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte("{not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "scan",
+		"--path", root,
+		"--salt-file", filepath.Join(out, "salt.hex"),
+	}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "coverage could not be completed") {
+		t.Fatalf("default user-config scan code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{
+		"helm-ai-kernel", "scan",
+		"--path", root,
+		"--salt-file", filepath.Join(out, "salt.hex"),
+		"--no-user-config",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("no-user-config scan code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
 func scanFixtureRoot(t *testing.T) string {
 	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "agent.py"), []byte("import anthropic\nOPENAI_API_KEY='sk-12345678901234567890123456789012'\n"), 0o644); err != nil {
 		t.Fatalf("write agent: %v", err)

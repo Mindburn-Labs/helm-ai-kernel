@@ -90,10 +90,13 @@ helm-ai-kernel workstation enforce \
 
 `decide` emits a signed policy decision receipt. `enforce` emits the same receipt and exits with code `126` on `DENY`, which makes it usable from shell hooks or wrapper scripts. The bridge covers selected shell, network, MCP, file, memory, and recurring-loop classes; it is not a kernel driver, browser controller, or complete OS sandbox.
 
-The v0.7 shell guard is intentionally narrow. It recognizes only a small set
-of literal destructive command forms and does not interpret shell expansion,
-aliases, `eval`, wrappers, or every destructive tool. Treat it as a
-selected-effect guardrail, not a claim of comprehensive shell enforcement.
+The shell guard parses shell syntax before classifying selected destructive
+forms, including chained and wrapped commands. It routes recognized force-push,
+database-drop, Terraform-destroy, and S3-removal forms through the signed
+decision path. Where a selected destructive invocation cannot be resolved
+statically, it also routes to a decision rather than silently allowing it.
+This remains a selected-effect guardrail, not a complete OS sandbox or a claim
+to recognize every destructive tool, alias, or `eval` payload.
 
 ## Operator workflow
 

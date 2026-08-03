@@ -1,6 +1,6 @@
 ---
 title: Agent Risk Scan
-last_reviewed: 2026-06-30
+last_reviewed: 2026-08-03
 ---
 
 # Agent Risk Scan
@@ -39,6 +39,7 @@ After running `scan`, you can show:
 | Explicit upload | `--upload --upload-url <url> --yes` |
 | Receipt projection | `--from-receipts <dir>` |
 | Local salt | `--salt-file <path>` |
+| Exclude user config | `--no-user-config` |
 | Content hash | `envelope_content_hash` |
 
 ## Static Scan
@@ -56,13 +57,36 @@ helm-ai-kernel scan \
   --evidence-pack out/risk-scan-pack.tar
 ```
 
-The scanner reads these local config shapes when present:
+For a static scan, the scanner reads recognized config shapes from the declared
+`--path` tree:
 
 - `.mcp.json`
 - `mcp.json`
+- `.claude.json`
 - `claude_desktop_config.json`
 - `.claude/settings*.json`
 - `.codex/config.toml`
+
+It also reads this bounded set of user-level candidates by default, rather than
+walking the home directory:
+
+- `~/.claude.json`
+- `~/.claude/settings.json` and `~/.claude/settings.local.json`
+- `~/.codex/config.toml`
+- `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS
+  or `~/.config/Claude/claude_desktop_config.json` on Linux
+- `.mcp.json` from an enabled Claude plugin selected through its local installed
+  plugin inventory; when more than one installation is present, the latest
+  RFC3339 timestamp wins
+
+Project settings take precedence over a user setting when determining the
+reported permission mode. Use `--no-user-config` to exclude only the bounded
+user-level candidates; it does not skip configuration below `--path`. The flag
+has no effect in `--from-receipts` mode.
+
+Missing optional user config is normal. A discovered recognized config file
+that cannot be read or parsed stops the static scan without exporting an
+artifact, so a partial configuration observation is not presented as complete.
 
 It also uses the local shadow scanner findings to project risk codes such as
 `MCP_WRITE_SCOPE_WITHOUT_APPROVAL`, `SECRET_CLASS_AGENT_READABLE`,
@@ -135,6 +159,7 @@ is implied by this command; operators must provide the explicit upload URL.
 | deterministic evidence pack tar contents | `core/pkg/riskscan/scan_test.go` |
 | upload sends the exact printed envelope body | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
 | `--upload-url` and `--yes` gates | `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
+| user config opt-in, project-over-user precedence, and CLI opt-out | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
 | receipt-derived risk mapping and raw receipt leakage checks | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
 
 Run the focused test set:

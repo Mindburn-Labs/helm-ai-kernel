@@ -30,9 +30,9 @@ MANIFEST_NAME = "helm-console-local-sidecar-release-manifest.json"
 MANIFEST_BUNDLE_NAME = f"{MANIFEST_NAME}.cosign.bundle"
 KERNEL_MANIFEST_BUNDLE_NAME = f"{MANIFEST_NAME}.kernel.cosign.bundle"
 COSIGN_ISSUER = "https://token.actions.githubusercontent.com"
-COSIGN_IDENTITY = (
+COSIGN_IDENTITY_PREFIX = (
     "https://github.com/Mindburn-Labs/app-helm-console/"
-    ".github/workflows/release-local-sidecar.yml@refs/heads/main"
+    ".github/workflows/release-local-sidecar.yml@"
 )
 TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64")
 KERNEL_BINARY_NAMES = {target: f"helm-ai-kernel-{target}" for target in TARGETS}
@@ -100,6 +100,10 @@ def require_immutable_workflow_ref(value: Any, label: str) -> str:
     if not isinstance(value, str) or not IMMUTABLE_WORKFLOW_REF.fullmatch(value):
         reject(f"{label} must be an immutable refs/tags/... reference")
     return value
+
+
+def console_cosign_identity(workflow_ref: str) -> str:
+    return COSIGN_IDENTITY_PREFIX + require_immutable_workflow_ref(workflow_ref, "Console workflow ref")
 
 
 def require_nonempty_string(value: Any, label: str) -> str:
@@ -561,7 +565,8 @@ def resolve_pin(pins_path: Path, kernel_release: str) -> dict[str, Any]:
     }
 
 
-def verify_cosign(manifest: Path, bundle: Path) -> None:
+def verify_cosign(manifest: Path, bundle: Path, workflow_ref: str) -> None:
+    identity = console_cosign_identity(workflow_ref)
     try:
         subprocess.run(
             [
@@ -570,7 +575,7 @@ def verify_cosign(manifest: Path, bundle: Path) -> None:
                 "--bundle",
                 str(bundle),
                 "--certificate-identity",
-                COSIGN_IDENTITY,
+                identity,
                 "--certificate-oidc-issuer",
                 COSIGN_ISSUER,
                 str(manifest),
@@ -622,6 +627,7 @@ def verify_release(
     expected_manifest_sha256: str | None = None,
 ) -> list[Path]:
     pin = resolve_pin(pins_path, kernel_release)
+    expected_identity = console_cosign_identity(pin["workflow_ref"])
     manifest = locate_unique(root, MANIFEST_NAME, "Console aggregate release manifest")
     bundle = locate_unique(root, MANIFEST_BUNDLE_NAME, "Console aggregate manifest cosign bundle")
     manifest_sha256 = sha256_path(manifest)
@@ -651,11 +657,11 @@ def verify_release(
         "signed_file": MANIFEST_NAME,
         "bundle": MANIFEST_BUNDLE_NAME,
         "issuer": COSIGN_ISSUER,
-        "certificate_identity": COSIGN_IDENTITY,
+        "certificate_identity": expected_identity,
     }:
         reject("Console aggregate release manifest has an unexpected outer signature contract")
     if require_cosign:
-        verify_cosign(manifest, bundle)
+        verify_cosign(manifest, bundle, pin["workflow_ref"])
 
     if not isinstance(payload["targets"], list):
         reject("Console aggregate release manifest targets must be a list")

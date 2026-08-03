@@ -34,6 +34,7 @@ RELEASE_SOURCE_PIN = {
     "package_lock_sha256": "1028990307789189333657942de79d11e6889ef47dc539f77e0a9c94c26a2076",
 }
 RELEASE_WORKFLOW_REF = "refs/tags/helm-console-sidecar-v0.8.0"
+TEST_WORKFLOW_REF = "refs/tags/test-console-source"
 
 
 def digest(data: bytes) -> str:
@@ -168,7 +169,7 @@ def build_release(root: Path, *, target_mutators: dict[str, dict[str, object]] |
             "signed_file": sidecar.MANIFEST_NAME,
             "bundle": sidecar.MANIFEST_BUNDLE_NAME,
             "issuer": sidecar.COSIGN_ISSUER,
-            "certificate_identity": sidecar.COSIGN_IDENTITY,
+            "certificate_identity": sidecar.console_cosign_identity(TEST_WORKFLOW_REF),
         },
     }
     manifest_dir = root / "aggregate"
@@ -183,7 +184,7 @@ def build_release(root: Path, *, target_mutators: dict[str, dict[str, object]] |
             "kernel_release_version": "v0.8.0",
             "source_repository": sidecar.CONSOLE_REPOSITORY,
             "source": SOURCE,
-            "workflow_ref": "refs/tags/test-console-source",
+            "workflow_ref": TEST_WORKFLOW_REF,
         }],
     }), encoding="utf-8")
     return root, pins
@@ -487,6 +488,18 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "workflow_ref|invalid fields"):
                         sidecar.resolve_pin(pins, "v0.8.0")
 
+    def test_release_rejects_outer_signature_not_bound_to_pinned_workflow_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            manifest = next(root.rglob(sidecar.MANIFEST_NAME))
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            payload["outer_signature"]["certificate_identity"] = sidecar.console_cosign_identity(
+                "refs/tags/other-console-source"
+            )
+            manifest.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unexpected outer signature contract"):
+                sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
+
     def test_release_rejects_checksum_descriptor_that_does_not_bind_archive(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, pins = build_release(Path(directory))
@@ -593,7 +606,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
                 "#!/usr/bin/env bash\n"
                 "case \" $* \" in\n"
                 "  *\" --certificate-identity https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v0.8.0 \"*) exit 0 ;;\n"
-                "  *\" --certificate-identity https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@refs/heads/main \"*) exit 0 ;;\n"
+                "  *\" --certificate-identity https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@refs/tags/helm-console-sidecar-v0.8.0 \"*) exit 0 ;;\n"
                 "  *) exit 23 ;;\n"
                 "esac\n",
                 encoding="utf-8",

@@ -476,6 +476,23 @@ func TestLocalConsolePeerProofRouteRequiresValidLoopbackNonceWithoutBearer(t *te
 	}
 }
 
+func TestLocalConsoleCosignIdentityRequiresImmutableConsoleWorkflowTag(t *testing.T) {
+	valid := localConsoleCosignIdentityPrefix + "refs/tags/helm-console-sidecar-v0.8.0"
+	if !validLocalConsoleCosignIdentity(valid) {
+		t.Fatalf("valid Console workflow identity rejected: %q", valid)
+	}
+	for _, identity := range []string{
+		localConsoleCosignIdentityPrefix + "main",
+		localConsoleCosignIdentityPrefix + "refs/heads/main",
+		localConsoleCosignIdentityPrefix + "refs/tags/.mutable",
+		"https://github.com/Mindburn-Labs/other/.github/workflows/release-local-sidecar.yml@refs/tags/helm-console-sidecar-v0.8.0",
+	} {
+		if validLocalConsoleCosignIdentity(identity) {
+			t.Fatalf("mutable or foreign Console workflow identity accepted: %q", identity)
+		}
+	}
+}
+
 func TestLocalConsolePeerProofRouteIsAbsentOutsideConsoleMode(t *testing.T) {
 	peer, err := newLocalConsolePeerProof(strings.Repeat("a", 64))
 	if err != nil {
@@ -1175,7 +1192,7 @@ func writeTrustedLocalConsoleRelease(t *testing.T, executable, runtimeTarget str
 			SignedFile:          localConsoleReleaseManifestFile,
 			Bundle:              localConsoleReleaseManifestBundleFile,
 			Issuer:              localConsoleCosignIssuer,
-			CertificateIdentity: localConsoleCosignIdentity,
+			CertificateIdentity: localConsoleCosignIdentityPrefix + "refs/tags/test-console-source",
 		},
 	}
 	var selected localConsoleBundle

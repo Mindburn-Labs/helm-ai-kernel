@@ -22,6 +22,11 @@ const (
 	// ContextKeyCapabilityManifestHash optionally pins the manifest revision
 	// expected by the caller. A non-empty mismatch denies fail closed.
 	ContextKeyCapabilityManifestHash = "capability_manifest_hash"
+	// ContextKeyCapabilityToken carries a task-bound signed grant. It is
+	// removed from request context before any receipt or audit record is built.
+	ContextKeyCapabilityToken = "capability_token"
+	// ContextKeyTaskID binds a presented token to the current task.
+	ContextKeyTaskID = "task_id"
 )
 
 // WithCapabilityRegistry attaches the governed capability registry. Requests
@@ -41,6 +46,20 @@ func (g *Guardian) SetCapabilityRegistry(reg *capability.Registry) {
 // CapabilityRegistry returns the attached registry, or nil.
 func (g *Guardian) CapabilityRegistry() *capability.Registry {
 	return g.capabilityRegistry
+}
+
+// WithCapabilityTokenVerifier attaches the signed task-token gate. A
+// presented token is verified and consumed before downstream policy/PDP
+// evaluation; an absent token leaves registry-only capability dispatch intact.
+func WithCapabilityTokenVerifier(verifier *capability.TokenVerifier) GuardianOption {
+	return func(g *Guardian) { g.capabilityVerifier = verifier }
+}
+
+// SetCapabilityTokenVerifier replaces the task-token verifier.
+// Deprecated: configure WithCapabilityTokenVerifier at construction so the
+// roster hash accurately describes the running gate composition.
+func (g *Guardian) SetCapabilityTokenVerifier(verifier *capability.TokenVerifier) {
+	g.capabilityVerifier = verifier
 }
 
 // resolveCapabilityGate resolves the registry entry and enriches req.Context
@@ -123,6 +142,66 @@ func (g *Guardian) resolveCapabilityGate(
 	req.Context["capability_required_permit_level"] = string(entry.Manifest.RequiredPermitLevel)
 	if entry.Manifest.Routing.MinModelTier != "" {
 		req.Context["capability_min_model_tier"] = entry.Manifest.Routing.MinModelTier
+	}
+
+	if rawToken, presented := req.Context[ContextKeyCapabilityToken]; presented {
+		// Capability tokens are bearer credentials. Never bind the raw token
+		// into a signed DecisionRecord or an audit entry, including on denial.
+		delete(req.Context, ContextKeyCapabilityToken)
+		if g.capabilityVerifier == nil {
+			return g.capabilityShortCircuit(
+				span,
+				req,
+				activeSnapshot,
+				policyVersion,
+				contracts.VerdictDeny,
+				contracts.ReasonCapabilityTokenInvalid,
+				fmt.Sprintf("%s: a capability token was presented but no verifier is configured", contracts.ReasonCapabilityTokenInvalid),
+				"CAPABILITY_TOKEN_INVALID_DENY",
+			)
+		}
+		taskID, _ := req.Context[ContextKeyTaskID].(string)
+		var args map[string]interface{}
+		if rawArgs, ok := req.Context["arguments"].(map[string]interface{}); ok {
+			args = rawArgs
+		}
+		presented, decodeErr := capability.DecodeToken(rawToken)
+		if decodeErr != nil {
+			return g.capabilityShortCircuit(
+				span,
+				req,
+				activeSnapshot,
+				policyVersion,
+				contracts.VerdictDeny,
+				contracts.ReasonCapabilityTokenInvalid,
+				fmt.Sprintf("%s: malformed token", contracts.ReasonCapabilityTokenInvalid),
+				"CAPABILITY_TOKEN_INVALID_DENY",
+			)
+		}
+		token, err := g.capabilityVerifier.Verify(capability.VerifyRequest{
+			Presented:    presented,
+			TaskID:       taskID,
+			CapabilityID: entry.Manifest.CapabilityID,
+			ManifestHash: entry.Hash,
+			Args:         args,
+		})
+		if err != nil {
+			return g.capabilityShortCircuit(
+				span,
+				req,
+				activeSnapshot,
+				policyVersion,
+				contracts.VerdictDeny,
+				contracts.ReasonCapabilityTokenInvalid,
+				fmt.Sprintf("%s: %s", contracts.ReasonCapabilityTokenInvalid, err),
+				"CAPABILITY_TOKEN_INVALID_DENY",
+			)
+		}
+		req.Context["capability_token_id"] = token.TokenID
+		span.SetAttributes(
+			attribute.Bool("capability.token_valid", true),
+			attribute.String("capability.token_id", token.TokenID),
+		)
 	}
 	return nil, nil
 }

@@ -744,6 +744,13 @@
       "domain": "capability",
       "description": "Caller-pinned capability manifest hash does not match the registry revision",
       "since": "1.7.0"
+    },
+    {
+      "code": "CAPABILITY_TOKEN_INVALID",
+      "applies_to": ["DENY"],
+      "domain": "capability",
+      "description": "Task capability token is malformed, expired, revoked, exhausted, out of scope, or fails signature/binding verification",
+      "since": "1.7.0"
     }
   ]
 }

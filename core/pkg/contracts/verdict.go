@@ -164,6 +164,7 @@ const (
 	// ── Capability Registry Reasons (capability-manifest/v1) ──────────────
 	ReasonCapabilityUnknown       ReasonCode = "CAPABILITY_UNKNOWN"
 	ReasonCapabilityManifestDrift ReasonCode = "CAPABILITY_MANIFEST_DRIFT"
+	ReasonCapabilityTokenInvalid  ReasonCode = "CAPABILITY_TOKEN_INVALID"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.
@@ -276,6 +277,7 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonDevFallbackPresent,
 		ReasonCapabilityUnknown,
 		ReasonCapabilityManifestDrift,
+		ReasonCapabilityTokenInvalid,
 	}
 }
 

@@ -28,6 +28,7 @@ const (
 	GateBehavioralTrust    GateID = "behavioral_trust"
 	GateBudget             GateID = "budget"
 	GateCapabilityRegistry GateID = "capability_registry"
+	GateCapabilityToken    GateID = "capability_token"
 	GateCompliance         GateID = "compliance"
 	GateContext            GateID = "context"
 	GateDelegation         GateID = "delegation"
@@ -75,6 +76,7 @@ func (g *Guardian) GateRoster() GateRoster {
 		GateBehavioralTrust:    g.behavioralScorer != nil,
 		GateBudget:             g.tracker != nil,
 		GateCapabilityRegistry: g.capabilityRegistry != nil,
+		GateCapabilityToken:    g.capabilityVerifier != nil,
 		GateCompliance:         g.complianceChecker != nil,
 		GateContext:            g.contextGuard != nil,
 		GateDelegation:         g.delegationStore != nil,
@@ -109,7 +111,7 @@ func (g *Guardian) GateRoster() GateRoster {
 func AllGateIDs() []GateID {
 	ids := []GateID{
 		GateAgentKillSwitch, GateAssumption, GateAudit, GateBehavioralTrust, GateBudget,
-		GateCapabilityRegistry,
+		GateCapabilityRegistry, GateCapabilityToken,
 		GateCompliance, GateContext, GateDelegation, GateEgress, GateFreeze,
 		GateIsolation, GatePDP, GatePolicySnapshots, GatePrivilege,
 		GateSafeDeprecation, GateScopedStop, GateSessionRisk, GateTemporal,

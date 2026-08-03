@@ -16,6 +16,7 @@ var gateFieldByID = map[GateID]string{
 	GateBehavioralTrust:    "behavioralScorer",
 	GateBudget:             "tracker",
 	GateCapabilityRegistry: "capabilityRegistry",
+	GateCapabilityToken:    "capabilityVerifier",
 	GateCompliance:         "complianceChecker",
 	GateContext:            "contextGuard",
 	GateDelegation:         "delegationStore",

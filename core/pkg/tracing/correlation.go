@@ -4,75 +4,73 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/google/uuid"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 )
 
+// The correlation identity moved to pkg/correlation, which depends on nothing
+// but the standard library and a UUID implementation (HELM-460). Reading an ID
+// out of a context is not a tracing concern, and importing it from here made
+// the policy engine and the executor inherit an OpenTelemetry SDK and an OTLP
+// exporter for a single map lookup.
+//
+// Everything below forwards to that package and exists only so consumers
+// pinned to this import path keep compiling. CorrelationID is a type *alias*,
+// not a definition, so the two names denote the same type and values cross the
+// boundary freely.
+//
+// New code should import pkg/correlation directly.
+
 // CorrelationID is an opaque token used to correlate requests across services.
-type CorrelationID string
+//
+// Deprecated: use correlation.ID.
+type CorrelationID = correlation.ID
 
-// correlationHeader is the canonical HTTP header name for correlation IDs.
-const correlationHeader = "X-Helm-Correlation-ID"
-
-// correlationContextKey is the unexported key used to store correlation IDs in
-// a context. The struct type prevents collisions with other packages.
-type correlationContextKey struct{}
-
-// WithCorrelationID attaches a correlation ID to ctx and returns the derived context.
+// WithCorrelationID attaches a correlation ID to ctx.
+//
+// Deprecated: use correlation.With.
 func WithCorrelationID(ctx context.Context, id CorrelationID) context.Context {
-	return context.WithValue(ctx, correlationContextKey{}, id)
+	return correlation.With(ctx, id)
 }
 
 // GetCorrelationID extracts the correlation ID from ctx.
-// The second return value is false when no ID is present.
+//
+// Deprecated: use correlation.From.
 func GetCorrelationID(ctx context.Context) (CorrelationID, bool) {
-	id, ok := ctx.Value(correlationContextKey{}).(CorrelationID)
-	return id, ok && id != ""
+	return correlation.From(ctx)
 }
 
 // NewCorrelationID generates a new cryptographically random correlation ID.
+//
+// Deprecated: use correlation.New.
 func NewCorrelationID() CorrelationID {
-	return CorrelationID(uuid.New().String())
+	return correlation.New()
 }
 
-// IsValidCorrelationID reports whether v is a canonically formatted UUID
-// (36-char, lowercase, hyphenated). Only canonical form is accepted:
-// correlation IDs are compared as opaque strings downstream, so admitting
-// aliases of the same UUID (uppercase, braced, urn-prefixed) would let one
-// request appear under two identities.
+// IsValidCorrelationID reports whether v is a canonically formatted UUID.
+//
+// Deprecated: use correlation.IsValid.
 func IsValidCorrelationID(v string) bool {
-	u, err := uuid.Parse(v)
-	return err == nil && u.String() == v
+	return correlation.IsValid(v)
 }
 
 // AdoptOrMintFromHeaders implements the adopt-or-mint rule of the pilot
-// business-telemetry contract (§2.2): a valid inbound X-Helm-Correlation-ID
-// is adopted; anything else — absent, malformed, or non-canonical — is
-// replaced with a freshly minted ID. The second return reports whether the
-// inbound value was adopted. Validation is mandatory here: unvalidated
-// adoption is an injection channel for unbounded attacker-chosen values.
+// business-telemetry contract (§2.2).
+//
+// Deprecated: use correlation.AdoptOrMint.
 func AdoptOrMintFromHeaders(headers http.Header) (CorrelationID, bool) {
-	if v := headers.Get(correlationHeader); IsValidCorrelationID(v) {
-		return CorrelationID(v), true
-	}
-	return NewCorrelationID(), false
+	return correlation.AdoptOrMint(headers)
 }
 
-// InjectHTTPHeaders writes the correlation ID from ctx into headers under the
-// canonical X-Helm-Correlation-ID key. If no ID is present, the header is left
-// unchanged.
+// InjectHTTPHeaders writes the correlation ID from ctx into headers.
+//
+// Deprecated: use correlation.Inject.
 func InjectHTTPHeaders(ctx context.Context, headers http.Header) {
-	if id, ok := GetCorrelationID(ctx); ok {
-		headers.Set(correlationHeader, string(id))
-	}
+	correlation.Inject(ctx, headers)
 }
 
-// ExtractHTTPHeaders reads the correlation ID from headers.
-// Returns (id, true) only when the header carries a canonically valid ID
-// (see IsValidCorrelationID); malformed values are rejected as if absent.
+// ExtractHTTPHeaders reads a canonically valid correlation ID from headers.
+//
+// Deprecated: use correlation.Extract.
 func ExtractHTTPHeaders(headers http.Header) (CorrelationID, bool) {
-	v := headers.Get(correlationHeader)
-	if !IsValidCorrelationID(v) {
-		return "", false
-	}
-	return CorrelationID(v), true
+	return correlation.Extract(headers)
 }

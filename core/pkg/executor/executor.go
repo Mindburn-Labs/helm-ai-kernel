@@ -14,12 +14,12 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receipts/policies"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/safedep"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 )
 
 // UsageMeter is an optional interface for recording execution usage events.
@@ -615,7 +615,7 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 			SessionID:     sessionID,
 		}
 		if receipt.CorrelationID == "" {
-			if corr, ok := tracing.GetCorrelationID(ctx); ok {
+			if corr, ok := correlation.From(ctx); ok {
 				receipt.CorrelationID = string(corr)
 			}
 		}

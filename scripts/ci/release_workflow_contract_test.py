@@ -68,6 +68,20 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
     def test_release_creation_requires_prebuilt_console_assets(self) -> None:
         binaries = self.job("binaries")
         self.assertIn("needs: [validate, deployment-smoke, kind-smoke, release-smoke]", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_PROFILE: ${{ vars.HELM_RELEASE_EVIDENCE_PROFILE }}", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_ANCHOR_TYPE: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_TYPE }}", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_ANCHOR_URI: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_URI }}", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_URI: ${{ vars.HELM_RELEASE_EVIDENCE_STORAGE_URI }}", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND: ${{ secrets.HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND }}", binaries)
+        self.assertIn("HELM_EVIDENCE_KMS_KEY_ID: ${{ secrets.HELM_EVIDENCE_KMS_KEY_ID }}", binaries)
+        self.assertIn("HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX: ${{ secrets.HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX }}", binaries)
+        self.assertIn("HELM_EVIDENCE_KMS_SIGN_COMMAND: ${{ secrets.HELM_EVIDENCE_KMS_SIGN_COMMAND }}", binaries)
+        self.assertIn("name: Require explicit external release EvidencePack trust", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND", binaries)
+        self.assertLess(
+            binaries.index("Require explicit external release EvidencePack trust"),
+            binaries.index("Build and stage release assets"),
+        )
         self.assertNotIn("console-local-sidecar", binaries)
         self.assertNotIn("HELM_REQUIRE_CONSOLE_LOCAL_SIDECAR", binaries)
 

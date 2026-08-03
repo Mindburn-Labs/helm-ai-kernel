@@ -29,6 +29,8 @@ Then choose one path.
 
 ## Start
 
+- [Public docs index](PUBLIC_DOCS_INDEX.md)
+- [Local proof journey](LOCAL_PROOF_JOURNEY.md)
 - [Quickstart](QUICKSTART.md)
 - [HELM proof loop](PROOF_LOOP.md)
 - [Protect local coding agents](quickstart/workstation-governance.md)

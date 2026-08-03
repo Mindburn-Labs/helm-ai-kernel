@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,6 +72,101 @@ func TestRuntimeRouteRegistryMatchesOpenAPI(t *testing.T) {
 			t.Fatalf("operationId drift for %s: registry=%s openapi=%s", key, registered.OperationID, operationID)
 		}
 	}
+}
+
+func TestPublicDocsOpenAPIContract(t *testing.T) {
+	root := openAPIRepositoryRoot(t)
+	manifestData, err := os.ReadFile(filepath.Join(root, "docs", "public-docs.manifest.json"))
+	if err != nil {
+		t.Fatalf("read public docs manifest: %v", err)
+	}
+	var manifest publicDocsManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatalf("parse public docs manifest: %v", err)
+	}
+	contract := manifest.APIContract
+	if contract.SchemaVersion != 1 {
+		t.Fatalf("public docs API contract schema_version=%d, want 1", contract.SchemaVersion)
+	}
+	if contract.SourcePath != "api/openapi/helm.openapi.yaml" {
+		t.Fatalf("public docs API contract source_path=%q", contract.SourcePath)
+	}
+	if len(contract.PublicOperations) == 0 {
+		t.Fatal("public docs API contract has no public operations")
+	}
+
+	openAPIData, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(contract.SourcePath)))
+	if err != nil {
+		t.Fatalf("read public OpenAPI source: %v", err)
+	}
+	digest := sha256.Sum256(openAPIData)
+	if got, want := contract.ContentSHA256, "sha256:"+hex.EncodeToString(digest[:]); got != want {
+		t.Fatalf("public docs API contract content_sha256=%q, want %q", got, want)
+	}
+
+	openAPIOperations := readOpenAPIOperations(t)
+	runtimeRoutes := make(map[string]RuntimeRouteSpec, len(PublicRuntimeRouteSpecs()))
+	for _, spec := range PublicRuntimeRouteSpecs() {
+		key := spec.Method + " " + spec.Path
+		if existing, exists := runtimeRoutes[key]; exists {
+			t.Fatalf("duplicate public runtime route %s: %s and %s", key, existing.OperationID, spec.OperationID)
+		}
+		runtimeRoutes[key] = spec
+	}
+
+	seenRoutes := map[string]struct{}{}
+	seenOperationIDs := map[string]struct{}{}
+	for _, expected := range contract.PublicOperations {
+		if expected.Method != strings.ToUpper(expected.Method) || expected.Path == "" || expected.OperationID == "" {
+			t.Fatalf("invalid public docs API contract operation: %+v", expected)
+		}
+		key := expected.Method + " " + expected.Path
+		if _, exists := seenRoutes[key]; exists {
+			t.Fatalf("duplicate public docs API contract route %s", key)
+		}
+		seenRoutes[key] = struct{}{}
+		if _, exists := seenOperationIDs[expected.OperationID]; exists {
+			t.Fatalf("duplicate public docs API contract operationId %q", expected.OperationID)
+		}
+		seenOperationIDs[expected.OperationID] = struct{}{}
+
+		if got, exists := openAPIOperations[key]; !exists {
+			t.Fatalf("public docs API contract route %s is missing from OpenAPI", key)
+		} else if got != expected.OperationID {
+			t.Fatalf("public docs API contract operationId drift for %s: manifest=%s openapi=%s", key, expected.OperationID, got)
+		}
+		runtimeRoute, exists := runtimeRoutes[key]
+		if !exists {
+			t.Fatalf("public docs API contract route %s is not a public runtime route", key)
+		}
+		if runtimeRoute.OperationID != expected.OperationID {
+			t.Fatalf("public docs API contract operationId drift for %s: manifest=%s runtime=%s", key, expected.OperationID, runtimeRoute.OperationID)
+		}
+	}
+}
+
+type publicDocsManifest struct {
+	APIContract struct {
+		SchemaVersion    int                           `json:"schema_version"`
+		SourcePath       string                        `json:"source_path"`
+		ContentSHA256    string                        `json:"content_sha256"`
+		PublicOperations []publicDocsManifestOperation `json:"public_operations"`
+	} `json:"api_contract"`
+}
+
+type publicDocsManifestOperation struct {
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	OperationID string `json:"operation_id"`
+}
+
+func openAPIRepositoryRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate OpenAPI contract test source")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 }
 
 func TestBoundaryStatusOpenAPIMatchesRuntimeContract(t *testing.T) {

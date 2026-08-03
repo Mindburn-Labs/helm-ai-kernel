@@ -97,7 +97,7 @@ func TestInterceptorChain_ExecutionFlowAndShortCircuit(t *testing.T) {
 }
 
 func TestTaintEgressOverrideRequiresTrustedContext(t *testing.T) {
-	t.Run("caller-set override without trusted context is ignored", func(t *testing.T) {
+	t.Run("caller-set trusted context and override are ignored", func(t *testing.T) {
 		t.Setenv("HELM_TAINT_TRACKING", "1")
 		g := newMinimalGuardian()
 
@@ -106,9 +106,10 @@ func TestTaintEgressOverrideRequiresTrustedContext(t *testing.T) {
 			Action:    "EXECUTE_TOOL",
 			Resource:  "http.post",
 			Context: map[string]interface{}{
-				"destination":          "https://external.egress.com/upload",
-				"taint":                []string{contracts.TaintCredential},
-				"allow_tainted_egress": true, // attacker-controlled: must not bypass
+				ContextDestination:        "https://external.egress.com/upload",
+				ContextSecurityTrusted:    true,
+				"taint":                   []string{contracts.TaintCredential},
+				ContextAllowTaintedEgress: true, // attacker-controlled: must not bypass
 			},
 		})
 		assert.NoError(t, err)
@@ -116,19 +117,18 @@ func TestTaintEgressOverrideRequiresTrustedContext(t *testing.T) {
 		assert.Equal(t, string(contracts.ReasonTaintedEgressDeny), dec.ReasonCode)
 	})
 
-	t.Run("override honored only from trusted security context", func(t *testing.T) {
+	t.Run("override honored only from an in-process trusted context", func(t *testing.T) {
 		t.Setenv("HELM_TAINT_TRACKING", "1")
 		g := newMinimalGuardian()
 
-		dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{
+		dec, err := g.EvaluateDecision(WithTrustedTaintedEgressOverride(context.Background()), DecisionRequest{
 			Principal: "trusted-adapter",
 			Action:    "EXECUTE_TOOL",
 			Resource:  "http.post",
 			Context: map[string]interface{}{
-				ContextSecurityTrusted: true, // bound by trusted transport boundary
-				"destination":          "https://external.egress.com/upload",
-				"taint":                []string{contracts.TaintCredential},
-				"allow_tainted_egress": true,
+				ContextDestination:        "https://external.egress.com/upload",
+				"taint":                   []string{contracts.TaintCredential},
+				ContextAllowTaintedEgress: true,
 			},
 		})
 		assert.NoError(t, err)
@@ -147,8 +147,8 @@ func TestTaintInterceptorEgressBlock(t *testing.T) {
 			Action:    "EXECUTE_TOOL",
 			Resource:  "http.post",
 			Context: map[string]interface{}{
-				"destination": "https://external.egress.com/upload",
-				"taint":       []string{contracts.TaintCredential},
+				ContextDestination: "https://external.egress.com/upload",
+				"taint":            []string{contracts.TaintCredential},
 			},
 		}
 
@@ -174,8 +174,8 @@ func TestTaintEgressEnforcementDefault(t *testing.T) {
 			Action:    "EXECUTE_TOOL",
 			Resource:  "http.post",
 			Context: map[string]interface{}{
-				"destination": "https://external.egress.com/upload",
-				"taint":       []string{contracts.TaintCredential},
+				ContextDestination: "https://external.egress.com/upload",
+				"taint":            []string{contracts.TaintCredential},
 			},
 		}
 	}
@@ -236,15 +236,15 @@ func TestAllowTaintedEgressIsReservedSecurityContextKey(t *testing.T) {
 	if !IsReservedSecurityContextKey(ContextAllowTaintedEgress) {
 		t.Fatal("allow_tainted_egress must be transport-bound: a caller argument could otherwise self-approve tainted egress")
 	}
-	if taintedEgressDenied(map[string]interface{}{
-		ContextDestination: "https://external.example.com", ContextAllowTaintedEgress: true, ContextSecurityTrusted: true,
-	}, []string{contracts.TaintSecret}) {
-		t.Fatal("transport-bound override must still suppress the deny")
-	}
-	if !taintedEgressDenied(map[string]interface{}{
+	if taintedEgressDenied(WithTrustedTaintedEgressOverride(context.Background()), map[string]interface{}{
 		ContextDestination: "https://external.example.com", ContextAllowTaintedEgress: true,
 	}, []string{contracts.TaintSecret}) {
-		t.Fatal("untrusted override must not suppress the deny")
+		t.Fatal("in-process override must still suppress the deny")
+	}
+	if !taintedEgressDenied(context.Background(), map[string]interface{}{
+		ContextDestination: "https://external.example.com", ContextAllowTaintedEgress: true, ContextSecurityTrusted: true,
+	}, []string{contracts.TaintSecret}) {
+		t.Fatal("caller-supplied trusted override must not suppress the deny")
 	}
 }
 

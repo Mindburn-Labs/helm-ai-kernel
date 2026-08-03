@@ -45,7 +45,7 @@ Callers may attach taint labels through `DecisionRequest.Context`:
 }
 ```
 
-Guardian denies outbound egress carrying sensitive taint (`pii`, `credential`, or `secret`) unless the context explicitly contains:
+Guardian evaluates tainted-egress only when `destination` is non-empty. For such a destination, it denies outbound egress carrying sensitive taint (`pii`, `credential`, or `secret`) unless an in-process trusted transport has approved it:
 
 ```json
 {
@@ -53,12 +53,16 @@ Guardian denies outbound egress carrying sensitive taint (`pii`, `credential`, o
 }
 ```
 
-and that context was bound by a trusted transport boundary. `allow_tainted_egress`
-is a reserved security-context key (`IsReservedSecurityContextKey`), so a transport
-that forwards caller arguments — the MCP server, for example — rejects it at the
-boundary rather than copying it into the decision context. Without that, an agent
-could pass the flag as a tool argument and self-approve its own egress on any
-transport that marks its context trusted.
+and the trusted transport binds `WithTrustedTaintedEgressOverride` to the request
+context. `allow_tainted_egress` is a reserved security-context key
+(`IsReservedSecurityContextKey`): JSON and tool arguments, including a supplied
+`security_context_trusted: true`, cannot create the out-of-band approval. A transport
+that forwards caller arguments — the MCP server, for example — rejects the key at its
+boundary rather than copying it into the decision context.
+
+When `destination` is missing or blank, Guardian has no outbound egress target to
+evaluate, so this gate does not emit `TAINTED_DATA_EGRESS_DENY`. Adapters that send
+external traffic must bind a non-empty destination for tainted-egress enforcement.
 
 The decision remains fail-closed: denial uses `TAINTED_DATA_EGRESS_DENY`, and issued execution intents copy normalized taint labels from the effect they authorize.
 

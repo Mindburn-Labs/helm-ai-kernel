@@ -24,9 +24,9 @@ const (
 	ContextSourceChannel   = "source_channel"
 	ContextTrustLevel      = "trust_level"
 	ContextDestination     = "destination"
-	// ContextAllowTaintedEgress overrides the tainted-egress deny. It is a
-	// security decision and must be bound by the transport, never passed as a
-	// caller argument — see IsReservedSecurityContextKey.
+	// ContextAllowTaintedEgress requests a tainted-egress override. It is a
+	// security decision and is honored only with an out-of-band trusted marker;
+	// it must never be passed as a caller argument.
 	ContextAllowTaintedEgress = "allow_tainted_egress"
 )
 
@@ -716,7 +716,7 @@ func (t *TaintEgressInterceptor) Evaluate(ctx context.Context, evalCtx *Evaluati
 		evalCtx.Request.Context["taint"] = taintLabels
 		evalCtx.Tainted = true
 	}
-	if taintEgressEnforcementEnabled() && taintedEgressDenied(evalCtx.Request.Context, taintLabels) {
+	if taintEgressEnforcementEnabled() && taintedEgressDenied(ctx, evalCtx.Request.Context, taintLabels) {
 		now := t.g.clock.Now()
 		decision := &contracts.DecisionRecord{
 			ID:         newDecisionID(),

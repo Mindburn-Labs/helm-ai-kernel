@@ -226,22 +226,28 @@ func TestCoverageGuardianPureHelpers(t *testing.T) {
 		t.Fatalf("existing policy version was overwritten: %+v", existingVersion)
 	}
 
-	if taintedEgressDenied(nil, []string{contracts.TaintPII}) {
+	if taintedEgressDenied(context.Background(), nil, []string{contracts.TaintPII}) {
 		t.Fatal("nil context should not deny tainted egress")
 	}
-	if !taintedEgressDenied(map[string]interface{}{"destination": "https://example.com", "allow_tainted_egress": true}, []string{contracts.TaintSecret}) {
+	if !taintedEgressDenied(context.Background(), map[string]interface{}{ContextDestination: "https://example.com", ContextAllowTaintedEgress: true}, []string{contracts.TaintSecret}) {
 		t.Fatal("caller-set approval without trusted security context must still deny")
 	}
-	if taintedEgressDenied(map[string]interface{}{"destination": "https://example.com", "allow_tainted_egress": true, ContextSecurityTrusted: true}, []string{contracts.TaintSecret}) {
-		t.Fatal("explicitly approved tainted egress from trusted context should not deny")
+	if !taintedEgressDenied(context.Background(), map[string]interface{}{ContextDestination: "https://example.com", ContextAllowTaintedEgress: true, ContextSecurityTrusted: true}, []string{contracts.TaintSecret}) {
+		t.Fatal("caller-supplied trusted security context must not approve tainted egress")
 	}
-	if taintedEgressDenied(map[string]interface{}{"destination": "   "}, []string{contracts.TaintCredential}) {
+	if !taintedEgressDenied(nil, map[string]interface{}{ContextDestination: "https://example.com", ContextAllowTaintedEgress: true}, []string{contracts.TaintSecret}) {
+		t.Fatal("nil request context must not approve tainted egress")
+	}
+	if taintedEgressDenied(WithTrustedTaintedEgressOverride(context.Background()), map[string]interface{}{ContextDestination: "https://example.com", ContextAllowTaintedEgress: true}, []string{contracts.TaintSecret}) {
+		t.Fatal("in-process approved tainted egress should not deny")
+	}
+	if taintedEgressDenied(context.Background(), map[string]interface{}{ContextDestination: "   "}, []string{contracts.TaintCredential}) {
 		t.Fatal("missing destination should not deny")
 	}
-	if taintedEgressDenied(map[string]interface{}{"destination": "https://example.com"}, []string{"benign"}) {
+	if taintedEgressDenied(context.Background(), map[string]interface{}{ContextDestination: "https://example.com"}, []string{"benign"}) {
 		t.Fatal("benign labels should not deny")
 	}
-	if !taintedEgressDenied(map[string]interface{}{"destination": "https://example.com"}, []string{contracts.TaintSecret}) {
+	if !taintedEgressDenied(context.Background(), map[string]interface{}{ContextDestination: "https://example.com"}, []string{contracts.TaintSecret}) {
 		t.Fatal("secret taint to destination should deny")
 	}
 

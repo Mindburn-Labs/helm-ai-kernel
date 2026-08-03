@@ -1035,4 +1035,35 @@ func TestGraph_Validate_MalformedRequirementFailsClosed(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for an unsatisfiable rule")
 	}
+	if !strings.Contains(err.Error(), "action act-malformed has malformed requirement") {
+		t.Fatalf("expected actionable malformed-rule error, got %q", err)
+	}
+}
+
+// A malformed leaf must abort evaluation before a parent NOT can invert it.
+func TestGraph_Validate_MalformedRequirementNestedInNOTFailsClosed(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddRule("act-malformed-not", RequirementSet{
+		ID:    "rs-root",
+		Logic: AND,
+		Children: []RequirementSet{{
+			ID:           "rs-not",
+			Logic:        NOT,
+			Requirements: []Requirement{{ID: "r-malformed"}},
+		}},
+	})
+
+	ok, hash, err := g.Validate("act-malformed-not", nil)
+	if ok {
+		t.Fatal("fail-open: malformed requirement was inverted by NOT")
+	}
+	if hash != "" {
+		t.Fatalf("must not emit a rule hash for a malformed rule, got %q", hash)
+	}
+	if err == nil {
+		t.Fatal("expected an error for a malformed requirement")
+	}
+	if !strings.Contains(err.Error(), "action act-malformed-not has malformed requirement") {
+		t.Fatalf("expected actionable malformed-rule error, got %q", err)
+	}
 }

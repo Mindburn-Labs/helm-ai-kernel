@@ -141,6 +141,12 @@ func (g *Graph) Validate(actionID string, artifacts []*pkg_artifact.ArtifactEnve
 			actionID,
 		)
 	}
+	if hasMalformedRequirement(rule) {
+		return false, "", fmt.Errorf(
+			"action %s has malformed requirement: expected artifact_type or expression",
+			actionID,
+		)
+	}
 
 	if check(rule, artifacts) {
 		return true, rule.Hash(), nil
@@ -164,14 +170,29 @@ func hasExpressionRequirement(rs RequirementSet) bool {
 	return false
 }
 
+// hasMalformedRequirement reports whether rs or any descendant has a
+// requirement with neither an ArtifactType nor an Expression.
+func hasMalformedRequirement(rs RequirementSet) bool {
+	for _, req := range rs.Requirements {
+		if req.ArtifactType == "" && req.Expression == "" {
+			return true
+		}
+	}
+	for _, child := range rs.Children {
+		if hasMalformedRequirement(child) {
+			return true
+		}
+	}
+	return false
+}
+
 // check is the legacy artifact-presence validator used by Graph.Validate.
 // It evaluates only ArtifactType requirements. Rules carrying CEL Expressions
-// are rejected by Validate before reaching here, so anything this function sees
-// must be checkable; a requirement it cannot check is malformed and fails
-// closed. The canonical evaluator that honours CEL is
-// PolicyEngine.EvaluateRequirementSet — prefer it for policy decisions. This
-// function is retained for the artifact-only Graph.Validate API and kept in
-// operator-semantics sync with that path.
+// or malformed leaves are rejected by Validate before reaching here. The
+// canonical evaluator that honours CEL is PolicyEngine.EvaluateRequirementSet
+// — prefer it for policy decisions. This function keeps only the AND/OR/NOT
+// aggregation semantics aligned with that evaluator; its leaf evaluation is
+// deliberately artifact-only.
 //
 //nolint:gocognit // recursive requirement checking is inherently complex
 func check(rs RequirementSet, artifacts []*pkg_artifact.ArtifactEnvelope) bool {
@@ -191,11 +212,6 @@ func check(rs RequirementSet, artifacts []*pkg_artifact.ArtifactEnvelope) bool {
 					break
 				}
 			}
-		} else {
-			// Neither an ArtifactType nor (per Validate's guard) an Expression:
-			// the requirement is malformed. Fail closed — this evaluator must
-			// never report a requirement it did not actually check as satisfied.
-			has = false
 		}
 		leafResults = append(leafResults, has)
 	}

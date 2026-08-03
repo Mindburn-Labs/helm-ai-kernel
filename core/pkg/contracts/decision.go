@@ -52,6 +52,10 @@ type DecisionRecord struct {
 	Reason         string         `json:"reason"`                  // Human-readable explanation
 	ReasonCode     string         `json:"reason_code,omitempty"`   // Machine-readable registry code
 	InputContext   map[string]any `json:"input_context,omitempty"` // For explainability
+	// ThreatScan is Guardian-owned typed threat evidence. Decisions with this
+	// field use the V3 preimage, which binds the complete canonical reference
+	// (including semantic model, score, and failure state).
+	ThreatScan *ThreatScanRef `json:"threat_scan,omitempty"`
 	// Session Risk Memory fields bind trajectory-level authorization state to the signed decision.
 	TrajectoryRiskScore    float64 `json:"trajectory_risk_score,omitempty"`
 	SessionCentroidHash    string  `json:"session_centroid_hash,omitempty"`
@@ -63,18 +67,19 @@ type DecisionRecord struct {
 	// of leaving that to code review. An uninjected gate is skipped rather
 	// than refused, so two kernels can return the same verdict from different
 	// enforcement: without this the difference is invisible downstream.
-	// NOTE: still outside the decision signature — DecisionRecordSignatureV2
-	// (HELM-303) swapped free-text Reason for ReasonCode but did not widen the
-	// preimage, so binding this needs a further version. It remains
-	// tamper-evident via the receipt envelope chain hash.
+	// NOTE: still outside the decision signature. DecisionRecordSignatureV2
+	// (HELM-303) swapped free-text Reason for ReasonCode, and V3 binds typed
+	// threat evidence; binding this roster needs a further preimage revision.
+	// It remains tamper-evident via the receipt envelope chain hash.
 	GateRosterHash string `json:"gate_roster_hash,omitempty"`
 	Signature      string `json:"signature"`
 	SignatureType  string `json:"signature_type"`
-	// SignatureVersion names the signing-preimage revision (HELM-303). Empty =
-	// legacy (free-text Reason in the preimage, ReasonCode absent).
+	// SignatureVersion names the signing-preimage revision. Empty = legacy
+	// (free-text Reason in the preimage, ReasonCode absent).
 	// DecisionRecordSignatureV2 signs the machine-readable ReasonCode instead
 	// of prose: the field every downstream consumer keys on is the one the
-	// signature attests.
+	// signature attests. DecisionRecordSignatureV3 additionally binds typed
+	// Guardian threat evidence when it is present.
 	SignatureVersion string    `json:"signature_version,omitempty"`
 	Timestamp        time.Time `json:"timestamp"`
 
@@ -153,6 +158,11 @@ const AuthorizedExecutionIntentSignatureV2 = "authorized_execution_intent.v2"
 // DecisionRecordSignatureV2 marks the HELM-303 decision preimage: ReasonCode
 // replaces free-text Reason in the signed payload.
 const DecisionRecordSignatureV2 = "decision_record.v2"
+
+// DecisionRecordSignatureV3 binds Guardian-owned typed threat evidence when a
+// decision contains it. Records without threat evidence remain on V2 so
+// historical and ordinary decisions preserve their established preimage.
+const DecisionRecordSignatureV3 = "decision_record.v3"
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)

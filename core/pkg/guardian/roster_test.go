@@ -40,17 +40,18 @@ var gateFieldByID = map[GateID]string{
 // listed explicitly so that adding a field forces a deliberate choice between
 // "this is a gate" and "this is not".
 var nonGateFields = map[string]bool{
-	"signer":            true,
-	"prg":               true,
-	"pe":                true,
-	"registry":          true,
-	"clock":             true,
-	"envFprint":         true,
-	"gateRosterHash":    true,
-	"snapshotScope":     true,
-	"otel":              true,
-	"zeroidInterceptor": true,
-	"boundaryChain":     true,
+	"signer":                        true,
+	"prg":                           true,
+	"pe":                            true,
+	"registry":                      true,
+	"clock":                         true,
+	"envFprint":                     true,
+	"gateRosterHash":                true,
+	"snapshotScope":                 true,
+	"semanticEscalationThresholdBP": true,
+	"otel":                          true,
+	"zeroidInterceptor":             true,
+	"boundaryChain":                 true,
 }
 
 // A new nil-gated dependency added to Guardian without a GateID would be

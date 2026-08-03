@@ -93,6 +93,55 @@ func TestVerifyEvidencePackIndexRootsChecksTheCompleteInventory(t *testing.T) {
 	}
 }
 
+func TestVerifyEvidencePackIndexRootsRejectsSymlinkPaths(t *testing.T) {
+	t.Run("indexed file", func(t *testing.T) {
+		dir := t.TempDir()
+		outside := filepath.Join(t.TempDir(), "outside.json")
+		if err := os.WriteFile(outside, []byte(`{"score":1}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, filepath.Join(dir, "01_SCORE.json")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		writeSealTestIndex(t, dir, []string{"01_SCORE.json"})
+
+		if _, err := VerifyEvidencePackIndexRoots(dir); err == nil || !strings.Contains(err.Error(), "symlink") {
+			t.Fatalf("indexed symlink error=%v, want symlink rejection", err)
+		}
+	})
+
+	t.Run("indexed directory", func(t *testing.T) {
+		dir := t.TempDir()
+		outside := t.TempDir()
+		if err := os.WriteFile(filepath.Join(outside, "01_SCORE.json"), []byte(`{"score":1}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, filepath.Join(dir, "nested")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		writeSealTestIndex(t, dir, []string{"nested/01_SCORE.json"})
+
+		if _, err := VerifyEvidencePackIndexRoots(dir); err == nil || !strings.Contains(err.Error(), "symlink") {
+			t.Fatalf("indexed directory symlink error=%v, want symlink rejection", err)
+		}
+	})
+
+	t.Run("index file", func(t *testing.T) {
+		dir := t.TempDir()
+		outside := filepath.Join(t.TempDir(), "index.json")
+		if err := os.WriteFile(outside, []byte(`{"entries":[]}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, filepath.Join(dir, "00_INDEX.json")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+
+		if _, err := VerifyEvidencePackIndexRoots(dir); err == nil || !strings.Contains(err.Error(), "symlink") {
+			t.Fatalf("index symlink error=%v, want symlink rejection", err)
+		}
+	})
+}
+
 func TestFileDevEvidenceSignerParseEdges(t *testing.T) {
 	dir := t.TempDir()
 	keyPath := FileDevEvidenceKeyPath(dir)

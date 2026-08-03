@@ -151,15 +151,15 @@ func adv02PolicyBypass(opts VerificationOptions) *Suite {
 
 			receiptsDir := filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts")
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
+			receipts := loadReceipts(files)
 
 			t := TestResult{TestID: "ADV-02-T1", Name: "All effect actions have preceding policy_decision"}
 			effectsWithoutPolicy := 0
-			for _, f := range files {
-				receipt := loadReceipt(f)
+			for _, receipt := range receipts {
 				action, _ := receipt["action_type"].(string)
 				if isEffectAction(action) {
 					decisionID, _ := receipt["decision_id"].(string)
-					if decisionID == "" || !hasBoundAuthorizationReceipt(files, receipt, "policy_decision", opts) {
+					if decisionID == "" || !hasBoundAuthorization(receipts, receipt, "policy_decision", opts) {
 						effectsWithoutPolicy++
 					}
 				}
@@ -692,21 +692,21 @@ func adv10HighFinalityUnsigned(opts VerificationOptions) *Suite {
 
 			receiptsDir := filepath.Join(evidenceDir, "02_PROOFGRAPH", "receipts")
 			files, _ := filepath.Glob(filepath.Join(receiptsDir, "*.json"))
+			receipts := loadReceipts(files)
 
 			t := TestResult{TestID: "ADV-10-T1", Name: "High-finality effects require approval_action receipt"}
 
 			unsigned := 0
-			for _, f := range files {
-				receipt := loadReceipt(f)
+			for i, receipt := range receipts {
 				action, _ := receipt["action_type"].(string)
 				effectClass, _ := receipt["effect_class"].(string)
 
 				// High-finality: E4 (irreversible) or E5 (catastrophic)
 				if isHighFinality(effectClass, action) {
 					decisionID, _ := receipt["decision_id"].(string)
-					if decisionID == "" || !hasBoundAuthorizationReceipt(files, receipt, "approval_action", opts) {
+					if decisionID == "" || !hasBoundAuthorization(receipts, receipt, "approval_action", opts) {
 						unsigned++
-						t.Evidence += fmt.Sprintf("unapproved high-finality: %s (class=%s); ", filepath.Base(f), effectClass)
+						t.Evidence += fmt.Sprintf("unapproved high-finality: %s (class=%s); ", filepath.Base(files[i]), effectClass)
 					}
 				}
 			}
@@ -754,6 +754,14 @@ func loadReceipt(path string) map[string]interface{} {
 	var receipt map[string]interface{}
 	json.Unmarshal(data, &receipt) //nolint:errcheck
 	return receipt
+}
+
+func loadReceipts(files []string) []map[string]interface{} {
+	receipts := make([]map[string]interface{}, len(files))
+	for i, file := range files {
+		receipts[i] = loadReceipt(file)
+	}
+	return receipts
 }
 
 func loadSequenceNumbers(files []string) []uint64 {
@@ -805,16 +813,6 @@ func budgetScope(receipt map[string]interface{}) string {
 		return "budget_snapshot_ref:" + strings.TrimSpace(value)
 	}
 	return ""
-}
-
-func hasBoundAuthorizationReceipt(files []string, effect map[string]interface{}, actionType string, opts VerificationOptions) bool {
-	receipts := make([]map[string]interface{}, 0, len(files))
-	for _, path := range files {
-		if receipt := loadReceipt(path); receipt != nil {
-			receipts = append(receipts, receipt)
-		}
-	}
-	return hasBoundAuthorization(receipts, effect, actionType, opts)
 }
 
 func hasBoundAuthorization(receipts []map[string]interface{}, effect map[string]interface{}, actionType string, opts VerificationOptions) bool {

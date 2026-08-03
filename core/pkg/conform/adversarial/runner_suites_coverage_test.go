@@ -190,6 +190,10 @@ func TestAdversarialSuiteHelpers(t *testing.T) {
 	if got := loadReceipt(filepath.Join(dir, "missing.json")); got != nil {
 		t.Fatalf("loadReceipt missing file = %#v, want nil", got)
 	}
+	receipts := loadReceipts(files)
+	if len(receipts) != len(files) || receipts[0]["action_type"] != "policy_decision" || receipts[1]["action_type"] != "approval_action" || receipts[2] != nil {
+		t.Fatalf("loadReceipts = %#v, want one aligned entry per file", receipts)
+	}
 	if seqs := loadSequenceNumbers(files); len(seqs) != 2 || seqs[0] != 10 || seqs[1] != 11 {
 		t.Fatalf("loadSequenceNumbers = %#v, want [10 11]", seqs)
 	}

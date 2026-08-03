@@ -503,6 +503,9 @@ func VerifyEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, error
 
 func computeEvidencePackInventory(packDir string, verifyFiles bool, allowVerifiedConformanceSignature ...bool) (evidencePackInventory, error) {
 	indexPath := filepath.Join(packDir, "00_INDEX.json")
+	if err := rejectEvidencePackSymlinks(packDir, "00_INDEX.json"); err != nil {
+		return evidencePackInventory{}, fmt.Errorf("read 00_INDEX.json: %w", err)
+	}
 	indexData, err := os.ReadFile(indexPath)
 	if err != nil {
 		return evidencePackInventory{}, fmt.Errorf("read 00_INDEX.json: %w", err)
@@ -622,6 +625,9 @@ func verifyEvidencePackIndexedFiles(packDir string, entries []indexRootEntry) er
 
 func verifyEvidencePackIndexedFile(packDir string, entry indexRootEntry) error {
 	clean := filepath.Clean(entry.Path)
+	if err := rejectEvidencePackSymlinks(packDir, clean); err != nil {
+		return fmt.Errorf("inspect indexed file %s: %w", entry.Path, err)
+	}
 	actual, err := HashFile(filepath.Join(packDir, clean))
 	if err != nil {
 		return fmt.Errorf("hash indexed file %s: %w", entry.Path, err)
@@ -629,6 +635,21 @@ func verifyEvidencePackIndexedFile(packDir string, entry indexRootEntry) error {
 	expected := strings.TrimPrefix(strings.TrimSpace(entry.SHA256), "sha256:")
 	if !strings.EqualFold(strings.TrimPrefix(actual, "sha256:"), expected) {
 		return fmt.Errorf("indexed file hash mismatch for %s: index=sha256:%s current=%s", entry.Path, expected, actual)
+	}
+	return nil
+}
+
+func rejectEvidencePackSymlinks(packDir, rel string) error {
+	path := packDir
+	for _, component := range strings.Split(filepath.Clean(rel), string(filepath.Separator)) {
+		path = filepath.Join(path, component)
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("evidence pack path is a symlink: %s", filepath.ToSlash(rel))
+		}
 	}
 	return nil
 }

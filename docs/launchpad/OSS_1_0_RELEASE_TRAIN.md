@@ -42,6 +42,13 @@ published drift evidence for that exact version.
 
 ## Cross-Release Rules
 
+- Code-merge authority follows `GOVERNANCE.md`: green required deterministic
+  checks on the pull request's current merge commit, with all review threads
+  resolved. The live `main protection` ruleset (`16024605`) is the enforcement
+  source; this train does not duplicate its mutable configuration. The
+  distinct-provider exact-head machine interlock remains an R&D track, not a
+  current merge requirement. Release tags and package publishes require an
+  explicit maintainer action.
 - One release has one theme. Do not mix EvidencePack, RiskEnvelope, release
   infrastructure, and product-scope work in the same tag unless the prior tag
   failed and the fix is required to publish correctly.
@@ -66,7 +73,9 @@ published drift evidence for that exact version.
    dependencies.
 2. Run scoped `/helm-audit`; use codebase-memory or CodeGraph for structural
    code discovery.
-3. Merge only approved and green prerequisite PRs, preserving attribution.
+3. Collect the current Governance merge evidence for prerequisite PRs,
+   preserving attribution; do not treat advisory review or the R&D interlock as
+   merge authority.
 4. Apply one release theme and keep unrelated changes out.
 5. Run `make prepare-version VERSION=<target>`.
 6. Regenerate OpenAPI, proto, schema, and SDK outputs only when source contracts
@@ -86,8 +95,8 @@ make release-assets
 10. Open one release PR. Require CI, CodeQL, Scorecard, docs truth, SDKs,
     contract drift, deployment smoke, kind smoke, release smoke, and launchpad
     smoke to pass.
-11. Merge only after required review.
-12. Tag merged `main` as `v<target>`; create `sdk/go/v<target>` at the same
+11. Merge the release PR only when the current Governance merge evidence is satisfied.
+12. Tag the merged `main` as `v<target>`; create `sdk/go/v<target>` at the same
     commit if the workflow does not already do it.
 13. Monitor the tag workflow: version contract, validate, deployment smoke, kind
     smoke, release smoke, binaries, cosign, reproducibility, container, chart,

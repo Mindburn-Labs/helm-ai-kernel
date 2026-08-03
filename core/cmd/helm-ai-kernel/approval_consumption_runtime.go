@@ -27,47 +27,54 @@ import (
 )
 
 const (
-	approvalConsumptionEnabledEnv       = "HELM_APPROVAL_CONSUMPTION_ENABLED"
-	approvalConsumerJWKSURLEnv          = "HELM_APPROVAL_CONSUMER_JWKS_URL"
-	approvalConsumerIssuerEnv           = "HELM_APPROVAL_CONSUMER_ISSUER"
-	approvalConsumerAudienceEnv         = "HELM_APPROVAL_CONSUMER_AUDIENCE"
-	approvalConsumerResourceEnv         = "HELM_APPROVAL_CONSUMER_RESOURCE"
-	approvalConsumerScopeEnv            = "HELM_APPROVAL_CONSUMER_SCOPE"
-	approvalDispatchScopeEnv            = "HELM_APPROVAL_DISPATCH_SCOPE"
-	approvalDispatchAdmissionTTLEnv     = "HELM_APPROVAL_DISPATCH_ADMISSION_TTL"
-	approvalSigningKeyRefEnv            = "HELM_APPROVAL_SIGNING_KEY_REF"
-	approvalKernelTrustRootIDEnv        = "HELM_APPROVAL_KERNEL_TRUST_ROOT_ID"
-	approvalConsumerMaxTokenTTLEnv      = "HELM_APPROVAL_CONSUMER_MAX_TOKEN_TTL"
-	effectDispositionEnabledEnv         = "HELM_EFFECT_DISPOSITION_ENABLED"
-	effectDispositionScopeEnv           = "HELM_EFFECT_DISPOSITION_SCOPE"
-	effectDispositionCommandKeyringEnv  = "HELM_EFFECT_DISPOSITION_COMMAND_KEYRING"
-	connectorReleaseAuthorityKeyringEnv = "HELM_CONNECTOR_RELEASE_AUTHORITY_KEYRING"
-	defaultApprovalConsumerScope        = "helm.approval.consume"
-	defaultApprovalDispatchScope        = "helm.approval.dispatch"
-	defaultEffectDispositionScope       = "helm.effect.disposition"
-	effectDispositionCommandKeyringV1   = "effect-disposition-command-keyring.v1"
-	connectorReleaseAuthorityKeyringV1  = "connector-release-authority-keyring.v1"
-	defaultApprovalDispatchAdmissionTTL = 30 * time.Second
-	defaultApprovalConsumerMaxTokenTTL  = 5 * time.Minute
-	maximumApprovalConsumerMaxTokenTTL  = 15 * time.Minute
+	approvalConsumptionEnabledEnv              = "HELM_APPROVAL_CONSUMPTION_ENABLED"
+	approvalConsumerJWKSURLEnv                 = "HELM_APPROVAL_CONSUMER_JWKS_URL"
+	approvalConsumerIssuerEnv                  = "HELM_APPROVAL_CONSUMER_ISSUER"
+	approvalConsumerAudienceEnv                = "HELM_APPROVAL_CONSUMER_AUDIENCE"
+	approvalConsumerResourceEnv                = "HELM_APPROVAL_CONSUMER_RESOURCE"
+	approvalConsumerScopeEnv                   = "HELM_APPROVAL_CONSUMER_SCOPE"
+	approvalDispatchScopeEnv                   = "HELM_APPROVAL_DISPATCH_SCOPE"
+	approvalDispatchAdmissionTTLEnv            = "HELM_APPROVAL_DISPATCH_ADMISSION_TTL"
+	approvalSigningKeyRefEnv                   = "HELM_APPROVAL_SIGNING_KEY_REF"
+	approvalKernelTrustRootIDEnv               = "HELM_APPROVAL_KERNEL_TRUST_ROOT_ID"
+	approvalConsumerMaxTokenTTLEnv             = "HELM_APPROVAL_CONSUMER_MAX_TOKEN_TTL"
+	effectDispositionEnabledEnv                = "HELM_EFFECT_DISPOSITION_ENABLED"
+	effectDispositionScopeEnv                  = "HELM_EFFECT_DISPOSITION_SCOPE"
+	effectReconciliationCandidatesEnabledEnv   = "HELM_EFFECT_RECONCILIATION_CANDIDATES_ENABLED"
+	effectReconciliationCandidatesResourceEnv  = "HELM_EFFECT_RECONCILIATION_CANDIDATES_RESOURCE"
+	effectReconciliationCandidatesScopeEnv     = "HELM_EFFECT_RECONCILIATION_CANDIDATES_SCOPE"
+	effectDispositionCommandKeyringEnv         = "HELM_EFFECT_DISPOSITION_COMMAND_KEYRING"
+	connectorReleaseAuthorityKeyringEnv        = "HELM_CONNECTOR_RELEASE_AUTHORITY_KEYRING"
+	defaultApprovalConsumerScope               = "helm.approval.consume"
+	defaultApprovalDispatchScope               = "helm.approval.dispatch"
+	defaultEffectDispositionScope              = "helm.effect.disposition"
+	defaultEffectReconciliationCandidatesScope = "helm.effect.reconciliation.read"
+	effectDispositionCommandKeyringV1          = "effect-disposition-command-keyring.v1"
+	connectorReleaseAuthorityKeyringV1         = "connector-release-authority-keyring.v1"
+	defaultApprovalDispatchAdmissionTTL        = 30 * time.Second
+	defaultApprovalConsumerMaxTokenTTL         = 5 * time.Minute
+	maximumApprovalConsumerMaxTokenTTL         = 15 * time.Minute
 )
 
 type approvalConsumptionConfig struct {
-	JWKSURL              string
-	Issuer               string
-	Audience             string
-	Resource             string
-	Scope                string
-	DispatchScope        string
-	SigningKeyRef        string
-	KernelTrustRootID    string
-	MaxTokenTTL          time.Duration
-	DispatchAdmissionTTL time.Duration
-	DispositionEnabled   bool
-	DispositionScope     string
-	DispositionKeys      []approvalceremony.TrustedEffectDispositionCommandKey
-	ReleaseAuthorityID   string
-	ReleaseAuthorityKeys []connectorregistry.TrustedReleaseAuthorityKey
+	JWKSURL                          string
+	Issuer                           string
+	Audience                         string
+	Resource                         string
+	Scope                            string
+	DispatchScope                    string
+	SigningKeyRef                    string
+	KernelTrustRootID                string
+	MaxTokenTTL                      time.Duration
+	DispatchAdmissionTTL             time.Duration
+	DispositionEnabled               bool
+	DispositionScope                 string
+	ReconciliationCandidatesEnabled  bool
+	ReconciliationCandidatesResource string
+	ReconciliationCandidatesScope    string
+	DispositionKeys                  []approvalceremony.TrustedEffectDispositionCommandKey
+	ReleaseAuthorityID               string
+	ReleaseAuthorityKeys             []connectorregistry.TrustedReleaseAuthorityKey
 }
 
 type runtimeAuthorityKeyring struct {
@@ -87,24 +94,27 @@ type runtimeAuthorityKeyringKey struct {
 
 func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error) {
 	if !envBool(approvalConsumptionEnabledEnv) {
-		if envBool(effectDispositionEnabledEnv) {
-			return approvalConsumptionConfig{}, true, errors.New("effect disposition transport requires approval consumption runtime")
+		if envBool(effectDispositionEnabledEnv) || envBool(effectReconciliationCandidatesEnabledEnv) {
+			return approvalConsumptionConfig{}, true, errors.New("effect disposition and reconciliation transports require approval consumption runtime")
 		}
 		return approvalConsumptionConfig{}, false, nil
 	}
 	config := approvalConsumptionConfig{
-		JWKSURL:              strings.TrimSpace(os.Getenv(approvalConsumerJWKSURLEnv)),
-		Issuer:               strings.TrimSpace(os.Getenv(approvalConsumerIssuerEnv)),
-		Audience:             strings.TrimSpace(os.Getenv(approvalConsumerAudienceEnv)),
-		Resource:             strings.TrimSpace(os.Getenv(approvalConsumerResourceEnv)),
-		Scope:                strings.TrimSpace(os.Getenv(approvalConsumerScopeEnv)),
-		DispatchScope:        strings.TrimSpace(os.Getenv(approvalDispatchScopeEnv)),
-		SigningKeyRef:        strings.TrimSpace(os.Getenv(approvalSigningKeyRefEnv)),
-		KernelTrustRootID:    strings.TrimSpace(os.Getenv(approvalKernelTrustRootIDEnv)),
-		MaxTokenTTL:          defaultApprovalConsumerMaxTokenTTL,
-		DispatchAdmissionTTL: defaultApprovalDispatchAdmissionTTL,
-		DispositionEnabled:   envBool(effectDispositionEnabledEnv),
-		DispositionScope:     strings.TrimSpace(os.Getenv(effectDispositionScopeEnv)),
+		JWKSURL:                          strings.TrimSpace(os.Getenv(approvalConsumerJWKSURLEnv)),
+		Issuer:                           strings.TrimSpace(os.Getenv(approvalConsumerIssuerEnv)),
+		Audience:                         strings.TrimSpace(os.Getenv(approvalConsumerAudienceEnv)),
+		Resource:                         strings.TrimSpace(os.Getenv(approvalConsumerResourceEnv)),
+		Scope:                            strings.TrimSpace(os.Getenv(approvalConsumerScopeEnv)),
+		DispatchScope:                    strings.TrimSpace(os.Getenv(approvalDispatchScopeEnv)),
+		SigningKeyRef:                    strings.TrimSpace(os.Getenv(approvalSigningKeyRefEnv)),
+		KernelTrustRootID:                strings.TrimSpace(os.Getenv(approvalKernelTrustRootIDEnv)),
+		MaxTokenTTL:                      defaultApprovalConsumerMaxTokenTTL,
+		DispatchAdmissionTTL:             defaultApprovalDispatchAdmissionTTL,
+		DispositionEnabled:               envBool(effectDispositionEnabledEnv),
+		DispositionScope:                 strings.TrimSpace(os.Getenv(effectDispositionScopeEnv)),
+		ReconciliationCandidatesEnabled:  envBool(effectReconciliationCandidatesEnabledEnv),
+		ReconciliationCandidatesResource: strings.TrimSpace(os.Getenv(effectReconciliationCandidatesResourceEnv)),
+		ReconciliationCandidatesScope:    strings.TrimSpace(os.Getenv(effectReconciliationCandidatesScopeEnv)),
 	}
 	if config.Scope == "" {
 		config.Scope = defaultApprovalConsumerScope
@@ -114,6 +124,9 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 	}
 	if config.DispositionScope == "" {
 		config.DispositionScope = defaultEffectDispositionScope
+	}
+	if config.ReconciliationCandidatesScope == "" {
+		config.ReconciliationCandidatesScope = defaultEffectReconciliationCandidatesScope
 	}
 	for name, value := range map[string]string{
 		approvalConsumerJWKSURLEnv:   config.JWKSURL,
@@ -167,12 +180,33 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 		if !validWorkloadClaim(config.DispositionScope) || config.DispositionScope == config.Scope || config.DispositionScope == config.DispatchScope {
 			return approvalConsumptionConfig{}, true, errors.New("effect disposition scope must be a distinct non-whitespace token")
 		}
+	}
+	if config.ReconciliationCandidatesEnabled {
+		if !validEffectReconciliationCandidatesResource(config.ReconciliationCandidatesResource) || !validWorkloadClaim(config.ReconciliationCandidatesScope) ||
+			config.ReconciliationCandidatesScope != defaultEffectReconciliationCandidatesScope ||
+			config.ReconciliationCandidatesScope == config.Scope || config.ReconciliationCandidatesScope == config.DispatchScope ||
+			config.ReconciliationCandidatesScope == config.DispositionScope || config.ReconciliationCandidatesResource == config.Resource {
+			return approvalConsumptionConfig{}, true, errors.New("effect reconciliation candidates require the exact route resource and read scope")
+		}
+	}
+	if config.DispositionEnabled || config.ReconciliationCandidatesEnabled {
 		config.DispositionKeys, config.ReleaseAuthorityID, config.ReleaseAuthorityKeys, err = configuredEffectDispositionAuthorities(config.Audience)
 		if err != nil {
 			return approvalConsumptionConfig{}, true, err
 		}
 	}
 	return config, true, nil
+}
+
+func validEffectReconciliationCandidatesResource(value string) bool {
+	if !validWorkloadClaim(value) {
+		return false
+	}
+	parsed, err := url.Parse(value)
+	return err == nil && strings.EqualFold(parsed.Scheme, "https") && parsed.Host != "" &&
+		parsed.User == nil && parsed.Opaque == "" && parsed.RawPath == "" &&
+		parsed.RawQuery == "" && !parsed.ForceQuery && parsed.Fragment == "" &&
+		parsed.Path == effectReconciliationCandidatesPath
 }
 
 func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode string, signer helmcrypto.Signer, stops kernel.ScopedStopReader) (*approvalConsumptionRuntime, error) {
@@ -221,8 +255,10 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 		Resource: config.Resource, Scopes: []string{config.DispatchScope},
 	})
 	var disposition effectDispositionRecorder
+	var reconciliationCandidates effectReconciliationCandidateProvider
 	var dispositionValidator approvalConsumerTokenValidator
-	if config.DispositionEnabled {
+	var reconciliationValidator approvalConsumerTokenValidator
+	if config.DispositionEnabled || config.ReconciliationCandidatesEnabled {
 		commandVerifier, err := approvalceremony.NewEd25519EffectDispositionCommandVerifier(config.DispositionKeys)
 		if err != nil {
 			return nil, fmt.Errorf("initialize effect disposition command verifier: %w", err)
@@ -235,20 +271,31 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 		if err != nil {
 			return nil, fmt.Errorf("initialize connector release authority store: %w", err)
 		}
-		disposition, err = approvalceremony.NewEffectDispositionService(
+		service, err := approvalceremony.NewEffectDispositionService(
 			store, approvalceremony.ContextConsumerIdentityProvider{}, releaseStore, commandVerifier, approvalSigner,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("initialize effect disposition service: %w", err)
 		}
-		dispositionValidator = mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
-			JWKSURL: config.JWKSURL, Issuer: config.Issuer, Audience: config.Audience,
-			Resource: config.Resource, Scopes: []string{config.DispositionScope},
-		})
+		if config.DispositionEnabled {
+			disposition = service
+			dispositionValidator = mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
+				JWKSURL: config.JWKSURL, Issuer: config.Issuer, Audience: config.Audience,
+				Resource: config.Resource, Scopes: []string{config.DispositionScope},
+			})
+		}
+		if config.ReconciliationCandidatesEnabled {
+			reconciliationCandidates = service
+			reconciliationValidator = mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
+				JWKSURL: config.JWKSURL, Issuer: config.Issuer, Audience: config.Audience,
+				Resource: config.ReconciliationCandidatesResource, Scopes: []string{config.ReconciliationCandidatesScope},
+			})
+		}
 	}
 	return &approvalConsumptionRuntime{
 		consumer: consumer, admitter: admitter, validator: validator, dispatchValidator: dispatchValidator,
 		disposition: disposition, dispositionValidator: dispositionValidator,
+		reconciliationCandidates: reconciliationCandidates, reconciliationValidator: reconciliationValidator,
 		stops: stops, audience: config.Audience,
 		maxTokenTTL: config.MaxTokenTTL,
 	}, nil

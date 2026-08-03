@@ -367,6 +367,7 @@ func TestApprovalConsumptionRoutesHaveExactRegistryMetadata(t *testing.T) {
 		{Method: http.MethodPost, Path: approvalDispatchAdmissionRecoverPath, MuxPattern: approvalDispatchAdmissionRecoverPath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "recoverApprovalDispatchAdmission", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: effectDispositionPath, MuxPattern: effectDispositionPath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "recordEffectDisposition", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: effectDispositionRecoverPath, MuxPattern: effectDispositionRecoverPath, Auth: RouteAuthWorkload, RateLimit: RouteRateEvidence, ContractStatus: RouteContractInternal, OperationID: "recoverEffectDisposition", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodGet, Path: effectReconciliationCandidatesPath, MuxPattern: effectReconciliationCandidatesPath, Auth: RouteAuthWorkload, RateLimit: RouteRateEvidence, ContractStatus: RouteContractInternal, OperationID: "listEffectReconciliationCandidates", Owner: "core/cmd/helm-ai-kernel"},
 	}
 	registered := make(map[string]RuntimeRouteSpec, len(RuntimeRouteSpecs()))
 	for _, spec := range RuntimeRouteSpecs() {

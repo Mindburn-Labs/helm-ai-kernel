@@ -125,21 +125,9 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return 2
 	}
-	classification := classifyPreToolPayload(payload)
-	if !classification.ShouldDecide {
+	classifications := classifyPreToolPayloads(payload)
+	if len(classifications) == 0 {
 		return 0
-	}
-	classifications := []hookClassification{classification}
-	if classification.RequiresShellPermission {
-		classifications = append(classifications, hookClassification{
-			ShouldDecide: true,
-			Class:        "shell-operate",
-			Target:       inputString(payload.ToolInput, "command", "cmd"),
-			Action:       "shell_operate",
-			ToolID:       "shell",
-			Reason:       "compound shell operation",
-			Metadata:     classification.Metadata,
-		})
 	}
 	for _, decision := range classifications {
 		receipt, err := buildHookDecisionReceipt(opts, payload, decision)
@@ -204,6 +192,14 @@ func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
 }
 
 func classifyPreToolPayload(payload preToolPayload) hookClassification {
+	classifications := classifyPreToolPayloads(payload)
+	if len(classifications) == 0 {
+		return hookClassification{}
+	}
+	return classifications[0]
+}
+
+func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 	tool := strings.TrimSpace(payload.ToolName)
 	switch {
 	case strings.EqualFold(tool, "Bash"):
@@ -212,40 +208,41 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 		// advisory input only: it decides whether the command reaches the
 		// existing signed decision path; the permit/receipt verdict is still
 		// produced by workstation.Decide, fail-closed as before.
-		if scan := shellscan.ClassifyAt(command, payload.CWD); scan.Decide {
-			class := "shell-operate"
-			target := command
-			action := "shell_operate"
-			reason := "shell operation: " + scan.Reason
-			if scan.SensitiveTarget != "" {
-				class = "sensitive-file-write"
-				target = scan.SensitiveTarget
-				action = "file_write"
-				reason = "sensitive file operation"
+		scan := shellscan.ClassifyAt(command, payload.CWD)
+		classifications := make([]hookClassification, 0, len(scan.EffectFacts)+2)
+		for _, fact := range scan.EffectFacts {
+			if classification, ok := hookClassificationFromShellscanFact(fact, scan); ok {
+				classifications = append(classifications, classification)
+				continue
 			}
-			return hookClassification{
-				ShouldDecide:            true,
-				Class:                   class,
-				Target:                  target,
-				Action:                  action,
-				ToolID:                  "shell",
-				Reason:                  reason,
-				Metadata:                shellscanReceiptMetadata(scan),
-				RequiresShellPermission: scan.RequiresShellPermission,
-			}
+			// A future scanner fact must never become an ungoverned effect just
+			// because this hook has not learned its dedicated policy class yet.
+			classifications = append(classifications, hookClassification{
+				ShouldDecide: true,
+				Class:        "shell-operate",
+				Target:       command,
+				Action:       "shell_operate",
+				ToolID:       "shell",
+				Reason:       "unrecognized shell effect fact",
+				Metadata:     shellscanReceiptMetadata(scan),
+			})
 		}
+		if scan.RequiresShellDecision {
+			classifications = append(classifications, shellscanGenericClassification(command, scan))
+		}
+		return appendRequiredShellPermission(classifications, command)
 	case strings.HasPrefix(tool, "mcp__"):
 		if isHelmSelfMCPTool(tool) {
-			return hookClassification{}
+			return nil
 		}
-		return hookClassification{
+		return []hookClassification{{
 			ShouldDecide: true,
 			Class:        "mcp",
 			Target:       tool,
 			Action:       "mcp_tool_call",
 			ToolID:       tool,
 			Reason:       "MCP tool call",
-		}
+		}}
 	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "apply_patch"):
 		target := inputString(payload.ToolInput, "file_path", "path", "target_file")
 		if target == "" && strings.EqualFold(tool, "apply_patch") {
@@ -255,17 +252,90 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 			target = "apply_patch"
 		}
 		if isSensitiveWriteTarget(target) {
-			return hookClassification{
+			return []hookClassification{{
 				ShouldDecide: true,
 				Class:        "sensitive-file-write",
 				Target:       target,
 				Action:       "file_write",
 				ToolID:       tool,
 				Reason:       "sensitive file write",
-			}
+			}}
 		}
 	}
-	return hookClassification{}
+	return nil
+}
+
+func hookClassificationFromShellscanFact(fact shellscan.EffectFact, scan shellscan.Result) (hookClassification, bool) {
+	metadata := shellscanReceiptMetadata(scan)
+	switch fact.Class {
+	case "network":
+		return hookClassification{
+			ShouldDecide: true,
+			Class:        "network",
+			Target:       fact.Target,
+			Action:       fact.Action,
+			ToolID:       "network.egress",
+			Reason:       fact.Reason,
+			Metadata:     metadata,
+		}, true
+	case "secret":
+		return hookClassification{
+			ShouldDecide: true,
+			Class:        "secret",
+			Target:       fact.Target,
+			Action:       fact.Action,
+			ToolID:       "secret.read",
+			Reason:       fact.Reason,
+			Metadata:     metadata,
+		}, true
+	default:
+		return hookClassification{}, false
+	}
+}
+
+func shellscanGenericClassification(command string, scan shellscan.Result) hookClassification {
+	class := "shell-operate"
+	target := command
+	action := "shell_operate"
+	reason := "shell operation: " + scan.Reason
+	if scan.SensitiveTarget != "" {
+		class = "sensitive-file-write"
+		target = scan.SensitiveTarget
+		action = "file_write"
+		reason = "sensitive file operation"
+	}
+	return hookClassification{
+		ShouldDecide:            true,
+		Class:                   class,
+		Target:                  target,
+		Action:                  action,
+		ToolID:                  "shell",
+		Reason:                  reason,
+		Metadata:                shellscanReceiptMetadata(scan),
+		RequiresShellPermission: scan.RequiresShellPermission,
+	}
+}
+
+func appendRequiredShellPermission(classifications []hookClassification, command string) []hookClassification {
+	if len(classifications) == 0 {
+		return nil
+	}
+	decisions := make([]hookClassification, 0, len(classifications)+1)
+	for _, classification := range classifications {
+		decisions = append(decisions, classification)
+		if classification.RequiresShellPermission {
+			decisions = append(decisions, hookClassification{
+				ShouldDecide: true,
+				Class:        "shell-operate",
+				Target:       command,
+				Action:       "shell_operate",
+				ToolID:       "shell",
+				Reason:       "compound shell operation",
+				Metadata:     classification.Metadata,
+			})
+		}
+	}
+	return decisions
 }
 
 func buildHookDecisionReceipt(opts hookOptions, payload preToolPayload, classification hookClassification) (*contracts.WorkstationPolicyDecisionReceipt, error) {

@@ -63,8 +63,6 @@ const (
 	localConsoleReadyTimeout                    = 5 * time.Second
 	localConsoleReadyRetry                      = 50 * time.Millisecond
 	localConsoleStopTimeout                     = 3 * time.Second
-	localConsolePeerReplayTTL                   = 10 * time.Minute
-	localConsolePeerReplayLimit                 = 4096
 )
 
 var (
@@ -1025,41 +1023,23 @@ func validLocalConsoleSecret(secret string) bool {
 
 type localConsolePeerProof struct {
 	secret string
-
-	mu   sync.Mutex
-	used map[string]time.Time
 }
 
 func newLocalConsolePeerProof(secret string) (*localConsolePeerProof, error) {
 	if !validLocalConsoleSecret(secret) {
 		return nil, fmt.Errorf("local Console peer secret is invalid")
 	}
-	return &localConsolePeerProof{secret: secret, used: make(map[string]time.Time)}, nil
+	return &localConsolePeerProof{secret: secret}, nil
 }
 
 func (p *localConsolePeerProof) prove(nonce string) (string, bool) {
 	if p == nil || !validLocalConsoleReadyNonce(nonce) {
 		return "", false
 	}
-	now := time.Now().UTC()
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.used == nil {
-		p.used = make(map[string]time.Time)
-	}
-	for previousNonce, issuedAt := range p.used {
-		if now.Sub(issuedAt) >= localConsolePeerReplayTTL {
-			delete(p.used, previousNonce)
-		}
-	}
-	if _, seen := p.used[nonce]; seen || len(p.used) >= localConsolePeerReplayLimit {
-		return "", false
-	}
 	proof := localConsolePeerProofValue(p.secret, nonce)
 	if proof == "" {
 		return "", false
 	}
-	p.used[nonce] = now
 	return proof, true
 }
 

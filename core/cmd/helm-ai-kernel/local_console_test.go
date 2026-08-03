@@ -385,7 +385,7 @@ func TestLocalConsoleReadinessRequiresHMACWithoutCredentialsOnWire(t *testing.T)
 	}
 }
 
-func TestLocalConsolePeerProofRouteRequiresFreshLoopbackNonceWithoutBearer(t *testing.T) {
+func TestLocalConsolePeerProofRouteRequiresValidLoopbackNonceWithoutBearer(t *testing.T) {
 	secret := strings.Repeat("a", 64)
 	peer, err := newLocalConsolePeerProof(secret)
 	if err != nil {
@@ -424,12 +424,17 @@ func TestLocalConsolePeerProofRouteRequiresFreshLoopbackNonceWithoutBearer(t *te
 		t.Fatalf("peer proof = %q, want %q", got, wantProof)
 	}
 
-	// A proof nonce is one-time: replayed proof requests fail closed instead of
-	// becoming a reusable peer-authentication oracle.
+	// The Console verifier owns CSPRNG nonce freshness and validates the shared
+	// secret HMAC. The Kernel must not reserve unauthenticated nonce slots.
 	replay := httptest.NewRecorder()
 	mux.ServeHTTP(replay, request)
-	if replay.Code != http.StatusNotFound || replay.Header().Get(localConsolePeerProofHeader) != "" {
+	if replay.Code != http.StatusOK || !hmac.Equal([]byte(replay.Header().Get(localConsolePeerProofHeader)), []byte(wantProof)) {
 		t.Fatalf("replayed peer proof = status %d headers %#v", replay.Code, replay.Header())
+	}
+	for i := 0; i <= 4096; i++ {
+		if _, ok := peer.prove(fmt.Sprintf("%064x", i)); !ok {
+			t.Fatalf("valid peer nonce %d was rejected", i)
+		}
 	}
 
 	head := httptest.NewRequest(http.MethodHead, localConsolePeerProofPath, nil)

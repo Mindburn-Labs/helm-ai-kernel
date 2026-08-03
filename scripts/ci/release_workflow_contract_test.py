@@ -132,6 +132,17 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertRegex(post_release, r"- name: Check full published version status\n\s+if: always\(\)")
         self.assertRegex(post_release, r"- name: Replace release version status with full post-release status\n\s+if: always\(\)")
 
+    def test_console_dispatch_uses_an_immutable_ref_bound_to_the_source_pin(self) -> None:
+        console_sidecar = self.job("console-local-sidecar")
+        self.assertIn("CONSOLE_WORKFLOW_REF: ${{ steps.console-pin.outputs.workflow_ref }}", console_sidecar)
+        self.assertIn('case "${CONSOLE_WORKFLOW_REF}" in', console_sidecar)
+        self.assertIn('refs/tags/*) ;;', console_sidecar)
+        self.assertIn('workflow_tag="${CONSOLE_WORKFLOW_REF#refs/tags/}"', console_sidecar)
+        self.assertIn('gh api "repos/${CONSOLE_REPOSITORY}/commits/${workflow_tag}" --jq \'.sha\'', console_sidecar)
+        self.assertIn('[ "${workflow_sha}" != "${CONSOLE_SOURCE_SHA}" ]', console_sidecar)
+        self.assertIn('--ref "${workflow_tag}"', console_sidecar)
+        self.assertNotIn("--ref main", console_sidecar)
+
 
 if __name__ == "__main__":
     unittest.main()

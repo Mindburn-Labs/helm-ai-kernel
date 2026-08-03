@@ -196,9 +196,23 @@ jobs:
           GH_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
           CONSOLE_REPOSITORY: ${{ steps.console-pin.outputs.repository }}
           CONSOLE_SOURCE_SHA: ${{ steps.console-pin.outputs.source_sha }}
+          CONSOLE_WORKFLOW_REF: ${{ steps.console-pin.outputs.workflow_ref }}
         run: |
           set -euo pipefail
           command -v gh >/dev/null
+          case "${CONSOLE_WORKFLOW_REF}" in
+            refs/tags/*) ;;
+            *)
+              echo "::error::Console workflow_ref must be an immutable refs/tags/... source pin."
+              exit 1
+              ;;
+          esac
+          workflow_tag="${CONSOLE_WORKFLOW_REF#refs/tags/}"
+          workflow_sha="$(gh api "repos/${CONSOLE_REPOSITORY}/commits/${workflow_tag}" --jq '.sha')"
+          if [ "${workflow_sha}" != "${CONSOLE_SOURCE_SHA}" ]; then
+            echo "::error::Console workflow_ref ${CONSOLE_WORKFLOW_REF} resolves to ${workflow_sha}, not pinned source ${CONSOLE_SOURCE_SHA}. Create a protected immutable tag at the pinned source before releasing."
+            exit 1
+          fi
           prior_runs="${RUNNER_TEMP}/console-local-sidecar-prior-runs.txt"
           gh run list \
             --repo "${CONSOLE_REPOSITORY}" \
@@ -209,7 +223,7 @@ jobs:
             --jq '.[].databaseId' | sort > "${prior_runs}"
           gh workflow run release-local-sidecar.yml \
             --repo "${CONSOLE_REPOSITORY}" \
-            --ref main \
+            --ref "${workflow_tag}" \
             -f source_sha="${CONSOLE_SOURCE_SHA}" \
             -f kernel_release_version="${GITHUB_REF_NAME}"
 

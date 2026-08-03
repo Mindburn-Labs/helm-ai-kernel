@@ -33,6 +33,7 @@ RELEASE_SOURCE_PIN = {
     "version": "0.2.1",
     "package_lock_sha256": "1028990307789189333657942de79d11e6889ef47dc539f77e0a9c94c26a2076",
 }
+RELEASE_WORKFLOW_REF = "refs/tags/helm-console-sidecar-v0.8.0"
 
 
 def digest(data: bytes) -> str:
@@ -182,6 +183,7 @@ def build_release(root: Path, *, target_mutators: dict[str, dict[str, object]] |
             "kernel_release_version": "v0.8.0",
             "source_repository": sidecar.CONSOLE_REPOSITORY,
             "source": SOURCE,
+            "workflow_ref": "refs/tags/test-console-source",
         }],
     }), encoding="utf-8")
     return root, pins
@@ -469,6 +471,22 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "exactly one Console source pin"):
                 sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
 
+    def test_release_rejects_missing_or_mutable_workflow_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, pins = build_release(Path(directory))
+            payload = json.loads(pins.read_text(encoding="utf-8"))
+            for label, workflow_ref in (("missing", None), ("main", "main"), ("branch", "refs/heads/main")):
+                with self.subTest(label=label):
+                    candidate = json.loads(json.dumps(payload))
+                    pin = candidate["pins"][0]
+                    if workflow_ref is None:
+                        del pin["workflow_ref"]
+                    else:
+                        pin["workflow_ref"] = workflow_ref
+                    pins.write_text(json.dumps(candidate), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "workflow_ref|invalid fields"):
+                        sidecar.resolve_pin(pins, "v0.8.0")
+
     def test_release_rejects_checksum_descriptor_that_does_not_bind_archive(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, pins = build_release(Path(directory))
@@ -532,13 +550,14 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "ordered exactly"):
                 sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
 
-    def test_v080_source_pin_matches_the_authenticated_console_main_tuple(self) -> None:
+    def test_v080_source_pin_matches_the_exact_console_release_contract(self) -> None:
         pin = sidecar.resolve_pin(
             REPOSITORY_ROOT / "release/console-local-sidecar-pins.json",
             "v0.8.0",
         )
         self.assertEqual(pin["source_repository"], sidecar.CONSOLE_REPOSITORY)
         self.assertEqual(pin["source"], RELEASE_SOURCE_PIN)
+        self.assertEqual(pin["workflow_ref"], RELEASE_WORKFLOW_REF)
 
     def test_manifest_digest_flows_into_normal_and_reproducible_linker_flags(self) -> None:
         expected_digest = "d" * 64

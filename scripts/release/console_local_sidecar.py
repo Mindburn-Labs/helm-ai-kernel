@@ -23,7 +23,7 @@ from typing import Any
 
 
 MANIFEST_SCHEMA = "helm.console.local-sidecar.release-manifest.v1"
-PINS_SCHEMA = "helm.console.local-sidecar.source-pins.v1"
+PINS_SCHEMA = "helm.console.local-sidecar.source-pins.v2"
 COMPONENT = "app-helm-console"
 CONSOLE_REPOSITORY = "Mindburn-Labs/app-helm-console"
 MANIFEST_NAME = "helm-console-local-sidecar-release-manifest.json"
@@ -39,6 +39,7 @@ KERNEL_BINARY_NAMES = {target: f"helm-ai-kernel-{target}" for target in TARGETS}
 HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 SHA_40 = re.compile(r"^[0-9a-f]{40}$")
 SAFE_FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+IMMUTABLE_WORKFLOW_REF = re.compile(r"^refs/tags/[0-9A-Za-z][-0-9A-Za-z._/+]*$")
 INNER_PROVENANCE_SCHEMA = "helm.console.local-sidecar.provenance.v1"
 UNSIGNED_INNER_SIGNATURE = "none; this unsigned local artifact has no release authority"
 BUNDLE_MAX_BYTES = 512 * 1024 * 1024
@@ -92,6 +93,12 @@ def require_sha(value: Any, label: str) -> str:
 def require_safe_file_name(value: Any, label: str) -> str:
     if not isinstance(value, str) or not SAFE_FILE_NAME.fullmatch(value):
         reject(f"{label} must be a safe basename")
+    return value
+
+
+def require_immutable_workflow_ref(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not IMMUTABLE_WORKFLOW_REF.fullmatch(value):
+        reject(f"{label} must be an immutable refs/tags/... reference")
     return value
 
 
@@ -536,7 +543,7 @@ def load_pins(path: Path) -> list[dict[str, Any]]:
 def resolve_pin(pins_path: Path, kernel_release: str) -> dict[str, Any]:
     matches: list[dict[str, Any]] = []
     for value in load_pins(pins_path):
-        pin = require_exact_keys(value, {"kernel_release_version", "source_repository", "source"}, "source pin")
+        pin = require_exact_keys(value, {"kernel_release_version", "source_repository", "source", "workflow_ref"}, "source pin")
         if pin["kernel_release_version"] == kernel_release:
             matches.append(pin)
     if len(matches) != 1:
@@ -545,7 +552,13 @@ def resolve_pin(pins_path: Path, kernel_release: str) -> dict[str, Any]:
     if pin["source_repository"] != CONSOLE_REPOSITORY:
         reject("Console source pin names an unexpected repository")
     source = require_source(pin["source"], "source pin.source")
-    return {"kernel_release_version": kernel_release, "source_repository": CONSOLE_REPOSITORY, "source": source}
+    workflow_ref = require_immutable_workflow_ref(pin["workflow_ref"], "source pin.workflow_ref")
+    return {
+        "kernel_release_version": kernel_release,
+        "source_repository": CONSOLE_REPOSITORY,
+        "source": source,
+        "workflow_ref": workflow_ref,
+    }
 
 
 def verify_cosign(manifest: Path, bundle: Path) -> None:
@@ -842,6 +855,7 @@ def write_github_output(pin: dict[str, Any]) -> None:
     with Path(output).open("a", encoding="utf-8") as handle:
         handle.write(f"repository={pin['source_repository']}\n")
         handle.write(f"source_sha={pin['source']['commit']}\n")
+        handle.write(f"workflow_ref={pin['workflow_ref']}\n")
 
 
 def write_github_manifest_output(manifest_sha256: str) -> None:

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "helm://schemas/capability/rollback_plan.v1.json",
   "title": "HELM Rollback Plan v1",
-  "description": "Machine-checkable rollback plan attached to a capability manifest or an individual effect receipt. Implements the reversibility policy classes in docs/governance/reversibility-classes.md. Status: preview — schema only.",
+  "description": "Machine-checkable rollback plan attached to a capability manifest or an individual effect receipt. Implements the reversibility policy classes in docs/governance/reversibility-classes.md. Status: preview schema with core plan validation and Guardian plan binding; rollback execution and outcome verification remain follow-up.",
   "type": "object",
   "additionalProperties": false,
   "required": [

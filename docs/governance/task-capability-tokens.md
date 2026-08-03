@@ -1,7 +1,9 @@
 # Task Capability Tokens (R4)
 
-**Status:** preview specification. Schema merged
-(`capability/capability_token.v1.json`); mint/verify wiring is follow-up.
+**Status:** core in-process signed mint, verification, use consumption, and
+Guardian wiring are implemented. The bundled in-memory token store is
+process-local; durable shared token state, cross-process revocation,
+permit-ceremony mint authority, and emergency-stop fan-out remain follow-up.
 **Origin:** Step AOS 可控 ("权限按需授予、用完即收" — granted on demand,
 revoked when the task ends), formalized as a verifiable credential.
 
@@ -36,7 +38,7 @@ Recommended defaults: TTL = min(task end, 15 minutes); single-use for
 ## Lifecycle
 
 ```text
-mint (permit flow or policy-automatic for low-risk classes)
+mint (core authority primitive; permit-flow authority is follow-up)
   → dispatch checks: signature, task binding, manifest hash, expiry,
     use count, constraints
   → task end / scope violation / emergency stop
@@ -47,8 +49,10 @@ Revocation is itself a receipted effect — "用完即收" with a paper trail.
 
 ## Relationship to existing surfaces
 
-- Permit artifacts (`approval_artifact`, multi-party permits) authorize the
-  *mint*; the token authorizes individual *dispatches*.
-- Emergency stop revokes all outstanding tokens for the fenced subject.
+- Permit artifacts (`approval_artifact`, multi-party permits) are the intended
+  authority to authorize *mint*; the current core token authority does not
+  verify those artifacts itself. The token authorizes individual *dispatches*.
+- Subject-wide emergency-stop revocation requires durable shared token state
+  and remains follow-up.
 - Tokens compose with, never replace, guardian decisions: a valid token for a
   DENY-class effect still gets DENY.

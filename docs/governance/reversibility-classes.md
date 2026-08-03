@@ -1,6 +1,9 @@
 # Reversibility-Aware Policy Classes (R3)
 
-**Status:** preview specification. No guardian code changes in this pass.
+**Status:** core Guardian enforcement is implemented: validated rollback plans
+are bound before dispatch for reversible capabilities, invalid or expired
+plans deny, and external paths escalate. Rollback execution, outcome-receipt
+pairing, and authoritative approval-receipt verification remain follow-up.
 **Origin:** Step AOS alignment (their 可逆 "one-click rollback"), adapted to
 fail-closed enforcement instead of a UX promise.
 
@@ -19,9 +22,10 @@ base vocabulary. Policy classes compose it with effect reach:
 
 | Class | Definition | Dispatch requirement |
 | --- | --- | --- |
-| `reversible-local` | `exact_undo` or `compensating_action`, effect confined to `local_only` / `device_boundary` | ALLOW may proceed with a bound rollback plan (`rollback_plan.v1`) recorded in the decision receipt |
-| `reversible-external` | `exact_undo` or `compensating_action`, effect reaches `org_boundary` or `external` | ESCALATE by default; ALLOW only with rollback plan + `single_approval` minimum |
-| `irreversible` | `none` (any boundary) | DENY for protected targets; otherwise ESCALATE to permit flow. **No rollback promise may be made** |
+| `reversible-local` | `exact_undo` or `compensating_action`, effect confined to `local_only` / `device_boundary` | ALLOW may proceed only after a valid, capability-bound `rollback_plan.v1` is recorded in the decision context |
+| `reversible-external` | `exact_undo` or `compensating_action`, effect reaches `org_boundary` or `external` | ESCALATE after valid plan binding. The current core does not accept a raw caller-supplied approval as authority to ALLOW. |
+| `irreversible-effect` | `effect_class=irreversible` | DENY in the current core. **No rollback promise may be made.** |
+| `non-reversible` | `reversibility=none` with another effect class | ESCALATE to the permit flow; approval-receipt verification is follow-up. |
 
 ## Rules
 
@@ -29,17 +33,18 @@ base vocabulary. Policy classes compose it with effect reach:
    `compensating_action` or `exact_undo` and whose `effect_class` is not
    `read_only` must carry `rollback.plan_ref` in its manifest. The guardian
    refuses registration and dispatch otherwise (fail closed).
-2. **Rollback steps are capabilities.** Every step in a rollback plan
-   references a certified `capability_id`; compensating actions pass through
-   the same boundary as forward actions and produce paired receipts.
-3. **Verification is evidence.** `rollback_plan.v1.verification.method`:
+2. **Rollback steps are capabilities.** The current plan registry validates a
+   plan's target capability binding. Certification of every execution step,
+   execution through the forward boundary, and paired receipts are follow-up.
+3. **Verification is evidence.** `rollback_plan.v1.verification.method` is
+   required plan metadata; actual outcome verification is follow-up:
    - `receipt_pairing` — compensating receipt references the original receipt id;
    - `state_digest_match` — post-rollback state digest equals the pre-effect
      digest in the original receipt (strongest; preferred for local state);
    - `human_attestation` — signed human confirmation; weakest, allowed only
      where no machine check exists.
-4. **Guarantee expiry.** Rollback plans may declare `guarantee_expiry`. After
-   expiry the effect is treated as `irreversible` for policy purposes.
+4. **Guarantee expiry.** Rollback plans may declare `guarantee_expiry`. The
+   current Guardian denies dispatch when a required plan is expired.
 5. **Emergency stop supersedes.** Rollback execution never bypasses
    `EMERGENCY_STOP_FENCE`; a stopped subject rolls back only through the
    fenced path.

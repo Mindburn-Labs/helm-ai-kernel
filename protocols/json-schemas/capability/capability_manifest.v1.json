@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "helm://schemas/capability/capability_manifest.v1.json",
   "title": "HELM Governed Capability Manifest v1",
-  "description": "Normative manifest for an atomically callable capability (tool, MCP server method, A2A skill, CLI verb, GUI action, or API endpoint) registered in the HELM capability registry. The guardian resolves every dispatched effect to a manifest before decision. Status: preview — schema only; guardian enforcement wiring is follow-up work.",
+  "description": "Normative manifest for an atomically callable capability (tool, MCP server method, A2A skill, CLI verb, GUI action, or API endpoint) registered in the HELM capability registry. The Guardian resolves registered dispatched effects to a hash-bound manifest before downstream policy. Status: preview schema with core in-process registry enforcement; durable service and certification lifecycle remain follow-up work.",
   "type": "object",
   "additionalProperties": false,
   "required": [

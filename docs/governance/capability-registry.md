@@ -1,7 +1,10 @@
 # Governed Capability Registry (R1)
 
-**Status:** preview specification. Schemas are merged; guardian enforcement
-wiring is follow-up work and is **not** claimed as implemented.
+**Status:** core in-process enforcement is implemented: strict manifest
+loading, a content-addressed registry, and Guardian resolution bind registered
+capability facts before downstream policy evaluation. A durable registry
+service, certification lifecycle API, import adapters, and protocol-dispatch
+integration remain follow-up work.
 **Origin:** Step AOS alignment workstream (2026-07-24), research:
 `research/step-aos-2026-07/STEP-AOS-DEEP-RESEARCH.md`.
 
@@ -40,7 +43,7 @@ Every agent-callable capability is described by one
 | `memory_access` | Per-domain (user/agent) read/write grants; cross-domain reads default deny (see `memory-governance.md`) |
 | `routing.min_model_tier` | Minimum model tier allowed to plan/invoke (see `model-routing-policy.md`) |
 
-## Decision flow (target)
+## Decision flow (current core, target dispatch)
 
 ```text
 Agent intent
@@ -51,12 +54,12 @@ Agent intent
   → ALLOW (receipt + optional rollback plan binding)
     / DENY (fail-closed receipt)
     / ESCALATE (permit flow, quarantine record)
-  → dispatch via protocol binding
-  → execution receipt pairs with decision receipt
+  → dispatch via protocol binding (integration target)
+  → execution receipt pairs with decision receipt (integration target)
 ```
 
-Unknown capability id = **fail closed** (same posture as unknown MCP tools
-today: quarantine + escalate).
+Unknown capability id = **fail closed**: Guardian emits a signed quarantine
+and `ESCALATE` decision before downstream policy or dispatch.
 
 ## Registry service (target shape)
 

@@ -105,12 +105,61 @@ func (c *InterceptorChain) Execute(ctx context.Context, evalCtx *EvaluationConte
 
 // signDecisionWithContext binds runtime policy details and signs a DecisionRecord using the Guardian's signer.
 func (g *Guardian) signDecisionWithContext(decision *contracts.DecisionRecord, evalCtx *EvaluationContext) error {
+	if evalCtx == nil {
+		return fmt.Errorf("decision signing requires evaluation context")
+	}
+	if err := bindDecisionRequest(decision, evalCtx.Request); err != nil {
+		return fmt.Errorf("bind decision request: %w", err)
+	}
 	if evalCtx != nil && evalCtx.ThreatScanResult != nil {
 		ref := evalCtx.ThreatScanResult.Ref()
 		decision.ThreatScan = &ref
 	}
 	bindRuntimePolicyDecision(decision, evalCtx.ActiveSnapshot, evalCtx.PolicyVersion)
 	return g.signer.SignDecision(decision)
+}
+
+// signDecisionForRequest is the request-scoped signing funnel for Guardian
+// exits that occur before the interceptor chain is assembled. It binds the
+// evaluated request exactly once and rejects any record that was prefilled with
+// a conflicting subject, action, or resource.
+func (g *Guardian) signDecisionForRequest(decision *contracts.DecisionRecord, request DecisionRequest, snapshot *policyreconcile.EffectivePolicySnapshot, policyVersion string) error {
+	if err := bindDecisionRequest(decision, request); err != nil {
+		return fmt.Errorf("bind decision request: %w", err)
+	}
+	bindRuntimePolicyDecision(decision, snapshot, policyVersion)
+	return g.signer.SignDecision(decision)
+}
+
+// bindDecisionRequest attaches the exact authority tuple evaluated by the
+// Guardian. Missing values are filled from the request, but a prefilled value
+// may never disagree with it: signing a different tuple would attest authority
+// for an action that was not evaluated.
+func bindDecisionRequest(decision *contracts.DecisionRecord, request DecisionRequest) error {
+	if decision == nil {
+		return fmt.Errorf("decision is nil")
+	}
+	for _, field := range []struct {
+		name     string
+		decision *string
+		request  string
+	}{
+		{"subject ID", &decision.SubjectID, request.Principal},
+		{"action", &decision.Action, request.Action},
+		{"resource", &decision.Resource, request.Resource},
+	} {
+		if strings.TrimSpace(field.request) == "" {
+			return fmt.Errorf("request %s is required", field.name)
+		}
+		if strings.TrimSpace(*field.decision) == "" {
+			*field.decision = field.request
+			continue
+		}
+		if *field.decision != field.request {
+			return fmt.Errorf("decision %s %q does not match evaluated request %q", field.name, *field.decision, field.request)
+		}
+	}
+	return nil
 }
 
 // ── TemporalInterceptor ──

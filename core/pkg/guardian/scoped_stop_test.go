@@ -36,6 +36,7 @@ func TestScopedStopFenceDeniesExplicitlyScopedDispatch(t *testing.T) {
 	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
 		Principal: "agent-a",
 		Action:    "EXECUTE_TOOL",
+		Resource:  "tool:dispatch",
 		Context: map[string]interface{}{
 			"tenant_id":    "tenant-a",
 			"workspace_id": "workspace-a",
@@ -64,6 +65,7 @@ func TestScopedStopReaderFailureFailsClosedForScopedDispatch(t *testing.T) {
 	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
 		Principal: "agent-a",
 		Action:    "EXECUTE_TOOL",
+		Resource:  "tool:dispatch",
 		Context: map[string]interface{}{
 			"tenant_id":    "tenant-a",
 			"workspace_id": "workspace-a",
@@ -80,7 +82,7 @@ func TestScopedStopReaderFailureFailsClosedForScopedDispatch(t *testing.T) {
 func TestScopedStopReaderDeniesUnscopedEvaluationToPreventFenceBypass(t *testing.T) {
 	reader := &scopedStopReaderStub{fenced: true, state: kernel.FenceState{Epoch: 1, FencedAt: time.Now().UTC()}}
 	g := newMinimalGuardian(WithScopedStopReader(reader))
-	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-a", Action: "EXECUTE_TOOL"})
+	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-a", Action: "EXECUTE_TOOL", Resource: "tool:dispatch"})
 	if err != nil {
 		t.Fatal(err)
 	}

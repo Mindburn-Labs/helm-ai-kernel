@@ -6,7 +6,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-func TestDecisionV3ThreatEvidenceIsBound(t *testing.T) {
+func TestDecisionV4ThreatEvidenceIsBound(t *testing.T) {
 	signer, err := NewEd25519Signer("semantic-signature-test")
 	if err != nil {
 		t.Fatal(err)
@@ -37,11 +37,11 @@ func TestDecisionV3ThreatEvidenceIsBound(t *testing.T) {
 			},
 		},
 	}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(decision)); err != nil {
 		t.Fatal(err)
 	}
-	if decision.SignatureVersion != contracts.DecisionRecordSignatureV3 {
-		t.Fatalf("signature version = %q, want %q", decision.SignatureVersion, contracts.DecisionRecordSignatureV3)
+	if decision.SignatureVersion != contracts.DecisionRecordSignatureV4 {
+		t.Fatalf("signature version = %q, want %q", decision.SignatureVersion, contracts.DecisionRecordSignatureV4)
 	}
 	if valid, verifyErr := signer.VerifyDecision(decision); verifyErr != nil || !valid {
 		t.Fatalf("verify original: valid=%v err=%v", valid, verifyErr)

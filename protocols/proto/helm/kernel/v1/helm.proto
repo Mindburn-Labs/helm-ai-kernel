@@ -101,6 +101,15 @@ message DecisionRecord {
   string phenotype_hash = 15;
   string policy_content_hash = 16;
   ThreatScanReference threat_scan = 17;
+  // decision_record.v4 authorization and signer bindings. These are appended
+  // so current V3 Guardian threat evidence keeps its established wire field.
+  string subject_id = 18;
+  string action = 19;
+  string resource = 20;
+  string signature_type = 21;
+  // The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+  // legacy reason_code field above remains a closed enum for compatibility.
+  string reason_code_text = 22;
 }
 
 message AuthorizedExecutionIntent {

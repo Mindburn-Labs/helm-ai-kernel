@@ -4291,6 +4291,86 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
      * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
      */
     helm.kernel.v1.Helm.ThreatScanReferenceOrBuilder getThreatScanOrBuilder();
+
+    /**
+     * <pre>
+     * decision_record.v4 authorization and signer bindings. These are appended
+     * so current V3 Guardian threat evidence keeps its established wire field.
+     * </pre>
+     *
+     * <code>string subject_id = 18;</code>
+     * @return The subjectId.
+     */
+    java.lang.String getSubjectId();
+    /**
+     * <pre>
+     * decision_record.v4 authorization and signer bindings. These are appended
+     * so current V3 Guardian threat evidence keeps its established wire field.
+     * </pre>
+     *
+     * <code>string subject_id = 18;</code>
+     * @return The bytes for subjectId.
+     */
+    com.google.protobuf.ByteString
+        getSubjectIdBytes();
+
+    /**
+     * <code>string action = 19;</code>
+     * @return The action.
+     */
+    java.lang.String getAction();
+    /**
+     * <code>string action = 19;</code>
+     * @return The bytes for action.
+     */
+    com.google.protobuf.ByteString
+        getActionBytes();
+
+    /**
+     * <code>string resource = 20;</code>
+     * @return The resource.
+     */
+    java.lang.String getResource();
+    /**
+     * <code>string resource = 20;</code>
+     * @return The bytes for resource.
+     */
+    com.google.protobuf.ByteString
+        getResourceBytes();
+
+    /**
+     * <code>string signature_type = 21;</code>
+     * @return The signatureType.
+     */
+    java.lang.String getSignatureType();
+    /**
+     * <code>string signature_type = 21;</code>
+     * @return The bytes for signatureType.
+     */
+    com.google.protobuf.ByteString
+        getSignatureTypeBytes();
+
+    /**
+     * <pre>
+     * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+     * legacy reason_code field above remains a closed enum for compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 22;</code>
+     * @return The reasonCodeText.
+     */
+    java.lang.String getReasonCodeText();
+    /**
+     * <pre>
+     * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+     * legacy reason_code field above remains a closed enum for compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 22;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    com.google.protobuf.ByteString
+        getReasonCodeTextBytes();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.DecisionRecord}
@@ -4329,6 +4409,11 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       signatureVersion_ = "";
       phenotypeHash_ = "";
       policyContentHash_ = "";
+      subjectId_ = "";
+      action_ = "";
+      resource_ = "";
+      signatureType_ = "";
+      reasonCodeText_ = "";
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -4937,6 +5022,221 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       return threatScan_ == null ? helm.kernel.v1.Helm.ThreatScanReference.getDefaultInstance() : threatScan_;
     }
 
+    public static final int SUBJECT_ID_FIELD_NUMBER = 18;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object subjectId_ = "";
+    /**
+     * <pre>
+     * decision_record.v4 authorization and signer bindings. These are appended
+     * so current V3 Guardian threat evidence keeps its established wire field.
+     * </pre>
+     *
+     * <code>string subject_id = 18;</code>
+     * @return The subjectId.
+     */
+    @java.lang.Override
+    public java.lang.String getSubjectId() {
+      java.lang.Object ref = subjectId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        subjectId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * decision_record.v4 authorization and signer bindings. These are appended
+     * so current V3 Guardian threat evidence keeps its established wire field.
+     * </pre>
+     *
+     * <code>string subject_id = 18;</code>
+     * @return The bytes for subjectId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSubjectIdBytes() {
+      java.lang.Object ref = subjectId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        subjectId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int ACTION_FIELD_NUMBER = 19;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object action_ = "";
+    /**
+     * <code>string action = 19;</code>
+     * @return The action.
+     */
+    @java.lang.Override
+    public java.lang.String getAction() {
+      java.lang.Object ref = action_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        action_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string action = 19;</code>
+     * @return The bytes for action.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getActionBytes() {
+      java.lang.Object ref = action_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        action_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int RESOURCE_FIELD_NUMBER = 20;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object resource_ = "";
+    /**
+     * <code>string resource = 20;</code>
+     * @return The resource.
+     */
+    @java.lang.Override
+    public java.lang.String getResource() {
+      java.lang.Object ref = resource_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        resource_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string resource = 20;</code>
+     * @return The bytes for resource.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getResourceBytes() {
+      java.lang.Object ref = resource_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        resource_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int SIGNATURE_TYPE_FIELD_NUMBER = 21;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object signatureType_ = "";
+    /**
+     * <code>string signature_type = 21;</code>
+     * @return The signatureType.
+     */
+    @java.lang.Override
+    public java.lang.String getSignatureType() {
+      java.lang.Object ref = signatureType_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        signatureType_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string signature_type = 21;</code>
+     * @return The bytes for signatureType.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSignatureTypeBytes() {
+      java.lang.Object ref = signatureType_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        signatureType_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int REASON_CODE_TEXT_FIELD_NUMBER = 22;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object reasonCodeText_ = "";
+    /**
+     * <pre>
+     * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+     * legacy reason_code field above remains a closed enum for compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 22;</code>
+     * @return The reasonCodeText.
+     */
+    @java.lang.Override
+    public java.lang.String getReasonCodeText() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        reasonCodeText_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+     * legacy reason_code field above remains a closed enum for compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 22;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getReasonCodeTextBytes() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        reasonCodeText_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -5001,6 +5301,21 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       }
       if (((bitField0_ & 0x00000002) != 0)) {
         output.writeMessage(17, getThreatScan());
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(subjectId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 18, subjectId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(action_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 19, action_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(resource_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 20, resource_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureType_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 21, signatureType_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 22, reasonCodeText_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -5067,6 +5382,21 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(17, getThreatScan());
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(subjectId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(18, subjectId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(action_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(19, action_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(resource_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(20, resource_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureType_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(21, signatureType_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(22, reasonCodeText_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -5120,6 +5450,16 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         if (!getThreatScan()
             .equals(other.getThreatScan())) return false;
       }
+      if (!getSubjectId()
+          .equals(other.getSubjectId())) return false;
+      if (!getAction()
+          .equals(other.getAction())) return false;
+      if (!getResource()
+          .equals(other.getResource())) return false;
+      if (!getSignatureType()
+          .equals(other.getSignatureType())) return false;
+      if (!getReasonCodeText()
+          .equals(other.getReasonCodeText())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -5169,6 +5509,16 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         hash = (37 * hash) + THREAT_SCAN_FIELD_NUMBER;
         hash = (53 * hash) + getThreatScan().hashCode();
       }
+      hash = (37 * hash) + SUBJECT_ID_FIELD_NUMBER;
+      hash = (53 * hash) + getSubjectId().hashCode();
+      hash = (37 * hash) + ACTION_FIELD_NUMBER;
+      hash = (53 * hash) + getAction().hashCode();
+      hash = (37 * hash) + RESOURCE_FIELD_NUMBER;
+      hash = (53 * hash) + getResource().hashCode();
+      hash = (37 * hash) + SIGNATURE_TYPE_FIELD_NUMBER;
+      hash = (53 * hash) + getSignatureType().hashCode();
+      hash = (37 * hash) + REASON_CODE_TEXT_FIELD_NUMBER;
+      hash = (53 * hash) + getReasonCodeText().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -5332,6 +5682,11 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           threatScanBuilder_.dispose();
           threatScanBuilder_ = null;
         }
+        subjectId_ = "";
+        action_ = "";
+        resource_ = "";
+        signatureType_ = "";
+        reasonCodeText_ = "";
         return this;
       }
 
@@ -5423,6 +5778,21 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
               : threatScanBuilder_.build();
           to_bitField0_ |= 0x00000002;
         }
+        if (((from_bitField0_ & 0x00020000) != 0)) {
+          result.subjectId_ = subjectId_;
+        }
+        if (((from_bitField0_ & 0x00040000) != 0)) {
+          result.action_ = action_;
+        }
+        if (((from_bitField0_ & 0x00080000) != 0)) {
+          result.resource_ = resource_;
+        }
+        if (((from_bitField0_ & 0x00100000) != 0)) {
+          result.signatureType_ = signatureType_;
+        }
+        if (((from_bitField0_ & 0x00200000) != 0)) {
+          result.reasonCodeText_ = reasonCodeText_;
+        }
         result.bitField0_ |= to_bitField0_;
       }
 
@@ -5512,6 +5882,31 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         }
         if (other.hasThreatScan()) {
           mergeThreatScan(other.getThreatScan());
+        }
+        if (!other.getSubjectId().isEmpty()) {
+          subjectId_ = other.subjectId_;
+          bitField0_ |= 0x00020000;
+          onChanged();
+        }
+        if (!other.getAction().isEmpty()) {
+          action_ = other.action_;
+          bitField0_ |= 0x00040000;
+          onChanged();
+        }
+        if (!other.getResource().isEmpty()) {
+          resource_ = other.resource_;
+          bitField0_ |= 0x00080000;
+          onChanged();
+        }
+        if (!other.getSignatureType().isEmpty()) {
+          signatureType_ = other.signatureType_;
+          bitField0_ |= 0x00100000;
+          onChanged();
+        }
+        if (!other.getReasonCodeText().isEmpty()) {
+          reasonCodeText_ = other.reasonCodeText_;
+          bitField0_ |= 0x00200000;
+          onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -5628,6 +6023,31 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
                 bitField0_ |= 0x00010000;
                 break;
               } // case 138
+              case 146: {
+                subjectId_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00020000;
+                break;
+              } // case 146
+              case 154: {
+                action_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00040000;
+                break;
+              } // case 154
+              case 162: {
+                resource_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00080000;
+                break;
+              } // case 162
+              case 170: {
+                signatureType_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00100000;
+                break;
+              } // case 170
+              case 178: {
+                reasonCodeText_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00200000;
+                break;
+              } // case 178
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -6935,6 +7355,416 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           threatScan_ = null;
         }
         return threatScanBuilder_;
+      }
+
+      private java.lang.Object subjectId_ = "";
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @return The subjectId.
+       */
+      public java.lang.String getSubjectId() {
+        java.lang.Object ref = subjectId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          subjectId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @return The bytes for subjectId.
+       */
+      public com.google.protobuf.ByteString
+          getSubjectIdBytes() {
+        java.lang.Object ref = subjectId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          subjectId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @param value The subjectId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubjectId(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        subjectId_ = value;
+        bitField0_ |= 0x00020000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSubjectId() {
+        subjectId_ = getDefaultInstance().getSubjectId();
+        bitField0_ = (bitField0_ & ~0x00020000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @param value The bytes for subjectId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubjectIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        subjectId_ = value;
+        bitField0_ |= 0x00020000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object action_ = "";
+      /**
+       * <code>string action = 19;</code>
+       * @return The action.
+       */
+      public java.lang.String getAction() {
+        java.lang.Object ref = action_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          action_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string action = 19;</code>
+       * @return The bytes for action.
+       */
+      public com.google.protobuf.ByteString
+          getActionBytes() {
+        java.lang.Object ref = action_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          action_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string action = 19;</code>
+       * @param value The action to set.
+       * @return This builder for chaining.
+       */
+      public Builder setAction(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        action_ = value;
+        bitField0_ |= 0x00040000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string action = 19;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearAction() {
+        action_ = getDefaultInstance().getAction();
+        bitField0_ = (bitField0_ & ~0x00040000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string action = 19;</code>
+       * @param value The bytes for action to set.
+       * @return This builder for chaining.
+       */
+      public Builder setActionBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        action_ = value;
+        bitField0_ |= 0x00040000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object resource_ = "";
+      /**
+       * <code>string resource = 20;</code>
+       * @return The resource.
+       */
+      public java.lang.String getResource() {
+        java.lang.Object ref = resource_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          resource_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string resource = 20;</code>
+       * @return The bytes for resource.
+       */
+      public com.google.protobuf.ByteString
+          getResourceBytes() {
+        java.lang.Object ref = resource_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          resource_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string resource = 20;</code>
+       * @param value The resource to set.
+       * @return This builder for chaining.
+       */
+      public Builder setResource(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        resource_ = value;
+        bitField0_ |= 0x00080000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string resource = 20;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearResource() {
+        resource_ = getDefaultInstance().getResource();
+        bitField0_ = (bitField0_ & ~0x00080000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string resource = 20;</code>
+       * @param value The bytes for resource to set.
+       * @return This builder for chaining.
+       */
+      public Builder setResourceBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        resource_ = value;
+        bitField0_ |= 0x00080000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object signatureType_ = "";
+      /**
+       * <code>string signature_type = 21;</code>
+       * @return The signatureType.
+       */
+      public java.lang.String getSignatureType() {
+        java.lang.Object ref = signatureType_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          signatureType_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string signature_type = 21;</code>
+       * @return The bytes for signatureType.
+       */
+      public com.google.protobuf.ByteString
+          getSignatureTypeBytes() {
+        java.lang.Object ref = signatureType_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          signatureType_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string signature_type = 21;</code>
+       * @param value The signatureType to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureType(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        signatureType_ = value;
+        bitField0_ |= 0x00100000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string signature_type = 21;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSignatureType() {
+        signatureType_ = getDefaultInstance().getSignatureType();
+        bitField0_ = (bitField0_ & ~0x00100000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string signature_type = 21;</code>
+       * @param value The bytes for signatureType to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureTypeBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        signatureType_ = value;
+        bitField0_ |= 0x00100000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object reasonCodeText_ = "";
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @return The reasonCodeText.
+       */
+      public java.lang.String getReasonCodeText() {
+        java.lang.Object ref = reasonCodeText_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          reasonCodeText_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @return The bytes for reasonCodeText.
+       */
+      public com.google.protobuf.ByteString
+          getReasonCodeTextBytes() {
+        java.lang.Object ref = reasonCodeText_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          reasonCodeText_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @param value The reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeText(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00200000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearReasonCodeText() {
+        reasonCodeText_ = getDefaultInstance().getReasonCodeText();
+        bitField0_ = (bitField0_ & ~0x00200000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @param value The bytes for reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeTextBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00200000;
+        onChanged();
+        return this;
       }
 
       // @@protoc_insertion_point(builder_scope:helm.kernel.v1.DecisionRecord)
@@ -21901,7 +22731,7 @@ java.lang.String defaultValue) {
       "_id\030\001 \001(\t\022\024\n\014max_severity\030\002 \001(\t\022\025\n\rfindi" +
       "ng_count\030\003 \001(\r\022\023\n\013trust_level\030\004 \001(\t\022\022\n\ni" +
       "nput_hash\030\005 \001(\t\022:\n\010semantic\030\006 \001(\0132(.helm" +
-      ".kernel.v1.SemanticThreatAssessment\"\200\004\n\016" +
+      ".kernel.v1.SemanticThreatAssessment\"\350\004\n\016" +
       "DecisionRecord\022\n\n\002id\030\001 \001(\t\022-\n\ttimestamp\030" +
       "\002 \001(\0132\032.google.protobuf.Timestamp\022(\n\007ver" +
       "dict\030\003 \001(\0162\027.helm.kernel.v1.Verdict\022\016\n\006r" +
@@ -21914,91 +22744,93 @@ java.lang.String defaultValue) {
       "ion_id\030\r \001(\t\022\031\n\021signature_version\030\016 \001(\t\022" +
       "\026\n\016phenotype_hash\030\017 \001(\t\022\033\n\023policy_conten" +
       "t_hash\030\020 \001(\t\0228\n\013threat_scan\030\021 \001(\0132#.helm" +
-      ".kernel.v1.ThreatScanReference\"\362\001\n\031Autho" +
-      "rizedExecutionIntent\022\021\n\tintent_id\030\001 \001(\t\022" +
-      "\023\n\013decision_id\030\002 \001(\t\022\021\n\teffect_id\030\003 \001(\t\022" +
-      "-\n\tissued_at\030\004 \001(\0132\032.google.protobuf.Tim" +
-      "estamp\022.\n\nexpires_at\030\005 \001(\0132\032.google.prot" +
-      "obuf.Timestamp\022\021\n\tsignature\030\006 \001(\t\022\025\n\rsig" +
-      "ner_key_id\030\007 \001(\t\022\021\n\tprincipal\030\010 \001(\t\"\224\005\n\007" +
-      "Receipt\022\027\n\017receipt_version\030\001 \001(\t\022\022\n\nrece" +
-      "ipt_id\030\002 \001(\t\022\023\n\013decision_id\030\003 \001(\t\022\021\n\teff" +
-      "ect_id\030\004 \001(\t\022(\n\007verdict\030\005 \001(\0162\027.helm.ker" +
-      "nel.v1.Verdict\022\021\n\tprincipal\030\006 \001(\t\022\014\n\004too" +
-      "l\030\007 \001(\t\022\016\n\006action\030\010 \001(\t\022-\n\ttimestamp\030\t \001" +
-      "(\0132\032.google.protobuf.Timestamp\022\017\n\007lampor" +
-      "t\030\n \001(\004\022\027\n\017proofgraph_node\030\013 \001(\t\022\021\n\tsign" +
-      "ature\030\014 \001(\t\022\025\n\rsigner_key_id\030\r \001(\t\022\024\n\014pa" +
-      "yload_hash\030\016 \001(\t\022/\n\013reason_code\030\017 \001(\0162\032." +
-      "helm.kernel.v1.ReasonCode\0227\n\010metadata\030\020 " +
-      "\003(\0132%.helm.kernel.v1.Receipt.MetadataEnt" +
-      "ry\022\026\n\016correlation_id\030\021 \001(\t\022\031\n\021signature_" +
-      "version\030\022 \001(\t\022\016\n\006status\030\023 \001(\t\022\023\n\013output_" +
-      "hash\030\024 \001(\t\022\021\n\tprev_hash\030\025 \001(\t\022\021\n\targs_ha" +
-      "sh\030\026 \001(\t\022\023\n\013policy_hash\030\027 \001(\t\022\022\n\nsession" +
-      "_id\030\030 \001(\t\032/\n\rMetadataEntry\022\013\n\003key\030\001 \001(\t\022" +
-      "\r\n\005value\030\002 \001(\t:\0028\001\"\234\001\n\nPDPRequest\022&\n\006eff" +
-      "ect\030\001 \001(\0132\026.helm.kernel.v1.Effect\0222\n\007sub" +
-      "ject\030\002 \001(\0132!.helm.kernel.v1.SubjectDescr" +
-      "iptor\0222\n\007context\030\003 \001(\0132!.helm.kernel.v1." +
-      "ContextDescriptor\"E\n\021SubjectDescriptor\022\021" +
-      "\n\tprincipal\030\001 \001(\t\022\016\n\006tenant\030\002 \001(\t\022\r\n\005rol" +
-      "es\030\003 \003(\t\"\252\001\n\021ContextDescriptor\022\024\n\014jurisd" +
-      "iction\030\001 \001(\t\022\023\n\013environment\030\002 \001(\t\0225\n\021tim" +
-      "e_window_start\030\003 \001(\0132\032.google.protobuf.T" +
-      "imestamp\0223\n\017time_window_end\030\004 \001(\0132\032.goog" +
-      "le.protobuf.Timestamp\"\251\001\n\013PDPResponse\022\r\n" +
-      "\005allow\030\001 \001(\010\022/\n\013reason_code\030\002 \001(\0162\032.helm" +
-      ".kernel.v1.ReasonCode\022\022\n\npolicy_ref\030\003 \001(" +
-      "\t\022\025\n\rdecision_hash\030\004 \001(\t\022/\n\013obligations\030" +
-      "\005 \003(\0132\032.helm.kernel.v1.Obligation\"i\n\nObl" +
-      "igation\022\n\n\002id\030\001 \001(\t\022\014\n\004type\030\002 \001(\t\022\023\n\013des" +
-      "cription\030\003 \001(\t\022,\n\010deadline\030\004 \001(\0132\032.googl" +
-      "e.protobuf.Timestamp\"\267\001\n\rEffectRequest\022&" +
-      "\n\006effect\030\001 \001(\0132\026.helm.kernel.v1.Effect\022\021" +
-      "\n\tprincipal\030\002 \001(\t\022;\n\007context\030\003 \003(\0132*.hel" +
-      "m.kernel.v1.EffectRequest.ContextEntry\032." +
-      "\n\014ContextEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001" +
-      "(\t:\0028\001\"\340\001\n\016EffectResponse\022(\n\007verdict\030\001 \001" +
-      "(\0162\027.helm.kernel.v1.Verdict\022/\n\013reason_co" +
-      "de\030\002 \001(\0162\032.helm.kernel.v1.ReasonCode\022\016\n\006" +
-      "reason\030\003 \001(\t\022(\n\007receipt\030\004 \001(\0132\027.helm.ker" +
-      "nel.v1.Receipt\0229\n\006intent\030\005 \001(\0132).helm.ke" +
-      "rnel.v1.AuthorizedExecutionIntent\"\216\001\n\017Ex" +
-      "ecutionResult\022\021\n\tintent_id\030\001 \001(\t\022\017\n\007succ" +
-      "ess\030\002 \001(\010\022\016\n\006output\030\003 \001(\014\022\025\n\rerror_messa" +
-      "ge\030\004 \001(\t\0220\n\014completed_at\030\005 \001(\0132\032.google." +
-      "protobuf.Timestamp\"V\n\021CompletionReceipt\022" +
-      "(\n\007receipt\030\001 \001(\0132\027.helm.kernel.v1.Receip" +
-      "t\022\027\n\017proofgraph_node\030\002 \001(\t*]\n\007Verdict\022\027\n" +
-      "\023VERDICT_UNSPECIFIED\020\000\022\021\n\rVERDICT_ALLOW\020" +
-      "\001\022\020\n\014VERDICT_DENY\020\002\022\024\n\020VERDICT_ESCALATE\020" +
-      "\003*\243\005\n\nReasonCode\022\033\n\027REASON_CODE_UNSPECIF" +
-      "IED\020\000\022 \n\034REASON_CODE_POLICY_VIOLATION\020\001\022" +
-      "!\n\035REASON_CODE_NO_POLICY_DEFINED\020\002\022$\n RE" +
-      "ASON_CODE_PRG_EVALUATION_ERROR\020\003\022#\n\037REAS" +
-      "ON_CODE_MISSING_REQUIREMENT\020\004\022\030\n\024REASON_" +
-      "CODE_PDP_DENY\020\005\022\031\n\025REASON_CODE_PDP_ERROR" +
-      "\020\006\022\037\n\033REASON_CODE_BUDGET_EXCEEDED\020\007\022\034\n\030R" +
-      "EASON_CODE_BUDGET_ERROR\020\010\022 \n\034REASON_CODE" +
-      "_ENVELOPE_INVALID\020\t\022 \n\034REASON_CODE_SCHEM" +
-      "A_VIOLATION\020\n\022%\n!REASON_CODE_TEMPORAL_IN" +
-      "TERVENTION\020\013\022!\n\035REASON_CODE_TEMPORAL_THR" +
-      "OTTLE\020\014\022!\n\035REASON_CODE_SANDBOX_VIOLATION" +
-      "\020\r\022\"\n\036REASON_CODE_PROVENANCE_FAILURE\020\016\022$" +
-      "\n REASON_CODE_VERIFICATION_FAILURE\020\017\022 \n\034" +
-      "REASON_CODE_TENANT_ISOLATION\020\020\022&\n\"REASON" +
-      "_CODE_JURISDICTION_VIOLATION\020\021\022/\n+REASON" +
-      "_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED\020\0222" +
-      "a\n\032PolicyDecisionPointService\022C\n\010Evaluat" +
-      "e\022\032.helm.kernel.v1.PDPRequest\032\033.helm.ker" +
-      "nel.v1.PDPResponse2\260\001\n\025EffectBoundarySer" +
-      "vice\022G\n\006Submit\022\035.helm.kernel.v1.EffectRe" +
-      "quest\032\036.helm.kernel.v1.EffectResponse\022N\n" +
-      "\010Complete\022\037.helm.kernel.v1.ExecutionResu" +
-      "lt\032!.helm.kernel.v1.CompletionReceiptB&Z" +
-      "$helm.mindburn.run/kernel/v1;kernelv1b\006p" +
-      "roto3"
+      ".kernel.v1.ThreatScanReference\022\022\n\nsubjec" +
+      "t_id\030\022 \001(\t\022\016\n\006action\030\023 \001(\t\022\020\n\010resource\030\024" +
+      " \001(\t\022\026\n\016signature_type\030\025 \001(\t\022\030\n\020reason_c" +
+      "ode_text\030\026 \001(\t\"\362\001\n\031AuthorizedExecutionIn" +
+      "tent\022\021\n\tintent_id\030\001 \001(\t\022\023\n\013decision_id\030\002" +
+      " \001(\t\022\021\n\teffect_id\030\003 \001(\t\022-\n\tissued_at\030\004 \001" +
+      "(\0132\032.google.protobuf.Timestamp\022.\n\nexpire" +
+      "s_at\030\005 \001(\0132\032.google.protobuf.Timestamp\022\021" +
+      "\n\tsignature\030\006 \001(\t\022\025\n\rsigner_key_id\030\007 \001(\t" +
+      "\022\021\n\tprincipal\030\010 \001(\t\"\224\005\n\007Receipt\022\027\n\017recei" +
+      "pt_version\030\001 \001(\t\022\022\n\nreceipt_id\030\002 \001(\t\022\023\n\013" +
+      "decision_id\030\003 \001(\t\022\021\n\teffect_id\030\004 \001(\t\022(\n\007" +
+      "verdict\030\005 \001(\0162\027.helm.kernel.v1.Verdict\022\021" +
+      "\n\tprincipal\030\006 \001(\t\022\014\n\004tool\030\007 \001(\t\022\016\n\006actio" +
+      "n\030\010 \001(\t\022-\n\ttimestamp\030\t \001(\0132\032.google.prot" +
+      "obuf.Timestamp\022\017\n\007lamport\030\n \001(\004\022\027\n\017proof" +
+      "graph_node\030\013 \001(\t\022\021\n\tsignature\030\014 \001(\t\022\025\n\rs" +
+      "igner_key_id\030\r \001(\t\022\024\n\014payload_hash\030\016 \001(\t" +
+      "\022/\n\013reason_code\030\017 \001(\0162\032.helm.kernel.v1.R" +
+      "easonCode\0227\n\010metadata\030\020 \003(\0132%.helm.kerne" +
+      "l.v1.Receipt.MetadataEntry\022\026\n\016correlatio" +
+      "n_id\030\021 \001(\t\022\031\n\021signature_version\030\022 \001(\t\022\016\n" +
+      "\006status\030\023 \001(\t\022\023\n\013output_hash\030\024 \001(\t\022\021\n\tpr" +
+      "ev_hash\030\025 \001(\t\022\021\n\targs_hash\030\026 \001(\t\022\023\n\013poli" +
+      "cy_hash\030\027 \001(\t\022\022\n\nsession_id\030\030 \001(\t\032/\n\rMet" +
+      "adataEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\002" +
+      "8\001\"\234\001\n\nPDPRequest\022&\n\006effect\030\001 \001(\0132\026.helm" +
+      ".kernel.v1.Effect\0222\n\007subject\030\002 \001(\0132!.hel" +
+      "m.kernel.v1.SubjectDescriptor\0222\n\007context" +
+      "\030\003 \001(\0132!.helm.kernel.v1.ContextDescripto" +
+      "r\"E\n\021SubjectDescriptor\022\021\n\tprincipal\030\001 \001(" +
+      "\t\022\016\n\006tenant\030\002 \001(\t\022\r\n\005roles\030\003 \003(\t\"\252\001\n\021Con" +
+      "textDescriptor\022\024\n\014jurisdiction\030\001 \001(\t\022\023\n\013" +
+      "environment\030\002 \001(\t\0225\n\021time_window_start\030\003" +
+      " \001(\0132\032.google.protobuf.Timestamp\0223\n\017time" +
+      "_window_end\030\004 \001(\0132\032.google.protobuf.Time" +
+      "stamp\"\251\001\n\013PDPResponse\022\r\n\005allow\030\001 \001(\010\022/\n\013" +
+      "reason_code\030\002 \001(\0162\032.helm.kernel.v1.Reaso" +
+      "nCode\022\022\n\npolicy_ref\030\003 \001(\t\022\025\n\rdecision_ha" +
+      "sh\030\004 \001(\t\022/\n\013obligations\030\005 \003(\0132\032.helm.ker" +
+      "nel.v1.Obligation\"i\n\nObligation\022\n\n\002id\030\001 " +
+      "\001(\t\022\014\n\004type\030\002 \001(\t\022\023\n\013description\030\003 \001(\t\022," +
+      "\n\010deadline\030\004 \001(\0132\032.google.protobuf.Times" +
+      "tamp\"\267\001\n\rEffectRequest\022&\n\006effect\030\001 \001(\0132\026" +
+      ".helm.kernel.v1.Effect\022\021\n\tprincipal\030\002 \001(" +
+      "\t\022;\n\007context\030\003 \003(\0132*.helm.kernel.v1.Effe" +
+      "ctRequest.ContextEntry\032.\n\014ContextEntry\022\013" +
+      "\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\340\001\n\016Effec" +
+      "tResponse\022(\n\007verdict\030\001 \001(\0162\027.helm.kernel" +
+      ".v1.Verdict\022/\n\013reason_code\030\002 \001(\0162\032.helm." +
+      "kernel.v1.ReasonCode\022\016\n\006reason\030\003 \001(\t\022(\n\007" +
+      "receipt\030\004 \001(\0132\027.helm.kernel.v1.Receipt\0229" +
+      "\n\006intent\030\005 \001(\0132).helm.kernel.v1.Authoriz" +
+      "edExecutionIntent\"\216\001\n\017ExecutionResult\022\021\n" +
+      "\tintent_id\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\016\n\006out" +
+      "put\030\003 \001(\014\022\025\n\rerror_message\030\004 \001(\t\0220\n\014comp" +
+      "leted_at\030\005 \001(\0132\032.google.protobuf.Timesta" +
+      "mp\"V\n\021CompletionReceipt\022(\n\007receipt\030\001 \001(\013" +
+      "2\027.helm.kernel.v1.Receipt\022\027\n\017proofgraph_" +
+      "node\030\002 \001(\t*]\n\007Verdict\022\027\n\023VERDICT_UNSPECI" +
+      "FIED\020\000\022\021\n\rVERDICT_ALLOW\020\001\022\020\n\014VERDICT_DEN" +
+      "Y\020\002\022\024\n\020VERDICT_ESCALATE\020\003*\243\005\n\nReasonCode" +
+      "\022\033\n\027REASON_CODE_UNSPECIFIED\020\000\022 \n\034REASON_" +
+      "CODE_POLICY_VIOLATION\020\001\022!\n\035REASON_CODE_N" +
+      "O_POLICY_DEFINED\020\002\022$\n REASON_CODE_PRG_EV" +
+      "ALUATION_ERROR\020\003\022#\n\037REASON_CODE_MISSING_" +
+      "REQUIREMENT\020\004\022\030\n\024REASON_CODE_PDP_DENY\020\005\022" +
+      "\031\n\025REASON_CODE_PDP_ERROR\020\006\022\037\n\033REASON_COD" +
+      "E_BUDGET_EXCEEDED\020\007\022\034\n\030REASON_CODE_BUDGE" +
+      "T_ERROR\020\010\022 \n\034REASON_CODE_ENVELOPE_INVALI" +
+      "D\020\t\022 \n\034REASON_CODE_SCHEMA_VIOLATION\020\n\022%\n" +
+      "!REASON_CODE_TEMPORAL_INTERVENTION\020\013\022!\n\035" +
+      "REASON_CODE_TEMPORAL_THROTTLE\020\014\022!\n\035REASO" +
+      "N_CODE_SANDBOX_VIOLATION\020\r\022\"\n\036REASON_COD" +
+      "E_PROVENANCE_FAILURE\020\016\022$\n REASON_CODE_VE" +
+      "RIFICATION_FAILURE\020\017\022 \n\034REASON_CODE_TENA" +
+      "NT_ISOLATION\020\020\022&\n\"REASON_CODE_JURISDICTI" +
+      "ON_VIOLATION\020\021\022/\n+REASON_CODE_SEMANTIC_T" +
+      "HREAT_REVIEW_REQUIRED\020\0222a\n\032PolicyDecisio" +
+      "nPointService\022C\n\010Evaluate\022\032.helm.kernel." +
+      "v1.PDPRequest\032\033.helm.kernel.v1.PDPRespon" +
+      "se2\260\001\n\025EffectBoundaryService\022G\n\006Submit\022\035" +
+      ".helm.kernel.v1.EffectRequest\032\036.helm.ker" +
+      "nel.v1.EffectResponse\022N\n\010Complete\022\037.helm" +
+      ".kernel.v1.ExecutionResult\032!.helm.kernel" +
+      ".v1.CompletionReceiptB&Z$helm.mindburn.r" +
+      "un/kernel/v1;kernelv1b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -22028,7 +22860,7 @@ java.lang.String defaultValue) {
     internal_static_helm_kernel_v1_DecisionRecord_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_DecisionRecord_descriptor,
-        new java.lang.String[] { "Id", "Timestamp", "Verdict", "Reason", "ReasonCode", "EffectDigest", "RequirementSetHash", "Signature", "SignerKeyId", "PolicyRef", "PolicyDecisionHash", "InputContext", "CorrelationId", "SignatureVersion", "PhenotypeHash", "PolicyContentHash", "ThreatScan", });
+        new java.lang.String[] { "Id", "Timestamp", "Verdict", "Reason", "ReasonCode", "EffectDigest", "RequirementSetHash", "Signature", "SignerKeyId", "PolicyRef", "PolicyDecisionHash", "InputContext", "CorrelationId", "SignatureVersion", "PhenotypeHash", "PolicyContentHash", "ThreatScan", "SubjectId", "Action", "Resource", "SignatureType", "ReasonCodeText", });
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_descriptor =
       getDescriptor().getMessageType(4);
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_fieldAccessorTable = new

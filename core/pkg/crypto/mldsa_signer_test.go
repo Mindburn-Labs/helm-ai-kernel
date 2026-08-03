@@ -87,7 +87,7 @@ func TestMLDSASigner_SignDecision(t *testing.T) {
 		Timestamp:         time.Now(),
 	}
 
-	if err := signer.SignDecision(d); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("SignDecision failed: %v", err)
 	}
 
@@ -284,7 +284,7 @@ func TestMLDSAVerifier_VerifyDecision(t *testing.T) {
 		Reason:  "blocked",
 	}
 
-	if err := signer.SignDecision(d); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("SignDecision failed: %v", err)
 	}
 
@@ -360,7 +360,7 @@ func TestKeyRing_AddKeyMLDSA(t *testing.T) {
 		Reason:  "keyring-pq-test",
 	}
 
-	if err := kr.SignDecision(d); err != nil {
+	if err := kr.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("KeyRing.SignDecision failed: %v", err)
 	}
 
@@ -399,7 +399,7 @@ func TestKeyRing_MixedAlgorithms(t *testing.T) {
 		Verdict: "ALLOW",
 		Reason:  "ed25519-signed",
 	}
-	if err := ed.SignDecision(dEd); err != nil {
+	if err := ed.SignDecision(testDecisionV4Authority(dEd)); err != nil {
 		t.Fatalf("Ed25519 SignDecision failed: %v", err)
 	}
 
@@ -418,7 +418,7 @@ func TestKeyRing_MixedAlgorithms(t *testing.T) {
 		Verdict: "DENY",
 		Reason:  "ml-dsa-65-signed",
 	}
-	if err := pq.SignDecision(dPQ); err != nil {
+	if err := pq.SignDecision(testDecisionV4Authority(dPQ)); err != nil {
 		t.Fatalf("ML-DSA-65 SignDecision failed: %v", err)
 	}
 
@@ -546,7 +546,7 @@ func TestSoftHSM_GetSignerWithAlgorithm(t *testing.T) {
 		Verdict: "ALLOW",
 		Reason:  "hsm-test",
 	}
-	if err := pqSigner.SignDecision(d); err != nil {
+	if err := pqSigner.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("SignDecision failed: %v", err)
 	}
 

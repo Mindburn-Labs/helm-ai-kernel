@@ -42,6 +42,7 @@ func rollbackRequest(capabilityID string) *DecisionRequest {
 	return &DecisionRequest{
 		Principal: "agent-1",
 		Action:    "dispatch",
+		Resource:  "capability:" + capabilityID,
 		Context:   map[string]interface{}{ContextKeyCapabilityID: capabilityID},
 	}
 }

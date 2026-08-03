@@ -25,7 +25,7 @@ func TestClosing_Ed25519_SignVerify_Decision(t *testing.T) {
 	for _, verdict := range []string{"ALLOW", "DENY", "ESCALATE"} {
 		t.Run("verdict_"+verdict, func(t *testing.T) {
 			d := &contracts.DecisionRecord{ID: "d1", Verdict: verdict, Reason: "test"}
-			if err := signer.SignDecision(d); err != nil {
+			if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 				t.Fatal(err)
 			}
 			ok, err := signer.VerifyDecision(d)
@@ -99,7 +99,7 @@ func TestClosing_MLDSA_SignVerify_Decision(t *testing.T) {
 	for _, verdict := range []string{"ALLOW", "DENY", "ESCALATE"} {
 		t.Run("verdict_"+verdict, func(t *testing.T) {
 			d := &contracts.DecisionRecord{ID: "d-ml", Verdict: verdict, Reason: "pq-test"}
-			if err := signer.SignDecision(d); err != nil {
+			if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 				t.Fatal(err)
 			}
 			ok, err := signer.VerifyDecision(d)
@@ -234,7 +234,7 @@ func TestClosing_KeyRing_SingleKey_SignVerify(t *testing.T) {
 			switch op {
 			case "Decision":
 				d := &contracts.DecisionRecord{ID: "kr-d", Verdict: "ALLOW", Reason: "ok"}
-				if err := kr.SignDecision(d); err != nil {
+				if err := kr.SignDecision(testDecisionV4Authority(d)); err != nil {
 					t.Fatal(err)
 				}
 				ok, err := kr.VerifyDecision(d)
@@ -273,7 +273,7 @@ func TestClosing_KeyRing_MultiKey_VerifyAll(t *testing.T) {
 	for _, label := range []string{"key-0", "key-1", "key-2"} {
 		t.Run(label, func(t *testing.T) {
 			d := &contracts.DecisionRecord{ID: "mk-" + label, Verdict: "DENY", Reason: "multi"}
-			if err := kr.SignDecision(d); err != nil {
+			if err := kr.SignDecision(testDecisionV4Authority(d)); err != nil {
 				t.Fatal(err)
 			}
 			ok, err := kr.VerifyDecision(d)
@@ -706,7 +706,7 @@ func TestClosing_SigPrefix_Ed25519_DecisionFormat(t *testing.T) {
 		t.Run(kid, func(t *testing.T) {
 			s, _ := NewEd25519Signer(kid)
 			d := &contracts.DecisionRecord{ID: "fmt-d", Verdict: "ALLOW", Reason: "test"}
-			_ = s.SignDecision(d)
+			_ = s.SignDecision(testDecisionV4Authority(d))
 			expected := SigPrefixEd25519 + SigSeparator + kid
 			if d.SignatureType != expected {
 				t.Fatalf("expected %q, got %q", expected, d.SignatureType)
@@ -720,7 +720,7 @@ func TestClosing_SigPrefix_MLDSA_DecisionFormat(t *testing.T) {
 		t.Run(kid, func(t *testing.T) {
 			s, _ := NewMLDSASigner(kid)
 			d := &contracts.DecisionRecord{ID: "fmt-d-ml", Verdict: "DENY", Reason: "pq"}
-			_ = s.SignDecision(d)
+			_ = s.SignDecision(testDecisionV4Authority(d))
 			expected := SigPrefixMLDSA65 + SigSeparator + kid
 			if d.SignatureType != expected {
 				t.Fatalf("expected %q, got %q", expected, d.SignatureType)
@@ -791,7 +791,7 @@ func TestClosing_Ed25519Verifier_DecisionVerify(t *testing.T) {
 	for _, verdict := range []string{"ALLOW", "DENY", "ESCALATE"} {
 		t.Run(verdict, func(t *testing.T) {
 			d := &contracts.DecisionRecord{ID: "vd-" + verdict, Verdict: verdict, Reason: "test"}
-			_ = signer.SignDecision(d)
+			_ = signer.SignDecision(testDecisionV4Authority(d))
 			ok, err := verifier.VerifyDecision(d)
 			if err != nil || !ok {
 				t.Fatal("expected valid verifier decision check")

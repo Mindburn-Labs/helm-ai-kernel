@@ -35,7 +35,7 @@ func TestGuardian_Intervention(t *testing.T) {
 			ReasonCode: "MANUAL_OVERRIDE",
 		}
 
-		err := subject.SignDecision(ctx, decision, effect, nil, intervention)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, intervention)
 		require.NoError(t, err)
 
 		assert.Equal(t, "ESCALATE", decision.Verdict)

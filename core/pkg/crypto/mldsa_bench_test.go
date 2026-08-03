@@ -116,7 +116,7 @@ func BenchmarkMLDSA65_SignDecision(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		decision.ID = fmt.Sprintf("dec-bench-%d", i)
 		decision.Signature = ""
-		if err := signer.SignDecision(decision); err != nil {
+		if err := signer.SignDecision(testDecisionV4Authority(decision)); err != nil {
 			b.Fatal(err)
 		}
 	}

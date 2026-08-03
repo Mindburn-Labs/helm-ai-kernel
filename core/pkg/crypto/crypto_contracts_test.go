@@ -67,7 +67,7 @@ func TestFinal_Ed25519VerifyBadKeySize(t *testing.T) {
 func TestFinal_SignDecision(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "ok"}
-	if err := s.SignDecision(d); err != nil {
+	if err := s.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatal(err)
 	}
 	if d.Signature == "" {
@@ -78,7 +78,7 @@ func TestFinal_SignDecision(t *testing.T) {
 func TestFinal_VerifyDecision(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "ok"}
-	s.SignDecision(d)
+	s.SignDecision(testDecisionV4Authority(d))
 	ok, err := s.VerifyDecision(d)
 	if err != nil || !ok {
 		t.Fatal("decision should verify")
@@ -221,7 +221,7 @@ func TestFinal_ConcurrentSign(t *testing.T) {
 func TestFinal_DecisionRecordSignatureJSON(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "DENY", Reason: "r"}
-	s.SignDecision(d)
+	s.SignDecision(testDecisionV4Authority(d))
 	data, _ := json.Marshal(d)
 	var d2 contracts.DecisionRecord
 	json.Unmarshal(data, &d2)

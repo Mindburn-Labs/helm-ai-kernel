@@ -350,6 +350,9 @@ func (g *Guardian) capabilityShortCircuit(
 	reason string,
 	auditAction string,
 ) (*contracts.DecisionRecord, error) {
+	if req == nil {
+		return nil, fmt.Errorf("capability decision requires request")
+	}
 	decision := &contracts.DecisionRecord{
 		ID:             newDecisionID(),
 		Timestamp:      g.clock.Now(),
@@ -358,6 +361,9 @@ func (g *Guardian) capabilityShortCircuit(
 		Reason:         reason,
 		InputContext:   req.Context,
 		GateRosterHash: g.gateRosterHash,
+	}
+	if err := bindDecisionRequest(decision, *req); err != nil {
+		return nil, fmt.Errorf("bind capability decision request: %w", err)
 	}
 	bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
 	span.SetAttributes(attribute.String("capability.short_circuit", string(code)))

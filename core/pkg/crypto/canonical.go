@@ -270,6 +270,26 @@ type decisionV3SigningEnvelope struct {
 	ThreatScanHash    string `json:"threat_scan_hash"`
 }
 
+// decisionV4SigningEnvelope retains every V2/V3 decision fact and binds the
+// authorization request and chosen signing algorithm. No field uses omitempty:
+// an empty threat-scan hash denotes a decision without Guardian threat evidence
+// and cannot be confused with a missing field.
+type decisionV4SigningEnvelope struct {
+	SignatureVersion  string `json:"signature_version"`
+	ID                string `json:"id"`
+	Verdict           string `json:"verdict"`
+	ReasonCode        string `json:"reason_code"`
+	ReasonHash        string `json:"reason_hash"`
+	PhenotypeHash     string `json:"phenotype_hash"`
+	PolicyContentHash string `json:"policy_content_hash"`
+	EffectDigest      string `json:"effect_digest"`
+	ThreatScanHash    string `json:"threat_scan_hash"`
+	SubjectID         string `json:"subject_id"`
+	Action            string `json:"action"`
+	Resource          string `json:"resource"`
+	SignatureType     string `json:"signature_type"`
+}
+
 // HashReason is the digest under which free-text Reason is attested in the V2
 // decision preimage.
 //
@@ -350,6 +370,92 @@ func CanonicalizeDecisionV3(id, verdict, reason, reasonCode, phenotypeHash, poli
 	})
 }
 
+// CanonicalizeDecisionV4 returns the current decision-signing preimage. Newly
+// issued decisions must bind the evaluated authorization tuple and algorithm
+// metadata; V2/V3 remain available only through DecisionVerifyPayload for
+// historical records.
+func CanonicalizeDecisionV4(d *contracts.DecisionRecord) ([]byte, error) {
+	if d == nil {
+		return nil, fmt.Errorf("decision is nil")
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"decision ID", d.ID},
+		{"verdict", d.Verdict},
+		{"subject ID", d.SubjectID},
+		{"action", d.Action},
+		{"resource", d.Resource},
+		{"signature type", d.SignatureType},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return nil, fmt.Errorf("%s is required for %s", field.name, contracts.DecisionRecordSignatureV4)
+		}
+	}
+
+	threatScanHash := ""
+	if d.ThreatScan != nil {
+		var err error
+		threatScanHash, err = decisionThreatScanHash(d.ThreatScan)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// This mirrors the fixed V2 serializer rather than routing the hot signing
+	// path through a generic map encode/decode. The fields are appended in JCS
+	// lexicographic-key order and every value is a JSON string, so the result
+	// is byte-for-byte equivalent to canonicalize.JCS(decisionV4SigningEnvelope{
+	// ...}) without adding allocation cost to every authorization evaluation.
+	payload := make([]byte, 0, len(d.ID)+len(d.Verdict)+len(d.ReasonCode)+len(d.Reason)+len(d.PhenotypeHash)+len(d.PolicyContentHash)+len(d.EffectDigest)+len(threatScanHash)+len(d.SubjectID)+len(d.Action)+len(d.Resource)+len(d.SignatureType)+400)
+	payload = append(payload, `{"action":`...)
+	payload = appendJCSQuotedString(payload, d.Action)
+	payload = append(payload, `,"effect_digest":`...)
+	payload = appendJCSQuotedString(payload, d.EffectDigest)
+	payload = append(payload, `,"id":`...)
+	payload = appendJCSQuotedString(payload, d.ID)
+	payload = append(payload, `,"phenotype_hash":`...)
+	payload = appendJCSQuotedString(payload, d.PhenotypeHash)
+	payload = append(payload, `,"policy_content_hash":`...)
+	payload = appendJCSQuotedString(payload, d.PolicyContentHash)
+	payload = append(payload, `,"reason_code":`...)
+	payload = appendJCSQuotedString(payload, d.ReasonCode)
+	payload = append(payload, `,"reason_hash":`...)
+	payload = appendJCSQuotedString(payload, HashReason(d.Reason))
+	payload = append(payload, `,"resource":`...)
+	payload = appendJCSQuotedString(payload, d.Resource)
+	payload = append(payload, `,"signature_type":`...)
+	payload = appendJCSQuotedString(payload, d.SignatureType)
+	payload = append(payload, `,"signature_version":`...)
+	payload = appendJCSQuotedString(payload, contracts.DecisionRecordSignatureV4)
+	payload = append(payload, `,"subject_id":`...)
+	payload = appendJCSQuotedString(payload, d.SubjectID)
+	payload = append(payload, `,"threat_scan_hash":`...)
+	payload = appendJCSQuotedString(payload, threatScanHash)
+	payload = append(payload, `,"verdict":`...)
+	payload = appendJCSQuotedString(payload, d.Verdict)
+	return append(payload, '}'), nil
+}
+
+// prepareDecisionForSigning binds the signer metadata before deriving the
+// preimage. It stages the mutation so a malformed decision is never left
+// marked as V4 after the signer rejects it.
+func prepareDecisionForSigning(d *contracts.DecisionRecord, signatureType string) ([]byte, error) {
+	if d == nil {
+		return nil, fmt.Errorf("decision is nil")
+	}
+	candidate := *d
+	candidate.SignatureVersion = contracts.DecisionRecordSignatureV4
+	candidate.SignatureType = signatureType
+	payload, err := CanonicalizeDecisionV4(&candidate)
+	if err != nil {
+		return nil, err
+	}
+	d.SignatureVersion = candidate.SignatureVersion
+	d.SignatureType = candidate.SignatureType
+	return payload, nil
+}
+
 // appendJCSQuotedString appends an RFC 8785 JSON string. The V2 decision
 // envelope contains only strings, so this avoids re-parsing a generic JSON map
 // on Guardian's signing path while keeping the exact bytes canonicalize.JCS
@@ -392,17 +498,14 @@ func appendJCSQuotedString(dst []byte, value string) []byte {
 }
 
 // DecisionSigningPayload stamps the record with the current preimage version
-// and returns the payload to sign.
+// and returns the payload to sign. Signers should call
+// prepareDecisionForSigning with their own algorithm metadata so that metadata
+// is part of the preimage rather than a post-signing annotation.
 func DecisionSigningPayload(d *contracts.DecisionRecord) ([]byte, error) {
 	if d == nil {
 		return nil, fmt.Errorf("decision is nil")
 	}
-	if d.ThreatScan != nil {
-		d.SignatureVersion = contracts.DecisionRecordSignatureV3
-		return CanonicalizeDecisionV3(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, d.ThreatScan)
-	}
-	d.SignatureVersion = contracts.DecisionRecordSignatureV2
-	return CanonicalizeDecisionV2(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	return prepareDecisionForSigning(d, d.SignatureType)
 }
 
 // DecisionVerifyPayload reconstructs the signed payload per the record's
@@ -418,6 +521,8 @@ func DecisionVerifyPayload(d *contracts.DecisionRecord) ([]byte, error) {
 		return CanonicalizeDecisionV2(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
 	case contracts.DecisionRecordSignatureV3:
 		return CanonicalizeDecisionV3(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, d.ThreatScan)
+	case contracts.DecisionRecordSignatureV4:
+		return CanonicalizeDecisionV4(d)
 	default:
 		return nil, fmt.Errorf("unsupported decision signature version %q", d.SignatureVersion)
 	}

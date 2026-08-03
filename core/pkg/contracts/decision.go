@@ -79,7 +79,9 @@ type DecisionRecord struct {
 	// DecisionRecordSignatureV2 signs the machine-readable ReasonCode instead
 	// of prose: the field every downstream consumer keys on is the one the
 	// signature attests. DecisionRecordSignatureV3 additionally binds typed
-	// Guardian threat evidence when it is present.
+	// Guardian threat evidence when it is present. DecisionRecordSignatureV4
+	// retains those facts and also binds the evaluated authority tuple and
+	// signer metadata.
 	SignatureVersion string    `json:"signature_version,omitempty"`
 	Timestamp        time.Time `json:"timestamp"`
 
@@ -163,6 +165,12 @@ const DecisionRecordSignatureV2 = "decision_record.v2"
 // decision contains it. Records without threat evidence remain on V2 so
 // historical and ordinary decisions preserve their established preimage.
 const DecisionRecordSignatureV3 = "decision_record.v3"
+
+// DecisionRecordSignatureV4 is the current decision preimage. It retains the
+// V2 reason digest and the V3 typed threat-evidence digest, then binds the
+// evaluated authorization tuple and selected signature algorithm before any
+// signature is created.
+const DecisionRecordSignatureV4 = "decision_record.v4"
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)

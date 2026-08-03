@@ -182,7 +182,9 @@ func testVerdict() *effectgraph.NodeVerdict {
 		StepID: "step-1",
 		Decision: &contracts.DecisionRecord{
 			ID:           "decision-step-1",
+			SubjectID:    "agent:sandbox-test",
 			Action:       contracts.EffectTypeRunSandboxedCode,
+			Resource:     "sandbox:step-1",
 			EffectDigest: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Verdict:      string(contracts.VerdictAllow),
 			InputContext: map[string]any{},
@@ -763,6 +765,9 @@ func TestGuardianIssuedDefaultSandboxIntentExecutesWithinSignedWindow(t *testing
 	}
 	decision := &contracts.DecisionRecord{
 		ID:           "decision-default-sandbox-window",
+		SubjectID:    "agent:sandbox-test",
+		Action:       contracts.EffectTypeRunSandboxedCode,
+		Resource:     "sandbox:default-window",
 		Timestamp:    baseTime,
 		Verdict:      string(contracts.VerdictAllow),
 		EffectDigest: digest,

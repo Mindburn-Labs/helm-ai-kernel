@@ -27,7 +27,7 @@ func TestKeyRing_DeterministicSigning(t *testing.T) {
 		Reason:  "Test",
 	}
 
-	if err := kr.SignDecision(d); err != nil {
+	if err := kr.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("SignDecision failed: %v", err)
 	}
 

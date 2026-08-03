@@ -230,9 +230,9 @@ func (s *RollbackPlanRegistry) Len() int {
 	return len(s.entries)
 }
 
-// Expired reports whether the plan's rollback guarantee has lapsed; after
-// expiry the effect is treated as irreversible (reversibility-classes.md
-// rule 4).
+// Expired reports whether the plan's rollback guarantee has lapsed. Guardian
+// denies a dispatch that requires an expired plan; it does not claim to
+// mutate the forward effect's class.
 func (p *RollbackPlan) Expired(now time.Time) bool {
 	if p.GuaranteeExpiry == nil {
 		return false

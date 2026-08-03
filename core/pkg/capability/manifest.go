@@ -3,9 +3,10 @@
 // protocols/json-schemas/capability/capability_manifest.v1.json and
 // docs/governance/capability-registry.md.
 //
-// Scope honesty: this package resolves and validates manifests. It does NOT
-// mint capability tokens, execute rollback plans, or enforce permit levels;
-// those are follow-up chunks documented in the governance specs.
+// Scope honesty: this manifest/registry slice resolves and validates
+// manifests. Token minting and rollback-plan validation live in companion
+// files; protocol dispatch and permit-level enforcement remain outside the
+// current core implementation.
 package capability
 
 import (

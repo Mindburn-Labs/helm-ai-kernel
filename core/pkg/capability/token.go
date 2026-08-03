@@ -20,7 +20,7 @@ import (
 const TokenSchemaVersion = "capability-token/v1"
 
 // TokenStatus is the dynamic lifecycle state of a capability token. Terminal
-// states are fail-closed: no dispatch, refusal receipt written.
+// states are fail-closed: Guardian refuses a dispatch that presents one.
 type TokenStatus string
 
 const (

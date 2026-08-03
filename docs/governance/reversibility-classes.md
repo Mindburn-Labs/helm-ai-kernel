@@ -34,7 +34,8 @@ base vocabulary. Policy classes compose it with effect reach:
    `read_only` must carry `rollback.plan_ref` in its manifest. The guardian
    refuses registration and dispatch otherwise (fail closed).
 2. **Rollback steps are capabilities.** The current plan registry validates a
-   plan's target capability binding. Certification of every execution step,
+   plan's target capability binding and requires every step's `action_ref` to
+   resolve to a registered capability. Certification lifecycle enforcement,
    execution through the forward boundary, and paired receipts are follow-up.
 3. **Verification is evidence.** `rollback_plan.v1.verification.method` is
    required plan metadata; actual outcome verification is follow-up:

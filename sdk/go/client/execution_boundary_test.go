@@ -112,7 +112,7 @@ func TestExecutionBoundaryClientMethods(t *testing.T) {
 // change that would turn EvaluateRequest into a union and silently drop its
 // canonical V5 fields during serialization. The public schema intentionally
 // keeps those fields optional for legacy direct-daemon compatibility; the SDK
-// method enforces its canonical V5 contract before sending a request.
+// V5 method enforces its canonical contract before sending a request.
 func TestEvaluateRequestGeneratedModelSupportsCanonicalSession(t *testing.T) {
 	tool := "read_file"
 	effectLevel := "read"
@@ -146,8 +146,8 @@ func TestEvaluateRequestGeneratedModelSupportsCanonicalSession(t *testing.T) {
 	if got := incomplete.GetSessionId(); got != "" {
 		t.Fatalf("unset optional session_id = %q, want empty", got)
 	}
-	if _, err := New("http://invalid.example").EvaluateDecision(incomplete); err == nil {
-		t.Fatal("SDK EvaluateDecision accepted a request without a canonical top-level session_id")
+	if _, err := New("http://invalid.example").EvaluateDecisionV5(incomplete); err == nil {
+		t.Fatal("SDK EvaluateDecisionV5 accepted a request without a canonical top-level session_id")
 	}
 }
 
@@ -200,14 +200,25 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			}
 			return err
 		}},
-		{"evaluate decision", "POST /api/v1/evaluate", func() error {
+		{"evaluate decision v5", "POST /api/v1/evaluate", func() error {
 			request := NewEvaluateRequest()
 			request.SetTool("read_file")
 			request.SetEffectLevel("read")
 			request.SetSessionId("session-test")
-			result, err := client.EvaluateDecision(*request)
+			result, err := client.EvaluateDecisionV5(*request)
 			if err == nil && (result.ReceiptId != "receipt-evaluate" || result.LamportClock != 1) {
 				t.Fatalf("canonical evaluate response = %#v", result)
+			}
+			return err
+		}},
+		{"legacy evaluate decision", "POST /api/v1/evaluate", func() error {
+			result, err := client.EvaluateDecision(map[string]any{
+				"action":   "read_file",
+				"resource": "read",
+				"context":  map[string]any{"session_id": "legacy-session"},
+			})
+			if err == nil && result["receipt_id"] != "receipt-evaluate" {
+				t.Fatalf("legacy evaluate response = %#v", result)
 			}
 			return err
 		}},

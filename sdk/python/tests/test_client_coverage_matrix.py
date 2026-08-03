@@ -176,7 +176,30 @@ def test_check_handles_non_object_error_body() -> None:
 @pytest.mark.parametrize(
     ("method_name", "invoke", "response", "expected_method", "expected_path"),
     [
-        ("evaluate_decision", lambda c: c.evaluate_decision(EvaluateRequest(tool="read_file", effect_level="read", session_id="session-test")), EVALUATE_RESPONSE, "POST", "/api/v1/evaluate"),
+        (
+            "evaluate_decision",
+            lambda c: c.evaluate_decision(
+                {
+                    "action": "read_file",
+                    "resource": "read",
+                    "context": {"session_id": "legacy-session"},
+                }
+            ),
+            EVALUATE_RESPONSE,
+            "POST",
+            "/api/v1/evaluate",
+        ),
+        (
+            "evaluate_decision_v5",
+            lambda c: c.evaluate_decision_v5(
+                EvaluateRequest(
+                    tool="read_file", effect_level="read", session_id="session-test"
+                )
+            ),
+            EVALUATE_RESPONSE,
+            "POST",
+            "/api/v1/evaluate",
+        ),
         ("run_public_demo_empty_args", lambda c: c.run_public_demo("read_ticket"), {"ok": True}, "POST", "/api/demo/run"),
         ("run_public_demo_with_args", lambda c: c.run_public_demo("read_ticket", {"id": 1}), {"ok": True}, "POST", "/api/demo/run"),
         ("verify_public_demo_receipt", lambda c: c.verify_public_demo_receipt({"r": 1}, "hash"), {"ok": True}, "POST", "/api/demo/verify"),
@@ -270,20 +293,41 @@ def test_client_endpoint_matrix(method_name: str, invoke: Any, response: Any, ex
     if method_name == "export_evidence":
         assert result == b"bundle"
     if method_name == "evaluate_decision":
+        assert isinstance(result, dict)
+        assert result["receipt_id"] == "receipt-evaluate"
+        assert fake.calls[0][2]["json"] == {
+            "action": "read_file",
+            "resource": "read",
+            "context": {"session_id": "legacy-session"},
+        }
+    if method_name == "evaluate_decision_v5":
         assert isinstance(result, EvaluateResponse)
         assert result.receipt_id == "receipt-evaluate"
         assert fake.calls[0][2]["json"] == {"tool": "read_file", "effect_level": "read", "session_id": "session-test"}
 
 
-def test_evaluate_decision_rejects_legacy_or_blank_input_before_request() -> None:
+def test_evaluate_decision_v5_rejects_invalid_input_without_breaking_legacy() -> None:
     fake = FakeHTTPClient()
+    fake.queue(EVALUATE_RESPONSE)
     with patch("helm_sdk.client.httpx.Client", return_value=fake):
         client = HelmClient(base_url="http://h")
+        legacy = client.evaluate_decision(
+            {
+                "action": "read_file",
+                "resource": "read",
+                "context": {"session_id": "legacy-session"},
+            }
+        )
+        assert legacy["receipt_id"] == "receipt-evaluate"
         with pytest.raises(TypeError, match="EvaluateRequest"):
-            client.evaluate_decision({"tool": "read_file"})  # type: ignore[arg-type]
+            client.evaluate_decision_v5({"tool": "read_file"})  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="non-blank session_id"):
-            client.evaluate_decision(EvaluateRequest.model_construct(tool="read_file", effect_level="read", session_id=""))
-    assert fake.calls == []
+            client.evaluate_decision_v5(
+                EvaluateRequest.model_construct(
+                    tool="read_file", effect_level="read", session_id=""
+                )
+            )
+    assert len(fake.calls) == 1
 
 
 def test_list_sessions_uses_params_for_query_values() -> None:

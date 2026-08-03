@@ -36,7 +36,7 @@ npm run build
 import { HelmClient } from "@mindburn/helm-ai-kernel";
 
 const client = new HelmClient({ baseUrl: "http://127.0.0.1:7714" });
-const decision = await client.evaluateDecision({
+const decision = await client.evaluateDecisionV5({
   tool: "read-ticket",
   effect_level: "ticket:123",
   session_id: "example-session",
@@ -44,10 +44,10 @@ const decision = await client.evaluateDecision({
 console.log(decision.verdict); // ALLOW or DENY
 ```
 
-`tool`, `effect_level`, and `session_id` must all be non-blank. The SDK sends
-only this canonical V5 request shape; legacy direct-daemon callers are not an
-SDK contract. The authenticated principal, not a body `principal`, is recorded
-on the receipt.
+`tool`, `effect_level`, and `session_id` must all be non-blank for
+`evaluateDecisionV5`. The legacy `evaluateDecision` method remains available
+for existing direct-daemon callers. The authenticated principal, not a body
+`principal`, is recorded on the receipt.
 
 Run the first-class local example with `make sdk-examples-smoke` or directly
 from `examples/ts_sdk/`.

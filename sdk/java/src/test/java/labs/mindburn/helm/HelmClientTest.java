@@ -162,7 +162,7 @@ public class HelmClientTest {
         server.start();
         try {
             HelmClient client = new HelmClient("http://127.0.0.1:" + server.getAddress().getPort());
-            TypesGen.EvaluateResponse result = client.evaluateDecision(new TypesGen.EvaluateRequest()
+            TypesGen.EvaluateResponse result = client.evaluateDecisionV5(new TypesGen.EvaluateRequest()
                     .tool("read_file")
                     .effectLevel("read")
                     .sessionId("session-test"));
@@ -170,12 +170,19 @@ public class HelmClientTest {
             assertEquals("decision-evaluate", result.getDecisionId());
             assertTrue(body.get().contains("\"effect_level\":\"read\""));
             assertTrue(body.get().contains("\"session_id\":\"session-test\""));
+
+            com.google.gson.JsonElement legacy = client.evaluateDecision(java.util.Map.of(
+                    "action", "legacy-read",
+                    "resource", "legacy-resource",
+                    "context", java.util.Map.of("session_id", "legacy-session")));
+            assertEquals("receipt-evaluate", legacy.getAsJsonObject().get("receipt_id").getAsString());
+            assertTrue(body.get().contains("\"action\":\"legacy-read\""));
         } finally {
             server.stop(0);
         }
 
         HelmClient client = new HelmClient("http://127.0.0.1:1");
-        assertThrows(IllegalArgumentException.class, () -> client.evaluateDecision(new TypesGen.EvaluateRequest()
+        assertThrows(IllegalArgumentException.class, () -> client.evaluateDecisionV5(new TypesGen.EvaluateRequest()
                 .tool("read_file")
                 .effectLevel("read")
                 .sessionId(" ")));

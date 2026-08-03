@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 from urllib.parse import quote
 
 import httpx
@@ -18,6 +18,7 @@ from .types_gen import (
     ChatCompletionResponse,
     ConformanceRequest,
     ConformanceResult,
+    DecisionRequest,
     EvaluateRequest,
     EvaluateResponse,
     Receipt,
@@ -223,13 +224,25 @@ class HelmClient:
         return result
 
     # ── Decision Evaluation ─────────────────────────
-    def evaluate_decision(self, req: EvaluateRequest) -> EvaluateResponse:
+    def evaluate_decision(
+        self, req: Union[DecisionRequest, dict[str, Any]]
+    ) -> dict[str, Any]:
+        """POST /api/v1/evaluate using the legacy dynamic contract.
+
+        Deprecated: use evaluate_decision_v5 for typed V5 requests and responses.
+        """
+        resp = self._client.post("/api/v1/evaluate", json=_json_body(req))
+        self._check(resp)
+        return cast(dict[str, Any], resp.json())
+
+    def evaluate_decision_v5(self, req: EvaluateRequest) -> EvaluateResponse:
+        """POST /api/v1/evaluate using the canonical V5 request and response."""
         if not isinstance(req, EvaluateRequest):
-            raise TypeError("evaluate_decision requires an EvaluateRequest")
+            raise TypeError("evaluate_decision_v5 requires an EvaluateRequest")
         for field in ("tool", "effect_level", "session_id"):
             value = getattr(req, field)
             if not isinstance(value, str) or not value.strip():
-                raise ValueError(f"evaluate_decision requires a non-blank {field}")
+                raise ValueError(f"evaluate_decision_v5 requires a non-blank {field}")
         resp = self._client.post("/api/v1/evaluate", json=_json_body(req))
         self._check(resp)
         result = EvaluateResponse.from_dict(resp.json())

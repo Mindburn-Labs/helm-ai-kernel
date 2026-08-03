@@ -260,16 +260,29 @@ public class HelmClient {
         return send(r, ChatCompletionResponse.class);
     }
 
+    /**
+     * POST /api/v1/evaluate using the legacy dynamic contract.
+     *
+     * @deprecated Use {@link #evaluateDecisionV5(EvaluateRequest)} for typed V5 requests and responses.
+     */
+    @Deprecated
+    public JsonElement evaluateDecision(Object req) {
+        HttpRequest r = this.req("POST", "/api/v1/evaluate")
+                .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))
+                .build();
+        return sendJson(r);
+    }
+
     /** POST /api/v1/evaluate using the canonical V5 request and response. */
-    public EvaluateResponse evaluateDecision(EvaluateRequest req) {
+    public EvaluateResponse evaluateDecisionV5(EvaluateRequest req) {
         if (req == null || req.getTool() == null || req.getTool().isBlank()) {
-            throw new IllegalArgumentException("evaluateDecision requires a non-blank tool");
+            throw new IllegalArgumentException("evaluateDecisionV5 requires a non-blank tool");
         }
         if (req.getEffectLevel() == null || req.getEffectLevel().isBlank()) {
-            throw new IllegalArgumentException("evaluateDecision requires a non-blank effect_level");
+            throw new IllegalArgumentException("evaluateDecisionV5 requires a non-blank effect_level");
         }
         if (req.getSessionId() == null || req.getSessionId().isBlank()) {
-            throw new IllegalArgumentException("evaluateDecision requires a non-blank session_id");
+            throw new IllegalArgumentException("evaluateDecisionV5 requires a non-blank session_id");
         }
         HttpRequest r = this.req("POST", "/api/v1/evaluate")
                 .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(req)))

@@ -1,4 +1,4 @@
-package tracing
+package correlation
 
 import (
 	"net/http"
@@ -23,8 +23,8 @@ func TestIsValidCorrelationID(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := IsValidCorrelationID(tc.in); got != tc.want {
-				t.Errorf("IsValidCorrelationID(%q) = %v, want %v", tc.in, got, tc.want)
+			if got := IsValid(tc.in); got != tc.want {
+				t.Errorf("IsValid(%q) = %v, want %v", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -35,7 +35,7 @@ func TestAdoptOrMintFromHeaders_AdoptsValidInbound(t *testing.T) {
 	h := http.Header{}
 	h.Set("X-Helm-Correlation-ID", inbound)
 
-	got, adopted := AdoptOrMintFromHeaders(h)
+	got, adopted := AdoptOrMint(h)
 	if !adopted {
 		t.Fatal("expected inbound ID to be adopted")
 	}
@@ -50,11 +50,11 @@ func TestAdoptOrMintFromHeaders_MintsOnInvalid(t *testing.T) {
 		if bad != "" {
 			h.Set("X-Helm-Correlation-ID", bad)
 		}
-		got, adopted := AdoptOrMintFromHeaders(h)
+		got, adopted := AdoptOrMint(h)
 		if adopted {
 			t.Errorf("inbound %q must not be adopted", bad)
 		}
-		if !IsValidCorrelationID(string(got)) {
+		if !IsValid(string(got)) {
 			t.Errorf("minted ID %q is not canonically valid", got)
 		}
 		if string(got) == bad {
@@ -66,14 +66,14 @@ func TestAdoptOrMintFromHeaders_MintsOnInvalid(t *testing.T) {
 func TestExtractHTTPHeaders_RejectsMalformed(t *testing.T) {
 	h := http.Header{}
 	h.Set("X-Helm-Correlation-ID", "not-a-uuid")
-	if _, ok := ExtractHTTPHeaders(h); ok {
+	if _, ok := Extract(h); ok {
 		t.Error("malformed header value must be rejected")
 	}
 
 	valid := "d2f1c3a4-5b6e-4f70-8a91-b2c3d4e5f601"
 	h.Set("X-Helm-Correlation-ID", valid)
-	id, ok := ExtractHTTPHeaders(h)
+	id, ok := Extract(h)
 	if !ok || string(id) != valid {
-		t.Errorf("ExtractHTTPHeaders = (%q, %v), want (%q, true)", id, ok, valid)
+		t.Errorf("Extract = (%q, %v), want (%q, true)", id, ok, valid)
 	}
 }

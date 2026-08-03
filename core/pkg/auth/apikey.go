@@ -1,3 +1,8 @@
+// quantum_posture: this path performs no signature verification. The shared
+// admin key is compared with crypto/subtle.ConstantTimeCompare, a symmetric
+// secret comparison with no public-key algorithm to migrate; the JWT mention
+// below is describing the alternative mechanism, not using one.
+//
 // Package auth — apikey.go provides pre-shared API key authentication middleware.
 //
 // This is the recommended auth mechanism for OSS standalone deployments without
@@ -11,7 +16,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 )
 
 const (
@@ -41,7 +46,7 @@ func AdminAPIKeyMiddleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			principal, detail, ok := AdminPrincipalFromRequest(r, adminKey)
 			if !ok {
-				api.WriteUnauthorized(w, detail)
+				httperr.WriteUnauthorized(w, detail)
 				return
 			}
 			ctx := WithPrincipal(r.Context(), principal)

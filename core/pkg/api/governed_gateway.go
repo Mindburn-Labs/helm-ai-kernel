@@ -27,6 +27,7 @@ import (
 	"net/http"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
 )
 
@@ -156,7 +157,7 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 	}
 	tenantID := g.tenantID(r)
 	if tenantID == "" {
-		WriteUnauthorized(w, "tenant could not be resolved for request")
+		httperr.WriteUnauthorized(w, "tenant could not be resolved for request")
 		return
 	}
 

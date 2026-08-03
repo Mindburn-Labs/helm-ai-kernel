@@ -9,7 +9,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	"github.com/google/uuid"
 )
 
@@ -113,7 +113,7 @@ func (p *EvidencePackProducer) Produce(ctx context.Context, input *EvidencePackI
 	}
 
 	correlationID := ""
-	if corr, ok := tracing.GetCorrelationID(ctx); ok {
+	if corr, ok := correlation.From(ctx); ok {
 		correlationID = string(corr)
 	}
 

@@ -1,3 +1,8 @@
+// quantum_posture: JWT validation here delegates signature verification to the
+// injected identity.KeySet, so the algorithms in use are classical and are
+// chosen by that provider rather than fixed in this file. Any hybrid or
+// post-quantum migration lands in the key set, not in this middleware.
+
 package auth
 
 import (
@@ -5,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -93,35 +98,35 @@ func NewMiddleware(validator *JWTValidator) func(http.Handler) http.Handler {
 			// 2. Extract Authorization header
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				api.WriteUnauthorized(w, "Missing Authorization header")
+				httperr.WriteUnauthorized(w, "Missing Authorization header")
 				return
 			}
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				api.WriteUnauthorized(w, "Invalid Authorization header format (expected 'Bearer <token>')")
+				httperr.WriteUnauthorized(w, "Invalid Authorization header format (expected 'Bearer <token>')")
 				return
 			}
 			tokenStr := parts[1]
 
 			// 3. Fail closed if no validator configured
 			if validator == nil {
-				api.WriteUnauthorized(w, "Authentication not configured")
+				httperr.WriteUnauthorized(w, "Authentication not configured")
 				return
 			}
 
 			// 4. Validate JWT
 			claims, err := validator.Validate(tokenStr)
 			if err != nil {
-				api.WriteUnauthorized(w, "Invalid or expired token")
+				httperr.WriteUnauthorized(w, "Invalid or expired token")
 				return
 			}
 			if claims.Subject == "" {
-				api.WriteUnauthorized(w, "Token subject is required")
+				httperr.WriteUnauthorized(w, "Token subject is required")
 				return
 			}
 			if claims.TenantID == "" {
-				api.WriteUnauthorized(w, "Token tenant binding is required")
+				httperr.WriteUnauthorized(w, "Token tenant binding is required")
 				return
 			}
 
